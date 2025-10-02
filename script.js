@@ -1,56 +1,68 @@
-﻿
-// ====================================================================
+﻿// ====================================================================
 // JavaScript Logic for Frontend Control (Modified for Hybrid API)
+// TAKE/CLEAR機能の実装済み
 // ====================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- API Configuration ---
-    const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec'; // 例: 'https://script.google.com/macros/s/ABCDEF/exec'
+    // ここは、あなたのGASデプロイURLと秘密のキーに置き換えてください
+    const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec'; 
     const MY_SECRET_KEY = 'nanndemosoudann_23schop'; 
     const API_ENDPOINT = `${GAS_WEB_APP_URL}?key=${MY_SECRET_KEY}`;
 
     // スプレッドシートの列インデックス定数 (0から始まる)
     const COL = {
-        TIMESTAMP: 0,
-        RNAME: 1,
-        QUESTION: 2,
-        TEAM: 3,
+        TIMESTAMP: 0, RNAME: 1, QUESTION: 2, TEAM: 3, 
         SELECTED: 4, // 選択中 ('✔')
         COMPLETED: 5, // 回答済 ('✔')
         UID: 6
     };
     
-    // 旧スクリプトのグローバル変数の一部を再定義
+    // 旧スクリプトのグローバル変数の一部
     let rawDataCache = [];
     let previousNames = "";
-    let filterOnlyOpen = false;
-    let filterText = "";
     let busy = false;
-    let currentSelectedIndex = null;
-    let currentSelectedUid = null;
+    let currentSelectedUid = null; 
     let overlayShown = false, overlayTimer = null;
     
-    // --- Utility Functions (Simplified/Adapted from old script) ---
-    
+    // UI要素
+    const elements = {
+        nameList: document.getElementById("nameList"),
+        pvwMirror: document.getElementById('pvw-mirror'),
+        approveButton: document.getElementById('approve-button'),
+        // 他の要素も必要に応じて追加
+    };
+
+    // --- Utility Functions ---
     const escapeHtml = (s) => String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
     function setBusy(on){
         busy = !!on;
-        // UI要素を無効化するロジック
         ['approve-button','reject-button','reset-all-button','force-standby-button','jump-onair-button'].forEach(id=>{
             const el = document.getElementById(id); if (el) el.disabled = !!on;
         });
-        // updateApproveButtonState(); // この機能は未実装
+        updateApproveButtonState();
+    }
+    
+    function showToast(title, sub, kind='ok'){
+        // 簡略化されたトーストロジック
+        console.log(`[Toast ${kind}] ${title}: ${sub}`);
+        const toast = document.getElementById('toast');
+        if (!toast) return;
+        
+        toast.innerHTML = `<span class="icon">★</span><div class="txt"><div class="title">${escapeHtml(title)}</div>${sub?`<div class="sub">${escapeHtml(sub)}</div>`:''}</div>`;
+        toast.dataset.kind = kind;
+        toast.classList.add('show');
+        setTimeout(()=>toast.classList.remove('show'), 2400);
     }
 
     function showOverlay(msg){
         const ov = document.getElementById('overlay');
         const msgE = document.getElementById('overlay-msg');
         if (!ov || !msgE) return;
-
         msgE.textContent = msg || '送出更新中…';
         ov.classList.remove('hidden');
-        ov.classList.add('flex');
+        ov.classList.add('show');
         overlayShown = true;
         if (overlayTimer) clearTimeout(overlayTimer);
         overlayTimer = setTimeout(()=>{ if (overlayShown){ hideOverlay(); setBusy(false); } }, 12000);
@@ -59,27 +71,24 @@ document.addEventListener('DOMContentLoaded', () => {
     function hideOverlay(){
         const ov = document.getElementById('overlay');
         if (!ov) return;
-        ov.classList.remove('flex');
+        ov.classList.remove('show');
         ov.classList.add('hidden');
         overlayShown = false;
         if (overlayTimer) clearTimeout(overlayTimer);
         overlayTimer = null;
     }
 
-    // --- Core Data Fetching Logic (Replaced google.script.run.fetchNames) ---
+    // --- 描画ロジック ---
     
-    // PGM/PVWプレビューの更新 (今回はUIのダミー表示のみ)
     function updatePreviewMirror() {
-        // PGMプレビューのミラー更新ロジックをここに実装（現在はダミー）
         const pgmMirror = document.getElementById('preview-mirror');
         if (pgmMirror) pgmMirror.textContent = 'PGM Preview (Logic to be implemented)';
+        updateApproveButtonState();
     }
 
-    // 質問リストの描画
     function displayNames(names) {
-        // 名前リストの描画ロジックは旧スクリプトから大幅に変更し、簡略化しています
         const list = document.getElementById("nameList");
-        const currentSig = JSON.stringify(names.map(item=>[item[COL.QUESTION],item[COL.RNAME]]));
+        const currentSig = JSON.stringify(names.map(item=>[item[COL.QUESTION],item[COL.RNAME], item[COL.SELECTED], item[COL.COMPLETED]]));
         
         if (currentSig === previousNames) return;
         previousNames = currentSig;
@@ -87,20 +96,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const template = document.getElementById('tpl-question-item');
         let total = 0, onair = 0, completed = 0;
+        let selectedRowData = null;
 
-        names.forEach((item, index) => {
+        names.forEach((item) => {
+            if (!item || item.length < 7) return; 
+            
             total++;
             const isSelected = item[COL.SELECTED] === '✔';
             const isCompleted = item[COL.COMPLETED] === '✔';
             
-            if (isSelected) onair++;
+            if (isSelected) {
+                onair++;
+                selectedRowData = item;
+            }
             if (isCompleted) completed++;
 
-            // リストアイテムの作成
             const li = template.content.cloneNode(true).firstElementChild;
             li.dataset.uid = item[COL.UID];
             
-            li.querySelector('.rname-chip').textContent = escapeHtml(item[COL.RNAME] || '（匿名）');
+            const rname = item[COL.RNAME] || '（匿名）';
+            li.querySelector('.rname-chip').textContent = escapeHtml(rname);
+            li.querySelector('.rname-chip').classList.toggle('is-rname', rname !== 'Pick Up Question');
             li.querySelector('.text-container').textContent = escapeHtml(item[COL.QUESTION]);
             li.querySelector('.team-box').textContent = `班: ${item[COL.TEAM] || 'N/A'}`;
             
@@ -117,78 +133,197 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusBox.textContent = 'N';
             }
             
-            // クリックイベントの追加
-            li.addEventListener("click", () => selectItem(li));
-
+            li.addEventListener("click", () => selectItem(li, item));
             list.appendChild(li);
         });
 
-        // カウンタの更新
         document.getElementById('count-total').textContent = total;
         document.getElementById('count-onair').textContent = onair;
         document.getElementById('count-completed').textContent = completed;
+
+        if (selectedRowData) {
+            currentSelectedUid = selectedRowData[COL.UID];
+            const selectedEl = document.querySelector(`[data-uid="${currentSelectedUid}"]`);
+            if (selectedEl) selectedEl.classList.add('focused');
+            
+            elements.pvwMirror.innerHTML = `
+                <div class="p-4 text-white text-left">
+                    <p class="font-bold text-xl">${selectedRowData[COL.RNAME] || '（匿名）'}</p>
+                    <p class="mt-2 text-sm">${selectedRowData[COL.QUESTION]}</p>
+                </div>
+            `;
+        } else {
+            currentSelectedUid = null;
+            elements.pvwMirror.textContent = 'PVW Content Here';
+        }
+
+        document.body.classList.toggle('has-onair', onair > 0);
+        updateApproveButtonState();
     }
     
-    // 選択ロジック (簡易版)
-    function selectItem(el) {
+    function selectItem(el, item) {
         document.querySelectorAll('.name-box').forEach(i => i.classList.remove('focused'));
         el.classList.add('focused');
 
-        // PVWプレビューのダミー更新
-        const rname = el.querySelector('.rname-chip').textContent;
-        const question = el.querySelector('.text-container').textContent;
-        document.getElementById('pvw-mirror').innerHTML = `
+        currentSelectedUid = item[COL.UID];
+        
+        elements.pvwMirror.innerHTML = `
             <div class="p-4 text-white text-left">
-                <p class="font-bold text-xl">${rname}</p>
-                <p class="mt-2 text-sm">${question}</p>
+                <p class="font-bold text-xl">${item[COL.RNAME] || '（匿名）'}</p>
+                <p class="mt-2 text-sm">${item[COL.QUESTION]}</p>
             </div>
         `;
+        updateApproveButtonState();
     }
 
+    // --- PGM/TAKE ロジック (GAS APIと連携) ---
+    
+    function updateApproveButtonState() {
+        const btn = elements.approveButton;
+        if (!btn) return;
+
+        const focusedEl = document.querySelector('.name-box.focused');
+        const onAirEl = document.querySelector('.name-box.approved');
+        const isCurrentlyPGM = !!onAirEl;
+
+        btn.classList.remove('danger', 'standby');
+        btn.textContent = 'TAKE';
+        btn.disabled = false;
+        btn.title = 'ダブルクリックでTAKE';
+
+        if (focusedEl) {
+            if (focusedEl.classList.contains('approved')) {
+                btn.textContent = 'CLEAR';
+                btn.classList.add('danger');
+                btn.title = 'PGMをCLEAR（回答済に）';
+            } else if (focusedEl.classList.contains('completed')) {
+                btn.disabled = true;
+                btn.title = '再エントリー後にTAKE可能';
+            }
+        } else {
+            btn.textContent = isCurrentlyPGM ? 'CLEAR' : 'TAKE';
+            btn.classList.add('standby');
+            btn.disabled = !isCurrentlyPGM; 
+            if (isCurrentlyPGM) {
+                 btn.title = 'PGMを強制CLEAR';
+                 btn.classList.add('danger');
+            } else {
+                 btn.title = 'PVWに項目を入れてください';
+            }
+        }
+    }
+
+    async function sendActionToGas(action, uid) {
+        showOverlay(`操作: ${action} を実行中...`);
+        setBusy(true);
+
+        try {
+            const response = await fetch(API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: action, uid: uid })
+            });
+
+            const result = await response.json();
+            
+            if (result.status === 'ok') {
+                showToast(`${action} 成功`, 'スプレッドシートを更新しました', 'ok');
+            } else {
+                throw new Error(result.status || 'GASからの応答エラー');
+            }
+        } catch (error) {
+            console.error("GAS POST Error:", error);
+            showToast("操作失敗", error.message, "info");
+        } finally {
+            // 操作完了後、必ず最新のデータを再取得してUIを更新
+            loadNames();
+        }
+    }
+    
+    // TAKEボタンのロジック (TAKE_CLEARアクションを実行)
+    function setupApproveButtonLogic() {
+        let armTimer = null;
+        elements.approveButton.addEventListener("click", function() {
+            if (elements.approveButton.dataset.armed !== '1') {
+                elements.approveButton.dataset.armed = '1';
+                showToast('ARM', 'もう一度クリックでTAKE/CLEAR', 'standby');
+                clearTimeout(armTimer); 
+                armTimer = setTimeout(()=>{ elements.approveButton.dataset.armed='0'; elements.approveButton.title='ダブルクリックでTAKE'; }, 1200);
+                return;
+            }
+            
+            elements.approveButton.dataset.armed = '0';
+            handleTakeClear();
+        });
+
+        elements.approveButton.addEventListener("dblclick", function(e) {
+            e.preventDefault(); 
+            clearTimeout(armTimer);
+            elements.approveButton.dataset.armed = '0';
+            handleTakeClear();
+        });
+        
+        document.getElementById("force-standby-button").addEventListener("click", function() {
+            const onAirEl = document.querySelector('.name-box.approved');
+            if (!onAirEl) { showToast('PGMはありません', '', 'info'); return; }
+            const uid = onAirEl.dataset.uid;
+            sendActionToGas('TAKE_CLEAR', uid);
+        });
+    }
+
+    function handleTakeClear() {
+        if (busy || elements.approveButton.disabled) return;
+
+        const focusedEl = document.querySelector('.name-box.focused');
+        const onAirEl = document.querySelector('.name-box.approved');
+
+        let targetUid = null;
+        
+        if (focusedEl) {
+            targetUid = focusedEl.dataset.uid;
+        } else if (onAirEl) {
+            targetUid = onAirEl.dataset.uid;
+        } else {
+            showToast('エラー', '対象項目がありません', 'info');
+            return;
+        }
+
+        sendActionToGas('TAKE_CLEAR', targetUid);
+    }
+    
     // メインデータ読み込み (google.script.run.fetchNames の代替)
     async function loadNames() {
-        showOverlay('リストデータを読み込み中...');
         setBusy(true); 
+        if(rawDataCache.length === 0) showOverlay('リストデータを読み込み中...');
+
         try {
             const response = await fetch(API_ENDPOINT);
             if (!response.ok) {
-                  // Unauthorized Access (403)やその他のエラーをキャッチ
                 throw new Error(`APIアクセス失敗: ステータス ${response.status}`);
             }
             const rawData = await response.json();
             
-            // JSONはスプレッドシートの2次元配列のはず
-            if (!Array.isArray(rawData) || rawData.length === 0) {
+            if (!Array.isArray(rawData) || rawData.length < 2) {
                 throw new Error("GASから有効なデータが返されませんでした。");
             }
             
-            // ヘッダー行をスキップしてデータを表示
             rawDataCache = rawData.slice(1);
             displayNames(rawDataCache); 
             
         } catch (error) {
             console.error("loadNames failed:", error);
             document.getElementById("nameList").innerHTML = 
-                `<li class="text-red-400">データ取得エラー: ${error.message}</li>`;
+                `<li class="text-red-400 p-4">データ取得エラー: ${error.message}</li>`;
         } finally {
             hideOverlay();
             setBusy(false);
-            // 他の要素の初期化 (updatePreviewMirrorなど、本来はここに続く)
             updatePreviewMirror();
         }
     }
 
-    // --- Initialization ---
-    
-    // TAKE/REJECT/RESETボタンはまだ機能しないため、ダミーのクリックイベントを設定
-    document.getElementById("approve-button").addEventListener('click', () => {
-        showOverlay("TAKE操作は現在無効です。GAS側のAPI実装が必要です。");
-        setTimeout(hideOverlay, 1500);
-    });
-    // 他のボタンも同様にイベントをバインドできます
 
-    loadNames(); // データを読み込む
-    // 5秒ごとに自動更新（GASのcheckUpdateFlagの代替）
+    // --- Initialization ---
+    setupApproveButtonLogic();
+    loadNames(); 
     setInterval(loadNames, 5000); 
-    // その他の旧スクリプトのinit関数は、対応するUI要素がないため省略
 });
