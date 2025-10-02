@@ -62,9 +62,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const ov = document.getElementById('overlay');
         const msgE = document.getElementById('overlay-msg');
         if (!ov || !msgE) return;
-        msgE.textContent = msg || '送出更新中…';
+        // NOTE: hiddenクラスの制御はCSSの display: none!important に依存
         ov.classList.remove('hidden');
         ov.classList.add('show');
+        msgE.textContent = msg || '送出更新中…';
         overlayShown = true;
         if (overlayTimer) clearTimeout(overlayTimer);
         overlayTimer = setTimeout(()=>{ if (overlayShown){ hideOverlay(); setBusy(false); } }, 12000);
@@ -117,12 +118,16 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function displayNames(names) {
         const list = document.getElementById("nameList");
-        // データシグネチャの比較ロジックは省略し、常にリストを更新するシンプルな実装に
         
         list.innerHTML = "";
 
         const template = document.getElementById('tpl-selected');
-        if (!template) return; // テンプレートがない場合は処理を中断
+        // ★修正済み: DOMContentLoaded内で実行されているため、通常はnullにならないはず
+        if (!template) {
+            console.error("テンプレートID 'tpl-selected' が見つかりません。HTMLを確認してください。");
+            list.innerHTML = `<li class="text-red-400 p-4">表示エラー: リストのテンプレートが見つかりません。</li>`;
+            return;
+        } 
 
         let total = 0, onair = 0, completed = 0;
         
@@ -136,7 +141,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isSelected) onair++;
             if (isCompleted) completed++;
 
-            const li = template.content.cloneNode(true).firstElementChild;
+            // template.content が null の場合を防ぐため、存在チェックと要素取得を確実にする
+            const content = template.content;
+            if (!content) return; 
+            const li = content.firstElementChild.cloneNode(true);
+            if (!li) return; // cloneNode後の要素が取得できない場合も回避
+
             li.dataset.uid = item[COL.UID];
             li.dataset.rowindex = item[COL.UID]; // 互換性のためUIDを使う
 
@@ -231,6 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (result.status === 'ok') {
                 showToast(`${action} 成功`, 'スプレッドシートを更新しました', 'ok');
             } else {
+                // エラー応答の場合もメッセージを取得
                 throw new Error(result.message || 'GASからの応答エラー');
             }
         } catch (error) {
