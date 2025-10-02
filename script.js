@@ -1,6 +1,6 @@
 ﻿// ====================================================================
 // JavaScript Logic for Frontend Control (Modified for Hybrid API)
-// TAKE/CLEAR機能の実装済み
+// TAKE/CLEAR, REJECT, RESET_ALL機能の実装済み
 // ====================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -35,7 +35,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Utility Functions ---
     const escapeHtml = (s) => String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-
+    const ellipsis = (s,n)=>{s=String(s||''); return s.length>n? s.slice(0,n-1)+'…': s;};
+    const resolveItemFromUid = (uid) => rawDataCache.find(n => n[COL.UID] === uid);
+    
     function setBusy(on){
         busy = !!on;
         ['approve-button','reject-button','reset-all-button','force-standby-button','jump-onair-button'].forEach(id=>{
@@ -81,23 +83,49 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 描画ロジック ---
     
     function updatePreviewMirror() {
-        const pgmMirror = document.getElementById('preview-mirror');
-        if (pgmMirror) pgmMirror.textContent = 'PGM Preview (Logic to be implemented)';
+        // PGMミラーの描画ロジックはdisplay.htmlに依存するため、ここでは簡略化
+        const selectedItem = rawDataCache.find(n => n[COL.SELECTED] === '✔');
+        const previewMirror = document.getElementById('preview-mirror');
+
+        if (selectedItem) {
+            previewMirror.innerHTML = `
+                <div class="p-2 text-white text-left font-sans text-sm">
+                    <p class="font-bold">${selectedItem[COL.RNAME] || '（匿名）'}</p>
+                    <p>${ellipsis(selectedItem[COL.QUESTION], 60)}</p>
+                </div>
+            `;
+        } else {
+            previewMirror.textContent = 'PGMなし';
+            previewMirror.innerHTML = '';
+        }
+
         updateApproveButtonState();
     }
 
+    function renderPVW(item) {
+        // PVWミラーに選択中の項目を反映 (簡略版)
+        const pvwMirror = document.getElementById('pvw-mirror');
+        if (!pvwMirror) return;
+
+        pvwMirror.innerHTML = `
+            <div class="p-2 text-white text-left font-sans text-sm">
+                <p class="font-bold">${item[COL.RNAME] || '（匿名）'}</p>
+                <p>${ellipsis(item[COL.QUESTION], 60)}</p>
+            </div>
+        `;
+    }
+    
     function displayNames(names) {
         const list = document.getElementById("nameList");
-        const currentSig = JSON.stringify(names.map(item=>[item[COL.QUESTION],item[COL.RNAME], item[COL.SELECTED], item[COL.COMPLETED]]));
+        // データシグネチャの比較ロジックは省略し、常にリストを更新するシンプルな実装に
         
-        if (currentSig === previousNames) return;
-        previousNames = currentSig;
         list.innerHTML = "";
 
-        const template = document.getElementById('tpl-question-item');
-        let total = 0, onair = 0, completed = 0;
-        let selectedRowData = null;
+        const template = document.getElementById('tpl-selected');
+        if (!template) return; // テンプレートがない場合は処理を中断
 
+        let total = 0, onair = 0, completed = 0;
+        
         names.forEach((item) => {
             if (!item || item.length < 7) return; 
             
@@ -105,60 +133,38 @@ document.addEventListener('DOMContentLoaded', () => {
             const isSelected = item[COL.SELECTED] === '✔';
             const isCompleted = item[COL.COMPLETED] === '✔';
             
-            if (isSelected) {
-                onair++;
-                selectedRowData = item;
-            }
+            if (isSelected) onair++;
             if (isCompleted) completed++;
 
             const li = template.content.cloneNode(true).firstElementChild;
             li.dataset.uid = item[COL.UID];
-            
-            const rname = item[COL.RNAME] || '（匿名）';
-            li.querySelector('.rname-chip').textContent = escapeHtml(rname);
-            li.querySelector('.rname-chip').classList.toggle('is-rname', rname !== 'Pick Up Question');
-            li.querySelector('.text-container').textContent = escapeHtml(item[COL.QUESTION]);
-            li.querySelector('.team-box').textContent = `班: ${item[COL.TEAM] || 'N/A'}`;
-            
-            const statusBox = li.querySelector('.status-box');
-            if (isCompleted) {
-                li.classList.add("completed");
-                statusBox.textContent = '済';
-                statusBox.classList.replace('bg-gray-500', 'bg-green-600');
-            } else if (isSelected) {
-                li.classList.add("approved");
-                statusBox.textContent = 'PVW';
-                statusBox.classList.replace('bg-gray-500', 'bg-blue-600');
-            } else {
-                statusBox.textContent = 'N';
-            }
-            
-            li.addEventListener("click", () => selectItem(li, item));
+            li.dataset.rowindex = item[COL.UID]; // 互換性のためUIDを使う
+
+            // データの埋め込み
+            li.querySelector('.rname').textContent = escapeHtml(item[COL.RNAME] || '（匿名）');
+            li.querySelector('.content').textContent = escapeHtml(item[COL.QUESTION]); 
+            li.querySelector('.rname-prefix').hidden = (item[COL.RNAME] === 'Pick Up Question');
+            li.querySelector('.faq-tag').hidden = (item[COL.RNAME] !== 'Pick Up Question');
+
+            // ステータスとクラスの適用
+            li.classList.toggle("approved", isSelected);
+            li.classList.toggle("completed", isCompleted);
+            li.classList.toggle("open", !isSelected && !isCompleted); // 未送出項目
+
+            li.addEventListener("click", (e) => {
+                if (e.target.closest('.edit-btn')) return; // 編集ボタンクリック時は選択しない
+                selectItem(li, item);
+            });
             list.appendChild(li);
         });
 
+        // カウンターの更新
         document.getElementById('count-total').textContent = total;
         document.getElementById('count-onair').textContent = onair;
         document.getElementById('count-completed').textContent = completed;
 
-        if (selectedRowData) {
-            currentSelectedUid = selectedRowData[COL.UID];
-            const selectedEl = document.querySelector(`[data-uid="${currentSelectedUid}"]`);
-            if (selectedEl) selectedEl.classList.add('focused');
-            
-            elements.pvwMirror.innerHTML = `
-                <div class="p-4 text-white text-left">
-                    <p class="font-bold text-xl">${selectedRowData[COL.RNAME] || '（匿名）'}</p>
-                    <p class="mt-2 text-sm">${selectedRowData[COL.QUESTION]}</p>
-                </div>
-            `;
-        } else {
-            currentSelectedUid = null;
-            elements.pvwMirror.textContent = 'PVW Content Here';
-        }
-
         document.body.classList.toggle('has-onair', onair > 0);
-        updateApproveButtonState();
+        updatePreviewMirror();
     }
     
     function selectItem(el, item) {
@@ -166,16 +172,10 @@ document.addEventListener('DOMContentLoaded', () => {
         el.classList.add('focused');
 
         currentSelectedUid = item[COL.UID];
-        
-        elements.pvwMirror.innerHTML = `
-            <div class="p-4 text-white text-left">
-                <p class="font-bold text-xl">${item[COL.RNAME] || '（匿名）'}</p>
-                <p class="mt-2 text-sm">${item[COL.QUESTION]}</p>
-            </div>
-        `;
+        renderPVW(item); // PVWミラーに反映
         updateApproveButtonState();
     }
-
+    
     // --- PGM/TAKE ロジック (GAS APIと連携) ---
     
     function updateApproveButtonState() {
@@ -201,6 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.title = '再エントリー後にTAKE可能';
             }
         } else {
+            // フォーカスがない場合
             btn.textContent = isCurrentlyPGM ? 'CLEAR' : 'TAKE';
             btn.classList.add('standby');
             btn.disabled = !isCurrentlyPGM; 
@@ -209,11 +210,12 @@ document.addEventListener('DOMContentLoaded', () => {
                  btn.classList.add('danger');
             } else {
                  btn.title = 'PVWに項目を入れてください';
+                 btn.disabled = true;
             }
         }
     }
 
-    async function sendActionToGas(action, uid) {
+    async function sendActionToGas(action, uid = null) {
         showOverlay(`操作: ${action} を実行中...`);
         setBusy(true);
 
@@ -229,68 +231,118 @@ document.addEventListener('DOMContentLoaded', () => {
             if (result.status === 'ok') {
                 showToast(`${action} 成功`, 'スプレッドシートを更新しました', 'ok');
             } else {
-                throw new Error(result.status || 'GASからの応答エラー');
+                throw new Error(result.message || 'GASからの応答エラー');
             }
         } catch (error) {
             console.error("GAS POST Error:", error);
-            showToast("操作失敗", error.message, "info");
+            showToast("操作失敗", ellipsis(error.message, 60), "info");
         } finally {
             // 操作完了後、必ず最新のデータを再取得してUIを更新
             loadNames();
         }
     }
     
-    // TAKEボタンのロジック (TAKE_CLEARアクションを実行)
+    // TAKE/CLEAR/REJECT/RESETのロジック
     function setupApproveButtonLogic() {
         let armTimer = null;
+
+        // --- TAKE / CLEAR (ダブルクリックロジック) ---
         elements.approveButton.addEventListener("click", function() {
-            if (elements.approveButton.dataset.armed !== '1') {
-                elements.approveButton.dataset.armed = '1';
+            if (this.disabled) return;
+
+            if (this.dataset.armed !== '1') {
+                this.dataset.armed = '1';
                 showToast('ARM', 'もう一度クリックでTAKE/CLEAR', 'standby');
                 clearTimeout(armTimer); 
-                armTimer = setTimeout(()=>{ elements.approveButton.dataset.armed='0'; elements.approveButton.title='ダブルクリックでTAKE'; }, 1200);
+                armTimer = setTimeout(()=>{ this.dataset.armed='0'; this.title='ダブルクリックでTAKE'; }, 1200);
                 return;
             }
             
-            elements.approveButton.dataset.armed = '0';
+            this.dataset.armed = '0';
             handleTakeClear();
         });
 
         elements.approveButton.addEventListener("dblclick", function(e) {
             e.preventDefault(); 
             clearTimeout(armTimer);
-            elements.approveButton.dataset.armed = '0';
+            this.dataset.armed = '0';
             handleTakeClear();
         });
+
+        function handleTakeClear() {
+            if (busy || elements.approveButton.disabled) return;
+
+            const focusedEl = document.querySelector('.name-box.focused');
+            const onAirEl = document.querySelector('.name-box.approved');
+
+            let targetUid = null;
+            
+            if (focusedEl) {
+                // PVWにある項目をTAKEまたはCLEAR
+                targetUid = focusedEl.dataset.uid;
+            } else if (onAirEl) {
+                // PGM中の項目を強制CLEAR（フォーカス無しの場合）
+                targetUid = onAirEl.dataset.uid;
+            } else {
+                showToast('エラー', '対象項目がありません', 'info');
+                return;
+            }
+
+            sendActionToGas('TAKE_CLEAR', targetUid);
+        }
+
+        // --- REJECT (再エントリー) ---
+        document.getElementById("reject-button").addEventListener("click", function() {
+            if (this.disabled || busy) return;
+            const focusedEl = document.querySelector('.name-box.focused');
+            if (!focusedEl) { showToast('項目が選択されていません', '', 'info'); return; }
+            if (!focusedEl.classList.contains('completed')) { showToast('回答済みの項目を選択してください', '', 'info'); return; }
+
+            const uid = focusedEl.dataset.uid;
+            sendActionToGas('REJECT', uid);
+        });
+
+        // --- RESET_ALL (全再エントリー) ---
+        document.getElementById("reset-all-button").addEventListener("click", function() {
+            if (this.disabled || busy) return;
+            if (!confirm("本当に『オンエア済』をすべて未オンエアに戻しますか？")) return;
+            sendActionToGas('RESET_ALL');
+        });
         
+        // --- PANIC CLEAR (強制CLEAR) ---
         document.getElementById("force-standby-button").addEventListener("click", function() {
+            if (this.disabled || busy) return;
             const onAirEl = document.querySelector('.name-box.approved');
             if (!onAirEl) { showToast('PGMはありません', '', 'info'); return; }
+            if (!confirm("本当に現在のPGMを即時CLEAR（回答済みに）しますか？")) return;
+            
             const uid = onAirEl.dataset.uid;
             sendActionToGas('TAKE_CLEAR', uid);
         });
-    }
-
-    function handleTakeClear() {
-        if (busy || elements.approveButton.disabled) return;
-
-        const focusedEl = document.querySelector('.name-box.focused');
-        const onAirEl = document.querySelector('.name-box.approved');
-
-        let targetUid = null;
         
-        if (focusedEl) {
-            targetUid = focusedEl.dataset.uid;
-        } else if (onAirEl) {
-            targetUid = onAirEl.dataset.uid;
-        } else {
-            showToast('エラー', '対象項目がありません', 'info');
-            return;
-        }
+        // --- PGMへジャンプ ---
+        document.getElementById("jump-onair-button").addEventListener("click", function() {
+            const onAirItem = rawDataCache.find(n => n[COL.SELECTED] === '✔');
+            if (!onAirItem) { showToast('PGMはありません', '', 'info'); return; }
 
-        sendActionToGas('TAKE_CLEAR', targetUid);
+            // 検索・フィルタを解除して確実に要素を表示
+            // ここでは簡易的に全リストを再描画し、PGM項目を選択
+            loadNames(); 
+            
+            // 要素が再描画されるのを待ってからスクロール
+            setTimeout(() => {
+                 const el = document.querySelector(`.name-box[data-uid="${onAirItem[COL.UID]}"]`);
+                 if (el) { 
+                     el.scrollIntoView({ behavior: 'smooth', block: 'center' }); 
+                     selectItem(el, onAirItem);
+                     showToast('PGMへジャンプ', '', 'info'); 
+                 }
+            }, 50);
+        });
+
     }
-    
+
+
     // メインデータ読み込み (google.script.run.fetchNames の代替)
     async function loadNames() {
         setBusy(true); 
@@ -299,6 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch(API_ENDPOINT);
             if (!response.ok) {
+                // Unauthorized Access (403)やその他のエラーをキャッチ
                 throw new Error(`APIアクセス失敗: ステータス ${response.status}`);
             }
             const rawData = await response.json();
@@ -313,10 +366,11 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error("loadNames failed:", error);
             document.getElementById("nameList").innerHTML = 
-                `<li class="text-red-400 p-4">データ取得エラー: ${error.message}</li>`;
+                `<li class="text-red-400 p-4">データ取得エラー: ${ellipsis(error.message, 80)}</li>`;
         } finally {
             hideOverlay();
             setBusy(false);
+            // 他の要素の初期化 (updatePreviewMirrorなど、本来はここに続く)
             updatePreviewMirror();
         }
     }
