@@ -1,6 +1,6 @@
 ﻿// script.js
 // Step 2で発行されたGASのWebアプリURLに、秘密のキーを付けて記述します
-const GAS_WEB_APP_URL = '発行されたGASのURL' + '?key=あなたの秘密のキー';
+const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec' + '?key=nanndemosoudann_23schop';
 
 // データを取得する関数
 async function fetchData() {
