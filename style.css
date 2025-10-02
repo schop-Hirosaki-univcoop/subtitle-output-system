@@ -1,0 +1,1046 @@
+﻿    /* hidden属性を著者CSSが上書きしてしまう事故を防ぐ */
+    [hidden]{display:none!important}
+
+    /* フォント */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;600;700&family=M+PLUS+2:wght@800&display=swap');
+    :root{
+      --accent-faq:#38bdf8;  /* cyan */
+      --accent-rn:#f472b6;   /* magenta */
+      --accent-team:#f59e0b; /* amber */
+      --hscale:0.90;         /* 横圧縮の初期値 */
+      --rnhscale:0.90;
+       /* ▼ 句読点の詰め調整（表示側と同値） */
+      --punctPad:0.02em;
+      --punctEatL:0.02em;
+      --punctEatR:0.02em;
+      /* ▼ 画面制御のための寸法変数 */
+      --paneMaxH:400px;             /* 左パネル(#control-rail)の最大縦幅（外枠込み） */
+      --btn-font:clamp(13px,.85rem + .05vw,15px);
+      --btn-h:calc(var(--btn-font)*1.1 + 16px); /* = line-height相当 + (上下padding14px + 上下border2px) */
+      --tab-h:32px;                 /* タブ行の見込み高さ（padding/border込み） */
+      /* ▼ ルビ辞書ドロワー幅（ウィンドウの1/3） */
+      --dictW:33.333vw;
+      /* ▼ 共通フォーム寸法（セレクト等） */
+      --ctl-h:32px; --ctl-r:10px;
+     }
+
+    html,body{height:100%;margin:0}
+    body{
+      font-family:Inter,"Noto Sans JP",system-ui,-apple-system,Segoe UI,Roboto,Arial,"Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic","Meiryo",sans-serif;
+      background:#0b0e12;text-align:center;overflow:hidden;line-height:1.38;color-scheme:dark;
+      color:#e8eef9;
+      --gap:8px;
+      /* 以前の left-rail 用の計算系は不要になったため整理 */
+      --previewMin:604px;--listCardMin:420px;
+      --railPad:10px;--panelBW:1px;
+      --fs-title:clamp(16px,.95rem + .5vw,20px);
+      --fs-meta:clamp(12px,.8rem + .1vw,14px);--fs-btn:clamp(15px,.95rem + .2vw,18px);
+      --fs-card:clamp(14px,.9rem + .2vw,16px);--fs-chip:clamp(12px,.8rem + .1vw,14px);
+      --fs-ts:clamp(11px,.7rem + .1vw,12px);
+      --pad-card:12px;--card-gap:6px;--row-gap:4px;
+      --chip-h:32px;--status:16px;--radius:12px;--approveW:11.5em;
+      /* 配色 */
+      --bg:#0b0e12;--panel:#0f131a;--panelElev:rgba(18,22,30,.66);
+      --border:#1c2532;--line:#121821;--muted:#99a3b3;
+      --onair:#ff0033;--standby:#1f8cff;--ok:#00e5ff;--good:#22c55e;
+      --glow-red:0 0 0 1px rgba(255,0,51,.2),0 0 24px rgba(255,0,51,.25);
+      --glow-blue:0 0 0 1px rgba(31,140,255,.18),0 0 24px rgba(31,140,255,.22);
+      background-image:
+        radial-gradient(1200px 600px at 75% -10%, rgba(0,229,255,.07), transparent 60%),
+        radial-gradient(1000px 700px at -20% 120%, rgba(255,0,51,.05), transparent 60%),
+        repeating-linear-gradient(90deg, rgba(255,255,255,.03), rgba(255,255,255,.03) 1px, transparent 1px, transparent 24px),
+        repeating-linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02) 1px, transparent 1px, transparent 24px);
+    }
+    *{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale }
+
+    #layout{
+      display:grid;
+      row-gap:var(--gap);
+      column-gap:16px;
+      height:100dvh;padding:var(--gap);box-sizing:border-box;
+      grid-template-columns:1fr;
+      /* 1行目=ヘッダ, 2行目=ログ/画面の2分割, 3行目=リスト */
+      grid-template-rows:auto auto 1fr;
+    }
+
+    /* 2行目の2分割コンテナ（常に2カラム） */
+    #row2{ display:grid; grid-template-columns:minmax(220px,280px) 1fr; column-gap:16px; align-items:start; }
+
+    /* 汎用パネル */
+    .panel{
+      align-content:start; position:static; height:fit-content; min-width:0; overflow:visible; z-index:3;
+      background:var(--panelElev); backdrop-filter:blur(8px);
+      border:1px solid var(--border); border-radius:14px; padding:var(--railPad);
+      box-shadow:0 8px 26px rgba(0,0,0,.35);
+    }
+    .panel-header{
+      color:#e8eef9; font-size:var(--fs-title); font-weight:700; text-align:left; width:100%;
+      letter-spacing:.02em; display:flex; align-items:center; gap:8px; margin-bottom:8px;
+    }
+
+    /* パネル中身 */
+    #log-rail.panel{ display:grid; grid-template-rows:auto 1fr; }
+    /* 画面グループは「プレビュー群＋アクション」のみ（ヘッダは1行目へ移動） */
+    #control-rail.panel{
+      display:grid;
+      grid-template-rows:auto auto;
+      row-gap:var(--gap);
+      /* ★ 最大縦幅を固定（box-sizing:border-box で padding/border 含む） */
+      max-height:var(--paneMaxH);
+      overflow:auto;
+      box-sizing:border-box;
+      /* ボタン/余白などを差し引いた“モニタ部”の最大縦幅を算出（タブは廃止） */
+      --monMaxH: calc(
+        var(--paneMaxH) - (2 * var(--railPad)) - (2 * var(--panelBW))  /* 枠とpadding */
+        - (4 * var(--gap)) - (3 * var(--btn-h))                         /* 隙間 + ボタン3段 */
+      );
+      /* PGM/PVWの幅は“高さ×16:9”を上限に固定（横長化を抑止） */
+      --monW: calc(var(--monMaxH) * (16 / 9));
+    }
+ 
+    /* 送出ログコンテンツ */
+    #oplog-wrap{ align-self:start; max-height:calc(100dvh - 2*var(--gap)); overflow:auto; text-align:left; }
+    #oplog{ list-style:none; margin:0; padding:0; color:#bbb; font-size:12px; line-height:1.3; }
+    .oplog-title{ color:#aaa; font-size:12px; margin:8px 0 4px; }
+
+    #right-pane{
+      min-width:0;overflow-y:auto;overflow-x:hidden;padding-right:0;position:relative;z-index:2;isolation:isolate;
+      border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
+      /* スクロールバーの出現/消失で幅が揺れないよう予約 */
+      scrollbar-gutter: stable;
+    }
+    #page-title{
+      color:#e8eef9;font-size:var(--fs-title);font-weight:700;text-align:left;width:100%;
+      letter-spacing:.02em;display:flex;align-items:center;gap:8px;
+    }
+    /* タリー（PVW / PGM） : #page-title にバッジ */
+    body.has-onair #page-title::after{
+      content:"ON AIR"; font-family:'M PLUS 2',sans-serif; font-weight:800;
+      color:#fff; background:linear-gradient(180deg,#ff274c,#d8002f);
+      border-radius:999px; padding:3px 10px; letter-spacing:.04em; font-size:.85em;
+      box-shadow:var(--glow-red);
+    }
+    body:not(.has-onair) #page-title::after{
+      content:"STANDBY"; font-family:'M PLUS 2',sans-serif; font-weight:800;
+      color:#fff; background:linear-gradient(180deg,#4aa3ff,#1f8cff);
+      border-radius:999px; padding:3px 10px; letter-spacing:.04em; font-size:.85em;
+      box-shadow:var(--glow-blue);
+    }
+
+    #meta-row{display:flex;align-items:center;justify-content:space-between;gap:12px;white-space:nowrap;width:100%;}
+    #meta-row .counters{color:#b6c2d4;font-size:var(--fs-meta)}
+    #meta-row .tools{display:flex;gap:10px;align-items:center}
+    #search{
+      width:260px;height:36px;border-radius:10px;border:1px solid var(--border);
+      background:#0f131a;color:#e8eef9;font-size:var(--fs-chip);padding:0 12px;outline:none;
+      transition:.2s; box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);
+    }
+    #search::placeholder{color:#8fa0b5}
+    #search:focus{border-color:#1f8cff; box-shadow:0 0 0 3px rgba(31,140,255,.18)}
+    .only-open{color:#b6c2d4;font-size:var(--fs-meta);display:flex;align-items:center;gap:8px}
+    /* ▼ 統一スイッチUI */
+    .ui-switch{
+      appearance:none; width:44px;height:24px;border-radius:999px;background:#0f131a;
+      border:1px solid var(--border); position:relative; cursor:pointer; transition:.2s;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.03);
+    }
+    .ui-switch::after{
+      content:""; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%;
+      background:#8796a8; transition:.2s; box-shadow:0 2px 8px rgba(0,0,0,.4);
+    }
+    .ui-switch:checked{ background:rgba(31,140,255,.18); border-color:#1f4c8a }
+    .ui-switch:checked::after{ left:calc(100% - 20px); background:#1f8cff }
+    .ui-switch:focus-visible{ outline:2px solid rgba(31,140,255,.45); outline-offset:2px }
+    /* ▼ 統一プルダウン（ヘッダーのセーフマージン等にも適用） */
+    .ui-select{
+      height:var(--ctl-h);
+      border-radius:var(--ctl-r);
+      border:1px solid #2a3445;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 40%),
+        #0f131a;
+      color:#e8eef9;
+      padding:0 32px 0 12px;
+      outline:none; appearance:none;
+      font-size:var(--fs-chip);
+      transition:border-color .15s ease, box-shadow .15s ease, background .15s ease;
+      background-image:
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%23b6c2d4' d='M1.41.59L6 5.17 10.59.59 12 2 6 8 0 2z'/></svg>");
+      background-repeat:no-repeat;
+      background-position:right 10px center;
+      background-size:12px 8px;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);
+    }
+    .ui-select:hover{ border-color:#3a465b; background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,0) 40%), #101520; }
+    .ui-select:focus-visible{ border-color:#1f8cff; box-shadow:0 0 0 3px rgba(31,140,255,.22); }
+    .ui-select:disabled{ opacity:.6; cursor:not-allowed; }
+
+    #nameList{list-style:none;padding:0;width:95%;margin:0 auto;box-sizing:border-box;display:flex;flex-direction:column;gap:var(--card-gap);align-items:stretch}
+    /* アクションエリア：左レール内で幅100%に収める3行グリッド
+       1行目: ON AIR 全幅、2行目: ジャンプ/強制、3行目: エントリー系 */
+    #actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      grid-template-rows:auto auto auto;
+      /* ボタン3段は高さを固定して総量を算出可能に */
+      grid-auto-rows:unset;
+      grid-template-rows:var(--btn-h) var(--btn-h) var(--btn-h);
+      /* CUEを廃止。TAKEは1段目で2カラム幅に */
+      grid-template-areas:
+        "approve approve"
+        "jump    force"
+        "reentry reset";
+      gap:8px;
+      /* ▼ 2カラムの下で中央寄せ＆幅を抑える（左寄り修正） */
+      grid-column:1 / -1;
+      justify-self:center;
+      width:min(680px,100%);
+      align-items:stretch;
+      min-width:0;
+    }
+    #actions button{ width:100%; min-width:0; white-space:nowrap; height:var(--btn-h); }
+
+    /* ボタン：中立（スタンバイ時に青くしない） */
+    #approve-button,#reject-button,#reset-all-button,#force-standby-button,#jump-onair-button{
+      font-family:'M PLUS 2',sans-serif;font-weight:800;
+      /* さらに細身化 */
+      /* ボタン高さ算出と連動させるため変数化 */
+      font-size:var(--btn-font);
+       padding:7px 12px;
+      border-radius:8px;border:0;line-height:1.1;transition:.15s ease;
+      box-shadow:0 2px 0 rgba(255,255,255,.06) inset, 0 6px 20px rgba(0,0,0,.35);
+      background:#2a3342;color:#e8eef9;border:1px solid #3a455a;
+    }
+    #approve-button{ grid-area:approve; }
+    #jump-onair-button{ grid-area:jump; }
+    #force-standby-button{ grid-area:force; }
+    #reject-button{ grid-area:reentry; }
+    #reset-all-button{ grid-area:reset; }
+    #approve-button:hover,#reject-button:hover,#reset-all-button:hover,#force-standby-button:hover,#jump-onair-button:hover{background:#364154}
+    #approve-button.danger{background:#c62828;color:#fff;border-color:transparent}
+    #approve-button.danger:hover{background:#a52727}
+    button:disabled{opacity:.5; filter:grayscale(.2); cursor:not-allowed !important}
+
+    .name-box{
+      background:rgba(18,22,30,.72);
+      padding:var(--pad-card);margin:var(--card-gap) 0;border-radius:var(--radius);
+      border:1px solid var(--border);box-shadow:0 1px 0 rgba(255,255,255,.03) inset;
+      font-size:var(--fs-card);width:100%;max-width:100%;box-sizing:border-box;
+      text-align:left;cursor:pointer;transition:transform .18s ease, box-shadow .18s ease, background .18s ease;
+      /* Grid: 1行目=上段(左:ラベル/RN, 右:TS) 2行目=本文 */
+      display:grid;
+      grid-template-columns:minmax(0,1fr) auto;
+      grid-template-areas:
+        "top ts"
+        "body body";
+      gap:var(--row-gap);
+      position:relative; color:#e8eef9;
+    }
+    .name-box:hover{ transform:translateY(-1px); box-shadow:0 10px 24px rgba(0,0,0,.25) }
+    .name-box.focused{ outline:3px solid rgba(31,140,255,.45); outline-offset:2px }
+    .name-box.focused{--pad-card:15px;--row-gap:5px;--chip-h:40px;--status:20px;--radius:15px;--fs-card:clamp(15px,.95rem + .3vw,18px);--fs-chip:clamp(13px,.85rem + .15vw,15px);--fs-ts:clamp(11px,.7rem + .1vw,12px);}
+    .top-row{grid-area:top; display:flex; align-items:center; gap:10px}
+    .bottom-row{grid-area:body; display:flex; align-items:center; min-width:0}
+    .third-row{grid-area:ts; text-align:right; align-self:start; margin:0}
+    /* フォーカス時は TS を最下段の全幅へ */
+    .name-box.focused{
+      grid-template-areas:
+        "top top"
+        "body body"
+        "ts ts";
+    }
+    .status-normal{background:#e6eefc}.status-selected{background:var(--good)}
+    .content-wrapper{display:flex;align-items:center;flex-grow:1;justify-content:space-between;width:100%}
+    .text-container{flex-grow:1;text-align:left;min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;color:#e8eef9}
+    /* ダブルクリックで質問だけ編集のヒント */
+    .text-container{cursor:text}
+
+    /* 共通チップの下地（薄いガラス＋細縁） */
+    .rname-chip, .team-box{
+      position:relative; overflow:hidden;
+      border-radius:10px;
+      border:1px solid var(--border);
+      background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));
+      color:#dbe7ff;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);
+    }
+
+    /* 改行を許可するため group-box は可変高さ、最低高さだけ確保 */
+    .rname-chip{ min-height:var(--chip-h); }
+    /* team は従来通り固定高さ */
+    .team-box{ height:var(--chip-h); }
+
+
+    /* レイアウト安定化（幅・省略・余白） */
+    .rname-chip{
+      display:flex; align-items:center;
+      padding:0 12px 0 16px;              /* 左: アクセント6px + 余白10px */
+      flex:1; min-width:0; margin-right:10px;
+      /* 必ず表示：改行を許可し、長いRNでも折り返す */
+      white-space:normal; overflow:hidden; overflow-wrap:anywhere; text-overflow:clip;
+      line-height:1.25;
+    }
+
+    /* 軽い光沢筋（横方向のうっすらハイライト）…未完了のときだけ適用 */
+    .name-box:not(.completed) .rname-chip::before{
+      content:""; position:absolute; inset:0;
+      background:linear-gradient(90deg, rgba(255,255,255,.06), transparent 30%);
+      opacity:.25; pointer-events:none;
+    }
+
+    /* よくある質問（cyan） */
+    .rname-chip.is-faq{
+      color:#e7faff;
+      border-color:rgba(56,189,248,.35);
+      box-shadow:0 0 0 1px rgba(56,189,248,.22) inset, 0 6px 18px rgba(0,0,0,.18);
+    }
+    .rname-chip.is-faq::after{
+      content:""; position:absolute; left:0; top:0; bottom:0; width:6px;
+      background:linear-gradient(180deg, var(--accent-faq), #0891b2);
+      z-index:0;
+    }
+
+    /* ラジオネーム（magenta） */
+    .rname-chip.is-rname{
+      color:#ffeaf3;
+      border-color:rgba(244,114,182,.35);
+      box-shadow:0 0 0 1px rgba(244,114,182,.22) inset, 0 6px 18px rgba(0,0,0,.18);
+    }
+    .rname-chip.is-rname::after{
+      content:""; position:absolute; left:0; top:0; bottom:0; width:6px;
+      background:linear-gradient(180deg, var(--accent-rn), #be185d);
+      z-index:0;
+    }
+
+    /* 班番号（amber） */
+    .team-box{
+      display:flex; align-items:center; justify-content:center;
+      padding:0 14px; font-weight:800; color:#fff3d6;
+      height:var(--chip-h); flex-shrink:0;
+      background:linear-gradient(180deg, rgba(245,158,11,.16), rgba(245,158,11,.08));
+      border:1px solid rgba(245,158,11,.45);
+      box-shadow:0 0 0 1px rgba(245,158,11,.25) inset;
+    }
+    .team-box::after{
+      content:""; position:absolute; inset:0;
+      background:radial-gradient(120% 120% at -10% 50%, rgba(255,255,255,.18), transparent 40%);
+      opacity:.3; pointer-events:none;
+    }
+
+    .timestamp{
+      font-size:var(--fs-ts);
+      color:rgba(255,255,255,.55);
+      display:inline-block;
+      line-height:1.2;          /* ← 2行の間隔を少し詰める */
+      white-space: nowrap;
+    }
+
+    /* フラグ／警告チップ */
+    .chip{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;margin-left:8px}
+    .chip.ng{background:rgba(255,0,0,.18);border:1px solid rgba(255,0,0,.4);color:#ffd7d7}
+    .chip.dup{background:rgba(255,193,7,.18);border:1px solid rgba(255,193,7,.45);color:#fff2c2}
+    .edit-btn{margin-left:auto;background:#233043;border:1px solid #3a455a;border-radius:8px;padding:4px 8px;font-size:12px;cursor:pointer}
+    .edit-btn + .edit-btn{margin-left:6px}
+    .edit-btn:hover{background:#2f3a4d}
+
+    /* ON AIR中 */
+    .name-box.approved{
+      background:linear-gradient(180deg, rgba(255,0,51,.15), rgba(255,0,51,.06)), rgba(18,22,30,.8);
+      border-color:rgba(255,0,51,.45);
+      box-shadow:var(--glow-red), inset 0 0 0 1px rgba(255,255,255,.02);
+      position:relative;
+    }
+    .name-box.approved::after{
+      content:""; position:absolute; inset:0; pointer-events:none;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.05), transparent 60%),
+        repeating-linear-gradient(180deg, transparent 0 3px, rgba(255,255,255,.04) 3px 4px);
+      opacity:.6; border-radius:inherit;
+    }
+
+    /* 送出済み（スタンプ風・放送寄り） */
+    .name-box.completed{
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border-color:rgba(56,189,248,.32); /* cyan系 */
+      box-shadow:
+        inset 4px 0 0 #38bdf8,                 /* 左LEDバー */
+        inset 0 0 0 1px rgba(255,255,255,.03); /* 薄い縁 */
+      position:relative;
+    }
+    /* 旧：カード左上の済バッジは非表示（新バッジはチップ内へ） */
+    .name-box.completed::after{ display:none; }
+    /* 新：グループチップ先頭に“済”を金色で表示 */
+    .name-box.completed .rname-chip{ padding-left:56px; }
+    .name-box.completed .rname-chip::before{      content:"済";
+      position:absolute;
+      left:10px; top:50%; right:auto; bottom:auto;  /* insetの残留を打ち消す */
+      transform:translateY(-50%);
+      display:inline-flex; align-items:center; justify-content:center;
+      font-family:'M PLUS 2',sans-serif; font-weight:800;
+      font-size:.78rem; letter-spacing:.06em;
+      line-height:1; white-space:nowrap;
+      color:#1f1300;
+      background:linear-gradient(180deg,#fde68a,#f59e0b); /* gold */
+      border:1px solid rgba(255,255,255,.28);
+      border-radius:999px;
+      padding:.18rem .55rem .2rem;
+      box-shadow:0 2px 10px rgba(0,0,0,.35), 0 0 0 2px rgba(250,204,21,.18);
+      z-index:2; pointer-events:none;
+    }
+    .name-box.completed .timestamp{ color:rgba(255,255,255,.48) }
+
+    /* === preview-row：タブは廃止。常時2面表示 === */
+    #preview-row{
+      display:grid;
+      grid-template-rows:1fr;
+      gap:0;
+      /* 2面(=2× --monW) + 隙間までに幅を制限し中央寄せ、常に16:9維持 */
+      width:min(100%, calc(2 * var(--monW) + 8px));
+      max-width:100%;          /* 親より広がらないよう保険 */
+      margin:0 auto;           /* よくある中央寄せ */
+      justify-self:center;     /* grid子要素として中央に固定 */
+    }
+    /* PVW/PGM を2カラムに */
+    .monitors-grid{
+      display:grid;
+      /* 各面の横幅を “高さ由来の16:9” を上限に固定して横伸びを防止 */
+      grid-template-columns:minmax(0, var(--monW)) minmax(0, var(--monW));
+      justify-content:center;  /* 余白は中央に寄せる */
+      gap:8px;
+    }
+    /* タブ撤去に伴いそのまま器として使う */
+    #preview-contents{ min-height:0; }
+ 
+    #display-preview{
+      width:100%;max-width:var(--monW);aspect-ratio:16/9;z-index:20;
+      /* ← 左パネルの総量から逆算した“モニタ部”の上限高さで抑止 */
+      max-height:var(--monMaxH);
+      border-radius:14px;overflow:hidden;background:#000;
+      border:1px solid var(--border);box-shadow:0 8px 26px rgba(0,0,0,.5);
+      position:relative;
+    }
+    #display-preview .pgm-tag{
+      position:absolute;left:10px;top:10px;font-weight:800;
+      padding:3px 8px;border-radius:999px;background:#ff274c;color:#fff;font-size:.85rem;
+      box-shadow:0 0 0 1px rgba(255,0,51,.18), 0 0 18px rgba(255,0,51,.22);
+      z-index:40;
+    }
+
+    /* ベゼル */
+    #display-preview::after{
+      content:""; position:absolute; inset:0; pointer-events:none;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 18%),
+        linear-gradient(transparent calc(100% - 18%), rgba(255,255,255,.06));
+      box-shadow:inset 0 0 0 2px rgba(255,255,255,.04), inset 0 0 0 6px rgba(0,0,0,.45);
+    }
+
+    /* ▼ 新規：PVWプレビュー（小型モニタ） */
+    #pvw-preview{
+      width:100%;max-width:var(--monW);aspect-ratio:16/9;
+      max-height:var(--monMaxH);
+      border-radius:14px;overflow:hidden;background:#000;position:relative;
+      border:1px solid var(--border);box-shadow:0 6px 18px rgba(0,0,0,.5);
+      margin-bottom:0;
+    }
+    #pvw-preview::after{
+      content:""; position:absolute; inset:0; pointer-events:none;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0) 18%),
+        linear-gradient(transparent calc(100% - 18%), rgba(255,255,255,.05));
+      box-shadow:inset 0 0 0 2px rgba(255,255,255,.04), inset 0 0 0 6px rgba(0,0,0,.45);
+    }
+    #pvw-mirror{position:relative;width:100%;height:100%;overflow:hidden}
+    #pvw-stage{position:absolute;left:50%;bottom:0;width:1920px;height:1080px;transform-origin:bottom center}
+    #pvw-preview .pvw-tag{
+      position:absolute;left:10px;top:10px;font-weight:800;
+      padding:3px 8px;border-radius:999px;background:#1f8cff;color:#fff;font-size:.85rem;
+      box-shadow:0 0 0 1px rgba(31,140,255,.18), 0 0 18px rgba(31,140,255,.22);
+      z-index:40;
+    }
+
+    /* 本線タリーの輝き */
+    body.has-onair #display-preview{
+      box-shadow:0 8px 26px rgba(0,0,0,.55), 0 0 0 2px rgba(255,0,51,.25), 0 0 38px rgba(255,0,51,.25)
+    }
+    body:not(.has-onair) #display-preview{
+      box-shadow:0 8px 26px rgba(0,0,0,.55), 0 0 0 2px rgba(31,140,255,.22), 0 0 34px rgba(31,140,255,.22)
+    }
+
+    #preview-mirror{position:relative;width:100%;height:100%;overflow:hidden}
+    #mirror-stage{position:absolute;left:50%;bottom:0;width:1920px;height:1080px;transform-origin:bottom center}
+    #selectedList{list-style:none;margin:0;padding:0;position:absolute;bottom:20px;left:0;right:0;display:flex;flex-direction:column;align-items:center;color:#fff;width:100%}
+    /* ▼ PVW のレイアウトを PGM と合わせる（ズレ修正） */
+    #pvwList{
+      list-style:none;margin:0;padding:0;position:absolute;bottom:20px;left:0;right:0;
+      display:flex;flex-direction:column;align-items:center;color:#fff;width:100%;
+    }
+    .selected-box{
+      position:relative;padding:25px 30px 30px;margin:10px auto;
+      background:rgba(0,0,0,.85);
+      box-shadow:8px -8px 0 #ff1493,-8px 8px 0 #00ffff;
+      font-family:'M PLUS 2',sans-serif;font-weight:800;font-size:72px;
+      width:90%;line-height:1.3;
+      /* アニメ用のYは変数に寄せる（既定は 20px） */
+      --slideY: 20px;
+      transform-origin:bottom center; opacity:0;
+      /* 右→左で適用：skew → translateY → translateX（画面座標で補正） */
+      transform: translateX(var(--baseFixX, 0px))
+                translateY(var(--slideY))
+                skewX(-15deg);
+      transition:opacity .5s ease-out, transform .5s ease-out; z-index:10;
+    }
+    /* テキスト本体（色のスタイルは .style-1..4 を親に付与） */
+    /* 質問ブロックを“左揃えのまま中央”に置くためのラッパ */
+    .selected-box{ text-align:center; }
+    .content-wrap{ position:relative; width:100%; }
+    /* ここが“中央係”。幅が100%超でも左右均等にはみ出させる */
+    .content-center{
+      position:relative;
+      left:50%;
+      transform:translateX(calc(-50% + var(--nudgeX, 0px) - var(--baseFixX, 0px)));
+      width:calc(100% / var(--hscale));  /* 90% 圧縮 → 111%に拡張 */
+      max-width:none;
+      will-change:transform;
+    }
+    .selected-box .content{
+      position: relative;
+      display: block;
+      text-align:left;hyphens:auto;line-break:strict;word-break:break-all;
+      overflow-wrap:anywhere;
+      /* display.html の文字組と一致させるため明示 */
+      font-feature-settings:"palt","halt";
+      width:100%;
+      transform:skewX(15deg) scaleX(var(--hscale)); /* 親の -15° を相殺＋横圧縮 */
+      transform-origin:bottom center;
+    }
+    .selected-box .content .line{ display:block; }
+    /* ▼ 句読点ラップ用（palt を効かせつつ、負の margin でサイドベアリングを食う） */
+    .punct{
+      font-feature-settings:"palt" 1,"halt" 0;
+      letter-spacing:0;
+    }
+    .punct.padL{ padding-left: var(--punctPad);  margin-left:  calc(-1 * var(--punctEatL)); }
+    .punct.padR{ padding-right:var(--punctPad);   margin-right: calc(-1 * var(--punctEatR)); }
+
+    /* 文節の外箱＝行基準を「下端」に固定して、上下の食い込みを防ぐ */
+    .bun{
+      display:inline-block;
+      white-space:nowrap;
+      vertical-align:bottom;         /* ★行の下端を基準にしてズレを防止 */
+    }
+    /* 中身＝横圧縮。基準点も「左下」に変更して重なりを防ぐ */
+    .bun > .scaled{
+      display:inline-block;
+      color:inherit; text-shadow:inherit;
+      will-change:transform;
+    }
+    .entry-label{
+      position:absolute;top:-50px;left:-30px;
+      background:#ff0;color:#000;padding:0 40px;box-shadow:8px -8px 0 #ff1493;font-weight:800;font-size:50px;z-index:20;
+    }
+    /* ラベル全体を1行のフレックスにして改行禁止 */
+    .entry-label{
+      display:inline-flex;                 /* ★span側ではなく箱をflex化 */
+      align-items:baseline;
+      gap:5px;
+      transform-origin:left bottom;
+      white-space:nowrap;                  /* ★絶対に折り返さない */      
+      transform:scaleX(var(--rnhscale));
+    }
+    .entry-label .rname-prefix,
+    .entry-label .rname,
+    .entry-label .faq-tag{
+      display:inline;                      /* ★子はインラインのまま */
+      white-space:nowrap;
+    }
+    .entry-label-text{
+      transform:skewX(15deg);
+    }
+    .entry-label .faq-tag   {font-size:60px;line-height:1;padding:5px 20px 10px;margin-right:5px}
+    .entry-label .rname     {font-size:70px;line-height:1;margin-right:5px}
+    .entry-label .rname-prefix{font-size:50px;line-height:1}    .style-1{color:#ffaadd;text-shadow:-1px 0 0 #aa0044,0 1px 0 #aa0044,1px 0 0 #aa0044,0 -1px 0 #aa0044,-1px -1px 0 #aa0044,1px -1px 0 #aa0044,-1px 1px 0 #aa0044,1px 1px 0 #aa0044,0 0 10px #ee1188,0 0 12px #ee1188,0 0 14px #ee1188,0 0 16px #ee1188,0 0 18px #ee1188,0 0 20px #ee1188}
+    .style-2{color:#aaffff;text-shadow:-1px 0 0 #004444,0 1px 0 #004444,1px 0 0 #004444,0 -1px 0 #004444,-1px -1px 0 #004444,1px -1px 0 #004444,-1px 1px 0 #004444,0 0 10px #008888,0 0 12px #008888,0 0 14px #008888,0 0 16px #008888,0 0 18px #008888,0 0 20px #008888}
+    .style-3{color:#f8e4b1;text-shadow:-1px 0 0 #902707,0 1px 0 #902707,1px 0 0 #902707,0 -1px 0 #902707,-1px -1px 0 #902707,1px -1px 0 #902707,-1px 1px 0 #902707,1px 1px 0 #902707,0 0 10px #d16b0d,0 0 12px #d16b0d,0 0 14px #d16b0d,0 0 16px #d16b0d,0 0 18px #d16b0d,0 0 20px #d16b0d}
+    .style-4{color:#aaffaa;text-shadow:-1px 0 0 #005500,0 1px 0 #005500,1px 0 0 #005500,-1px -1px 0 #005500,1px -1px 0 #005500,-1px 1px 0 #005500,0 0 10px #229922,0 0 12px #229922,0 0 14px #229922,0 0 16px #229922,0 0 18px #229922,0 0 20px #229922}
+
+    #preview-mirror, #pvw-mirror,
+    #mirror-stage, #pvw-stage,
+    #selectedList, #pvwList,
+    .selected-box, .selected-box *{
+      -webkit-font-smoothing: auto;
+      -moz-osx-font-smoothing: auto;
+    }
+
+    /* slide は変数で制御（translateX(baseFixX) を壊さない） */
+    .slide-in { opacity:1;  --slideY: 0px; }
+    .slide-out{ opacity:0;  --slideY:-20px; }
+
+    /* ▼ 追加/修正：オーバーレイ（CSSが抜けていたため復活＆最前面化） */
+    #overlay{
+      position:fixed; inset:0; display:none;
+      align-items:center; justify-content:center;
+      background:rgba(0,0,0,.55); z-index:11000;
+    }
+    #overlay.show{ display:flex }
+    #overlay .panel{
+      min-width:280px; max-width:80vw; padding:22px 26px; border-radius:14px;
+      background:rgba(15,19,26,.9); color:#fff; text-align:center;
+      box-shadow:0 10px 30px rgba(0,0,0,.45); backdrop-filter:blur(6px);
+      border:1px solid rgba(255,255,255,.18);
+    }
+    #overlay .spinner{
+      width:48px; height:48px; border-radius:50%;
+      border:4px solid rgba(255,255,255,.25); border-top-color:#fff;
+      margin:0 auto 12px; animation:spin 1s linear infinite;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+    #overlay .msg{font-size:1.05rem;font-weight:700;margin-bottom:4px}
+    #overlay .sub{font-size:.85rem;opacity:.85}
+
+    /* トップ中央トースト */
+    #toast{
+      position:fixed; top:16px; left:50%;
+      transform:translateX(-50%) translateY(-10px);
+      background:rgba(16,18,24,.94);
+      color:#fff; padding:14px 18px; border-radius:12px;
+      font-size:clamp(14px,.9rem + .2vw,18px); font-weight:700;
+      box-shadow:0 8px 28px rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.2);
+      display:flex; align-items:center; gap:12px;
+      opacity:0; pointer-events:none; z-index:12000; /* ← オーバーレイより上でもOK */
+      transition:opacity .25s ease, transform .25s ease; backdrop-filter:blur(4px);
+    }
+    #toast .icon{font-size:1.2em}
+    #toast .title{letter-spacing:.02em}
+    #toast .sub{font-size:.9em; opacity:.9; font-weight:600; margin-top:2px}
+    #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+    #toast[data-kind="onair"]{ box-shadow:var(--glow-red), 0 8px 28px rgba(0,0,0,.6) }
+    #toast[data-kind="standby"]{ box-shadow:var(--glow-blue), 0 8px 28px rgba(0,0,0,.6) }
+    #toast[data-kind="reentry"]{ box-shadow:0 0 0 1px rgba(0,229,255,.18), 0 0 24px rgba(0,229,255,.22), 0 8px 28px rgba(0,0,0,.6) }
+    #toast[data-kind="reset"]{ box-shadow:0 0 0 1px rgba(255,255,255,.18), 0 0 24px rgba(255,255,255,.18), 0 8px 28px rgba(0,0,0,.6) }
+
+    #right-pane::-webkit-scrollbar{width:10px}
+    #right-pane::-webkit-scrollbar-thumb{background:#2a3342;border-radius:10px}
+
+    @media (prefers-reduced-motion:reduce){
+      .name-box,.name-box:hover,#toast{transition:none}
+    }
+
+    /* ヘッダー側のセーフUI */
+    #safe-controls{ display:flex; gap:8px; align-items:center; }
+
+    /* セーフガイド：PGM / PVW 両対応 */
+    #safe-guides-pgm,#safe-guides-pvw{ position:absolute; inset:0; pointer-events:none; z-index:100; }
+    #safe-guides-pgm .safe-box,#safe-guides-pvw .safe-box{
+      position:absolute; border-radius:2px; box-shadow:inset 0 0 0 1px rgba(255,255,255,.15);
+    }
+    #safe-guides-pgm .safe-box.action,#safe-guides-pvw .safe-box.action{ border:2px dashed rgba(56,189,248,.9); }
+    #safe-guides-pgm .safe-box.title,#safe-guides-pvw .safe-box.title  { border:2px solid  rgba(245,158,11,.9); }
+
+    /* セーフガイドの矩形 */
+    #safe-guides{ position:absolute; inset:0; pointer-events:none; z-index:100; }
+    .safe-box{
+      position:absolute; border-radius:2px;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.15);
+    }
+    .safe-box.action{ border:2px dashed rgba(56,189,248,.9); } /* cyan系（アクション） */
+    .safe-box.title { border:2px solid  rgba(245,158,11,.9); } /* amber系（タイトル） */
+    /* ===== 3行ヘッダー レイアウト ===== */
+    #header{display:grid;row-gap:6px;align-items:center}
+    #title-row{display:flex;align-items:center;gap:10px}
+    #stats-row{display:flex;align-items:center;justify-content:space-between}
+    #stats-left{color:#b6c2d4;font-size:var(--fs-meta);display:flex;gap:14px;align-items:center}
+    #stats-right{display:flex;gap:10px;align-items:center}
+    #tool-row.tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+    /* ===== ピル型バッジ（DISPLAY/PGM CLOCKなどで共通） ===== */
+    .badge{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:4px 10px;border-radius:999px;font-weight:700;font-size:12px;
+      border:1px solid var(--border);background:rgba(255,255,255,.04);
+    }
+    .badge .dot{width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.4) inset}
+    .badge.is-live .dot{background:#22c55e}
+    .badge.is-live{box-shadow:0 0 0 1px rgba(34,197,94,.25),0 0 12px rgba(34,197,94,.25)}
+    .badge.is-lost .dot{background:#f43f5e;animation:pulse 1s infinite}
+    .badge.is-lost{box-shadow:0 0 0 1px rgba(244,63,94,.25),0 0 12px rgba(244,63,94,.25)}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+    /* バッジ内のミニ入力（PGM CLOCKの秒設定） */
+    #pgm-clock.badge input{
+      width:3.8em;margin-left:4px;
+      background:#0f131a;color:#e8eef9;border:1px solid var(--border);
+      border-radius:6px;padding:2px 6px;outline:none;
+    }
+
+    /* タブ“見出し”だけ消す。中身( .tabpanel )は生かす */
+    #control-rail .tabs { display:none !important; }
+    #control-rail .tabpanel { display:block !important; }  /* ← 復活 */
+
+    /* 旧レイアウトの“辞書タブのボタン”だけ隠す */
+    #tabbtn-dict{ display:none !important; }
+    /* #tab-dict は表示のまま。JSが中の #dict-pane を右ドロワーへ移設します */
+
+    /* 辞書タブのUI（preview-row タブ内でも共通） */
+    /* ▼ 辞書フォームを整列（3行グリッド） */
+    #dict-form{
+      display:grid;
+      /* 12カラムで安定配置（狭い幅でも重ならない） */
+      grid-template-columns: repeat(12, minmax(0,1fr));
+      grid-auto-rows: 32px;
+      gap:8px;
+      align-items:center;
+      margin-bottom:8px;
+      grid-auto-flow: row dense;
+    }
+    #dict-form input{
+      height:32px;border-radius:8px;border:1px solid var(--border);background:#0f131a;color:#e8eef9;padding:0 10px;outline:none;width:100%;
+    }
+    #dict-form button{
+      height:32px;border-radius:8px;border:0;padding:0 12px;font-weight:800;background:#2a3342;color:#e8eef9;border:1px solid #3a455a;white-space:nowrap;
+    }
+    /* ▼ ボタンのホバー / アクティブ */
+    #dict-form button:hover{ background:#364154 }
+    #dict-form button:active{ transform:translateY(1px) }
+    /* ▼ ヘッダー右側のゴーストボタン（再読み込み） */
+    .ghost-btn{
+      height:28px;padding:0 10px;border-radius:8px;border:1px solid var(--border);
+      background:transparent;color:#e8eef9;font-weight:700;cursor:pointer
+    }
+    .ghost-btn:hover{ background:#1a2230; border-color:#3a455a }
+
+
+    /* フォーム部品の最小幅をゼロにして溢れ重なりを防止 */
+    #dict-form input, #dict-form select, #dict-form button{ min-width:0; }
+    /* ▼ レイアウト再設計（要望どおりの行構成） */
+    /* 1行目：用語/よみ/mode/追加-上書き を同じ行に */
+    #dict-term{ grid-column:1 / span 4; grid-row:1; }
+    #dict-ruby{ grid-column:5 / span 4; grid-row:1; }
+    #dict-mode{ grid-column:9 / span 2; grid-row:1; }
+    #dict-save{ grid-column:11 / span 2; grid-row:1; }
+    /* 2行目：CSVエクスポート / CSVインポート / mergeプルダウン を同じ行に */
+    #btn-export-dict { grid-column:1 / span 4; grid-row:2; }
+    #btn-import-dict { grid-column:5 / span 4; grid-row:2; }
+    #import-strategy{ grid-column:9 / span 4; grid-row:2; min-width:10ch; }
+    /* 狭幅時は6カラムに落として折り返し（オーバーラップ防止） */
+    @media (max-width: 720px){
+      #dict-form{ grid-template-columns: repeat(6, minmax(0,1fr)); }
+      #dict-term{ grid-column:1 / -1; grid-row:1; }
+      #dict-ruby{ grid-column:1 / -1; grid-row:2; }
+      #dict-mode{ grid-column:1 / span 3; grid-row:3; }
+      #dict-save{ grid-column:4 / span 3; grid-row:3; }
+      #btn-export-dict { grid-column:1 / span 3; grid-row:4; }
+      #btn-import-dict { grid-column:4 / span 3; grid-row:4; }
+      #import-strategy{ grid-column:1 / span 6; grid-row:5; }
+    }
+
+    #dict-table{width:100%;border-collapse:collapse;font-size:12px}
+    #dict-table th,#dict-table td{border-bottom:1px solid #1c2532;padding:6px;text-align:left}
+    #dict-table td:last-child{white-space:nowrap}
+    /* トグル列中央寄せ＆共通スイッチを少し下げない */
+    #dict-table td.col-enabled{ text-align:center }
+    #dict-table input.dict-enabled{ vertical-align:middle }
+    /* ▼ 表だけ縦スクロール */
+    .dict-table-wrap{
+      overflow-y:auto; overflow-x:hidden;
+      max-height:clamp(160px, 40vh, 480px);
+      border-top:1px solid var(--border);
+    }
+    #dict-table thead th{
+      position:sticky; top:0;
+      background:var(--panelElev);
+      z-index:1;
+    }
+    /* ==== 一括編集モード（辞書） ==== */
+    /* モードのフラグは #dict-pane に .bulk-editing を付与 */
+    #dict-pane:not(.bulk-editing) .dict-enabled{ pointer-events:none; opacity:.6 }
+    /* 選択（削除予約）カラムは一括編集モードだけ見せる */
+    #dict-table th.col-select, #dict-table td.col-select{ display:none }
+    #dict-pane.bulk-editing #dict-table th.col-select,
+    #dict-pane.bulk-editing #dict-table td.col-select{ display:table-cell }
+    /* 一括編集ツールバーの表示/非表示 */
+    #dict-bulk-toolbar{ display:none; gap:8px; margin-left:auto; align-items:center }
+    #dict-pane.bulk-editing #dict-bulk-toolbar{ display:flex }
+    #dict-pane.bulk-editing #dict-bulk-edit{ display:none }
+    /* 削除予定の行の見た目 */
+    /* 一括編集での「選択」可視化（削除予約ではなく中立選択） */
+    #dict-table tr.to-delete{
+      background:rgba(31,140,255,.10);
+      box-shadow:inset 0 0 0 1px rgba(31,140,255,.35);
+      text-decoration:none; opacity:1;
+    }
+    /* 編集行でもスイッチ見た目を維持 */
+    .in-en.ui-switch{ vertical-align:middle }
+
+    /* 一括編集中は行クリックで選択トグル（冗長UI排除＆操作性UP） */
+    #dict-pane.bulk-editing #dict-table tbody tr{ cursor:pointer }
+    #dict-pane.bulk-editing #dict-table tbody tr:focus-within{ outline:2px solid rgba(31,140,255,.45) }
+    /* 削除ボタンをアイコン付きで視認性UP（通常モードのみ表示） */
+    .dict-del{
+      position:relative; padding-left:30px;
+    }
+    .dict-del::before{
+      content:""; position:absolute; left:10px; top:50%; width:14px; height:14px; transform:translateY(-50%);
+      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23ffd7d7' d='M9 3h6a1 1 0 0 1 1 1v1h5v2H3V5h5V4a1 1 0 0 1 1-1zm1 5h2v11h-2V8zm4 0h2v11h-2V8zM7 8h2v11H7V8z'/></svg>");
+      background-repeat:no-repeat; background-size:14px 14px; opacity:.95;
+    }
+    .dict-del{background:linear-gradient(180deg, rgba(244,63,94,.28), rgba(244,63,94,.20)); border:1px solid rgba(244,63,94,.55)}
+    .dict-del:hover{background:linear-gradient(180deg, rgba(244,63,94,.35), rgba(244,63,94,.26))}
+    /* 一括編集中の行内「削除」ボタンは選択トグルとして中立化 */
+    #dict-pane.bulk-editing .dict-del{ background:#233043; border:1px solid #3a455a }
+    #dict-pane.bulk-editing .dict-del:hover{ background:#2f3a4d }
+
+    /* ▼ 統一プルダウンUI（辞書ペイン専用で上書き・洗練） */
+    #dict-pane .ui-select{
+      --ctl-h:32px; --ctl-r:10px;
+      height:var(--ctl-h);
+      border-radius:var(--ctl-r);
+      border:1px solid #2a3445;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 40%),
+        #0f131a;
+      color:#e8eef9;
+      padding:0 32px 0 12px;
+      outline:none; appearance:none;
+      font-size:var(--fs-chip);
+      transition:border-color .15s ease, box-shadow .15s ease, background .15s ease;
+      background-image:
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%23b6c2d4' d='M1.41.59L6 5.17 10.59.59 12 2 6 8 0 2z'/></svg>");
+      background-repeat:no-repeat;
+      background-position:right 10px center;
+      background-size:12px 8px;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);
+    }
+    #dict-pane .ui-select:hover{ border-color:#3a465b; background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,0) 40%), #101520; }
+    #dict-pane .ui-select:focus-visible{ border-color:#1f8cff; box-shadow:0 0 0 3px rgba(31,140,255,.22); }
+    #dict-pane .ui-select:disabled{ opacity:.6; cursor:not-allowed; }
+
+    /* ▼ 辞書ペイン本体（見た目は共通のまま） */
+    #dict-pane{
+      border:1px solid var(--border); border-radius:14px; background:var(--panelElev);
+      padding:10px;
+      /* 表のみスクロールさせるためペイン自体はスクロールさせない */
+      overflow:hidden; max-height:100%;
+      box-shadow:0 6px 18px rgba(0,0,0,.5);
+      width:100%;
+      display:flex; flex-direction:column;
+    }
+    #dict-pane .panel-header{ margin:4px 0 10px; }
+
+    /* ▼ 右サイドのルビ辞書ドロワー（初期は閉） */
+    #dict-drawer{
+      position:fixed;
+      top:var(--gap); right:var(--gap); bottom:var(--gap);
+      width:var(--dictW);
+      transform:translateX(calc(100% + var(--gap)));
+      transition:transform .25s ease;
+      z-index:1200;
+      pointer-events:none; /* 閉時に背面を操作可能に */
+    }
+    #dict-drawer.open{ transform:translateX(0); pointer-events:auto; }
+    #dict-drawer .drawer-panel{
+      height:100%;
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:var(--panelElev);
+      backdrop-filter:blur(8px);
+      box-shadow:0 12px 30px rgba(0,0,0,.55);
+      display:flex; flex-direction:column; overflow:hidden;
+    }
+    #dict-drawer .drawer-header{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:10px; border-bottom:1px solid var(--border);
+    }
+    #dict-drawer .drawer-header .panel-header{ margin:0 }
+    #dict-drawer-body{ padding:10px; display:flex; flex-direction:column; min-height:0; }
+    #dict-drawer #dict-pane{ height:100%; }
+
+    /* ドロワートグルが設置先を見つけられない場合のFAB（最終フォールバック） */
+    #toggle-dict.fab{
+      position:fixed;
+      right:16px; bottom:16px;
+      z-index:1400;
+    }
+
+    /* =========================
+       ルビ辞書 UI 改修（統一トーン）
+       ========================= */
+    #dict-pane{
+      --ctl-h:32px;
+      --ctl-r:10px;
+      --ctl-gap:8px;
+      --ctl-border:#2a3445;
+      --ctl-bg:#101520;
+      --ctl-elev:#0f131a;
+      --ctl-ring:rgba(31,140,255,.22);
+      --accent:#1f8cff;
+      --accent-2:#6ab3ff;
+      --danger:#f43f5e;
+      --danger-2:#fb7185;
+      --muted:#b6c2d4;
+    }
+
+    /* ボタンの共通下地（辞書ペイン内だけに適用） */
+    #dict-pane #dict-form button,
+    #dict-pane .edit-btn,
+    #dict-pane .ghost-btn,
+    #dict-pane .dict-del,
+    #dict-pane #dict-bulk-toolbar button{
+      height:var(--ctl-h);
+      border-radius:var(--ctl-r);
+      border:1px solid var(--ctl-border);
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 40%), var(--ctl-bg);
+      color:#e8eef9;
+      font-weight:800;
+      padding:0 12px 0 12px;
+      line-height:1;
+      display:inline-flex; align-items:center; gap:8px;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.02), 0 0 0 rgba(0,0,0,0);
+      transition:background .15s ease, border-color .15s ease, box-shadow .15s ease, transform .04s ease;
+    }
+    #dict-pane #dict-form button:hover,
+    #dict-pane .edit-btn:hover,
+    #dict-pane .ghost-btn:hover,
+    #dict-pane .dict-del:hover,
+    #dict-pane #dict-bulk-toolbar button:hover{
+      background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,0) 40%), #121a26;
+      border-color:#3a465b;
+    }
+    #dict-pane #dict-form button:active,
+    #dict-pane .edit-btn:active,
+    #dict-pane .ghost-btn:active,
+    #dict-pane .dict-del:active,
+    #dict-pane #dict-bulk-toolbar button:active{ transform:translateY(1px); }
+    #dict-pane #dict-form button:focus-visible,
+    #dict-pane .edit-btn:focus-visible,
+    #dict-pane .ghost-btn:focus-visible,
+    #dict-pane .dict-del:focus-visible,
+    #dict-pane #dict-bulk-toolbar button:focus-visible{ box-shadow:0 0 0 3px var(--ctl-ring); outline:none; }
+    #dict-pane button[disabled]{ opacity:.55; filter:grayscale(.1); cursor:not-allowed; }
+
+    /* 主要アクション（保存）をアクセントに */
+    #dict-pane #dict-save,
+    #dict-pane #dict-bulk-save{
+      background:linear-gradient(180deg, rgba(31,140,255,.28), rgba(31,140,255,.18)), var(--ctl-elev);
+      border-color:rgba(31,140,255,.55);
+    }
+    #dict-pane #dict-save:hover,
+    #dict-pane #dict-bulk-save:hover{
+      background:linear-gradient(180deg, rgba(31,140,255,.33), rgba(31,140,255,.20)), #0f151f;
+    }
+
+    /* ゴースト（再読み込み/全体編集）を軽く */
+    #dict-pane .ghost-btn{
+      background:transparent;
+      border:1px dashed #364155;
+      color:var(--muted);
+    }
+    #dict-pane .ghost-btn:hover{
+      background:rgba(255,255,255,.04);
+      border-color:#3a465b;
+      color:#e8eef9;
+    }
+
+    /* 削除（危険操作）を明確に */
+    #dict-pane .dict-del{
+      background:linear-gradient(180deg, rgba(244,63,94,.28), rgba(244,63,94,.20));
+      border-color:rgba(244,63,94,.55);
+      color:#ffd7d7;
+    }
+    #dict-pane .dict-del:hover{
+      background:linear-gradient(180deg, rgba(244,63,94,.35), rgba(244,63,94,.26));
+      border-color:rgba(244,63,94,.65);
+      color:#fff1f1;
+    }
+
+    /* 編集（中立）ボタン */
+    #dict-pane .edit-btn{
+      background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.01)), #16202e;
+      border-color:#3a465b;
+    }
+
+    /* エクスポート/インポートにアイコン付与（擬似要素で差し込み） */
+    #dict-pane #btn-export-dict::before,
+    #dict-pane #btn-import-dict::before,
+    #dict-pane #dict-save::before,
+    #dict-pane .dict-edit::before,
+    #dict-pane #dict-bulk-enable::before,
+    #dict-pane #dict-bulk-disable::before{
+      content:""; display:inline-block; width:14px; height:14px;
+      background-size:14px 14px; background-repeat:no-repeat;
+      transform:translateY(1px);
+    }
+    #dict-pane #dict-save::before{
+      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24'><path fill='%23e8eef9' d='M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM12 17a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 6v4h9V6H6z'/></svg>");
+    }
+    #dict-pane #btn-export-dict::before{
+      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24'><path fill='%23e8eef9' d='M5 20h14v-2H5v2zM12 2l5 5h-3v6h-4V7H7l5-5z'/></svg>");
+    }
+    #dict-pane #btn-import-dict::before{
+      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24'><path fill='%23e8eef9' d='M19 20H5v-2h14v2zM12 2v6H9l3 3 3-3h-3V2h-2z'/></svg>");
+    }
+    #dict-pane .dict-edit::before{
+      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24'><path fill='%23e8eef9' d='M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM21.41 6.34a1.25 1.25 0 0 0 0-1.77L19.43 2.59a1.25 1.25 0 0 0-1.77 0l-1.66 1.66 3.75 3.75 1.66-1.66z'/></svg>");
+    }
+    #dict-pane #dict-bulk-enable::before{
+      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24'><path fill='%23e8eef9' d='M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'/></svg>");
+    }
+    #dict-pane #dict-bulk-disable::before{
+      background-image:url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\"><path fill=\"%23e8eef9\" d=\"m19 6.41-1.41-1.41L12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z\"/></svg>');
+    }
+
+    /* スイッチ（チェックボックス）—辞書ペイン専用の見た目にアップデート */
+    #dict-pane .ui-switch{
+      --sw-h:24px; --sw-w:44px; --sw-pad:2px;
+      width:var(--sw-w); height:var(--sw-h);
+      border-radius:999px; cursor:pointer;
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 40%), #0f131a;
+      border:1px solid #2a3445;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);
+      position:relative; transition:.2s;
+    }
+    #dict-pane .ui-switch::after{
+      content:""; position:absolute; top:var(--sw-pad); left:var(--sw-pad);
+      width:calc(var(--sw-h) - var(--sw-pad)*2 - 2px);
+      height:calc(var(--sw-h) - var(--sw-pad)*2 - 2px);
+      border-radius:50%;
+      background:linear-gradient(180deg, #d5dbe6, #9aa8bd);
+      box-shadow:0 2px 8px rgba(0,0,0,.45);
+      transition:.2s;
+    }
+    #dict-pane .ui-switch:checked{
+      background:linear-gradient(180deg, rgba(31,140,255,.30), rgba(31,140,255,.18)), #0f131a;
+      border-color:rgba(31,140,255,.55);
+    }
+    #dict-pane .ui-switch:checked::after{
+      left:calc(100% - var(--sw-h) + var(--sw-pad));
+      background:linear-gradient(180deg, #7ec0ff, #2a8cff);
+    }
+    #dict-pane .ui-switch:focus-visible{ outline:3px solid var(--ctl-ring); outline-offset:2px }
+    #dict-pane .ui-switch:disabled{ opacity:.5; cursor:not-allowed; }
+
+    /* テーブルの操作列をわずかに詰める＆行ホバー */
+    #dict-table td.col-op{ white-space:nowrap; gap:6px }
+    #dict-table tbody tr:hover{ background:rgba(255,255,255,.02) }
+
+    /* 右端から少しはみ出す “本のインデックスタブ”  */
+    #toggle-dict.dict-tab{
+      position:fixed;
+      top:50%;
+      right:0;
+      transform:translateY(-50%);
+      writing-mode:vertical-rl;
+      padding:10px 8px;
+      border-radius:10px 0 0 10px;
+      z-index:1400;
+
+      /* あなたのUIトーンに合わせる */
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 40%), #0f131a;
+      border:1px solid var(--border);
+      color:#e8eef9;
+      font-weight:800;
+      box-shadow:0 8px 18px rgba(0,0,0,.35);
+      cursor:pointer;
+    }
+    #toggle-dict.dict-tab:hover{ filter:brightness(1.08) }
+    #toggle-dict.dict-tab[aria-expanded="true"]{ filter:brightness(1.15) }
