@@ -7,7 +7,15 @@ const COL = { TS:0, RNAME:1, Q:2, TEAM:3, SELECTED:4, DONE:5, UID:6 };
 // --- 組版/ルビ関連 ---
 const PUNCT_R = /[、。，．・：；！？…‥）」』】〉》〕］）]$/;
 const PUNCT_L = /^[（「『［｛《〈〔【(]/;
-function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g, m => ({
+    '&':'&amp;',
+    '<':'&lt;',
+    '>':'&gt;',
+    '"':'&quot;',
+    "'":'&#39;'
+  })[m]);
+}
 function renderRuby(text){ return String(text).replace(/\[([^\]]+?)\]\{([^}]+?)\}/g, (_m, a, b)=>`<ruby>${a}<rt>${b}</rt></ruby>`); }
 function stripHtml(s){ return String(s).replace(/<[^>]*>/g,''); }
 function styleFor(item){

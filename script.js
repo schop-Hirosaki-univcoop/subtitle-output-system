@@ -21,7 +21,15 @@ let dictBulkMode = false;
 let dictSelectedRow = null;
 
 // ========== ユーティリティ ==========
-function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]);}
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g, m => ({
+    '&':'&amp;',
+    '<':'&lt;',
+    '>':'&gt;',
+    '"':'&quot;',
+    "'":'&#39;'
+  })[m]);
+}
 function ellipsis(s,n){s=String(s||''); return s.length>n? s.slice(0,n-1)+'…': s;}
 function setBusy(on){
   busy = !!on;
