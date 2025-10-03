@@ -86,6 +86,8 @@ function displayNames(names) {
     // 班
     const teamBox = li.querySelector('.team-box');
     teamBox.textContent = item[COL.TEAM] ? String(item[COL.TEAM]) + "班" : "";
+    // FAQ時は班箱を非表示
+    if (item[COL.RNAME] === "Pick Up Question") teamBox.style.display = "none";
     // 質問
     li.querySelector('.text-container').textContent = item[COL.Q];
     // タイムスタンプ
@@ -451,29 +453,57 @@ async function dictEnable(row, enabled) {
   });
 }
 
-// ========== タブ切り替え ==========
+// ========== 右サイドドロワーUI ==========
+function setupDictDrawer() {
+  const dictDrawer = document.getElementById('dict-drawer');
+  const dictDrawerBody = document.getElementById('dict-drawer-body');
+  const dictPane = document.getElementById('dict-pane');
+  const toggleDictBtn = document.getElementById('toggle-dict');
+  const dictDrawerClose = document.getElementById('dict-drawer-close');
+  function openDictDrawer() {
+    dictDrawer.classList.add('open');
+    dictDrawer.setAttribute('aria-expanded', 'true');
+    dictDrawerBody.appendChild(dictPane);
+    toggleDictBtn.setAttribute('aria-expanded', 'true');
+  }
+  function closeDictDrawer() {
+    dictDrawer.classList.remove('open');
+    dictDrawer.setAttribute('aria-expanded', 'false');
+    document.body.appendChild(dictPane);
+    toggleDictBtn.setAttribute('aria-expanded', 'false');
+  }
+  toggleDictBtn.addEventListener('click', () => {
+    if (!dictDrawer.classList.contains('open')) openDictDrawer();
+    else closeDictDrawer();
+  });
+  dictDrawerClose.addEventListener('click', closeDictDrawer);
+  closeDictDrawer();
+}
 
-function setupTabs() {
-  document.getElementById('tabbtn-monitors').onclick = function() {
-    document.getElementById('tab-monitors').classList.add('active');
-    document.getElementById('tab-dict').classList.remove('active');
-    this.classList.add('active');
-    document.getElementById('tabbtn-dict').classList.remove('active');
-  };
-  document.getElementById('tabbtn-dict').onclick = function() {
-    document.getElementById('tab-dict').classList.add('active');
-    document.getElementById('tab-monitors').classList.remove('active');
-    this.classList.add('active');
-    document.getElementById('tabbtn-monitors').classList.remove('active');
-  };
+// ========== ショートカット ==========
+function setupShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    if(e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+      e.preventDefault();
+      document.getElementById('search').focus();
+    }
+    if(e.key === 'Escape' && document.getElementById('dict-drawer').classList.contains('open')) {
+      const dictDrawer = document.getElementById('dict-drawer');
+      dictDrawer.classList.remove('open');
+      dictDrawer.setAttribute('aria-expanded', 'false');
+      document.body.appendChild(document.getElementById('dict-pane'));
+      document.getElementById('toggle-dict').setAttribute('aria-expanded', 'false');
+    }
+  });
 }
 
 // ========== 初期化 ==========
 document.addEventListener('DOMContentLoaded', () => {
+  setupDictDrawer();
   setupApproveButtonLogic();
   loadNames();
   setInterval(loadNames, 5000);
   setupDictEvents();
   loadDict();
-  setupTabs();
+  setupShortcuts();
 });

@@ -1,89 +1,127 @@
-﻿/* 共通ベーススタイル (common.css) */
-/* テロップやラベルなど display/index 両方で使うデザイン */
+﻿/* ========== 共通CSS：テロップ/ルビ/組版/FAQ汎用 ========== */
 
-[hidden]{display:none!important}
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;600;700&family=M+PLUS+2:wght@800&display=swap');
-:root{
-  --accent-faq:#38bdf8;
-  --accent-rn:#f472b6;
-  --accent-team:#f59e0b;
-  --hscale:0.90;
-  --rnhscale:0.90;
-  --punctPad:0.02em;
-  --punctEatL:0.02em;
-  --punctEatR:0.02em;
+/* 基本フォント */
+body,button,input,select,textarea {
+  font-family: Inter,"Noto Sans JP",system-ui,-apple-system,Segoe UI,Roboto,Arial,"Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic","Meiryo",sans-serif;
 }
-body{
-  font-family:Inter,"Noto Sans JP",system-ui,-apple-system,Segoe UI,Roboto,Arial,"Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic","Meiryo",sans-serif;
-  color-scheme:dark;
-  color:#e8eef9;
-}
-*{ -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale }
+* { box-sizing: border-box; }
 
-/* テロップ箱の基本形状 */
-.selected-box {
-  position: relative;
-  padding: 25px 30px 30px;
-  margin: 10px auto;
-  background: rgba(0, 0, 0, 0.85);
-  box-shadow: 8px -8px 0 #ff1493, -8px 8px 0 #00ffff;
-  font-weight: 800;
-  font-size: 72px;
-  width: 90%;
-  line-height: 1.3;
-  --slideY: 20px;
-  transform-origin: bottom center; opacity: 0;
-  transform: translateX(var(--baseFixX, 0px)) translateY(var(--slideY)) skewX(-15deg);
-  transition: opacity .5s ease-out, transform .5s ease-out;
-  z-index: 10;
-  text-align: center;
+/* テロップの見出しや本文の統一スタイル */
+.tele-title {
+  font-weight: 700;
+  font-size: 1.1em;
+  letter-spacing: 0.05em;
+  color: #ffe8e8;
+  margin-bottom: 2px;
 }
-.selected-box.slide-in { opacity: 1; --slideY: 0px; }
-.selected-box.slide-out{ opacity:0;  --slideY:-20px; }
+.tele-body {
+  font-size: 1em;
+  color: #f5f6fa;
+  line-height: 1.4;
+  word-break: break-all;
+}
 
-.content-wrap{ position: relative; width: 100%; }
-.content-center {
-  position: relative; left: 50%;
-  transform:translateX(calc(-50% + var(--nudgeX, 0px) - var(--baseFixX, 0px)));
-  width: calc(100% / var(--hscale));
-  max-width: none; will-change: transform;
+/* ルビ付き組版（GAS時代仕様） */
+.ruby {
+  font-family: inherit;
+  font-size: 1em;
+  white-space: pre-line;
 }
-.selected-box .content {
-  position: relative; display: block;
-  text-align: left;hyphens:auto;line-break:strict;word-break:break-all;
-  overflow-wrap:anywhere;
-  font-feature-settings: "palt", "halt";
+.ruby ruby { /* for browsers that support ruby natively */
+  ruby-align: center;
+  ruby-position: over;
+  font-size: 1em;
+}
+.ruby rt {
+  font-size: 0.48em;
+  letter-spacing: 0.1em;
+  color: #f8e6ff;
+  font-weight: 400;
+  font-family: "Noto Sans JP", "Yu Gothic", "YuGothic", "Meiryo", sans-serif;
+}
+
+/* FAQ/注意表示用チップ */
+.faq-chip, .warn-chip, .ng-chip, .dup-chip {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: bold;
+  margin-left: 6px;
+}
+.faq-chip { background: #0278a3; color: #eaf9ff; }
+.warn-chip { background: #f6c453; color: #222; }
+.ng-chip { background: #f35252; color: #fff; }
+.dup-chip { background: #f6c453; color: #444; }
+
+/* ボタン汎用 */
+button, input[type="button"], input[type="submit"] {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 1em;
+  border-radius: 8px;
+  border: none;
+  outline: none;
+  padding: 6px 12px;
+  background: #1d2330;
+  color: #e8eef9;
+  transition: background 0.16s, color 0.16s;
+}
+button:hover, input[type="button"]:hover, input[type="submit"]:hover {
+  background: #263148;
+}
+
+.ghost-btn {
+  background: none !important;
+  border: none !important;
+  color: #7aa6ff !important;
+  font-weight: 700;
+  padding: 0 8px !important;
+}
+.ghost-btn:hover { color: #fff; background: #1f2a46; }
+
+.ui-switch-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 14px;
+}
+
+/* テーブル共通 */
+table {
+  border-collapse: collapse;
   width: 100%;
-  transform: skewX(15deg) scaleX(var(--hscale));
-  transform-origin: bottom center;
+  font-size: 1em;
+  background: transparent;
 }
-.selected-box .content .line { display: block; }
-.bun{ display:inline-block; white-space:nowrap; vertical-align:bottom; }
-.bun > .scaled{ display:inline-block; color:inherit; text-shadow:inherit; will-change:transform; }
-
-/* 句読点調整 */
-.punct { font-feature-settings:"palt" 1,"halt" 0; letter-spacing:0; }
-.punct.padL { padding-left:var(--punctPad);  margin-left: calc(-1 * var(--punctEatL)); }
-.punct.padR { padding-right:var(--punctPad); margin-right:calc(-1 * var(--punctEatR)); }
-
-/* ルビのスタイル */
-ruby { display: inline-block; vertical-align: bottom; line-height: 1; text-shadow: none; }
-rt {
-  position: absolute; top: -0.5em; left: 50%;
-  transform: translateX(-50%);
-  white-space: nowrap; font-size: 50%; line-height: 1;
+th, td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #2a3445;
+  text-align: left;
+}
+th {
+  background: #11151a;
+  color: #b6c2d4;
+  font-weight: 700;
 }
 
-/* ラベル共通スタイル */
-.entry-label { position:absolute;top:-50px;left:-30px; background:#ff0;box-shadow:8px -8px 0 #ff1493;font-size:42px;color:#000;padding:0 40px;margin-bottom:10px;display:inline-block;align-items:baseline;z-index:20; }
-.entry-label { display:inline-flex; align-items:baseline; gap:5px; transform-origin:left bottom; white-space:nowrap; transform:scaleX(var(--rnhscale)); }
-.entry-label-text { transform:skewX(15deg); }
-.entry-label .faq-tag {font-size:60px;line-height:1;padding:5px 20px 10px;margin-right:5px}
-.entry-label .rname {font-size:70px;line-height:1;margin-right:5px}
-.entry-label .rname-prefix {font-size:50px;line-height:1}
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible {
+  outline: 2px solid #1f8cff;
+  outline-offset: 1.5px;
+}
 
-/* テロップカラー */
-.style-1{color:#ffaadd;text-shadow:-1px 0 0 #aa0044,0 1px 0 #aa0044,1px 0 0 #aa0044,0 -1px 0 #aa0044,-1px -1px 0 #aa0044,1px -1px 0 #aa0044,-1px 1px 0 #aa0044,1px 1px 0 #aa0044,0 0 10px #ee1188,0 0 12px #ee1188,0 0 14px #ee1188,0 0 16px #ee1188,0 0 18px #ee1188,0 0 20px #ee1188}
-.style-2{color:#aaffff;text-shadow:-1px 0 0 #004444,0 1px 0 #004444,1px 0 0 #004444,0 -1px 0 #004444,-1px -1px 0 #004444,1px -1px 0 #004444,-1px 1px 0 #004444,1px 1px 0 #004444,0 0 10px #008888,0 0 12px #008888,0 0 14px #008888,0 0 16px #008888,0 0 18px #008888,0 0 20px #008888}
-.style-3{color:#f8e4b1;text-shadow:-1px 0 0 #902707,0 1px 0 #902707,1px 0 0 #902707,0 -1px 0 #902707,-1px -1px 0 #902707,1px -1px 0 #902707,-1px 1px 0 #902707,1px 1px 0 #902707,0 0 10px #d16b0d,0 0 12px #d16b0d,0 0 14px #d16b0d,0 0 16px #d16b0d,0 0 18px #d16b0d,0 0 20px #d16b0d}
-.style-4{color:#aaffaa;text-shadow:-1px 0 0 #005500,0 1px 0 #005500,1px 0 0 #005500,-1px -1px 0 #005500,1px -1px 0 #005500,-1px 1px 0 #005500,1px 1px 0 #005500,0 0 10px #229922,0 0 12px #229922,0 0 14px #229922,0 0 16px #229922,0 0 18px #229922,0 0 20px #229922}
+/* スクロールバー美化（Webkit系・Firefox） */
+::-webkit-scrollbar { width: 10px; background: #1d2330; }
+::-webkit-scrollbar-thumb { background: #283042; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #3a4562; }
+::-webkit-scrollbar-corner { background: #181d29; }
+html { scrollbar-color: #283042 #1d2330; scrollbar-width: thin; }
+
+/* レスポンシブ */
+@media (max-width: 650px) {
+  .panel, #dict-pane { padding: 2vw !important; }
+  #dict-pane { font-size: 0.98em; }
+}
+
+/* 選択状態 */
+.selected { background: #18304a !important; }

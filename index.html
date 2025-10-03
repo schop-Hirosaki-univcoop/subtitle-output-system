@@ -9,13 +9,11 @@
 </head>
 <body>
   <div id="layout">
-    <!-- ▼ ヘッダー -->
+    <!-- ▼ ヘッダー（3行構成） -->
     <header id="header">
-      <!-- 1行目：タイトル（ON AIR / STANDBYバッジは #page-title::after で表示） -->
       <div id="title-row" class="panel-header">
         <div id="page-title">テロップ送出コントロール（PVW/PGM）</div>
       </div>
-      <!-- 2行目：ステータス（カウンタ／DISPLAYバッジ／PGM CLOCK） -->
       <div id="stats-row">
         <div id="stats-left" class="counters">
           総件数: <span id="count-total">0</span> /
@@ -28,7 +26,6 @@
           </span>
         </div>
       </div>
-      <!-- 3行目：ツール（検索/フィルタ/セーフ） -->
       <div id="tool-row" class="tools">
         <label class="only-open"><input type="checkbox" id="filter-open" class="ui-switch" /> 未送出のみ</label>
         <input id="search" type="search" placeholder="ラジオネーム/班/質問で検索（/ でフォーカス）" />
@@ -41,6 +38,7 @@
         </div>
       </div>
     </header>
+
     <!-- ▼ 2行目：左＝送出ログ ／ 右＝画面グループ -->
     <div id="row2">
       <section id="log-rail" class="panel" aria-label="送出ログと辞書">
@@ -54,12 +52,8 @@
       </section>
       <section id="control-rail" class="panel" aria-label="送出コントロール">
         <div id="preview-row">
-          <div id="preview-tabs" class="tabs" role="tablist" aria-label="プレビュー">
-            <button id="tabbtn-monitors" class="tab active" role="tab" aria-controls="tab-monitors" aria-selected="true">PVW/PGM</button>
-            <button id="tabbtn-dict" class="tab" role="tab" aria-controls="tab-dict" aria-selected="false">ルビ辞書</button>
-          </div>
           <div id="preview-contents">
-            <div id="tab-monitors" class="tabpanel active" role="tabpanel" aria-labelledby="tabbtn-monitors">
+            <div id="tab-monitors" class="tabpanel active" role="tabpanel">
               <div class="monitors-grid">
                 <aside id="pvw-preview" title="PVW（キュー中のプレビュー）">
                   <div id="pvw-mirror"></div>
@@ -78,81 +72,98 @@
                 </div>
               </div>
             </div>
-            <div id="tab-dict" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-dict">
-              <aside id="dict-pane" title="ルビ辞書">
-                <div class="panel-header">
-                  <span>ルビ辞書</span>
-                  <button id="dict-reload" type="button" class="ghost-btn" title="辞書を再読み込み">再読み込み</button>
-                  <button id="dict-bulk-edit" type="button" class="ghost-btn" title="有効/削除の一括管理モード">一括管理</button>
-                </div>
-                <form id="dict-form" onsubmit="return false;">
-                  <div class="row-fields">
-                    <input id="dict-term" placeholder="用語（例：挨拶）" required />
-                    <input id="dict-ruby" placeholder="よみ（例：あいさつ）" required />
-                  </div>
-                  <div class="row-apply">
-                    <select id="dict-mode" title="一致方法" class="ui-select">
-                      <option value="any">any（どこでも）</option>
-                      <option value="both">both（前後が非語境界）</option>
-                      <option value="left">left（行頭/直前のみ）</option>
-                      <option value="right">right（行末/直後のみ）</option>
-                      <option value="regex">regex（正規表現）</option>
-                    </select>
-                    <button id="dict-save">追加 / 上書き</button>
-                  </div>
-                  <div class="row-csv">
-                    <div class="row-label">CSV：</div>
-                    <button id="btn-export-dict" type="button" title="CSVをダウンロード">出力</button>
-                    <button id="btn-import-dict" type="button" title="CSVを読み込む">取込</button>
-                    <select id="import-strategy" title="方式" class="ui-select">
-                      <option value="merge" selected>統合（上書き）</option>
-                      <option value="replace">置換（全入替）</option>
-                    </select>
-                  </div>
-                  <input id="file-import-dict" type="file" accept=".csv" hidden />
-                </form>
-                <div class="dict-table-wrap">
-                  <table id="dict-table">
-                    <thead>
-                      <tr>
-                        <th class="col-select"  title="全選択/解除">
-                          <input type="checkbox" id="dict-select-all" aria-label="全選択/解除" />
-                        </th>
-                        <th class="col-term">用語</th>
-                        <th class="col-ruby">よみ</th>
-                        <th class="col-mode">mode</th>
-                      </tr>
-                    </thead>
-                    <tbody id="dict-tbody"></tbody>
-                  </table>
-                </div>
-                <div id="dict-action-panel" role="group" aria-label="辞書操作パネル">
-                  <div class="normal-actions">
-                    <div class="sel-info">選択: <span id="dict-sel-summary">なし</span></div>
-                    <label class="ui-switch-wrap">有効
-                      <input type="checkbox" id="dict-toggle-enabled" class="ui-switch" />
-                    </label>
-                    <button id="dict-edit-row" class="edit-btn">編集</button>
-                    <button id="dict-delete-row" class="dict-del">削除</button>
-                  </div>
-                  <div id="dict-bulk-toolbar" class="bulk-actions" hidden>
-                    <div class="sel-info">選択: <span id="dict-bulk-count">0</span>件</div>
-                    <button id="dict-bulk-enable" class="edit-btn">選択を有効化</button>
-                    <button id="dict-bulk-disable" class="edit-btn">選択を無効化</button>
-                    <button id="dict-bulk-delete" class="dict-del">選択を削除</button>
-                    <button id="dict-bulk-save">一括保存</button>
-                    <button id="dict-bulk-cancel">キャンセル</button>
-                  </div>
-                </div>
-              </aside>
-            </div>
           </div>
         </div>
       </section>
     </div>
+
     <!-- ▼ 3行目：質問リスト -->
     <main id="right-pane"><ul id="nameList"></ul></main>
   </div>
+
+  <!-- ▼ 右サイド独立ドロワー：ルビ辞書（GAS時代仕様に完全再現） -->
+  <div id="dict-drawer">
+    <div class="drawer-rail">
+      <button id="toggle-dict" class="dict-tab" type="button" title="ルビ辞書を開閉" aria-controls="dict-drawer" aria-expanded="false">辞書</button>
+      <div class="drawer-panel" role="complementary" aria-label="ルビ辞書パネル">
+        <div class="drawer-header">
+          <div class="panel-header">ルビ辞書</div>
+          <button id="dict-drawer-close" class="ghost-btn" type="button" aria-label="閉じる">閉じる</button>
+        </div>
+        <div id="dict-drawer-body">
+          <!-- #dict-paneがここにJSで移設される -->
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- #dict-pane本体 -->
+  <aside id="dict-pane" title="ルビ辞書">
+    <div class="panel-header">
+      <span>ルビ辞書</span>
+      <button id="dict-reload" type="button" class="ghost-btn" title="辞書を再読み込み">再読み込み</button>
+      <button id="dict-bulk-edit" type="button" class="ghost-btn" title="有効/削除の一括管理モード">一括管理</button>
+    </div>
+    <form id="dict-form" onsubmit="return false;">
+      <div class="row-fields">
+        <input id="dict-term" placeholder="用語（例：挨拶）" required />
+        <input id="dict-ruby" placeholder="よみ（例：あいさつ）" required />
+      </div>
+      <div class="row-apply">
+        <select id="dict-mode" title="一致方法" class="ui-select">
+          <option value="any">any（どこでも）</option>
+          <option value="both">both（前後が非語境界）</option>
+          <option value="left">left（行頭/直前のみ）</option>
+          <option value="right">right（行末/直後のみ）</option>
+          <option value="regex">regex（正規表現）</option>
+        </select>
+        <button id="dict-save">追加 / 上書き</button>
+      </div>
+      <div class="row-csv">
+        <div class="row-label">CSV：</div>
+        <button id="btn-export-dict" type="button" title="CSVをダウンロード">出力</button>
+        <button id="btn-import-dict" type="button" title="CSVを読み込む">取込</button>
+        <select id="import-strategy" title="方式" class="ui-select">
+          <option value="merge" selected>統合（上書き）</option>
+          <option value="replace">置換（全入替）</option>
+        </select>
+      </div>
+      <input id="file-import-dict" type="file" accept=".csv" hidden />
+    </form>
+    <div class="dict-table-wrap">
+      <table id="dict-table">
+        <thead>
+          <tr>
+            <th class="col-select"  title="全選択/解除">
+              <input type="checkbox" id="dict-select-all" aria-label="全選択/解除" />
+            </th>
+            <th class="col-term">用語</th>
+            <th class="col-ruby">よみ</th>
+            <th class="col-mode">mode</th>
+          </tr>
+        </thead>
+        <tbody id="dict-tbody"></tbody>
+      </table>
+    </div>
+    <div id="dict-action-panel" role="group" aria-label="辞書操作パネル">
+      <div class="normal-actions">
+        <div class="sel-info">選択: <span id="dict-sel-summary">なし</span></div>
+        <label class="ui-switch-wrap">有効
+          <input type="checkbox" id="dict-toggle-enabled" class="ui-switch" />
+        </label>
+        <button id="dict-edit-row" class="edit-btn">編集</button>
+        <button id="dict-delete-row" class="dict-del">削除</button>
+      </div>
+      <div id="dict-bulk-toolbar" class="bulk-actions" hidden>
+        <div class="sel-info">選択: <span id="dict-bulk-count">0</span>件</div>
+        <button id="dict-bulk-enable" class="edit-btn">選択を有効化</button>
+        <button id="dict-bulk-disable" class="edit-btn">選択を無効化</button>
+        <button id="dict-bulk-delete" class="dict-del">選択を削除</button>
+        <button id="dict-bulk-save">一括保存</button>
+        <button id="dict-bulk-cancel">キャンセル</button>
+      </div>
+    </div>
+  </aside>
+
   <!-- ▼ 復活：オーバーレイ -->
   <div id="overlay" aria-live="polite" aria-busy="true">
     <div class="panel">
@@ -162,6 +173,8 @@
     </div>
   </div>
   <div id="toast" role="status" aria-live="polite"></div>
+
+  <!-- ========== templates ========== -->
   <template id="tpl-selected">
     <li class="name-box" data-uid="">
       <div class="top-row">
