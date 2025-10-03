@@ -26,7 +26,7 @@ body{
 
 /* サイト全体のグリッドレイアウト */
 #layout{
-  display:grid;row-gap:var(--gap);column-gap:16px;height:100dvh;padding:var(--gap);box-sizing:border-box;
+  display:grid;row-gap:var(--card-gap);column-gap:16px;height:100dvh;padding:var(--card-gap);box-sizing:border-box;
   grid-template-columns:1fr;grid-template-rows:auto auto 1fr;
 }
 /* 2段目のグリッド（ログとコントロールパネル） */
@@ -35,8 +35,8 @@ body{
 /* 汎用パネルのスタイル */
 .panel{
   align-content:start; position:static; height:fit-content; min-width:0; overflow:visible; z-index:3;
-  background:var(--panelElev); backdrop-filter:blur(8px);
-  border:1px solid var(--border); border-radius:14px; padding:var(--railPad, 10px);
+  background:var(--panel); backdrop-filter:blur(8px);
+  border:1px solid var(--line); border-radius:14px; padding:var(--pad-card, 10px);
   box-shadow:0 8px 26px rgba(0,0,0,.35);
 }
 .panel-header{
@@ -46,21 +46,21 @@ body{
 #log-rail.panel{ display:grid; grid-template-rows:auto 1fr; }
 /* コントロールパネルの縦幅計算 */
 #control-rail.panel{
-  display:grid;grid-template-rows:auto auto;row-gap:var(--gap);
-  max-height:var(--paneMaxH);overflow:auto;box-sizing:border-box;
-  --monMaxH: calc(var(--paneMaxH) - (2 * var(--railPad, 10px)) - (2 * var(--panelBW, 1px)) - (4 * var(--gap)) - (3 * var(--btn-h, 32px)));
+  display:grid;grid-template-rows:auto auto;row-gap:var(--card-gap);
+  max-height:400px;overflow:auto;box-sizing:border-box;
+  --monMaxH: calc(400px - (2 * var(--pad-card, 10px)) - (2 * 1px) - (4 * var(--card-gap)) - (3 * var(--chip-h, 32px)));
   --monW: calc(var(--monMaxH) * (16 / 9));
 }
 
 /* 送出ログ */
-#oplog-wrap{ align-self:start; max-height:calc(100dvh - 2*var(--gap)); overflow:auto; text-align:left; }
+#oplog-wrap{ align-self:start; max-height:calc(100dvh - 2*var(--card-gap)); overflow:auto; text-align:left; }
 #oplog{ list-style:none; margin:0; padding:0; color:#bbb; font-size:12px; line-height:1.3; }
 .oplog-title{ color:#aaa; font-size:12px; margin:8px 0 4px; }
 
 /* 質問リストコンテナ */
 #right-pane{
   min-width:0;overflow-y:auto;overflow-x:hidden;padding-right:0;position:relative;z-index:2;isolation:isolate;
-  border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
+  border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
   scrollbar-gutter: stable;
 }
 /* 質問リスト (ul) */
@@ -83,18 +83,18 @@ body.has-onair #page-title::after{
   content:"ON AIR"; font-family:'M PLUS 2',sans-serif; font-weight:800;
   color:#fff; background:linear-gradient(180deg,#ff274c,#d8002f);
   border-radius:999px; padding:3px 10px; letter-spacing:.04em; font-size:.85em;
-  box-shadow:var(--glow-red);
+  box-shadow:0 0 0 1px rgba(255,0,51,.2),0 0 24px rgba(255,0,51,.25);
 }
 body:not(.has-onair) #page-title::after{
   content:"STANDBY"; font-family:'M PLUS 2',sans-serif; font-weight:800;
   color:#fff; background:linear-gradient(180deg,#4aa3ff,#1f8cff);
   border-radius:999px; padding:3px 10px; letter-spacing:.04em; font-size:.85em;
-  box-shadow:var(--glow-blue);
+  box-shadow:0 0 0 1px rgba(31,140,255,.18),0 0 24px rgba(31,140,255,.22);
 }
 
 /* 検索バー */
 #search{
-  width:260px;height:36px;border-radius:10px;border:1px solid var(--border);
+  width:260px;height:36px;border-radius:10px;border:1px solid var(--line);
   background:#0f131a;color:#e8eef9;font-size:var(--fs-chip);padding:0 12px;outline:none;
   transition:.2s; box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);
 }
@@ -105,7 +105,7 @@ body:not(.has-onair) #page-title::after{
 /* 統一スイッチUI */
 .ui-switch{
   appearance:none; width:44px;height:24px;border-radius:999px;background:#0f131a;
-  border:1px solid var(--border); position:relative; cursor:pointer; transition:.2s;
+  border:1px solid var(--line); position:relative; cursor:pointer; transition:.2s;
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.03);
 }
 .ui-switch::after{
@@ -118,7 +118,7 @@ body:not(.has-onair) #page-title::after{
 
 /* 統一プルダウンUI */
 .ui-select{
-  height:var(--ctl-h, 32px); border-radius:var(--ctl-r, 10px);
+  height:32px; border-radius:10px;
   border:1px solid #2a3445;
   background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 40%), #0f131a;
   color:#e8eef9; padding:0 32px 0 12px; outline:none; appearance:none;
@@ -135,16 +135,16 @@ body:not(.has-onair) #page-title::after{
 #actions{
   display:grid;
   grid-template-columns:1fr 1fr;
-  grid-auto-rows:var(--btn-h, 32px);
+  grid-auto-rows:32px;
   grid-template-areas:"approve approve" "jump force" "reentry reset";
   gap:8px; grid-column:1 / -1; justify-self:center;
   width:min(680px,100%); align-items:stretch; min-width:0;
 }
-#actions button{ width:100%; min-width:0; white-space:nowrap; height:var(--btn-h, 32px); }
+#actions button{ width:100%; min-width:0; white-space:nowrap; height:32px; }
 
 /* アクションボタンの共通スタイル */
 #approve-button,#reject-button,#reset-all-button,#force-standby-button,#jump-onair-button{
-  font-family:'M PLUS 2',sans-serif;font-weight:800; font-size:var(--btn-font); padding:7px 12px;
+  font-family:'M PLUS 2',sans-serif;font-weight:800; font-size:var(--fs-btn); padding:7px 12px;
   border-radius:8px;border:0;line-height:1.1;transition:.15s ease;
   box-shadow:0 2px 0 rgba(255,255,255,.06) inset, 0 6px 20px rgba(0,0,0,.35);
   background:#2a3342;color:#e8eef9;border:1px solid #3a455a;
@@ -162,7 +162,7 @@ button:disabled{opacity:.5; filter:grayscale(.2); cursor:not-allowed !important}
 /* 質問リストアイテム (name-box) */
 .name-box{
   background:rgba(18,22,30,.72); padding:var(--pad-card);margin:var(--card-gap) 0;border-radius:var(--radius);
-  border:1px solid var(--border);box-shadow:0 1px 0 rgba(255,255,255,.03) inset;
+  border:1px solid var(--line);box-shadow:0 1px 0 rgba(255,255,255,.03) inset;
   font-size:var(--fs-card);width:100%;max-width:100%;box-sizing:border-box;
   text-align:left;cursor:pointer;transition:transform .18s ease, box-shadow .18s ease, background .18s ease;
   display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"top ts" "body body";gap:var(--row-gap);
@@ -177,11 +177,11 @@ button:disabled{opacity:.5; filter:grayscale(.2); cursor:not-allowed !important}
 .bottom-row{grid-area:body; display:flex; align-items:center; min-width:0}
 .third-row{grid-area:ts; text-align:right; align-self:start; margin:0}
 .text-container{flex-grow:1;text-align:left;min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;color:#e8eef9}
-.text-container{cursor:text} /* 質問編集ヒント */
+.text-container{cursor:text}
 
 /* 共通チップの下地 */
 .rname-chip, .team-box{
-  position:relative; overflow:hidden; border-radius:10px; border:1px solid var(--border);
+  position:relative; overflow:hidden; border-radius:10px; border:1px solid var(--line);
   background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));
   color:#dbe7ff; box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);
 }
@@ -198,9 +198,9 @@ button:disabled{opacity:.5; filter:grayscale(.2); cursor:not-allowed !important}
 
 /* ラジオネーム/FAQ/班のカラースタイル */
 .rname-chip.is-faq{ color:#e7faff; border-color:rgba(56,189,248,.35); box-shadow:0 0 0 1px rgba(56,189,248,.22) inset, 0 6px 18px rgba(0,0,0,.18); }
-.rname-chip.is-faq::after{ content:""; position:absolute; left:0; top:0; bottom:0; width:6px; background:linear-gradient(180deg, var(--accent-faq), #0891b2); z-index:0; }
+.rname-chip.is-faq::after{ content:""; position:absolute; left:0; top:0; bottom:0; width:6px; background:linear-gradient(180deg, #38bdf8, #0891b2); z-index:0; }
 .rname-chip.is-rname{ color:#ffeaf3; border-color:rgba(244,114,182,.35); box-shadow:0 0 0 1px rgba(244,114,182,.22) inset, 0 6px 18px rgba(0,0,0,.18); }
-.rname-chip.is-rname::after{ content:""; position:absolute; left:0; top:0; bottom:0; width:6px; background:linear-gradient(180deg, var(--accent-rn), #be185d); z-index:0; }
+.rname-chip.is-rname::after{ content:""; position:absolute; left:0; top:0; bottom:0; width:6px; background:linear-gradient(180deg, #f472b6, #be185d); z-index:0; }
 .team-box{
   display:flex; align-items:center; justify-content:center; padding:0 14px; font-weight:800; color:#fff3d6;
   height:var(--chip-h); flex-shrink:0; background:linear-gradient(180deg, rgba(245,158,11,.16), rgba(245,158,11,.08));
@@ -221,7 +221,7 @@ button:disabled{opacity:.5; filter:grayscale(.2); cursor:not-allowed !important}
 /* ON AIR中 (approved) */
 .name-box.approved{
   background:linear-gradient(180deg, rgba(255,0,51,.15), rgba(255,0,51,.06)), rgba(18,22,30,.8);
-  border-color:rgba(255,0,51,.45); box-shadow:var(--glow-red), inset 0 0 0 1px rgba(255,255,255,.02);
+  border-color:rgba(255,0,51,.45); box-shadow:0 0 0 1px rgba(255,0,51,.2),0 0 24px rgba(255,0,51,.25), inset 0 0 0 1px rgba(255,255,255,.02);
   position:relative;
 }
 .name-box.approved::after{
@@ -233,7 +233,7 @@ button:disabled{opacity:.5; filter:grayscale(.2); cursor:not-allowed !important}
 /* 送出済み (completed) */
 .name-box.completed{
   background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
-  border-color:rgba(56,189,248,.32); 
+  border-color:rgba(56,189,248,.32);
   box-shadow: inset 4px 0 0 #38bdf8, inset 0 0 0 1px rgba(255,255,255,.03);
   position:relative;
 }
@@ -244,7 +244,7 @@ button:disabled{opacity:.5; filter:grayscale(.2); cursor:not-allowed !important}
   transform:translateY(-50%); display:inline-flex; align-items:center; justify-content:center;
   font-family:'M PLUS 2',sans-serif; font-weight:800; font-size:.78rem; letter-spacing:.06em;
   line-height:1; white-space:nowrap; color:#1f1300;
-  background:linear-gradient(180deg,#fde68a,#f59e0b); 
+  background:linear-gradient(180deg,#fde68a,#f59e0b);
   border:1px solid rgba(255,255,255,.28); border-radius:999px; padding:.18rem .55rem .2rem;
   box-shadow:0 2px 10px rgba(0,0,0,.35), 0 0 0 2px rgba(250,204,21,.18);
   z-index:2; pointer-events:none;
@@ -263,7 +263,7 @@ button:disabled{opacity:.5; filter:grayscale(.2); cursor:not-allowed !important}
 #preview-contents{ min-height:0; }
 #display-preview{
   width:100%;max-width:var(--monW);aspect-ratio:16/9;z-index:20; max-height:var(--monMaxH);
-  border-radius:14px;overflow:hidden;background:#000;border:1px solid var(--border);box-shadow:0 8px 26px rgba(0,0,0,.5);
+  border-radius:14px;overflow:hidden;background:#000;border:1px solid var(--line);box-shadow:0 8px 26px rgba(0,0,0,.5);
   position:relative;
 }
 #display-preview .pgm-tag{
@@ -278,7 +278,7 @@ button:disabled{opacity:.5; filter:grayscale(.2); cursor:not-allowed !important}
 #pvw-preview{
   width:100%;max-width:var(--monW);aspect-ratio:16/9; max-height:var(--monMaxH);
   border-radius:14px;overflow:hidden;background:#000;position:relative;
-  border:1px solid var(--border);box-shadow:0 6px 18px rgba(0,0,0,.5); margin-bottom:0;
+  border:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.5); margin-bottom:0;
 }
 #pvw-preview::after{
   content:""; position:absolute; inset:0; pointer-events:none;
@@ -306,7 +306,7 @@ body:not(.has-onair) #display-preview{ box-shadow:0 8px 26px rgba(0,0,0,.55), 0 
 /* バッジ（DISPLAY/PGM CLOCK） */
 .badge{
   display:inline-flex;align-items:center;gap:8px;padding:4px 10px;border-radius:999px;font-weight:700;font-size:12px;
-  border:1px solid var(--border);background:rgba(255,255,255,.04);
+  border:1px solid var(--line);background:rgba(255,255,255,.04);
 }
 .badge .dot{width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.4) inset}
 .badge.is-live .dot{background:#22c55e}
@@ -315,13 +315,13 @@ body:not(.has-onair) #display-preview{ box-shadow:0 8px 26px rgba(0,0,0,.55), 0 
 .badge.is-lost{box-shadow:0 0 0 1px rgba(244,63,94,.25),0 0 12px rgba(244,63,94,.25)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 #pgm-clock.badge input{
-  width:3.8em;margin-left:4px;background:#0f131a;color:#e8eef9;border:1px solid var(--border);
+  width:3.8em;margin-left:4px;background:#0f131a;color:#e8eef9;border:1px solid var(--line);
   border-radius:6px;padding:2px 6px;outline:none;
 }
-/* タブは廃止 */
-#control-rail .tabs { display:none !important; }
-#control-rail .tabpanel { display:block !important; }
-#tabbtn-dict{ display:none !important; }
+/* タブ */
+#control-rail .tabs { display:flex;gap:8px;align-items:center;margin-bottom:8px; }
+#control-rail .tab{ padding:6px 18px; border-radius:8px; background:rgba(255,255,255,.04); border:1px solid var(--line); color:#e8eef9; font-weight:700; cursor:pointer; }
+#control-rail .tab.active{ background:linear-gradient(180deg,#4aa3ff,#1f8cff); color:#fff; border-color:rgba(31,140,255,.45); }
 
 /* オーバーレイとトースト */
 #overlay{
@@ -349,47 +349,29 @@ body:not(.has-onair) #display-preview{ box-shadow:0 8px 26px rgba(0,0,0,.55), 0 
   display:flex; align-items:center; gap:12px; opacity:0; pointer-events:none; z-index:12000; transition:opacity .25s ease, transform .25s ease; backdrop-filter:blur(4px);
 }
 #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
-#toast[data-kind="onair"]{ box-shadow:var(--glow-red), 0 8px 28px rgba(0,0,0,.6) }
-#toast[data-kind="standby"]{ box-shadow:var(--glow-blue), 0 8px 28px rgba(0,0,0,.6) }
-/* ... (toast style continues) ... */
+#toast[data-kind="onair"]{ box-shadow:0 0 0 1px rgba(255,0,51,.2),0 0 24px rgba(255,0,51,.25), 0 8px 28px rgba(0,0,0,.6) }
+#toast[data-kind="standby"]{ box-shadow:0 0 0 1px rgba(31,140,255,.18),0 0 24px rgba(31,140,255,.22), 0 8px 28px rgba(0,0,0,.6) }
 
-/* 辞書ドロワー UI */
-#dict-drawer{
-  position:fixed; top:var(--gap); right:var(--gap); bottom:var(--gap);
-  width:var(--dictW, 33.333vw); transform:translateX(calc(100% + var(--gap)));
-  transition:transform .25s ease; z-index:1200; pointer-events:none; 
-}
-#dict-drawer.open{ transform:translateX(0); pointer-events:auto; }
-#dict-drawer .drawer-panel{
-  height:100%; border:1px solid var(--border); border-radius:14px; background:var(--panelElev);
-  backdrop-filter:blur(8px); box-shadow:0 12px 30px rgba(0,0,0,.55);
-  display:flex; flex-direction:column; overflow:hidden;
-}
+/* 辞書UI */
 #dict-pane{
-  border:1px solid var(--border); border-radius:14px; background:var(--panelElev);
+  border:1px solid var(--line); border-radius:14px; background:var(--panel);
   padding:10px; overflow:hidden; max-height:100%; box-shadow:0 6px 18px rgba(0,0,0,.5);
   width:100%; display:flex; flex-direction:column;
 }
-
-/* ===== ルビ辞書：辞書UI専用スタイル ===== */
-
-/* フォームのコンポーネント配置 */
 #dict-form{
-  display:grid; grid-template-columns: repeat(12, minmax(0,1fr)); grid-auto-rows: var(--ctl-h, 32px);
-  gap:var(--ctl-gap, 8px); align-items:center; margin-bottom:var(--ctl-gap, 8px); grid-auto-flow: row dense;
+  display:grid; grid-template-columns: repeat(12, minmax(0,1fr)); grid-auto-rows: 32px;
+  gap:8px; align-items:center; margin-bottom:8px; grid-auto-flow: row dense;
 }
 #dict-form input{
-  height:var(--ctl-h, 32px); border-radius:var(--ctl-r, 10px); border:1px solid var(--ctl-border, #2a3445);
-  background:var(--ctl-elev, #0f131a); color:#e8eef9; padding:0 10px; outline:none; width:100%;
+  height:32px; border-radius:10px; border:1px solid #2a3445;
+  background:#0f131a; color:#e8eef9; padding:0 10px; outline:none; width:100%;
 }
 #dict-form button{
-  height:var(--ctl-h, 32px); border-radius:var(--ctl-r, 10px); border:0; padding:0 12px; font-weight:800;
+  height:32px; border-radius:10px; border:0; padding:0 12px; font-weight:800;
   background:#2a3342;color:#e8eef9;border:1px solid #3a455a;white-space:nowrap;
 }
 #dict-form button:hover{ background:#364154 }
 #dict-form button:active{ transform:translateY(1px) }
-
-/* レイアウト配置（12カラム） */
 #dict-term{ grid-column:1 / span 4; grid-row:1; }
 #dict-ruby{ grid-column:5 / span 4; grid-row:1; }
 #dict-mode{ grid-column:9 / span 2; grid-row:1; }
@@ -397,8 +379,6 @@ body:not(.has-onair) #display-preview{ box-shadow:0 8px 26px rgba(0,0,0,.55), 0 
 #btn-export-dict { grid-column:1 / span 4; grid-row:2; }
 #btn-import-dict { grid-column:5 / span 4; grid-row:2; }
 #import-strategy{ grid-column:9 / span 4; grid-row:2; min-width:10ch; }
-
-/* 狭幅時のレイアウト調整 (6カラム) */
 @media (max-width: 720px){
   #dict-form{ grid-template-columns: repeat(6, minmax(0,1fr)); }
   #dict-term{ grid-column:1 / -1; grid-row:1; }
@@ -409,46 +389,30 @@ body:not(.has-onair) #display-preview{ box-shadow:0 8px 26px rgba(0,0,0,.55), 0 
   #btn-import-dict { grid-column:4 / span 3; grid-row:4; }
   #import-strategy{ grid-column:1 / span 6; grid-row:5; }
 }
-
-/* 辞書テーブル */
 #dict-table{width:100%;border-collapse:collapse;font-size:12px}
-#dict-table th,#dict-table td{border-bottom:1px solid var(--border);padding:6px;text-align:left}
+#dict-table th,#dict-table td{border-bottom:1px solid var(--line);padding:6px;text-align:left}
 #dict-table td:last-child{white-space:nowrap}
-#dict-table td.col-enabled{ text-align:center }
 .dict-table-wrap{
   overflow-y:auto; overflow-x:hidden;
   max-height:clamp(160px, 40vh, 480px);
-  border-top:1px solid var(--border);
+  border-top:1px solid var(--line);
 }
 #dict-table thead th{
-  position:sticky; top:0; background:var(--panelElev); z-index:1;
+  position:sticky; top:0; background:var(--panel); z-index:1;
 }
+#dict-action-panel{ margin-top:8px; }
+.normal-actions, .bulk-actions { display:flex; gap:8px; align-items:center; }
+.bulk-actions[hidden]{ display:none; }
 
-/* 一括編集モード */
-#dict-pane:not(.bulk-editing) .dict-enabled{ pointer-events:none; opacity:.6 }
-#dict-table th.col-select, #dict-table td.col-select{ display:none }
-#dict-pane.bulk-editing #dict-table th.col-select,
-#dict-pane.bulk-editing #dict-table td.col-select{ display:table-cell }
-#dict-bulk-toolbar{ display:none; gap:8px; margin-left:auto; align-items:center }
-#dict-pane.bulk-editing #dict-bulk-toolbar{ display:flex }
-#dict-pane.bulk-editing #dict-bulk-edit{ display:none }
-#dict-table tr.to-delete{
-  background:rgba(31,140,255,.10);
-  box-shadow:inset 0 0 0 1px rgba(31,140,255,.35);
-  text-decoration:none; opacity:1;
-}
-#dict-pane.bulk-editing #dict-table tbody tr{ cursor:pointer }
-
-/* 辞書ボタンの調整（共通ボタンからの上書き） */
+/* 辞書ボタンの調整 */
 #dict-pane #dict-form button, #dict-pane .edit-btn, #dict-pane .ghost-btn, #dict-pane .dict-del, #dict-pane #dict-bulk-toolbar button{
-  height:var(--ctl-h, 32px); border-radius:var(--ctl-r, 10px); border:1px solid var(--ctl-border, #2a3445);
-  background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 40%), var(--ctl-bg, #101520);
+  height:32px; border-radius:10px; border:1px solid #2a3445;
+  background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 40%), #101520;
   color:#e8eef9; font-weight:800; padding:0 12px 0 12px; line-height:1;
   display:inline-flex; align-items:center; gap:8px;
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.02), 0 0 0 rgba(0,0,0,0);
   transition:background .15s ease, border-color .15s ease, box-shadow .15s ease, transform .04s ease;
 }
-
 /* 削除ボタン */
 .dict-del{
   position:relative; padding-left:30px;
@@ -461,25 +425,3 @@ body:not(.has-onair) #display-preview{ box-shadow:0 8px 26px rgba(0,0,0,.55), 0 
   background-repeat:no-repeat; background-size:14px 14px; opacity:.95;
 }
 .dict-del:hover{background:linear-gradient(180deg, rgba(244,63,94,.35), rgba(244,63,94,.26)); border-color:rgba(244,63,94,.65); color:#fff1f1;}
-#dict-pane.bulk-editing .dict-del{ background:#233043; border:1px solid #3a455a }
-
-/* トグルの共通上書き */
-#dict-pane .ui-switch{
-  --sw-h:24px; --sw-w:44px; --sw-pad:2px;
-  width:var(--sw-w); height:var(--sw-h); border-radius:999px; cursor:pointer;
-  background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 40%), #0f131a;
-  border:1px solid #2a3445; box-shadow:inset 0 0 0 1px rgba(255,255,255,.02); position:relative; transition:.2s;
-}
-#dict-pane .ui-switch::after{
-  content:""; position:absolute; top:var(--sw-pad); left:var(--sw-pad);
-  width:calc(var(--sw-h) - var(--sw-pad)*2 - 2px); height:calc(var(--sw-h) - var(--sw-pad)*2 - 2px);
-  border-radius:50%; background:linear-gradient(180deg, #d5dbe6, #9aa8bd); box-shadow:0 2px 8px rgba(0,0,0,.45); transition:.2s;
-}
-#dict-pane .ui-switch:checked{
-  background:linear-gradient(180deg, rgba(31,140,255,.30), rgba(31,140,255,.18)), #0f131a;
-  border-color:rgba(31,140,255,.55);
-}
-#dict-pane .ui-switch:checked::after{
-  left:calc(100% - var(--sw-h) + var(--sw-pad));
-  background:linear-gradient(180deg, #7ec0ff, #2a8cff);
-}
