@@ -230,46 +230,37 @@
             const snapshot = await get(telopRef);
             const currentTelop = snapshot.val();
         
-            try {
-                const response = await fetch(`${GAS_API_URL}?sheet=answer`);
-                const result = await response.json();
-                if (result.success) {
-                    const currentSelectedUid = selectedRowData ? selectedRowData.uid : null;
-                    questionsTableBody.innerHTML = '';
-                    result.data.forEach(item => {
-                        const tr = document.createElement('tr');
-                        tr.addEventListener('click', () => {
-                            document.querySelectorAll('#questions-table tbody tr').forEach(row => row.classList.remove('selected-row'));
-                            tr.classList.add('selected-row');
-                            selectedRowData = { uid: item['UID'], name: item['ラジオネーム'], question: item['質問・お悩み'] };
-                            actionButtons.forEach(btn => btn.disabled = false);
-                            selectedInfo.textContent = `選択中: ${escapeHtml(item['ラジオネーム'])}`;
-                        });
-                        if (item['回答済'] === true) { tr.classList.add('answered'); }
-                        if (currentTelop && currentTelop.name === item['ラジオネーム'] && currentTelop.question === item['質問・お悩み']) {
-                            tr.classList.add('now-displaying');
-                            if (lastDisplayedUid === item['UID']) {
-                                tr.classList.add('flash');
-                                tr.addEventListener('animationend', () => tr.classList.remove('flash'), { once: true });
-                                lastDisplayedUid = null;
-                            }
-                        }
-//                        const encodedQuestion = btoa(unescape(encodeURIComponent(item['質問・お悩み'])));
-                        
-                        // 「選択中」と「回答済」のカラム表示を追加
-                        const statusText = item['選択中'] === true ? '表示中' : (item['回答済'] === true ? '回答済' : '未回答');
-        
-                        tr.innerHTML = `<td>${escapeHtml(item['ラジオネーム'])}</td><td>${escapeHtml(item['質問・お悩み'])}</td><td>${statusText}</td>`;
-                        questionsTableBody.appendChild(tr);
-                    });
-                    if (!result.data.some(item => item.UID === currentSelectedUid)) {
-                        selectedRowData = null;
-                        actionButtons.forEach(btn => btn.disabled = true);
-                        selectedInfo.textContent = '行を選択してください';
-                    }
-                }
-            } catch (error) {
-                console.error('通信エラーが発生しました: ' + error.message);
+            const currentSelectedUid = selectedRowData ? selectedRowData.uid : null;
+            questionsTableBody.innerHTML = '';
+            
+            questionsToRender.forEach(item => {
+               const tr = document.createElement('tr');
+               tr.addEventListener('click', () => {
+                   document.querySelectorAll('#questions-table tbody tr').forEach(row => row.classList.remove('selected-row'));
+                   tr.classList.add('selected-row');
+                   selectedRowData = { uid: item['UID'], name: item['ラジオネーム'], question: item['質問・お悩み'] };
+                   actionButtons.forEach(btn => btn.disabled = false);
+                   selectedInfo.textContent = `選択中: ${escapeHtml(item['ラジオネーム'])}`;
+               });
+               if (item['回答済'] === true) { tr.classList.add('answered'); }
+               if (currentTelop && currentTelop.name === item['ラジオネーム'] && currentTelop.question === item['質問・お悩み']) {
+                   tr.classList.add('now-displaying');
+                   if (lastDisplayedUid === item['UID']) {
+                       tr.classList.add('flash');
+                       tr.addEventListener('animationend', () => tr.classList.remove('flash'), { once: true });
+                       lastDisplayedUid = null;
+                   }
+               }
+               const statusText = item['選択中'] === true ? '表示中' : (item['回答済'] === true ? '回答済' : '未回答');
+               tr.innerHTML = `<td>${escapeHtml(item['ラジオネーム'])}</td><td>${escapeHtml(item['質問・お悩み'])}</td><td>${statusText}</td>`;
+               questionsTableBody.appendChild(tr);
+            });
+            
+            // 行選択をリセットする処理
+            if (!questionsToRender.some(item => item.UID === currentSelectedUid)) {
+               selectedRowData = null;
+               actionButtons.forEach(btn => btn.disabled = true);
+               selectedInfo.textContent = '行を選択してください';
             }
         }
         async function handleDisplay() {
