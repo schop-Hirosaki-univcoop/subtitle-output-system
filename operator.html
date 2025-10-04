@@ -92,11 +92,12 @@
         const newTermInput = document.getElementById('new-term');
         const newRubyInput = document.getElementById('new-ruby');
 
+        let questionInterval; // 自動更新を管理するための変数
+
         // --- ▼▼▼ ログイン処理の心臓部 ▼▼▼ ---
         // ログイン状態の変化を監視する
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                // ログインしている場合
                 loginContainer.style.display = 'none';
                 mainContent.style.display = 'flex';
                 userInfo.innerHTML = `${user.displayName} (${user.email}) <button onclick="logout()">ログアウト</button>`;
@@ -104,10 +105,9 @@
                 // ログイン後に初めてデータを読み込む
                 fetchQuestions();
                 fetchDictionary();
-                setInterval(fetchQuestions, 30000);
-
+                // ログイン後に自動更新を開始
+                questionInterval = setInterval(fetchQuestions, 30000);
             } else {
-                // ログアウトしている場合
                 loginContainer.style.display = 'block';
                 mainContent.style.display = 'none';
                 userInfo.innerHTML = '';
@@ -115,7 +115,7 @@
                 if (questionInterval) {
                     clearInterval(questionInterval);
                 }
-             }
+            }
         });
 
         // ログイン処理
