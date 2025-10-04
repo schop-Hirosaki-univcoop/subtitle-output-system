@@ -268,6 +268,7 @@
             try {
                 await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateSelectingStatus', uid: selectedRowData.uid }) });
                 await set(telopRef, { name: selectedRowData.name, question: selectedRowData.question });
+                logAction('DISPLAY', `RN: ${selectedRowData.name}`);
                 lastDisplayedUid = selectedRowData.uid;
                 fetchQuestions();
             } catch (error) { alert('エラー: ' + error.message); }
@@ -278,7 +279,7 @@
             try {
                 const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateStatus', uid: selectedRowData.uid, status: true }) });
                 const result = await response.json();
-                if (result.success) { fetchQuestions(); } else { alert('更新失敗: ' + result.error); }
+                if (result.success) { logAction('SET_ANSWERED', `UID: ${selectedRowData.uid}`); fetchQuestions(); } else { alert('更新失敗: ' + result.error); }
             } catch (error) { alert('通信エラー: ' + error.message); }
         }
         async function handleEdit() {
@@ -300,6 +301,7 @@
                 });
                 // localStorage.removeItem の代わりにFirebaseから削除する
                 await remove(telopRef);
+                logAction('CLEAR');
                 fetchQuestions();
             } catch(error) {
                 alert('ステータスのクリア中にエラーが発生しました: ' + error.message);
@@ -313,6 +315,26 @@
             document.querySelector(`.tab-button[onclick="switchTab('${tabName}')"]`).classList.add('active');
             // 現在のタブに合わせてリストを再描画
             renderQuestions();
+        }
+
+        // ログをGASに送信するヘルパー関数
+        async function logAction(action, details = '') {
+            const user = auth.currentUser;
+            if (!user) return; // ユーザーが不明な場合は何もしない
+        
+            try {
+                await fetch(GAS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'logAction',
+                        user: user.email,
+                        action: action,
+                        details: details
+                    })
+                });
+            } catch (error) {
+                console.error("Failed to write log:", error);
+            }
         }
         
         // --- 辞書関連の関数 ---
