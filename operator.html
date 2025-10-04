@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <title>Telop Operator</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; display: flex; gap: 40px; }
+        body { font-family: sans-serif; padding: 20px; }
+        #login-container { text-align: center; margin-top: 50px; }
+        #main-content { display: flex; gap: 40px; }
+        #user-info { position: absolute; top: 10px; right: 20px; font-size: 14px; }
         .panel { flex: 1; }
         table { border-collapse: collapse; width: 100%; margin-top: 10px; }
         th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
@@ -13,7 +16,7 @@
         tr.disabled { text-decoration: line-through; color: #999; }
         #add-term-form { display: flex; gap: 10px; margin-top: 10px; }
         #add-term-form input { padding: 5px; }
-        tr.now-displaying { background-color: #d4edda; /* 明るい緑色 */ font-weight: bold; }
+        tr.now-displaying { background-color: #d4edda; font-weight: bold; }
     </style>
     <script type="module">
         // Import the functions you need from the SDKs you need
@@ -39,49 +42,48 @@
 </head>
 <body>
 
-    <div class="panel" id="questions-panel">
-        <h1>テロップ操作パネル</h1>
-        <button onclick="fetchQuestions()">質問リストを更新</button>
-        <button onclick="clearTelop()">テロップを消去</button>
-        <table id="questions-table">
-            <thead>
-                <tr>
-                    <th>ラジオネーム</th>
-                    <th>質問・お悩み</th>
-                    <th>ステータス</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
+    <div id="user-info"></div>
+
+    <div id="login-container">
+        <h2>テロップ操作パネル ログイン</h2>
+        <button onclick="login()">Googleアカウントでログイン</button>
     </div>
 
-    <div class="panel" id="dictionary-panel">
-        <h2>ルビ辞書管理</h2>
-        <button onclick="fetchDictionary()">辞書を更新</button>
-        <form id="add-term-form" onsubmit="addTerm(event)">
-            <input type="text" id="new-term" placeholder="単語" required>
-            <input type="text" id="new-ruby" placeholder="ルビ" required>
-            <button type="submit">追加</button>
-        </form>
-        <table id="dictionary-table">
-            <thead>
-                <tr>
-                    <th>単語</th>
-                    <th>ルビ</th>
-                    <th>状態</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
+    <div id="main-content" style="display: none;">
+        <div class="panel" id="questions-panel">
+            <h1>テロップ操作パネル</h1>
+            <button onclick="fetchQuestions()">質問リストを手動更新</button>
+            <button onclick="clearTelop()">テロップを消去</button>
+            <table id="questions-table">
+                <thead>
+                    <tr><th>ラジオネーム</th><th>質問・お悩み</th><th>ステータス</th><th>操作</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="panel" id="dictionary-panel">
+            <h2>ルビ辞書管理</h2>
+            <button onclick="fetchDictionary()">辞書を更新</button>
+            <form id="add-term-form" onsubmit="addTerm(event)">
+                <input type="text" id="new-term" placeholder="単語" required>
+                <input type="text" id="new-ruby" placeholder="ルビ" required>
+                <button type="submit">追加</button>
+            </form>
+            <table id="dictionary-table">
+                <thead>
+                    <tr><th>単語</th><th>ルビ</th><th>状態</th><th>操作</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
     </div>
-
+    
     <script type="module">
         // ▼▼▼ Firebaseの初期化処理を追加 ▼▼▼
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getDatabase, ref, set, remove, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-        
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
         // headに貼り付けたconfig情報をここにも記述
         const firebaseConfig = {
             apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
@@ -93,11 +95,17 @@
             appId: "1:378400426909:web:f1549aad61e3f7aacebd74"
         };
 
+        const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec'; 
+
         const app = initializeApp(firebaseConfig);
         const database = getDatabase(app);
-        const telopRef = ref(database, 'currentTelop'); // データベース内の 'currentTelop' という場所を参照
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+        const telopRef = ref(database, 'currentTelop');
 
-        const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec'; 
+        const loginContainer = document.getElementById('login-container');
+        const mainContent = document.getElementById('main-content');
+        const userInfo = document.getElementById('user-info');
         
         // --- 要素の取得 ---
         const questionsTableBody = document.querySelector('#questions-table tbody');
@@ -105,6 +113,47 @@
         const newTermInput = document.getElementById('new-term');
         const newRubyInput = document.getElementById('new-ruby');
 
+        // --- ▼▼▼ ログイン処理の心臓部 ▼▼▼ ---
+        // ログイン状態の変化を監視する
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // ログインしている場合
+                loginContainer.style.display = 'none';
+                mainContent.style.display = 'flex';
+                userInfo.innerHTML = `${user.displayName} (${user.email}) <button onclick="logout()">ログアウト</button>`;
+                
+                // ログイン後に初めてデータを読み込む
+                fetchQuestions();
+                fetchDictionary();
+                setInterval(fetchQuestions, 30000);
+
+            } else {
+                // ログアウトしている場合
+                loginContainer.style.display = 'block';
+                mainContent.style.display = 'none';
+                userInfo.innerHTML = '';
+            }
+        });
+
+        // ログイン処理
+        async function login() {
+            try {
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                console.error("Login failed:", error);
+                alert("ログインに失敗しました。");
+            }
+        }
+
+        // ログアウト処理
+        async function logout() {
+            try {
+                await signOut(auth);
+            } catch (error) {
+                console.error("Logout failed:", error);
+            }
+        }
+        
         // --- 質問関連の関数 ---
         async function fetchQuestions() {
             // Firebaseから現在のテロップ情報を一度だけ取得
