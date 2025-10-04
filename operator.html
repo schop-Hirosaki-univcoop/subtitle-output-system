@@ -67,6 +67,8 @@
 
         // --- 質問関連の関数 ---
         async function fetchQuestions() {
+            const currentTelopJSON = localStorage.getItem('currentTelop');
+            const currentTelop = currentTelopJSON ? JSON.parse(currentTelopJSON) : null;
             try {
                 const response = await fetch(`${GAS_API_URL}?sheet=answer`);
                 const result = await response.json();
