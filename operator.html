@@ -81,6 +81,7 @@
         const auth = getAuth(app);
         const provider = new GoogleAuthProvider();
         const telopRef = ref(database, 'currentTelop');
+        const updateTriggerRef = ref(database, 'update_trigger'); // 'update_trigger' を参照
 
         const loginContainer = document.getElementById('login-container');
         const mainContent = document.getElementById('main-content');
@@ -115,7 +116,15 @@
                             
                             fetchQuestions();
                             fetchDictionary();
-                            questionInterval = setInterval(fetchQuestions, 30000);
+
+                            // 'update_trigger' の変更を監視する
+                            onValue(updateTriggerRef, (snapshot) => {
+                                // 値が変更されたら（初回読み込みも含む）、リストを更新
+                                if (snapshot.exists()) {
+                                    console.log("Spreadsheet has been updated. Fetching new questions...");
+                                    fetchQuestions();
+                                }
+                            });
                         } else {
                             // --- 権限NGの場合の処理 ---
                             alert("あなたのアカウントはこのシステムへのアクセスが許可されていません。");
