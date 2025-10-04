@@ -1,5 +1,7 @@
 ﻿// ====================================================================
-// script.js: index.html用 完全再現・選択保持・PVW/PGM常時反映バージョン
+// script.js: GAS時代のUX完全再現・全機能フルバージョン
+// - 選択/選択解除/再選択/リスト外クリック/Esc解除/TAKE後自動解除
+// - PVW/PGM表示・全API・辞書・一括編集・CSV・アクセシビリティ・細部まで網羅
 // ====================================================================
 
 const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec';
@@ -9,15 +11,14 @@ const API_DICT_ENDPOINT = `${GAS_WEB_APP_URL}?key=${MY_SECRET_KEY}&dict=1`;
 
 const COL = { TS:0, RNAME:1, Q:2, TEAM:3, SELECTED:4, DONE:5, UID:6 };
 
-// グローバル状態
 let rawDataCache = [];
 let busy = false;
-// 選択状態を常に保持
 let currentSelectedUid = null;
 let dictCache = [];
 let dictTableRows = [];
 let dictBulkMode = false;
-let dictSelectedRow = null;
+let dictSelectedRow = null; // index in dictCache
+let dictWorkingBulk = [];   // work copy for bulk edit
 
 // ========== ユーティリティ ==========
 function escapeHtml(s){
@@ -106,17 +107,30 @@ function displayNames(names) {
     li.classList.toggle("approved", isSelected);
     li.classList.toggle("completed", isCompleted);
     li.classList.toggle("open", !isSelected && !isCompleted);
+
     // 選択状態を復元
     if (item[COL.UID] === currentSelectedUid) {
       li.classList.add('focused');
-      // 再描画時にもPVWを維持
       renderPVW(item);
     }
+
     li.addEventListener("click", (e) => {
+      // GAS時代: もう一度クリックで選択解除
+      if (currentSelectedUid === item[COL.UID]) {
+        clearSelection();
+        updateApproveButtonState();
+        return;
+      }
       selectItem(li, item);
     });
     li.addEventListener("keydown", e=>{
-      if(e.key==="Enter"||e.key===" "){ e.preventDefault(); selectItem(li,item);}
+      if(e.key==="Enter"||e.key===" "){ e.preventDefault();
+        if (currentSelectedUid === item[COL.UID]) {
+          clearSelection();
+          updateApproveButtonState();
+          return;
+        }
+        selectItem(li,item);}
     });
     list.appendChild(li);
   });
@@ -124,8 +138,6 @@ function displayNames(names) {
   document.getElementById('count-onair').textContent = onair;
   document.getElementById('count-completed').textContent = completed;
 }
-
-// 選択
 function selectItem(el, item) {
   document.querySelectorAll('.name-box').forEach(i => i.classList.remove('focused'));
   el.classList.add('focused');
@@ -133,6 +145,42 @@ function selectItem(el, item) {
   renderPVW(item);
   updateApproveButtonState();
   el.focus();
+}
+function clearSelection() {
+  document.querySelectorAll('.name-box').forEach(i => i.classList.remove('focused'));
+  currentSelectedUid = null;
+  clearPVW();
+  updateApproveButtonState();
+}
+function clearPVW() {
+  const pvwMirror = document.getElementById('pvw-mirror');
+  if (pvwMirror) {
+    pvwMirror.textContent = '';
+    pvwMirror.innerHTML = '';
+  }
+}
+
+// ========== リスト外クリック/Escで選択解除 ==========
+function setupSelectionClearUX() {
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest('.name-box') && !e.target.closest('#dict-drawer') && !e.target.closest('#dict-pane')) {
+      clearSelection();
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      clearSelection();
+      // ドロワーも閉じる
+      const dictDrawer = document.getElementById('dict-drawer');
+      if (dictDrawer && dictDrawer.classList.contains('open')) {
+        dictDrawer.classList.remove('open');
+        dictDrawer.setAttribute('aria-expanded', 'false');
+        document.body.appendChild(document.getElementById('dict-pane'));
+        document.getElementById('toggle-dict').setAttribute('aria-expanded', 'false');
+        document.getElementById('toggle-dict').focus();
+      }
+    }
+  });
 }
 
 // ========== PVW/PGMミラー描画 ==========
@@ -234,17 +282,10 @@ async function sendActionToGas(action, uid = null) {
   } catch (error) {
     showToast("操作失敗", ellipsis(error.message, 60), "info");
   } finally {
-    await loadNames(); // 必ずawaitでリスト再取得
+    await loadNames();
     setBusy(false);
     hideOverlay();
-    // 選択状態が消えることを防ぐ
-    if (currentSelectedUid) {
-      const item = rawDataCache.find(x => x[COL.UID] === currentSelectedUid);
-      if (item) {
-        // 再度PVW再描画
-        renderPVW(item);
-      }
-    }
+    clearSelection();
     updatePreviewMirror();
   }
 }
@@ -318,7 +359,6 @@ function setupApproveButtonLogic() {
     const onAirItem = rawDataCache.find(n => n[COL.SELECTED] === '✔');
     if (!onAirItem) { showToast('PGMはありません', '', 'info'); return; }
     displayNames(rawDataCache);
-    // PGM項目を自動選択
     currentSelectedUid = onAirItem[COL.UID];
     const el = document.querySelector(`.name-box[data-uid="${onAirItem[COL.UID]}"]`);
     if (el) {
@@ -344,7 +384,6 @@ async function loadNames() {
     rawDataCache = rawData.slice(1);
     displayNames(rawDataCache);
     updatePreviewMirror();
-    // 選択状態を復元
     if (currentSelectedUid) {
       const item = rawDataCache.find(x => x[COL.UID] === currentSelectedUid);
       if (item) {
@@ -361,8 +400,7 @@ async function loadNames() {
   }
 }
 
-// ========== ルビ辞書管理(完全＋バリデ/アクセシビリティ) ==========
-
+// ========== ルビ辞書 管理・編集・一括編集・CSV ==========
 async function loadDict(showToastMsg) {
   try {
     const res = await fetch(API_DICT_ENDPOINT);
@@ -378,21 +416,38 @@ function renderDictTable() {
   const tbody = document.getElementById('dict-tbody');
   tbody.innerHTML = '';
   dictTableRows = [];
-  dictCache.forEach((row, idx) => {
+  const data = dictBulkMode ? dictWorkingBulk : dictCache;
+  data.forEach((row, idx) => {
     const tr = document.createElement('tr');
     tr.dataset.row = row.row;
     tr.dataset.idx = idx;
     tr.className = row.enabled ? '' : 'disabled';
+    if (dictBulkMode) tr.classList.toggle('bulk-selected', !!row._sel);
     tr.innerHTML = `
-      <td class="col-select"><input type="checkbox" class="dict-row-select" data-row="${row.row}" tabindex="0" aria-label="行選択"></td>
+      <td class="col-select">
+        ${dictBulkMode ? `<input type="checkbox" class="dict-row-select" data-row="${row.row}" tabindex="0" aria-label="行選択" ${row._sel?'checked':''}>` : ''}
+      </td>
       <td class="col-term">${escapeHtml(row.term)}</td>
       <td class="col-ruby">${escapeHtml(row.ruby)}</td>
       <td class="col-mode">${escapeHtml(row.mode)}</td>
     `;
-    tr.addEventListener('click', () => selectDictRow(idx));
+    tr.addEventListener('click', (e) => {
+      if (dictBulkMode) {
+        // 一括編集: 行クリックで選択トグル
+        row._sel = !row._sel;
+        tr.classList.toggle('bulk-selected', !!row._sel);
+        const chk = tr.querySelector('.dict-row-select');
+        if (chk) chk.checked = !!row._sel;
+        updateDictBulkToolbar();
+      } else {
+        selectDictRow(idx);
+      }
+    });
     dictTableRows.push(tr);
     tbody.appendChild(tr);
   });
+  updateDictPanel();
+  updateDictBulkToolbar();
 }
 function selectDictRow(idx) {
   if (dictBulkMode) return;
@@ -403,13 +458,33 @@ function selectDictRow(idx) {
 }
 function updateDictPanel() {
   const info = document.getElementById('dict-sel-summary');
+  if (dictBulkMode) {
+    info.textContent = '一括編集中';
+    return;
+  }
   if (dictSelectedRow == null || dictSelectedRow >= dictCache.length) {
     info.textContent = 'なし';
+    document.getElementById('dict-toggle-enabled').checked = false;
+    document.getElementById('dict-toggle-enabled').disabled = true;
+    document.getElementById('dict-edit-row').disabled = true;
+    document.getElementById('dict-delete-row').disabled = true;
     return;
   }
   const row = dictCache[dictSelectedRow];
   info.textContent = row.term;
   document.getElementById('dict-toggle-enabled').checked = !!row.enabled;
+  document.getElementById('dict-toggle-enabled').disabled = false;
+  document.getElementById('dict-edit-row').disabled = false;
+  document.getElementById('dict-delete-row').disabled = false;
+}
+function updateDictBulkToolbar() {
+  const count = dictWorkingBulk?.filter(r=>r._sel).length || 0;
+  const lab = document.getElementById('dict-bulk-count');
+  if (lab) lab.textContent = count;
+  document.getElementById('dict-bulk-enable').disabled = !count;
+  document.getElementById('dict-bulk-disable').disabled = !count;
+  document.getElementById('dict-bulk-delete').disabled = !count;
+  document.getElementById('dict-bulk-save').disabled = false;
 }
 function setupDictEvents() {
   document.getElementById('dict-reload').onclick = () => loadDict(true);
@@ -426,6 +501,7 @@ function setupDictEvents() {
     if (!confirm(`本当に削除しますか？(${row.term})`)) return;
     await dictDelete(row.row);
     await loadDict(true);
+    dictSelectedRow = null;
   };
   document.getElementById('dict-toggle-enabled').onchange = async function() {
     if (dictSelectedRow == null) return;
@@ -480,8 +556,48 @@ function setupDictEvents() {
     }
     await loadDict(true);
   };
+  // 一括編集
+  document.getElementById('dict-bulk-edit').onclick = function() {
+    dictBulkMode = true;
+    dictWorkingBulk = dictCache.map(r=>({...r, _sel:false}));
+    document.getElementById('dict-pane').classList.add('bulk-editing');
+    renderDictTable();
+  };
+  document.getElementById('dict-bulk-enable').onclick = function() {
+    dictWorkingBulk.forEach(r=>{if(r._sel) r.enabled = true;});
+    renderDictTable();
+  };
+  document.getElementById('dict-bulk-disable').onclick = function() {
+    dictWorkingBulk.forEach(r=>{if(r._sel) r.enabled = false;});
+    renderDictTable();
+  };
+  document.getElementById('dict-bulk-delete').onclick = async function() {
+    const targets = dictWorkingBulk.filter(r=>r._sel);
+    if (!targets.length) { showToast('削除対象が選択されていません','', 'info'); return; }
+    if (!confirm(`${targets.length}件を削除しますか？`)) return;
+    for (const row of targets) await dictDelete(row.row);
+    await loadDict(true);
+    exitBulkEdit();
+  };
+  document.getElementById('dict-bulk-save').onclick = async function() {
+    for (const row of dictWorkingBulk) {
+      if (row.enabled !== dictCache.find(r=>r.row===row.row)?.enabled) {
+        await dictEnable(row.row, row.enabled);
+      }
+    }
+    await loadDict(true);
+    exitBulkEdit();
+  };
+  document.getElementById('dict-bulk-cancel').onclick = function() {
+    exitBulkEdit();
+  };
 }
-
+function exitBulkEdit() {
+  dictBulkMode = false;
+  dictWorkingBulk = [];
+  document.getElementById('dict-pane').classList.remove('bulk-editing');
+  renderDictTable();
+}
 // --- GAS API ---
 async function dictUpsert(term, ruby, mode, enabled) {
   return fetch(API_DICT_ENDPOINT, {
@@ -544,14 +660,6 @@ function setupShortcuts() {
       e.preventDefault();
       document.getElementById('search').focus();
     }
-    if(e.key === 'Escape' && document.getElementById('dict-drawer').classList.contains('open')) {
-      const dictDrawer = document.getElementById('dict-drawer');
-      dictDrawer.classList.remove('open');
-      dictDrawer.setAttribute('aria-expanded', 'false');
-      document.body.appendChild(document.getElementById('dict-pane'));
-      document.getElementById('toggle-dict').setAttribute('aria-expanded', 'false');
-      document.getElementById('toggle-dict').focus();
-    }
     if(e.key === '?' && !document.getElementById('help-modal')) {
       e.preventDefault();
       showHelpModal();
@@ -570,8 +678,8 @@ function showHelpModal(){
       <h2 style="font-size:1.15em;margin-bottom:.7em;color:#fff;">ショートカット一覧</h2>
       <ul style="line-height:1.8;color:#eee;padding-left:1.2em">
         <li><b>/</b> ... 検索バーにフォーカス</li>
-        <li><b>Esc</b> ... ドロワーやモーダルを閉じる</li>
-        <li><b>Enter/Space</b> ... 質問リスト項目の選択</li>
+        <li><b>Esc</b> ... 選択解除＆ドロワーやモーダルを閉じる</li>
+        <li><b>Enter/Space</b> ... 質問リスト項目の選択/再クリックで解除</li>
         <li><b>?</b> ... このヘルプを表示</li>
       </ul>
       <button id="help-close" style="margin-top:1.7em;background:#2a3342;color:#fff;font-weight:bold;border-radius:8px;padding:7px 20px;">閉じる</button>
@@ -585,16 +693,14 @@ function showHelpModal(){
   });
 }
 
-// ========== 外部クリックで選択解除しない（再描画時保持のため） ==========
-// （明示的に外部クリックで解除したい場合はここに追記）
-
 // ========== 初期化 ==========
 document.addEventListener('DOMContentLoaded', () => {
   setupDictDrawer();
   setupApproveButtonLogic();
   loadNames();
   setInterval(loadNames, 5000);
+  setupSelectionClearUX();
+  setupShortcuts();
   setupDictEvents();
   loadDict();
-  setupShortcuts();
 });
