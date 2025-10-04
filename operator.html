@@ -108,11 +108,13 @@
             }
         }
 
-        function displayTelop(name, question) {
+        function displayTelop(name, encodedQuestion) {
+            // デコードして元の日本語文字列に戻してから localStorage に保存する
+            const question = decodeURIComponent(escape(atob(encodedQuestion)));
             const telopData = { name: name, question: question };
             localStorage.setItem('currentTelop', JSON.stringify(telopData));
             alert(`「${name}」さんの質問を表示します。`);
-            fetchQuestions();
+            fetchQuestions(); // リストを更新してハイライトを反映
         }
         
         async function editQuestion(uid, encodedCurrentText) {
