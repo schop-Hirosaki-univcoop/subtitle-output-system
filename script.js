@@ -1,19 +1,18 @@
 ﻿// ====================================================================
-// script.js: index.html用 完全版（GAS移植前の全機能を網羅）
+// script.js: index.html用 完全再現・選択保持・PVW/PGM常時反映バージョン
 // ====================================================================
 
-// --- API設定 ---
 const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec';
 const MY_SECRET_KEY = 'nanndemosoudann_23schop';
 const API_ENDPOINT = `${GAS_WEB_APP_URL}?key=${MY_SECRET_KEY}`;
 const API_DICT_ENDPOINT = `${GAS_WEB_APP_URL}?key=${MY_SECRET_KEY}&dict=1`;
-const API_UPDATE_FLAG = `${GAS_WEB_APP_URL}?key=${MY_SECRET_KEY}&flag=1`;
 
 const COL = { TS:0, RNAME:1, Q:2, TEAM:3, SELECTED:4, DONE:5, UID:6 };
 
-// ------ グローバル状態 ------
+// グローバル状態
 let rawDataCache = [];
 let busy = false;
+// 選択状態を常に保持
 let currentSelectedUid = null;
 let dictCache = [];
 let dictTableRows = [];
@@ -23,11 +22,7 @@ let dictSelectedRow = null;
 // ========== ユーティリティ ==========
 function escapeHtml(s){
   return String(s||'').replace(/[&<>"']/g, m => ({
-    '&':'&amp;',
-    '<':'&lt;',
-    '>':'&gt;',
-    '"':'&quot;',
-    "'":'&#39;'
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   })[m]);
 }
 function ellipsis(s,n){s=String(s||''); return s.length>n? s.slice(0,n-1)+'…': s;}
@@ -41,7 +36,13 @@ function setBusy(on){
 function showToast(title, sub, kind='ok'){
   const toast = document.getElementById('toast');
   if (!toast) return;
-  toast.innerHTML = `<span class="icon">★</span><div class="txt"><div class="title">${escapeHtml(title)}</div>${sub?`<div class="sub">${escapeHtml(sub)}</div>`:''}</div>`;
+  toast.setAttribute('role','status');
+  toast.setAttribute('aria-live','polite');
+  toast.innerHTML = `<span class="icon" aria-hidden="true">★</span>
+    <div class="txt">
+      <div class="title">${escapeHtml(title)}</div>
+      ${sub?`<div class="sub">${escapeHtml(sub)}</div>`:''}
+    </div>`;
   toast.dataset.kind = kind;
   toast.classList.add('show');
   setTimeout(()=>toast.classList.remove('show'), 2400);
@@ -50,6 +51,7 @@ function showOverlay(msg){
   const ov = document.getElementById('overlay');
   const msgE = document.getElementById('overlay-msg');
   if (!ov || !msgE) return;
+  ov.setAttribute('aria-busy','true');
   ov.classList.remove('hidden');
   ov.classList.add('show');
   msgE.textContent = msg || '送出更新中…';
@@ -57,6 +59,7 @@ function showOverlay(msg){
 function hideOverlay(){
   const ov = document.getElementById('overlay');
   if (!ov) return;
+  ov.setAttribute('aria-busy','false');
   ov.classList.remove('show');
   ov.classList.add('hidden');
 }
@@ -66,7 +69,6 @@ function displayNames(names) {
   const list = document.getElementById("nameList");
   list.innerHTML = "";
   const template = document.getElementById('tpl-selected');
-  if (!template) return;
   let total = 0, onair = 0, completed = 0;
   names.forEach((item) => {
     if (!item || item.length < 7) return;
@@ -77,18 +79,24 @@ function displayNames(names) {
     if (isCompleted) completed++;
     const li = template.content.firstElementChild.cloneNode(true);
     li.dataset.uid = item[COL.UID];
-    // RN/FAQ判定
+    li.setAttribute('tabindex', 0);
+    // RN/FAQ
     const rnChip = li.querySelector('.rname-chip');
     rnChip.textContent = item[COL.RNAME] || '（匿名）';
-    if (item[COL.RNAME] === "Pick Up Question") rnChip.classList.add("is-faq");
-    else if (item[COL.RNAME]) rnChip.classList.add("is-rname");
-    else rnChip.classList.remove("is-faq", "is-rname");
+    if (item[COL.RNAME] === "Pick Up Question") {
+      rnChip.classList.add("is-faq");
+      rnChip.setAttribute('aria-label','FAQ');
+      li.setAttribute('aria-label', 'FAQ: ' + item[COL.Q]);
+    } else if (item[COL.RNAME]) {
+      rnChip.classList.add("is-rname");
+    } else {
+      rnChip.classList.remove("is-faq", "is-rname");
+    }
     // 班
     const teamBox = li.querySelector('.team-box');
     teamBox.textContent = item[COL.TEAM] ? String(item[COL.TEAM]) + "班" : "";
-    // FAQ時は班箱を非表示
     if (item[COL.RNAME] === "Pick Up Question") teamBox.style.display = "none";
-    // 質問
+    // 本文
     li.querySelector('.text-container').textContent = item[COL.Q];
     // タイムスタンプ
     let ts = item[COL.TS];
@@ -98,8 +106,17 @@ function displayNames(names) {
     li.classList.toggle("approved", isSelected);
     li.classList.toggle("completed", isCompleted);
     li.classList.toggle("open", !isSelected && !isCompleted);
+    // 選択状態を復元
+    if (item[COL.UID] === currentSelectedUid) {
+      li.classList.add('focused');
+      // 再描画時にもPVWを維持
+      renderPVW(item);
+    }
     li.addEventListener("click", (e) => {
       selectItem(li, item);
+    });
+    li.addEventListener("keydown", e=>{
+      if(e.key==="Enter"||e.key===" "){ e.preventDefault(); selectItem(li,item);}
     });
     list.appendChild(li);
   });
@@ -115,25 +132,48 @@ function selectItem(el, item) {
   currentSelectedUid = item[COL.UID];
   renderPVW(item);
   updateApproveButtonState();
+  el.focus();
 }
 
 // ========== PVW/PGMミラー描画 ==========
 function renderPVW(item) {
   const pvwMirror = document.getElementById('pvw-mirror');
   if (!pvwMirror) return;
-  pvwMirror.innerHTML = `<div class="p-2 text-white text-left font-sans text-sm">
-    <p class="font-bold">${escapeHtml(item[COL.RNAME] || '（匿名）')}</p>
-    <p>${escapeHtml(ellipsis(item[COL.Q], 60))}</p>
-  </div>`;
+  let label = '', labelClass = '';
+  if(item[COL.RNAME] === "Pick Up Question") {
+    label = 'FAQ'; labelClass = 'faq-chip';
+  } else if (item[COL.TEAM]) {
+    label = item[COL.TEAM]+'班'; labelClass = 'team-box';
+  } else if (item[COL.RNAME]) {
+    label = item[COL.RNAME]; labelClass = 'rname-chip';
+  }
+  pvwMirror.innerHTML = `
+    <div class="tele-title">${label? `<span class="${labelClass}">${escapeHtml(label)}</span>`:""}
+      <span>${escapeHtml(item[COL.RNAME]||'（匿名）')}</span>
+    </div>
+    <div class="tele-body">${escapeHtml(item[COL.Q])}</div>
+  `;
+  pvwMirror.setAttribute('aria-label','PVWプレビュー: '+(item[COL.RNAME]||'匿名')+" "+item[COL.Q]);
 }
 function updatePreviewMirror() {
   const selectedItem = rawDataCache.find(n => n[COL.SELECTED] === '✔');
   const previewMirror = document.getElementById('preview-mirror');
   if (selectedItem) {
-    previewMirror.innerHTML = `<div class="p-2 text-white text-left font-sans text-sm">
-      <p class="font-bold">${escapeHtml(selectedItem[COL.RNAME] || '（匿名）')}</p>
-      <p>${escapeHtml(ellipsis(selectedItem[COL.Q], 60))}</p>
-    </div>`;
+    let label = '', labelClass = '';
+    if(selectedItem[COL.RNAME] === "Pick Up Question") {
+      label = 'FAQ'; labelClass = 'faq-chip';
+    } else if (selectedItem[COL.TEAM]) {
+      label = selectedItem[COL.TEAM]+'班'; labelClass = 'team-box';
+    } else if (selectedItem[COL.RNAME]) {
+      label = selectedItem[COL.RNAME]; labelClass = 'rname-chip';
+    }
+    previewMirror.innerHTML = `
+      <div class="tele-title">${label? `<span class="${labelClass}">${escapeHtml(label)}</span>`:""}
+        <span>${escapeHtml(selectedItem[COL.RNAME]||'（匿名）')}</span>
+      </div>
+      <div class="tele-body">${escapeHtml(selectedItem[COL.Q])}</div>
+    `;
+    previewMirror.setAttribute('aria-label','PGMプレビュー: '+(selectedItem[COL.RNAME]||'匿名')+" "+selectedItem[COL.Q]);
   } else {
     previewMirror.textContent = '';
     previewMirror.innerHTML = '';
@@ -145,6 +185,7 @@ function updatePreviewMirror() {
 function updateApproveButtonState() {
   const btn = document.getElementById("approve-button");
   if (!btn) return;
+  btn.setAttribute('aria-label','TAKE/CLEAR');
   const focusedEl = document.querySelector('.name-box.focused');
   const onAirEl = document.querySelector('.name-box.approved');
   const isCurrentlyPGM = !!onAirEl;
@@ -193,31 +234,48 @@ async function sendActionToGas(action, uid = null) {
   } catch (error) {
     showToast("操作失敗", ellipsis(error.message, 60), "info");
   } finally {
-    loadNames();
+    await loadNames(); // 必ずawaitでリスト再取得
     setBusy(false);
     hideOverlay();
+    // 選択状態が消えることを防ぐ
+    if (currentSelectedUid) {
+      const item = rawDataCache.find(x => x[COL.UID] === currentSelectedUid);
+      if (item) {
+        // 再度PVW再描画
+        renderPVW(item);
+      }
+    }
+    updatePreviewMirror();
   }
 }
 
 function setupApproveButtonLogic() {
   let armTimer = null;
   const approveBtn = document.getElementById("approve-button");
+  approveBtn.setAttribute('aria-label','TAKE/CLEAR');
   approveBtn.addEventListener("click", function() {
     if (this.disabled) return;
     if (this.dataset.armed !== '1') {
       this.dataset.armed = '1';
+      this.classList.add('armed');
       showToast('ARM', 'もう一度クリックでTAKE/CLEAR', 'standby');
       clearTimeout(armTimer);
-      armTimer = setTimeout(()=>{ this.dataset.armed='0'; this.title='ダブルクリックでTAKE'; }, 1200);
+      armTimer = setTimeout(()=>{ 
+        this.dataset.armed='0'; 
+        this.classList.remove('armed');
+        this.title='ダブルクリックでTAKE'; 
+      }, 1200);
       return;
     }
     this.dataset.armed = '0';
+    this.classList.remove('armed');
     handleTakeClear();
   });
   approveBtn.addEventListener("dblclick", function(e) {
     e.preventDefault();
     clearTimeout(armTimer);
     this.dataset.armed = '0';
+    this.classList.remove('armed');
     handleTakeClear();
   });
 
@@ -259,15 +317,18 @@ function setupApproveButtonLogic() {
   document.getElementById("jump-onair-button").addEventListener("click", function() {
     const onAirItem = rawDataCache.find(n => n[COL.SELECTED] === '✔');
     if (!onAirItem) { showToast('PGMはありません', '', 'info'); return; }
-    loadNames();
-    setTimeout(() => {
-      const el = document.querySelector(`.name-box[data-uid="${onAirItem[COL.UID]}"]`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        selectItem(el, onAirItem);
-        showToast('PGMへジャンプ', '', 'info');
-      }
-    }, 50);
+    displayNames(rawDataCache);
+    // PGM項目を自動選択
+    currentSelectedUid = onAirItem[COL.UID];
+    const el = document.querySelector(`.name-box[data-uid="${onAirItem[COL.UID]}"]`);
+    if (el) {
+      el.classList.add('focused');
+      renderPVW(onAirItem);
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showToast('PGMへジャンプ', '', 'info');
+    }
+    updatePreviewMirror();
+    updateApproveButtonState();
   });
 }
 
@@ -283,6 +344,15 @@ async function loadNames() {
     rawDataCache = rawData.slice(1);
     displayNames(rawDataCache);
     updatePreviewMirror();
+    // 選択状態を復元
+    if (currentSelectedUid) {
+      const item = rawDataCache.find(x => x[COL.UID] === currentSelectedUid);
+      if (item) {
+        const el = document.querySelector(`.name-box[data-uid="${currentSelectedUid}"]`);
+        if (el) el.classList.add('focused');
+        renderPVW(item);
+      }
+    }
   } catch (error) {
     document.getElementById("nameList").innerHTML = `<li class="text-red-400 p-4">データ取得エラー: ${ellipsis(error.message, 80)}</li>`;
   } finally {
@@ -291,9 +361,8 @@ async function loadNames() {
   }
 }
 
-// ========== ルビ辞書管理(完全) ==========
+// ========== ルビ辞書管理(完全＋バリデ/アクセシビリティ) ==========
 
-// --- 1. 取得 ---
 async function loadDict(showToastMsg) {
   try {
     const res = await fetch(API_DICT_ENDPOINT);
@@ -305,8 +374,6 @@ async function loadDict(showToastMsg) {
     showToast('辞書取得失敗', e.message, 'info');
   }
 }
-
-// --- 2. 描画 ---
 function renderDictTable() {
   const tbody = document.getElementById('dict-tbody');
   tbody.innerHTML = '';
@@ -317,26 +384,24 @@ function renderDictTable() {
     tr.dataset.idx = idx;
     tr.className = row.enabled ? '' : 'disabled';
     tr.innerHTML = `
-      <td class="col-select"><input type="checkbox" class="dict-row-select" data-row="${row.row}"></td>
+      <td class="col-select"><input type="checkbox" class="dict-row-select" data-row="${row.row}" tabindex="0" aria-label="行選択"></td>
       <td class="col-term">${escapeHtml(row.term)}</td>
       <td class="col-ruby">${escapeHtml(row.ruby)}</td>
       <td class="col-mode">${escapeHtml(row.mode)}</td>
     `;
     tr.addEventListener('click', () => selectDictRow(idx));
-    tbody.appendChild(tr);
     dictTableRows.push(tr);
+    tbody.appendChild(tr);
   });
 }
-
-// --- 3. 選択 ---
 function selectDictRow(idx) {
   if (dictBulkMode) return;
   dictSelectedRow = idx;
   dictTableRows.forEach((tr, i) => tr.classList.toggle('selected', i === idx));
   updateDictPanel();
+  dictTableRows[idx] && dictTableRows[idx].focus && dictTableRows[idx].focus();
 }
 function updateDictPanel() {
-  // パネルの選択内容表示
   const info = document.getElementById('dict-sel-summary');
   if (dictSelectedRow == null || dictSelectedRow >= dictCache.length) {
     info.textContent = 'なし';
@@ -346,13 +411,8 @@ function updateDictPanel() {
   info.textContent = row.term;
   document.getElementById('dict-toggle-enabled').checked = !!row.enabled;
 }
-
-// --- 4. 編集 ---
 function setupDictEvents() {
-  // 再読み込み
   document.getElementById('dict-reload').onclick = () => loadDict(true);
-
-  // 編集
   document.getElementById('dict-edit-row').onclick = () => {
     if (dictSelectedRow == null) return;
     const row = dictCache[dictSelectedRow];
@@ -360,8 +420,6 @@ function setupDictEvents() {
     document.getElementById('dict-ruby').value = row.ruby;
     document.getElementById('dict-mode').value = row.mode;
   };
-
-  // 削除
   document.getElementById('dict-delete-row').onclick = async () => {
     if (dictSelectedRow == null) return;
     const row = dictCache[dictSelectedRow];
@@ -369,31 +427,26 @@ function setupDictEvents() {
     await dictDelete(row.row);
     await loadDict(true);
   };
-
-  // 有効/無効
   document.getElementById('dict-toggle-enabled').onchange = async function() {
     if (dictSelectedRow == null) return;
     const row = dictCache[dictSelectedRow];
     await dictEnable(row.row, this.checked);
     await loadDict(true);
   };
-
-  // 保存（追加/上書き）
   document.getElementById('dict-save').onclick = async function(e) {
     e.preventDefault();
     const term = document.getElementById('dict-term').value.trim();
     const ruby = document.getElementById('dict-ruby').value.trim();
     const mode = document.getElementById('dict-mode').value.trim();
-    if (!term || !ruby) { alert('用語とよみは必須です'); return; }
+    if (!term || !ruby) { showToast('エラー', '用語とよみは必須です', 'info'); return; }
+    if (!/^([ぁ-んア-ン一-龥ａ-ｚＡ-Ｚa-zA-Z0-9\-ー々]+)$/.test(term)) { showToast('エラー','用語に不正な文字があります','info'); return;}
     await dictUpsert(term, ruby, mode);
     await loadDict(true);
   };
-
-  // CSVエクスポート
   document.getElementById('btn-export-dict').onclick = function() {
     let csv = "term,ruby,mode,enabled\n";
     dictCache.forEach(row => {
-      csv += [row.term, row.ruby, row.mode, row.enabled ? 1 : 0].map(s => `"${s.replace(/"/g,'""')}"`).join(',') + "\n";
+      csv += [row.term, row.ruby, row.mode, row.enabled ? 1 : 0].map(s => `"${(s||'').replace(/"/g,'""')}"`).join(',') + "\n";
     });
     const blob = new Blob([csv],{type:"text/csv"});
     const url = URL.createObjectURL(blob);
@@ -402,8 +455,6 @@ function setupDictEvents() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
-
-  // CSVインポート
   document.getElementById('btn-import-dict').onclick = function() {
     document.getElementById('file-import-dict').click();
   };
@@ -416,9 +467,10 @@ function setupDictEvents() {
     for (let i=1; i<lines.length; i++) {
       const cols = lines[i].split(',').map(s => s.replace(/^"|"$/g,'').replace(/""/g,'"'));
       if (cols.length < 2) continue;
-      imported.push({term: cols[0], ruby: cols[1], mode: cols[2]||"any", enabled: cols[3]!== "0"});
+      if (!cols[0] || !cols[1]) { showToast('エラー', '空の用語またはよみを検出','info'); continue;}
+      imported.push({term: cols[0], ruby: cols[1], mode: cols[2]||"any", enabled: cols[3]!=="0"});
     }
-    // 上書き/統合
+    if (!imported.length) { showToast('エラー', '有効な辞書行がありません', 'info'); return;}
     const strategy = document.getElementById('import-strategy').value;
     if (strategy==="replace") {
       for (const row of dictCache) await dictDelete(row.row);
@@ -430,7 +482,7 @@ function setupDictEvents() {
   };
 }
 
-// --- 5: GAS API ---
+// --- GAS API ---
 async function dictUpsert(term, ruby, mode, enabled) {
   return fetch(API_DICT_ENDPOINT, {
     method: 'POST',
@@ -453,7 +505,7 @@ async function dictEnable(row, enabled) {
   });
 }
 
-// ========== 右サイドドロワーUI ==========
+// ========== 右サイドドロワーUI/ARIA/アニメ ==========
 function setupDictDrawer() {
   const dictDrawer = document.getElementById('dict-drawer');
   const dictDrawerBody = document.getElementById('dict-drawer-body');
@@ -465,22 +517,27 @@ function setupDictDrawer() {
     dictDrawer.setAttribute('aria-expanded', 'true');
     dictDrawerBody.appendChild(dictPane);
     toggleDictBtn.setAttribute('aria-expanded', 'true');
+    dictPane.focus();
   }
   function closeDictDrawer() {
     dictDrawer.classList.remove('open');
     dictDrawer.setAttribute('aria-expanded', 'false');
     document.body.appendChild(dictPane);
     toggleDictBtn.setAttribute('aria-expanded', 'false');
+    toggleDictBtn.focus();
   }
   toggleDictBtn.addEventListener('click', () => {
     if (!dictDrawer.classList.contains('open')) openDictDrawer();
     else closeDictDrawer();
   });
   dictDrawerClose.addEventListener('click', closeDictDrawer);
+  dictDrawerClose.setAttribute('aria-label','辞書を閉じる');
+  toggleDictBtn.setAttribute('tabindex','0');
+  dictPane.setAttribute('tabindex','0');
   closeDictDrawer();
 }
 
-// ========== ショートカット ==========
+// ========== ショートカット/操作補助 ==========
 function setupShortcuts() {
   document.addEventListener('keydown', (e) => {
     if(e.key === '/' && document.activeElement.tagName !== 'INPUT') {
@@ -493,9 +550,43 @@ function setupShortcuts() {
       dictDrawer.setAttribute('aria-expanded', 'false');
       document.body.appendChild(document.getElementById('dict-pane'));
       document.getElementById('toggle-dict').setAttribute('aria-expanded', 'false');
+      document.getElementById('toggle-dict').focus();
+    }
+    if(e.key === '?' && !document.getElementById('help-modal')) {
+      e.preventDefault();
+      showHelpModal();
     }
   });
 }
+function showHelpModal(){
+  const modal = document.createElement('div');
+  modal.id = "help-modal";
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+  modal.setAttribute('tabindex','-1');
+  modal.style = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9999;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:#181d29;padding:28px 32px;border-radius:12px;max-width:480px;text-align:left;box-shadow:0 8px 32px #000;">
+      <h2 style="font-size:1.15em;margin-bottom:.7em;color:#fff;">ショートカット一覧</h2>
+      <ul style="line-height:1.8;color:#eee;padding-left:1.2em">
+        <li><b>/</b> ... 検索バーにフォーカス</li>
+        <li><b>Esc</b> ... ドロワーやモーダルを閉じる</li>
+        <li><b>Enter/Space</b> ... 質問リスト項目の選択</li>
+        <li><b>?</b> ... このヘルプを表示</li>
+      </ul>
+      <button id="help-close" style="margin-top:1.7em;background:#2a3342;color:#fff;font-weight:bold;border-radius:8px;padding:7px 20px;">閉じる</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.focus();
+  document.getElementById('help-close').onclick = ()=>{ modal.remove(); };
+  modal.addEventListener('keydown', e=>{
+    if(e.key==="Escape"||e.key==="Enter"||e.key===" "){ modal.remove(); }
+  });
+}
+
+// ========== 外部クリックで選択解除しない（再描画時保持のため） ==========
+// （明示的に外部クリックで解除したい場合はここに追記）
 
 // ========== 初期化 ==========
 document.addEventListener('DOMContentLoaded', () => {
