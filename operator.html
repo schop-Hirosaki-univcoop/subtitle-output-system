@@ -1,0 +1,90 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Telop Operator</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        button { cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>テロップ操作パネル</h1>
+    <button onclick="fetchQuestions()">質問リストを更新</button>
+    <button onclick="clearTelop()">テロップを消去</button>
+    <hr>
+    <table id="questions-table">
+        <thead>
+            <tr>
+                <th>ラジオネーム</th>
+                <th>質問・お悩み</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            </tbody>
+    </table>
+
+    <script>
+        const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec'; 
+        const tableBody = document.querySelector('#questions-table tbody');
+
+        async function fetchQuestions() {
+            try {
+                // GASからanswerシートのデータを取得
+                const response = await fetch(`${GAS_API_URL}?sheet=answer`);
+                const result = await response.json();
+
+                if (result.success) {
+                    tableBody.innerHTML = ''; // テーブルを初期化
+                    result.data.forEach(item => {
+                        const tr = document.createElement('tr');
+                        // ラジオネームと質問のみ表示
+                        tr.innerHTML = `
+                            <td>${escapeHtml(item['ラジオネーム'])}</td>
+                            <td>${escapeHtml(item['質問・お悩み'])}</td>
+                            <td><button onclick="displayTelop('${item['ラジオネーム']}', '${item['質問・お悩み']}')">表示</button></td>
+                        `;
+                        tableBody.appendChild(tr);
+                    });
+                } else {
+                    alert('データの取得に失敗しました: ' + result.error);
+                }
+            } catch (error) {
+                alert('通信エラーが発生しました: ' + error.message);
+            }
+        }
+
+        function displayTelop(name, question) {
+            const telopData = {
+                name: name,
+                question: question,
+            };
+            // 選択されたテロップ情報をJSON文字列としてLocalStorageに保存
+            localStorage.setItem('currentTelop', JSON.stringify(telopData));
+            alert(`「${name}」さんの質問を表示します。`);
+        }
+
+        function clearTelop() {
+            // LocalStorageからデータを削除
+            localStorage.removeItem('currentTelop');
+            alert('テロップを消去しました。');
+        }
+        
+        // XSS対策のための簡易的なHTMLエスケープ関数
+        function escapeHtml(str) {
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // ページ読み込み時に自動で質問を取得
+        fetchQuestions();
+    </script>
+</body>
+</html>

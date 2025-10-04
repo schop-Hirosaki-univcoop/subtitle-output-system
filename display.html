@@ -1,28 +1,71 @@
 ﻿<!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>テロップ送出（本線）</title>
-  <link rel="stylesheet" href="common.css">
-  <link rel="stylesheet" href="display.css">
+    <meta charset="UTF-8">
+    <title>Telop Display</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden; /* スクロールバーを非表示に */
+        }
+        #telop-canvas {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            aspect-ratio: 1920 / 1080; /* 常に16:9を維持 */
+            background-color: rgba(0, 0, 0, 0.5); /* 確認しやすいように背景色を仮設定 */
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            box-sizing: border-box;
+            padding: 2%;
+        }
+        #radio-name {
+            font-size: 5vmin; /* ビューポートに対する相対的なサイズ */
+            font-weight: bold;
+        }
+        #question {
+            font-size: 7vmin;
+            margin-top: 1%;
+        }
+    </style>
 </head>
 <body>
-  <div id="stage"><ul id="selectedList"></ul></div>
-  <div id="hb" aria-hidden="true"></div>
-  <template id="tpl-selected">
-    <li class="selected-box" data-uid="">
-      <div class="entry-label">
-        <div class="entry-label-text">
-          <span class="faq-tag" hidden>Pick Up Question</span>
-          <span class="rname-prefix">ラジオネーム:</span>
-          <span class="rname"></span>
-        </div>
-      </div>
-      <div class="content-wrap">
-        <div class="content-center"><span class="content"></span></div>
-      </div>
-    </li>
-  </template>
-  <script src="display.js"></script>
+    <div id="telop-canvas">
+        <div id="radio-name"></div>
+        <div id="question"></div>
+    </div>
+
+    <script>
+        const radioNameEl = document.getElementById('radio-name');
+        const questionEl = document.getElementById('question');
+
+        // LocalStorageの変更を監視する
+        window.addEventListener('storage', (event) => {
+            if (event.key === 'currentTelop') {
+                updateTelop();
+            }
+        });
+
+        // ページ読み込み時にも一度更新
+        updateTelop();
+
+        function updateTelop() {
+            const telopDataJSON = localStorage.getItem('currentTelop');
+            if (telopDataJSON) {
+                const telopData = JSON.parse(telopDataJSON);
+                radioNameEl.textContent = `RN: ${telopData.name}`;
+                questionEl.textContent = telopData.question;
+            } else {
+                // データがない場合は非表示にする
+                radioNameEl.textContent = '';
+                questionEl.textContent = '';
+            }
+        }
+    </script>
 </body>
 </html>
