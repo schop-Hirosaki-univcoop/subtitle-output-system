@@ -15,6 +15,27 @@
         #add-term-form input { padding: 5px; }
         tr.now-displaying { background-color: #d4edda; /* 明るい緑色 */ font-weight: bold; }
     </style>
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "firebase/app";
+        // TODO: Add SDKs for Firebase products that you want to use
+        // https://firebase.google.com/docs/web/setup#available-libraries
+        
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+          apiKey: "AIzaSyC6nfPoKA7VwDNJ1cSIYXuKiKHCYliXkvI",
+          authDomain: "subtitle-output-system-9bc14.firebaseapp.com",
+          databaseURL: "https://subtitle-output-system-9bc14-default-rtdb.asia-southeast1.firebasedatabase.app",
+          projectId: "subtitle-output-system-9bc14",
+          storageBucket: "subtitle-output-system-9bc14.firebasestorage.app",
+          messagingSenderId: "378400426909",
+          appId: "1:378400426909:web:f1549aad61e3f7aacebd74"
+        };
+        
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+    </script>
+<script type="module" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"></script>
 </head>
 <body>
 
@@ -56,7 +77,26 @@
         </table>
     </div>
 
-    <script>
+    <script type="module">
+        // ▼▼▼ Firebaseの初期化処理を追加 ▼▼▼
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getDatabase, ref, set, remove, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+        
+        // headに貼り付けたconfig情報をここにも記述
+        const firebaseConfig = {
+          apiKey: "AIzaSyC6nfPoKA7VwDNJ1cSIYXuKiKHCYliXkvI",
+          authDomain: "subtitle-output-system-9bc14.firebaseapp.com",
+          databaseURL: "https://subtitle-output-system-9bc14-default-rtdb.asia-southeast1.firebasedatabase.app",
+          projectId: "subtitle-output-system-9bc14",
+          storageBucket: "subtitle-output-system-9bc14.firebasestorage.app",
+          messagingSenderId: "378400426909",
+          appId: "1:378400426909:web:f1549aad61e3f7aacebd74"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        const telopRef = ref(database, 'currentTelop'); // データベース内の 'currentTelop' という場所を参照
+
         const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec'; 
         
         // --- 要素の取得 ---
@@ -67,8 +107,9 @@
 
         // --- 質問関連の関数 ---
         async function fetchQuestions() {
-            const currentTelopJSON = localStorage.getItem('currentTelop');
-            const currentTelop = currentTelopJSON ? JSON.parse(currentTelopJSON) : null;
+            // Firebaseから現在のテロップ情報を一度だけ取得
+            const snapshot = await get(telopRef);
+            const currentTelop = snapshot.val();
         
             try {
                 const response = await fetch(`${GAS_API_URL}?sheet=answer`);
@@ -107,6 +148,8 @@
         }
 
         async function displayTelop(uid, name, encodedQuestion) {
+            const question = decodeURIComponent(escape(atob(encodedQuestion)));
+            const telopData = { name: name, question: question };
             try {
                 // 先にGASに「選択中」ステータスを更新するリクエストを送る
                 await fetch(GAS_API_URL, {
@@ -114,15 +157,12 @@
                     body: JSON.stringify({ action: 'updateSelectingStatus', uid: uid })
                 });
         
-                // 成功したら表示処理へ
-                const question = decodeURIComponent(escape(atob(encodedQuestion)));
-                const telopData = { name: name, question: question };
-                localStorage.setItem('currentTelop', JSON.stringify(telopData));
-                // alertは操作の邪魔になるのでコメントアウトしてもOK
-                // alert(`「${name}」さんの質問を表示します。`);
+                // localStorage.setItem の代わりにFirebaseに書き込む
+                await set(telopRef, telopData); 
+                
                 fetchQuestions();
             } catch (error) {
-                alert('ステータスの更新中にエラーが発生しました: ' + error.message);
+                alert('エラーが発生しました: ' + error.message);
             }
         }
         
@@ -163,7 +203,8 @@
                     method: 'POST',
                     body: JSON.stringify({ action: 'updateSelectingStatus', uid: -1 })
                 });
-                localStorage.removeItem('currentTelop');
+                // localStorage.removeItem の代わりにFirebaseから削除する
+                await remove(telopRef);
                 fetchQuestions();
             } catch(error) {
                 alert('ステータスのクリア中にエラーが発生しました: ' + error.message);
