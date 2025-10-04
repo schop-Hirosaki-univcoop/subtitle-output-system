@@ -93,8 +93,9 @@
                             <td>${escapeHtml(item['質問・お悩み'])}</td>
                             <td>${item['回答済'] === true ? '回答済' : '未回答'}</td>
                             <td>
-                                <button onclick="displayTelop('${escapeHtml(item['ラジオネーム'])}', '${escapeHtml(item['質問・お悩み'])}')">表示</button>
+                                <button onclick="displayTelop('${escapeHtml(item['ラジオネーム'])}', '${encodedQuestion}')">表示</button>
                                 <button onclick="updateStatus('${item['UID']}', true)">回答済にする</button>
+                                <button onclick="editQuestion('${item['UID']}', '${encodedQuestion}')">編集</button>
                             </td>
                         `;
                         questionsTableBody.appendChild(tr);
