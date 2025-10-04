@@ -30,6 +30,26 @@
             0% { background-color: #77dd77; } 100% { background-color: #d4edda; }
         }
         .flash { animation: flash-success 1.2s ease-out; }
+        #tab-buttons {
+            display: flex;
+            gap: 5px;
+            border-bottom: 2px solid #dee2e6;
+            margin-bottom: 10px;
+        }
+        .tab-button {
+            padding: 8px 15px;
+            border: none;
+            background-color: transparent;
+            cursor: pointer;
+            font-size: 16px;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px; /* 下線を重ねるため */
+        }
+        .tab-button.active {
+            font-weight: bold;
+            color: #007bff;
+            border-bottom-color: #007bff;
+        }
     </style>
 </head>
 <body>
@@ -44,13 +64,19 @@
     <div id="main-container" style="display: none;">
         <div class="panel" id="questions-panel">
             <h1>テロップ操作パネル</h1>
-            <button onclick="fetchQuestions()">質問リストを手動更新</button>
-            <table id="questions-table">
-                <thead>
-                    <tr><th>ラジオネーム</th><th>質問・お悩み</th><th>ステータス</th></tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+            <div id="tab-buttons">
+                <button class="tab-button active" onclick="switchTab('normal')">通常質問</button>
+                <button class="tab-button" onclick="switchTab('puq')">Pick Up Question</button>
+                <button onclick="fetchQuestions()">手動更新</button>
+            </div>
+            <div id="tab-contents">
+                <table id="questions-table">
+                    <thead>
+                        <tr><th>ラジオネーム</th><th>質問・お悩み</th><th>ステータス</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
         <div class="panel" id="dictionary-panel">
             <h2>ルビ辞書管理</h2>
@@ -111,6 +137,8 @@
         const selectedInfo = document.getElementById('selected-info');
         let selectedRowData = null;
         let lastDisplayedUid = null;
+        let allQuestions = []; // 全ての質問を保持する配列
+        let currentTab = 'normal'; // 現在表示中のタブ ('normal' or 'puq')
 
         // --- ▼▼▼ ログイン処理の心臓部 ▼▼▼ ---
         // ログイン状態の変化を監視する
@@ -181,6 +209,23 @@
         
         // --- 質問関連の関数 ---
         async function fetchQuestions() {
+            try {
+                const response = await fetch(`${GAS_API_URL}?sheet=answer`);
+                const result = await response.json();
+                if (result.success) {
+                    allQuestions = result.data; // 取得した全質問を保持
+                    renderQuestions(); // リストの描画処理を呼び出す
+                }
+            } catch (error) { console.error('通信エラーが発生しました: ' + error.message); }
+        }
+        
+        // 保持しているデータから、現在のタブに応じたリストを描画する関数
+        async function renderQuestions() {
+            // 表示する質問をフィルタリング
+            const questionsToRender = allQuestions.filter(item => {
+                const isPuq = item['ラジオネーム'] === 'Pick Up Question';
+                return currentTab === 'puq' ? isPuq : !isPuq;
+            });
             // Firebaseから現在のテロップ情報を一度だけ取得
             const snapshot = await get(telopRef);
             const currentTelop = snapshot.val();
@@ -270,6 +315,15 @@
             }
         }
 
+        function switchTab(tabName) {
+            currentTab = tabName;
+            // ボタンのアクティブ状態を切り替え
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`.tab-button[onclick="switchTab('${tabName}')"]`).classList.add('active');
+            // 現在のタブに合わせてリストを再描画
+            renderQuestions();
+        }
+        
         // --- 辞書関連の関数 ---
         async function fetchDictionary() {
             try {
@@ -367,11 +421,12 @@
         window.login = login;
         window.logout = logout;
         window.fetchQuestions = fetchQuestions;
-        window.fetchDictionary = fetchDictionary;
         window.handleDisplay = handleDisplay;
         window.handleAnswered = handleAnswered;
         window.handleEdit = handleEdit;
         window.clearTelop = clearTelop;
+        window.switchTab = switchTab;
+        window.fetchDictionary = fetchDictionary;
         window.addTerm = addTerm;
         window.toggleTerm = toggleTerm;
         window.deleteTerm = deleteTerm;
