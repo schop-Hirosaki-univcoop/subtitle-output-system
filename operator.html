@@ -13,6 +13,7 @@
         tr.disabled { text-decoration: line-through; color: #999; }
         #add-term-form { display: flex; gap: 10px; margin-top: 10px; }
         #add-term-form input { padding: 5px; }
+        tr.now-displaying { background-color: #d4edda; /* 明るい緑色 */ font-weight: bold; }
     </style>
 </head>
 <body>
@@ -76,6 +77,9 @@
                         if (item['回答済'] === true) {
                             tr.classList.add('answered');
                         }
+                        if (currentTelop && currentTelop.name === item['ラジオネーム'] && currentTelop.question === item['質問・お悩み']) {
+                            tr.classList.add('now-displaying');
+                        }
                         tr.innerHTML = `
                             <td>${escapeHtml(item['ラジオネーム'])}</td>
                             <td>${escapeHtml(item['質問・お悩み'])}</td>
@@ -99,11 +103,13 @@
             const telopData = { name: name, question: question };
             localStorage.setItem('currentTelop', JSON.stringify(telopData));
             alert(`「${name}」さんの質問を表示します。`);
+            fetchQuestions();
         }
 
         function clearTelop() {
             localStorage.removeItem('currentTelop');
             alert('テロップを消去しました。');
+            fetchQuestions();
         }
 
         async function updateStatus(uid, status) {
@@ -222,6 +228,7 @@
         
         fetchQuestions();
         fetchDictionary();
+        setInterval(fetchQuestions, 30000); // 30000ミリ秒 = 30秒
     </script>
 </body>
 </html>
