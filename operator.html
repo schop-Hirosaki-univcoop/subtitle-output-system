@@ -113,7 +113,8 @@
                             loginContainer.style.display = 'none';
                             mainContent.style.display = 'flex';
                             userInfo.innerHTML = `${user.displayName} (${user.email}) <button onclick="logout()">ログアウト</button>`;
-                            
+
+                            fetchQuestions();
                             fetchDictionary();
 
                             // 'update_trigger' の変更を監視する
