@@ -279,7 +279,10 @@
             try {
                 const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateStatus', uid: selectedRowData.uid, status: true }) });
                 const result = await response.json();
-                if (result.success) { logAction('SET_ANSWERED', `UID: ${selectedRowData.uid}`); fetchQuestions(); } else { alert('更新失敗: ' + result.error); }
+                if (result.success) {
+                   logAction('SET_ANSWERED', `UID: ${selectedRowData.uid}`);
+                   fetchQuestions();
+                } else { alert('更新失敗: ' + result.error); }
             } catch (error) { alert('通信エラー: ' + error.message); }
         }
         async function handleEdit() {
@@ -289,7 +292,11 @@
             try {
                 const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'editQuestion', uid: selectedRowData.uid, newText: newText.trim() }) });
                 const result = await response.json();
-                if (result.success) { alert('質問を更新しました。'); fetchQuestions(); } else { alert('更新失敗: ' + result.error); }
+                if (result.success) {
+                    logAction('EDIT', `UID: ${selectedRowData.uid}`);
+                    alert('質問を更新しました。');
+                    fetchQuestions();
+                } else { alert('更新失敗: ' + result.error); }
             } catch (error) { alert('通信エラー: ' + error.message); }
         }
         async function clearTelop() {
