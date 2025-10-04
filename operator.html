@@ -325,7 +325,7 @@
         }
 
         // ログをGASに送信するヘルパー関数
-        async function logAction(action, details = '') {
+        async function logAction(actionName, details = '') {
             const user = auth.currentUser;
             if (!user) return; // ユーザーが不明な場合は何もしない
         
@@ -335,7 +335,7 @@
                     body: JSON.stringify({
                         action: 'logAction',
                         user: user.email,
-                        action_type: action,
+                        action_type: actionName,
                         details: details
                     })
                 });
