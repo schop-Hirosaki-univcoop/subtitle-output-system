@@ -4,117 +4,178 @@
     <meta charset="UTF-8">
     <title>Telop Operator</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; }
-        table { border-collapse: collapse; width: 100%; }
+        body { font-family: sans-serif; padding: 20px; display: flex; gap: 40px; }
+        .panel { flex: 1; }
+        table { border-collapse: collapse; width: 100%; margin-top: 10px; }
         th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
         button { cursor: pointer; margin-right: 5px; }
-        tr.answered { background-color: #e0e0e0; color: #888; } /* 回答済の行のスタイル */
+        tr.answered { background-color: #e0e0e0; color: #888; }
+        /* ▼▼▼ 追加：辞書管理用のスタイル ▼▼▼ */
+        tr.disabled { text-decoration: line-through; color: #999; }
+        #add-term-form { display: flex; gap: 10px; margin-top: 10px; }
+        #add-term-form input { padding: 5px; }
     </style>
 </head>
 <body>
-    <h1>テロップ操作パネル</h1>
-    <button onclick="fetchQuestions()">質問リストを更新</button>
-    <button onclick="clearTelop()">テロップを消去</button>
-    <hr>
-    <table id="questions-table">
-        <thead>
-            <tr>
-                <th>ラジオネーム</th>
-                <th>質問・お悩み</th>
-                <th>ステータス</th> <th>操作</th>
-            </tr>
-        </thead>
-        <tbody>
-            </tbody>
-    </table>
+
+    <div class="panel" id="questions-panel">
+        <h1>テロップ操作パネル</h1>
+        <button onclick="fetchQuestions()">質問リストを更新</button>
+        <button onclick="clearTelop()">テロップを消去</button>
+        <table id="questions-table">
+            <thead>
+                <tr>
+                    <th>ラジオネーム</th>
+                    <th>質問・お悩み</th>
+                    <th>ステータス</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div class="panel" id="dictionary-panel">
+        <h2>ルビ辞書管理</h2>
+        <button onclick="fetchDictionary()">辞書を更新</button>
+        <form id="add-term-form" onsubmit="addTerm(event)">
+            <input type="text" id="new-term" placeholder="単語" required>
+            <input type="text" id="new-ruby" placeholder="ルビ" required>
+            <button type="submit">追加</button>
+        </form>
+        <table id="dictionary-table">
+            <thead>
+                <tr>
+                    <th>単語</th>
+                    <th>ルビ</th>
+                    <th>状態</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
 
     <script>
         const GAS_API_URL = 'ここにGASのウェブアプリURLを貼り付け'; 
-        const tableBody = document.querySelector('#questions-table tbody');
+        
+        // --- 質問関連の要素と関数 ---
+        const questionsTableBody = document.querySelector('#questions-table tbody');
+        // （fetchQuestions, displayTelop, clearTelop, updateStatus, escapeHtmlは変更なし）
+        async function fetchQuestions() { /* ...変更なし... */ }
+        function displayTelop(name, question) { /* ...変更なし... */ }
+        function clearTelop() { /* ...変更なし... */ }
+        async function updateStatus(uid, status) { /* ...変更なし... */ }
+        function escapeHtml(str) { /* ...変更なし... */ }
 
-        async function fetchQuestions() {
+        // ▼▼▼ 以下、辞書関連の要素と関数をまるごと追加 ▼▼▼
+        const dictionaryTableBody = document.querySelector('#dictionary-table tbody');
+        const newTermInput = document.getElementById('new-term');
+        const newRubyInput = document.getElementById('new-ruby');
+
+        // 辞書データを取得してテーブルに描画する
+        async function fetchDictionary() {
             try {
-                const response = await fetch(`${GAS_API_URL}?sheet=answer`);
+                const response = await fetch(`${GAS_API_URL}?sheet=dictionary`);
                 const result = await response.json();
-
                 if (result.success) {
-                    tableBody.innerHTML = '';
+                    dictionaryTableBody.innerHTML = '';
                     result.data.forEach(item => {
                         const tr = document.createElement('tr');
-                        
-                        // ▼▼▼ 回答済フラグによってクラスを付与 ▼▼▼
-                        if (item['回答済'] === true) {
-                            tr.classList.add('answered');
+                        if (!item.enabled) {
+                            tr.classList.add('disabled');
                         }
-
-                        // ▼▼▼ テーブルの列構成を変更 ▼▼▼
                         tr.innerHTML = `
-                            <td>${escapeHtml(item['ラジオネーム'])}</td>
-                            <td>${escapeHtml(item['質問・お悩み'])}</td>
-                            <td>${item['回答済'] === true ? '回答済' : '未回答'}</td>
+                            <td>${escapeHtml(item.term)}</td>
+                            <td>${escapeHtml(item.ruby)}</td>
+                            <td>${item.enabled ? '有効' : '無効'}</td>
                             <td>
-                                <button onclick="displayTelop('${item['ラジオネーム']}', '${item['質問・お悩み']}')">表示</button>
-                                <button onclick="updateStatus('${item['UID']}', true)">回答済にする</button>
+                                <button onclick="toggleTerm('${item.term}', ${!item.enabled})">${item.enabled ? '無効にする' : '有効にする'}</button>
+                                <button onclick="deleteTerm('${item.term}')">削除</button>
                             </td>
                         `;
-                        tableBody.appendChild(tr);
+                        dictionaryTableBody.appendChild(tr);
                     });
-                } else {
-                    alert('データの取得に失敗しました: ' + result.error);
                 }
             } catch (error) {
-                alert('通信エラーが発生しました: ' + error.message);
+                alert('辞書の取得に失敗: ' + error.message);
             }
         }
 
-        function displayTelop(name, question) {
-            const telopData = { name: name, question: question };
-            localStorage.setItem('currentTelop', JSON.stringify(telopData));
-            alert(`「${name}」さんの質問を表示します。`);
-        }
-
-        function clearTelop() {
-            localStorage.removeItem('currentTelop');
-            alert('テロップを消去しました。');
-        }
-
-        // ▼▼▼ 追加：ステータスを更新する関数 ▼▼▼
-        async function updateStatus(uid, status) {
-            if (!confirm('ステータスを「回答済」に変更しますか？')) return;
+        // 新しい単語を追加する
+        async function addTerm(event) {
+            event.preventDefault(); // フォームのデフォルト送信をキャンセル
+            const term = newTermInput.value.trim();
+            const ruby = newRubyInput.value.trim();
+            if (!term || !ruby) return;
 
             try {
                 const response = await fetch(GAS_API_URL, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'text/plain;charset=utf-8', // CORS対策で必要になる場合がある
-                    },
-                    body: JSON.stringify({
-                        action: 'updateStatus',
-                        uid: uid,
-                        status: status
-                    })
+                    body: JSON.stringify({ action: 'addTerm', term: term, ruby: ruby })
                 });
-
                 const result = await response.json();
-
                 if (result.success) {
-                    alert('ステータスを更新しました。');
-                    fetchQuestions(); // テーブルを再読み込みして表示を更新
+                    newTermInput.value = '';
+                    newRubyInput.value = '';
+                    fetchDictionary(); // リストを更新
                 } else {
-                    alert('更新に失敗しました: ' + result.error);
+                    alert('追加失敗: ' + result.error);
                 }
-
             } catch (error) {
-                alert('通信エラーが発生しました: ' + error.message);
+                alert('通信エラー: ' + error.message);
             }
         }
-        
-        function escapeHtml(str) {
-            if (typeof str !== 'string') return '';
-            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+
+        // 単語を削除する
+        async function deleteTerm(term) {
+            if (!confirm(`「${term}」を辞書から削除しますか？`)) return;
+            try {
+                const response = await fetch(GAS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'deleteTerm', term: term })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    fetchDictionary(); // リストを更新
+                } else {
+                    alert('削除失敗: ' + result.error);
+                }
+            } catch (error) {
+                alert('通信エラー: ' + error.message);
+            }
         }
 
+        // 単語の有効/無効を切り替える
+        async function toggleTerm(term, newStatus) {
+            try {
+                const response = await fetch(GAS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'toggleTerm', term: term, enabled: newStatus })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    fetchDictionary(); // リストを更新
+                } else {
+                    alert('状態の更新失敗: ' + result.error);
+                }
+            } catch (error) {
+                alert('通信エラー: ' + error.message);
+            }
+        }
+
+        // --- ページ読み込み時の処理 ---
+        // 質問リストと辞書リストの両方を読み込む
         fetchQuestions();
+        fetchDictionary();
+
+
+        /* === 既存の関数（変更なし） === */
+        async function fetchQuestions() { try { const response = await fetch(`${GAS_API_URL}?sheet=answer`); const result = await response.json(); if (result.success) { questionsTableBody.innerHTML = ''; result.data.forEach(item => { const tr = document.createElement('tr'); if (item['回答済'] === true) { tr.classList.add('answered'); } tr.innerHTML = `<td>${escapeHtml(item['ラジオネーム'])}</td><td>${escapeHtml(item['質問・お悩み'])}</td><td>${item['回答済'] === true ? '回答済' : '未回答'}</td><td><button onclick="displayTelop('${item['ラジオネーム']}', '${item['質問・お悩み']}')">表示</button><button onclick="updateStatus('${item['UID']}', true)">回答済にする</button></td>`; questionsTableBody.appendChild(tr); }); } else { alert('データの取得に失敗しました: ' + result.error); } } catch (error) { alert('通信エラーが発生しました: ' + error.message); } }
+        function displayTelop(name, question) { const telopData = { name: name, question: question, }; localStorage.setItem('currentTelop', JSON.stringify(telopData)); alert(`「${name}」さんの質問を表示します。`); }
+        function clearTelop() { localStorage.removeItem('currentTelop'); alert('テロップを消去しました。'); }
+        async function updateStatus(uid, status) { if (!confirm('ステータスを「回答済」に変更しますか？')) return; try { const response = await fetch(GAS_API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8', }, body: JSON.stringify({ action: 'updateStatus', uid: uid, status: status }) }); const result = await response.json(); if (result.success) { alert('ステータスを更新しました。'); fetchQuestions(); } else { alert('更新に失敗しました: ' + result.error); } } catch (error) { alert('通信エラーが発生しました: ' + error.message); } }
+        function escapeHtml(str) { if (typeof str !== 'string') return ''; return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
     </script>
 </body>
 </html>
