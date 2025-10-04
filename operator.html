@@ -325,6 +325,16 @@
             return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
         
+        window.displayTelop = displayTelop;
+        window.clearTelop = clearTelop;
+        window.updateStatus = updateStatus;
+        window.editQuestion = editQuestion;
+        window.fetchQuestions = fetchQuestions;
+        window.fetchDictionary = fetchDictionary;
+        window.addTerm = addTerm;
+        window.toggleTerm = toggleTerm;
+        window.deleteTerm = deleteTerm;
+        
         fetchQuestions();
         fetchDictionary();
         setInterval(fetchQuestions, 30000); // 30000ミリ秒 = 30秒
