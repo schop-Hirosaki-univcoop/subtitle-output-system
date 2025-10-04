@@ -69,6 +69,7 @@
         async function fetchQuestions() {
             const currentTelopJSON = localStorage.getItem('currentTelop');
             const currentTelop = currentTelopJSON ? JSON.parse(currentTelopJSON) : null;
+        
             try {
                 const response = await fetch(`${GAS_API_URL}?sheet=answer`);
                 const result = await response.json();
@@ -76,24 +77,21 @@
                     questionsTableBody.innerHTML = '';
                     result.data.forEach(item => {
                         const tr = document.createElement('tr');
-                        if (item['回答済'] === true) {
-                            tr.classList.add('answered');
-                        }
+                        if (item['回答済'] === true) { tr.classList.add('answered'); }
                         if (currentTelop && currentTelop.name === item['ラジオネーム'] && currentTelop.question === item['質問・お悩み']) {
                             tr.classList.add('now-displaying');
                         }
-                        // ▼▼▼ 変更点：「編集」ボタンを追加 ▼▼▼
-                        //
-                        // Javacriptで文字列を扱う際、改行や特殊文字でエラーが起きやすいため、
-                        // btoa()でBase64エンコードして渡し、関数側でatob()でデコードする方法をとっています。
                         const encodedQuestion = btoa(unescape(encodeURIComponent(item['質問・お悩み'])));
-
+                        
+                        // 「選択中」と「回答済」のカラム表示を追加
+                        const statusText = item['選択中'] === true ? '表示中' : (item['回答済'] === true ? '回答済' : '未回答');
+        
                         tr.innerHTML = `
                             <td>${escapeHtml(item['ラジオネーム'])}</td>
                             <td>${escapeHtml(item['質問・お悩み'])}</td>
-                            <td>${item['回答済'] === true ? '回答済' : '未回答'}</td>
+                            <td>${statusText}</td>
                             <td>
-                                <button onclick="displayTelop('${escapeHtml(item['ラジオネーム'])}', '${encodedQuestion}')">表示</button>
+                                <button onclick="displayTelop('${item['UID']}', '${escapeHtml(item['ラジオネーム'])}', '${encodedQuestion}')">表示</button>
                                 <button onclick="updateStatus('${item['UID']}', true)">回答済にする</button>
                                 <button onclick="editQuestion('${item['UID']}', '${encodedQuestion}')">編集</button>
                             </td>
@@ -101,20 +99,31 @@
                         questionsTableBody.appendChild(tr);
                     });
                 } else {
-                    alert('データの取得に失敗しました: ' + result.error);
+                    console.error('データの取得に失敗しました: ' + result.error);
                 }
             } catch (error) {
-                alert('通信エラーが発生しました: ' + error.message);
+                console.error('通信エラーが発生しました: ' + error.message);
             }
         }
 
-        function displayTelop(name, encodedQuestion) {
-            // デコードして元の日本語文字列に戻してから localStorage に保存する
-            const question = decodeURIComponent(escape(atob(encodedQuestion)));
-            const telopData = { name: name, question: question };
-            localStorage.setItem('currentTelop', JSON.stringify(telopData));
-            alert(`「${name}」さんの質問を表示します。`);
-            fetchQuestions(); // リストを更新してハイライトを反映
+        async function displayTelop(uid, name, encodedQuestion) {
+            try {
+                // 先にGASに「選択中」ステータスを更新するリクエストを送る
+                await fetch(GAS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'updateSelectingStatus', uid: uid })
+                });
+        
+                // 成功したら表示処理へ
+                const question = decodeURIComponent(escape(atob(encodedQuestion)));
+                const telopData = { name: name, question: question };
+                localStorage.setItem('currentTelop', JSON.stringify(telopData));
+                // alertは操作の邪魔になるのでコメントアウトしてもOK
+                // alert(`「${name}」さんの質問を表示します。`);
+                fetchQuestions();
+            } catch (error) {
+                alert('ステータスの更新中にエラーが発生しました: ' + error.message);
+            }
         }
         
         async function editQuestion(uid, encodedCurrentText) {
@@ -147,10 +156,18 @@
             }
         }
 
-        function clearTelop() {
-            localStorage.removeItem('currentTelop');
-            alert('テロップを消去しました。');
-            fetchQuestions();
+        async function clearTelop() {
+            try {
+                // UID: -1 を送ることで、GAS側で全てのフラグをクリアさせる
+                await fetch(GAS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'updateSelectingStatus', uid: -1 })
+                });
+                localStorage.removeItem('currentTelop');
+                fetchQuestions();
+            } catch(error) {
+                alert('ステータスのクリア中にエラーが発生しました: ' + error.message);
+            }
         }
 
         async function updateStatus(uid, status) {
