@@ -96,22 +96,45 @@
 
         // --- ▼▼▼ ログイン処理の心臓部 ▼▼▼ ---
         // ログイン状態の変化を監視する
-        onAuthStateChanged(auth, (user) => {
+        onAuthStateChanged(auth, async (user) => {
             if (user) {
-                loginContainer.style.display = 'none';
-                mainContent.style.display = 'flex';
-                userInfo.innerHTML = `${user.displayName} (${user.email}) <button onclick="logout()">ログアウト</button>`;
-                
-                // ログイン後に初めてデータを読み込む
-                fetchQuestions();
-                fetchDictionary();
-                // ログイン後に自動更新を開始
-                questionInterval = setInterval(fetchQuestions, 30000);
+                // ログイン成功後、まずユーザー権限をチェック
+                try {
+                    const response = await fetch(`${GAS_API_URL}?sheet=users`);
+                    const result = await response.json();
+
+                    if (result.success && result.data) {
+                        // ★★★★★ 'メールアドレス' の部分は、あなたの users シートのカラム名に合わせてください ★★★★★
+                        const authorizedUsers = result.data.map(item => item['メールアドレス']); 
+
+                        if (authorizedUsers.includes(user.email)) {
+                            // --- 権限OKの場合の処理 ---
+                            loginContainer.style.display = 'none';
+                            mainContent.style.display = 'flex';
+                            userInfo.innerHTML = `${user.displayName} (${user.email}) <button onclick="logout()">ログアウト</button>`;
+                            
+                            fetchQuestions();
+                            fetchDictionary();
+                            questionInterval = setInterval(fetchQuestions, 30000);
+                        } else {
+                            // --- 権限NGの場合の処理 ---
+                            alert("あなたのアカウントはこのシステムへのアクセスが許可されていません。");
+                            logout();
+                        }
+                    } else {
+                        alert("ユーザー権限の確認に失敗しました。");
+                        logout();
+                    }
+                } catch (error) {
+                    console.error("Authorization check failed:", error);
+                    alert("ユーザー権限の確認中にエラーが発生しました。");
+                    logout();
+                }
             } else {
+                // --- ログアウト時の処理 ---
                 loginContainer.style.display = 'block';
                 mainContent.style.display = 'none';
                 userInfo.innerHTML = '';
-                // ログアウトしたら自動更新を停止
                 if (questionInterval) {
                     clearInterval(questionInterval);
                 }
