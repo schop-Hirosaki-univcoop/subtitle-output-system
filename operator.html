@@ -82,6 +82,12 @@
                         if (currentTelop && currentTelop.name === item['ラジオネーム'] && currentTelop.question === item['質問・お悩み']) {
                             tr.classList.add('now-displaying');
                         }
+                        // ▼▼▼ 変更点：「編集」ボタンを追加 ▼▼▼
+                        //
+                        // Javacriptで文字列を扱う際、改行や特殊文字でエラーが起きやすいため、
+                        // btoa()でBase64エンコードして渡し、関数側でatob()でデコードする方法をとっています。
+                        const encodedQuestion = btoa(unescape(encodeURIComponent(item['質問・お悩み'])));
+
                         tr.innerHTML = `
                             <td>${escapeHtml(item['ラジオネーム'])}</td>
                             <td>${escapeHtml(item['質問・お悩み'])}</td>
@@ -106,6 +112,36 @@
             localStorage.setItem('currentTelop', JSON.stringify(telopData));
             alert(`「${name}」さんの質問を表示します。`);
             fetchQuestions();
+        }
+        
+        async function editQuestion(uid, encodedCurrentText) {
+            const currentText = decodeURIComponent(escape(atob(encodedCurrentText)));
+            const newText = prompt("質問内容を編集してください：", currentText);
+
+            // promptでキャンセルされた場合や、内容が変更されなかった場合は何もしない
+            if (newText === null || newText.trim() === currentText.trim()) {
+                return;
+            }
+
+            try {
+                const response = await fetch(GAS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'editQuestion',
+                        uid: uid,
+                        newText: newText.trim()
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('質問を更新しました。');
+                    fetchQuestions(); // リストを再読み込みして変更を反映
+                } else {
+                    alert('更新に失敗しました: ' + result.error);
+                }
+            } catch (error) {
+                alert('通信エラー: ' + error.message);
+            }
         }
 
         function clearTelop() {
