@@ -17,14 +17,18 @@
     <div id="main-container" style="display: none;">
         <div class="panel" id="questions-panel">
             <h1>テロップ操作パネル</h1>
-            <div id="tab-buttons">
-                <button class="tab-button active" data-tab="normal">通常質問</button>
-                <button class="tab-button" data-tab="puq">Pick Up Question</button>
-                <button class="tab-button" data-tab="logs">操作ログ</button>
+            <div id="main-tab-buttons">
+                <button class="main-tab-button active" data-tab="questions">質問</button>
+                <button class="main-tab-button" data-tab="logs">操作ログ</button>
                 <button id="manual-update-button">手動更新</button>
             </div>
-            <div id="tab-contents">
-                <div class="tab-content active" id="questions-content">
+
+            <div id="main-tab-contents">
+                <div class="main-tab-content active" id="questions-content">
+                    <div id="sub-tab-buttons">
+                        <button class="sub-tab-button active" data-sub-tab="normal">通常質問</button>
+                        <button class="sub-tab-button" data-sub-tab="puq">Pick Up Question</button>
+                    </div>
                     <table id="questions-table">
                         <thead>
                             <tr><th>ラジオネーム</th><th>質問・お悩み</th><th>ステータス</th></tr>
@@ -32,7 +36,7 @@
                         <tbody></tbody>
                     </table>
                 </div>
-                <div class="tab-content" id="logs-content">
+                <div class="main-tab-content" id="logs-content">
                     <table id="logs-table">
                         <thead>
                             <tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th></tr>
