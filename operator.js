@@ -83,6 +83,7 @@ onAuthStateChanged(auth, async (user) => {
                     fetchQuestions();
                     fetchDictionary();
                     fetchLogs();
+                    showToast(`ようこそ、${user.displayName}さん`, 'success');
 
                     // リアルタイム更新の監視を開始
                     onValue(updateTriggerRef, (snapshot) => {
@@ -90,18 +91,18 @@ onAuthStateChanged(auth, async (user) => {
                     });
                 } else {
                     // --- 権限NG処理 ---
-                    alert("あなたのアカウントはこのシステムへのアクセスが許可されていません。");
+                    showToast("あなたのアカウントはこのシステムへのアクセスが許可されていません。", 'error');
                     logout();
                 }
             } else {
                 // --- 権限確認失敗処理 ---
-                alert("ユーザー権限の確認に失敗しました。");
+                showToast("ユーザー権限の確認に失敗しました。", 'error');
                 logout();
             }
         } catch (error) {
             // --- エラー処理 ---
             console.error("Authorization check failed:", error);
-            alert("ユーザー権限の確認中にエラーが発生しました。");
+            showToast("ユーザー権限の確認中にエラーが発生しました。", 'error');
             logout();
         }
     } else {
@@ -258,7 +259,10 @@ async function handleDisplay() {
         logAction('DISPLAY', `RN: ${selectedRowData.name}`);
         lastDisplayedUid = selectedRowData.uid;
         fetchQuestions();
-    } catch (error) { alert('エラー: ' + error.message); }
+        showToast(`「${selectedRowData.name}」さんの質問を表示しました。`, 'success');
+    } catch (error) {
+        showToast('表示処理中にエラーが発生しました: ' + error.message, 'error');
+    }
 }
 async function handleAnswered() {
     if (!selectedRowData) return;
@@ -269,8 +273,13 @@ async function handleAnswered() {
         if (result.success) {
            logAction('SET_ANSWERED', `UID: ${selectedRowData.uid}`);
            fetchQuestions();
-        } else { alert('更新失敗: ' + result.error); }
-    } catch (error) { alert('通信エラー: ' + error.message); }
+           showToast('ステータスを「回答済」に更新しました。', 'success');
+        } else { 
+            showToast('ステータスの更新に失敗しました: ' + result.error, 'error');
+        }
+    } catch (error) { 
+        showToast('通信エラー: ' + error.message, 'error');
+    }
 }
 async function handleEdit() {
     if (!selectedRowData) return;
@@ -281,10 +290,14 @@ async function handleEdit() {
         const result = await response.json();
         if (result.success) {
             logAction('EDIT', `UID: ${selectedRowData.uid}`);
-            alert('質問を更新しました。');
+            showToast('質問を更新しました。', 'success');
             fetchQuestions();
-        } else { alert('更新失敗: ' + result.error); }
-    } catch (error) { alert('通信エラー: ' + error.message); }
+        } else { 
+            showToast('質問の更新に失敗しました: ' + result.error, 'error');
+        }
+    } catch (error) { 
+        showToast('通信エラー: ' + error.message, 'error');
+    }
 }
 async function clearTelop() {
     try {
@@ -297,8 +310,9 @@ async function clearTelop() {
         await remove(telopRef);
         logAction('CLEAR');
         fetchQuestions();
+        showToast('テロップを消去しました。', 'success');
     } catch(error) {
-        alert('ステータスのクリア中にエラーが発生しました: ' + error.message);
+        showToast('テロップの消去中にエラーが発生しました: ' + error.message, 'error');
     }
 }
 
@@ -339,10 +353,10 @@ async function addTerm(event) {
             newRubyInput.value = '';
             fetchDictionary();
         } else {
-            alert('追加失敗: ' + result.error);
+            showToast('追加失敗: ' + result.error, 'error');
         }
     } catch (error) {
-        alert('通信エラー: ' + error.message);
+        showToast('通信エラー: ' + error.message, 'error');
     }
 }
 
@@ -357,10 +371,10 @@ async function deleteTerm(term) {
         if (result.success) {
             fetchDictionary();
         } else {
-            alert('削除失敗: ' + result.error);
+            showToast('削除失敗: ' + result.error, 'error');
         }
     } catch (error) {
-        alert('通信エラー: ' + error.message);
+        showToast('通信エラー: ' + error.message, 'error');
     }
 }
 
@@ -374,10 +388,10 @@ async function toggleTerm(term, newStatus) {
         if (result.success) {
             fetchDictionary();
         } else {
-            alert('状態の更新失敗: ' + result.error);
+            showToast('状態の更新失敗: ' + result.error, 'error');
         }
     } catch (error) {
-        alert('通信エラー: ' + error.message);
+        showToast('通信エラー: ' + error.message, 'error');
     }
 }
 
@@ -387,7 +401,7 @@ async function login() {
         await signInWithPopup(auth, provider);
     } catch (error) {
         console.error("Login failed:", error);
-        alert("ログインに失敗しました。");
+        showToast("ログインに失敗しました。", 'error');
     }
 }
 async function logout() {
@@ -402,4 +416,23 @@ async function logout() {
 function escapeHtml(str) {
     if (typeof str !== 'string') return '';
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+function showToast(message, type = 'success') {
+    const backgroundColor = type === 'success' 
+        ? "linear-gradient(to right, #4CAF50, #77dd77)" 
+        : "linear-gradient(to right, #f06595, #ff6b6b)";
+
+    Toastify({
+        text: message,
+        duration: 3000,
+        close: true,
+        gravity: "top", // `top` or `bottom`
+        position: "right", // `left`, `center` or `right`
+        stopOnFocus: true, // Prevents dismissing of toast on hover
+        style: {
+            background: backgroundColor,
+        },
+        className: `toastify-${type}`
+    }).showToast();
 }
