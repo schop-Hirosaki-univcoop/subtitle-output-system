@@ -12,14 +12,14 @@
     #telop-canvas {
       position: fixed;
       left: 0; right: 0; bottom: 0;
-      width: 100%;
+      width: 100vw;
       aspect-ratio: 1920 / 1080;   /* 幅から高さを16:9で算出 */
       display: flex;
       flex-direction: column;
       align-items: center;          /* 水平中央（テロップ塊を中央に） */
       justify-content: flex-end;    /* 垂直は下寄せ */
       box-sizing: border-box;
-      padding: 5vh 5vw;         /* 下の余白 */
+      padding: 2.5vh 2.5vw;         /* 下の余白 */
       color: #fff;
       background: transparent;      /* 背景は箱側に付ける */
       font-family: "Noto Sans JP","Hiragino Sans","Meiryo",system-ui,sans-serif;
@@ -28,6 +28,7 @@
     /* テロップの箱（左揃えのブロックを中央配置） */
     #telop-canvas .telop-box{
       display: inline-block;
+      width: 95vw;
       text-align: left;             /* 行は左揃え */
       background: rgba(0,0,0,.65);
       border: 1px solid rgba(255,255,255,.08);
