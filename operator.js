@@ -126,7 +126,7 @@ onAuthStateChanged(auth, async (user) => {
 
 function switchMainTab(tabName) {
     if (!tabName) return;
-    currentMainTab = tabName;
+    state.currentMainTab = tabName;
     document.querySelectorAll('.main-tab-button').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.tab === tabName);
     });
@@ -137,7 +137,7 @@ function switchMainTab(tabName) {
 
 function switchSubTab(tabName) {
     if (!tabName) return;
-    currentSubTab = tabName;
+    state.currentSubTab = tabName;
     document.querySelectorAll('.sub-tab-button').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.subTab === tabName);
     });
@@ -150,7 +150,7 @@ async function fetchQuestions() {
         const response = await fetch(`${GAS_API_URL}?sheet=answer`);
         const result = await response.json();
         if (result.success) {
-            allQuestions = result.data; // 取得した全質問を保持
+            state.allQuestions = result.data; // 取得した全質問を保持
             renderQuestions(); // リストの描画処理を呼び出す
         }
     } catch (error) { console.error('通信エラーが発生しました: ' + error.message); }
@@ -193,7 +193,7 @@ async function fetchLogs() {
         const response = await fetch(`${GAS_API_URL}?sheet=logs`);
         const result = await response.json();
         if (result.success) {
-            allLogs = result.data;
+            state.allLogs = result.data;
             renderLogs();
         }
     } catch (error) { console.error('ログの取得に失敗:', error); }
@@ -259,7 +259,7 @@ function renderLogs() {
 
 // --- 操作関数 ---
 async function handleDisplay() {
-    if (!selectedRowData || selectedRowData.isAnswered) return;
+    if (!state.selectedRowData || state.selectedRowData.isAnswered) return;
     const snapshot = await get(telopRef);
     const previousTelop = snapshot.val();
     try {
@@ -272,19 +272,19 @@ async function handleDisplay() {
         state.lastDisplayedUid = state.selectedRowData.uid;
         logAction('DISPLAY', `RN: ${state.selectedRowData.name}`);
         fetchQuestions();
-        showToast(`「${selectedRowData.name}」さんの質問を表示しました。`, 'success');
+        showToast(`「${state.selectedRowData.name}」さんの質問を表示しました。`, 'success');
     } catch (error) {
         showToast('表示処理中にエラーが発生しました: ' + error.message, 'error');
     }
 }
 async function handleAnswered() {
-    if (!selectedRowData) return;
-    if (!confirm(`「${selectedRowData.name}」の質問を「回答済」にしますか？`)) return;
+    if (!state.selectedRowData) return;
+    if (!confirm(`「${state.selectedRowData.name}」の質問を「回答済」にしますか？`)) return;
     try {
-        const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateStatus', uid: selectedRowData.uid, status: true }) });
+        const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateStatus', uid: state.selectedRowData.uid, status: true }) });
         const result = await response.json();
         if (result.success) {
-           logAction('SET_ANSWERED', `UID: ${selectedRowData.uid}`);
+           logAction('SET_ANSWERED', `UID: ${state.selectedRowData.uid}`);
            fetchQuestions();
            showToast('ステータスを「回答済」に更新しました。', 'success');
         } else { 
@@ -318,14 +318,14 @@ function updateBatchButtonVisibility() {
     dom.batchUnanswerBtn.style.display = checkedCount > 0 ? 'inline-block' : 'none';
 }
 async function handleEdit() {
-    if (!selectedRowData) return;
-    const newText = prompt("質問内容を編集してください：", selectedRowData.question);
-    if (newText === null || newText.trim() === selectedRowData.question.trim()) return;
+    if (!state.selectedRowData) return;
+    const newText = prompt("質問内容を編集してください：", state.selectedRowData.question);
+    if (newText === null || newText.trim() === state.selectedRowData.question.trim()) return;
     try {
-        const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'editQuestion', uid: selectedRowData.uid, newText: newText.trim() }) });
+        const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'editQuestion', uid: state.selectedRowData.uid, newText: newText.trim() }) });
         const result = await response.json();
         if (result.success) {
-            logAction('EDIT', `UID: ${selectedRowData.uid}`);
+            logAction('EDIT', `UID: ${state.selectedRowData.uid}`);
             showToast('質問を更新しました。', 'success');
             fetchQuestions();
         } else { 
