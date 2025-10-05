@@ -194,9 +194,7 @@ async function fetchLogs() {
         const result = await apiPost({ action: 'fetchSheet', sheet: 'logs' });
         if (result.success) {
             state.allLogs = result.data;
-                if (state.allLogs.length) {
-                console.debug('logs keys =', Object.keys(state.allLogs[0]));
-                }
+            if (state.allLogs.length) console.debug('logs keys =', Object.keys(state.allLogs[0]));
             renderLogs();
         }
     } catch (error) { console.error('ログの取得に失敗:', error); }
@@ -253,17 +251,21 @@ async function renderQuestions() {
 }
 function renderLogs() {
   dom.logsTableBody.innerHTML = '';
-  state.allLogs.slice().reverse().forEach(log => {
+  const rows = state.allLogs.slice().reverse();
+  for (const log of rows) {
+    // Timestamp は頑丈に
     const rawTs = log.Timestamp ?? log.timestamp ?? log['時刻'] ?? log['タイムスタンプ'] ?? '';
     const d = parseLogTimestamp(rawTs);
-    const tsText = d ? d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : (rawTs ? String(rawTs) : '');
-    const user    = pickUser(log);
-    const action  = log.Action  ?? log.action  ?? log['アクション'] ?? '';
-    const details = log.Details ?? log.details ?? log['詳細'] ?? '';
+    const tsText = d ? d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : String(rawTs || '');
+    // User / Action / Details は正規化ピック
+    const user = pickUser(log);
+    const action = pickAction(log);
+    const details = pickDetails(log);
+    // 表へ
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${escapeHtml(tsText)}</td><td>${escapeHtml(user)}</td><td>${escapeHtml(action)}</td><td>${escapeHtml(details)}</td>`;
     dom.logsTableBody.appendChild(tr);
-  });
+  }
 }
 
 
@@ -539,23 +541,61 @@ async function apiPost(payload, retryOnAuthError = true) {
 
 function normKey(k){
   return String(k || '')
-    .normalize('NFKC')            // 全角→半角など正規化
-    .replace(/[\u200B-\u200D\uFEFF]/g, '') // ゼロ幅スペース類除去
-    .replace(/\s+/g, '')          // 空白除去
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '') // ゼロ幅系を除去
+    .replace(/\s+/g, '')                   // 空白除去
     .toLowerCase();
 }
 function pickUser(obj){
-  // 1) 代表候補
-  const wanted = ['user','ユーザー','email','メールアドレス'];
   const map = {};
   for (const [k,v] of Object.entries(obj)) map[normKey(k)] = v;
-  for (const w of wanted){
-    const v = map[normKey(w)];
-    if (v != null && v !== '') return v;
+  // 優先候補
+  for (const key of ['user','ユーザー','email','メールアドレス']) {
+    if (map.hasOwnProperty(normKey(key))) return map[normKey(key)];
   }
-  // 2) 部分一致（user/email を含むキー）
-  for (const [k,v] of Object.entries(map)){
+  // 部分一致（念のため）
+  for (const [k,v] of Object.entries(map)) {
     if (k.includes('user') || k.includes('email')) return v;
   }
   return '';
 }
+function pickAction(obj){
+  const map = {};
+  for (const [k,v] of Object.entries(obj)) map[normKey(k)] = v;
+  for (const key of ['action','アクション']) {
+    if (map.hasOwnProperty(normKey(key))) return map[normKey(key)];
+  }
+  for (const [k,v] of Object.entries(map)) if (k.includes('action')) return v;
+  return '';
+}
+function pickDetails(obj){
+  const map = {};
+  for (const [k,v] of Object.entries(obj)) map[normKey(k)] = v;
+  for (const key of ['details','詳細']) {
+    if (map.hasOwnProperty(normKey(key))) return map[normKey(key)];
+  }
+  for (const [k,v] of Object.entries(map)) if (k.includes('detail')) return v;
+  return '';
+}
+function parseLogTimestamp(ts){
+  if (ts == null) return null;
+  if (ts instanceof Date && !isNaN(ts)) return ts;
+  if (typeof ts === 'number') {
+    if (ts > 1e12) return new Date(ts);        // epoch ms
+    if (ts > 1e10) return new Date(ts * 1000); // epoch sec
+    const ms = (ts - 25569) * 86400 * 1000;    // Excel序数
+    return new Date(ms);
+  }
+  let s = String(ts).trim();
+  if (!s) return null;
+  if (/^\d{4}\/\d{1,2}\/\d{1,2}/.test(s)) {    // 2025/10/05 12:34:56
+    const [dPart, tPart='00:00:00'] = s.split(' ');
+    const [y,m,d] = dPart.split('/').map(Number);
+    const [hh=0,mm=0,ss=0] = tPart.split(':').map(Number);
+    return new Date(y, m-1, d, hh, mm, ss);
+  }
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) s = s.replace(' ', 'T');
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
