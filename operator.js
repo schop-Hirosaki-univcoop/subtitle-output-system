@@ -182,6 +182,10 @@ async function fetchDictionary() {
                 if (!item.enabled) { tr.classList.add('disabled'); }
                 dom.dictionaryTableBody.appendChild(tr);
             });
+
+            // ▼ 有効な辞書だけを Firebase にミラー（display が購読）
+            const enabledOnly = result.data.filter(i => i.enabled === true);
+            await set(ref(database, 'dictionary'), enabledOnly);
         }
     } catch (error) { alert('辞書の取得に失敗: ' + error.message); }
 }
