@@ -40,6 +40,15 @@ const dom = {
     batchUnanswerBtn: document.getElementById('btn-batch-unanswer')
 };
 
+Object.assign(dom, {
+  logsTableView: document.getElementById('logs-table-view'),
+  logsStreamView: document.getElementById('logs-stream-view'),
+  logStream: document.getElementById('log-stream'),
+  logViewRadios: [...document.querySelectorAll('input[name="log-view"]')],
+  logSearch: document.getElementById('log-search'),
+  logAutoscroll: document.getElementById('log-autoscroll'),
+});
+
 // --- 状態管理変数 ---
 let state = {
     allQuestions: [],
@@ -48,7 +57,18 @@ let state = {
     currentSubTab: 'normal',
     selectedRowData: null,
     lastDisplayedUid: null,
+    logView: 'table',
+    autoScrollLogs: true,
 };
+
+dom.logViewRadios.forEach(r => r.addEventListener('change', (e)=>{
+  state.logView = e.target.value;
+  dom.logsTableView.style.display = state.logView==='table' ? '' : 'none';
+  dom.logsStreamView.style.display = state.logView==='stream' ? '' : 'none';
+  renderLogs();
+}));
+dom.logSearch.addEventListener('input', ()=>renderLogs());
+dom.logAutoscroll.addEventListener('change', (e)=>{ state.autoScrollLogs = e.target.checked; });
 
 // --- イベントリスナーの設定 ---
 document.getElementById('login-button').addEventListener('click', login);
@@ -249,25 +269,64 @@ async function renderQuestions() {
     }
     updateBatchButtonVisibility();
 }
-function renderLogs() {
-  dom.logsTableBody.innerHTML = '';
-  const rows = state.allLogs.slice().reverse();
-  for (const log of rows) {
-    // Timestamp は頑丈に
-    const rawTs = log.Timestamp ?? log.timestamp ?? log['時刻'] ?? log['タイムスタンプ'] ?? '';
-    const d = parseLogTimestamp(rawTs);
-    const tsText = d ? d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : String(rawTs || '');
-    // User / Action / Details は正規化ピック
-    const user = pickUser(log);
-    const action = pickAction(log);
-    const details = pickDetails(log);
-    // 表へ
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(tsText)}</td><td>${escapeHtml(user)}</td><td>${escapeHtml(action)}</td><td>${escapeHtml(details)}</td>`;
-    dom.logsTableBody.appendChild(tr);
+function renderLogs(){
+  const rows = applyLogFilters(state.allLogs || []);
+  if (state.logView === 'table') {
+    renderLogsTable(rows);
+  } else {
+    renderLogsStream(rows);
   }
 }
-
+function applyLogFilters(arr){
+  const q = (dom.logSearch?.value || '').trim().toLowerCase();
+  if (!q) return arr;
+  return arr.filter(row=>{
+    const rawTs = row.Timestamp ?? row.timestamp ?? row['時刻'] ?? row['タイムスタンプ'] ?? '';
+    const tsText = (parseLogTimestamp(rawTs)?.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}) || String(rawTs)).toLowerCase();
+    const user    = String(row.User    ?? row.user    ?? row['ユーザー'] ?? '').toLowerCase();
+    const action  = String(row.Action  ?? row.action  ?? row['アクション'] ?? '').toLowerCase();
+    const details = String(row.Details ?? row.details ?? row['詳細'] ?? '').toLowerCase();
+    return tsText.includes(q)||user.includes(q)||action.includes(q)||details.includes(q);
+  });
+}
+function renderLogsTable(rows){
+  dom.logsTableBody.innerHTML = '';
+  rows.slice().reverse().forEach(log=>{
+    const rawTs = log.Timestamp ?? log.timestamp ?? log['時刻'] ?? log['タイムスタンプ'] ?? '';
+    const d = parseLogTimestamp(rawTs);
+    const tsText = d ? d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}) : String(rawTs||'');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(tsText)}</td><td>${escapeHtml(log.User)}</td><td>${escapeHtml(log.Action)}</td><td>${escapeHtml(log.Details)}</td>`;
+    dom.logsTableBody.appendChild(tr);
+  });
+}
+function renderLogsStream(rows){
+  const max = 500; // 重くならないよう上限
+  const viewRows = rows.slice(-max);
+  dom.logStream.innerHTML = '';
+  for (const log of viewRows){
+    const rawTs = log.Timestamp ?? log.timestamp ?? log['時刻'] ?? log['タイムスタンプ'] ?? '';
+    const d = parseLogTimestamp(rawTs);
+    const tsText = d ? d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}) : String(rawTs||'');
+    const user = String(log.User ?? '');
+    const action = String(log.Action ?? '');
+    const details = String(log.Details ?? '');
+    const actionLower = action.toLowerCase();
+    const actionClass =
+      actionLower.includes('display') ? 'display' :
+      actionLower.includes('clear')   ? 'clear'   :
+      actionLower.includes('edit')    ? 'edit'    :
+      actionLower.includes('answer')  ? 'answer'  : '';
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    line.innerHTML = `<span class="ts">[${escapeHtml(tsText)}]</span> ` +
+                     `<span class="badge user">@${escapeHtml(user)}</span> ` +
+                     `<span class="badge action ${actionClass}">${escapeHtml(action.toUpperCase())}</span> ` +
+                     `<span class="details">${escapeHtml(details)}</span>`;
+    dom.logStream.appendChild(line);
+  }
+  if (state.autoScrollLogs) dom.logStream.scrollTop = dom.logStream.scrollHeight;
+}
 
 function parseLogTimestamp(ts) {
   if (ts == null) return null;
