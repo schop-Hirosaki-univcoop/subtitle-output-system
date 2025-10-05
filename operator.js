@@ -81,6 +81,11 @@ document.getElementById('fetch-dictionary-button').addEventListener('click', fet
 dom.addTermForm.addEventListener('submit', addTerm);
 dom.selectAllCheckbox.addEventListener('change', handleSelectAll);
 dom.batchUnanswerBtn.addEventListener('click', handleBatchUnanswer);
+dom.questionsTableBody.addEventListener('change', (e) => {
+  if (e.target && e.target.classList.contains('row-checkbox')) {
+    updateBatchButtonVisibility();
+  }
+});
 
 // --- ログイン状態の監視 ---
 onAuthStateChanged(auth, async (user) => {
