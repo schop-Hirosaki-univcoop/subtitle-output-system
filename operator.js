@@ -160,7 +160,7 @@ async function fetchDictionary() {
         const response = await fetch(`${GAS_API_URL}?sheet=dictionary`);
         const result = await response.json();
         if (result.success) {
-            dictionaryTableBody.innerHTML = '';
+            dom.dictionaryTableBody.innerHTML = '';
             result.data.forEach(item => {
                 const tr = document.createElement('tr');
 
@@ -183,7 +183,7 @@ async function fetchDictionary() {
                 tr.appendChild(actionTd);
                 
                 if (!item.enabled) { tr.classList.add('disabled'); }
-                dictionaryTableBody.appendChild(tr);
+                dom.dictionaryTableBody.appendChild(tr);
             });
         }
     } catch (error) { alert('辞書の取得に失敗: ' + error.message); }
@@ -387,8 +387,8 @@ async function logAction(actionName, details = '') {
 // --- 辞書関連の関数 ---
 async function addTerm(event) {
     event.preventDefault();
-    const term = newTermInput.value.trim();
-    const ruby = newRubyInput.value.trim();
+    const term = dom.newTermInput.value.trim();
+    const ruby = dom.newRubyInput.value.trim();
     if (!term || !ruby) return;
 
     try {
@@ -398,8 +398,8 @@ async function addTerm(event) {
         });
         const result = await response.json();
         if (result.success) {
-            newTermInput.value = '';
-            newRubyInput.value = '';
+            dom.newTermInput.value = '';
+            dom.newRubyInput.value = '';
             fetchDictionary();
         } else {
             showToast('追加失敗: ' + result.error, 'error');
