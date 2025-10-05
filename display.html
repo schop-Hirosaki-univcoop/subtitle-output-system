@@ -8,7 +8,6 @@
     html, body {
       height: 100%;
       margin: 0;
-      background: #0b0f17; /* 余白エリアの色（任意） */
     }
     #telop-canvas {
       position: fixed;
@@ -51,10 +50,9 @@
     /* ─ ここが“1行23文字”の肝 ─
        23ic（CJK全角23文字幅）に固定。非対応ブラウザは 23em にフォールバック。 */
     #question {
-      width: 23em;                  /* フォールバック */
-      width: 23ic;                  /* 23 全角幅（対応ブラウザで有効） */
+      width: 95vw;                  /* 23 全角幅（対応ブラウザで有効） */
       font-weight: 700;
-      font-size: 64px;              /* 56–72pxあたりで微調整OK */
+      font-size: calc(90vw / 23);              /* 56–72pxあたりで微調整OK */
       line-height: 1.25;
       letter-spacing: .01em;
       white-space: normal;
