@@ -220,7 +220,7 @@ async function renderQuestions() {
             dom.actionButtons[1].disabled = !isAnswered; // 未回答なら未回答ボタンを無効化
             dom.selectedInfo.textContent = `選択中: ${escapeHtml(item['ラジオネーム'])}`;
         });
-        if (item.UID === currentSelectedUid) { tr.classList.add('selected-row'); }
+        if (item['UID'] === currentSelectedUid) { tr.classList.add('selected-row'); }
         if (currentTelop && currentTelop.name === item['ラジオネーム'] && currentTelop.question === item['質問・お悩み']) {
             tr.classList.add('now-displaying');
             if (state.lastDisplayedUid === item['UID']) {
@@ -387,11 +387,7 @@ async function addTerm(event) {
     if (!term || !ruby) return;
 
     try {
-        const response = await fetch(GAS_API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'addTerm', term: term, ruby: ruby })
-        });
-        const result = await response.json();
+        const result = await apiPost({ action: 'addTerm', term, ruby });
         if (result.success) {
             dom.newTermInput.value = '';
             dom.newRubyInput.value = '';
@@ -407,11 +403,7 @@ async function addTerm(event) {
 async function deleteTerm(term) {
     if (!confirm(`「${term}」を辞書から削除しますか？`)) return;
     try {
-        const response = await fetch(GAS_API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'deleteTerm', term: term })
-        });
-        const result = await response.json();
+        const result = await apiPost({ action: 'deleteTerm', term });
         if (result.success) {
             fetchDictionary();
         } else {
@@ -424,11 +416,7 @@ async function deleteTerm(term) {
 
 async function toggleTerm(term, newStatus) {
     try {
-        const response = await fetch(GAS_API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'toggleTerm', term: term, enabled: newStatus })
-        });
-        const result = await response.json();
+        const result = await apiPost({ action: 'toggleTerm', term, enabled: newStatus });
         if (result.success) {
             fetchDictionary();
         } else {
