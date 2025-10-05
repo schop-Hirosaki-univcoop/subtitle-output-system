@@ -147,8 +147,7 @@ function switchSubTab(tabName) {
 // --- データ取得処理 ---
 async function fetchQuestions() {
     try {
-        const response = await fetch(`${GAS_API_URL}?sheet=answer`);
-        const result = await response.json();
+        const result = await apiPost({ action: 'fetchSheet', sheet: 'answer' });
         if (result.success) {
             state.allQuestions = result.data; // 取得した全質問を保持
             renderQuestions(); // リストの描画処理を呼び出す
@@ -157,8 +156,7 @@ async function fetchQuestions() {
 }
 async function fetchDictionary() {
     try {
-        const response = await fetch(`${GAS_API_URL}?sheet=dictionary`);
-        const result = await response.json();
+        const result = await apiPost({ action: 'fetchSheet', sheet: 'dictionary' });
         if (result.success) {
             dom.dictionaryTableBody.innerHTML = '';
             result.data.forEach(item => {
@@ -281,8 +279,7 @@ async function handleAnswered() {
     if (!state.selectedRowData) return;
     if (!confirm(`「${state.selectedRowData.name}」の質問を「回答済」にしますか？`)) return;
     try {
-        const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateStatus', uid: state.selectedRowData.uid, status: true }) });
-        const result = await response.json();
+        const result = await apiPost({ action: 'updateStatus', uid: state.selectedRowData.uid, status: true });
         if (result.success) {
            logAction('SET_ANSWERED', `UID: ${state.selectedRowData.uid}`);
            fetchQuestions();
@@ -303,8 +300,7 @@ async function updateStatusOnServer(uids, isAnswered, isSelectingUpdate = false,
           action === 'updateSelectingStatus'   ? { action, uid: selectingUid } :
           action === 'clearSelectingStatus'    ? { action } :
                                                  { action, uids, status: isAnswered };
-        const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify(payload) });
-        const result = await response.json();
+        const result = await apiPost(payload);
         if (result.success) {
             if (!isSelectingUpdate) {
                 logAction(isAnswered ? 'BATCH_SET_ANSWERED' : 'BATCH_SET_UNANSWERED', `UIDs: ${uids.join(', ')}`);
@@ -327,8 +323,7 @@ async function handleEdit() {
     const newText = prompt("質問内容を編集してください：", state.selectedRowData.question);
     if (newText === null || newText.trim() === state.selectedRowData.question.trim()) return;
     try {
-        const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'editQuestion', uid: state.selectedRowData.uid, newText: newText.trim() }) });
-        const result = await response.json();
+        const result = await apiPost({ action: 'editQuestion', uid: state.selectedRowData.uid, newText: newText.trim() });
         if (result.success) {
             logAction('EDIT', `UID: ${state.selectedRowData.uid}`);
             showToast('質問を更新しました。', 'success');
@@ -490,3 +485,35 @@ function showToast(message, type = 'success') {
         className: `toastify-${type}`
     }).showToast();
 }
+
+async function getIdTokenSafe(force = false) {
+  // 既にサインインしている前提（未サインインならあなたの既存のログインUIへ誘導）
+  const user = firebase.auth().currentUser || await new Promise(resolve => {
+    const un = firebase.auth().onAuthStateChanged(u => { un(); resolve(u); });
+  });
+  if (!user) throw new Error('Not signed in');
+  return await user.getIdToken(force);
+}
+
+async function apiPost(payload, retryOnAuthError = true) {
+  const idToken = await getIdTokenSafe();
+  const res = await fetch(GAS_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' }, // ← プリフライト回避
+    body: JSON.stringify({ ...payload, idToken })
+  });
+  let json;
+  try { json = await res.json(); } catch (e) { throw new Error('Bad JSON response'); }
+
+  if (!json.success) {
+    // トークン期限切れ等を想定して一度だけリフレッシュ再試行
+    const msg = String(json.error || '');
+    if (retryOnAuthError && /Auth/.test(msg)) {
+      await getIdTokenSafe(true); // force refresh
+      return await apiPost(payload, false);
+    }
+    throw new Error(`${msg}${json.errorId ? ' [' + json.errorId + ']' : ''}`);
+  }
+  return json;
+}
+
