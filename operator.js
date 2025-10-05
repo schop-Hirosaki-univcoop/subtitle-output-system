@@ -41,10 +41,8 @@ const dom = {
 };
 
 Object.assign(dom, {
-  logsTableView: document.getElementById('logs-table-view'),
   logsStreamView: document.getElementById('logs-stream-view'),
   logStream: document.getElementById('log-stream'),
-  logViewRadios: [...document.querySelectorAll('input[name="log-view"]')],
   logSearch: document.getElementById('log-search'),
   logAutoscroll: document.getElementById('log-autoscroll'),
 });
@@ -57,16 +55,8 @@ let state = {
     currentSubTab: 'normal',
     selectedRowData: null,
     lastDisplayedUid: null,
-    logView: 'table',
     autoScrollLogs: true,
 };
-
-dom.logViewRadios.forEach(r => r.addEventListener('change', (e)=>{
-  state.logView = e.target.value;
-  dom.logsTableView.style.display = state.logView==='table' ? '' : 'none';
-  dom.logsStreamView.style.display = state.logView==='stream' ? '' : 'none';
-  renderLogs();
-}));
 dom.logSearch.addEventListener('input', ()=>renderLogs());
 dom.logAutoscroll.addEventListener('change', (e)=>{ state.autoScrollLogs = e.target.checked; });
 
@@ -271,12 +261,9 @@ async function renderQuestions() {
 }
 function renderLogs(){
   const rows = applyLogFilters(state.allLogs || []);
-  if (state.logView === 'table') {
-    renderLogsTable(rows);
-  } else {
-    renderLogsStream(rows);
-  }
+  renderLogsStream(rows);
 }
+
 function applyLogFilters(arr){
   const q = (dom.logSearch?.value || '').trim().toLowerCase();
   if (!q) return arr;
@@ -287,17 +274,6 @@ function applyLogFilters(arr){
     const action  = String(row.Action  ?? row.action  ?? row['アクション'] ?? '').toLowerCase();
     const details = String(row.Details ?? row.details ?? row['詳細'] ?? '').toLowerCase();
     return tsText.includes(q)||user.includes(q)||action.includes(q)||details.includes(q);
-  });
-}
-function renderLogsTable(rows){
-  dom.logsTableBody.innerHTML = '';
-  rows.slice().reverse().forEach(log=>{
-    const rawTs = log.Timestamp ?? log.timestamp ?? log['時刻'] ?? log['タイムスタンプ'] ?? '';
-    const d = parseLogTimestamp(rawTs);
-    const tsText = d ? d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}) : String(rawTs||'');
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(tsText)}</td><td>${escapeHtml(log.User)}</td><td>${escapeHtml(log.Action)}</td><td>${escapeHtml(log.Details)}</td>`;
-    dom.logsTableBody.appendChild(tr);
   });
 }
 function renderLogsStream(rows){
