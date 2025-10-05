@@ -1,46 +1,98 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <title>Telop Display</title>
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden; /* スクロールバーを非表示に */
-        }
-        #telop-canvas {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            aspect-ratio: 1920 / 1080; /* 常に16:9を維持 */
-            background-color: rgba(0, 0, 0, 0.5); /* 確認しやすいように背景色を仮設定 */
-            color: white;
-            font-family: sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            box-sizing: border-box;
-            padding: 2%;
-        }
-        #radio-name {
-            font-size: 5vmin; /* ビューポートに対する相対的なサイズ */
-            font-weight: bold;
-        }
-        #question {
-            font-size: 7vmin;
-            margin-top: 1%;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Telop Display</title>
+  <style>
+    /* 画面中央に 1920x1080 の“舞台”を固定 */
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #0b0f17;           /* 余白部の背景（任意） */
+      display: grid;
+      place-items: center;
+    }
+
+    .stage {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      background: #000;              /* 必要なら映像/背景をここに */
+      overflow: hidden;
+    }
+
+    /* テロップ（下部固定） */
+    .telop {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      padding: 28px 0 44px;          /* 上下余白はお好みで */
+      pointer-events: none;          /* クリック透過（任意） */
+    }
+    .telop-inner {
+      display: flex;
+      justify-content: center;       /* ブロックを水平中央に */
+    }
+    .telop-box {
+      background: rgba(0,0,0,.65);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      padding: 16px 28px 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      max-width: calc(100% - 160px); /* 端の余白バッファ */
+    }
+
+    /* 見出し（任意） */
+    #radio-name {
+      font-family: "Noto Sans JP", "Hiragino Sans", "Meiryo", system-ui, sans-serif;
+      font-weight: 700;
+      font-size: 36px;
+      line-height: 1.2;
+      color: #cfe3ff;
+      text-align: left;              /* 行は左揃え */
+      margin: 2px 0 6px;
+      letter-spacing: .01em;
+    }
+
+    /* ── ここが“23文字/行”のキモ ────────────────
+       CJKの1文字幅 ＝ 1ic。23ic 幅の箱に文字を入れると自然に23文字で折り返す。
+       未対応ブラウザでも 23em をフォールバックに指定。 */
+    #question {
+      width: 23em;                   /* フォールバック */
+      width: 23ic;                   /* 23文字幅（対応ブラウザで有効） */
+      font-family: "Noto Sans JP", "Hiragino Sans", "Meiryo", system-ui, sans-serif;
+      font-weight: 700;
+      font-size: 64px;               /* お好みで（幅が固定なので23文字で改行される） */
+      line-height: 1.25;
+      letter-spacing: .01em;
+      color: #fff;
+      text-align: left;              /* 行は左揃え */
+      white-space: normal;
+      line-break: strict;            /* 日本語の禁則寄りに */
+      overflow-wrap: anywhere;       /* 英数/句読点が続いても崩れにくく */
+    }
+
+    /* ルビの読みやすさ（任意） */
+    ruby { ruby-position: under; }
+    rt { font-size: .5em; line-height: 1; }
+  </style>
 </head>
 <body>
-    <div id="telop-canvas">
-        <div id="radio-name"></div>
-        <div id="question"></div>
-    </div>
+  <div class="stage">
+    <!-- 映像やキャンバスがあるならここに置く -->
 
-    <script type="module">
+    <!-- テロップ -->
+    <div class="telop">
+      <div class="telop-inner">
+        <div class="telop-box">
+          <div id="radio-name"></div>
+          <div id="question"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ここより下の <script type="module"> は既存のままでOK（IDsは同じ） -->
+  <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
         
