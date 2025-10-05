@@ -40,14 +40,18 @@ const selectedInfo = document.getElementById('selected-info');
 // --- 状態管理変数 ---
 let allQuestions = []; // 全ての質問を保持する配列
 let allLogs = [];
-let currentTab = 'normal'; // 現在表示中のタブ ('normal' or 'puq')
+let currentMainTab = 'questions'; // 'questions' or 'logs'
+let currentSubTab = 'normal';   // 'normal' or 'puq'
 let selectedRowData = null;
 let lastDisplayedUid = null;
 
 // --- イベントリスナーの設定 ---
 document.getElementById('login-button').addEventListener('click', login);
-document.querySelectorAll('.tab-button').forEach(button => {
-    button.addEventListener('click', () => switchTab(button.dataset.tab));
+document.querySelectorAll('.main-tab-button').forEach(button => {
+    button.addEventListener('click', () => switchMainTab(button.dataset.tab));
+});
+document.querySelectorAll('.sub-tab-button').forEach(button => {
+    button.addEventListener('click', () => switchSubTab(button.dataset.subTab));
 });
 document.getElementById('manual-update-button').addEventListener('click', () => {
     fetchQuestions();
@@ -111,23 +115,24 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-function switchTab(tabName) {
+function switchMainTab(tabName) {
     if (!tabName) return;
-    currentTab = tabName;
-    document.querySelectorAll('.tab-button').forEach(btn => {
+    currentMainTab = tabName;
+    document.querySelectorAll('.main-tab-button').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.tab === tabName);
     });
-    // 全てのコンテンツを一旦非表示
-    document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
+    document.querySelectorAll('.main-tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === `${tabName}-content`);
+    });
+}
 
-    // 質問タブとログタブで表示を切り替える
-    if (tabName === 'normal' || tabName === 'puq') {
-        document.getElementById('questions-content').style.display = 'block';
-        renderQuestions();
-    } else if (tabName === 'logs') {
-        document.getElementById('logs-content').style.display = 'block';
-        renderLogs();
-    }
+function switchSubTab(tabName) {
+    if (!tabName) return;
+    currentSubTab = tabName;
+    document.querySelectorAll('.sub-tab-button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.subTab === tabName);
+    });
+    renderQuestions(); // サブタブは質問リストを再描画するだけ
 }
 
 // --- データ取得処理 ---
@@ -191,7 +196,7 @@ async function renderQuestions() {
     // 表示する質問をフィルタリング
     const questionsToRender = allQuestions.filter(item => {
         const isPuq = item['ラジオネーム'] === 'Pick Up Question';
-        return currentTab === 'puq' ? isPuq : !isPuq;
+        return currentSubTab === 'puq' ? isPuq : !isPuq;
     });
     // Firebaseから現在のテロップ情報を一度だけ取得
     const snapshot = await get(telopRef);
