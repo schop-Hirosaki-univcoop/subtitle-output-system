@@ -6,15 +6,13 @@
   <style>
     /* ====== Modern look (visual-only) ====== */
     :root{
-      --text: #fff;
-      --muted: #cfe3ff;
-      --glass-bg: rgba(10,14,22,.55);
-      --glass-border: rgba(255,255,255,.1);
-      --glass-blur: 12px;
-      --radius: 16px;
-      --shadow: 0 20px 40px rgba(0,0,0,.35);
-      --accent1: #7c3aed; /* 紫 */
-      --accent2: #22d3ee; /* シアン */
+      --neon-a: #00eaff;    /* シアン系 */
+      --neon-b: #ff2a6d;    /* マゼンタ系 */
+      --seat-bg1: rgba(4,7,12,.50);   /* 座布団の濃いめグラデ上 */
+      --seat-bg2: rgba(3,5,9,.62);    /* 座布団の濃いめグラデ下 */
+      --seat-border: rgba(255,255,255,.10);
+      --radius: 18px;
+      --shadow: 0 22px 48px rgba(0,0,0,.38);
     }
     /* 画面下部・全幅・16:9 の #telop-canvas を固定 */
     html, body {
@@ -42,40 +40,56 @@
       display: inline-block;
       text-align: left;             /* 行は左揃え */
       width:95%;
-      background: var(--glass-bg);
-      border: 1px solid var(--glass-border);
+      background: linear-gradient(180deg, var(--seat-bg1), var(--seat-bg2));
+      border: 1px solid var(--seat-border);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
-      backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
       overflow: hidden;
       padding: 1.5vh 2.5vw;
     }
-    /* グラデのアウトライン（うっすら） */
+    /* ネオンの発光する枠線（細い管 + ぼんやりグロー） */
+    #telop-canvas .telop-box::before,
+    #telop-canvas .telop-box::after{
+      content:""; position:absolute; inset:0; border-radius: inherit; pointer-events:none;
+    }
+    
+    /* 細いネオンチューブ（輪郭） */
     #telop-canvas .telop-box::before{
-      content:"";
-      position:absolute; inset:0; border-radius: inherit; padding:1px;
-      background: linear-gradient(135deg, var(--accent1), var(--accent2));
+      padding: 1px;                                 /* 細いチューブ */
+      background: linear-gradient(135deg, var(--neon-a), var(--neon-b));
       -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
       -webkit-mask-composite: xor; mask-composite: exclude;
-      pointer-events:none; opacity:.25;
+      opacity: .9;
     }
-    /* 斜めの光沢 */
+    
+    /* ぼんやり広がるグロー（外側のにじみ） */
     #telop-canvas .telop-box::after{
-      content:""; position:absolute; inset:-60%;
-      background: conic-gradient(from 200deg at 50% 50%, rgba(255,255,255,.08), transparent 40%);
-      transform: rotate(8deg);
-      pointer-events:none; mix-blend-mode: overlay; opacity:.5;
+      background: linear-gradient(135deg, var(--neon-a), var(--neon-b));
+      filter: blur(18px);
+      opacity: .45;
+      transform: scale(1.03);
     }
-
+    
+    /* うっすら底辺の“ネオンバー”を追加（2px） */
+    #telop-canvas .telop-box > .neon-underline {
+      content:"";
+      position: absolute; left: 12px; right: 12px; bottom: 10px; height: 2px;
+      background: linear-gradient(90deg, var(--neon-a), var(--neon-b));
+      filter: drop-shadow(0 0 8px rgba(0,234,255,.45)) drop-shadow(0 0 8px rgba(255,42,109,.35));
+      border-radius: 2px;
+      pointer-events: none;
+    }
+    
     /* 見出し（任意） */
     #radio-name {
+      color: #cfe3ff;
       width: fit-content;
       font-weight: 700;
       font-size: calc(90vw / 25.7);
       line-height: 1.2;
-      color: var(--muted);
-      text-shadow: 0 1px 0 rgba(0,0,0,.4);
+      text-shadow:
+        0 1px 0 rgba(0,0,0,.45),
+        0 0 6px rgba(0,234,255,.20);
       margin: 2px 0 6px;
       letter-spacing: .01em;
     }
@@ -83,7 +97,8 @@
       content: "ラジオネーム:";
       font-size: calc(90vw / 32); /* 小さめ */
       margin-right: .5em;
-      color: var(--muted);
+      color: #b7d3ff;
+      opacity: .95;
       font-weight: 700;
     }
     #radio-name.no-label::before{ content:none; }
@@ -99,8 +114,12 @@
       white-space: normal;
       line-break: strict;           /* 日本語の禁則寄り */
       overflow-wrap: anywhere;      /* 英数や句読点が続いても崩れにくく */
-      color: var(--text);
-      text-shadow: 0 2px 12px rgba(0,0,0,.45);
+      color: #fff;
+      text-shadow:
+        0 0 1px rgba(255,255,255,.9),
+        0 0 6px rgba(0,234,255,.35),
+        0 0 14px rgba(0,234,255,.25),
+        0 0 28px rgba(255,42,109,.18);
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       margin-top: auto;
@@ -111,6 +130,18 @@
     @keyframes fadeSlideUp{
       from{ opacity:0; transform: translateY(8px) scale(.995); }
       to  { opacity:1; transform: translateY(0)   scale(1); }
+    }
+    @media (prefers-reduced-motion: no-preference){
+      #telop-canvas .telop-box::after{
+        animation: neonPulse 3.6s ease-in-out infinite;
+      }
+      @keyframes neonPulse{
+        0%, 100% { opacity:.40; }
+        12%      { opacity:.55; }
+        16%      { opacity:.30; } /* 一瞬だけ落とす→点滅風 */
+        22%      { opacity:.50; }
+        60%      { opacity:.43; }
+      }
     }
     /* ルビ（任意） */
     ruby { ruby-position: under; }
