@@ -58,48 +58,38 @@
         const database = getDatabase(app);
         const telopRef = ref(database, 'currentTelop');
         
-        const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec';
         const radioNameEl = document.getElementById('radio-name');
         const questionEl = document.getElementById('question');
-        
-        let dictionary = []; // ルビ辞書を保存する配列
-        
-        // ルビ辞書をGASから非同期で取得する
-        async function loadDictionary() {
-            try {
-                const response = await fetch(`${GAS_API_URL}?sheet=dictionary`);
-                const result = await response.json();
-                if (result.success) {
-                    // 有効な(enabled=true)辞書だけを保持
-                    dictionary = result.data.filter(item => item.enabled === true);
-                }
-            } catch (error) {
-                console.error('Failed to load dictionary:', error);
-            }
-        }
+
+        let dictionary = [];
+        const dictRef = ref(database, 'dictionary');
+        onValue(dictRef, snap => { dictionary = snap.val() || []; });
         
         // テキストにルビを適用する関数
         function applyRuby(text) {
-            if (!text || dictionary.length === 0) {
-                return text;
-            }
-            let processedText = text;
+            if (!text) return '';
+            let processedText = escapeHtml(text); // ベースをサニタイズ
             dictionary.forEach(item => {
                 // 正規表現で単語を検索し、<ruby>タグに置換する
                 // 'g'フラグですべてのマッチを置換
                 const regex = new RegExp(escapeRegExp(item.term), 'g');
-                processedText = processedText.replace(regex, `<ruby>${item.term}<rt>${item.ruby}</rt></ruby>`);
+                processedText = processedText.replace(
+                  regex,
+                  `<ruby>${escapeHtml(item.term)}<rt>${escapeHtml(item.ruby)}</rt></ruby>`
+                );
             });
             return processedText;
         }
         
+        function escapeHtml(s){
+          return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                          .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+        }        
+
         // 正規表現用の特殊文字をエスケープするヘルパー関数
         function escapeRegExp(string) {
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }
-        
-        // 辞書を最初に読み込む
-        loadDictionary();
 
         // Firebaseの 'currentTelop' の場所の変更を監視する
         onValue(telopRef, (snapshot) => {
