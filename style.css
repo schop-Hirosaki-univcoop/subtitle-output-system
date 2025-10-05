@@ -94,3 +94,35 @@ tr.disabled { text-decoration: line-through; color: #999; }
 
 /* ログテーブル */
 #logs-table td { font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+
+/* ▼▼▼ トースト通知のカスタムスタイル ▼▼▼ */
+.toastify {
+    padding: 12px 20px;
+    color: #fff;
+    display: inline-block;
+    box-shadow: 0 3px 6px -1px rgba(0, 0, 0, 0.12), 0 10px 36px -4px rgba(77, 96, 232, 0.3);
+    background: -webkit-linear-gradient(315deg, #73a5ff, #5477f5);
+    background: linear-gradient(135deg, #73a5ff, #5477f5);
+    position: fixed;
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.215, 0.61, 0.355, 1);
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: none;
+    max-width: calc(50% - 20px);
+    z-index: 2000;
+}
+
+.toastify.on {
+    opacity: 1;
+}
+
+/* 成功メッセージ用のカスタムカラー */
+.toastify-success {
+    background: linear-gradient(135deg, #77dd77, #4CAF50);
+}
+
+/* エラーメッセージ用のカスタムカラー */
+.toastify-error {
+    background: linear-gradient(135deg, #ff6b6b, #f06595);
+}
