@@ -254,7 +254,7 @@ function renderLogs() {
     const rawTs = log.Timestamp ?? log.timestamp ?? log['時刻'] ?? log['タイムスタンプ'] ?? '';
     const d = parseLogTimestamp(rawTs);
     const tsText = d ? d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : (rawTs ? String(rawTs) : '');
-    const user    = log.User    ?? log.user    ?? log['ユーザー'] ?? '';
+    const user    = pickUser(log);
     const action  = log.Action  ?? log.action  ?? log['アクション'] ?? '';
     const details = log.Details ?? log.details ?? log['詳細'] ?? '';
     const tr = document.createElement('tr');
@@ -478,9 +478,11 @@ async function logout() {
 }
 
 // --- ヘルパー関数 ---
-function escapeHtml(str) {
-    if (typeof str !== 'string') return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+function escapeHtml(v) {
+  const s = v == null ? '' : String(v);
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
 }
 
 function showToast(message, type = 'success') {
@@ -532,3 +534,25 @@ async function apiPost(payload, retryOnAuthError = true) {
   return json;
 }
 
+function normKey(k){
+  return String(k || '')
+    .normalize('NFKC')            // 全角→半角など正規化
+    .replace(/[\u200B-\u200D\uFEFF]/g, '') // ゼロ幅スペース類除去
+    .replace(/\s+/g, '')          // 空白除去
+    .toLowerCase();
+}
+function pickUser(obj){
+  // 1) 代表候補
+  const wanted = ['user','ユーザー','email','メールアドレス'];
+  const map = {};
+  for (const [k,v] of Object.entries(obj)) map[normKey(k)] = v;
+  for (const w of wanted){
+    const v = map[normKey(w)];
+    if (v != null && v !== '') return v;
+  }
+  // 2) 部分一致（user/email を含むキー）
+  for (const [k,v] of Object.entries(map)){
+    if (k.includes('user') || k.includes('email')) return v;
+  }
+  return '';
+}
