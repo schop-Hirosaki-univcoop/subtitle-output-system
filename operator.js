@@ -73,7 +73,7 @@ onAuthStateChanged(auth, async (user) => {
                     loginContainer.style.display = 'none';
                     mainContainer.style.display = 'flex';
                     actionPanel.style.display = 'flex';
-                    userInfo.innerHTML = `${user.displayName} (${user.email}) <button onclick="logout()">ログアウト</button>`;
+                    userInfo.innerHTML = `${user.displayName} (${user.email}) <button id="logout-button">ログアウト</button>`;
                     document.getElementById('logout-button').addEventListener('click', logout);
                     fetchQuestions();
                     fetchDictionary();
