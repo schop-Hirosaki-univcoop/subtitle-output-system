@@ -194,6 +194,9 @@ async function fetchLogs() {
         const result = await apiPost({ action: 'fetchSheet', sheet: 'logs' });
         if (result.success) {
             state.allLogs = result.data;
+                if (state.allLogs.length) {
+                console.debug('logs keys =', Object.keys(state.allLogs[0]));
+                }
             renderLogs();
         }
     } catch (error) { console.error('ログの取得に失敗:', error); }
