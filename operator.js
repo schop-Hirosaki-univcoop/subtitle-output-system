@@ -577,25 +577,3 @@ function pickDetails(obj){
   for (const [k,v] of Object.entries(map)) if (k.includes('detail')) return v;
   return '';
 }
-function parseLogTimestamp(ts){
-  if (ts == null) return null;
-  if (ts instanceof Date && !isNaN(ts)) return ts;
-  if (typeof ts === 'number') {
-    if (ts > 1e12) return new Date(ts);        // epoch ms
-    if (ts > 1e10) return new Date(ts * 1000); // epoch sec
-    const ms = (ts - 25569) * 86400 * 1000;    // Excel序数
-    return new Date(ms);
-  }
-  let s = String(ts).trim();
-  if (!s) return null;
-  if (/^\d{4}\/\d{1,2}\/\d{1,2}/.test(s)) {    // 2025/10/05 12:34:56
-    const [dPart, tPart='00:00:00'] = s.split(' ');
-    const [y,m,d] = dPart.split('/').map(Number);
-    const [hh=0,mm=0,ss=0] = tPart.split(':').map(Number);
-    return new Date(y, m-1, d, hh, mm, ss);
-  }
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) s = s.replace(' ', 'T');
-  const d = new Date(s);
-  return isNaN(d) ? null : d;
-}
-
