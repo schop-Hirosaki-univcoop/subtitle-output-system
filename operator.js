@@ -77,8 +77,7 @@ onAuthStateChanged(auth, async (user) => {
     if (user) {
         // ログイン成功後、まずユーザー権限をチェック
         try {
-            const response = await fetch(`${GAS_API_URL}?sheet=users`);
-            const result = await response.json();
+            const result = await apiPost({ action: 'fetchSheet', sheet: 'users' });
             if (result.success && result.data) {
                 const authorizedUsers = result.data.map(item => item['メールアドレス']); 
                 if (authorizedUsers.includes(user.email)) {
@@ -188,8 +187,7 @@ async function fetchDictionary() {
 }
 async function fetchLogs() {
     try {
-        const response = await fetch(`${GAS_API_URL}?sheet=logs`);
-        const result = await response.json();
+        const result = await apiPost({ action: 'fetchSheet', sheet: 'logs' });
         if (result.success) {
             state.allLogs = result.data;
             renderLogs();
@@ -233,13 +231,13 @@ async function renderQuestions() {
         }
         const statusText = item['選択中'] ? '表示中' : (isAnswered ? '回答済' : '未回答');
         tr.innerHTML = `
-            <td><input type="checkbox" class="row-checkbox" data-uid="${item.UID}"></td>
+            <td><input type="checkbox" class="row-checkbox" data-uid="${item['UID']}"></td>
             <td>${escapeHtml(item['ラジオネーム'])}</td>
             <td>${escapeHtml(item['質問・お悩み'])}</td>
             <td>${statusText}</td>`;
         dom.questionsTableBody.appendChild(tr);
     });
-    if (!questionsToRender.some(item => item.UID === currentSelectedUid)) {
+    if (!questionsToRender.some(item => item['UID'] === currentSelectedUid)) {
         state.selectedRowData = null;
         dom.actionButtons.forEach(btn => btn.disabled = true);
         dom.selectedInfo.textContent = '行を選択してください';
@@ -263,7 +261,7 @@ async function handleDisplay() {
     try {
         if (previousTelop) {
             const prevItem = state.allQuestions.find(q => q['ラジオネーム'] === previousTelop.name && q['質問・お悩み'] === previousTelop.question);
-            if (prevItem) { await updateStatusOnServer([prevItem.UID], true); }
+            if (prevItem) { await updateStatusOnServer([prevItem['UID']], true); }
         }
         await set(telopRef, { name: state.selectedRowData.name, question: state.selectedRowData.question });
         await updateStatusOnServer([], false, true, state.selectedRowData.uid);
@@ -341,7 +339,7 @@ async function clearTelop() {
     try {
         if (previousTelop) {
             const prevItem = state.allQuestions.find(q => q['ラジオネーム'] === previousTelop.name && q['質問・お悩み'] === previousTelop.question);
-            if (prevItem) { await updateStatusOnServer([prevItem.UID], true); }
+            if (prevItem) { await updateStatusOnServer([prevItem['UID']], true); }
         }
         await remove(telopRef);
         await updateStatusOnServer([], false, true, -1);
@@ -370,15 +368,12 @@ async function logAction(actionName, details = '') {
     if (!user) return; // ユーザーが不明な場合は何もしない
 
     try {
-        await fetch(GAS_API_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'logAction',
-                user: user.email,
-                action_type: actionName,
-                details: details
-            })
-        });
+      await apiPost({
+        action: 'logAction',
+        user: user.email,
+        action: actionName,
+        details
+      });
     } catch (error) {
         console.error("Failed to write log:", error);
     }
@@ -487,9 +482,8 @@ function showToast(message, type = 'success') {
 }
 
 async function getIdTokenSafe(force = false) {
-  // 既にサインインしている前提（未サインインならあなたの既存のログインUIへ誘導）
-  const user = firebase.auth().currentUser || await new Promise(resolve => {
-    const un = firebase.auth().onAuthStateChanged(u => { un(); resolve(u); });
+  const user = auth.currentUser || await new Promise(resolve => {
+    const un = onAuthStateChanged(auth, u => { un(); resolve(u); });
   });
   if (!user) throw new Error('Not signed in');
   return await user.getIdToken(force);
