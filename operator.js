@@ -38,10 +38,11 @@ const actionButtons = ['btn-display', 'btn-answered', 'btn-edit'].map(id => docu
 const selectedInfo = document.getElementById('selected-info');
 
 // --- 状態管理変数 ---
+let allQuestions = []; // 全ての質問を保持する配列
+let allLogs = [];
+let currentTab = 'normal'; // 現在表示中のタブ ('normal' or 'puq')
 let selectedRowData = null;
 let lastDisplayedUid = null;
-let allQuestions = []; // 全ての質問を保持する配列
-let currentTab = 'normal'; // 現在表示中のタブ ('normal' or 'puq')
 
 // --- イベントリスナーの設定 ---
 document.getElementById('login-button').addEventListener('click', login);
