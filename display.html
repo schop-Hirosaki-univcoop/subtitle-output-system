@@ -8,8 +8,8 @@
     :root{
       --neon-a: #00eaff;    /* シアン系 */
       --neon-b: #ff2a6d;    /* マゼンタ系 */
-      --seat-bg1: rgba(4,7,12,.50);   /* 座布団の濃いめグラデ上 */
-      --seat-bg2: rgba(3,5,9,.62);    /* 座布団の濃いめグラデ下 */
+      --seat-bg1: rgba(4,7,12,.76);   /* 座布団の濃いめグラデ上 */
+      --seat-bg2: rgba(3,5,9,.82);    /* 座布団の濃いめグラデ下 */
       --seat-border: rgba(255,255,255,.10);
       --radius: 18px;
       --shadow: 0 22px 48px rgba(0,0,0,.38);
@@ -44,6 +44,8 @@
       border: 1px solid var(--seat-border);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
+      backdrop-filter: blur(14px) saturate(150%);
+      -webkit-backdrop-filter: blur(14px) saturate(150%);
       overflow: hidden;
       padding: 1.5vh 2.5vw;
     }
@@ -87,9 +89,13 @@
       font-weight: 700;
       font-size: calc(90vw / 25.7);
       line-height: 1.2;
+      -webkit-text-stroke: 0.6px rgba(0,0,0,.55);
       text-shadow:
-        0 1px 0 rgba(0,0,0,.45),
-        0 0 6px rgba(0,234,255,.20);
+        1px 0 0 rgba(0,0,0,.55), -1px 0 0 rgba(0,0,0,.55),
+        0 1px 0 rgba(0,0,0,.55),  0 -1px 0 rgba(0,0,0,.55),
+        1px 1px 0 rgba(0,0,0,.45), 1px -1px 0 rgba(0,0,0,.45),
+        -1px 1px 0 rgba(0,0,0,.45), -1px -1px 0 rgba(0,0,0,.45),
+        0 0 8px rgba(0,234,255,.18);
       margin: 2px 0 6px;
       letter-spacing: .01em;
     }
@@ -115,11 +121,14 @@
       line-break: strict;           /* 日本語の禁則寄り */
       overflow-wrap: anywhere;      /* 英数や句読点が続いても崩れにくく */
       color: #fff;
+      -webkit-text-stroke: 1px rgba(0,0,0,.65);
       text-shadow:
-        0 0 1px rgba(255,255,255,.9),
-        0 0 6px rgba(0,234,255,.35),
-        0 0 14px rgba(0,234,255,.25),
-        0 0 28px rgba(255,42,109,.18);
+        1.2px 0 0 rgba(0,0,0,.70),  -1.2px 0 0 rgba(0,0,0,.70),
+        0 1.2px 0 rgba(0,0,0,.70),   0 -1.2px 0 rgba(0,0,0,.70),
+        1.2px 1.2px 0 rgba(0,0,0,.60), 1.2px -1.2px 0 rgba(0,0,0,.60),
+        -1.2px 1.2px 0 rgba(0,0,0,.60), -1.2px -1.2px 0 rgba(0,0,0,.60),
+        0 0 10px rgba(0,234,255,.22),
+        0 0 20px rgba(255,42,109,.16);
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       margin-top: auto;
@@ -133,19 +142,25 @@
     }
     @media (prefers-reduced-motion: no-preference){
       #telop-canvas .telop-box::after{
-        animation: neonPulse 3.6s ease-in-out infinite;
+        animation: neonPulse 5s ease-in-out infinite;
       }
       @keyframes neonPulse{
         0%, 100% { opacity:.40; }
-        12%      { opacity:.55; }
-        16%      { opacity:.30; } /* 一瞬だけ落とす→点滅風 */
-        22%      { opacity:.50; }
-        60%      { opacity:.43; }
+        15%      { opacity:.48; }
+        20%      { opacity:.36; }
+        55%      { opacity:.44; }
       }
     }
     /* ルビ（任意） */
     ruby { ruby-position: under; }
-    rt   { font-size: .5em; line-height: 1; }
+    rt   {
+      font-size: .5em; line-height: 1;
+      color:#e8f2ff;
+      -webkit-text-stroke: 0.4px rgba(0,0,0,.55);
+      text-shadow:
+        0.8px 0 0 rgba(0,0,0,.45), -0.8px 0 0 rgba(0,0,0,.45),
+        0 0.8px 0 rgba(0,0,0,.45),  0 -0.8px 0 rgba(0,0,0,.45);
+    }
   </style>
 </head>
 <body>
