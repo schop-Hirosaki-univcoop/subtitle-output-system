@@ -15,6 +15,40 @@ th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
 tr.selected-row { background-color: #cce5ff !important; }
 tr.now-displaying { background-color: #d4edda; font-weight: bold; }
 
+/* メインタブ */
+#main-tab-buttons {
+    display: flex;
+    gap: 5px;
+    border-bottom: 2px solid #dee2e6;
+    margin-bottom: 10px;
+}
+.main-tab-button {
+    padding: 8px 15px; border: none; background-color: transparent;
+    cursor: pointer; font-size: 16px;
+    border-bottom: 2px solid transparent; margin-bottom: -2px;
+}
+.main-tab-button.active {
+    font-weight: bold; color: #007bff; border-bottom-color: #007bff;
+}
+
+/* サブタブ */
+#sub-tab-buttons {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.sub-tab-button {
+    padding: 5px 10px; border: 1px solid #ccc; background-color: #f8f9fa;
+    cursor: pointer; font-size: 14px; border-radius: 4px;
+}
+.sub-tab-button.active {
+    background-color: #007bff; color: white; border-color: #007bff;
+}
+
+/* タブコンテンツの表示/非表示 */
+.main-tab-content { display: none; }
+.main-tab-content.active { display: block; }
+
 /* 操作パネル */
 #action-panel {
     position: fixed; bottom: 0; left: 0; width: 100%;
