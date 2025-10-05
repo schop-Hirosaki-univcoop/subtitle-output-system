@@ -296,8 +296,13 @@ async function handleAnswered() {
 }
 async function updateStatusOnServer(uids, isAnswered, isSelectingUpdate = false, selectingUid = null) {
     try {
-        const action = isSelectingUpdate ? 'updateSelectingStatus' : 'batchUpdateStatus';
-        const payload = isSelectingUpdate ? { action, uid: selectingUid } : { action, uids, status: isAnswered };
+        const action = isSelectingUpdate
+          ? (selectingUid === -1 ? 'clearSelectingStatus' : 'updateSelectingStatus')
+          : 'batchUpdateStatus';
+        const payload =
+          action === 'updateSelectingStatus'   ? { action, uid: selectingUid } :
+          action === 'clearSelectingStatus'    ? { action } :
+                                                 { action, uids, status: isAnswered };
         const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify(payload) });
         const result = await response.json();
         if (result.success) {
