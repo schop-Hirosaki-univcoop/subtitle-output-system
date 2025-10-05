@@ -3,54 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Telop Operator</title>
-    <style>
-        body { font-family: sans-serif; padding: 20px; margin-bottom: 80px; }
-        #login-container { text-align: center; margin-top: 50px; }
-        #main-container { display: flex; gap: 40px; }
-        #user-info { position: fixed; top: 10px; right: 20px; font-size: 14px; z-index: 100; }
-        .panel { flex: 1; }
-        table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        #questions-table tbody tr { cursor: pointer; }
-        #questions-table tbody tr:hover { background-color: #f5f5f5; }
-        tr.selected-row { background-color: #cce5ff !important; }
-        tr.answered { background-color: #e0e0e0; color: #888; }
-        tr.disabled { text-decoration: line-through; color: #999; }
-        #add-term-form { display: flex; gap: 10px; margin-top: 10px; }
-        tr.now-displaying { background-color: #d4edda; font-weight: bold; }
-        #action-panel {
-            position: fixed; bottom: 0; left: 0; width: 100%;
-            background-color: #f8f9fa; border-top: 1px solid #dee2e6;
-            padding: 15px 20px; box-sizing: border-box;
-            display: flex; align-items: center; gap: 15px; z-index: 99;
-        }
-        #action-panel button { padding: 8px 15px; font-size: 14px; }
-        #action-panel #selected-info { font-size: 14px; color: #6c757d; }
-        @keyframes flash-success {
-            0% { background-color: #77dd77; } 100% { background-color: #d4edda; }
-        }
-        .flash { animation: flash-success 1.2s ease-out; }
-        #tab-buttons {
-            display: flex;
-            gap: 5px;
-            border-bottom: 2px solid #dee2e6;
-            margin-bottom: 10px;
-        }
-        .tab-button {
-            padding: 8px 15px;
-            border: none;
-            background-color: transparent;
-            cursor: pointer;
-            font-size: 16px;
-            border-bottom: 2px solid transparent;
-            margin-bottom: -2px; /* 下線を重ねるため */
-        }
-        .tab-button.active {
-            font-weight: bold;
-            color: #007bff;
-            border-bottom-color: #007bff;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -58,30 +11,43 @@
 
     <div id="login-container">
         <h2>テロップ操作パネル ログイン</h2>
-        <button onclick="login()">Googleアカウントでログイン</button>
+        <button id="login-button">Googleアカウントでログイン</button>
     </div>
 
     <div id="main-container" style="display: none;">
         <div class="panel" id="questions-panel">
             <h1>テロップ操作パネル</h1>
             <div id="tab-buttons">
-                <button class="tab-button active" onclick="switchTab('normal')">通常質問</button>
-                <button class="tab-button" onclick="switchTab('puq')">Pick Up Question</button>
-                <button onclick="fetchQuestions()">手動更新</button>
+                <button class="tab-button active" data-tab="normal">通常質問</button>
+                <button class="tab-button" data-tab="puq">Pick Up Question</button>
+                <button class="tab-button" data-tab="logs">操作ログ</button>
+                <button id="manual-update-button">手動更新</button>
             </div>
             <div id="tab-contents">
-                <table id="questions-table">
-                    <thead>
-                        <tr><th>ラジオネーム</th><th>質問・お悩み</th><th>ステータス</th></tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
+                <div class="tab-content active" id="tab-normal">
+                    <table id="questions-table">
+                        <thead>
+                            <tr><th>ラジオネーム</th><th>質問・お悩み</th><th>ステータス</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="tab-content" id="tab-puq">
+                    </div>
+                <div class="tab-content" id="tab-logs">
+                    <table id="logs-table">
+                        <thead>
+                            <tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </div>
         <div class="panel" id="dictionary-panel">
             <h2>ルビ辞書管理</h2>
-            <button onclick="fetchDictionary()">辞書を更新</button>
-            <form id="add-term-form" onsubmit="addTerm(event)">
+            <button id="fetch-dictionary-button">辞書を更新</button>
+            <form id="add-term-form">
                 <input type="text" id="new-term" placeholder="単語" required>
                 <input type="text" id="new-ruby" placeholder="ルビ" required>
                 <button type="submit">追加</button>
@@ -96,360 +62,13 @@
     </div>
     
     <div id="action-panel" style="display: none;">
-        <button id="btn-display" onclick="handleDisplay()" disabled>表示</button>
-        <button id="btn-answered" onclick="handleAnswered()" disabled>回答済にする</button>
-        <button id="btn-edit" onclick="handleEdit()" disabled>編集</button>
-        <button onclick="clearTelop()">テロップを消去</button>
+        <button id="btn-display" disabled>表示</button>
+        <button id="btn-answered" disabled>回答済にする</button>
+        <button id="btn-edit" disabled>編集</button>
+        <button id="btn-clear">テロップを消去</button>
         <span id="selected-info">行を選択してください</span>
-    </div>   
-
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getDatabase, ref, set, remove, get, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-
-        // headに貼り付けたconfig情報をここにも記述
-        const firebaseConfig = {
-            apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
-            authDomain: "subtitle-output-system-9bc14.firebaseapp.com",
-            databaseURL: "https://subtitle-output-system-9bc14-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "subtitle-output-system-9bc14",
-            storageBucket: "subtitle-output-system-9bc14.firebasestorage.app",
-            messagingSenderId: "378400426909",
-            appId: "1:378400426909:web:f1549aad61e3f7aacebd74"
-        };
-
-        const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec'; 
-
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
-        const auth = getAuth(app);
-        const provider = new GoogleAuthProvider();
-        const telopRef = ref(database, 'currentTelop');
-        const updateTriggerRef = ref(database, 'update_trigger'); // 'update_trigger' を参照
-        const loginContainer = document.getElementById('login-container');
-        const mainContainer = document.getElementById('main-container');
-        const actionPanel = document.getElementById('action-panel');
-        const userInfo = document.getElementById('user-info');
-        const questionsTableBody = document.querySelector('#questions-table tbody');
-        const dictionaryTableBody = document.querySelector('#dictionary-table tbody');
-        const actionButtons = ['btn-display', 'btn-answered', 'btn-edit'].map(id => document.getElementById(id));
-        const selectedInfo = document.getElementById('selected-info');
-        let selectedRowData = null;
-        let lastDisplayedUid = null;
-        let allQuestions = []; // 全ての質問を保持する配列
-        let currentTab = 'normal'; // 現在表示中のタブ ('normal' or 'puq')
-
-        // --- ▼▼▼ ログイン処理の心臓部 ▼▼▼ ---
-        // ログイン状態の変化を監視する
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                // ログイン成功後、まずユーザー権限をチェック
-                try {
-                    const response = await fetch(`${GAS_API_URL}?sheet=users`);
-                    const result = await response.json();
-
-                    if (result.success && result.data) {
-                        // ★★★★★ 'メールアドレス' の部分は、あなたの users シートのカラム名に合わせてください ★★★★★
-                        const authorizedUsers = result.data.map(item => item['メールアドレス']); 
-
-                        if (authorizedUsers.includes(user.email)) {
-                            loginContainer.style.display = 'none';
-                            mainContainer.style.display = 'flex';
-                            actionPanel.style.display = 'flex';
-                            userInfo.innerHTML = `${user.displayName} (${user.email}) <button onclick="logout()">ログアウト</button>`;
-                            fetchQuestions();
-                            fetchDictionary();
-                            onValue(updateTriggerRef, (snapshot) => {
-                                if (snapshot.exists()) { fetchQuestions(); }
-                            });
-                        } else {
-                            // --- 権限NGの場合の処理 ---
-                            alert("あなたのアカウントはこのシステムへのアクセスが許可されていません。");
-                            logout();
-                        }
-                    } else {
-                        alert("ユーザー権限の確認に失敗しました。");
-                        logout();
-                    }
-                } catch (error) {
-                    console.error("Authorization check failed:", error);
-                    alert("ユーザー権限の確認中にエラーが発生しました。");
-                    logout();
-                }
-            } else {
-                // --- ログアウト時の処理 ---
-                loginContainer.style.display = 'block';
-                mainContainer.style.display = 'none';
-                actionPanel.style.display = 'none';
-                userInfo.innerHTML = '';
-                // データベースの変更監視を停止
-                off(updateTriggerRef);
-            }
-        });
-
-        // ログイン処理
-        async function login() {
-            try {
-                await signInWithPopup(auth, provider);
-            } catch (error) {
-                console.error("Login failed:", error);
-                alert("ログインに失敗しました。");
-            }
-        }
-
-        // ログアウト処理
-        async function logout() {
-            try {
-                await signOut(auth);
-            } catch (error) {
-                console.error("Logout failed:", error);
-            }
-        }
-        
-        // --- 質問関連の関数 ---
-        async function fetchQuestions() {
-            try {
-                const response = await fetch(`${GAS_API_URL}?sheet=answer`);
-                const result = await response.json();
-                if (result.success) {
-                    allQuestions = result.data; // 取得した全質問を保持
-                    renderQuestions(); // リストの描画処理を呼び出す
-                }
-            } catch (error) { console.error('通信エラーが発生しました: ' + error.message); }
-        }
-        
-        // 保持しているデータから、現在のタブに応じたリストを描画する関数
-        async function renderQuestions() {
-            // 表示する質問をフィルタリング
-            const questionsToRender = allQuestions.filter(item => {
-                const isPuq = item['ラジオネーム'] === 'Pick Up Question';
-                return currentTab === 'puq' ? isPuq : !isPuq;
-            });
-            // Firebaseから現在のテロップ情報を一度だけ取得
-            const snapshot = await get(telopRef);
-            const currentTelop = snapshot.val();
-        
-            const currentSelectedUid = selectedRowData ? selectedRowData.uid : null;
-            questionsTableBody.innerHTML = '';
-            
-            questionsToRender.forEach(item => {
-               const tr = document.createElement('tr');
-               tr.addEventListener('click', () => {
-                   document.querySelectorAll('#questions-table tbody tr').forEach(row => row.classList.remove('selected-row'));
-                   tr.classList.add('selected-row');
-                   selectedRowData = { uid: item['UID'], name: item['ラジオネーム'], question: item['質問・お悩み'] };
-                   actionButtons.forEach(btn => btn.disabled = false);
-                   selectedInfo.textContent = `選択中: ${escapeHtml(item['ラジオネーム'])}`;
-               });
-               if (item['回答済'] === true) { tr.classList.add('answered'); }
-               if (currentTelop && currentTelop.name === item['ラジオネーム'] && currentTelop.question === item['質問・お悩み']) {
-                   tr.classList.add('now-displaying');
-                   if (lastDisplayedUid === item['UID']) {
-                       tr.classList.add('flash');
-                       tr.addEventListener('animationend', () => tr.classList.remove('flash'), { once: true });
-                       lastDisplayedUid = null;
-                   }
-               }
-               const statusText = item['選択中'] === true ? '表示中' : (item['回答済'] === true ? '回答済' : '未回答');
-               tr.innerHTML = `<td>${escapeHtml(item['ラジオネーム'])}</td><td>${escapeHtml(item['質問・お悩み'])}</td><td>${statusText}</td>`;
-               questionsTableBody.appendChild(tr);
-            });
-            
-            // 行選択をリセットする処理
-            if (!questionsToRender.some(item => item.UID === currentSelectedUid)) {
-               selectedRowData = null;
-               actionButtons.forEach(btn => btn.disabled = true);
-               selectedInfo.textContent = '行を選択してください';
-            }
-        }
-        async function handleDisplay() {
-            if (!selectedRowData) return;
-            try {
-                await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateSelectingStatus', uid: selectedRowData.uid }) });
-                await set(telopRef, { name: selectedRowData.name, question: selectedRowData.question });
-                logAction('DISPLAY', `RN: ${selectedRowData.name}`);
-                lastDisplayedUid = selectedRowData.uid;
-                fetchQuestions();
-            } catch (error) { alert('エラー: ' + error.message); }
-        }
-        async function handleAnswered() {
-            if (!selectedRowData) return;
-            if (!confirm(`「${selectedRowData.name}」の質問を「回答済」にしますか？`)) return;
-            try {
-                const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateStatus', uid: selectedRowData.uid, status: true }) });
-                const result = await response.json();
-                if (result.success) {
-                   logAction('SET_ANSWERED', `UID: ${selectedRowData.uid}`);
-                   fetchQuestions();
-                } else { alert('更新失敗: ' + result.error); }
-            } catch (error) { alert('通信エラー: ' + error.message); }
-        }
-        async function handleEdit() {
-            if (!selectedRowData) return;
-            const newText = prompt("質問内容を編集してください：", selectedRowData.question);
-            if (newText === null || newText.trim() === selectedRowData.question.trim()) return;
-            try {
-                const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'editQuestion', uid: selectedRowData.uid, newText: newText.trim() }) });
-                const result = await response.json();
-                if (result.success) {
-                    logAction('EDIT', `UID: ${selectedRowData.uid}`);
-                    alert('質問を更新しました。');
-                    fetchQuestions();
-                } else { alert('更新失敗: ' + result.error); }
-            } catch (error) { alert('通信エラー: ' + error.message); }
-        }
-        async function clearTelop() {
-            try {
-                // UID: -1 を送ることで、GAS側で全てのフラグをクリアさせる
-                await fetch(GAS_API_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({ action: 'updateSelectingStatus', uid: -1 })
-                });
-                // localStorage.removeItem の代わりにFirebaseから削除する
-                await remove(telopRef);
-                logAction('CLEAR');
-                fetchQuestions();
-            } catch(error) {
-                alert('ステータスのクリア中にエラーが発生しました: ' + error.message);
-            }
-        }
-
-        function switchTab(tabName) {
-            currentTab = tabName;
-            // ボタンのアクティブ状態を切り替え
-            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-            document.querySelector(`.tab-button[onclick="switchTab('${tabName}')"]`).classList.add('active');
-            // 現在のタブに合わせてリストを再描画
-            renderQuestions();
-        }
-
-        // ログをGASに送信するヘルパー関数
-        async function logAction(actionName, details = '') {
-            const user = auth.currentUser;
-            if (!user) return; // ユーザーが不明な場合は何もしない
-        
-            try {
-                await fetch(GAS_API_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        action: 'logAction',
-                        user: user.email,
-                        action_type: actionName,
-                        details: details
-                    })
-                });
-            } catch (error) {
-                console.error("Failed to write log:", error);
-            }
-        }
-        
-        // --- 辞書関連の関数 ---
-        async function fetchDictionary() {
-            try {
-                const response = await fetch(`${GAS_API_URL}?sheet=dictionary`);
-                const result = await response.json();
-                if (result.success) {
-                    dictionaryTableBody.innerHTML = '';
-                    result.data.forEach(item => {
-                        const tr = document.createElement('tr');
-                        if (!item.enabled) {
-                            tr.classList.add('disabled');
-                        }
-                        tr.innerHTML = `
-                            <td>${escapeHtml(item.term)}</td>
-                            <td>${escapeHtml(item.ruby)}</td>
-                            <td>${item.enabled ? '有効' : '無効'}</td>
-                            <td>
-                                <button onclick="toggleTerm('${escapeHtml(item.term)}', ${!item.enabled})">${item.enabled ? '無効にする' : '有効にする'}</button>
-                                <button onclick="deleteTerm('${escapeHtml(item.term)}')">削除</button>
-                            </td>
-                        `;
-                        dictionaryTableBody.appendChild(tr);
-                    });
-                }
-            } catch (error) {
-                alert('辞書の取得に失敗: ' + error.message);
-            }
-        }
-
-        async function addTerm(event) {
-            event.preventDefault();
-            const term = newTermInput.value.trim();
-            const ruby = newRubyInput.value.trim();
-            if (!term || !ruby) return;
-
-            try {
-                const response = await fetch(GAS_API_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({ action: 'addTerm', term: term, ruby: ruby })
-                });
-                const result = await response.json();
-                if (result.success) {
-                    newTermInput.value = '';
-                    newRubyInput.value = '';
-                    fetchDictionary();
-                } else {
-                    alert('追加失敗: ' + result.error);
-                }
-            } catch (error) {
-                alert('通信エラー: ' + error.message);
-            }
-        }
-
-        async function deleteTerm(term) {
-            if (!confirm(`「${term}」を辞書から削除しますか？`)) return;
-            try {
-                const response = await fetch(GAS_API_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({ action: 'deleteTerm', term: term })
-                });
-                const result = await response.json();
-                if (result.success) {
-                    fetchDictionary();
-                } else {
-                    alert('削除失敗: ' + result.error);
-                }
-            } catch (error) {
-                alert('通信エラー: ' + error.message);
-            }
-        }
-
-        async function toggleTerm(term, newStatus) {
-            try {
-                const response = await fetch(GAS_API_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({ action: 'toggleTerm', term: term, enabled: newStatus })
-                });
-                const result = await response.json();
-                if (result.success) {
-                    fetchDictionary();
-                } else {
-                    alert('状態の更新失敗: ' + result.error);
-                }
-            } catch (error) {
-                alert('通信エラー: ' + error.message);
-            }
-        }
-
-        // --- 共通関数 & 初期化処理 ---
-        function escapeHtml(str) {
-            if (typeof str !== 'string') return '';
-            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-        }
-        
-        window.login = login;
-        window.logout = logout;
-        window.fetchQuestions = fetchQuestions;
-        window.handleDisplay = handleDisplay;
-        window.handleAnswered = handleAnswered;
-        window.handleEdit = handleEdit;
-        window.clearTelop = clearTelop;
-        window.switchTab = switchTab;
-        window.fetchDictionary = fetchDictionary;
-        window.addTerm = addTerm;
-        window.toggleTerm = toggleTerm;
-        window.deleteTerm = deleteTerm;
-    </script>
+    </div>
+    
+    <script type="module" src="operator.js"></script>
 </body>
 </html>
