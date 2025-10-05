@@ -47,11 +47,15 @@
       margin: 2px 0 6px;
       letter-spacing: .01em;
     }
-
-    #RN {
-      font-size: calc(90vw / 32);
+    #radio-name::before{
+      content: "ラジオネーム:";
+      font-size: calc(90vw / 32); /* 小さめ */
+      margin-right: .4em;
+      color: #cfe3ff;
+      font-weight: 700;
     }
-    
+    #radio-name.no-label::before{ content:none; }
+
     /* ─ ここが“1行23文字”の肝 ─
        23ic（CJK全角23文字幅）に固定。非対応ブラウザは 23em にフォールバック。 */
     #question {
@@ -140,8 +144,13 @@
 
             if (telopData) {
                 // データが存在する場合、テロップを表示
-                radioNameEl.textContent = `<span id='RN'>ラジオネーム:</span> ${telopData.name}`;
+                radioNameEl.textContent = telopData.name || '';
                 questionEl.innerHTML = applyRuby(telopData.question);
+                // "Pick Up Question" 判定（大小・空白差を吸収）
+                function isPickup(n){
+                  return String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
+                }
+                radioNameEl.classList.toggle('no-label', isPickup(name));
             } else {
                 // データがnull（削除された）場合、テロップを消去
                 radioNameEl.textContent = '';
