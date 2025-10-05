@@ -273,7 +273,8 @@ function applyLogFilters(arr){
     const user    = String(row.User    ?? row.user    ?? row['ユーザー'] ?? '').toLowerCase();
     const action  = String(row.Action  ?? row.action  ?? row['アクション'] ?? '').toLowerCase();
     const details = String(row.Details ?? row.details ?? row['詳細'] ?? '').toLowerCase();
-    return tsText.includes(q)||user.includes(q)||action.includes(q)||details.includes(q);
+    const level   = getLogLevel(row).toLowerCase();
+    return tsText.includes(q)||user.includes(q)||action.includes(q)||details.includes(q)||level.includes(q);
   });
 }
 function renderLogsStream(rows){
@@ -287,18 +288,16 @@ function renderLogsStream(rows){
     const user = String(log.User ?? '');
     const action = String(log.Action ?? '');
     const details = String(log.Details ?? '');
-    const actionLower = action.toLowerCase();
-    const actionClass =
-      actionLower.includes('display') ? 'display' :
-      actionLower.includes('clear')   ? 'clear'   :
-      actionLower.includes('edit')    ? 'edit'    :
-      actionLower.includes('answer')  ? 'answer'  : '';
+    const level = getLogLevel(log);      // ★ レベル判定
+    const levelCls = `lvl-${level}`;     // log-line 用クラス
     const line = document.createElement('div');
-    line.className = 'log-line';
-    line.innerHTML = `<span class="ts">[${escapeHtml(tsText)}]</span> ` +
-                     `<span class="badge user">@${escapeHtml(user)}</span> ` +
-                     `<span class="badge action ${actionClass}">${escapeHtml(action.toUpperCase())}</span> ` +
-                     `<span class="details">${escapeHtml(details)}</span>`;
+    line.className = `log-line ${levelCls}`;
+    line.innerHTML =
+      `<span class="ts">[${escapeHtml(tsText)}]</span> ` +
+      `<span class="badge level ${escapeHtml(level)}">${escapeHtml(level.toUpperCase())}</span> ` +
+      `<span class="badge user">@${escapeHtml(user)}</span> ` +
+      `<span class="badge action">${escapeHtml(action.toUpperCase())}</span> ` +
+      `<span class="details">${escapeHtml(details)}</span>`;
     dom.logStream.appendChild(line);
   }
   if (state.autoScrollLogs) dom.logStream.scrollTop = dom.logStream.scrollHeight;
@@ -611,4 +610,25 @@ function pickDetails(obj){
   }
   for (const [k,v] of Object.entries(map)) if (k.includes('detail')) return v;
   return '';
+}
+
+function getLogLevel(log){
+  const a = String(log.Action || '').toLowerCase();
+  const d = String(log.Details || '').toLowerCase();
+
+  // 明確なエラー語やHTTPエラーコード
+  if (/(error|failed|exception|timeout|unauthorized|forbidden|denied)/.test(a+d)) return 'error';
+  if (/\b5\d{2}\b|\b4\d{2}\b/.test(d)) return 'error';
+
+  // データ破壊・クリア系は注意喚起
+  if (/(delete|clear|remove|reset|unanswer)/.test(a)) return 'warn';
+
+  // 成功系（送出・回答更新・編集・追加 など）
+  if (/(display|send|answer|set_answered|batch_set_answered|edit|add|toggle|update)/.test(a)) return 'success';
+
+  // 取得系・ログ書き込みなどは情報レベル
+  if (/(fetch|read|log|whoami)/.test(a)) return 'info';
+
+  // デフォルト
+  return 'info';
 }
