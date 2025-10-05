@@ -4,6 +4,18 @@
   <meta charset="UTF-8" />
   <title>Telop Display</title>
   <style>
+    /* ====== Modern look (visual-only) ====== */
+    :root{
+      --text: #fff;
+      --muted: #cfe3ff;
+      --glass-bg: rgba(10,14,22,.55);
+      --glass-border: rgba(255,255,255,.1);
+      --glass-blur: 12px;
+      --radius: 16px;
+      --shadow: 0 20px 40px rgba(0,0,0,.35);
+      --accent1: #7c3aed; /* 紫 */
+      --accent2: #22d3ee; /* シアン */
+    }
     /* 画面下部・全幅・16:9 の #telop-canvas を固定 */
     html, body {
       height: 100%;
@@ -24,17 +36,43 @@
       background: transparent;      /* 背景は箱側に付ける */
       font-family: "Noto Sans JP","Hiragino Sans","Meiryo",system-ui,sans-serif;
     }
-
+    /* さりげないビネット（奥行き） */
+    #telop-canvas::before{
+      content:""; position:absolute; inset:0; pointer-events:none;
+      background: radial-gradient(120% 120% at 50% 120%,
+                   transparent 0%, transparent 40%, rgba(0,0,0,.25) 100%);
+    }
+    
     /* テロップの箱（左揃えのブロックを中央配置） */
     #telop-canvas .telop-box{
+      position: relative;
       display: inline-block;
       text-align: left;             /* 行は左揃え */
       width:95%;
-      background: rgba(0,0,0,.65);
-      border: 1px solid rgba(255,255,255,.08);
-      border-radius: 14px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+      overflow: hidden;
       padding: 1.5vh 2.5vw;
-      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    /* グラデのアウトライン（うっすら） */
+    #telop-canvas .telop-box::before{
+      content:"";
+      position:absolute; inset:0; border-radius: inherit; padding:1px;
+      background: linear-gradient(135deg, var(--accent1), var(--accent2));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+      pointer-events:none; opacity:.25;
+    }
+    /* 斜めの光沢 */
+    #telop-canvas .telop-box::after{
+      content:""; position:absolute; inset:-60%;
+      background: conic-gradient(from 200deg at 50% 50%, rgba(255,255,255,.08), transparent 40%);
+      transform: rotate(8deg);
+      pointer-events:none; mix-blend-mode: overlay; opacity:.5;
     }
 
     /* 見出し（任意） */
@@ -43,15 +81,16 @@
       font-weight: 700;
       font-size: calc(90vw / 25.7);
       line-height: 1.2;
-      color: #cfe3ff;
+      color: var(--muted);
+      text-shadow: 0 1px 0 rgba(0,0,0,.4);
       margin: 2px 0 6px;
       letter-spacing: .01em;
     }
     #radio-name::before{
       content: "ラジオネーム:";
       font-size: calc(90vw / 32); /* 小さめ */
-      margin-right: .4em;
-      color: #cfe3ff;
+      margin-right: .5em;
+      color: var(--muted);
       font-weight: 700;
     }
     #radio-name.no-label::before{ content:none; }
@@ -67,10 +106,19 @@
       white-space: normal;
       line-break: strict;           /* 日本語の禁則寄り */
       overflow-wrap: anywhere;      /* 英数や句読点が続いても崩れにくく */
-      color: #fff;
+      color: var(--text);
+      text-shadow: 0 2px 12px rgba(0,0,0,.45);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
       margin-top: auto;
     }
-
+    
+    /* 入れ替え時に“ふわっ”と表示（任意） */
+    .animate-in{ animation: fadeSlideUp .28s ease-out both; }
+    @keyframes fadeSlideUp{
+      from{ opacity:0; transform: translateY(8px) scale(.995); }
+      to  { opacity:1; transform: translateY(0)   scale(1); }
+    }
     /* ルビ（任意） */
     ruby { ruby-position: under; }
     rt   { font-size: .5em; line-height: 1; }
@@ -149,6 +197,9 @@
                 questionEl.innerHTML = applyRuby(telopData.question);
                 const isPickup = (n) => String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
                 radioNameEl.classList.toggle('no-label', isPickup(name));
+                [radioNameEl, questionEl].forEach(el=>{
+                  el.classList.remove('animate-in'); void el.offsetWidth; el.classList.add('animate-in');
+                });
             } else {
                 // データがnull（削除された）場合、テロップを消去
                 radioNameEl.textContent = '';
