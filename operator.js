@@ -250,21 +250,19 @@ async function renderQuestions() {
 }
 function renderLogs() {
   dom.logsTableBody.innerHTML = '';
-  const rows = state.allLogs.slice().reverse();
-  rows.forEach(log => {
+  state.allLogs.slice().reverse().forEach(log => {
     const rawTs = log.Timestamp ?? log.timestamp ?? log['時刻'] ?? log['タイムスタンプ'] ?? '';
     const d = parseLogTimestamp(rawTs);
-    const tsText = d
-      ? d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
-      : (rawTs ? String(rawTs) : '');
-    const user = log.User ?? log.user ?? log['ユーザー'] ?? '';
-    const action = log.Action ?? log.action ?? log['アクション'] ?? '';
+    const tsText = d ? d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : (rawTs ? String(rawTs) : '');
+    const user    = log.User    ?? log.user    ?? log['ユーザー'] ?? '';
+    const action  = log.Action  ?? log.action  ?? log['アクション'] ?? '';
     const details = log.Details ?? log.details ?? log['詳細'] ?? '';
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${escapeHtml(tsText)}</td><td>${escapeHtml(user)}</td><td>${escapeHtml(action)}</td><td>${escapeHtml(details)}</td>`;
     dom.logsTableBody.appendChild(tr);
   });
 }
+
 
 function parseLogTimestamp(ts) {
   if (ts == null) return null;
