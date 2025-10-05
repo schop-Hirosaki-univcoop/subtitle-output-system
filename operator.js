@@ -249,12 +249,49 @@ async function renderQuestions() {
     updateBatchButtonVisibility();
 }
 function renderLogs() {
-    dom.logsTableBody.innerHTML = '';
-    state.allLogs.slice().reverse().forEach(log => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${new Date(log.Timestamp).toLocaleString('ja-JP')}</td><td>${escapeHtml(log.User)}</td><td>${escapeHtml(log.Action)}</td><td>${escapeHtml(log.Details)}</td>`;
-        dom.logsTableBody.appendChild(tr);
-    });
+  dom.logsTableBody.innerHTML = '';
+  const rows = state.allLogs.slice().reverse();
+  rows.forEach(log => {
+    const rawTs = log.Timestamp ?? log.timestamp ?? log['時刻'] ?? log['タイムスタンプ'] ?? '';
+    const d = parseLogTimestamp(rawTs);
+    const tsText = d
+      ? d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+      : (rawTs ? String(rawTs) : '');
+    const user = log.User ?? log.user ?? log['ユーザー'] ?? '';
+    const action = log.Action ?? log.action ?? log['アクション'] ?? '';
+    const details = log.Details ?? log.details ?? log['詳細'] ?? '';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(tsText)}</td><td>${escapeHtml(user)}</td><td>${escapeHtml(action)}</td><td>${escapeHtml(details)}</td>`;
+    dom.logsTableBody.appendChild(tr);
+  });
+}
+
+function parseLogTimestamp(ts) {
+  if (ts == null) return null;
+  if (ts instanceof Date && !isNaN(ts)) return ts;
+  if (typeof ts === 'number') {
+    if (ts > 1e12) return new Date(ts);        // epoch ms
+    if (ts > 1e10) return new Date(ts * 1000); // epoch sec
+    // Excel 序数 (1899-12-30起点)
+    const ms = (ts - 25569) * 86400 * 1000;
+    return new Date(ms);
+  }
+  if (typeof ts === 'string') {
+    let s = ts.trim();
+    if (!s) return null;
+    // 2025/10/05 12:34:56 → Safari 対策
+    if (/^\d{4}\/\d{1,2}\/\d{1,2}/.test(s)) {
+      const [dPart, tPart='00:00:00'] = s.split(' ');
+      const [y,m,d] = dPart.split('/').map(Number);
+      const [hh=0,mm=0,ss=0] = tPart.split(':').map(Number);
+      return new Date(y, m-1, d, hh, mm, ss);
+    }
+    // 2025-10-05 12:34:56 → T 挿入
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) s = s.replace(' ', 'T');
+    const d = new Date(s);
+    if (!isNaN(d)) return d;
+  }
+  return null;
 }
 
 // --- 操作関数 ---
