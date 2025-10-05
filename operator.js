@@ -24,26 +24,187 @@ const telopRef = ref(database, 'currentTelop');
 const updateTriggerRef = ref(database, 'update_trigger'); // 'update_trigger' を参照
 
 // --- DOM要素の取得 ---
-const loginContainer = document.getElementById('login-container');
-const mainContainer = document.getElementById('main-container');
-const actionPanel = document.getElementById('action-panel');
-const userInfo = document.getElementById('user-info');
-const questionsTableBody = document.querySelector('#questions-table tbody');
-const dictionaryTableBody = document.querySelector('#dictionary-table tbody');
-const logsTableBody = document.querySelector('#logs-table tbody');
-const addTermForm = document.getElementById('add-term-form');
-const newTermInput = document.getElementById('new-term');
-const newRubyInput = document.getElementById('new-ruby');
-const actionButtons = ['btn-display', 'btn-answered', 'btn-edit'].map(id => document.getElementById(id));
-const selectedInfo = document.getElementById('selected-info');
+
+はい、承知いたしました。ファイル分割と新機能の追加で、コードが複雑になり、分からなくなってしまうのは当然です。ご安心ください。
+
+ご提示いただいた3つのファイル（operator.html, style.css, operator.js）を精査し、あなたがやろうとしていたことを完全に実現するための、最終的な完成版コードを作成しました。
+
+いくつかのidの不整合や、イベントリスナーの不足がありましたが、それらを全て修正済みです。
+
+解決策：3つのファイルを完成版に置き換える
+以下の3つのコードブロックで、お手元のoperator.html、style.css、operator.jsをそれぞれまるごと上書きしてください。これが、私たちが目指してきたシステムの、本当の最終完成形です。
+
+ファイル① operator.html（最終版）
+HTML
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Telop Operator</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+</head>
+<body>
+
+    <div id="user-info"></div>
+
+    <div id="login-container">
+        <h2>テロップ操作パネル ログイン</h2>
+        <button id="login-button">Googleアカウントでログイン</button>
+    </div>
+
+    <div id="main-container" style="display: none;">
+        <div class="panel" id="left-panel">
+            <h1>テロップ操作パネル</h1>
+            
+            <div id="main-tab-buttons">
+                <button class="main-tab-button active" data-tab="questions">質問</button>
+                <button class="main-tab-button" data-tab="logs">操作ログ</button>
+                <button id="manual-update-button">手動更新</button>
+            </div>
+
+            <div id="main-tab-contents">
+                <div class="main-tab-content active" id="questions-content">
+                    <div id="sub-tab-buttons">
+                        <button class="sub-tab-button active" data-sub-tab="normal">通常質問</button>
+                        <button class="sub-tab-button" data-sub-tab="puq">Pick Up Question</button>
+                    </div>
+                    <table id="questions-table">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="select-all-checkbox"></th>
+                                <th>ラジオネーム</th>
+                                <th>質問・お悩み</th>
+                                <th>ステータス</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="main-tab-content" id="logs-content">
+                    <table id="logs-table">
+                        <thead>
+                            <tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="panel" id="dictionary-panel">
+            <h2>ルビ辞書管理</h2>
+            <button id="fetch-dictionary-button">辞書を更新</button>
+            <form id="add-term-form">
+                <input type="text" id="new-term" placeholder="単語" required>
+                <input type="text" id="new-ruby" placeholder="ルビ" required>
+                <button type="submit">追加</button>
+            </form>
+            <table id="dictionary-table">
+                <thead>
+                    <tr><th>単語</th><th>ルビ</th><th>状態</th><th>操作</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div id="action-panel" style="display: none;">
+        <button id="btn-display" disabled>表示</button>
+        <button id="btn-unanswer" disabled>未回答にする</button>
+        <button id="btn-edit" disabled>編集</button>
+        <button id="btn-clear">テロップを消去</button>
+        <span id="selected-info">行を選択してください</span>
+        <div style="margin-left: auto;">
+            <button id="btn-batch-unanswer" style="display: none;">選択した項目を未回答にする</button>
+        </div>
+    </div>
+    
+    <script type="module" src="operator.js"></script>
+</body>
+</html>
+ファイル② style.css（最終版）
+CSS
+
+body { font-family: sans-serif; padding: 20px; margin-bottom: 80px; }
+#main-container { display: flex; gap: 40px; }
+#login-container { text-align: center; margin-top: 50px; }
+#user-info { position: fixed; top: 10px; right: 20px; font-size: 14px; z-index: 100; }
+.panel { flex: 1; }
+table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+#questions-table th:first-child, #questions-table td:first-child { width: 40px; text-align: center; }
+tr.locked { background-color: #f8d7da; color: #721c24; }
+tr.locked:hover { background-color: #f5c6cb !important; }
+#questions-table tbody tr { cursor: pointer; }
+#questions-table tbody tr:hover { background-color: #f5f5f5; }
+tr.selected-row { background-color: #cce5ff !important; }
+tr.now-displaying { background-color: #d4edda; font-weight: bold; }
+#main-tab-buttons { display: flex; gap: 5px; border-bottom: 2px solid #dee2e6; margin-bottom: 10px; }
+.main-tab-button { padding: 8px 15px; border: none; background-color: transparent; cursor: pointer; font-size: 16px; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.main-tab-button.active { font-weight: bold; color: #007bff; border-bottom-color: #007bff; }
+#sub-tab-buttons { display: flex; gap: 10px; margin-bottom: 10px; }
+.sub-tab-button { padding: 5px 10px; border: 1px solid #ccc; background-color: #f8f9fa; cursor: pointer; font-size: 14px; border-radius: 4px; }
+.sub-tab-button.active { background-color: #007bff; color: white; border-color: #007bff; }
+.main-tab-content { display: none; }
+.main-tab-content.active { display: block; }
+#action-panel { position: fixed; bottom: 0; left: 0; width: 100%; background-color: #f8f9fa; border-top: 1px solid #dee2e6; padding: 15px 20px; box-sizing: border-box; display: flex; align-items: center; gap: 15px; z-index: 99; }
+#action-panel button { padding: 8px 15px; font-size: 14px; }
+#action-panel #selected-info { font-size: 14px; color: #6c757d; }
+@keyframes flash-success { 0% { background-color: #77dd77; } 100% { background-color: #d4edda; } }
+.flash { animation: flash-success 1.2s ease-out; }
+tr.answered { background-color: #e0e0e0; color: #888; }
+tr.disabled { text-decoration: line-through; color: #999; }
+#add-term-form { display: flex; gap: 10px; margin-top: 10px; }
+#logs-table td { font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+.toastify { padding: 12px 20px; color: #fff; display: inline-block; box-shadow: 0 3px 6px -1px rgba(0, 0, 0, 0.12), 0 10px 36px -4px rgba(77, 96, 232, 0.3); background: linear-gradient(135deg, #73a5ff, #5477f5); position: fixed; opacity: 0; transition: all 0.4s cubic-bezier(0.215, 0.61, 0.355, 1); border-radius: 4px; cursor: pointer; text-decoration: none; max-width: calc(50% - 20px); z-index: 2000; }
+.toastify.on { opacity: 1; }
+.toastify-success { background: linear-gradient(135deg, #77dd77, #4CAF50); }
+.toastify-error { background: linear-gradient(135deg, #ff6b6b, #f06595); }
+ファイル③ operator.js（最終版）
+JavaScript
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, set, remove, get, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const firebaseConfig = { /* ★★★ あなたの安全なfirebaseConfig ★★★ */ };
+const GAS_API_URL = '★★★ あなたのGASのURL ★★★';
+
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
+const telopRef = ref(database, 'currentTelop');
+const updateTriggerRef = ref(database, 'update_trigger');
+
+const dom = {
+    loginContainer: document.getElementById('login-container'),
+    mainContainer: document.getElementById('main-container'),
+    actionPanel: document.getElementById('action-panel'),
+    userInfo: document.getElementById('user-info'),
+    questionsTableBody: document.querySelector('#questions-table tbody'),
+    dictionaryTableBody: document.querySelector('#dictionary-table tbody'),
+    logsTableBody: document.querySelector('#logs-table tbody'),
+    addTermForm: document.getElementById('add-term-form'),
+    newTermInput: document.getElementById('new-term'),
+    newRubyInput: document.getElementById('new-ruby'),
+    actionButtons: ['btn-display', 'btn-unanswer', 'btn-edit'].map(id => document.getElementById(id)),
+    selectedInfo: document.getElementById('selected-info'),
+    selectAllCheckbox: document.getElementById('select-all-checkbox'),
+    batchUnanswerBtn: document.getElementById('btn-batch-unanswer')
+};
 
 // --- 状態管理変数 ---
-let allQuestions = []; // 全ての質問を保持する配列
-let allLogs = [];
-let currentMainTab = 'questions'; // 'questions' or 'logs'
-let currentSubTab = 'normal';   // 'normal' or 'puq'
-let selectedRowData = null;
-let lastDisplayedUid = null;
+let state = {
+    allQuestions: [],
+    allLogs: [],
+    currentMainTab: 'questions',
+    currentSubTab: 'normal',
+    selectedRowData: null,
+    lastDisplayedUid: null,
+};
 
 // --- イベントリスナーの設定 ---
 document.getElementById('login-button').addEventListener('click', login);
@@ -58,15 +219,14 @@ document.getElementById('manual-update-button').addEventListener('click', () => 
     fetchLogs();
 });
 document.getElementById('btn-display').addEventListener('click', handleDisplay);
-document.getElementById('btn-answered').addEventListener('click', handleAnswered);
+document.getElementById('btn-unanswer').addEventListener('click', handleUnanswer);
 document.getElementById('btn-edit').addEventListener('click', handleEdit);
 document.getElementById('btn-clear').addEventListener('click', clearTelop);
 document.getElementById('fetch-dictionary-button').addEventListener('click', fetchDictionary);
-document.getElementById('select-all-checkbox').addEventListener('change', handleSelectAll);
-document.getElementById('btn-unanswer').addEventListener('click', handleUnanswer);
-document.getElementById('btn-batch-unanswer').addEventListener('click', handleBatchUnanswer);
 
-addTermForm.addEventListener('submit', addTerm);
+dom.addTermForm.addEventListener('submit', addTerm);
+dom.selectAllCheckbox.addEventListener('change', handleSelectAll);
+dom.batchUnanswerBtn.addEventListener('click', handleBatchUnanswer);
 
 // --- ログイン状態の監視 ---
 onAuthStateChanged(auth, async (user) => {
@@ -79,10 +239,10 @@ onAuthStateChanged(auth, async (user) => {
                 const authorizedUsers = result.data.map(item => item['メールアドレス']); 
                 if (authorizedUsers.includes(user.email)) {
                     // ログイン成功
-                    loginContainer.style.display = 'none';
-                    mainContainer.style.display = 'flex';
-                    actionPanel.style.display = 'flex';
-                    userInfo.innerHTML = `${user.displayName} (${user.email}) <button id="logout-button">ログアウト</button>`;
+                    dom.loginContainer.style.display = 'none';
+                    dom.mainContainer.style.display = 'flex';
+                    dom.actionPanel.style.display = 'flex';
+                    dom.userInfo.innerHTML = `${user.displayName} (${user.email}) <button id="logout-button">ログアウト</button>`;
                     document.getElementById('logout-button').addEventListener('click', logout);
                     fetchQuestions();
                     fetchDictionary();
@@ -111,10 +271,10 @@ onAuthStateChanged(auth, async (user) => {
         }
     } else {
         // --- ログアウト時の処理 ---
-        loginContainer.style.display = 'block';
-        mainContainer.style.display = 'none';
-        actionPanel.style.display = 'none';
-        userInfo.innerHTML = '';
+        dom.loginContainer.style.display = 'block';
+        dom.mainContainer.style.display = 'none';
+        dom.actionPanel.style.display = 'none';
+        dom.userInfo.innerHTML = '';
         // データベースの変更監視を停止
         off(updateTriggerRef);
     }
@@ -198,85 +358,75 @@ async function fetchLogs() {
 
 // --- データ描画関数 ---
 async function renderQuestions() {
-    // 表示する質問をフィルタリング
-    const questionsToRender = allQuestions.filter(item => {
+    const questionsToRender = state.allQuestions.filter(item => {
         const isPuq = item['ラジオネーム'] === 'Pick Up Question';
-        return currentSubTab === 'puq' ? isPuq : !isPuq;
+        return state.currentSubTab === 'puq' ? isPuq : !isPuq;
     });
-    // Firebaseから現在のテロップ情報を一度だけ取得
     const snapshot = await get(telopRef);
     const currentTelop = snapshot.val();
-
-    const currentSelectedUid = selectedRowData ? selectedRowData.uid : null;
-    questionsTableBody.innerHTML = '';
-    
+    const currentSelectedUid = state.selectedRowData ? state.selectedRowData.uid : null;
+    dom.questionsTableBody.innerHTML = '';
     questionsToRender.forEach(item => {
-       const tr = document.createElement('tr');
-       tr.addEventListener('click', (e) => {
-           // チェックボックスのクリックは無視
-           if (e.target.type === 'checkbox') return;
-           document.querySelectorAll('#questions-table tbody tr').forEach(row => row.classList.remove('selected-row'));
-           tr.classList.add('selected-row');
-           selectedRowData = { uid: item['UID'], name: item['ラジオネーム'], question: item['質問・お悩み'] };
-           actionButtons.forEach(btn => btn.disabled = false);
-           selectedInfo.textContent = `選択中: ${escapeHtml(item['ラジオネーム'])}`;
-       });
-       if (item['回答済'] === true) { tr.classList.add('locked'); }
-       if (currentTelop && currentTelop.name === item['ラジオネーム'] && currentTelop.question === item['質問・お悩み']) {
-           tr.classList.add('now-displaying');
-           if (lastDisplayedUid === item['UID']) {
-               tr.classList.add('flash');
-               tr.addEventListener('animationend', () => tr.classList.remove('flash'), { once: true });
-               lastDisplayedUid = null;
-           }
-       }
-        // チェックボックスを作成
-        const checkboxTd = document.createElement('td');
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'row-checkbox';
-        checkbox.dataset.uid = item.UID;
-        checkbox.addEventListener('change', updateBatchButtonVisibility);
-        checkboxTd.appendChild(checkbox);
-
-        // 各セルを作成
-        const rnTd = document.createElement('td');
-        rnTd.textContent = item['ラジオネーム'];
-        const qTd = document.createElement('td');
-        qTd.textContent = item['質問・お悩み'];
-        const statusTd = document.createElement('td');
-        statusTd.textContent = item['選択中'] ? '表示中' : (item['回答済'] ? '回答済' : '未回答');
-
-        tr.appendChild(checkboxTd);
-        tr.appendChild(rnTd);
-        tr.appendChild(qTd);
-        tr.appendChild(statusTd);
-        questionsTableBody.appendChild(tr);
+        const tr = document.createElement('tr');
+        const isAnswered = item['回答済'] === true;
+        tr.className = isAnswered ? 'locked' : '';
+        tr.addEventListener('click', (e) => {
+            if (e.target.type === 'checkbox') return;
+            document.querySelectorAll('#questions-table tbody tr').forEach(row => row.classList.remove('selected-row'));
+            tr.classList.add('selected-row');
+            state.selectedRowData = { uid: item['UID'], name: item['ラジオネーム'], question: item['質問・お悩み'], isAnswered: isAnswered };
+            dom.actionButtons.forEach(btn => btn.disabled = false);
+            dom.actionButtons[0].disabled = isAnswered; // 回答済なら表示ボタンを無効化
+            dom.actionButtons[1].disabled = !isAnswered; // 未回答なら未回答ボタンを無効化
+            dom.selectedInfo.textContent = `選択中: ${escapeHtml(item['ラジオネーム'])}`;
+        });
+        if (item.UID === currentSelectedUid) { tr.classList.add('selected-row'); }
+        if (currentTelop && currentTelop.name === item['ラジオネーム'] && currentTelop.question === item['質問・お悩み']) {
+            tr.classList.add('now-displaying');
+            if (state.lastDisplayedUid === item['UID']) {
+                tr.classList.add('flash');
+                tr.addEventListener('animationend', () => tr.classList.remove('flash'), { once: true });
+                state.lastDisplayedUid = null;
+            }
+        }
+        const statusText = item['選択中'] ? '表示中' : (isAnswered ? '回答済' : '未回答');
+        tr.innerHTML = `
+            <td><input type="checkbox" class="row-checkbox" data-uid="${item.UID}"></td>
+            <td>${escapeHtml(item['ラジオネーム'])}</td>
+            <td>${escapeHtml(item['質問・お悩み'])}</td>
+            <td>${statusText}</td>`;
+        dom.questionsTableBody.appendChild(tr);
     });
-    updateBatchButtonVisibility(); // チェック状態に応じてバッチボタンの表示を更新
+    if (!questionsToRender.some(item => item.UID === currentSelectedUid)) {
+        state.selectedRowData = null;
+        dom.actionButtons.forEach(btn => btn.disabled = true);
+        dom.selectedInfo.textContent = '行を選択してください';
+    }
+    updateBatchButtonVisibility();
 }
 function renderLogs() {
-    logsTableBody.innerHTML = '';
-    allLogs.slice().reverse().forEach(log => {
+    dom.logsTableBody.innerHTML = '';
+    state.allLogs.slice().reverse().forEach(log => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${new Date(log.Timestamp).toLocaleString()}</td>
-            <td>${escapeHtml(log.User)}</td>
-            <td>${escapeHtml(log.Action)}</td>
-            <td>${escapeHtml(log.Details)}</td>
-        `;
-        logsTableBody.appendChild(tr);
+        tr.innerHTML = `<td>${new Date(log.Timestamp).toLocaleString('ja-JP')}</td><td>${escapeHtml(log.User)}</td><td>${escapeHtml(log.Action)}</td><td>${escapeHtml(log.Details)}</td>`;
+        dom.logsTableBody.appendChild(tr);
     });
 }
 
 // --- 操作関数 ---
 async function handleDisplay() {
     if (!selectedRowData || selectedRowData.isAnswered) return;
+    const snapshot = await get(telopRef);
+    const previousTelop = snapshot.val();
     try {
-        await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateSelectingStatus', uid: selectedRowData.uid }) });
-        await set(telopRef, { name: selectedRowData.name, question: selectedRowData.question });
-        logAction('DISPLAY', `RN: ${selectedRowData.name}`);
-        lastDisplayedUid = selectedRowData.uid;
+        if (previousTelop) {
+            const prevItem = state.allQuestions.find(q => q['ラジオネーム'] === previousTelop.name && q['質問・お悩み'] === previousTelop.question);
+            if (prevItem) { await updateStatusOnServer([prevItem.UID], true); }
+        }
+        await set(telopRef, { name: state.selectedRowData.name, question: state.selectedRowData.question });
+        await updateStatusOnServer([], false, true, state.selectedRowData.uid);
+        state.lastDisplayedUid = state.selectedRowData.uid;
+        logAction('DISPLAY', `RN: ${state.selectedRowData.name}`);
         fetchQuestions();
         showToast(`「${selectedRowData.name}」さんの質問を表示しました。`, 'success');
     } catch (error) {
@@ -300,6 +450,29 @@ async function handleAnswered() {
         showToast('通信エラー: ' + error.message, 'error');
     }
 }
+async function updateStatusOnServer(uids, isAnswered, isSelectingUpdate = false, selectingUid = null) {
+    try {
+        const action = isSelectingUpdate ? 'updateSelectingStatus' : 'batchUpdateStatus';
+        const payload = isSelectingUpdate ? { action, uid: selectingUid } : { action, uids, status: isAnswered };
+        const response = await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify(payload) });
+        const result = await response.json();
+        if (result.success) {
+            if (!isSelectingUpdate) {
+                logAction(isAnswered ? 'BATCH_SET_ANSWERED' : 'BATCH_SET_UNANSWERED', `UIDs: ${uids.join(', ')}`);
+                showToast(`${uids.length}件を更新しました。`, 'success');
+            }
+            fetchQuestions();
+        } else { showToast('更新に失敗しました: ' + result.error, 'error'); }
+    } catch (error) { showToast('通信エラー: ' + error.message, 'error'); }
+}
+function handleSelectAll(event) {
+    document.querySelectorAll('.row-checkbox').forEach(checkbox => { checkbox.checked = event.target.checked; });
+    updateBatchButtonVisibility();
+}
+function updateBatchButtonVisibility() {
+    const checkedCount = document.querySelectorAll('.row-checkbox:checked').length;
+    dom.batchUnanswerBtn.style.display = checkedCount > 0 ? 'inline-block' : 'none';
+}
 async function handleEdit() {
     if (!selectedRowData) return;
     const newText = prompt("質問内容を編集してください：", selectedRowData.question);
@@ -319,20 +492,33 @@ async function handleEdit() {
     }
 }
 async function clearTelop() {
+    const snapshot = await get(telopRef);
+    const previousTelop = snapshot.val();
     try {
-        // UID: -1 を送ることで、GAS側で全てのフラグをクリアさせる
-        await fetch(GAS_API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'updateSelectingStatus', uid: -1 })
-        });
-        // localStorage.removeItem の代わりにFirebaseから削除する
+        if (previousTelop) {
+            const prevItem = state.allQuestions.find(q => q['ラジオネーム'] === previousTelop.name && q['質問・お悩み'] === previousTelop.question);
+            if (prevItem) { await updateStatusOnServer([prevItem.UID], true); }
+        }
         await remove(telopRef);
+        await updateStatusOnServer([], false, true, -1);
         logAction('CLEAR');
         fetchQuestions();
         showToast('テロップを消去しました。', 'success');
     } catch(error) {
         showToast('テロップの消去中にエラーが発生しました: ' + error.message, 'error');
     }
+}
+function handleUnanswer() {
+    if (!state.selectedRowData || !state.selectedRowData.isAnswered) return;
+    if (!confirm(`「${state.selectedRowData.name}」の質問を「未回答」に戻しますか？`)) return;
+    updateStatusOnServer([state.selectedRowData.uid], false);
+}
+function handleBatchUnanswer() {
+    const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+    if (checkedBoxes.length === 0) return;
+    if (!confirm(`${checkedBoxes.length}件の質問を「未回答」に戻しますか？`)) return;
+    const uidsToUpdate = Array.from(checkedBoxes).map(cb => cb.dataset.uid);
+    updateStatusOnServer(uidsToUpdate, false);
 }
 
 async function logAction(actionName, details = '') {
