@@ -10,6 +10,21 @@ body {
 .panel { flex: 1; }
 table { border-collapse: collapse; width: 100%; margin-top: 10px; }
 th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+/* チェックボックス列の幅を固定 */
+#questions-table th:first-child,
+#questions-table td:first-child {
+    width: 40px;
+    text-align: center;
+}
+
+/* ロックされた（回答済の）行のスタイル */
+tr.locked {
+    background-color: #f8d7da; /* 薄い赤色 */
+    color: #721c24;
+}
+tr.locked:hover {
+    background-color: #f5c6cb !important;
+}
 #questions-table tbody tr { cursor: pointer; }
 #questions-table tbody tr:hover { background-color: #f5f5f5; }
 tr.selected-row { background-color: #cce5ff !important; }
