@@ -405,19 +405,13 @@ function handleBatchUnanswer() {
 }
 
 async function logAction(actionName, details = '') {
-    const user = auth.currentUser;
-    if (!user) return; // ユーザーが不明な場合は何もしない
-
-    try {
-      await apiPost({
-        action: 'logAction',
-        user: user.email,
-        action: actionName,
-        details
-      });
-    } catch (error) {
-        console.error("Failed to write log:", error);
-    }
+  try {
+    await apiPost({
+      action: 'logAction',   // ← ディスパッチ用
+      action_type: actionName, // ← 保存したい「操作名」
+      details
+    });
+  } catch(e){ console.error('Failed to write log:', e); }
 }
 
 // --- 辞書関連の関数 ---
