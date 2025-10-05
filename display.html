@@ -144,12 +144,10 @@
 
             if (telopData) {
                 // データが存在する場合、テロップを表示
-                radioNameEl.textContent = telopData.name || '';
+                const name = telopData?.name || '';
+                radioNameEl.textContent = name;
                 questionEl.innerHTML = applyRuby(telopData.question);
-                // "Pick Up Question" 判定（大小・空白差を吸収）
-                function isPickup(n){
-                  return String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
-                }
+                const isPickup = (n) => String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
                 radioNameEl.classList.toggle('no-label', isPickup(name));
             } else {
                 // データがnull（削除された）場合、テロップを消去
