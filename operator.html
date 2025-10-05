@@ -33,7 +33,10 @@
                     </div>
                     <table id="questions-table">
                         <thead>
-                            <tr><th>ラジオネーム</th><th>質問・お悩み</th><th>ステータス</th></tr>
+                            <th><input type="checkbox" id="select-all-checkbox"></th>
+                            <th>ラジオネーム</th>
+                            <th>質問・お悩み</th>
+                            <th>ステータス</th>
                         </thead>
                         <tbody></tbody>
                     </table>
@@ -67,10 +70,10 @@
     
     <div id="action-panel" style="display: none;">
         <button id="btn-display" disabled>表示</button>
-        <button id="btn-answered" disabled>回答済にする</button>
-        <button id="btn-edit" disabled>編集</button>
+        <button id="btn-unanswer" disabled>未回答にする</button> <button id="btn-edit" disabled>編集</button>
         <button id="btn-clear">テロップを消去</button>
         <span id="selected-info">行を選択してください</span>
+        <div style="margin-left: auto;"> <button id="btn-batch-unanswer" style="display: none;">選択した項目を未回答にする</button>
     </div>
     
     <script type="module" src="operator.js"></script>
