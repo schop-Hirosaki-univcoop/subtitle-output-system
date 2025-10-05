@@ -30,6 +30,10 @@ const actionPanel = document.getElementById('action-panel');
 const userInfo = document.getElementById('user-info');
 const questionsTableBody = document.querySelector('#questions-table tbody');
 const dictionaryTableBody = document.querySelector('#dictionary-table tbody');
+const logsTableBody = document.querySelector('#logs-table tbody');
+const addTermForm = document.getElementById('add-term-form');
+const newTermInput = document.getElementById('new-term');
+const newRubyInput = document.getElementById('new-ruby');
 const actionButtons = ['btn-display', 'btn-answered', 'btn-edit'].map(id => document.getElementById(id));
 const selectedInfo = document.getElementById('selected-info');
 
