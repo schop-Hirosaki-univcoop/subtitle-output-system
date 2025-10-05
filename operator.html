@@ -42,12 +42,26 @@
                     </table>
                 </div>
                 <div class="main-tab-content" id="logs-content">
-                    <table id="logs-table">
+                    <!-- ▼ ツールバー -->
+                    <div id="logs-toolbar" style="display:flex;gap:12px;align-items:center;margin:8px 0;">
+                      <label><input type="radio" name="log-view" value="table" checked> 表</label>
+                      <label><input type="radio" name="log-view" value="stream"> ストリーム</label>
+                      <input id="log-search" placeholder="検索 (user/action/details)" style="flex:1;max-width:340px;">
+                      <label style="margin-left:auto;"><input type="checkbox" id="log-autoscroll" checked> 自動スクロール</label>
+                    </div>
+                    <!-- ▼ 表ビュー -->
+                    <div id="logs-table-view">
+                      <table id="logs-table">
                         <thead>
-                            <tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th></tr>
+                          <tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th></tr>
                         </thead>
                         <tbody></tbody>
-                    </table>
+                      </table>
+                    </div>
+                    <!-- ▼ ストリームビュー -->
+                    <div id="logs-stream-view" style="display:none;">
+                      <div id="log-stream" class="log-stream"></div>
+                    </div>
                 </div>
             </div>
         </div>
