@@ -62,6 +62,10 @@ document.getElementById('btn-answered').addEventListener('click', handleAnswered
 document.getElementById('btn-edit').addEventListener('click', handleEdit);
 document.getElementById('btn-clear').addEventListener('click', clearTelop);
 document.getElementById('fetch-dictionary-button').addEventListener('click', fetchDictionary);
+document.getElementById('select-all-checkbox').addEventListener('change', handleSelectAll);
+document.getElementById('btn-unanswer').addEventListener('click', handleUnanswer);
+document.getElementById('btn-batch-unanswer').addEventListener('click', handleBatchUnanswer);
+
 addTermForm.addEventListener('submit', addTerm);
 
 // --- ログイン状態の監視 ---
@@ -208,14 +212,16 @@ async function renderQuestions() {
     
     questionsToRender.forEach(item => {
        const tr = document.createElement('tr');
-       tr.addEventListener('click', () => {
+       tr.addEventListener('click', (e) => {
+           // チェックボックスのクリックは無視
+           if (e.target.type === 'checkbox') return;
            document.querySelectorAll('#questions-table tbody tr').forEach(row => row.classList.remove('selected-row'));
            tr.classList.add('selected-row');
            selectedRowData = { uid: item['UID'], name: item['ラジオネーム'], question: item['質問・お悩み'] };
            actionButtons.forEach(btn => btn.disabled = false);
            selectedInfo.textContent = `選択中: ${escapeHtml(item['ラジオネーム'])}`;
        });
-       if (item['回答済'] === true) { tr.classList.add('answered'); }
+       if (item['回答済'] === true) { tr.classList.add('locked'); }
        if (currentTelop && currentTelop.name === item['ラジオネーム'] && currentTelop.question === item['質問・お悩み']) {
            tr.classList.add('now-displaying');
            if (lastDisplayedUid === item['UID']) {
@@ -224,17 +230,30 @@ async function renderQuestions() {
                lastDisplayedUid = null;
            }
        }
-       const statusText = item['選択中'] === true ? '表示中' : (item['回答済'] === true ? '回答済' : '未回答');
-       tr.innerHTML = `<td>${escapeHtml(item['ラジオネーム'])}</td><td>${escapeHtml(item['質問・お悩み'])}</td><td>${statusText}</td>`;
-       questionsTableBody.appendChild(tr);
+        // チェックボックスを作成
+        const checkboxTd = document.createElement('td');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'row-checkbox';
+        checkbox.dataset.uid = item.UID;
+        checkbox.addEventListener('change', updateBatchButtonVisibility);
+        checkboxTd.appendChild(checkbox);
+
+        // 各セルを作成
+        const rnTd = document.createElement('td');
+        rnTd.textContent = item['ラジオネーム'];
+        const qTd = document.createElement('td');
+        qTd.textContent = item['質問・お悩み'];
+        const statusTd = document.createElement('td');
+        statusTd.textContent = item['選択中'] ? '表示中' : (item['回答済'] ? '回答済' : '未回答');
+
+        tr.appendChild(checkboxTd);
+        tr.appendChild(rnTd);
+        tr.appendChild(qTd);
+        tr.appendChild(statusTd);
+        questionsTableBody.appendChild(tr);
     });
-    
-    // 行選択をリセットする処理
-    if (!questionsToRender.some(item => item.UID === currentSelectedUid)) {
-       selectedRowData = null;
-       actionButtons.forEach(btn => btn.disabled = true);
-       selectedInfo.textContent = '行を選択してください';
-    }
+    updateBatchButtonVisibility(); // チェック状態に応じてバッチボタンの表示を更新
 }
 function renderLogs() {
     logsTableBody.innerHTML = '';
@@ -252,7 +271,7 @@ function renderLogs() {
 
 // --- 操作関数 ---
 async function handleDisplay() {
-    if (!selectedRowData) return;
+    if (!selectedRowData || selectedRowData.isAnswered) return;
     try {
         await fetch(GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateSelectingStatus', uid: selectedRowData.uid }) });
         await set(telopRef, { name: selectedRowData.name, question: selectedRowData.question });
