@@ -141,3 +141,22 @@ tr.disabled { text-decoration: line-through; color: #999; }
 .toastify-error {
     background: linear-gradient(135deg, #ff6b6b, #f06595);
 }
+
+/* --- log stream --- */
+.log-stream{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background:#0b1020; color:#eaeef8;
+  border-radius:8px; padding:12px;
+  height:360px; overflow:auto; border:1px solid #16213a;
+}
+.log-line{ white-space:pre-wrap; line-height:1.45; padding:2px 0; border-bottom:1px solid rgba(255,255,255,.06); }
+.log-line:last-child{ border-bottom:none; }
+.log-line .ts{ color:#9fb3c8; margin-right:8px; }
+.badge{ display:inline-block; padding:0 6px; border-radius:999px; font-size:12px; margin-right:6px; background:#334155; color:#cde; }
+.badge.user{ background:#243a5a; }
+.badge.action{ background:#3b4252; }
+.badge.action.display{ background:#2563eb; }
+.badge.action.clear{ background:#ef4444; }
+.badge.action.edit{ background:#10b981; }
+.badge.action.answer{ background:#f59e0b; }
+.details{ color:#eaeef8; }
