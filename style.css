@@ -160,3 +160,17 @@ tr.disabled { text-decoration: line-through; color: #999; }
 .badge.action.edit{ background:#10b981; }
 .badge.action.answer{ background:#f59e0b; }
 .details{ color:#eaeef8; }
+
+/* --- log levels --- */
+.badge.level{ background:#334155; color:#cde; }
+.badge.level.info{ background:#3b4252; }
+.badge.level.success{ background:#155e75; }  /* teal系 */
+.badge.level.warn{ background:#7c3aed; }     /* purple系（見やすさ重視） */
+.badge.level.error{ background:#991b1b; }    /* red系 */
+.badge.level.debug{ background:#475569; }
+
+.log-line.lvl-info{    border-left:3px solid #64748b; }
+.log-line.lvl-success{ border-left:3px solid #14b8a6; }
+.log-line.lvl-warn{    border-left:3px solid #a78bfa; }
+.log-line.lvl-error{   border-left:3px solid #ef4444; background:rgba(239,68,68,.05); }
+.log-line.lvl-debug{   border-left:3px solid #94a3b8; opacity:.95; }
