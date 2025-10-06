@@ -35,12 +35,20 @@
       src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2");
       font-weight: 900; font-style: normal; font-display: swap;
     }
-    /* H-KL（質問本文用）— 単独ファミリーとして登録 */
+    /* H-KL（質問本文用）
+       → 日本語だけを担当させ、英数字は通常の P にフォールバックさせる */
     @font-face{
       font-family: "GenEiGothicP-HKL";
       src: url("/assets/fonts/genei-gothic/GenEiGothicP-H-KL.woff2") format("woff2");
       font-weight: 400; font-style: normal; font-display: swap;
+      unicode-range:
+        U+3000-303F,      /* CJK記号・句読点 */
+        U+3040-309F,      /* ひらがな */
+        U+30A0-30FF,      /* カタカナ */
+        U+4E00-9FFF,      /* CJK統合漢字 */
+        U+FF01-FF60, U+FFE0-FFE6; /* 全角英数・記号 */
     }
+
     /* ====== Modern look (visual-only) ====== */
     :root{
       --neon-a: #00eaff;    /* シアン系 */
