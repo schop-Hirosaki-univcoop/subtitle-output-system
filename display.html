@@ -94,7 +94,7 @@
         0 0 10px color-mix(in srgb, var(--neon-a, #39f) 65%, transparent),
         0 0 20px color-mix(in srgb, var(--neon-b, #9f3) 45%, transparent);
       pointer-events: none;                     /* 操作対象ではないため */
-      z-index: 3;
+      z-index: 1;
     }
     
     /* ラッパ（タブ＋本文をまとめてスケール） */
@@ -108,6 +108,7 @@
     /* 本文の座布団（中身だけ） */
     #telop-canvas .telop-box{
       position: relative;
+      z-index: 2;
       text-align: left;
       width:100%;
       background: linear-gradient(180deg, var(--seat-bg1), var(--seat-bg2));
