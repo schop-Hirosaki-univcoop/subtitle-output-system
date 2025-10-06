@@ -160,6 +160,21 @@
       #telop-canvas.show .telop-box,
       #telop-canvas.hide .telop-box{ animation: none; }
     }
+
+    /* ───────── 内容入替アニメ（テキスト行用） ───────── */
+    .text-swap-out{ animation: textOut .18s ease both; }
+    .text-swap-in { animation: textIn  .22s ease both; }
+    @keyframes textOut{
+      0%   { opacity:1; transform: translateY(0);   filter: blur(0); }
+      100% { opacity:0; transform: translateY(-6px); filter: blur(4px); }
+    }
+    @keyframes textIn{
+      0%   { opacity:0; transform: translateY(6px); filter: blur(4px); }
+      100% { opacity:1; transform: translateY(0);   filter: blur(0); }
+    }
+    @media (prefers-reduced-motion: reduce){
+      .text-swap-out, .text-swap-in{ animation:none !important; }
+    }
     
     /* 見出し（任意） */
     #radio-name {
@@ -313,6 +328,28 @@
             telopCanvas.classList.remove('hide');
           }
         });
+
+        // ─ 内容入替のための小さなユーティリティ
+        function swapText(el, setContent){
+          // 進行中のアニメをリセット
+          el.classList.remove('text-swap-in','text-swap-out');
+          void el.offsetWidth;
+          // まず旧テキストをフェードアウト
+          el.classList.add('text-swap-out');
+          el.addEventListener('animationend', () => {
+            // テキストを差し替え → フェードイン
+            setContent();
+            el.classList.remove('text-swap-out');
+            void el.offsetWidth;
+            el.classList.add('text-swap-in');
+            // 終了後にクラスを掃除
+            el.addEventListener('animationend', () => {
+              el.classList.remove('text-swap-in');
+            }, { once:true });
+          }, { once:true });
+        }
+    
+        let prevName = '', prevQuestion = '';
     
         let dictionary = [];
         const dictRef = ref(database, 'dictionary');
@@ -346,26 +383,43 @@
 
         // Firebaseの 'currentTelop' の場所の変更を監視する
         onValue(telopRef, (snapshot) => {
-          const telopData = snapshot.val() || null;
-          const name      = telopData?.name ?? '';
-          const question  = telopData?.question ?? '';
-          const hasQuestion = !!(question && question.trim().length); // 質問が空なら隠す
+          const telopData  = snapshot.val() || null;
+          const name       = telopData?.name ?? '';
+          const question   = telopData?.question ?? '';
+          const hasQuestion = !!(question && question.trim().length);
     
           if (!hasQuestion){
-            // 非表示へ（座布団ごと退場アニメ）
+            // 非表示へ（座布団ごと退場）
             hideTelop();
             radioNameEl.textContent = '';
             questionEl.innerHTML    = '';
             radioNameEl.classList.remove('no-label');
+            prevName = ''; prevQuestion = '';
             return;
           }
     
-          // 表示へ（入場アニメ）
-          radioNameEl.textContent = name;
-          questionEl.innerHTML    = applyRuby(question);
+          // ラベル制御（Pick Up Question はラベル非表示）
           const isPickup = (n) => String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
           radioNameEl.classList.toggle('no-label', isPickup(name));
-          showTelop();
+    
+          const nameChanged = name.trim() !== prevName.trim();
+          const qChanged    = question.trim() !== prevQuestion.trim();
+    
+          // 座布団自体は出す（入場アニメは showTelop が担当）
+          if (telopCanvas.classList.contains('hidden')) {
+            radioNameEl.textContent = name;
+            questionEl.innerHTML    = applyRuby(question);
+            showTelop();
+          } else {
+            // 表示中：変わったパートだけ“入替アニメ”
+            if (nameChanged){
+              swapText(radioNameEl, () => { radioNameEl.textContent = name; });
+            }
+            if (qChanged){
+              swapText(questionEl, () => { questionEl.innerHTML = applyRuby(question); });
+            }
+          }
+          prevName = name; prevQuestion = question;
         });
   </script>
 </body>
