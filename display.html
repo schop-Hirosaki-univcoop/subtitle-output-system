@@ -4,45 +4,46 @@
   <meta charset="UTF-8" />
   <title>Telop Display</title>
   <!-- 主要フォントを先読み（同一オリジン想定） -->
-  <link rel="preload" as="font" href="/assets/fonts/genei-gothic/GenEiGothicP-Bold.woff2" type="font/woff2" crossorigin>
-  <link rel="preload" as="font" href="/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2" type="font/woff2" crossorigin>
-  <link rel="preload" as="font" href="/assets/fonts/genei-gothic/GenEiGothicP-H-KL.woff2" type="font/woff2" crossorigin>  <style>
+  <link rel="preload" as="font" href="assets/fonts/genei-gothic/GenEiGothicP-Bold.woff2" type="font/woff2" crossorigin>
+  <link rel="preload" as="font" href="assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2" type="font/woff2" crossorigin>
+  <link rel="preload" as="font" href="assets/fonts/genei-gothic/GenEiGothicP-H-KL.woff2" type="font/woff2" crossorigin>
+  <style>
     /* === GenEi Gothic P / H-KL を登録（アップ済みの woff2 を使用） === */
     @font-face{
       font-family: "GenEiGothicP";
-      src: url("/assets/fonts/genei-gothic/GenEiGothicP-ExtraLight.woff2") format("woff2");
+      src: url("assets/fonts/genei-gothic/GenEiGothicP-ExtraLight.woff2") format("woff2");
       font-weight: 200; font-style: normal; font-display: swap;
     }
     @font-face{
       font-family: "GenEiGothicP";
-      src: url("/assets/fonts/genei-gothic/GenEiGothicP-Light.woff2") format("woff2");
+      src: url("assets/fonts/genei-gothic/GenEiGothicP-Light.woff2") format("woff2");
       font-weight: 300; font-style: normal; font-display: swap;
     }
     @font-face{
       font-family: "GenEiGothicP";
-      src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2");
+      src: url("assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2");
       font-weight: 400; font-style: normal; font-display: swap;
     }
     @font-face{
       font-family: "GenEiGothicP";
-      src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2");
+      src: url("assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2");
       font-weight: 600; font-style: normal; font-display: swap;
     }
     @font-face{
       font-family: "GenEiGothicP";
-      src: url("/assets/fonts/genei-gothic/GenEiGothicP-Bold.woff2") format("woff2");
+      src: url("assets/fonts/genei-gothic/GenEiGothicP-Bold.woff2") format("woff2");
       font-weight: 700; font-style: normal; font-display: swap;
     }
     @font-face{
       font-family: "GenEiGothicP";
-      src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2");
+      src: url("assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2");
       font-weight: 900; font-style: normal; font-display: swap;
     }
     /* H-KL（質問本文用）
        → 日本語だけを担当させ、英数字は通常の P にフォールバックさせる */
     @font-face{
       font-family: "GenEiGothicP-HKL";
-      src: url("/assets/fonts/genei-gothic/GenEiGothicP-H-KL.woff2") format("woff2");
+      src: url("assets/fonts/genei-gothic/GenEiGothicP-H-KL.woff2") format("woff2");
       font-weight: 400; font-style: normal; font-display: swap;
       unicode-range:
         U+3000-303F,      /* CJK記号・句読点 */
@@ -307,8 +308,6 @@
         55%      { opacity:.44; }
       }
     }
-    /* ルビ（任意） */
-    ruby { ruby-position: under; }
     rt   {
       font-size: .5em; line-height: 1;
       color:#ffffff;
