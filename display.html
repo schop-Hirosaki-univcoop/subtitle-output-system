@@ -124,7 +124,7 @@
     #telop-canvas .telop-box > .neon-underline {
       content:"";
       display: block;
-      width: 90vw;
+      width: 100%;
       height: 2px;
       margin: 9px auto;
       background: linear-gradient(90deg, var(--neon-a), var(--neon-b));
@@ -320,6 +320,10 @@
     
         // 表示/非表示の制御ヘルパ
         function showTelop(){
+          // 念のため：テキストは必ず可視状態に戻し、高さロックも解除してから入場
+          ensureTextVisible();
+          telopBox.style.height = '';
+          telopBox.style.transition = '';
           telopCanvas.classList.remove('hidden','hide');
           void telopCanvas.offsetWidth;            // アニメ再起動
           telopCanvas.classList.add('show');
