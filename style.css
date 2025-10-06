@@ -3,6 +3,21 @@ body {
     padding: 20px; 
     margin-bottom: 80px; /* 固定操作パネルの分の余白を確保 */
 }
+
+/* ==== Display 状態ランプ ==== */
+.render-indicator{ display:flex; align-items:center; gap:.5rem; }
+.lamp{
+  inline-size: .9rem; block-size: .9rem; border-radius: 9999px;
+  background: #94a3b8; /* slate-400: idle/hidden */
+  box-shadow: 0 0 0 1px rgba(0,0,0,.15) inset, 0 0 6px rgba(0,0,0,.1);
+  transition: background-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.lamp-label{ font: 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color:#475569; }
+.lamp.is-visible{ background:#10b981; box-shadow:0 0 10px #10b98166; }
+.lamp.is-showing,.lamp.is-hiding{ background:#f59e0b; box-shadow:0 0 10px #f59e0b66; }
+.lamp.is-hidden{ background:#94a3b8; }
+.lamp.is-error{ background:#ef4444; box-shadow:0 0 10px #ef444466; }
+
 #main-container { display: flex; gap: 40px; }
 #login-container { text-align: center; margin-top: 50px; }
 #user-info { position: fixed; top: 10px; right: 20px; font-size: 14px; z-index: 100; }
