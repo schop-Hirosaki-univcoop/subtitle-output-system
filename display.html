@@ -275,10 +275,9 @@
         0.8px 0 0 rgba(0,0,0,.45), -0.8px 0 0 rgba(0,0,0,.45),
         0 0.8px 0 rgba(0,0,0,.45),  0 -0.8px 0 rgba(0,0,0,.45);
     }
-    /* ─ 計測用クローン（data-probe）では一切のモーション/装飾を無効化 ─ */
+    /* 計測用クローンでは一切のモーションを無効化（高さだけ測る） */
     [data-probe],
     [data-probe] * { animation: none !important; transition: none !important; }
-    /* ネオンの飾り(疑似要素)も排除：高さ計測に不要 */
     [data-probe] .telop-box::after { content: none !important; }
   </style>
 </head>
@@ -350,40 +349,58 @@
           void el.offsetWidth; el.classList.add('text-swap-in');
           el.addEventListener('animationend', ()=> el.classList.remove('text-swap-in'), {once:true});
         }
-        /* ===== 実DOM測定版：高さモーションを確実に出す ===== */
+        /* ===== 高さを「現在→目標」にだけ補間する安定版 ===== */
         function applyTexts(next){
           // ラベル制御 → テキストの順で（疑似要素の有無が高さに効くため）
           radioNameEl.classList.toggle('no-label', next.noLabel);
           radioNameEl.textContent = next.name || '';
           questionEl.innerHTML    = applyRuby(next.question || '');
         }
-        function animateHeightDuringSwap(next){
-          // 1) 現在のレイアウト高さ(px)を固定（transform等の影響を受けない）
-          const firstH = telopBox.scrollHeight | 0;
-          telopBox.style.height = firstH + 'px';
-          telopBox.style.transition = 'none';
-          // 2) 新テキストをDOMに適用（まだ fade-out 中なので見えない）
-          applyTexts(next);
-          // 3) レイアウトを確定させてから再計測（同フレーム強制リフロー）
-          void telopBox.offsetHeight; // reflow
-          const lastH = telopBox.scrollHeight | 0;
-          const diff  = Math.abs(lastH - firstH);
-          if (!firstH || !lastH || diff < 2){
-            // 差が小さければ即時反映
+        async function fontsReady(){
+          if (!document.fonts) return;
+          if (document.fonts.status === 'loaded') return;
+          try { await document.fonts.ready; } catch(_) {}
+        }
+        function measureTargetHeight(next){
+          // 現在の幅を固定したクローンで「最終状態」を構成 → scrollHeight を測る
+          const probe = telopBox.cloneNode(true);
+          probe.removeAttribute('id');
+          probe.setAttribute('data-probe','');
+          const w = getComputedStyle(telopBox).width;
+          Object.assign(probe.style, {
+            position:'fixed', left:'-99999px', top:'0',
+            height:'auto', width:w, visibility:'hidden', pointerEvents:'none',
+            contain:'layout size style paint'
+          });
+          document.body.appendChild(probe);
+          const pName = probe.querySelector('#radio-name');
+          const pQ    = probe.querySelector('#question');
+          pName.classList.toggle('no-label', next.noLabel);
+          pName.textContent = next.name || '';
+          pQ.innerHTML      = applyRuby(next.question || '');
+          // reflowしてから測定
+          void probe.offsetHeight;
+          const target = probe.scrollHeight | 0;
+          probe.remove();
+          return target;
+        }
+        function animateHeightFromTo(fromPx, toPx){
+          const diff = Math.abs(toPx - fromPx);
+          if (!fromPx || !toPx || diff < 2){
             telopBox.style.height = ''; telopBox.style.transition = '';
             return Promise.resolve();
           }
-          // 4) 次フレームで高さにアニメを掛ける
+          // 現在高さに固定 → 次フレームで目標へ
+          telopBox.style.height = fromPx + 'px';
+          telopBox.style.transition = 'none';
           return new Promise(resolve=>{
             requestAnimationFrame(()=>{
               telopBox.style.transition = 'height 260ms cubic-bezier(.2,.7,.2,1)';
-              telopBox.style.height = lastH + 'px';
+              telopBox.style.height = toPx + 'px';
               telopBox.addEventListener('transitionend', ()=>{
-                // 5) 完了後に auto に戻す
-                telopBox.style.height = '';
-                telopBox.style.transition = '';
+                telopBox.style.height = ''; telopBox.style.transition = '';
                 resolve();
-              }, { once:true });
+              }, {once:true});
             });
           });
         }
@@ -463,8 +480,15 @@
                 // 途中でさらに新更新が来たら、この更新は棄却
                 if (myToken !== updateToken) return;
                 const next = { name, question, noLabel: willNoLabel };
-                // 実DOMで新高さを取得し、その高さへトランジション
-                await animateHeightDuringSwap(next);
+                // 1) フォント確定（計測ぶれ防止）
+                await fontsReady();
+                // 2) 目標高さを“クローン（モーション無効）”で確定
+                const fromH = telopBox.scrollHeight | 0;     // 現在の実レイアウト高さ
+                const toH   = measureTargetHeight(next);     // 最終状態の高さ（厳密）
+                // 3) 本体テキストはこの時点で差し替え（※今はフェードアウト済みで不可視）
+                applyTexts(next);
+                // 4) 高さは「from → to」にだけ補間（中間値を通る単調なモーション）
+                await animateHeightFromTo(fromH, toH);
                 if (myToken !== updateToken) return; // レース対策
                 // テキストはクロスフェードで復帰
                 if (nameChanged) fadeIn(radioNameEl);
