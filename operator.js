@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, set, update, remove, get, onValue, off, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, set, update, remove, get, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
@@ -88,11 +88,6 @@ function setLamp(phase){
     }
   });
 
-onValue(renderRef, (snap)=>{
-    const v = snap.val() || {};
-    setLamp(v.phase);
-});
-
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 const telopRef = ref(database, 'currentTelop');
@@ -145,7 +140,6 @@ document.querySelectorAll('.sub-tab-button').forEach(button => {
     button.addEventListener('click', () => switchSubTab(button.dataset.subTab));
 });
 document.getElementById('manual-update-button').addEventListener('click', () => {
-    fetchQuestions();
     fetchLogs();
 });
 document.getElementById('btn-display').addEventListener('click', handleDisplay);
@@ -194,7 +188,7 @@ onAuthStateChanged(auth, async (user) => {
                     onValue(updateTriggerRef, (snapshot) => {
                       if (!snapshot.exists()) return;
                       clearTimeout(_rtTimer);
-                      _rtTimer = setTimeout(()=>{ fetchQuestions(); fetchLogs(); }, 150);
+                      _rtTimer = setTimeout(()=>{ fetchLogs(); }, 150);
                     });
                 } else {
                     // --- 権限NG処理 ---
@@ -220,6 +214,8 @@ onAuthStateChanged(auth, async (user) => {
         dom.userInfo.innerHTML = '';
         // データベースの変更監視を停止
         off(updateTriggerRef);
+        off(questionsRef);
+        off(renderRef);
     }
 });
 
@@ -245,6 +241,7 @@ function switchSubTab(tabName) {
 
 // --- データ取得処理 ---
 function startQuestionsStream(){
+  off(questionsRef);
   onValue(questionsRef, (snap)=>{
     const m = snap.val() || {};
     // RTDB → 既存レンダの型に合わせる
@@ -438,11 +435,11 @@ async function handleDisplay() {
         if (previousTelop) {
           const prev = state.allQuestions.find(q => q['ラジオネーム'] === previousTelop.name && q['質問・お悩み'] === previousTelop.question);
           if (prev) {
-            updates[`questions/${prev['UID']}/選択中`] = false;
-            updates[`questions/${prev['UID']}/answered`] = true; // 直前のものは回答済に
+            updates[`questions/${prev['UID']}/selecting`] = false;
+            updates[`questions/${prev['UID']}/answered`] = true;
           }
         }
-        updates[`questions/${state.selectedRowData.uid}/選択中`] = true;
+        updates[`questions/${state.selectedRowData.uid}/selecting`] = true;
         updates[`questions/${state.selectedRowData.uid}/answered`] = false;
         await update(ref(database), updates);
         await set(telopRef, { name: state.selectedRowData.name, question: state.selectedRowData.question });
@@ -455,7 +452,6 @@ async function handleDisplay() {
         }
         state.lastDisplayedUid = state.selectedRowData.uid;
         logAction('DISPLAY', `RN: ${state.selectedRowData.name}`);
-        fetchQuestions();
         showToast(`「${state.selectedRowData.name}」さんの質問を表示しました。`, 'success');
     } catch (error) {
         showToast('表示処理中にエラーが発生しました: ' + error.message, 'error');
@@ -468,7 +464,6 @@ async function handleAnswered() {
         const result = await apiPost({ action: 'updateStatus', uid: state.selectedRowData.uid, status: true });
         if (result.success) {
            logAction('SET_ANSWERED', `UID: ${state.selectedRowData.uid}`);
-           fetchQuestions();
            showToast('ステータスを「回答済」に更新しました。', 'success');
         } else { 
             showToast('ステータスの更新に失敗しました: ' + result.error, 'error');
@@ -492,7 +487,6 @@ async function updateStatusOnServer(uids, isAnswered, isSelectingUpdate = false,
                 logAction(isAnswered ? 'BATCH_SET_ANSWERED' : 'BATCH_SET_UNANSWERED', `UIDs: ${uids.join(', ')}`);
                 showToast(`${uids.length}件を更新しました。`, 'success');
             }
-            fetchQuestions();
         } else { showToast('更新に失敗しました: ' + result.error, 'error'); }
     } catch (error) { showToast('通信エラー: ' + error.message, 'error'); }
 }
@@ -530,7 +524,6 @@ async function clearTelop() {
         await remove(telopRef);
         await updateStatusOnServer([], false, true, -1);
         logAction('CLEAR');
-        fetchQuestions();
         showToast('テロップを消去しました。', 'success');
     } catch(error) {
         showToast('テロップの消去中にエラーが発生しました: ' + error.message, 'error');
