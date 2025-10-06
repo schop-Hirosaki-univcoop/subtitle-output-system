@@ -477,7 +477,9 @@
           // ラベル制御（Pick Up Question はラベル非表示）※ ここでは切り替え“しない”
           const isPickup = (n) => String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
           const willNoLabel = isPickup(name);
-    
+          // ★ ここが抜けていて ReferenceError → 以降の処理が止まっていました
+          const nameChanged = name.trim() !== prevName.trim();
+          const qChanged    = question.trim() !== prevQuestion.trim();
           const labelChanged = (radioNameEl.classList.contains('no-label') !== willNoLabel);
           const nameOrLabelChanged = nameChanged || labelChanged;
           const myToken     = ++updateToken;  // 後着優先
@@ -485,6 +487,7 @@
           // 座布団自体は出す（入場アニメは showTelop が担当）
           if (telopCanvas.classList.contains('hidden')) {
             radioNameEl.textContent = name;
+            questionEl.innerHTML    = applyRuby(question);  // ★ 初回も本文を必ずセット
             // 初表示のときはラベル状態もここで整える（事前変形を防ぐ）
             radioNameEl.classList.toggle('no-label', willNoLabel);
             showTelop();
