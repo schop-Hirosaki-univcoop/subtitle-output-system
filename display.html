@@ -358,13 +358,14 @@
           questionEl.innerHTML    = applyRuby(next.question || '');
         }
         function animateHeightDuringSwap(next){
-          // 1) 現在の高さ(px)を固定（ガクッ防止）
-          const firstH = telopBox.getBoundingClientRect().height | 0;
+          // 1) 現在のレイアウト高さ(px)を固定（transform等の影響を受けない）
+          const firstH = telopBox.scrollHeight | 0;
           telopBox.style.height = firstH + 'px';
           telopBox.style.transition = 'none';
           // 2) 新テキストをDOMに適用（まだ fade-out 中なので見えない）
           applyTexts(next);
-          // 3) 新しい必要高さを“実DOM”で取得（height 固定でも scrollHeight は正確）
+          // 3) レイアウトを確定させてから再計測（同フレーム強制リフロー）
+          void telopBox.offsetHeight; // reflow
           const lastH = telopBox.scrollHeight | 0;
           const diff  = Math.abs(lastH - firstH);
           if (!firstH || !lastH || diff < 2){
