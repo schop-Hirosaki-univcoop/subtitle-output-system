@@ -350,54 +350,37 @@
           void el.offsetWidth; el.classList.add('text-swap-in');
           el.addEventListener('animationend', ()=> el.classList.remove('text-swap-in'), {once:true});
         }
-        /* ========= 安定版：計測→適用（クローンはモーション無効） ========= */
-        async function fontsReady(){
-          if (!document.fonts) return;
-          if (document.fonts.status === 'loaded') return;
-          try { await document.fonts.ready; } catch(_) {}
-        }
-        function measureNextHeight(next){
-          // クローンを作って“最終状態”で高さを測る
-          const probe = telopBox.cloneNode(true);
-          probe.removeAttribute('id');
-          probe.setAttribute('data-probe','');
-          // 幅は実体と同一に固定（vw/vh 計算の揺れを排除）
-          const w = getComputedStyle(telopBox).width;
-          Object.assign(probe.style, {
-            position: 'fixed', left: '-99999px', top: '0',
-            height: 'auto', width: w, visibility: 'hidden', pointerEvents: 'none',
-            contain: 'layout size style paint'
-          });
-          document.body.appendChild(probe);
-          const pName = probe.querySelector('#radio-name');
-          const pQ    = probe.querySelector('#question');
-          pName.textContent = next.name;
-          pQ.innerHTML      = applyRuby(next.question);
-          pName.classList.toggle('no-label', next.noLabel);
-          const h = probe.getBoundingClientRect().height;
-          probe.remove();
-          return h;
-        }
-        function setTexts(next){
-          radioNameEl.textContent = next.name;
-          questionEl.innerHTML    = applyRuby(next.question);
+        /* ===== 実DOM測定版：高さモーションを確実に出す ===== */
+        function applyTexts(next){
+          // ラベル制御 → テキストの順で（疑似要素の有無が高さに効くため）
           radioNameEl.classList.toggle('no-label', next.noLabel);
+          radioNameEl.textContent = next.name || '';
+          questionEl.innerHTML    = applyRuby(next.question || '');
         }
-        function animateHeightTo(targetPx){
-          const first = telopBox.getBoundingClientRect().height;
-          const diff  = Math.abs(targetPx - first);
-          if (!first || !targetPx || diff < 2){
+        function animateHeightDuringSwap(next){
+          // 1) 現在の高さ(px)を固定（ガクッ防止）
+          const firstH = telopBox.getBoundingClientRect().height | 0;
+          telopBox.style.height = firstH + 'px';
+          telopBox.style.transition = 'none';
+          // 2) 新テキストをDOMに適用（まだ fade-out 中なので見えない）
+          applyTexts(next);
+          // 3) 新しい必要高さを“実DOM”で取得（height 固定でも scrollHeight は正確）
+          const lastH = telopBox.scrollHeight | 0;
+          const diff  = Math.abs(lastH - firstH);
+          if (!firstH || !lastH || diff < 2){
+            // 差が小さければ即時反映
             telopBox.style.height = ''; telopBox.style.transition = '';
             return Promise.resolve();
           }
-          telopBox.style.height = first + 'px';
-          telopBox.style.transition = 'none';
-          return new Promise((resolve)=>{
+          // 4) 次フレームで高さにアニメを掛ける
+          return new Promise(resolve=>{
             requestAnimationFrame(()=>{
               telopBox.style.transition = 'height 260ms cubic-bezier(.2,.7,.2,1)';
-              telopBox.style.height = targetPx + 'px';
+              telopBox.style.height = lastH + 'px';
               telopBox.addEventListener('transitionend', ()=>{
-                telopBox.style.height = ''; telopBox.style.transition = '';
+                // 5) 完了後に auto に戻す
+                telopBox.style.height = '';
+                telopBox.style.transition = '';
                 resolve();
               }, { once:true });
             });
@@ -478,13 +461,10 @@
               Promise.all(outs).then(async ()=>{
                 // 途中でさらに新更新が来たら、この更新は棄却
                 if (myToken !== updateToken) return;
-                await fontsReady();
                 const next = { name, question, noLabel: willNoLabel };
-                const targetH = measureNextHeight(next); // 先に確定
-                // 実体は旧テキストのまま高さだけ固定 → 新文言をセット → 目標高さへ
-                await animateHeightTo(targetH);
-                if (myToken !== updateToken) return;
-                setTexts(next);
+                // 実DOMで新高さを取得し、その高さへトランジション
+                await animateHeightDuringSwap(next);
+                if (myToken !== updateToken) return; // レース対策
                 // テキストはクロスフェードで復帰
                 if (nameChanged) fadeIn(radioNameEl);
                 if (qChanged)    fadeIn(questionEl);
