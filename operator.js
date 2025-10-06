@@ -27,6 +27,7 @@ const titleEl  = document.getElementById('render-title');
 const qEl      = document.getElementById('render-question');
 const updEl    = document.getElementById('render-updated');
 let lastUpdatedAt = 0;
+let renderTicker = null;
 
 function setLamp(phase){
     lampEl.className = 'lamp';
@@ -63,8 +64,9 @@ function setLamp(phase){
   onValue(renderRef, (snap)=>{
     const v = snap.val() || {};
     setLamp(v.phase);
-    // 表示内容の反映
-    const now = v.nowShowing || null;
+    // 表示内容の反映（hidden のときは中身が来ていても“非表示”優先）
+    const isHidden = v.phase === 'hidden';
+    const now = isHidden ? null : (v.nowShowing || null);
     if (!now){
       titleEl.textContent = '（非表示）';
       qEl.textContent     = '';
@@ -74,9 +76,10 @@ function setLamp(phase){
       titleEl.textContent = name === 'Pick Up Question' ? name : `ラジオネーム：${name}`;
       qEl.textContent     = (now.question || '').replace(/\s+/g,' ').trim();
     }
-    // 更新時刻＆フラッシュ
+    // 更新時刻（スナップショット時に記録し、下の ticker で1秒ごとに再描画）
     const at = normalizeUpdatedAt(v.updatedAt);
-    updEl.textContent = at ? `${new Date(at).toLocaleTimeString('ja-JP',{hour12:false})}（${formatRelative(at)}）` : '—';
+    lastUpdatedAt = at || 0;
+    redrawUpdatedAt();
     if (at && at > lastUpdatedAt){
       lastUpdatedAt = at;
       sumEl.classList.add('is-updated');
@@ -85,6 +88,10 @@ function setLamp(phase){
         sumEl.classList.remove('is-updated');
         document.querySelector('.render-indicator')?.classList.remove('is-updated');
       }, 800);
+    }
+    // 追記：ticker を起動（多重起動防止）
+    if (!renderTicker){
+      renderTicker = setInterval(redrawUpdatedAt, 1000);
     }
   });
 
@@ -220,6 +227,10 @@ onAuthStateChanged(auth, async (user) => {
         off(updateTriggerRef);
         off(questionsRef);
         off(renderRef);
+        // 追記：ticker を止める
+        if (renderTicker){ clearInterval(renderTicker); renderTicker = null; }
+        lastUpdatedAt = 0;
+        redrawUpdatedAt();
     }
 });
 
@@ -398,6 +409,17 @@ function renderLogsStream(rows){
     dom.logStream.appendChild(line);
   }
   if (state.autoScrollLogs) dom.logStream.scrollTop = dom.logStream.scrollHeight;
+}
+
+
+// 追記：相対時刻を毎秒更新する描画関数
+function redrawUpdatedAt(){
+  if (!lastUpdatedAt){
+    updEl.textContent = '—';
+    return;
+  }
+  const t = new Date(lastUpdatedAt).toLocaleTimeString('ja-JP', { hour12:false });
+  updEl.textContent = `${t}（${formatRelative(lastUpdatedAt)}）`;
 }
 
 function parseLogTimestamp(ts) {
