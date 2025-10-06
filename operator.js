@@ -1,6 +1,13 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, set, update, remove, get, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+    initializeAuth,
+    browserSessionPersistence,
+    GoogleAuthProvider,
+    signInWithPopup,
+    signOut,
+    onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
@@ -95,7 +102,7 @@ function setLamp(phase){
     }
   });
 
-const auth = getAuth(app);
+const auth = initializeAuth(app, { persistence: browserSessionPersistence });
 const provider = new GoogleAuthProvider();
 const telopRef = ref(database, 'currentTelop');
 const updateTriggerRef = ref(database, 'update_trigger');
