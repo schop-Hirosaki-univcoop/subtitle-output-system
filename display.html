@@ -378,19 +378,21 @@
           const pQ    = probe.querySelector('#question');
           const doProbeMutate = (fn)=> fn({ nameEl:pName, qEl:pQ });
           document.body.appendChild(probe);
-          // mutator をクローン用に一度適用
-          doProbeMutate(({nameEl,qEl})=>{
-            mutator((textSetter)=>{
-              // textSetter は実体に適用する関数 → ここではクローンへ適用
-              textSetter({ nameEl, qEl });
-            });
+          // mutator をクローン用に一度適用（※ クローンにも no-label の切替を反映させる）
+          mutator((textSetter, toggleNoLabel)=>{
+            textSetter({ nameEl: pName, qEl: pQ });
+            if (typeof toggleNoLabel === 'function') toggleNoLabel(pName);
           });
           const lastH = probe.getBoundingClientRect().height;
           probe.remove();
     
           // 4) 実体へ“同時に”新内容を入れつつ、高さを lastH にアニメ
           const diff = Math.abs(lastH - firstH);
-          mutator(({nameEl,qEl})=>{ /* 実体に適用 */ });
+          // ★ 実体にも確実に適用（ここが空で旧テキストが残っていた）
+          mutator((textSetter, toggleNoLabel)=>{
+            textSetter({ nameEl: radioNameEl, qEl: questionEl });
+            if (typeof toggleNoLabel === 'function') toggleNoLabel(radioNameEl);
+          });
           if (!lastH || diff < 2){
             telopBox.style.height = '';
             telopBox.style.transition = '';
@@ -407,6 +409,8 @@
         }
   
         let prevName = '', prevQuestion = '';
+        // 連続更新の競合防止用トークン
+        let updateToken = 0;
     
         let dictionary = [];
         const dictRef = ref(database, 'dictionary');
@@ -457,10 +461,12 @@
     
           // ラベル制御（Pick Up Question はラベル非表示）
           const isPickup = (n) => String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
-          radioNameEl.classList.toggle('no-label', isPickup(name));
+          const willNoLabel = isPickup(name);
+          radioNameEl.classList.toggle('no-label', willNoLabel);
     
           const nameChanged = name.trim() !== prevName.trim();
           const qChanged    = question.trim() !== prevQuestion.trim();
+          const myToken     = ++updateToken;  // 後着優先
     
           // 座布団自体は出す（入場アニメは showTelop が担当）
           if (telopCanvas.classList.contains('hidden')) {
@@ -474,15 +480,21 @@
             if (qChanged)    outs.push(fadeOut(questionEl));
             if (outs.length){
               Promise.all(outs).then(()=>{
+                // 途中でさらに新更新が来たら、この更新は棄却
+                if (myToken !== updateToken) return;
                 // プローブで最終高さを先に確定 → 高さを滑らかに遷移
-                morphHeightAccurateWith((applyTo)=>{
-                  // クローン用/実体用を同じ処理で適用できるようにする
-                  const setTexts = ({nameEl,qEl})=>{
+                morphHeightAccurateWith((textSetter, toggleNoLabel)=>{
+                  // クローン／実体の両方に共通適用
+                  const applyTexts = ({nameEl,qEl})=>{
                     if (nameChanged) nameEl.textContent = name;
                     if (qChanged)    qEl.innerHTML      = applyRuby(question);
                   };
-                  applyTo(setTexts);
+                  textSetter(applyTexts);
+                  // ラベル表示状態も両者に反映（高さ計測の一貫性のため重要）
+                  toggleNoLabel && toggleNoLabel((el)=> el.classList.toggle('no-label', willNoLabel));
                 });
+                // 競合再チェック（計測・適用の間に更新が来た可能性）
+                if (myToken !== updateToken) return;
                 // テキストはクロスフェードで復帰
                 if (nameChanged) fadeIn(radioNameEl);
                 if (qChanged)    fadeIn(questionEl);
