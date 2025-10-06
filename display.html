@@ -78,10 +78,28 @@
       color: #fff;
       font-family: "Noto Sans JP","Hiragino Sans","Meiryo",system-ui,sans-serif;
     }
+
+    /* ─ ラジオネーム“タブ座布団” ─ */
+    #telop-canvas .name-tag{
+      position: absolute;
+      left: clamp(10px, 1.2vw, 18px);
+      top: calc(-1 * clamp(8px, 0.9vw, 14px));
+      padding: clamp(4px, 0.5vw, 8px) clamp(10px, 1.1vw, 16px);
+      border-radius: 10px 10px 10px 0;          /* 左上にくっつくインデックス形状 */
+      background: rgba(0,0,0,.38);              /* 現行デザイン踏襲（透明・ガラス感） */
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid rgba(255,255,255,.18);
+      box-shadow:
+        0 0 10px color-mix(in srgb, var(--neon-a, #39f) 65%, transparent),
+        0 0 20px color-mix(in srgb, var(--neon-b, #9f3) 45%, transparent);
+      pointer-events: none;                     /* 操作対象ではないため */
+      z-index: 3;
+    }
     
     /* テロップの箱（左揃えのブロックを中央配置） */
     #telop-canvas .telop-box{
-      position: relative;
+      overflow: visible; /* タグを箱の外に少しはみ出せるように */
       display: inline-block;
       text-align: left;             /* 行は左揃え */
       width:95%;
@@ -289,8 +307,11 @@
   <!-- ★ あなたの条件：#telop-canvas を下部・全幅・16:9で固定 -->
   <div id="telop-canvas">
     <div class="telop-box">
-      <div id="radio-name"></div>
-      <i class="neon-underline"></i> <!-- ← これだけ追加（空要素） -->
+      <!-- ▽ ラジオネーム用の“タブ座布団”を左上に追加 -->
+      <div class="name-tag" id="name-tag">
+        <span id="radio-name"></span>
+      </div>
+      <i class="neon-underline"></i>
       <div id="question"></div>
     </div>
   </div>
