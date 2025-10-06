@@ -411,7 +411,8 @@
         async function hideTelop(){
           reportRender('hiding');
           await buildOut().catch((e)=> { console.error(e); reportRender('error'); });
-          reportRender('hidden');
+          // ビルドアウト完了時：中身もクリアしたいので nowShowing を null に
+          reportRender('hidden', { nowShowing: null });
         }
         // 入退場アニメ終了時の後始末
         let pendingClear = false;
