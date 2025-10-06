@@ -113,6 +113,64 @@ provider.setCustomParameters({ prompt: 'select_account' });
 const telopRef = ref(database, 'currentTelop');
 const updateTriggerRef = ref(database, 'update_trigger');
 
+// === 追加: 認証フローのゲート用フラグ ===
+let _authFlow = 'idle';           // 'idle' | 'prompting' | 'done'
+let _pendingAuthUser = null;      // prompting 中に onAuthStateChanged が渡してくる user を一時保持
+
+// 認証後の共通処理（元の onAuthStateChanged 内の “user あり” 分岐をそのまま移植）
+async function handleAfterLogin(user) {
+  if (!user) {
+    // --- ログアウト時 ---
+    dom.loginContainer.style.display = 'block';
+    dom.mainContainer.style.display = 'none';
+    dom.actionPanel.style.display = 'none';
+    dom.userInfo.innerHTML = '';
+    off(updateTriggerRef);
+    return;
+  }
+  try {
+    const result = await apiPost({ action: 'fetchSheet', sheet: 'users' });
+    if (result.success && result.data) {
+      const authorizedUsers = result.data.map(item => item['メールアドレス']);
+      if (authorizedUsers.includes(user.email)) {
+        // ログイン成功 UI
+        dom.loginContainer.style.display = 'none';
+        dom.mainContainer.style.display = 'flex';
+        dom.actionPanel.style.display = 'flex';
+        dom.userInfo.innerHTML = `${user.displayName} (${user.email}) <button id="logout-button">ログアウト</button>`;
+        document.getElementById('logout-button').addEventListener('click', logout);
+        // 初回だけシート→RTDB ミラー（空なら）
+        try {
+          const s = await get(questionsRef);
+          if (!s.exists()) await apiPost({ action: 'mirrorSheet' });
+        } catch(_) {}
+        // RTDB 購読
+        startQuestionsStream();
+        fetchDictionary();
+        fetchLogs();
+        showToast(`ようこそ、${user.displayName}さん`, 'success');
+        // update_trigger の購読（logs のリアルタイム反映）
+        let _rtTimer = null;
+        onValue(updateTriggerRef, (snapshot) => {
+          if (!snapshot.exists()) return;
+          clearTimeout(_rtTimer);
+          _rtTimer = setTimeout(()=>{ fetchLogs(); }, 150);
+        });
+      } else {
+        showToast("あなたのアカウントはこのシステムへのアクセスが許可されていません。", 'error');
+        await logout();
+      }
+    } else {
+      showToast("ユーザー権限の確認に失敗しました。", 'error');
+      await logout();
+    }
+  } catch (error) {
+    console.error("Authorization check failed:", error);
+    showToast("ユーザー権限の確認中にエラーが発生しました。", 'error');
+    await logout();
+  }
+}
+
 // --- DOM要素の取得 ---
 const dom = {
     loginContainer: document.getElementById('login-container'),
@@ -178,73 +236,13 @@ dom.questionsTableBody.addEventListener('change', (e) => {
 });
 
 // --- ログイン状態の監視 ---
-onAuthStateChanged(auth, async (user) => {
-    if (user) {
-        // ログイン成功後、まずユーザー権限をチェック
-        try {
-            const result = await apiPost({ action: 'fetchSheet', sheet: 'users' });
-            if (result.success && result.data) {
-                const authorizedUsers = result.data.map(item => item['メールアドレス']); 
-                if (authorizedUsers.includes(user.email)) {
-                    // ログイン成功
-                    dom.loginContainer.style.display = 'none';
-                    dom.mainContainer.style.display = 'flex';
-                    dom.actionPanel.style.display = 'flex';
-                    dom.userInfo.innerHTML = `${user.displayName} (${user.email}) <button id="logout-button">ログアウト</button>`;
-                    document.getElementById('logout-button').addEventListener('click', logout);
-                    
-                    // ★ ここで自動昇格（usersに載っていれば /admins/{uid}=true をGASが付与）
-                    try { await apiPost({ action: 'ensureAdmin' }); } catch(e){ console.warn('ensureAdmin skipped:', e); }
-
-                    // 初回だけシートから RTDB に種まき（空だったら）
-                    try {
-                      const s = await get(questionsRef);
-                      if (!s.exists()) await apiPost({ action: 'mirrorSheet' });
-                    } catch(_) {}
-                    // 以後は RTDB を購読
-                    startQuestionsStream();
-                    fetchDictionary();
-                    fetchLogs();
-                    showToast(`ようこそ、${user.displayName}さん`, 'success');
-
-                    // リアルタイム更新の監視を開始
-                    let _rtTimer = null;
-                    onValue(updateTriggerRef, (snapshot) => {
-                      if (!snapshot.exists()) return;
-                      clearTimeout(_rtTimer);
-                      _rtTimer = setTimeout(()=>{ fetchLogs(); }, 150);
-                    });
-                } else {
-                    // --- 権限NG処理 ---
-                    showToast("あなたのアカウントはこのシステムへのアクセスが許可されていません。", 'error');
-                    logout();
-                }
-            } else {
-                // --- 権限確認失敗処理 ---
-                showToast("ユーザー権限の確認に失敗しました。", 'error');
-                logout();
-            }
-        } catch (error) {
-            // --- エラー処理 ---
-            console.error("Authorization check failed:", error);
-            showToast("ユーザー権限の確認中にエラーが発生しました。", 'error');
-            logout();
-        }
-    } else {
-        // --- ログアウト時の処理 ---
-        dom.loginContainer.style.display = 'block';
-        dom.mainContainer.style.display = 'none';
-        dom.actionPanel.style.display = 'none';
-        dom.userInfo.innerHTML = '';
-        // データベースの変更監視を停止
-        off(updateTriggerRef);
-        off(questionsRef);
-        off(renderRef);
-        // 追記：ticker を止める
-        if (renderTicker){ clearInterval(renderTicker); renderTicker = null; }
-        lastUpdatedAt = 0;
-        redrawUpdatedAt();
-    }
+onAuthStateChanged(auth, (user) => {
+  // ポップアップ中は UI 更新を保留（ポップアップが閉じた後に反映）
+  if (_authFlow === 'prompting') {
+    _pendingAuthUser = user || null;
+    return;
+  }
+  handleAfterLogin(user);
 });
 
 function switchMainTab(tabName) {
@@ -652,21 +650,28 @@ async function login() {
   const btn = document.getElementById('login-button');
   const origText = btn ? btn.textContent : '';
   try {
+    _authFlow = 'prompting';                 // ← ポップアップ開始
     if (btn) {
       btn.disabled = true;
       btn.classList.add('is-busy');
       btn.textContent = 'サインイン中…';
     }
-    await signInWithPopup(auth, provider);
-    // 成功後の画面遷移/描画は onAuthStateChanged に任せる
+    await signInWithPopup(auth, provider);   // ← この Promise が解決 = ポップアップが閉じた
   } catch (error) {
     console.error("Login failed:", error);
     showToast("ログインに失敗しました。", 'error');
   } finally {
+    _authFlow = 'done';
     if (btn) {
       btn.disabled = false;
       btn.classList.remove('is-busy');
       btn.textContent = origText;
+    }
+    // prompting 中に来ていた onAuthStateChanged をここで反映
+    if (_pendingAuthUser !== null) {
+      const u = _pendingAuthUser;
+      _pendingAuthUser = null;
+      handleAfterLogin(u);
     }
   }
 }
@@ -676,6 +681,9 @@ async function logout() {
     } catch (error) {
         console.error("Logout failed:", error);
     }
+    // 念のためゲートを初期化
+    _authFlow = 'idle';
+    _pendingAuthUser = null;
 }
 
 // --- ヘルパー関数 ---
