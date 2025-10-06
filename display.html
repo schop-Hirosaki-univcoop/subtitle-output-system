@@ -282,6 +282,13 @@
       font-feature-settings: "palt" 1, "kern" 1; /* 横組み代替('palt')＋カーニング */
     }
 
+    /* ルビは上に表示（標準）＋ 古い WebKit フォールバック */
+    #telop-canvas ruby{
+      ruby-position: over;           /* 標準: 上に */
+      -webkit-ruby-position: before; /* 旧WebKit: 上に */
+    }
+    /* 既存サイズ指定はそのまま。line-heightだけ詰めたい時は以下を任意で */
+    /* #telop-canvas rt{ line-height:1; } */
     
     /* 入れ替え時に“ふわっ”と表示（任意） */
     .animate-in{ animation: fadeSlideUp .28s ease-out both; }
