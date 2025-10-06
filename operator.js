@@ -21,22 +21,77 @@ const database = getDatabase(app);
 const renderRef = ref(database, 'render_state');
 const lampEl = document.getElementById('render-lamp');
 const phaseEl = document.getElementById('render-phase');
+const sumEl    = document.getElementById('render-summary');
+const titleEl  = document.getElementById('render-title');
+const qEl      = document.getElementById('render-question');
+const updEl    = document.getElementById('render-updated');
+let lastUpdatedAt = 0;
+
 function setLamp(phase){
-lampEl.className = 'lamp';
-switch (phase) {
-  case 'visible': lampEl.classList.add('is-visible'); break;
-  case 'showing':
-  case 'hiding':  lampEl.classList.add('is-showing'); break;
-  case 'hidden':  lampEl.classList.add('is-hidden');  break;
-  case 'error':   lampEl.classList.add('is-error');   break;
-  default:        lampEl.classList.add('is-hidden');  break;
+    lampEl.className = 'lamp';
+    switch (phase) {
+        case 'visible': lampEl.classList.add('is-visible'); break;
+        case 'showing':
+        case 'hiding':  lampEl.classList.add('is-showing'); break;
+        case 'hidden':  lampEl.classList.add('is-hidden');  break;
+        case 'error':   lampEl.classList.add('is-error');   break;
+        default:        lampEl.classList.add('is-hidden');  break;
+    }
+    phaseEl.textContent = phase || '-';
 }
-phaseEl.textContent = phase || '-';
-}
+
+  function normalizeUpdatedAt(u){
+    if (!u) return 0;
+    if (typeof u === 'number') return u;        // RTDB: serverTimestamp → number(millis)
+    if (u.seconds) return u.seconds*1000;       // もしオブジェクト形式なら
+    return 0;
+  }
+  function formatRelative(ms){
+    if (!ms) return '—';
+    const diff = Math.max(0, Date.now() - ms);
+    const s = Math.floor(diff/1000);
+    if (s < 60) return `${s}秒前`;
+    const m = Math.floor(s/60);
+    if (m < 60) return `${m}分前`;
+    const h = Math.floor(m/60);
+    if (h < 24) return `${h}時間前`;
+    const d = Math.floor(h/24);
+    return `${d}日前`;
+  }
+
+  onValue(renderRef, (snap)=>{
+    const v = snap.val() || {};
+    setLamp(v.phase);
+    // 表示内容の反映
+    const now = v.nowShowing || null;
+    if (!now){
+      titleEl.textContent = '（非表示）';
+      qEl.textContent     = '';
+    }else{
+      const name = (now.name || '').trim();
+      // “Pick Up Question” なら「ラジオネーム：」は付けない
+      titleEl.textContent = name === 'Pick Up Question' ? name : `ラジオネーム：${name}`;
+      qEl.textContent     = (now.question || '').replace(/\s+/g,' ').trim();
+    }
+    // 更新時刻＆フラッシュ
+    const at = normalizeUpdatedAt(v.updatedAt);
+    updEl.textContent = at ? `${new Date(at).toLocaleTimeString('ja-JP',{hour12:false})}（${formatRelative(at)}）` : '—';
+    if (at && at > lastUpdatedAt){
+      lastUpdatedAt = at;
+      sumEl.classList.add('is-updated');
+      document.querySelector('.render-indicator')?.classList.add('is-updated');
+      setTimeout(()=>{
+        sumEl.classList.remove('is-updated');
+        document.querySelector('.render-indicator')?.classList.remove('is-updated');
+      }, 800);
+    }
+  });
+
 onValue(renderRef, (snap)=>{
-const v = snap.val() || {};
-setLamp(v.phase);
+    const v = snap.val() || {};
+    setLamp(v.phase);
 });
+
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 const telopRef = ref(database, 'currentTelop');
