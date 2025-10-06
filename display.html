@@ -129,6 +129,10 @@
       border-radius: 2px;
       pointer-events: none;
     }
+
+    /* 質問未選択時：座布団ごと消す／名前が空ならラベルも消す */
+    #telop-canvas.is-empty { display: none; }
+    #radio-name:empty::before { content: none; }
     
     /* 見出し（任意） */
     #radio-name {
@@ -258,6 +262,7 @@
         
         const radioNameEl = document.getElementById('radio-name');
         const questionEl = document.getElementById('question');
+        const telopCanvas = document.getElementById('telop-canvas');
 
         let dictionary = [];
         const dictRef = ref(database, 'dictionary');
@@ -291,23 +296,32 @@
 
         // Firebaseの 'currentTelop' の場所の変更を監視する
         onValue(telopRef, (snapshot) => {
-            const telopData = snapshot.val(); // 変更後のデータを取得
-
-            if (telopData) {
-                // データが存在する場合、テロップを表示
-                const name = telopData?.name || '';
-                radioNameEl.textContent = name;
-                questionEl.innerHTML = applyRuby(telopData.question);
-                const isPickup = (n) => String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
-                radioNameEl.classList.toggle('no-label', isPickup(name));
-                [radioNameEl, questionEl].forEach(el=>{
-                  el.classList.remove('animate-in'); void el.offsetWidth; el.classList.add('animate-in');
-                });
-            } else {
-                // データがnull（削除された）場合、テロップを消去
-                radioNameEl.textContent = '';
-                questionEl.innerHTML = '';
-            }
+          const telopData = snapshot.val() || null;
+          const name     = telopData?.name ?? '';
+          const question = telopData?.question ?? '';
+          const hasContent = (question && question.trim().length) || (name && name.trim().length);
+    
+          // 座布団の表示/非表示
+          telopCanvas.classList.toggle('is-empty', !hasContent);
+    
+          if (!hasContent) {
+            radioNameEl.textContent = '';
+            questionEl.innerHTML    = '';
+            radioNameEl.classList.remove('no-label');
+            return;
+          }
+    
+          // 中身があるときだけ反映
+          radioNameEl.textContent = name;
+          questionEl.innerHTML    = applyRuby(question);
+          const isPickup = (n) => String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
+          radioNameEl.classList.toggle('no-label', isPickup(name));
+    
+          // アニメ（任意）
+          [radioNameEl, questionEl].forEach(el=>{
+            el.classList.remove('animate-in');
+            void el.offsetWidth; el.classList.add('animate-in');
+          });
         });
     </script>
 </body>
