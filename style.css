@@ -11,6 +11,45 @@ body {
   cursor: progress;
 }
 
+/* ===== Loading Overlay ===== */
+#loading-overlay[hidden] { display: none !important; }
+#loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
+.loading-backdrop {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(2px);
+  background: rgba(10, 12, 20, 0.35);
+}
+.loading-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 260px;
+  max-width: min(92vw, 560px);
+  padding: 20px 24px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(20,22,34,0.96), rgba(12,14,22,0.96));
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35), inset 0 0 1px rgba(255,255,255,0.06);
+  color: #E9ECF1;
+  text-align: center;
+}
+.spinner {
+  width: 36px; height: 36px;
+  margin: 0 auto 14px;
+  border: 3px solid rgba(255,255,255,0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-weight: 600; letter-spacing: .02em; }
+.loading-sub  { margin-top: 6px; font-size: 12px; opacity: .75; }
+
 /* ==== Display 状態ランプ ==== */
 .render-indicator{ display:flex; align-items:center; gap:.5rem; }
 .lamp{
