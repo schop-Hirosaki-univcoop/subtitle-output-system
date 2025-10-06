@@ -17,6 +17,26 @@ const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISP
 // --- 初期化処理 ---
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
+// ★ Display 側の状態ランプ購読
+const renderRef = ref(database, 'render_state');
+const lampEl = document.getElementById('render-lamp');
+const phaseEl = document.getElementById('render-phase');
+function setLamp(phase){
+lampEl.className = 'lamp';
+switch (phase) {
+  case 'visible': lampEl.classList.add('is-visible'); break;
+  case 'showing':
+  case 'hiding':  lampEl.classList.add('is-showing'); break;
+  case 'hidden':  lampEl.classList.add('is-hidden');  break;
+  case 'error':   lampEl.classList.add('is-error');   break;
+  default:        lampEl.classList.add('is-hidden');  break;
+}
+phaseEl.textContent = phase || '-';
+}
+onValue(renderRef, (snap)=>{
+const v = snap.val() || {};
+setLamp(v.phase);
+});
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 const telopRef = ref(database, 'currentTelop');
