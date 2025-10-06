@@ -109,6 +109,7 @@ const auth = initializeAuth(app, {
   popupRedirectResolver: browserPopupRedirectResolver
 });
 const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ prompt: 'select_account' });
 const telopRef = ref(database, 'currentTelop');
 const updateTriggerRef = ref(database, 'update_trigger');
 
@@ -648,12 +649,26 @@ async function toggleTerm(term, newStatus) {
 
 // --- 認証関数 ---
 async function login() {
-    try {
-        await signInWithPopup(auth, provider);
-    } catch (error) {
-        console.error("Login failed:", error);
-        showToast("ログインに失敗しました。", 'error');
+  const btn = document.getElementById('login-button');
+  const origText = btn ? btn.textContent : '';
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.add('is-busy');
+      btn.textContent = 'サインイン中…';
     }
+    await signInWithPopup(auth, provider);
+    // 成功後の画面遷移/描画は onAuthStateChanged に任せる
+  } catch (error) {
+    console.error("Login failed:", error);
+    showToast("ログインに失敗しました。", 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('is-busy');
+      btn.textContent = origText;
+    }
+  }
 }
 async function logout() {
     try {
