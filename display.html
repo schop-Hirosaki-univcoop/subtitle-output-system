@@ -342,7 +342,7 @@
   <!-- Firebase スクリプトは既存のまま（IDも同じ） -->
   <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+        import { getDatabase, ref, onValue, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
         
         const firebaseConfig = {
             apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
@@ -361,7 +361,18 @@
         }
         const database = getDatabase(app);
         const telopRef = ref(database, 'currentTelop');
-        
+        const renderRef = ref(database, 'render_state');
+      
+        // ★ 状態レポート（display → Firebase）
+        function reportRender(phase, info = {}) {
+          const payload = {
+            phase,                                        // 'showing' | 'visible' | 'hiding' | 'hidden' | 'error'
+            updatedAt: serverTimestamp(),
+            ...info                                       // { name, uid, seq など任意}
+          };
+          update(renderRef, payload).catch(console.error);
+        }
+    
         const radioNameEl = document.getElementById('radio-name');
         const questionEl = document.getElementById('question');
         const telopCanvas = document.getElementById('telop-canvas');
@@ -375,6 +386,10 @@
     
         // 表示/非表示の制御ヘルパ
         function showTelop(){
+          reportRender('showing', { name: next?.name || '', uid: next?.uid || null });
+          await flipResize(next)               // ← 既存：座布団の高さやタブ幅を補間
+            .then(()=> reportRender('visible', { name: next?.name || '', uid: next?.uid || null }))
+            .catch((e)=> { console.error(e); reportRender('error'); });
           // 念のため：テキストは必ず可視状態に戻し、高さロックも解除してから入場
           ensureTextVisible();
           telopWrap.style.transform = '';
@@ -384,6 +399,10 @@
           telopCanvas.classList.add('show');
         }
         function hideTelop(){
+          reportRender('hiding');
+          await buildOut()
+            .then(()=> reportRender('hidden'))
+            .catch((e)=> { console.error(e); reportRender('error'); });
           if (telopCanvas.classList.contains('hidden')) return; // 既に消えている
           telopCanvas.classList.remove('show');
           telopCanvas.classList.add('hide');
