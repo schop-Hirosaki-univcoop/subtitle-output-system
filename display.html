@@ -338,9 +338,13 @@
           telopCanvas.classList.remove('show');
           telopCanvas.classList.add('hide');
         }
-        // 退場アニメが終わったら完全に隠す＆中身のクリアはここで（先に消さない）
+        // 入退場アニメ終了時の後始末
         let pendingClear = false;
         telopBox?.addEventListener('animationend', (e)=>{
+          if (e.animationName === 'telopIn'){
+            // 入場アニメの transform をクリア（以降の FLIP と競合させない）
+            telopCanvas.classList.remove('show');
+          }
           if (e.animationName === 'telopOut'){
             telopCanvas.classList.add('hidden');
             telopCanvas.classList.remove('hide');
@@ -474,19 +478,20 @@
           const isPickup = (n) => String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
           const willNoLabel = isPickup(name);
     
-          const nameChanged = name.trim() !== prevName.trim();
-          const qChanged    = question.trim() !== prevQuestion.trim();
+          const labelChanged = (radioNameEl.classList.contains('no-label') !== willNoLabel);
+          const nameOrLabelChanged = nameChanged || labelChanged;
           const myToken     = ++updateToken;  // 後着優先
     
           // 座布団自体は出す（入場アニメは showTelop が担当）
           if (telopCanvas.classList.contains('hidden')) {
             radioNameEl.textContent = name;
-            questionEl.innerHTML    = applyRuby(question);
+            // 初表示のときはラベル状態もここで整える（事前変形を防ぐ）
+            radioNameEl.classList.toggle('no-label', willNoLabel);
             showTelop();
           } else {
             // 表示中：変化した要素を同時にフェードアウト
             const outs = [];
-            if (nameChanged) outs.push(fadeOut(radioNameEl));
+            if (nameOrLabelChanged) outs.push(fadeOut(radioNameEl));
             if (qChanged)    outs.push(fadeOut(questionEl));
             if (outs.length){
               Promise.all(outs).then(async ()=>{
@@ -498,7 +503,7 @@
                 await flipResize(next);
                 if (myToken !== updateToken) return; // レース対策
                 // テキストはクロスフェードで復帰
-                if (nameChanged) fadeIn(radioNameEl);
+                if (nameOrLabelChanged) fadeIn(radioNameEl);
                 if (qChanged)    fadeIn(questionEl);
                 // 念のため：必ず可視化に戻す
                 ensureTextVisible();
