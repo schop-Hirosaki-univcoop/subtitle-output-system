@@ -1,0 +1,8 @@
+﻿Font: GenEi Gothic (源暎ゴシック)
+Author: Okoneya (御琥祢屋) — https://okoneya.jp/
+License: SIL Open Font License 1.1 (OFL-1.1)
+Copyright © respective authors
+
+This repository redistributes the font files under the OFL-1.1.
+If you modify or subset the font, distribute the derivative under the same license,
+and do not use any Reserved Font Names if specified.
