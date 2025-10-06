@@ -179,11 +179,10 @@
       .text-swap-out, .text-swap-in{ animation:none !important; }
     }
 
-     /* FLIP用の内包ラッパーは transform だけをアニメする（合成レイヤで滑らか） */
-    #telop-canvas .telop-box { transform-origin: bottom center; }
-    #telop-canvas .telop-inner{
-      will-change: transform;
+    /* 座布団ごとスケール（コンテナに適用） */
+    #telop-canvas .telop-box{
       transform-origin: bottom center;
+      will-change: transform;
     }
 
     /* 見出し（任意） */
@@ -319,12 +318,7 @@
         const questionEl = document.getElementById('question');
         const telopCanvas = document.getElementById('telop-canvas');
 
-        // ─ FLIP用ラッパーを起動時に動的生成（HTMLを書き換えなくてOK）
         const telopBox = document.querySelector('#telop-canvas .telop-box');
-        const inner = document.createElement('div');
-        inner.className = 'telop-inner';
-        while (telopBox.firstChild) inner.appendChild(telopBox.firstChild);
-        telopBox.appendChild(inner);
     
         // 初期状態は非表示に（データ到着まで）
         telopCanvas.classList.add('hidden');
@@ -390,25 +384,28 @@
           if (document.fonts.status === 'loaded') return;
           try { await document.fonts.ready; } catch(_) {}
         }
-        // FLIP：中身を新状態に“先に差し替え”→ 見た目だけ scaleY を逆掛け → 1 に戻す
+        // FLIP：座布団（コンテナ）を直接 scaleY。中身はフェードでも座布団が確実に動く
         function flipResize(next){
           const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          const firstH = telopBox.offsetHeight | 0;
-          applyTexts(next);                      // ← 新内容を先に反映（レイアウトは最終状態に）
-          void inner.offsetHeight;               // reflow
-          const lastH  = telopBox.offsetHeight | 0;
+          const firstH = telopBox.offsetHeight | 0;    // いまの見た目高さ（座布団込み）
+          applyTexts(next);                             // ← 先に最終内容へ（レイアウト確定）
+          void telopBox.offsetHeight;                  // reflow
+          const lastH  = telopBox.offsetHeight | 0;    // 最終高さ（座布団込み）
           if (reduce || !firstH || !lastH || Math.abs(lastH - firstH) < 2) return Promise.resolve();
           const scaleY = firstH / lastH;
-          inner.style.transition = 'none';
-          inner.style.transform  = `scaleY(${scaleY})`;
+          telopBox.style.transition = 'none';
+          telopBox.style.transform  = `scaleY(${scaleY})`;
           // 2段階 rAF で合成レイヤを安定確保 → 超なめらか
           return new Promise(resolve=>{
             requestAnimationFrame(()=>{
               requestAnimationFrame(()=>{
-                inner.style.transition = 'transform 300ms cubic-bezier(.25,.9,.2,1)';
-                inner.style.transform  = 'scaleY(1)';
-                const done = ()=>{ inner.style.transition=''; inner.style.transform=''; resolve(); };
-                inner.addEventListener('transitionend', done, {once:true});
+                telopBox.style.transition = 'transform 320ms cubic-bezier(.25,.9,.2,1)';
+                telopBox.style.transform  = 'scaleY(1)';
+                const done = ()=>{
+                  telopBox.style.transition=''; telopBox.style.transform='';
+                  resolve();
+                };
+                telopBox.addEventListener('transitionend', done, {once:true});
                 setTimeout(done, 380); // フォールバック
               });
             });
