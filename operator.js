@@ -289,13 +289,15 @@ function startQuestionsStream(){
   off(questionsRef);
   onValue(questionsRef, (snap)=>{
     const m = snap.val() || {};
-    // RTDB → 既存レンダの型に合わせる
+    // RTDB → レンダ用配列（班番号・tsも保持）
     state.allQuestions = Object.values(m).map(x => ({
       'UID': x.uid,
+      '班番号': (x.group ?? ''),     // ← 追加
       'ラジオネーム': x.name,
       '質問・お悩み': x.question,
       '回答済': !!x.answered,
       '選択中': !!x.selecting,
+      '__ts': Number(x.ts || 0)      // ← ソート用の内部フィールド
     }));
     renderQuestions();
   });
@@ -351,10 +353,20 @@ async function fetchLogs() {
 
 // --- データ描画関数 ---
 async function renderQuestions() {
-    const questionsToRender = state.allQuestions.filter(item => {
+    // 1) サブタブでフィルタ
+    let questionsToRender = state.allQuestions.filter(item => {
         const isPuq = item['ラジオネーム'] === 'Pick Up Question';
         return state.currentSubTab === 'puq' ? isPuq : !isPuq;
     });
+    // 2) タイムスタンプで安定ソート（古い→新しい。逆にしたい場合は b - a に）
+    questionsToRender = questionsToRender
+      .slice()
+      .sort((a,b)=>{
+        const da = a['__ts'] || 0, db = b['__ts'] || 0;
+        if (da !== db) return da - db;
+        // 同一タイムスタンプではUIDで決定的ソート
+        return String(a['UID']).localeCompare(String(b['UID']));
+      });
     const snapshot = await get(telopRef);
     const currentTelop = snapshot.val();
     const currentSelectedUid = state.selectedRowData ? state.selectedRowData.uid : null;
@@ -385,6 +397,7 @@ async function renderQuestions() {
         const statusText = item['選択中'] ? '表示中' : (isAnswered ? '回答済' : '未回答');
         tr.innerHTML = `
             <td><input type="checkbox" class="row-checkbox" data-uid="${item['UID']}"></td>
+            <td>${escapeHtml(item['班番号'] ?? '')}</td>
             <td>${escapeHtml(item['ラジオネーム'])}</td>
             <td>${escapeHtml(item['質問・お悩み'])}</td>
             <td>${statusText}</td>`;
