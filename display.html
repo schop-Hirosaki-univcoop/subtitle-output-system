@@ -58,6 +58,9 @@
       --seat-border: rgba(255,255,255,.10);
       --radius: 1vw;
       --shadow: 0 1vw 2vw rgba(0,0,0,.38);
+      /* レイアウト用の共通余白（横）と、16:9 に合わせた縦の余白を変数化 */
+      --pad-x: 2.5vw;
+      --pad-y: calc(var(--pad-x) * (1080 / 1920));
     }
     /* 画面下部・全幅・16:9 の #telop-canvas を固定 */
     html, body {
@@ -67,14 +70,13 @@
     #telop-canvas {
       position: fixed;
       left: 0; right: 0; bottom: 0;
-      width: 100vw;
       aspect-ratio: 1920 / 1080;   /* 幅から高さを16:9で算出 */
       display: flex;
       flex-direction: column;
       align-items: center;          /* 水平中央（テロップ塊を中央に） */
       justify-content: flex-end;    /* 垂直は下寄せ */
       box-sizing: border-box;
-      padding: calc(2.5vw * (1080 / 1920)) 2.5vw calc(2.5vw * (1080 / 1920));         /* 下の余白 */
+      padding: var(--pad-y) var(--pad-x) var(--pad-y);
       color: #fff;
       font-family: "Noto Sans JP","Hiragino Sans","Meiryo",system-ui,sans-serif;
     }
@@ -82,8 +84,8 @@
     /* ─ ラジオネーム“タブ座布団” ─ */
     #telop-canvas .name-tag{
       position: absolute;
-      /*left: clamp(10px, 1.2vw, 18px);*/
-      top:  calc(-1 * 5vw); /* ← もう少し上へ“はみ出す” */
+      left: var(--pad-x);                 /* ← 座布団の内側余白と揃える */
+      top:  calc(-1 * 5vw);
       padding: 0.5vw 1vw 2vw;
       border-radius: 1vw 1vw 0 0;          /* 左上にくっつくインデックス形状 */
       background: rgba(0,0,0,.38);              /* 現行デザイン踏襲（透明・ガラス感） */
@@ -120,7 +122,7 @@
       backdrop-filter: blur(1vw) saturate(150%);
       -webkit-backdrop-filter: blur(1vw) saturate(150%);
       overflow: hidden;
-      padding: calc(1.5vw * (1080 / 1920)) 2.5vw;
+      padding: calc(1.5vw * (1080 / 1920)) var(--pad-x);
     }
     /* ネオンの発光する枠線（細い管 + ぼんやりグロー） */
     #telop-canvas .telop-box::before,
