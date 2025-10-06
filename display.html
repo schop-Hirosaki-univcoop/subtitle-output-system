@@ -93,6 +93,9 @@
       -webkit-backdrop-filter: blur(14px) saturate(150%);
       overflow: hidden;
       padding: 1.5vh 2.5vw;
+      /* ▼ 追加：サイズ変化の見せ方を“下基準”に（FLIP用） */
+      transform-origin: bottom center;
+      will-change: transform;
     }
     /* ネオンの発光する枠線（細い管 + ぼんやりグロー） */
     #telop-canvas .telop-box::before,
@@ -329,24 +332,37 @@
           }
         });
 
-        // ─ 内容入替のための小さなユーティリティ
+        // ─ 内容入替アニメ（Promise化：完了を待てるように）
         function swapText(el, setContent){
-          // 進行中のアニメをリセット
-          el.classList.remove('text-swap-in','text-swap-out');
-          void el.offsetWidth;
-          // まず旧テキストをフェードアウト
-          el.classList.add('text-swap-out');
-          el.addEventListener('animationend', () => {
-            // テキストを差し替え → フェードイン
-            setContent();
-            el.classList.remove('text-swap-out');
-            void el.offsetWidth;
-            el.classList.add('text-swap-in');
-            // 終了後にクラスを掃除
+          return new Promise((resolve)=>{
+            el.classList.remove('text-swap-in','text-swap-out');
+            void el.offsetWidth; // restart
+            el.classList.add('text-swap-out');
             el.addEventListener('animationend', () => {
-              el.classList.remove('text-swap-in');
+              setContent();                          // 差し替え
+              el.classList.remove('text-swap-out');
+              void el.offsetWidth;
+              el.classList.add('text-swap-in');
+              el.addEventListener('animationend', () => {
+                el.classList.remove('text-swap-in');
+                resolve();
+              }, { once:true });
             }, { once:true });
-          }, { once:true });
+          });
+        }
+    
+        // ─ 座布団のサイズ変化を“滑らかに見せる”FLIPアニメ
+        function animateBoxResize(prevH){
+          const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          const newH   = telopBox.offsetHeight || 0;
+          if (reduce || !prevH || !newH) return;
+          const diff   = Math.abs(newH - prevH);
+          if (diff < 2) return; // 微小差は無視
+          const scaleY = prevH / newH;
+          telopBox.animate(
+            [{ transform: `scaleY(${scaleY})` }, { transform: 'scaleY(1)' }],
+            { duration: 240, easing: 'cubic-bezier(.2,.7,.2,1)' }
+          );
         }
     
         let prevName = '', prevQuestion = '';
@@ -411,12 +427,13 @@
             questionEl.innerHTML    = applyRuby(question);
             showTelop();
           } else {
-            // 表示中：変わったパートだけ“入替アニメ”
-            if (nameChanged){
-              swapText(radioNameEl, () => { radioNameEl.textContent = name; });
-            }
-            if (qChanged){
-              swapText(questionEl, () => { questionEl.innerHTML = applyRuby(question); });
+            // 表示中：変わったパートだけ“入替アニメ”＋座布団のサイズをFLIPで補間
+            const prevH = telopBox.offsetHeight;
+            const tasks = [];
+            if (nameChanged) tasks.push(swapText(radioNameEl, () => { radioNameEl.textContent = name; }));
+            if (qChanged)    tasks.push(swapText(questionEl, () => { questionEl.innerHTML = applyRuby(question); }));
+            if (tasks.length){
+              Promise.all(tasks).then(()=> animateBoxResize(prevH));
             }
           }
           prevName = name; prevQuestion = question;
