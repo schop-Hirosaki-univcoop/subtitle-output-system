@@ -116,6 +116,10 @@ const updateTriggerRef = ref(database, 'update_trigger');
 // === 追加: 認証フローのゲート用フラグ ===
 let _authFlow = 'idle';           // 'idle' | 'prompting' | 'done'
 let _pendingAuthUser = null;      // prompting 中に onAuthStateChanged が渡してくる user を一時保持
+// ローダー制御
+function showLoader(msg){ document.getElementById('loading-overlay')?.removeAttribute('hidden'); updateLoader(msg); document.body.setAttribute('aria-busy','true'); }
+function updateLoader(msg){ if (msg) { const t = document.getElementById('loading-text'); if (t) t.textContent = msg; } }
+function hideLoader(){ document.getElementById('loading-overlay')?.setAttribute('hidden',''); document.body.removeAttribute('aria-busy'); }
 
 // 認証後の共通処理（元の onAuthStateChanged 内の “user あり” 分岐をそのまま移植）
 async function handleAfterLogin(user) {
@@ -126,9 +130,11 @@ async function handleAfterLogin(user) {
     dom.actionPanel.style.display = 'none';
     dom.userInfo.innerHTML = '';
     off(updateTriggerRef);
+    hideLoader();
     return;
   }
   try {
+    showLoader('権限を確認しています…');
     const result = await apiPost({ action: 'fetchSheet', sheet: 'users' });
     if (result.success && result.data) {
       const authorizedUsers = result.data.map(item => item['メールアドレス']);
@@ -140,14 +146,24 @@ async function handleAfterLogin(user) {
         dom.userInfo.innerHTML = `${user.displayName} (${user.email}) <button id="logout-button">ログアウト</button>`;
         document.getElementById('logout-button').addEventListener('click', logout);
         // 初回だけシート→RTDB ミラー（空なら）
+        updateLoader('初期データを準備しています…');
         try {
           const s = await get(questionsRef);
           if (!s.exists()) await apiPost({ action: 'mirrorSheet' });
         } catch(_) {}
-        // RTDB 購読
-        startQuestionsStream();
-        fetchDictionary();
-        fetchLogs();
+        // RTDB 初回データを取得 → UI へ反映 → ストリーム購読開始
+        updateLoader('データ同期中…');
+        const first = await get(questionsRef);
+        const m = first.val() || {};
+        state.allQuestions = Object.values(m).map(x => ({
+          'UID': x.uid, 'ラジオネーム': x.name, '質問・お悩み': x.question,
+          '回答済': !!x.answered, '選択中': !!x.selecting,
+        }));
+        renderQuestions();
+        startQuestionsStream(); // ← 以後リアルタイム
+        // 他パネルの初期読み込み
+        await Promise.all([ fetchDictionary(), fetchLogs() ]);
+        hideLoader();
         showToast(`ようこそ、${user.displayName}さん`, 'success');
         // update_trigger の購読（logs のリアルタイム反映）
         let _rtTimer = null;
@@ -159,15 +175,18 @@ async function handleAfterLogin(user) {
       } else {
         showToast("あなたのアカウントはこのシステムへのアクセスが許可されていません。", 'error');
         await logout();
+        hideLoader();
       }
     } else {
       showToast("ユーザー権限の確認に失敗しました。", 'error');
       await logout();
+      hideLoader();
     }
   } catch (error) {
     console.error("Authorization check failed:", error);
     showToast("ユーザー権限の確認中にエラーが発生しました。", 'error');
     await logout();
+    hideLoader();
   }
 }
 
@@ -651,6 +670,7 @@ async function login() {
   const origText = btn ? btn.textContent : '';
   try {
     _authFlow = 'prompting';                 // ← ポップアップ開始
+    showLoader('サインイン中…');
     if (btn) {
       btn.disabled = true;
       btn.classList.add('is-busy');
@@ -660,6 +680,7 @@ async function login() {
   } catch (error) {
     console.error("Login failed:", error);
     showToast("ログインに失敗しました。", 'error');
+    hideLoader();
   } finally {
     _authFlow = 'done';
     if (btn) {
@@ -684,6 +705,7 @@ async function logout() {
     // 念のためゲートを初期化
     _authFlow = 'idle';
     _pendingAuthUser = null;
+    hideLoader();
 }
 
 // --- ヘルパー関数 ---
