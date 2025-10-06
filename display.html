@@ -346,28 +346,60 @@
           void el.offsetWidth; el.classList.add('text-swap-in');
           el.addEventListener('animationend', ()=> el.classList.remove('text-swap-in'), {once:true});
         }
-        // ─ 高さの“auto”を滑らかに：旧→新の高さ(px)をトランジション
-        function morphHeightWith(mutator){
+        // ─ 高さトランジション（正確版）：クローンで“最終高さ”を先に測る
+        function morphHeightAccurateWith(mutator){
           const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          const first  = telopBox.offsetHeight || 0;
+          const firstRect = telopBox.getBoundingClientRect();
+          const firstH = firstRect.height;
+          const widthPx = firstRect.width + 'px'; // 現在の幅を固定して測る（vw/vh計算の揺れ対策）
+          if (!firstH || reduce){ mutator(); return; }
+    
           // 1) 現在の高さを固定（ガクッ防止）
-          telopBox.style.height = first + 'px';
+          telopBox.style.height = firstH + 'px';
           telopBox.style.transition = 'none';
-          // 2) 同フレームで中身を更新
-          mutator();
-          // 3) 新しい必要高さを測る（コンテンツは更新済み）
-          const last = telopBox.scrollHeight || telopBox.offsetHeight || 0;
-          const diff = Math.abs(last - first);
-          if (reduce || !first || !last || diff < 2){
-            telopBox.style.height = ''; telopBox.style.transition = '';
+    
+          // 2) 測定用クローンを作成（アニメ用クラス等は無効化）
+          const probe = telopBox.cloneNode(true);
+          probe.removeAttribute('id');
+          probe.style.position = 'absolute';
+          probe.style.left = '-99999px';
+          probe.style.top = '0';
+          probe.style.height = 'auto';
+          probe.style.width = widthPx;
+          probe.style.visibility = 'hidden';
+          probe.style.pointerEvents = 'none';
+          // クローン内のアニメ用クラスを除去（高さ測定に影響しないように）
+          probe.querySelectorAll('.text-swap-in, .text-swap-out').forEach(el=>{
+            el.classList.remove('text-swap-in','text-swap-out');
+          });
+    
+          // 3) クローンに“新しい内容”を反映してからサイズを測る
+          const pName = probe.querySelector('#radio-name');
+          const pQ    = probe.querySelector('#question');
+          const doProbeMutate = (fn)=> fn({ nameEl:pName, qEl:pQ });
+          document.body.appendChild(probe);
+          // mutator をクローン用に一度適用
+          doProbeMutate(({nameEl,qEl})=>{
+            mutator((textSetter)=>{
+              // textSetter は実体に適用する関数 → ここではクローンへ適用
+              textSetter({ nameEl, qEl });
+            });
+          });
+          const lastH = probe.getBoundingClientRect().height;
+          probe.remove();
+    
+          // 4) 実体へ“同時に”新内容を入れつつ、高さを lastH にアニメ
+          const diff = Math.abs(lastH - firstH);
+          mutator(({nameEl,qEl})=>{ /* 実体に適用 */ });
+          if (!lastH || diff < 2){
+            telopBox.style.height = '';
+            telopBox.style.transition = '';
             return;
           }
-          // 4) 次フレームで高さにアニメを掛ける
           requestAnimationFrame(()=>{
             telopBox.style.transition = 'height 260ms cubic-bezier(.2,.7,.2,1)';
-            telopBox.style.height = last + 'px';
+            telopBox.style.height = lastH + 'px';
             telopBox.addEventListener('transitionend', ()=>{
-              // 5) 完了後に“auto”へ戻す
               telopBox.style.height = '';
               telopBox.style.transition = '';
             }, {once:true});
@@ -442,10 +474,14 @@
             if (qChanged)    outs.push(fadeOut(questionEl));
             if (outs.length){
               Promise.all(outs).then(()=>{
-                // 高さは“固定→新高さへ”の順で滑らかに
-                morphHeightWith(()=>{
-                  if (nameChanged) radioNameEl.textContent = name;
-                  if (qChanged)    questionEl.innerHTML    = applyRuby(question);
+                // プローブで最終高さを先に確定 → 高さを滑らかに遷移
+                morphHeightAccurateWith((applyTo)=>{
+                  // クローン用/実体用を同じ処理で適用できるようにする
+                  const setTexts = ({nameEl,qEl})=>{
+                    if (nameChanged) nameEl.textContent = name;
+                    if (qChanged)    qEl.innerHTML      = applyRuby(question);
+                  };
+                  applyTo(setTexts);
                 });
                 // テキストはクロスフェードで復帰
                 if (nameChanged) fadeIn(radioNameEl);
