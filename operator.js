@@ -172,6 +172,10 @@ onAuthStateChanged(auth, async (user) => {
                     dom.actionPanel.style.display = 'flex';
                     dom.userInfo.innerHTML = `${user.displayName} (${user.email}) <button id="logout-button">ログアウト</button>`;
                     document.getElementById('logout-button').addEventListener('click', logout);
+                    
+                    // ★ ここで自動昇格（usersに載っていれば /admins/{uid}=true をGASが付与）
+                    try { await apiPost({ action: 'ensureAdmin' }); } catch(e){ console.warn('ensureAdmin skipped:', e); }
+
                     // 初回だけシートから RTDB に種まき（空だったら）
                     try {
                       const s = await get(questionsRef);
