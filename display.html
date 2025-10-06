@@ -385,7 +385,7 @@
         telopCanvas.classList.add('hidden');
     
         // 表示/非表示の制御ヘルパ
-        async function showTelop(){
+        async function showTelop(next){
           reportRender('showing', { name: next?.name || '', uid: next?.uid || null });
           await flipResize(next)               // ← 既存：座布団の高さやタブ幅を補間
             .then(()=> reportRender('visible', { name: next?.name || '', uid: next?.uid || null }))
