@@ -189,7 +189,7 @@
       /* ラジオネーム本文＝Bold */
       font-family: "GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
       font-weight: 700;
-      font-size: calc(90vw / 25.7);
+      font-size: calc(90vw / 23.9);
       line-height: 1.2;
       text-shadow:
         1px 0 0 rgba(0,0,0,.55), -1px 0 0 rgba(0,0,0,.55),
@@ -217,7 +217,7 @@
       width: fit-content;
       font-family: "GenEiGothicP-HKL","GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
       font-weight: 800;
-      font-size: calc(90vw / 22.17);              /* 56–72pxあたりで微調整OK */
+      font-size: calc(90vw / 22);              /* 56–72pxあたりで微調整OK */
       line-height: 1.25;
       letter-spacing: .01em;
       white-space: normal;
@@ -276,6 +276,11 @@
         0.8px 0 0 rgba(0,0,0,.45), -0.8px 0 0 rgba(0,0,0,.45),
         0 0.8px 0 rgba(0,0,0,.45),  0 -0.8px 0 rgba(0,0,0,.45);
     }
+    /* ─ 計測用クローン（data-probe）では一切のモーション/装飾を無効化 ─ */
+    [data-probe],
+    [data-probe] * { animation: none !important; transition: none !important; }
+    /* ネオンの飾り(疑似要素)も排除：高さ計測に不要 */
+    [data-probe] .telop-box::after { content: none !important; }
   </style>
 </head>
 <body>
@@ -346,13 +351,17 @@
           void el.offsetWidth; el.classList.add('text-swap-in');
           el.addEventListener('animationend', ()=> el.classList.remove('text-swap-in'), {once:true});
         }
-        // ─ 高さトランジション（正確版）：クローンで“最終高さ”を先に測る
-        function morphHeightAccurateWith(mutator){
+    // ─ 高さトランジション（正確版）：クローンで“最終高さ”を先に測る
+    async function morphHeightAccurateWith(mutator){
+      // 1) フォント未ロードだと計測がブレる → まず待つ
+      if (document.fonts && document.fonts.status !== 'loaded'){
+        try { await document.fonts.ready; } catch(_) {}
+      }
           const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
           const firstRect = telopBox.getBoundingClientRect();
           const firstH = firstRect.height;
           const widthPx = firstRect.width + 'px'; // 現在の幅を固定して測る（vw/vh計算の揺れ対策）
-          if (!firstH || reduce){ mutator(); return; }
+          if (!firstH || reduce){ mutator(()=>{}); return; }
     
           // 1) 現在の高さを固定（ガクッ防止）
           telopBox.style.height = firstH + 'px';
@@ -361,37 +370,41 @@
           // 2) 測定用クローンを作成（アニメ用クラス等は無効化）
           const probe = telopBox.cloneNode(true);
           probe.removeAttribute('id');
-          probe.style.position = 'absolute';
-          probe.style.left = '-99999px';
-          probe.style.top = '0';
+          probe.setAttribute('data-probe','');     // ← モーション殺し
+          probe.style.position = 'fixed';
+          probe.style.left = '-99999px'; probe.style.top = '0';
           probe.style.height = 'auto';
           probe.style.width = widthPx;
           probe.style.visibility = 'hidden';
           probe.style.pointerEvents = 'none';
-          // クローン内のアニメ用クラスを除去（高さ測定に影響しないように）
-          probe.querySelectorAll('.text-swap-in, .text-swap-out').forEach(el=>{
-            el.classList.remove('text-swap-in','text-swap-out');
-          });
+          probe.style.contain = 'layout size style paint';
+          // （上の data-probe で十分だが、念のため既存のアニメ用クラスも削除）
+          probe.querySelectorAll('.text-swap-in, .text-swap-out')
+               .forEach(el=> el.classList.remove('text-swap-in','text-swap-out'));
     
-          // 3) クローンに“新しい内容”を反映してからサイズを測る
+          // 3) クローンに“新しい内容”を反映してからサイズを測る（no-label も反映）
           const pName = probe.querySelector('#radio-name');
           const pQ    = probe.querySelector('#question');
-          const doProbeMutate = (fn)=> fn({ nameEl:pName, qEl:pQ });
           document.body.appendChild(probe);
-          // mutator をクローン用に一度適用（※ クローンにも no-label の切替を反映させる）
-          mutator((textSetter, toggleNoLabel)=>{
-            textSetter({ nameEl: pName, qEl: pQ });
-            if (typeof toggleNoLabel === 'function') toggleNoLabel(pName);
+          mutator(({nameEl,qEl, setNoLabel})=>{
+            nameEl.textContent = pName.textContent; // 初期値を明示（安全側）
+            // ← 実際の適用内容をクローンに入れる
+            nameEl.textContent = nameEl.textContent; // no-op
+          }, (apply)=>{
+            // textSetter 相当：クローンへ
+            apply({ nameEl: pName, qEl: pQ });
+            // ラベル状態も反映
+            setNoLabel && setNoLabel(pName);
           });
           const lastH = probe.getBoundingClientRect().height;
           probe.remove();
     
           // 4) 実体へ“同時に”新内容を入れつつ、高さを lastH にアニメ
           const diff = Math.abs(lastH - firstH);
-          // ★ 実体にも確実に適用（ここが空で旧テキストが残っていた）
-          mutator((textSetter, toggleNoLabel)=>{
-            textSetter({ nameEl: radioNameEl, qEl: questionEl });
-            if (typeof toggleNoLabel === 'function') toggleNoLabel(radioNameEl);
+          // ★ 実体にも確実に適用
+          mutator(null, (apply, setNoLabel)=>{
+            apply({ nameEl: radioNameEl, qEl: questionEl });
+            setNoLabel && setNoLabel(radioNameEl);
           });
           if (!lastH || diff < 2){
             telopBox.style.height = '';
@@ -479,22 +492,19 @@
             if (nameChanged) outs.push(fadeOut(radioNameEl));
             if (qChanged)    outs.push(fadeOut(questionEl));
             if (outs.length){
-              Promise.all(outs).then(()=>{
+              Promise.all(outs).then(async ()=>{
                 // 途中でさらに新更新が来たら、この更新は棄却
                 if (myToken !== updateToken) return;
-                // プローブで最終高さを先に確定 → 高さを滑らかに遷移
-                morphHeightAccurateWith((textSetter, toggleNoLabel)=>{
-                  // クローン／実体の両方に共通適用
+                // プローブで最終高さを先に確定 → 高さを滑らかに遷移（モーション無効）
+                await morphHeightAccurateWith((init, applyBoth)=>{
                   const applyTexts = ({nameEl,qEl})=>{
                     if (nameChanged) nameEl.textContent = name;
                     if (qChanged)    qEl.innerHTML      = applyRuby(question);
                   };
-                  textSetter(applyTexts);
-                  // ラベル表示状態も両者に反映（高さ計測の一貫性のため重要）
-                  toggleNoLabel && toggleNoLabel((el)=> el.classList.toggle('no-label', willNoLabel));
+                  // クローン適用
+                  applyBoth(applyTexts, (el)=> el.classList.toggle('no-label', willNoLabel));
                 });
-                // 競合再チェック（計測・適用の間に更新が来た可能性）
-                if (myToken !== updateToken) return;
+                if (myToken !== updateToken) return; // 念のため
                 // テキストはクロスフェードで復帰
                 if (nameChanged) fadeIn(radioNameEl);
                 if (qChanged)    fadeIn(questionEl);
