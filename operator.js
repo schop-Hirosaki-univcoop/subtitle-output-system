@@ -108,8 +108,11 @@ onAuthStateChanged(auth, async (user) => {
                     showToast(`ようこそ、${user.displayName}さん`, 'success');
 
                     // リアルタイム更新の監視を開始
+                    let _rtTimer = null;
                     onValue(updateTriggerRef, (snapshot) => {
-                        if (snapshot.exists()) { fetchQuestions(); fetchLogs(); }
+                      if (!snapshot.exists()) return;
+                      clearTimeout(_rtTimer);
+                      _rtTimer = setTimeout(()=>{ fetchQuestions(); fetchLogs(); }, 150);
                     });
                 } else {
                     // --- 権限NG処理 ---
