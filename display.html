@@ -338,17 +338,32 @@
           }
         });
 
-        // ─ 退色→差し替え→入れの制御（内容入替）
+        // アニメの取りこぼし防止（animationend が飛ばなくても確実に進む）
         function fadeOut(el){
           el.classList.remove('text-swap-in','text-swap-out');
           void el.offsetWidth; el.classList.add('text-swap-out');
-          return new Promise(res => el.addEventListener('animationend', res, {once:true}));
+          return new Promise((resolve)=>{
+            const done = ()=> resolve();
+            el.addEventListener('animationend', done, { once:true });
+            setTimeout(done, 280); // フォールバック
+          });
         }
         function fadeIn(el){
           el.classList.remove('text-swap-out');
           void el.offsetWidth; el.classList.add('text-swap-in');
-          el.addEventListener('animationend', ()=> el.classList.remove('text-swap-in'), {once:true});
+          const cleanup = ()=> el.classList.remove('text-swap-in');
+          el.addEventListener('animationend', cleanup, { once:true });
+          setTimeout(cleanup, 320); // フォールバック
         }
+    
+        // 念のため：強制的に可視へ戻すユーティリティ
+        function ensureTextVisible(){
+          [radioNameEl, questionEl].forEach(el=>{
+            el.classList.remove('text-swap-out','text-swap-in');
+            el.style.opacity = ''; // カスタムで触っていればリセット
+          });
+        }
+
         /* ===== 高さを「現在→目標」にだけ補間する安定版 ===== */
         function applyTexts(next){
           // ラベル制御 → テキストの順で（疑似要素の有無が高さに効くため）
@@ -401,6 +416,12 @@
                 telopBox.style.height = ''; telopBox.style.transition = '';
                 resolve();
               }, {once:true});
+              // もし transitionend が来なくても 400ms 後に復帰
+              setTimeout(()=>{
+                telopBox.style.height = '';
+                telopBox.style.transition = '';
+                resolve();
+              }, 400);
             });
           });
         }
@@ -493,7 +514,12 @@
                 // テキストはクロスフェードで復帰
                 if (nameChanged) fadeIn(radioNameEl);
                 if (qChanged)    fadeIn(questionEl);
+                // 念のため：必ず可視化に戻す
+                ensureTextVisible();
               });
+            } else {
+              // 変更なしでも不可視が残っていたら強制復帰
+              ensureTextVisible();
             }
           }
           prevName = name; prevQuestion = question;
