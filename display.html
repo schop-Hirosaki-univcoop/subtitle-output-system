@@ -400,12 +400,8 @@
         }
         async function hideTelop(){
           reportRender('hiding');
-          await buildOut()
-            .then(()=> reportRender('hidden'))
-            .catch((e)=> { console.error(e); reportRender('error'); });
-          if (telopCanvas.classList.contains('hidden')) return; // 既に消えている
-          telopCanvas.classList.remove('show');
-          telopCanvas.classList.add('hide');
+          await buildOut().catch((e)=> { console.error(e); reportRender('error'); });
+          reportRender('hidden');
         }
         // 入退場アニメ終了時の後始末
         let pendingClear = false;
@@ -453,6 +449,34 @@
           });
         }
 
+        // ★ 退場アニメ（.hide を付けて telopOut の終了を待つ）
+        function buildOut(){
+          return new Promise((resolve)=>{
+            // すでに hidden なら何もしない
+            if (telopCanvas.classList.contains('hidden')) { resolve(); return; }
+            // 入場状態を外し、退場を開始
+            telopCanvas.classList.remove('show');
+            void telopCanvas.offsetWidth; // reflow でアニメ再始動を安定化
+            telopCanvas.classList.add('hide');
+
+            let settled = false;
+            const onEnd = (e)=>{
+              if (e.animationName !== 'telopOut') return;
+              telopWrap.removeEventListener('animationend', onEnd);
+              settled = true;
+              resolve();
+            };
+            telopWrap.addEventListener('animationend', onEnd);
+            // フォールバック（アニメイベント取りこぼし対策）
+            setTimeout(()=>{
+              if (!settled){
+                telopWrap.removeEventListener('animationend', onEnd);
+                resolve();
+              }
+            }, 450);
+          });
+        }
+    
         /* ===== FLIP（scaleY）で“現在→目標”にだけ補間：超なめらか ===== */
         function applyTexts(next){
           // ラベル制御 → テキストの順で（疑似要素の有無が高さに効くため）
