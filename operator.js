@@ -363,15 +363,27 @@ async function renderQuestions() {
         const isPuq = item['ラジオネーム'] === 'Pick Up Question';
         return state.currentSubTab === 'puq' ? isPuq : !isPuq;
     });
-    // 2) タイムスタンプで安定ソート（古い→新しい。逆にしたい場合は b - a に）
-    questionsToRender = questionsToRender
-      .slice()
-      .sort((a,b)=>{
-        const da = a['__ts'] || 0, db = b['__ts'] || 0;
-        if (da !== db) return da - db;
-        // 同一タイムスタンプではUIDで決定的ソート
-        return String(a['UID']).localeCompare(String(b['UID']));
-      });
+    // 2) 並び順：PUQは「質問→ts→UID」、通常は「ts→名前→UID」
+    const isPUQ = state.currentSubTab === 'puq';
+    questionsToRender.sort((a, b) => {
+        if (isPUQ) {
+            const ta = String(a['質問・お悩み'] ?? '');
+            const tb = String(b['質問・お悩み'] ?? '');
+            const c1 = ta.localeCompare(tb, 'ja', { numeric: true, sensitivity: 'base' });
+            if (c1) return c1;
+            const da = a['__ts'] || 0, db = b['__ts'] || 0;
+            if (da !== db) return da - db; // 古い→新しい（逆にしたいなら db - da）
+            return String(a['UID']).localeCompare(String(b['UID']));
+        } else {
+              const da = a['__ts'] || 0, db = b['__ts'] || 0;
+              if (da !== db) return da - db; // 古い→新しい
+              const na = String(a['ラジオネーム'] ?? '');
+              const nb = String(b['ラジオネーム'] ?? '');
+              const c2 = na.localeCompare(nb, 'ja', { numeric: true, sensitivity: 'base' });
+              if (c2) return c2;
+              return String(a['UID']).localeCompare(String(b['UID']));
+        }
+    });
     const snapshot = await get(telopRef);
     const currentTelop = snapshot.val();
     const currentSelectedUid = state.selectedRowData ? state.selectedRowData.uid : null;
@@ -415,6 +427,7 @@ async function renderQuestions() {
     }
     updateBatchButtonVisibility();
 }
+
 function renderLogs(){
   const rows = applyLogFilters(state.allLogs || []);
   renderLogsStream(rows);
