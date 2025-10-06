@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, set, remove, get, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, set, update, remove, get, onValue, off, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
@@ -19,6 +19,7 @@ const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 // ★ Display 側の状態ランプ購読
 const renderRef = ref(database, 'render_state');
+const questionsRef = ref(database, 'questions');
 const lampEl = document.getElementById('render-lamp');
 const phaseEl = document.getElementById('render-phase');
 const sumEl    = document.getElementById('render-summary');
@@ -177,7 +178,13 @@ onAuthStateChanged(auth, async (user) => {
                     dom.actionPanel.style.display = 'flex';
                     dom.userInfo.innerHTML = `${user.displayName} (${user.email}) <button id="logout-button">ログアウト</button>`;
                     document.getElementById('logout-button').addEventListener('click', logout);
-                    fetchQuestions();
+                    // 初回だけシートから RTDB に種まき（空だったら）
+                    try {
+                      const s = await get(questionsRef);
+                      if (!s.exists()) await apiPost({ action: 'mirrorSheet' });
+                    } catch(_) {}
+                    // 以後は RTDB を購読
+                    startQuestionsStream();
                     fetchDictionary();
                     fetchLogs();
                     showToast(`ようこそ、${user.displayName}さん`, 'success');
@@ -237,15 +244,21 @@ function switchSubTab(tabName) {
 }
 
 // --- データ取得処理 ---
-async function fetchQuestions() {
-    try {
-        const result = await apiPost({ action: 'fetchSheet', sheet: 'answer' });
-        if (result.success) {
-            state.allQuestions = result.data; // 取得した全質問を保持
-            renderQuestions(); // リストの描画処理を呼び出す
-        }
-    } catch (error) { console.error('通信エラーが発生しました: ' + error.message); }
+function startQuestionsStream(){
+  onValue(questionsRef, (snap)=>{
+    const m = snap.val() || {};
+    // RTDB → 既存レンダの型に合わせる
+    state.allQuestions = Object.values(m).map(x => ({
+      'UID': x.uid,
+      'ラジオネーム': x.name,
+      '質問・お悩み': x.question,
+      '回答済': !!x.answered,
+      '選択中': !!x.selecting,
+    }));
+    renderQuestions();
+  });
 }
+
 async function fetchDictionary() {
     try {
         const result = await apiPost({ action: 'fetchSheet', sheet: 'dictionary' });
@@ -420,12 +433,26 @@ async function handleDisplay() {
     const snapshot = await get(telopRef);
     const previousTelop = snapshot.val();
     try {
+        // 1) RTDB を先に更新（UIは即反映）
+        const updates = {};
         if (previousTelop) {
-            const prevItem = state.allQuestions.find(q => q['ラジオネーム'] === previousTelop.name && q['質問・お悩み'] === previousTelop.question);
-            if (prevItem) { await updateStatusOnServer([prevItem['UID']], true); }
+          const prev = state.allQuestions.find(q => q['ラジオネーム'] === previousTelop.name && q['質問・お悩み'] === previousTelop.question);
+          if (prev) {
+            updates[`questions/${prev['UID']}/選択中`] = false;
+            updates[`questions/${prev['UID']}/answered`] = true; // 直前のものは回答済に
+          }
         }
+        updates[`questions/${state.selectedRowData.uid}/選択中`] = true;
+        updates[`questions/${state.selectedRowData.uid}/answered`] = false;
+        await update(ref(database), updates);
         await set(telopRef, { name: state.selectedRowData.name, question: state.selectedRowData.question });
-        await updateStatusOnServer([], false, true, state.selectedRowData.uid);
+
+        // 2) GAS へは“依頼”だけ（待たない）
+        fireAndForgetApi({ action:'updateSelectingStatus', uid: state.selectedRowData.uid });
+        if (previousTelop){
+          const prev = state.allQuestions.find(q => q['ラジオネーム'] === previousTelop.name && q['質問・お悩み'] === previousTelop.question);
+          if (prev) fireAndForgetApi({ action:'updateStatus', uid: prev['UID'], status: true });
+        }
         state.lastDisplayedUid = state.selectedRowData.uid;
         logAction('DISPLAY', `RN: ${state.selectedRowData.name}`);
         fetchQuestions();
@@ -482,14 +509,12 @@ async function handleEdit() {
     const newText = prompt("質問内容を編集してください：", state.selectedRowData.question);
     if (newText === null || newText.trim() === state.selectedRowData.question.trim()) return;
     try {
-        const result = await apiPost({ action: 'editQuestion', uid: state.selectedRowData.uid, newText: newText.trim() });
-        if (result.success) {
-            logAction('EDIT', `UID: ${state.selectedRowData.uid}`);
-            showToast('質問を更新しました。', 'success');
-            fetchQuestions();
-        } else { 
-            showToast('質問の更新に失敗しました: ' + result.error, 'error');
-        }
+        // RTDB 先行
+        await update(ref(database, `questions/${state.selectedRowData.uid}`), { question: newText.trim() });
+        // GAS 同期依頼（非同期）
+        fireAndForgetApi({ action:'editQuestion', uid: state.selectedRowData.uid, text: newText.trim() });
+        logAction('EDIT', `UID: ${state.selectedRowData.uid}`);
+        showToast('質問を更新しました。', 'success');
     } catch (error) { 
         showToast('通信エラー: ' + error.message, 'error');
     }
@@ -514,14 +539,22 @@ async function clearTelop() {
 function handleUnanswer() {
     if (!state.selectedRowData || !state.selectedRowData.isAnswered) return;
     if (!confirm(`「${state.selectedRowData.name}」の質問を「未回答」に戻しますか？`)) return;
-    updateStatusOnServer([state.selectedRowData.uid], false);
+    // RTDB 先行
+    update(ref(database, `questions/${state.selectedRowData.uid}`), { answered:false });
+    // GAS 同期依頼（非同期）
+    fireAndForgetApi({ action:'updateStatus', uid: state.selectedRowData.uid, status:false });
 }
 function handleBatchUnanswer() {
     const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
     if (checkedBoxes.length === 0) return;
     if (!confirm(`${checkedBoxes.length}件の質問を「未回答」に戻しますか？`)) return;
     const uidsToUpdate = Array.from(checkedBoxes).map(cb => cb.dataset.uid);
-    updateStatusOnServer(uidsToUpdate, false);
+    // RTDB 先行（まとめて）
+    const updates = {};
+    for (const uid of uidsToUpdate){ updates[`questions/${uid}/answered`] = false; }
+    update(ref(database), updates);
+    // GAS 同期依頼（非同期）
+    fireAndForgetApi({ action:'batchUpdateStatus', uids: uidsToUpdate, status:false });
 }
 
 async function logAction(actionName, details = '') {
@@ -654,6 +687,11 @@ async function apiPost(payload, retryOnAuthError = true) {
     throw new Error(`${msg}${json.errorId ? ' [' + json.errorId + ']' : ''}`);
   }
   return json;
+}
+
+function fireAndForgetApi(payload){
+  // 認証付き POST だが UI は待たない
+  apiPost(payload).catch(()=>{ /* ログに出すならここ */ });
 }
 
 function normKey(k){
