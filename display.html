@@ -56,8 +56,8 @@
       --seat-bg1: rgba(4,7,12,.76);   /* 座布団の濃いめグラデ上 */
       --seat-bg2: rgba(3,5,9,.82);    /* 座布団の濃いめグラデ下 */
       --seat-border: rgba(255,255,255,.10);
-      --radius: 18px;
-      --shadow: 0 22px 48px rgba(0,0,0,.38);
+      --radius: 1vw;
+      --shadow: 0 1vw 2vw rgba(0,0,0,.38);
     }
     /* 画面下部・全幅・16:9 の #telop-canvas を固定 */
     html, body {
@@ -83,13 +83,13 @@
     #telop-canvas .name-tag{
       position: absolute;
       /*left: clamp(10px, 1.2vw, 18px);*/
-      top:  calc(-1 * clamp(16px, 1.6vw, 28px)); /* ← もう少し上へ“はみ出す” */
+      top:  calc(-1 * 15vw); /* ← もう少し上へ“はみ出す” */
       padding: clamp(4px, 0.5vw, 8px) clamp(10px, 1.1vw, 16px);
       border-radius: 10px 10px 10px 0;          /* 左上にくっつくインデックス形状 */
       background: rgba(0,0,0,.38);              /* 現行デザイン踏襲（透明・ガラス感） */
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
-      border: 1px solid rgba(255,255,255,.18);
+      backdrop-filter: blur(1.2vw);
+      -webkit-backdrop-filter: blur(1.2vw);
+      border: 0.2vw solid rgba(255,255,255,.18);
       box-shadow:
         0 0 10px color-mix(in srgb, var(--neon-a, #39f) 65%, transparent),
         0 0 20px color-mix(in srgb, var(--neon-b, #9f3) 45%, transparent);
@@ -101,7 +101,7 @@
     #telop-canvas .telop-wrap{
       position: relative;
       display: inline-block;
-      width:95%;
+      width:100%;
       transform-origin: bottom center;
       will-change: transform;
       overflow: visible; /* ← タブを外側に“はみ出し”表示するため必須 */
