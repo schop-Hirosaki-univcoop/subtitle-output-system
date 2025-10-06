@@ -84,12 +84,17 @@ function setLamp(phase){
       titleEl.textContent = name === 'Pick Up Question' ? name : `ラジオネーム：${name}`;
       qEl.textContent     = (now.question || '').replace(/\s+/g,' ').trim();
     }
-    // 更新時刻（スナップショット時に記録し、下の ticker で1秒ごとに再描画）
-    const at = normalizeUpdatedAt(v.updatedAt);
-    lastUpdatedAt = at || 0;
-    redrawUpdatedAt();
-    if (at && at > lastUpdatedAt){
+    // 更新時刻（前回値と比較してフラッシュ）
+    const at = normalizeUpdatedAt(v.updatedAt) || 0;
+    const prev = lastUpdatedAt || 0;
+    if (at > 0) {
       lastUpdatedAt = at;
+      redrawUpdatedAt();
+    } else {
+      lastUpdatedAt = 0;
+      redrawUpdatedAt();
+    }
+    if (at > prev){
       sumEl.classList.add('is-updated');
       document.querySelector('.render-indicator')?.classList.add('is-updated');
       setTimeout(()=>{
@@ -97,7 +102,7 @@ function setLamp(phase){
         document.querySelector('.render-indicator')?.classList.remove('is-updated');
       }, 800);
     }
-    // 追記：ticker を起動（多重起動防止）
+    // ticker を起動（多重起動防止）
     if (!renderTicker){
       renderTicker = setInterval(redrawUpdatedAt, 1000);
     }
