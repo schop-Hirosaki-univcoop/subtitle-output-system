@@ -130,9 +130,36 @@
       pointer-events: none;
     }
 
-    /* 質問未選択時：座布団ごと消す／名前が空ならラベルも消す */
-    #telop-canvas.is-empty { display: none; }
+    /* 質問未選択時：ラベルを出さない（保険） */
     #radio-name:empty::before { content: none; }
+
+    /* ─ 表示状態（displayは使わずにアニメ可能にする） ─ */
+    #telop-canvas.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+    #telop-canvas.show   { opacity: 1; visibility: visible;  }
+    #telop-canvas.hide   { opacity: 1; visibility: visible;  } /* 退場アニメ中 */
+
+    /* 入退場アニメ（座布団ごと） */
+    #telop-canvas.show .telop-box{
+      animation: telopIn .36s cubic-bezier(.2,.7,.2,1) both;
+      will-change: transform, opacity, filter;
+    }
+    #telop-canvas.hide .telop-box{
+      animation: telopOut .28s cubic-bezier(.2,.7,.2,1) both;
+      will-change: transform, opacity, filter;
+    }
+    @keyframes telopIn{
+      0%   { opacity:0; transform: translateY(16px) scale(.985); filter: blur(6px); }
+      60%  { opacity:1; transform: translateY(-2px) scale(1.005); filter: blur(0); }
+      100% { opacity:1; transform: translateY(0)    scale(1); }
+    }
+    @keyframes telopOut{
+      0%   { opacity:1; transform: translateY(0)    scale(1);    filter: blur(0); }
+      100% { opacity:0; transform: translateY(12px) scale(.985); filter: blur(6px); }
+    }
+    @media (prefers-reduced-motion: reduce){
+      #telop-canvas.show .telop-box,
+      #telop-canvas.hide .telop-box{ animation: none; }
+    }
     
     /* 見出し（任意） */
     #radio-name {
@@ -264,6 +291,29 @@
         const questionEl = document.getElementById('question');
         const telopCanvas = document.getElementById('telop-canvas');
 
+        // 初期状態は非表示に（データ到着まで）
+        telopCanvas.classList.add('hidden');
+    
+        // 表示/非表示の制御ヘルパ
+        function showTelop(){
+          telopCanvas.classList.remove('hidden','hide');
+          void telopCanvas.offsetWidth;            // アニメ再起動
+          telopCanvas.classList.add('show');
+        }
+        function hideTelop(){
+          if (telopCanvas.classList.contains('hidden')) return; // 既に消えている
+          telopCanvas.classList.remove('show');
+          telopCanvas.classList.add('hide');
+        }
+        // 退場アニメが終わったら完全に隠す
+        const telopBox = document.querySelector('#telop-canvas .telop-box');
+        telopBox?.addEventListener('animationend', (e)=>{
+          if (e.animationName === 'telopOut'){
+            telopCanvas.classList.add('hidden');
+            telopCanvas.classList.remove('hide');
+          }
+        });
+    
         let dictionary = [];
         const dictRef = ref(database, 'dictionary');
         onValue(dictRef, snap => { dictionary = snap.val() || []; });
@@ -297,32 +347,26 @@
         // Firebaseの 'currentTelop' の場所の変更を監視する
         onValue(telopRef, (snapshot) => {
           const telopData = snapshot.val() || null;
-          const name     = telopData?.name ?? '';
-          const question = telopData?.question ?? '';
-          const hasContent = (question && question.trim().length) || (name && name.trim().length);
+          const name      = telopData?.name ?? '';
+          const question  = telopData?.question ?? '';
+          const hasQuestion = !!(question && question.trim().length); // 質問が空なら隠す
     
-          // 座布団の表示/非表示
-          telopCanvas.classList.toggle('is-empty', !hasContent);
-    
-          if (!hasContent) {
+          if (!hasQuestion){
+            // 非表示へ（座布団ごと退場アニメ）
+            hideTelop();
             radioNameEl.textContent = '';
             questionEl.innerHTML    = '';
             radioNameEl.classList.remove('no-label');
             return;
           }
     
-          // 中身があるときだけ反映
+          // 表示へ（入場アニメ）
           radioNameEl.textContent = name;
           questionEl.innerHTML    = applyRuby(question);
           const isPickup = (n) => String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
           radioNameEl.classList.toggle('no-label', isPickup(name));
-    
-          // アニメ（任意）
-          [radioNameEl, questionEl].forEach(el=>{
-            el.classList.remove('animate-in');
-            void el.offsetWidth; el.classList.add('animate-in');
-          });
+          showTelop();
         });
-    </script>
+  </script>
 </body>
 </html>
