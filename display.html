@@ -97,12 +97,19 @@
       z-index: 3;
     }
     
-    /* テロップの箱（左揃えのブロックを中央配置） */
-    #telop-canvas .telop-box{
-      overflow: visible; /* タグを箱の外に少しはみ出せるように */
+    /* ラッパ（タブ＋本文をまとめてスケール） */
+    #telop-canvas .telop-wrap{
+      position: relative;
       display: inline-block;
-      text-align: left;             /* 行は左揃え */
       width:95%;
+      transform-origin: bottom center;
+      will-change: transform;
+    }
+    /* 本文の座布団（中身だけ） */
+    #telop-canvas .telop-box{
+      position: relative;
+      text-align: left;
+      width:100%;
       background: linear-gradient(180deg, var(--seat-bg1), var(--seat-bg2));
       border: 1px solid var(--seat-border);
       border-radius: var(--radius);
@@ -111,9 +118,6 @@
       -webkit-backdrop-filter: blur(14px) saturate(150%);
       overflow: hidden;
       padding: 1.5vh 2.5vw;
-      /* サイズ変化は“下基準”で／高さアニメのヒントも出す */
-      transform-origin: bottom center;
-      will-change: height, transform;
     }
     /* ネオンの発光する枠線（細い管 + ぼんやりグロー） */
     #telop-canvas .telop-box::before,
@@ -159,12 +163,12 @@
     #telop-canvas.show   { opacity: 1; visibility: visible;  }
     #telop-canvas.hide   { opacity: 1; visibility: visible;  } /* 退場アニメ中 */
 
-    /* 入退場アニメ（座布団ごと） */
-    #telop-canvas.show .telop-box{
+    /* 入退場はラッパに対して */
+    #telop-canvas.show .telop-wrap{
       animation: telopIn .36s cubic-bezier(.2,.7,.2,1) both;
       will-change: transform, opacity, filter;
     }
-    #telop-canvas.hide .telop-box{
+    #telop-canvas.hide .telop-wrap{
       animation: telopOut .28s cubic-bezier(.2,.7,.2,1) both;
       will-change: transform, opacity, filter;
     }
@@ -197,8 +201,8 @@
       .text-swap-out, .text-swap-in{ animation:none !important; }
     }
 
-    /* 座布団ごとスケール（コンテナに適用） */
-    #telop-canvas .telop-box{
+    /* FLIPはラッパに適用（タブも本文も一緒にスケール） */
+    #telop-canvas .telop-wrap{
       transform-origin: bottom center;
       will-change: transform;
     }
@@ -306,13 +310,17 @@
 
   <!-- ★ あなたの条件：#telop-canvas を下部・全幅・16:9で固定 -->
   <div id="telop-canvas">
-    <div class="telop-box">
-      <!-- ▽ ラジオネーム用の“タブ座布団”を左上に追加 -->
+    <!-- ▼ タブ＋本文座布団をひとまとめにするラッパ（ここに FLIP を適用） -->
+    <div class="telop-wrap">
+      <!-- タブ座布団（兄） -->
       <div class="name-tag" id="name-tag">
         <span id="radio-name"></span>
       </div>
-      <i class="neon-underline"></i>
-      <div id="question"></div>
+      <!-- 本文の座布団（弟） -->
+      <div class="telop-box">
+        <i class="neon-underline"></i>
+        <div id="question"></div>
+      </div>
     </div>
   </div>
 
@@ -339,7 +347,8 @@
         const questionEl = document.getElementById('question');
         const telopCanvas = document.getElementById('telop-canvas');
 
-        const telopBox = document.querySelector('#telop-canvas .telop-box');
+        const telopWrap = document.querySelector('#telop-canvas .telop-wrap');
+        const telopBox  = document.querySelector('#telop-canvas .telop-box');
     
         // 初期状態は非表示に（データ到着まで）
         telopCanvas.classList.add('hidden');
@@ -348,8 +357,8 @@
         function showTelop(){
           // 念のため：テキストは必ず可視状態に戻し、高さロックも解除してから入場
           ensureTextVisible();
-          telopBox.style.height = '';
-          telopBox.style.transition = '';
+          telopWrap.style.transform = '';
+          telopWrap.style.transition = '';
           telopCanvas.classList.remove('hidden','hide');
           void telopCanvas.offsetWidth;            // アニメ再起動
           telopCanvas.classList.add('show');
@@ -361,7 +370,7 @@
         }
         // 入退場アニメ終了時の後始末
         let pendingClear = false;
-        telopBox?.addEventListener('animationend', (e)=>{
+        telopWrap?.addEventListener('animationend', (e)=>{
           if (e.animationName === 'telopIn'){
             // 入場アニメの transform をクリア（以降の FLIP と競合させない）
             telopCanvas.classList.remove('show');
@@ -417,30 +426,30 @@
           if (document.fonts.status === 'loaded') return;
           try { await document.fonts.ready; } catch(_) {}
         }
-        // FLIP：座布団（コンテナ）を直接 scaleY。中身はフェードでも座布団が確実に動く
+        // FLIP：ラッパ（タブ＋本文）をまとめて scaleY
         function flipResize(next){
           const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          const firstH = telopBox.offsetHeight | 0;    // いまの見た目高さ（座布団込み）
+          const firstH = telopWrap.offsetHeight | 0;   // いまの見た目高さ（タブ含む見た目基準）
           applyTexts(next);                             // ← 先に最終内容へ（レイアウト確定）
-          void telopBox.offsetHeight;                  // reflow
-          const lastH  = telopBox.offsetHeight | 0;    // 最終高さ（座布団込み）
+          void telopWrap.offsetHeight;                 // reflow
+          const lastH  = telopWrap.offsetHeight | 0;   // 最終高さ
           if (reduce || !firstH || !lastH || Math.abs(lastH - firstH) < 2) return Promise.resolve();
           const scaleY = firstH / lastH;
-          telopBox.style.transition = 'none';
-          telopBox.style.transform  = `scaleY(${scaleY})`;
+          telopWrap.style.transition = 'none';
+          telopWrap.style.transform  = `scaleY(${scaleY})`;
           // ★ 同フレームで transform を確実に適用（チラ見え防止）
-          void getComputedStyle(telopBox).transform;
+          void getComputedStyle(telopWrap).transform;
           // 2段階 rAF で合成レイヤを安定確保 → 超なめらか
           return new Promise(resolve=>{
             requestAnimationFrame(()=>{
               requestAnimationFrame(()=>{
-                telopBox.style.transition = 'transform 320ms cubic-bezier(.25,.9,.2,1)';
-                telopBox.style.transform  = 'scaleY(1)';
+                telopWrap.style.transition = 'transform 320ms cubic-bezier(.25,.9,.2,1)';
+                telopWrap.style.transform  = 'scaleY(1)';
                 const done = ()=>{
-                  telopBox.style.transition=''; telopBox.style.transform='';
+                  telopWrap.style.transition=''; telopWrap.style.transform='';
                   resolve();
                 };
-                telopBox.addEventListener('transitionend', done, {once:true});
+                telopWrap.addEventListener('transitionend', done, {once:true});
                 setTimeout(done, 380); // フォールバック
               });
             });
