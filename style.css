@@ -4,6 +4,13 @@ body {
     margin-bottom: 80px; /* 固定操作パネルの分の余白を確保 */
 }
 
+/* login 中の簡易スタイル（任意） */
+#login-button.is-busy {
+  opacity: 0.7;
+  pointer-events: none;
+  cursor: progress;
+}
+
 /* ==== Display 状態ランプ ==== */
 .render-indicator{ display:flex; align-items:center; gap:.5rem; }
 .lamp{
