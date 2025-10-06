@@ -96,6 +96,9 @@
         0 0 1vw color-mix(in srgb, var(--neon-b, #9f3) 45%, transparent);
       pointer-events: none;                     /* 操作対象ではないため */
       z-index: 1;
+      width: fit-content;               /* 内容幅に追従 */
+      transform-origin: top left;       /* ← 左端を支点に横伸縮 */
+      will-change: transform;
     }
     
     /* ラッパ（タブ＋本文をまとめてスケール） */
@@ -339,6 +342,7 @@
 
         const telopWrap = document.querySelector('#telop-canvas .telop-wrap');
         const telopBox  = document.querySelector('#telop-canvas .telop-box');
+        const nameTagEl = document.getElementById('name-tag');
     
         // 初期状態は非表示に（データ到着まで）
         telopCanvas.classList.add('hidden');
@@ -416,31 +420,56 @@
           if (document.fonts.status === 'loaded') return;
           try { await document.fonts.ready; } catch(_) {}
         }
-        // FLIP：ラッパ（タブ＋本文）をまとめて scaleY
+        // FLIP：ラッパ（タブ＋本文）を scaleY、タブを scaleX で滑らかに補間
         function flipResize(next){
           const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          const firstH = telopWrap.offsetHeight | 0;   // いまの見た目高さ（タブ含む見た目基準）
+          const firstH = telopWrap.offsetHeight | 0;   // いまの見た目高さ（タブ含む）
+          const firstW = nameTagEl.offsetWidth | 0;    // いまのタブ幅
           applyTexts(next);                             // ← 先に最終内容へ（レイアウト確定）
           void telopWrap.offsetHeight;                 // reflow
           const lastH  = telopWrap.offsetHeight | 0;   // 最終高さ
-          if (reduce || !firstH || !lastH || Math.abs(lastH - firstH) < 2) return Promise.resolve();
-          const scaleY = firstH / lastH;
-          telopWrap.style.transition = 'none';
-          telopWrap.style.transform  = `scaleY(${scaleY})`;
-          // ★ 同フレームで transform を確実に適用（チラ見え防止）
+          const lastW  = nameTagEl.offsetWidth | 0;    // 最終タブ幅
+
+          const doH = (!!firstH && !!lastH && Math.abs(lastH - firstH) >= 2);
+          const doW = (!!firstW && !!lastW && Math.abs(lastW - firstW) >= 2);
+          if (reduce || (!doH && !doW)) return Promise.resolve();
+
+          if (doH){
+            telopWrap.style.transition = 'none';
+            telopWrap.style.transform  = `scaleY(${firstH / lastH})`;
+          }
+          if (doW){
+            nameTagEl.style.transition = 'none';
+            nameTagEl.style.transform  = `scaleX(${firstW / lastW})`;
+          }
+          // transform を同フレーム適用（チラつき防止）
           void getComputedStyle(telopWrap).transform;
-          // 2段階 rAF で合成レイヤを安定確保 → 超なめらか
+          void getComputedStyle(nameTagEl).transform;
+
           return new Promise(resolve=>{
             requestAnimationFrame(()=>{
               requestAnimationFrame(()=>{
-                telopWrap.style.transition = 'transform 320ms cubic-bezier(.25,.9,.2,1)';
-                telopWrap.style.transform  = 'scaleY(1)';
-                const done = ()=>{
-                  telopWrap.style.transition=''; telopWrap.style.transform='';
+                const tr = 'transform 320ms cubic-bezier(.25,.9,.2,1)';
+                let pending = 0;
+                const cleanup = ()=>{
+                  if (doH){ telopWrap.style.transition=''; telopWrap.style.transform=''; }
+                  if (doW){ nameTagEl.style.transition=''; nameTagEl.style.transform=''; }
                   resolve();
                 };
-                telopWrap.addEventListener('transitionend', done, {once:true});
-                setTimeout(done, 380); // フォールバック
+                const done = ()=>{ if(--pending<=0) cleanup(); };
+                if (doH){
+                  pending++;
+                  telopWrap.style.transition = tr;
+                  telopWrap.style.transform  = 'scaleY(1)';
+                  telopWrap.addEventListener('transitionend', done, {once:true});
+                }
+                if (doW){
+                  pending++;
+                  nameTagEl.style.transition = tr;
+                  nameTagEl.style.transform  = 'scaleX(1)';
+                  nameTagEl.addEventListener('transitionend', done, {once:true});
+                }
+                setTimeout(cleanup, 450); // フォールバック
               });
             });
           });
