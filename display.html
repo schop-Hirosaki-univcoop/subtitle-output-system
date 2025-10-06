@@ -178,7 +178,10 @@
     @media (prefers-reduced-motion: reduce){
       .text-swap-out, .text-swap-in{ animation:none !important; }
     }
-    
+
+    /* FLIP の見た目を下基準に（既存と同じなら不要） */
+    #telop-canvas .telop-box{ transform-origin: bottom center; will-change: transform; }
+
     /* 見出し（任意） */
     #radio-name {
       color: #ffffff;
@@ -332,37 +335,35 @@
           }
         });
 
-        // ─ 内容入替アニメ（Promise化：完了を待てるように）
-        function swapText(el, setContent){
-          return new Promise((resolve)=>{
-            el.classList.remove('text-swap-in','text-swap-out');
-            void el.offsetWidth; // restart
-            el.classList.add('text-swap-out');
-            el.addEventListener('animationend', () => {
-              setContent();                          // 差し替え
-              el.classList.remove('text-swap-out');
-              void el.offsetWidth;
-              el.classList.add('text-swap-in');
-              el.addEventListener('animationend', () => {
-                el.classList.remove('text-swap-in');
-                resolve();
-              }, { once:true });
-            }, { once:true });
-          });
+        // ─ 退色→差し替え→入れの制御（内容入替）と FLIP を同フレームで適用
+        function fadeOut(el){
+          el.classList.remove('text-swap-in','text-swap-out');
+          void el.offsetWidth; el.classList.add('text-swap-out');
+          return new Promise(res => el.addEventListener('animationend', res, {once:true}));
         }
-    
-        // ─ 座布団のサイズ変化を“滑らかに見せる”FLIPアニメ
-        function animateBoxResize(prevH){
+        function fadeIn(el){
+          el.classList.remove('text-swap-out');
+          void el.offsetWidth; el.classList.add('text-swap-in');
+          el.addEventListener('animationend', ()=> el.classList.remove('text-swap-in'), {once:true});
+        }
+        function flipResize(mutator){
           const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          const newH   = telopBox.offsetHeight || 0;
-          if (reduce || !prevH || !newH) return;
-          const diff   = Math.abs(newH - prevH);
-          if (diff < 2) return; // 微小差は無視
-          const scaleY = prevH / newH;
-          telopBox.animate(
-            [{ transform: `scaleY(${scaleY})` }, { transform: 'scaleY(1)' }],
-            { duration: 240, easing: 'cubic-bezier(.2,.7,.2,1)' }
-          );
+          const firstH = telopBox.offsetHeight || 0;
+          mutator(); // ← ここで中身を差し替える（まだ描画前）
+          const lastH  = telopBox.offsetHeight || 0;
+          if (reduce || !firstH || !lastH) return;
+          const scaleY = firstH / lastH;
+          if (Math.abs(lastH - firstH) < 2) return;
+          // “差し替え直後”に逆変換を即適用 → 次のフレームで 1 に戻す
+          telopBox.style.transition = 'none';
+          telopBox.style.transform  = `scaleY(${scaleY})`;
+          // reflow してからトランジションで 1 へ
+          void telopBox.offsetHeight;
+          telopBox.style.transition = 'transform 240ms cubic-bezier(.2,.7,.2,1)';
+          telopBox.style.transform  = 'scaleY(1)';
+          telopBox.addEventListener('transitionend', ()=>{
+            telopBox.style.transition = ''; telopBox.style.transform = '';
+          }, {once:true});
         }
     
         let prevName = '', prevQuestion = '';
@@ -427,13 +428,21 @@
             questionEl.innerHTML    = applyRuby(question);
             showTelop();
           } else {
-            // 表示中：変わったパートだけ“入替アニメ”＋座布団のサイズをFLIPで補間
-            const prevH = telopBox.offsetHeight;
-            const tasks = [];
-            if (nameChanged) tasks.push(swapText(radioNameEl, () => { radioNameEl.textContent = name; }));
-            if (qChanged)    tasks.push(swapText(questionEl, () => { questionEl.innerHTML = applyRuby(question); }));
-            if (tasks.length){
-              Promise.all(tasks).then(()=> animateBoxResize(prevH));
+            // 表示中：変化した要素を同時にフェードアウト
+            const outs = [];
+            if (nameChanged) outs.push(fadeOut(radioNameEl));
+            if (qChanged)    outs.push(fadeOut(questionEl));
+            if (outs.length){
+              Promise.all(outs).then(()=>{
+                // 差し替えと FLIP を同フレームで適用（ガクッ防止の核心）
+                flipResize(()=>{
+                  if (nameChanged) radioNameEl.textContent = name;
+                  if (qChanged)    questionEl.innerHTML    = applyRuby(question);
+                });
+                // フェードイン
+                if (nameChanged) fadeIn(radioNameEl);
+                if (qChanged)    fadeIn(questionEl);
+              });
             }
           }
           prevName = name; prevQuestion = question;
