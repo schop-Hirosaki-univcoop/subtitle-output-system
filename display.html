@@ -343,7 +343,8 @@
   <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getDatabase, ref, onValue, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-        
+        import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
         const firebaseConfig = {
             apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
             authDomain: "subtitle-output-system-9bc14.firebaseapp.com",
@@ -360,6 +361,15 @@
           document.body.classList.add('low-gpu');
         }
         const database = getDatabase(app);
+        const auth = getAuth(app);
+        onAuthStateChanged(auth, (user) => {
+          if (!user) {
+            signInAnonymously(auth).catch(err => {
+              console.error('Anonymous sign-in failed:', err);
+            });
+          }
+        });
+    
         const telopRef = ref(database, 'currentTelop');
         const renderRef = ref(database, 'render_state');
       
