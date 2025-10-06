@@ -177,6 +177,19 @@
       -moz-osx-font-smoothing: grayscale;
       margin-top: auto;
     }
+
+    /* プロポーショナル関連の機能を“明示的にON”にする */
+    #radio-name,
+    #question{
+      /* 文字詰め（カーニング）を使う */
+      font-kerning: normal;
+      /* 東アジア文字をプロポーショナル幅に（'pwid' 相当） */
+      /* かなも個別にプロポーショナルにしたいなら追加（'pkna' 相当） */
+      font-variant-east-asian: proportional-width proportional-kana;
+      /* OpenType 機能を明示（対応フォント・ブラウザで有効） */
+      font-feature-settings: "palt" 1, "kern" 1; /* 横組み代替('palt')＋カーニング */
+    }
+
     
     /* 入れ替え時に“ふわっ”と表示（任意） */
     .animate-in{ animation: fadeSlideUp .28s ease-out both; }
