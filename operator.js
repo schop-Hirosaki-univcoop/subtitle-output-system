@@ -3,6 +3,7 @@ import { getDatabase, ref, set, update, remove, get, onValue, off } from "https:
 import {
     initializeAuth,
     browserSessionPersistence,
+    browserPopupRedirectResolver,
     GoogleAuthProvider,
     signInWithPopup,
     signOut,
@@ -102,7 +103,11 @@ function setLamp(phase){
     }
   });
 
-const auth = initializeAuth(app, { persistence: browserSessionPersistence });
+// タブを閉じたら消えるセッション保存 + ポップアップ resolver を設定
+const auth = initializeAuth(app, {
+  persistence: browserSessionPersistence,
+  popupRedirectResolver: browserPopupRedirectResolver
+});
 const provider = new GoogleAuthProvider();
 const telopRef = ref(database, 'currentTelop');
 const updateTriggerRef = ref(database, 'update_trigger');
