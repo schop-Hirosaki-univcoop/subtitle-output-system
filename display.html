@@ -385,7 +385,7 @@
         telopCanvas.classList.add('hidden');
     
         // 表示/非表示の制御ヘルパ
-        function showTelop(){
+        async function showTelop(){
           reportRender('showing', { name: next?.name || '', uid: next?.uid || null });
           await flipResize(next)               // ← 既存：座布団の高さやタブ幅を補間
             .then(()=> reportRender('visible', { name: next?.name || '', uid: next?.uid || null }))
@@ -398,7 +398,7 @@
           void telopCanvas.offsetWidth;            // アニメ再起動
           telopCanvas.classList.add('show');
         }
-        function hideTelop(){
+        async function hideTelop(){
           reportRender('hiding');
           await buildOut()
             .then(()=> reportRender('hidden'))
@@ -583,11 +583,13 @@
     
           // 座布団自体は出す（入場アニメは showTelop が担当）
           if (telopCanvas.classList.contains('hidden')) {
+            // 初回は next を渡して入場（座布団サイズは telopIn アニメで表示）
+            const next = { name, question, noLabel: willNoLabel };
+            // 初回でも本文は先に適用してOK（入場はクラスで実施）
             radioNameEl.textContent = name;
-            questionEl.innerHTML    = applyRuby(question);  // ★ 初回も本文を必ずセット
-            // 初表示のときはラベル状態もここで整える（事前変形を防ぐ）
+            questionEl.innerHTML    = applyRuby(question);
             radioNameEl.classList.toggle('no-label', willNoLabel);
-            showTelop();
+            showTelop(next);
           } else {
             // 表示中：変化した要素を同時にフェードアウト
             const outs = [];
