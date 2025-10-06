@@ -338,14 +338,22 @@
           telopCanvas.classList.remove('show');
           telopCanvas.classList.add('hide');
         }
-        // 退場アニメが終わったら完全に隠す
+        // 退場アニメが終わったら完全に隠す＆中身のクリアはここで（先に消さない）
+        let pendingClear = false;
         telopBox?.addEventListener('animationend', (e)=>{
           if (e.animationName === 'telopOut'){
             telopCanvas.classList.add('hidden');
             telopCanvas.classList.remove('hide');
+            if (pendingClear){
+              radioNameEl.textContent = '';
+              questionEl.innerHTML = '';
+              radioNameEl.classList.remove('no-label');
+              prevName = ''; prevQuestion = '';
+              pendingClear = false;
+            }
           }
         });
-
+    
         // アニメの取りこぼし防止（animationend が飛ばなくても確実に進む）
         function fadeOut(el){
           el.classList.remove('text-swap-in','text-swap-out');
@@ -395,6 +403,8 @@
           const scaleY = firstH / lastH;
           telopBox.style.transition = 'none';
           telopBox.style.transform  = `scaleY(${scaleY})`;
+          // ★ 同フレームで transform を確実に適用（チラ見え防止）
+          void getComputedStyle(telopBox).transform;
           // 2段階 rAF で合成レイヤを安定確保 → 超なめらか
           return new Promise(resolve=>{
             requestAnimationFrame(()=>{
@@ -454,19 +464,15 @@
           const hasQuestion = !!(question && question.trim().length);
     
           if (!hasQuestion){
-            // 非表示へ（座布団ごと退場）
+            // 非表示へ（座布団ごと退場）…中身は退場完了後に消す
+            pendingClear = true;
             hideTelop();
-            radioNameEl.textContent = '';
-            questionEl.innerHTML    = '';
-            radioNameEl.classList.remove('no-label');
-            prevName = ''; prevQuestion = '';
             return;
           }
     
-          // ラベル制御（Pick Up Question はラベル非表示）
+          // ラベル制御（Pick Up Question はラベル非表示）※ ここでは切り替え“しない”
           const isPickup = (n) => String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
           const willNoLabel = isPickup(name);
-          radioNameEl.classList.toggle('no-label', willNoLabel);
     
           const nameChanged = name.trim() !== prevName.trim();
           const qChanged    = question.trim() !== prevQuestion.trim();
