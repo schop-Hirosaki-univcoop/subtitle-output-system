@@ -4,6 +4,43 @@
   <meta charset="UTF-8" />
   <title>Telop Display</title>
   <style>
+    /* === GenEi Gothic P / H-KL を登録（アップ済みの woff2 を使用） === */
+    @font-face{
+      font-family: "GenEiGothicP";
+      src: url("/assets/fonts/genei-gothic/GenEiGothicP-ExtraLight.woff2") format("woff2");
+      font-weight: 200; font-style: normal; font-display: swap;
+    }
+    @font-face{
+      font-family: "GenEiGothicP";
+      src: url("/assets/fonts/genei-gothic/GenEiGothicP-Light.woff2") format("woff2");
+      font-weight: 300; font-style: normal; font-display: swap;
+    }
+    @font-face{
+      font-family: "GenEiGothicP";
+      src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2");
+      font-weight: 400; font-style: normal; font-display: swap;
+    }
+    @font-face{
+      font-family: "GenEiGothicP";
+      src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2");
+      font-weight: 600; font-style: normal; font-display: swap;
+    }
+    @font-face{
+      font-family: "GenEiGothicP";
+      src: url("/assets/fonts/genei-gothic/GenEiGothicP-Bold.woff2") format("woff2");
+      font-weight: 700; font-style: normal; font-display: swap;
+    }
+    @font-face{
+      font-family: "GenEiGothicP";
+      src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2");
+      font-weight: 900; font-style: normal; font-display: swap;
+    }
+    /* H-KL（質問本文用）— 単独ファミリーとして登録 */
+    @font-face{
+      font-family: "GenEiGothicP-HKL";
+      src: url("/assets/fonts/genei-gothic/GenEiGothicP-H-KL.woff2") format("woff2");
+      font-weight: 400; font-style: normal; font-display: swap;
+    }
     /* ====== Modern look (visual-only) ====== */
     :root{
       --neon-a: #00eaff;    /* シアン系 */
@@ -89,6 +126,8 @@
     #radio-name {
       color: #ffffff;
       width: fit-content;
+      /* ラジオネーム本文＝Bold */
+      font-family: "GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
       font-weight: 700;
       font-size: calc(90vw / 25.7);
       line-height: 1.2;
@@ -108,7 +147,8 @@
       margin-right: .5em;
       color: #ffffff;
       opacity: .95;
-      font-weight: 700;
+      font-family: "GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
+      font-weight: 600;
     }
     #radio-name.no-label::before{ content:none; }
 
@@ -116,7 +156,8 @@
        23ic（CJK全角23文字幅）に固定。非対応ブラウザは 23em にフォールバック。 */
     #question {
       width: fit-content;
-      font-weight: 700;
+      font-family: "GenEiGothicP-HKL","GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
+      font-weight: 800;
       font-size: calc(90vw / 22.17);              /* 56–72pxあたりで微調整OK */
       line-height: 1.25;
       letter-spacing: .01em;
