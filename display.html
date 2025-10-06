@@ -93,9 +93,9 @@
       -webkit-backdrop-filter: blur(14px) saturate(150%);
       overflow: hidden;
       padding: 1.5vh 2.5vw;
-      /* ▼ 追加：サイズ変化の見せ方を“下基準”に（FLIP用） */
+      /* サイズ変化は“下基準”で／高さアニメのヒントも出す */
       transform-origin: bottom center;
-      will-change: transform;
+      will-change: height, transform;
     }
     /* ネオンの発光する枠線（細い管 + ぼんやりグロー） */
     #telop-canvas .telop-box::before,
@@ -335,7 +335,7 @@
           }
         });
 
-        // ─ 退色→差し替え→入れの制御（内容入替）と FLIP を同フレームで適用
+        // ─ 退色→差し替え→入れの制御（内容入替）
         function fadeOut(el){
           el.classList.remove('text-swap-in','text-swap-out');
           void el.offsetWidth; el.classList.add('text-swap-out');
@@ -346,26 +346,34 @@
           void el.offsetWidth; el.classList.add('text-swap-in');
           el.addEventListener('animationend', ()=> el.classList.remove('text-swap-in'), {once:true});
         }
-        function flipResize(mutator){
+        // ─ 高さの“auto”を滑らかに：旧→新の高さ(px)をトランジション
+        function morphHeightWith(mutator){
           const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          const firstH = telopBox.offsetHeight || 0;
-          mutator(); // ← ここで中身を差し替える（まだ描画前）
-          const lastH  = telopBox.offsetHeight || 0;
-          if (reduce || !firstH || !lastH) return;
-          const scaleY = firstH / lastH;
-          if (Math.abs(lastH - firstH) < 2) return;
-          // “差し替え直後”に逆変換を即適用 → 次のフレームで 1 に戻す
+          const first  = telopBox.offsetHeight || 0;
+          // 1) 現在の高さを固定（ガクッ防止）
+          telopBox.style.height = first + 'px';
           telopBox.style.transition = 'none';
-          telopBox.style.transform  = `scaleY(${scaleY})`;
-          // reflow してからトランジションで 1 へ
-          void telopBox.offsetHeight;
-          telopBox.style.transition = 'transform 240ms cubic-bezier(.2,.7,.2,1)';
-          telopBox.style.transform  = 'scaleY(1)';
-          telopBox.addEventListener('transitionend', ()=>{
-            telopBox.style.transition = ''; telopBox.style.transform = '';
-          }, {once:true});
+          // 2) 同フレームで中身を更新
+          mutator();
+          // 3) 新しい必要高さを測る（コンテンツは更新済み）
+          const last = telopBox.scrollHeight || telopBox.offsetHeight || 0;
+          const diff = Math.abs(last - first);
+          if (reduce || !first || !last || diff < 2){
+            telopBox.style.height = ''; telopBox.style.transition = '';
+            return;
+          }
+          // 4) 次フレームで高さにアニメを掛ける
+          requestAnimationFrame(()=>{
+            telopBox.style.transition = 'height 260ms cubic-bezier(.2,.7,.2,1)';
+            telopBox.style.height = last + 'px';
+            telopBox.addEventListener('transitionend', ()=>{
+              // 5) 完了後に“auto”へ戻す
+              telopBox.style.height = '';
+              telopBox.style.transition = '';
+            }, {once:true});
+          });
         }
-    
+  
         let prevName = '', prevQuestion = '';
     
         let dictionary = [];
@@ -434,12 +442,12 @@
             if (qChanged)    outs.push(fadeOut(questionEl));
             if (outs.length){
               Promise.all(outs).then(()=>{
-                // 差し替えと FLIP を同フレームで適用（ガクッ防止の核心）
-                flipResize(()=>{
+                // 高さは“固定→新高さへ”の順で滑らかに
+                morphHeightWith(()=>{
                   if (nameChanged) radioNameEl.textContent = name;
                   if (qChanged)    questionEl.innerHTML    = applyRuby(question);
                 });
-                // フェードイン
+                // テキストはクロスフェードで復帰
                 if (nameChanged) fadeIn(radioNameEl);
                 if (qChanged)    fadeIn(questionEl);
               });
