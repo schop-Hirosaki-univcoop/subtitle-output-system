@@ -395,11 +395,30 @@
         telopCanvas.classList.add('hidden');
     
         // 表示/非表示の制御ヘルパ
+        // ★ レース対策トークン
+        let __updateToken = 0;
+        let __currentToken = 0;
+
         async function showTelop(next){
+          const token = (++__updateToken || 1);
+          __currentToken = token;
           reportRender('showing', { nowShowing: { name: next?.name || '', question: next?.question || '', uid: next?.uid || null } });
-          await flipResize(next)
-            .then(()=> reportRender('visible', { nowShowing: { name: next?.name || '', question: next?.question || '', uid: next?.uid || null } }))
-            .catch((e)=> { console.error(e); reportRender('error'); });
+          try{
+            if (__currentToken !== token) return;
+            await flipResize(next);
+            if (__currentToken !== token) return;
+            await reportRender('visible', { nowShowing: { name: next?.name || '', question: next?.question || '', uid: next?.uid || null } });
+          } catch(e){
+            console.error(e);
+            await reportRender('error', { error: String(e && e.message || e) });
+            // ★ 自動復帰：5秒後に hidden へ
+            setTimeout(async () => {
+              if (__currentToken === token) {
+                try { await reportRender('hidden'); } catch(_) {}
+              }
+            }, 5000);
+            return;
+          }
           // 念のため：テキストは必ず可視状態に戻し、高さロックも解除してから入場
           ensureTextVisible();
           telopWrap.style.transform = '';
@@ -409,10 +428,24 @@
           telopCanvas.classList.add('show');
         }
         async function hideTelop(){
+          const token = (++__updateToken || 1);
+          __currentToken = token;
           reportRender('hiding');
-          await buildOut().catch((e)=> { console.error(e); reportRender('error'); });
-          // ビルドアウト完了時：中身もクリアしたいので nowShowing を null に
-          reportRender('hidden', { nowShowing: null });
+          try{
+            if (__currentToken !== token) return;
+            await buildOut();
+            if (__currentToken !== token) return;
+            // ビルドアウト完了時：中身もクリアしたいので nowShowing を null に
+            await reportRender('hidden', { nowShowing: null });
+          } catch(e){
+            console.error(e);
+            await reportRender('error', { error: String(e && e.message || e) });
+            setTimeout(async () => {
+              if (__currentToken === token) {
+                try { await reportRender('hidden'); } catch(_) {}
+              }
+            }, 5000);
+          }
         }
         // 入退場アニメ終了時の後始末
         let pendingClear = false;
