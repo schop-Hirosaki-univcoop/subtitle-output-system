@@ -201,7 +201,8 @@ const dom = {
     mainContainer: document.getElementById('main-container'),
     actionPanel: document.getElementById('action-panel'),
     userInfo: document.getElementById('user-info'),
-    questionsTableBody: document.querySelector('#questions-table tbody'),
+    questionsTableBody: null, // テーブルは廃止
+    cardsContainer: document.getElementById('questions-cards'),
     dictionaryTableBody: document.querySelector('#dictionary-table tbody'),
     logsTableBody: document.querySelector('#logs-table tbody'),
     addTermForm: document.getElementById('add-term-form'),
@@ -253,10 +254,9 @@ document.getElementById('fetch-dictionary-button').addEventListener('click', fet
 dom.addTermForm.addEventListener('submit', addTerm);
 dom.selectAllCheckbox.addEventListener('change', handleSelectAll);
 dom.batchUnanswerBtn.addEventListener('click', handleBatchUnanswer);
-dom.questionsTableBody.addEventListener('change', (e) => {
-  if (e.target && e.target.classList.contains('row-checkbox')) {
-    updateBatchButtonVisibility();
-  }
+// カード上のチェックは委譲
+dom.cardsContainer.addEventListener('change', (e)=>{
+  if (e.target && e.target.classList.contains('row-checkbox')) updateBatchButtonVisibility();
 });
 
 // --- ログイン状態の監視 ---
