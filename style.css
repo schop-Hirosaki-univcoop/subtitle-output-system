@@ -178,6 +178,12 @@ body.op-theme{ padding:20px; margin-bottom:100px; }
 .loading-text { font-weight: 600; letter-spacing: .02em; }
 .loading-sub  { margin-top: 6px; font-size: 12px; opacity: .75; }
 
+/* ===== Loader steps (段階表示) ===== */
+#loader-steps{ margin-top:12px; padding-left:1.25rem; max-width:560px; font-size:.95rem; color:var(--muted); }
+#loader-steps li{ margin:4px 0; opacity:.6; transition:opacity .2s, transform .2s; transform:translateX(-2px); }
+#loader-steps li.current{ opacity:1; transform:translateX(0); list-style:decimal; }
+#loader-steps li.done{ opacity:.9; }
+
 /* ==== Display 状態ランプ ==== */
 .render-indicator{ display:flex; align-items:center; gap:.5rem; padding-inline:8px; border-inline:1px solid var(--line); }
 .lamp{ inline-size:.9rem; block-size:.9rem; border-radius:9999px; background:#94a3b8;
@@ -188,6 +194,9 @@ body.op-theme{ padding:20px; margin-bottom:100px; }
 .lamp.is-showing,.lamp.is-hiding{ background:var(--warn); box-shadow:0 0 12px #f59e0b80; }
 .lamp.is-hidden{ background:#94a3b8; }
 .lamp.is-error{ background:var(--danger); box-shadow:0 0 12px #ef444480; }
+
+/* ★ 30秒超過で“古さ”をわずかに示す（事故防止） */
+.render-indicator.is-stale{ filter:saturate(.6); opacity:.85; }
 
 /* === 表示内容プレビュー === */
 .render-summary{ display:flex; flex-direction:column; gap:.25rem; margin-left:1rem; min-inline-size:20rem; }
