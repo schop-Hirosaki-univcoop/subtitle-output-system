@@ -143,8 +143,16 @@ async function handleAfterLogin(user) {
     const result = await apiPost({ action: 'fetchSheet', sheet: 'users' });
     if (result.success && result.data) {
       const authorizedUsers = result.data.map(item => item['メールアドレス']);
-      if (authorizedUsers.includes(user.email)) {
-        // ログイン成功 UI
+　　　　if (authorizedUsers.includes(user.email)) {
+        // ★ 管理者付与を自動実行（/admins/{uid} が無ければ付与）
+        try {
+          const adminSnap = await get(ref(database, 'admins/' + user.uid));
+          if (!adminSnap.exists() || adminSnap.val() !== true) {
+            await apiPost({ action: 'ensureAdmin' });
+          }
+        } catch (e) {
+          console.warn('ensureAdmin skipped:', e);
+        }
         dom.loginContainer.style.display = 'none';
         dom.mainContainer.style.display = 'flex';
         dom.actionPanel.style.display = 'flex';
