@@ -355,78 +355,104 @@ async function fetchLogs() {
     } catch (error) { console.error('ログの取得に失敗:', error); }
 }
 
-
-// --- データ描画関数 ---
+// --- データ描画関数（カードUIへ） ---
 async function renderQuestions() {
-    // 1) サブタブでフィルタ
-    let questionsToRender = state.allQuestions.filter(item => {
-        const isPuq = item['ラジオネーム'] === 'Pick Up Question';
-        return state.currentSubTab === 'puq' ? isPuq : !isPuq;
-    });
-    // 2) 並び順：PUQは「質問→ts→UID」、通常は「ts→名前→UID」
-    const isPUQ = state.currentSubTab === 'puq';
-    questionsToRender.sort((a, b) => {
-        if (isPUQ) {
-            const ta = String(a['質問・お悩み'] ?? '');
-            const tb = String(b['質問・お悩み'] ?? '');
-            const c1 = ta.localeCompare(tb, 'ja', { numeric: true, sensitivity: 'base' });
-            if (c1) return c1;
-            const da = a['__ts'] || 0, db = b['__ts'] || 0;
-            if (da !== db) return da - db; // 古い→新しい（逆にしたいなら db - da）
-            return String(a['UID']).localeCompare(String(b['UID']));
-        } else {
-              const da = a['__ts'] || 0, db = b['__ts'] || 0;
-              if (da !== db) return da - db; // 古い→新しい
-              const na = String(a['ラジオネーム'] ?? '');
-              const nb = String(b['ラジオネーム'] ?? '');
-              const c2 = na.localeCompare(nb, 'ja', { numeric: true, sensitivity: 'base' });
-              if (c2) return c2;
-              return String(a['UID']).localeCompare(String(b['UID']));
-        }
-    });
-    const snapshot = await get(telopRef);
-    const currentTelop = snapshot.val();
-    const currentSelectedUid = state.selectedRowData ? state.selectedRowData.uid : null;
-    dom.questionsTableBody.innerHTML = '';
-    questionsToRender.forEach(item => {
-        const tr = document.createElement('tr');
-        const isAnswered = item['回答済'] === true;
-        tr.className = isAnswered ? 'locked' : '';
-        tr.addEventListener('click', (e) => {
-            if (e.target.type === 'checkbox') return;
-            document.querySelectorAll('#questions-table tbody tr').forEach(row => row.classList.remove('selected-row'));
-            tr.classList.add('selected-row');
-            state.selectedRowData = { uid: item['UID'], name: item['ラジオネーム'], question: item['質問・お悩み'], isAnswered: isAnswered };
-            dom.actionButtons.forEach(btn => btn.disabled = false);
-            dom.actionButtons[0].disabled = isAnswered; // 回答済なら表示ボタンを無効化
-            dom.actionButtons[1].disabled = !isAnswered; // 未回答なら未回答ボタンを無効化
-            dom.selectedInfo.textContent = `選択中: ${escapeHtml(item['ラジオネーム'])}`;
-        });
-        if (item['UID'] === currentSelectedUid) { tr.classList.add('selected-row'); }
-        if (currentTelop && currentTelop.name === item['ラジオネーム'] && currentTelop.question === item['質問・お悩み']) {
-            tr.classList.add('now-displaying');
-            if (state.lastDisplayedUid === item['UID']) {
-                tr.classList.add('flash');
-                tr.addEventListener('animationend', () => tr.classList.remove('flash'), { once: true });
-                state.lastDisplayedUid = null;
-            }
-        }
-        const status = item['選択中'] ? 'live' : (isAnswered ? 'answered' : 'pending');
-        const statusText = status === 'live' ? '表示中' : (status === 'answered' ? '回答済' : '未回答');
-        tr.innerHTML = `
-            <td><input type="checkbox" class="row-checkbox" data-uid="${item['UID']}"></td>
-            <td>${escapeHtml(item['班番号'] ?? '')}</td>
-            <td>${escapeHtml(item['ラジオネーム'])}</td>
-            <td>${escapeHtml(item['質問・お悩み'])}</td>
-            <td><span class="chip chip--${status}">${statusText}</span></td>`;
-        dom.questionsTableBody.appendChild(tr);
-    });
-    if (!questionsToRender.some(item => item['UID'] === currentSelectedUid)) {
-        state.selectedRowData = null;
-        dom.actionButtons.forEach(btn => btn.disabled = true);
-        dom.selectedInfo.textContent = '行を選択してください';
+  // 1) サブタブでフィルタ
+  let list = state.allQuestions.filter(item => {
+    const isPuq = item['ラジオネーム'] === 'Pick Up Question';
+    return state.currentSubTab === 'puq' ? isPuq : !isPuq;
+  });
+  // 2) 並び順：PUQ=「質問→ts→UID」、通常=「ts→名前→UID」
+  const isPUQ = state.currentSubTab === 'puq';
+  list.sort((a,b)=>{
+    if (isPUQ){
+      const ta = String(a['質問・お悩み'] ?? '');
+      const tb = String(b['質問・お悩み'] ?? '');
+      const t = ta.localeCompare(tb, 'ja', {numeric:true, sensitivity:'base'});
+      if (t) return t;
+      const da = a['__ts']||0, db = b['__ts']||0;
+      if (da!==db) return da-db;
+      return String(a['UID']).localeCompare(String(b['UID']));
+    }else{
+      const da = a['__ts']||0, db = b['__ts']||0;
+      if (da!==db) return da-db;                    // 古い→新しい
+      const na = String(a['ラジオネーム'] ?? ''), nb = String(b['ラジオネーム'] ?? '');
+      const n = na.localeCompare(nb, 'ja', {numeric:true, sensitivity:'base'});
+      if (n) return n;
+      return String(a['UID']).localeCompare(String(b['UID']));
     }
-    updateBatchButtonVisibility();
+  });
+
+  const snap = await get(telopRef);
+  const live = snap.val();
+  const selectedUid = state.selectedRowData ? state.selectedRowData.uid : null;
+
+  // --- カード描画 ---
+  const host = dom.cardsContainer;
+  host.innerHTML = '';
+  list.forEach(item=>{
+    const isAnswered = item['回答済'] === true;
+    const status = item['選択中'] ? 'live' : (isAnswered ? 'answered' : 'pending');
+    const statusText = status==='live' ? '表示中' : (status==='answered' ? '回答済' : '未回答');
+
+    const card = document.createElement('article');
+    card.className = `q-card ${status==='live'?'is-live':''} ${isAnswered?'is-answered':'is-pending'}`;
+    card.dataset.uid = String(item['UID']);
+
+    // 現在表示中のカードにマーキング（反応フラッシュ）
+    if (live && live.name === item['ラジオネーム'] && live.question === item['質問・お悩み']) {
+      card.classList.add('now-displaying');
+      if (state.lastDisplayedUid === item['UID']) {
+        card.classList.add('flash');
+        card.addEventListener('animationend', ()=>card.classList.remove('flash'), {once:true});
+        state.lastDisplayedUid = null;
+      }
+    }
+    if (item['UID'] === selectedUid) card.classList.add('is-selected');
+
+    card.innerHTML = `
+      <header class="q-head">
+        <div class="q-title">
+          <span class="q-name">${escapeHtml(item['ラジオネーム'])}</span>
+          ${item['ラジオネーム']==='Pick Up Question' ? '<span class="q-badge q-badge--puq">PUQ</span>' : ''}
+        </div>
+        <div class="q-meta">
+          <span class="q-group">${escapeHtml(item['班番号'] ?? '') || ''}</span>
+          <span class="chip chip--${status}">${statusText}</span>
+          <label class="q-check">
+            <input type="checkbox" class="row-checkbox" data-uid="${item['UID']}">
+          </label>
+        </div>
+      </header>
+      <div class="q-text">${escapeHtml(item['質問・お悩み'])}</div>
+    `;
+
+    // カード選択
+    card.addEventListener('click', (e)=>{
+      if (e.target && (e.target as HTMLElement).closest('.q-check')) return; // チェック操作は除外
+      host.querySelectorAll('.q-card').forEach(el=>el.classList.remove('is-selected'));
+      card.classList.add('is-selected');
+      state.selectedRowData = {
+        uid: item['UID'],
+        name: item['ラジオネーム'],
+        question: item['質問・お悩み'],
+        isAnswered
+      };
+      dom.actionButtons.forEach(btn => btn.disabled = false);
+      dom.actionButtons[0].disabled = isAnswered;   // 表示ボタン
+      dom.actionButtons[1].disabled = !isAnswered;  // 未回答へ戻す
+      dom.selectedInfo.textContent = `選択中: ${escapeHtml(item['ラジオネーム'])}`;
+    });
+
+    host.appendChild(card);
+  });
+
+  if (!list.some(x => x['UID'] === selectedUid)) {
+    state.selectedRowData = null;
+    dom.actionButtons.forEach(btn => btn.disabled = true);
+    dom.selectedInfo.textContent = '行を選択してください';
+  }
+  updateBatchButtonVisibility();
 }
 
 function renderLogs(){
