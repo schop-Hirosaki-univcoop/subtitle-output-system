@@ -34,6 +34,7 @@ const sumEl    = document.getElementById('render-summary');
 const titleEl  = document.getElementById('render-title');
 const qEl      = document.getElementById('render-question');
 const updEl    = document.getElementById('render-updated');
+const indicatorEl = document.querySelector('.render-indicator'); // ★ “古さ”の視覚表示に使用
 let lastUpdatedAt = 0;
 let renderTicker = null;
 
@@ -104,8 +105,11 @@ function setLamp(phase){
     }
     // ticker を起動（多重起動防止）
     if (!renderTicker){
-      renderTicker = setInterval(redrawUpdatedAt, 1000);
-    }
+      // 相対時刻と“古さ”の状態を毎秒更新
+      renderTicker = setInterval(()=>{ redrawUpdatedAt(); refreshStaleness(); }, 1000);
+     }
+    // 値が来たタイミングでも一度だけ評価
+    refreshStaleness();
   });
 
 // タブを閉じたら消えるセッション保存 + ポップアップ resolver を設定
@@ -126,6 +130,28 @@ function showLoader(msg){ document.getElementById('loading-overlay')?.removeAttr
 function updateLoader(msg){ if (msg) { const t = document.getElementById('loading-text'); if (t) t.textContent = msg; } }
 function hideLoader(){ document.getElementById('loading-overlay')?.setAttribute('hidden',''); document.body.removeAttribute('aria-busy'); }
 
+// ===== 追加：段階ステップ（loader-steps が無ければ黙って何もしない） =====
+const domSteps = { list: document.getElementById('loader-steps') };
+const STEP_LABELS = [
+  '認証', '在籍チェック', '管理者付与',
+  '初期ミラー', '購読開始', '辞書取得', 'ログ取得', '準備完了'
+];
+function initLoaderSteps(){
+  if (!domSteps.list) return;
+  domSteps.list.innerHTML = STEP_LABELS.map((s,i)=>`<li data-step="${i}">${escapeHtml(s)}</li>`).join('');
+}
+function setStep(i, message){
+  if (message) updateLoader(message);
+  if (!domSteps.list) return;
+  const items = domSteps.list.querySelectorAll('li');
+  items.forEach((li, idx) => {
+    li.classList.toggle('current', idx === i);
+    li.classList.toggle('done', idx < i);
+  });
+}
+function finishSteps(msg){ setStep(STEP_LABELS.length - 1, msg || '準備完了'); }
+
+
 // 認証後の共通処理（元の onAuthStateChanged 内の “user あり” 分岐をそのまま移植）
 async function handleAfterLogin(user) {
   if (!user) {
@@ -140,11 +166,15 @@ async function handleAfterLogin(user) {
   }
   try {
     showLoader('権限を確認しています…');
+    initLoaderSteps();
+    setStep(0, '認証OK。ユーザー情報を確認中…');
     const result = await apiPost({ action: 'fetchSheet', sheet: 'users' });
+    setStep(1, '在籍チェック中…');
     if (result.success && result.data) {
       const authorizedUsers = result.data.map(item => item['メールアドレス']);
 　　　　if (authorizedUsers.includes(user.email)) {
         // ★ 管理者付与を“毎回”試す（冪等）: ルールで /admins 読めないため読まずに実行
+        setStep(2, '管理者権限の確認/付与…');
         try {
           await apiPost({ action: 'ensureAdmin' });
         } catch (e) {
@@ -157,12 +187,14 @@ async function handleAfterLogin(user) {
         dom.userInfo.innerHTML = `${user.displayName} (${user.email}) <button id="logout-button">ログアウト</button>`;
         document.getElementById('logout-button').addEventListener('click', logout);
         // 初回だけシート→RTDB ミラー（空なら）
+        setStep(3, '初期ミラー実行中…');
         updateLoader('初期データを準備しています…');
         try {
           const s = await get(questionsRef);
           if (!s.exists()) await apiPost({ action: 'mirrorSheet' });
         } catch(_) {}
         // RTDB 初回データを取得 → UI へ反映 → ストリーム購読開始
+        setStep(4, '購読開始…');
         updateLoader('データ同期中…');
         const first = await get(questionsRef);
         const m = first.val() || {};
@@ -173,7 +205,11 @@ async function handleAfterLogin(user) {
         renderQuestions();
         startQuestionsStream(); // ← 以後リアルタイム
         // 他パネルの初期読み込み
-        await Promise.all([ fetchDictionary(), fetchLogs() ]);
+        setStep(5, '辞書取得…');
+        await fetchDictionary();
+        setStep(6, 'ログ取得…');
+        await fetchLogs();
+        finishSteps('準備完了');
         hideLoader();
         showToast(`ようこそ、${user.displayName}さん`, 'success');
         // update_trigger の購読（logs のリアルタイム反映）
@@ -515,6 +551,15 @@ function redrawUpdatedAt(){
   }
   const t = new Date(lastUpdatedAt).toLocaleTimeString('ja-JP', { hour12:false });
   updEl.textContent = `${t}（${formatRelative(lastUpdatedAt)}）`;
+}
+
+// ★ “古さ”の視覚表示：30秒経過でごく僅かにトーンダウン
+function refreshStaleness(){
+  if (!indicatorEl) return;
+  if (!lastUpdatedAt) { indicatorEl.classList.remove('is-stale'); return; }
+  const age = Date.now() - lastUpdatedAt;
+  if (Number.isFinite(age) && age >= 30_000) indicatorEl.classList.add('is-stale');
+  else indicatorEl.classList.remove('is-stale');
 }
 
 function parseLogTimestamp(ts) {
