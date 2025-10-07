@@ -411,13 +411,14 @@ async function renderQuestions() {
                 state.lastDisplayedUid = null;
             }
         }
-        const statusText = item['選択中'] ? '表示中' : (isAnswered ? '回答済' : '未回答');
+        const status = item['選択中'] ? 'live' : (isAnswered ? 'answered' : 'pending');
+        const statusText = status === 'live' ? '表示中' : (status === 'answered' ? '回答済' : '未回答');
         tr.innerHTML = `
             <td><input type="checkbox" class="row-checkbox" data-uid="${item['UID']}"></td>
             <td>${escapeHtml(item['班番号'] ?? '')}</td>
             <td>${escapeHtml(item['ラジオネーム'])}</td>
             <td>${escapeHtml(item['質問・お悩み'])}</td>
-            <td>${statusText}</td>`;
+            <td><span class="chip chip--${status}">${statusText}</span></td>`;
         dom.questionsTableBody.appendChild(tr);
     });
     if (!questionsToRender.some(item => item['UID'] === currentSelectedUid)) {
