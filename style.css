@@ -10,6 +10,10 @@
   --success: #18d18f;
   --warn: #ffc247;
   --danger: #ff6b6b;
+  /* aliases for consistency */
+  --bg: var(--ui-bg);
+  --text: var(--txt);
+  --line: var(--stroke);
 }
 
 body { 
