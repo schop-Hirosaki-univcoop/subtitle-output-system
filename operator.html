@@ -57,6 +57,7 @@
                         <button class="sub-tab-button active" data-sub-tab="normal">通常質問</button>
                         <button class="sub-tab-button" data-sub-tab="puq">Pick Up Question</button>
                     </div>
+<!--
                     <table id="questions-table">
                         <thead><tr>
                             <th style="width:32px"><input type="checkbox" id="select-all-checkbox"></th>
@@ -67,6 +68,15 @@
                         </tr></thead>
                         <tbody></tbody>
                     </table>
+-->
+                    <!-- 質問リスト（カードビュー） -->
+                    <div class="cards-toolbar">
+                        <label class="chk">
+                            <input id="select-all-checkbox" type="checkbox" />
+                            全選択
+                        </label>
+                    </div>
+                    <div id="questions-cards" class="cards-list" aria-live="polite"></div>
                 </div>
                 <div class="main-tab-content" id="logs-content">
                     <div id="logs-toolbar" style="display:flex;gap:12px;align-items:center;margin:8px 0;">
