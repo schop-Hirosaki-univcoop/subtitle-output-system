@@ -144,14 +144,12 @@ async function handleAfterLogin(user) {
     if (result.success && result.data) {
       const authorizedUsers = result.data.map(item => item['メールアドレス']);
 　　　　if (authorizedUsers.includes(user.email)) {
-        // ★ 管理者付与を自動実行（/admins/{uid} が無ければ付与）
+        // ★ 管理者付与を“毎回”試す（冪等）: ルールで /admins 読めないため読まずに実行
         try {
-          const adminSnap = await get(ref(database, 'admins/' + user.uid));
-          if (!adminSnap.exists() || adminSnap.val() !== true) {
-            await apiPost({ action: 'ensureAdmin' });
-          }
+          await apiPost({ action: 'ensureAdmin' });
         } catch (e) {
-          console.warn('ensureAdmin skipped:', e);
+          // users未在籍などはここに来るが致命ではない
+          console.warn('ensureAdmin non-fatal:', e);
         }
         dom.loginContainer.style.display = 'none';
         dom.mainContainer.style.display = 'flex';
