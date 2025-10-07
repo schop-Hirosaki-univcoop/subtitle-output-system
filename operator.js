@@ -429,8 +429,8 @@ async function renderQuestions() {
 
     // カード選択
     card.addEventListener('click', (e)=>{
-      if (e.target && (e.target as HTMLElement).closest('.q-check')) return; // チェック操作は除外
-      host.querySelectorAll('.q-card').forEach(el=>el.classList.remove('is-selected'));
+      const t = e.target;
+      if (t instanceof Element && t.closest('.q-check')) return; // チェック操作は除外      host.querySelectorAll('.q-card').forEach(el=>el.classList.remove('is-selected'));
       card.classList.add('is-selected');
       state.selectedRowData = {
         uid: item['UID'],
