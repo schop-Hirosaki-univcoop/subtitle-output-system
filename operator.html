@@ -7,7 +7,7 @@
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 </head>
-<body>
+<body class="op-theme">
     <!-- ローディングオーバーレイ -->
     <div id="loading-overlay" aria-live="polite" hidden>
       <div class="loading-backdrop"></div>
@@ -19,20 +19,24 @@
     </div>
   <header class="op-header">
     <h1>Operator</h1>
-    <div class="render-indicator" title="Display 状態">
-      <span id="render-lamp" class="lamp"></span>
-      <span id="render-phase" class="lamp-label">-</span>
-    </div>
-    <div class="render-summary" id="render-summary">
-      <div class="render-line">
-        <span class="label">表示中:</span>
-        <span id="render-title" class="text-strong">—</span>
-      </div>
-      <div id="render-question" class="text-soft">—</div>
-      <div id="render-updated" class="text-meta">—</div>
+    <div class="status-bar">
+        <div class="brand">TELoP OPS</div>
+        <div class="render-indicator" title="Display 状態">
+            <span id="render-lamp" class="lamp"></span>
+            <span id="render-phase" class="lamp-label">-</span>
+        </div>
+        <div class="render-summary" id="render-summary">
+            <div class="render-line">
+                <span class="label">表示中:</span>
+                <span id="render-title" class="text-strong">—</span>
+            </div>
+            <div id="render-question" class="text-soft">—</div>
+            <div id="render-updated" class="text-meta">—</div>
+        </div>
     </div>
     <div id="user-info"></div>
-
+  </header>
+      
     <div id="login-container">
         <h2>テロップ操作パネル ログイン</h2>
         <button id="login-button">Googleアカウントでログイン</button>
