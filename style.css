@@ -60,6 +60,11 @@ body.op-theme{ padding:20px; margin-bottom:100px; }
 .q-card:hover{ border-color:#3b5672; }
 .q-card.selected{ outline:2px solid var(--accent); outline-offset:2px; }
 .q-card.locked{ opacity:.55; }
+/* keyboard focus */
+.q-card:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+}
 
 /* 上段：RN & 時刻/班/状態 */
 .q-head{
