@@ -134,7 +134,7 @@ async function handleAfterLogin(user) {
     dom.mainContainer.style.display = 'none';
     dom.actionPanel.style.display = 'none';
     dom.userInfo.innerHTML = '';
-    off(updateTriggerRef);
+    cleanupSubscriptions();
     hideLoader();
     return;
   }
@@ -430,7 +430,8 @@ async function renderQuestions() {
     // カード選択
     card.addEventListener('click', (e)=>{
       const t = e.target;
-      if (t instanceof Element && t.closest('.q-check')) return; // チェック操作は除外      host.querySelectorAll('.q-card').forEach(el=>el.classList.remove('is-selected'));
+      if (t instanceof Element && t.closest('.q-check')) return; // チェック操作は除外
+      host.querySelectorAll('.q-card').forEach(el => el.classList.remove('is-selected'));
       card.classList.add('is-selected');
       state.selectedRowData = {
         uid: item['UID'],
@@ -605,7 +606,8 @@ async function updateStatusOnServer(uids, isAnswered, isSelectingUpdate = false,
     } catch (error) { showToast('通信エラー: ' + error.message, 'error'); }
 }
 function handleSelectAll(event) {
-    document.querySelectorAll('.row-checkbox').forEach(checkbox => { checkbox.checked = event.target.checked; });
+    dom.cardsContainer.querySelectorAll('.row-checkbox')
+      .forEach(cb => { cb.checked = event.target.checked; });
     updateBatchButtonVisibility();
 }
 function updateBatchButtonVisibility() {
@@ -887,3 +889,11 @@ function getLogLevel(log){
   // デフォルト
   return 'info';
 }
+
+function cleanupSubscriptions(){
+  try { off(questionsRef); } catch(_){}
+  try { off(updateTriggerRef); } catch(_){}
+  try { off(renderRef); } catch(_){}
+  if (renderTicker){ clearInterval(renderTicker); renderTicker = null; }
+}
+
