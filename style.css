@@ -1,8 +1,24 @@
+/* ===== Theme Tokens (Broadcast UI) ===== */
+:root{
+  --bg:#0f1424; --panel:#12192c; --panel-2:#0e1526; --text:#e7edf7; --muted:#9fb3c8; --line:#1a2340;
+  --accent:#3b82f6; --accent-2:#06b6d4; --success:#10b981; --warn:#f59e0b; --danger:#ef4444;
+  --chip:#1e2a46; --chip-line:#24314f;
+}
 body { 
     font-family: sans-serif; 
     padding: 20px; 
     margin-bottom: 80px; /* 固定操作パネルの分の余白を確保 */
 }
+.op-theme{ background:var(--bg); color:var(--text); }
+body.op-theme{ padding:20px; margin-bottom:100px; }
+
+/* ===== Top Status Bar ===== */
+.status-bar{ display:flex; align-items:center; gap:16px; padding:12px 16px;
+  background:linear-gradient(180deg, rgba(24,30,52,.9), rgba(16,22,40,.9));
+  border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.25);
+  position:sticky; top:12px; z-index:50; backdrop-filter: blur(6px);
+}
+.status-bar .brand{ font-weight:700; letter-spacing:.04em; opacity:.85; }
 
 /* login 中の簡易スタイル（任意） */
 #login-button.is-busy {
@@ -51,26 +67,23 @@ body {
 .loading-sub  { margin-top: 6px; font-size: 12px; opacity: .75; }
 
 /* ==== Display 状態ランプ ==== */
-.render-indicator{ display:flex; align-items:center; gap:.5rem; }
-.lamp{
-  inline-size: .9rem; block-size: .9rem; border-radius: 9999px;
-  background: #94a3b8; /* slate-400: idle/hidden */
-  box-shadow: 0 0 0 1px rgba(0,0,0,.15) inset, 0 0 6px rgba(0,0,0,.1);
-  transition: background-color .18s ease, box-shadow .18s ease, transform .18s ease;
-}
+.render-indicator{ display:flex; align-items:center; gap:.5rem; padding-inline:8px; border-inline:1px solid var(--line); }
+.lamp{ inline-size:.9rem; block-size:.9rem; border-radius:9999px; background:#94a3b8;
+  box-shadow:0 0 0 1px rgba(0,0,0,.25) inset, 0 0 10px rgba(0,0,0,.25);
+  transition: background-color .18s ease, box-shadow .18s ease, transform .18s ease; }
 .lamp-label{ font: 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color:#475569; }
-.lamp.is-visible{ background:#10b981; box-shadow:0 0 10px #10b98166; }
-.lamp.is-showing,.lamp.is-hiding{ background:#f59e0b; box-shadow:0 0 10px #f59e0b66; }
+.lamp.is-visible{ background:var(--success); box-shadow:0 0 12px #10b98180; }
+.lamp.is-showing,.lamp.is-hiding{ background:var(--warn); box-shadow:0 0 12px #f59e0b80; }
 .lamp.is-hidden{ background:#94a3b8; }
-.lamp.is-error{ background:#ef4444; box-shadow:0 0 10px #ef444466; }
+.lamp.is-error{ background:var(--danger); box-shadow:0 0 12px #ef444480; }
 
 /* === 表示内容プレビュー === */
-.render-summary{ display:flex; flex-direction:column; gap:.25rem; margin-left:1rem; min-inline-size: 20rem; }
+.render-summary{ display:flex; flex-direction:column; gap:.25rem; margin-left:1rem; min-inline-size:20rem; }
 .render-line{ display:flex; align-items:baseline; gap:.5rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.render-summary .text-strong{ font-weight:600; max-inline-size: 36rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.render-summary .text-soft{ color:#334155; opacity:.85; max-inline-size: 48rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-.render-summary .text-meta{ color:#64748b; font-size:12px; }
-.render-summary .label{ color:#64748b; font-size:12px; }
+.render-summary .text-strong{ font-weight:700; letter-spacing:.01em; max-inline-size:36rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.render-summary .text-soft{ color:#c6d1e3; opacity:.9; max-inline-size:48rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.render-summary .text-meta{ color:#9fb3c8; font-size:12px; }
+.render-summary .label{ color:#9fb3c8; font-size:12px; }
 
 /* 更新フラッシュ */
 .render-indicator.is-updated .lamp{ transform: scale(1.15); }
@@ -80,13 +93,26 @@ body {
   100%{ filter: brightness(1); }
 }
 
-#main-container { display: flex; gap: 40px; }
+#main-container { display:flex; gap:24px; }
 #login-container { text-align: center; margin-top: 50px; }
 #user-info { position: fixed; top: 10px; right: 20px; font-size: 14px; z-index: 100; }
 
 .panel { flex: 1; }
-table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+/* ===== Questions Table ===== */
+table{ border-collapse:separate; border-spacing:0; width:100%; margin-top:12px; }
+#questions-table{ background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+#questions-table thead th{
+  position:sticky; top:0; z-index:1; text-align:left; font-weight:600;
+  background:linear-gradient(180deg, #1c2546, #151d34); color:#dbe6fb;
+  border-bottom:1px solid var(--line); padding:10px 12px;
+}
+#questions-table tbody td{ border-bottom:1px solid var(--line); padding:10px 12px; color:#dfe6f7; }
+#questions-table tbody tr:hover{ background:#16213a; }
+#questions-table tbody tr.selected-row{ background:#11233f !important; }
+#questions-table tbody tr.now-displaying{ background:rgba(16,185,129,.08); }
+#questions-table tbody tr.locked{ background:rgba(239,68,68,.06); color:#ffe; }
+#questions-table tbody tr.locked:hover{ background:rgba(239,68,68,.1) !important; }
+
 /* チェックボックス列の幅を固定 */
 #questions-table th:first-child,
 #questions-table td:first-child {
@@ -141,15 +167,27 @@ tr.now-displaying { background-color: #d4edda; font-weight: bold; }
 .main-tab-content { display: none; }
 .main-tab-content.active { display: block; }
 
-/* 操作パネル */
+/* ===== Action Panel (glass dock) ===== */
 #action-panel {
-    position: fixed; bottom: 0; left: 0; width: 100%;
-    background-color: #f8f9fa; border-top: 1px solid #dee2e6;
-    padding: 15px 20px; box-sizing: border-box;
-    display: flex; align-items: center; gap: 15px; z-index: 99;
+  position:fixed; inset-inline:12px; bottom:12px; z-index:60;
+  display:flex; align-items:center; gap:12px; padding:12px 14px; box-sizing:border-box;
+  background:linear-gradient(180deg, rgba(24,30,52,.85), rgba(16,22,40,.85));
+  border:1px solid var(--line); border-radius:14px; backdrop-filter: blur(8px);
+  box-shadow:0 10px 30px rgba(0,0,0,.35);
 }
-#action-panel button { padding: 8px 15px; font-size: 14px; }
-#action-panel #selected-info { font-size: 14px; color: #6c757d; }
+#action-panel button{
+  padding:9px 14px; font-size:14px; border-radius:10px; border:1px solid var(--line);
+  background:#172037; color:var(--text); cursor:pointer; transition:transform .1s ease, filter .2s ease, background .2s ease;
+}
+#action-panel button:hover{ filter:brightness(1.08); }
+#action-panel button:active{ transform:translateY(1px) scale(.99); }
+#action-panel #selected-info { font-size: 14px; color: var(--muted); }
+
+/* Button accents */
+.btn-primary{ background:linear-gradient(180deg, #2563eb, #1d4ed8); border-color:#1b3ea9; }
+.btn-warn{ background:linear-gradient(180deg, #f59e0b, #d97706); border-color:#b45309; }
+.btn-danger{ background:linear-gradient(180deg, #ef4444, #b91c1c); border-color:#7f1d1d; }
+.btn-ghost{ background:transparent; border-color:var(--line); }
 
 /* アニメーション */
 @keyframes flash-success {
@@ -157,9 +195,15 @@ tr.now-displaying { background-color: #d4edda; font-weight: bold; }
 }
 .flash { animation: flash-success 1.2s ease-out; }
 
-/* ステータス */
-tr.answered { background-color: #e0e0e0; color: #888; }
-tr.disabled { text-decoration: line-through; color: #999; }
+/* ===== Status Chips ===== */
+.chip{
+  display:inline-flex; align-items:center; gap:.4em; padding:.25em .6em; border-radius:999px;
+  font:600 12px/1 system-ui,-apple-system,"Segoe UI",sans-serif;
+  background:var(--chip); color:#cfe1ff; border:1px solid var(--chip-line);
+}
+.chip--live{ background:rgba(16,185,129,.12); border-color:#164e3a; color:#a7f3d0; }
+.chip--answered{ background:rgba(59,130,246,.12); border-color:#1e3a8a; color:#c7d2fe; }
+.chip--pending{ background:rgba(245,158,11,.12); border-color:#7c2d12; color:#fcd34d; }
 
 /* 辞書フォーム */
 #add-term-form { display: flex; gap: 10px; margin-top: 10px; }
