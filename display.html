@@ -342,7 +342,7 @@
   <!-- Firebase スクリプトは既存のまま（IDも同じ） -->
   <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getDatabase, ref, onValue, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+        import { getDatabase, ref, onValue, update, serverTimestamp, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
         import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
         const firebaseConfig = {
@@ -428,9 +428,6 @@
           });
         });
     
-        const telopRef = ref(database, 'currentTelop');
-        const renderRef = ref(database, 'render_state');
-      
         // ★ 状態レポート（display → Firebase）
         function reportRender(phase, info = {}) {
           if (!canReportRender) {
