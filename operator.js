@@ -300,6 +300,8 @@ let state = {
     displaySession: null,
     displaySessionActive: false,
 };
+
+updateActionAvailability();
 dom.logSearch.addEventListener('input', ()=>renderLogs());
 dom.logAutoscroll.addEventListener('change', (e)=>{ state.autoScrollLogs = e.target.checked; });
 
