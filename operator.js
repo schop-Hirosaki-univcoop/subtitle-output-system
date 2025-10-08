@@ -163,6 +163,7 @@ async function handleAfterLogin(user) {
     dom.userInfo.innerHTML = '';
     cleanupSubscriptions();
     hideLoader();
+    setDisplayApprovalFeedback('');
     return;
   }
   try {
@@ -241,17 +242,20 @@ async function handleAfterLogin(user) {
         showToast("あなたのアカウントはこのシステムへのアクセスが許可されていません。", 'error');
         await logout();
         hideLoader();
+        setDisplayApprovalFeedback('');
       }
     } else {
       showToast("ユーザー権限の確認に失敗しました。", 'error');
       await logout();
       hideLoader();
+      setDisplayApprovalFeedback('');
     }
   } catch (error) {
     console.error("Authorization check failed:", error);
     showToast("ユーザー権限の確認中にエラーが発生しました。", 'error');
     await logout();
     hideLoader();
+    setDisplayApprovalFeedback('');
   }
 }
 
@@ -325,6 +329,10 @@ dom.batchUnanswerBtn.addEventListener('click', handleBatchUnanswer);
 dom.cardsContainer.addEventListener('change', (e)=>{
   if (e.target && e.target.classList.contains('row-checkbox')) updateBatchButtonVisibility();
 });
+
+if (dom.approveDisplayForm) {
+  dom.approveDisplayForm.addEventListener('submit', handleApproveDisplay);
+}
 
 // --- ログイン状態の監視 ---
 onAuthStateChanged(auth, (user) => {
