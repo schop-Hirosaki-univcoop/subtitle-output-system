@@ -320,6 +320,7 @@
     [data-probe],
     [data-probe] * { animation: none !important; transition: none !important; }
     [data-probe] .telop-box::after { content: none !important; }
+
   </style>
 </head>
 <body>
@@ -370,6 +371,16 @@
         let approvalEnabledLogged = false;
         let approvalUnreadableLogged = false;
         let reportSuppressedLogged = false;
+        let pendingRenderUpdate = null;
+
+        function cloneInfo(info) {
+          if (!info) return {};
+          try {
+            return JSON.parse(JSON.stringify(info));
+          } catch (_) {
+            return { ...info };
+          }
+        }
 
         onAuthStateChanged(auth, (user) => {
           if (typeof unsubscribeApproval === 'function') {
@@ -384,6 +395,7 @@
             approvalEnabledLogged = false;
             approvalUnreadableLogged = false;
             reportSuppressedLogged = false;
+            pendingRenderUpdate = null;
             signInAnonymously(auth).catch(err => {
               console.error('Anonymous sign-in failed:', err);
             });
@@ -403,6 +415,12 @@
               if (!approvalEnabledLogged) {
                 console.info('Display UID approved; render_state updates enabled.');
                 approvalEnabledLogged = true;
+              }
+              if (pendingRenderUpdate) {
+                const pending = pendingRenderUpdate;
+                pendingRenderUpdate = null;
+                console.info('Flushing deferred render_state update after approval.');
+                reportRender(pending.phase, pending.info);
               }
               return;
             }
@@ -427,13 +445,14 @@
             console.error('Failed to confirm display approval status:', error);
           });
         });
-    
+
         const currentTelopRef = ref(database, 'currentTelop');
         const renderRef = ref(database, 'render_state');
-      
+
         // ★ 状態レポート（display → Firebase）
         function reportRender(phase, info = {}) {
           if (!canReportRender) {
+            pendingRenderUpdate = { phase, info: cloneInfo(info) };
             if (approvalChecked && !reportSuppressedLogged) {
               console.debug('render_state update skipped because this display is not approved yet.');
               reportSuppressedLogged = true;
@@ -446,7 +465,9 @@
             updatedAt: serverTimestamp(),
             ...info                                       // { name, uid, seq など任意}
           };
-          return update(renderRef, payload).catch(err => {
+          return update(renderRef, payload).then(() => {
+            pendingRenderUpdate = null;
+          }).catch(err => {
             if (err && err.code === 'PERMISSION_DENIED') {
               canReportRender = false;
               approvalEnabledLogged = false;
@@ -454,6 +475,7 @@
                 console.warn('render_state update was denied. Waiting for operator approval before retrying.');
                 approvalWaitingLogged = true;
               }
+              pendingRenderUpdate = { phase, info: cloneInfo(info) };
               return;
             }
             console.error(err);
