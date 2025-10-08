@@ -364,15 +364,20 @@
         const database = getDatabase(app);
         const auth = getAuth(app);
 
-        let canReportRender = false;
-        let approvalChecked = false;
-        let unsubscribeApproval = null;
-        let approvalWaitingLogged = false;
-        let approvalEnabledLogged = false;
-        let approvalUnreadableLogged = false;
+        const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec';
+
+        const HEARTBEAT_INTERVAL_MS = 20000;
+        const SESSION_RETRY_DELAY_MS = 8000;
+
+        let sessionInfo = null;
+        let sessionActive = false;
         let reportSuppressedLogged = false;
         let pendingRenderUpdate = null;
         let pendingFlushTimer = null;
+        let sessionRetryTimer = null;
+        let heartbeatTimer = null;
+        let latestIdToken = null;
+        let beginInFlight = null;
 
         function clearPendingFlushTimer() {
           if (pendingFlushTimer) {
@@ -381,15 +386,52 @@
           }
         }
 
-        // Firebase ルールの都合で approvalRef が PERMISSION_DENIED になる環境では
-        // onValue で承認状態を監視できない。その場合でも承認後に即座に
-        // render_state を更新できるよう、一定間隔で再送するタイマーを持たせる。
+        function clearSessionRetryTimer() {
+          if (sessionRetryTimer) {
+            clearTimeout(sessionRetryTimer);
+            sessionRetryTimer = null;
+          }
+        }
+
+        function stopHeartbeat() {
+          if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+            heartbeatTimer = null;
+          }
+        }
+
+        function startHeartbeat() {
+          stopHeartbeat();
+          heartbeatTimer = setInterval(() => {
+            heartbeatDisplaySession().catch(err => {
+              console.warn('Display heartbeat failed:', err);
+            });
+          }, HEARTBEAT_INTERVAL_MS);
+        }
+
+        function scheduleSessionRetry(delayMs = SESSION_RETRY_DELAY_MS) {
+          if (sessionRetryTimer) return;
+          sessionRetryTimer = setTimeout(() => {
+            sessionRetryTimer = null;
+            if (!auth.currentUser) return;
+            beginDisplaySession().catch(err => {
+              console.error('Display session restart failed:', err);
+              scheduleSessionRetry(Math.min(delayMs * 1.5, 30000));
+            });
+          }, delayMs);
+        }
+
+        // render_state を更新できるよう、セッション待ちの間は一定間隔で再送をリトライ
         function schedulePendingFlush(delayMs = 5000) {
           if (pendingFlushTimer) return;
           pendingFlushTimer = setTimeout(() => {
             pendingFlushTimer = null;
             if (!pendingRenderUpdate) return;
-            console.debug('Retrying deferred render_state update after approval denial.');
+            if (!sessionActive) {
+              scheduleSessionRetry();
+              return;
+            }
+            console.debug('Retrying deferred render_state update after session resume.');
             flushPendingRender('retry');
           }, delayMs);
         }
@@ -403,68 +445,147 @@
           }
         }
 
-        onAuthStateChanged(auth, (user) => {
-          if (typeof unsubscribeApproval === 'function') {
-            unsubscribeApproval();
-            unsubscribeApproval = null;
-          }
+        function resetSessionState() {
+          sessionInfo = null;
+          sessionActive = false;
+          reportSuppressedLogged = false;
+          pendingRenderUpdate = null;
+          clearPendingFlushTimer();
+          clearSessionRetryTimer();
+          stopHeartbeat();
+          beginInFlight = null;
+        }
 
-          if (!user) {
-            canReportRender = false;
-            approvalChecked = false;
-            approvalWaitingLogged = false;
-            approvalEnabledLogged = false;
-            approvalUnreadableLogged = false;
+        async function callGas(action, extra = {}) {
+          const user = auth.currentUser;
+          if (!user) throw new Error('Not signed in');
+          const idToken = await user.getIdToken();
+          latestIdToken = idToken;
+          const res = await fetch(GAS_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ action, idToken, ...extra })
+          });
+          let json;
+          try {
+            json = await res.json();
+          } catch (err) {
+            throw new Error('Invalid JSON response from GAS');
+          }
+          if (!json.success) {
+            throw new Error(String(json.error || 'GAS request failed'));
+          }
+          return json;
+        }
+
+        function setSessionActive(active) {
+          sessionActive = active === true;
+          if (sessionActive) {
             reportSuppressedLogged = false;
-            pendingRenderUpdate = null;
-            clearPendingFlushTimer();
+            flushPendingRender('session ready');
+          }
+        }
+
+        async function beginDisplaySession() {
+          if (beginInFlight) return beginInFlight;
+          const user = auth.currentUser;
+          if (!user) return;
+          beginInFlight = (async () => {
+            clearSessionRetryTimer();
+            try {
+              const result = await callGas('beginDisplaySession');
+              if (!result.session || !result.session.sessionId) {
+                throw new Error('Invalid session payload');
+              }
+              sessionInfo = result.session;
+              console.info('Display anonymous UID:', user.uid, 'sessionId:', sessionInfo.sessionId);
+              setSessionActive(true);
+              startHeartbeat();
+              return sessionInfo;
+            } catch (err) {
+              setSessionActive(false);
+              scheduleSessionRetry();
+              throw err;
+            } finally {
+              beginInFlight = null;
+            }
+          })();
+          return beginInFlight;
+        }
+
+        async function heartbeatDisplaySession() {
+          if (!sessionInfo || !sessionInfo.sessionId) {
+            await beginDisplaySession();
+            return;
+          }
+          try {
+            const result = await callGas('heartbeatDisplaySession', { sessionId: sessionInfo.sessionId });
+            if (result.active === false) {
+              console.warn('Display session heartbeat rejected; restarting session.');
+              setSessionActive(false);
+              scheduleSessionRetry(2000);
+              return;
+            }
+            if (result.session && result.session.sessionId === sessionInfo.sessionId) {
+              sessionInfo = result.session;
+            }
+            setSessionActive(true);
+          } catch (err) {
+            console.warn('Display heartbeat error:', err);
+          }
+        }
+
+        async function endDisplaySession(reason) {
+          if (!sessionInfo || !sessionInfo.sessionId) return;
+          try {
+            await callGas('endDisplaySession', { sessionId: sessionInfo.sessionId, reason });
+          } catch (err) {
+            console.warn('Failed to end display session:', err);
+          }
+        }
+
+        function sendSessionEndBeacon(reason) {
+          if (!sessionInfo || !sessionInfo.sessionId || !latestIdToken) return false;
+          try {
+            const payload = JSON.stringify({
+              action: 'endDisplaySession',
+              idToken: latestIdToken,
+              sessionId: sessionInfo.sessionId,
+              reason: reason || 'beacon'
+            });
+            const blob = new Blob([payload], { type: 'application/json' });
+            return navigator.sendBeacon(GAS_API_URL, blob);
+          } catch (err) {
+            console.warn('sendBeacon failed:', err);
+            return false;
+          }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+          if (!user) {
+            resetSessionState();
             signInAnonymously(auth).catch(err => {
               console.error('Anonymous sign-in failed:', err);
             });
             return;
           }
-
-          // オペレーターが whitelisting するときに控えられるよう UID を通知
-          console.info('Display anonymous UID:', user.uid);
-
-          const approvalRef = ref(database, `screens/approved/${user.uid}`);
-          unsubscribeApproval = onValue(approvalRef, (snapshot) => {
-            approvalChecked = true;
-            const approved = snapshot.exists() && snapshot.val() === true;
-
-            if (approved) {
-              canReportRender = true;
-              reportSuppressedLogged = false;
-              approvalWaitingLogged = false;
-              approvalUnreadableLogged = false;
-              if (!approvalEnabledLogged) {
-                console.info('Display UID approved; render_state updates enabled.');
-                approvalEnabledLogged = true;
-              }
-              clearPendingFlushTimer();
-              flushPendingRender('approval granted');
-              return;
-            }
-
-            canReportRender = false;
-            approvalEnabledLogged = false;
-            if (!approvalWaitingLogged) {
-              console.warn('Display UID is not yet approved. Waiting for operator approval before writing render_state.');
-              approvalWaitingLogged = true;
-            }
-          }, (error) => {
-            approvalChecked = true;
-            canReportRender = false;
-            approvalEnabledLogged = false;
-            if (error && error.code === 'PERMISSION_DENIED') {
-              if (!approvalUnreadableLogged) {
-                console.warn('Display approval status is not readable under current Firebase rules; render_state writes suppressed until approval is granted.');
-                approvalUnreadableLogged = true;
-              }
-              return;
-            }
-            console.error('Failed to confirm display approval status:', error);
+          beginDisplaySession().catch(err => {
+            console.error('Failed to establish display session:', err);
           });
+        });
+
+        window.addEventListener('pagehide', () => {
+          sendSessionEndBeacon('pagehide');
+        });
+
+        window.addEventListener('beforeunload', () => {
+          sendSessionEndBeacon('beforeunload');
+        });
+
+        window.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'hidden') {
+            sendSessionEndBeacon('hidden');
+          }
         });
 
         const currentTelopRef = ref(database, 'currentTelop');
@@ -472,6 +593,10 @@
 
         function flushPendingRender(reason) {
           if (!pendingRenderUpdate) return;
+          if (!sessionActive) {
+            scheduleSessionRetry();
+            return;
+          }
           const pending = pendingRenderUpdate;
           if (reason === 'retry') {
             console.debug('Flushing deferred render_state update (scheduled retry).');
@@ -480,47 +605,40 @@
           } else {
             console.info('Flushing deferred render_state update.');
           }
+          pendingRenderUpdate = null;
           writeRenderState(pending.phase, pending.info, { force: true });
         }
 
         function writeRenderState(phase, info = {}, { force = false } = {}) {
-          if (!force && !canReportRender) {
+          if (!force && !sessionActive) {
             pendingRenderUpdate = { phase, info: cloneInfo(info) };
-            if (approvalChecked && !reportSuppressedLogged) {
-              console.debug('render_state update skipped because this display is not approved yet.');
+            if (!reportSuppressedLogged) {
+              console.debug('render_state update deferred until display session is active.');
               reportSuppressedLogged = true;
             }
             schedulePendingFlush(2000);
+            beginDisplaySession().catch(() => {});
             return Promise.resolve();
           }
 
           const payload = {
-            phase,                                        // 'showing' | 'visible' | 'hiding' | 'hidden' | 'error'
+            phase,
             updatedAt: serverTimestamp(),
             ...info
           };
 
           return update(renderRef, payload).then(() => {
-            canReportRender = true;
             pendingRenderUpdate = null;
             clearPendingFlushTimer();
             reportSuppressedLogged = false;
-            approvalWaitingLogged = false;
-            approvalUnreadableLogged = false;
-            if (!approvalEnabledLogged) {
-              console.info('Display UID approved; render_state updates enabled.');
-              approvalEnabledLogged = true;
-            }
+            setSessionActive(true);
           }).catch(err => {
             if (err && err.code === 'PERMISSION_DENIED') {
-              canReportRender = false;
-              approvalEnabledLogged = false;
               pendingRenderUpdate = { phase, info: cloneInfo(info) };
-              if (!approvalWaitingLogged) {
-                console.warn('render_state update was denied. Waiting for operator approval before retrying.');
-                approvalWaitingLogged = true;
-              }
+              setSessionActive(false);
+              console.warn('render_state update denied; retrying after session renewal.');
               schedulePendingFlush();
+              scheduleSessionRetry();
               return;
             }
             console.error(err);

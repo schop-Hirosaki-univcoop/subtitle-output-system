@@ -27,6 +27,7 @@ const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 // ★ Display 側の状態ランプ購読
 const renderRef = ref(database, 'render_state');
+const displaySessionRef = ref(database, 'render_control/session');
 const questionsRef = ref(database, 'questions');
 const lampEl = document.getElementById('render-lamp');
 const phaseEl = document.getElementById('render-phase');
@@ -203,7 +204,6 @@ async function handleAfterLogin(user) {
         logoutBtn.textContent = 'ログアウト';
         dom.userInfo.append(userLabel, logoutBtn);
         logoutBtn.addEventListener('click', logout);
-        setDisplayApprovalFeedback('');
         // 初回だけシート→RTDB ミラー（空なら）
         setStep(3, '初期ミラー実行中…');
         updateLoader('初期データを準備しています…');
@@ -222,6 +222,7 @@ async function handleAfterLogin(user) {
         }));
         renderQuestions();
         startQuestionsStream(); // ← 以後リアルタイム
+        startDisplaySessionMonitor();
         // 他パネルの初期読み込み
         setStep(5, '辞書取得…');
         await fetchDictionary();
@@ -275,9 +276,7 @@ const dom = {
     selectedInfo: document.getElementById('selected-info'),
     selectAllCheckbox: document.getElementById('select-all-checkbox'),
     batchUnanswerBtn: document.getElementById('btn-batch-unanswer'),
-    approveDisplayForm: document.getElementById('approve-display-form'),
-    approveDisplayUid: document.getElementById('approve-display-uid'),
-    approveDisplayFeedback: document.getElementById('approve-display-feedback')
+    clearButton: document.getElementById('btn-clear')
 };
 
 Object.assign(dom, {
@@ -286,6 +285,8 @@ Object.assign(dom, {
   logSearch: document.getElementById('log-search'),
   logAutoscroll: document.getElementById('log-autoscroll'),
 });
+
+updateActionAvailability();
 
 // --- 状態管理変数 ---
 let state = {
@@ -296,9 +297,13 @@ let state = {
     selectedRowData: null,
     lastDisplayedUid: null,
     autoScrollLogs: true,
+    displaySession: null,
+    displaySessionActive: false,
 };
 dom.logSearch.addEventListener('input', ()=>renderLogs());
 dom.logAutoscroll.addEventListener('change', (e)=>{ state.autoScrollLogs = e.target.checked; });
+
+let lastSessionActive = null;
 
 // --- イベントリスナーの設定 ---
 document.getElementById('login-button').addEventListener('click', login);
@@ -375,6 +380,27 @@ function startQuestionsStream(){
       '__ts': Number(x.ts || 0)      // ← ソート用の内部フィールド
     }));
     renderQuestions();
+  });
+}
+
+function startDisplaySessionMonitor(){
+  off(displaySessionRef);
+  onValue(displaySessionRef, (snap) => {
+    const data = snap.val() || null;
+    const now = Date.now();
+    const expiresAt = Number(data && data.expiresAt) || 0;
+    const status = String(data && data.status || '');
+    const active = !!data && status === 'active' && (!expiresAt || expiresAt > now);
+    state.displaySession = data;
+    state.displaySessionActive = active;
+    if (lastSessionActive !== null && lastSessionActive !== active) {
+      showToast(active ? '表示端末とのセッションが確立されました。' : '表示端末の接続が確認できません。', active ? 'success' : 'error');
+    }
+    lastSessionActive = active;
+    updateActionAvailability();
+    updateBatchButtonVisibility();
+  }, (error) => {
+    console.error('Failed to monitor display session:', error);
   });
 }
 
@@ -514,10 +540,7 @@ async function renderQuestions() {
         question: item['質問・お悩み'],
         isAnswered
       };
-      dom.actionButtons.forEach(btn => btn.disabled = false);
-      dom.actionButtons[0].disabled = isAnswered;   // 表示ボタン
-      dom.actionButtons[1].disabled = !isAnswered;  // 未回答へ戻す
-      dom.selectedInfo.textContent = `選択中: ${escapeHtml(item['ラジオネーム'])}`;
+      updateActionAvailability();
     });
 
     host.appendChild(card);
@@ -525,8 +548,7 @@ async function renderQuestions() {
 
   if (!list.some(x => x['UID'] === selectedUid)) {
     state.selectedRowData = null;
-    dom.actionButtons.forEach(btn => btn.disabled = true);
-    dom.selectedInfo.textContent = '行を選択してください';
+    updateActionAvailability();
   }
   updateBatchButtonVisibility();
 }
@@ -625,6 +647,10 @@ function parseLogTimestamp(ts) {
 
 // --- 操作関数 ---
 async function handleDisplay() {
+    if (!state.displaySessionActive) {
+        showToast('表示端末が接続されていません。', 'error');
+        return;
+    }
     if (!state.selectedRowData || state.selectedRowData.isAnswered) return;
     const snapshot = await get(telopRef);
     const previousTelop = snapshot.val();
@@ -695,8 +721,11 @@ function handleSelectAll(event) {
     updateBatchButtonVisibility();
 }
 function updateBatchButtonVisibility() {
-    const checkedCount = document.querySelectorAll('.row-checkbox:checked').length;
-    dom.batchUnanswerBtn.style.display = checkedCount > 0 ? 'inline-block' : 'none';
+    if (!dom.batchUnanswerBtn) return;
+    const active = !!state.displaySessionActive;
+    const checkedCount = active ? document.querySelectorAll('.row-checkbox:checked').length : 0;
+    dom.batchUnanswerBtn.style.display = active && checkedCount > 0 ? 'inline-block' : 'none';
+    dom.batchUnanswerBtn.disabled = !active || checkedCount === 0;
 }
 async function handleEdit() {
     if (!state.selectedRowData) return;
@@ -714,6 +743,10 @@ async function handleEdit() {
     }
 }
 async function clearTelop() {
+    if (!state.displaySessionActive) {
+        showToast('表示端末が接続されていません。', 'error');
+        return;
+    }
     const snapshot = await get(telopRef);
     const previousTelop = snapshot.val();
     try {
@@ -730,6 +763,10 @@ async function clearTelop() {
     }
 }
 function handleUnanswer() {
+    if (!state.displaySessionActive) {
+        showToast('表示端末が接続されていません。', 'error');
+        return;
+    }
     if (!state.selectedRowData || !state.selectedRowData.isAnswered) return;
     if (!confirm(`「${state.selectedRowData.name}」の質問を「未回答」に戻しますか？`)) return;
     // RTDB 先行
@@ -738,6 +775,10 @@ function handleUnanswer() {
     fireAndForgetApi({ action:'updateStatus', uid: state.selectedRowData.uid, status:false });
 }
 function handleBatchUnanswer() {
+    if (!state.displaySessionActive) {
+        showToast('表示端末が接続されていません。', 'error');
+        return;
+    }
     const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
     if (checkedBoxes.length === 0) return;
     if (!confirm(`${checkedBoxes.length}件の質問を「未回答」に戻しますか？`)) return;
@@ -750,39 +791,36 @@ function handleBatchUnanswer() {
     fireAndForgetApi({ action:'batchUpdateStatus', uids: uidsToUpdate, status:false });
 }
 
-function setDisplayApprovalFeedback(message = '') {
-  if (!dom.approveDisplayFeedback) return;
-  dom.approveDisplayFeedback.textContent = message ? String(message) : '';
-}
+function updateActionAvailability() {
+  const active = !!state.displaySessionActive;
+  const selection = state.selectedRowData;
 
-async function handleApproveDisplay(event) {
-  event.preventDefault();
-  if (!dom.approveDisplayUid) return;
-  const raw = String(dom.approveDisplayUid.value || '').trim();
-  if (!raw) {
-    showToast('承認したい表示端末のUIDを入力してください。', 'error');
-    setDisplayApprovalFeedback('UIDを入力してください。');
-    return;
-  }
-  const uid = raw.replace(/\s+/g, '');
-  if (!/^[A-Za-z0-9:_-]{6,}$/.test(uid)) {
-    showToast('UIDの形式が正しくありません。', 'error');
-    setDisplayApprovalFeedback('UIDの形式を確認してください。');
+  dom.actionButtons.forEach(btn => { if (btn) btn.disabled = true; });
+  if (dom.clearButton) dom.clearButton.disabled = !active;
+
+  if (!dom.selectedInfo) {
+    updateBatchButtonVisibility();
     return;
   }
 
-  try {
-    setDisplayApprovalFeedback('承認を処理しています…');
-    await apiPost({ action: 'approveDisplay', displayUid: uid });
-    showToast(`UID ${uid} を承認しました。`);
-    setDisplayApprovalFeedback(`UID ${uid} を承認しました。ディスプレイの再接続後に書き込みが許可されます。`);
-    dom.approveDisplayUid.value = '';
-  } catch (error) {
-    console.error('Display approval failed:', error);
-    const message = error && error.message ? error.message : String(error);
-    showToast('表示端末の承認に失敗しました。', 'error');
-    setDisplayApprovalFeedback(`承認に失敗しました: ${message}`);
+  if (!active) {
+    dom.selectedInfo.textContent = '表示端末が接続されていません';
+    updateBatchButtonVisibility();
+    return;
   }
+
+  if (!selection) {
+    dom.selectedInfo.textContent = '行を選択してください';
+    updateBatchButtonVisibility();
+    return;
+  }
+
+  dom.actionButtons.forEach(btn => { if (btn) btn.disabled = false; });
+  if (dom.actionButtons[0]) dom.actionButtons[0].disabled = !!selection.isAnswered;
+  if (dom.actionButtons[1]) dom.actionButtons[1].disabled = !selection.isAnswered;
+  const safeName = String(selection.name ?? '');
+  dom.selectedInfo.textContent = `選択中: ${safeName}`;
+  updateBatchButtonVisibility();
 }
 
 async function logAction(actionName, details = '') {
@@ -1015,6 +1053,12 @@ function cleanupSubscriptions(){
   try { off(questionsRef); } catch(_){}
   try { off(updateTriggerRef); } catch(_){}
   try { off(renderRef); } catch(_){}
+  try { off(displaySessionRef); } catch(_){}
   if (renderTicker){ clearInterval(renderTicker); renderTicker = null; }
+  state.displaySession = null;
+  state.displaySessionActive = false;
+  lastSessionActive = null;
+  updateActionAvailability();
+  updateBatchButtonVisibility();
 }
 

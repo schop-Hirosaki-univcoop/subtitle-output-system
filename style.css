@@ -222,22 +222,6 @@ body.op-theme{ padding:20px; margin-bottom:100px; }
 
 .panel { flex: 1; }
 
-.display-approval{
-  margin-bottom:24px;
-  padding:16px;
-  border-radius:12px;
-  background:linear-gradient(180deg, rgba(33,44,68,.55), rgba(19,24,36,.65));
-  border:1px solid rgba(64,92,128,.35);
-  box-shadow:0 12px 32px rgba(0,0,0,.25) inset;
-}
-.display-approval h3{ margin:0 0 8px; font-size:1.05rem; }
-.stacked-form{ display:flex; flex-direction:column; gap:12px; margin-top:12px; }
-.form-row{ display:flex; gap:10px; align-items:center; }
-.form-row input{ flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(92,118,168,.45); background:rgba(8,12,22,.85); color:var(--text); }
-.form-row input::placeholder{ color:rgba(187,204,230,.55); }
-.form-row button{ padding:10px 16px; border-radius:10px; border:1px solid var(--line); background:linear-gradient(180deg, #2563eb, #1d4ed8); color:#fff; cursor:pointer; font-weight:600; }
-.form-row button:hover{ filter:brightness(1.05); }
-.form-note{ margin-top:8px; font-size:.85rem; color:var(--muted); }
 
 /* ===== Questions Table ===== */
 table{ border-collapse:separate; border-spacing:0; width:100%; margin-top:12px; }
