@@ -300,6 +300,7 @@ function createInitialState(){
     autoScrollLogs: true,
     displaySession: null,
     displaySessionActive: false,
+    displaySessionLastActive: null,
   };
 }
 
@@ -322,10 +323,6 @@ if (dom.logSearch) {
 if (dom.logAutoscroll) {
   dom.logAutoscroll.addEventListener('change', (e)=>{ state.autoScrollLogs = e.target.checked; });
 }
-
-let lastSessionActive = null;
-
-let lastSessionActive = null;
 
 // --- イベントリスナーの設定 ---
 document.getElementById('login-button').addEventListener('click', login);
@@ -415,10 +412,10 @@ function startDisplaySessionMonitor(){
     const active = !!data && status === 'active' && (!expiresAt || expiresAt > now);
     state.displaySession = data;
     state.displaySessionActive = active;
-    if (lastSessionActive !== null && lastSessionActive !== active) {
+    if (state.displaySessionLastActive !== null && state.displaySessionLastActive !== active) {
       showToast(active ? '表示端末とのセッションが確立されました。' : '表示端末の接続が確認できません。', active ? 'success' : 'error');
     }
-    lastSessionActive = active;
+    state.displaySessionLastActive = active;
     updateActionAvailability();
     updateBatchButtonVisibility();
   }, (error) => {
@@ -1079,7 +1076,7 @@ function cleanupSubscriptions(){
   try { off(displaySessionRef); } catch(_){}
   if (renderTicker){ clearInterval(renderTicker); renderTicker = null; }
   resetState();
-  lastSessionActive = null;
+  state.displaySessionLastActive = null;
   updateActionAvailability();
   updateBatchButtonVisibility();
 }

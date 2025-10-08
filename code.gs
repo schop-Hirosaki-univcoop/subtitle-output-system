@@ -249,7 +249,7 @@ function requireAuth_(idToken, options){
 
   let email = '';
   if (!isAnonymous) {
-    email = String(resolvedEmail || '');
+    email = String(resolvedEmail || '').trim();
 
     const allowed = getAllowedDomains_().map(d => String(d).toLowerCase());
     if (allowed.length && email) {
@@ -263,7 +263,7 @@ function requireAuth_(idToken, options){
 
   return {
     uid: user.localId,
-    email: String(email || ''),
+    email: String(email || '').trim(),
     emailVerified: user.emailVerified === true,
     isAnonymous: isAnonymous
   };
@@ -343,10 +343,22 @@ function patchRtdb_(updates, token) {
   }
 }
 
-function beginDisplaySession_(principal) {
-  if (!principal || principal.isAnonymous !== true) {
-    throw new Error('Only anonymous display accounts can begin sessions');
+function isDisplayPrincipal_(principal) {
+  if (!principal) return false;
+  if (principal.isAnonymous === true) return true;
+  const email = String(principal.email || '').trim();
+  return email === '';
+}
+
+function ensureDisplayPrincipal_(principal, message) {
+  if (!isDisplayPrincipal_(principal)) {
+    throw new Error(message || 'Only anonymous display accounts can perform this action');
   }
+  return principal;
+}
+
+function beginDisplaySession_(principal) {
+  ensureDisplayPrincipal_(principal, 'Only anonymous display accounts can begin sessions');
   const token = getFirebaseAccessToken_();
   const now = Date.now();
   const current = fetchRtdb_('render_control/session', token);
@@ -392,9 +404,7 @@ function beginDisplaySession_(principal) {
 }
 
 function heartbeatDisplaySession_(principal, rawSessionId) {
-  if (!principal || principal.isAnonymous !== true) {
-    throw new Error('Only anonymous display accounts can send heartbeats');
-  }
+  ensureDisplayPrincipal_(principal, 'Only anonymous display accounts can send heartbeats');
   const sessionId = requireSessionId_(rawSessionId);
   const token = getFirebaseAccessToken_();
   const now = Date.now();
@@ -445,9 +455,7 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
 }
 
 function endDisplaySession_(principal, rawSessionId, reason) {
-  if (!principal || principal.isAnonymous !== true) {
-    throw new Error('Only anonymous display accounts can end sessions');
-  }
+  ensureDisplayPrincipal_(principal, 'Only anonymous display accounts can end sessions');
   const sessionId = requireSessionId_(rawSessionId);
   const token = getFirebaseAccessToken_();
   const now = Date.now();
