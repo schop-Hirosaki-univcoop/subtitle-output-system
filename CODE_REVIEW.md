@@ -42,30 +42,12 @@ Pull Request などでレビュー内容を共有する場合は、このファ�
 適用後は `git status` で変更内容を確認し、テスト実行やレビューの指摘チェックを行ってからコミット & push する流れが一般的です。
 
 ## Summary
-- Review of provided `code.gs` Apps Script implementation for subtitle display tool backend.
+- Review of the latest `display.html`, `operator.js`, `style.css`, and supporting Apps Script (`code.gs`) against the current Firebase security rules and the `render_state` permission errors reported in the browser console.
 
 ## Findings
 
-### 1. `updateAnswerStatus` / `batchUpdateStatus` may write non-boolean values
-Both `updateAnswerStatus` and `batchUpdateStatus` write the incoming `status` value directly into the "回答済" column. When the caller sends a string such as `"true"` (which is what you currently pass from the operator front-end), the sheet stores a string instead of a boolean. Later, `mirrorSheetToRtdb_()` normalizes the column with `Boolean(row[ansIdx] === true)`, so any non-boolean truthy value becomes `false` and answered questions revert to "未回答" in Realtime Database. Please coerce to a proper boolean before writing (e.g., `const isAnswered = status === true || status === 'true';`).
-
-### 2. `updateSelectingStatus` performs N individual writes for reset
-To clear the existing selection, `updateSelectingStatus` iterates every row and calls `setValue(false)` on each `true` cell. With larger sheets this results in many Apps Script calls and can easily exceed execution quotas, especially because `notifyUpdate()` mirrors the sheet after every edit. Prefer a single range update (`range.setValues(...)`) similar to what `clearSelectingStatus()` already does.
-
-### 3. `clearSelectingStatus` returns inconsistent payload types
-When there are no data rows, `clearSelectingStatus` returns a `ContentService.TextOutput`, but for the general case it returns a plain object. The caller (`doPost`) always wraps the result with `jsonOk`, which expects a simple object. Returning a `TextOutput` instance makes the response inconsistent and risks runtime errors if Google modifies the host objects. Returning `{ success: true }` in all cases keeps the API surface predictable.
-
-### 4. Allow-list domain comparison is case-sensitive
-`requireAuth_()` splits the email domain and compares it with `allowed.includes(domain)`. Because neither value is lowercased, a user whose domain contains uppercase characters (which Firebase can emit) would be rejected even though the domain matches. Normalizing both sides with `toLowerCase()` avoids this false negative.
-
-### 5. `display.html` keeps writing `render_state` without verifying the anonymous UID is whitelisted
-When the display client loads, it immediately starts calling `update(renderRef, …)` even though the Firebase rules only allow
-anonymous accounts that are listed under `/screens/approved/{uid}`. If the device has not been approved yet, every write fails
-with `PERMISSION_DENIED` (as seen in the console log you shared). Aside from the noisy logs, this causes exponential backoff and
-keeps the websocket busy.
-
-Gate the reporting until (a) `onAuthStateChanged` has produced an anonymous user, and (b) the UID has been confirmed as approved.
-Below is a minimal change that reads the allow-list once and disables `reportRender()` until approval succeeds:
+### 1. `render_state` writes ignore the `/screens/approved` gate (display.html)
+Firebase rules only allow anonymous users whose UID is whitelisted under `/screens/approved/{uid}` to update `render_state`, yet `reportRender()` is invoked immediately after the app starts. Until the approval entry exists, every call fails with `PERMISSION_DENIED`, spamming the console and wasting retries. Gate the writes until both anonymous auth has completed *and* the device is approved.
 
 ```diff
 diff --git a/display.html b/display.html
@@ -79,50 +61,173 @@ diff --git a/display.html b/display.html
 +const renderRef = ref(database, 'render_state');
 +let canReportRender = false;
 +let approvalChecked = false;
-
-onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    signInAnonymously(auth).catch(err => {
-      console.error('Anonymous sign-in failed:', err);
-    });
-    return;
-  }
-
+ 
+-onAuthStateChanged(auth, (user) => {
+-  if (!user) {
+-    signInAnonymously(auth).catch(err => {
+-      console.error('Anonymous sign-in failed:', err);
+-    });
+-  }
+-});
++onAuthStateChanged(auth, async (user) => {
++  if (!user) {
++    signInAnonymously(auth).catch(err => {
++      console.error('Anonymous sign-in failed:', err);
++    });
++    return;
++  }
++
 +  try {
 +    const approvedSnap = await get(ref(database, `screens/approved/${user.uid}`));
 +    canReportRender = approvedSnap.exists() && approvedSnap.val() === true;
 +    approvalChecked = true;
 +    if (!canReportRender) {
-+      console.warn('Display UID is not in screens/approved – suppressing render_state updates.');
++      console.warn('Display UID is not approved; suppressing render_state updates.');
 +    }
 +  } catch (err) {
 +    approvalChecked = true;
 +    canReportRender = false;
-+    console.error('Failed to check display approval status:', err);
++    console.error('Failed to confirm display approval status:', err);
 +  }
 +});
-+
-// ★ 状態レポート（display → Firebase）
-function reportRender(phase, info = {}) {
+@@
+-function reportRender(phase, info = {}) {
 -  const payload = {
+-    phase,                                        // 'showing' | 'visible' | 'hiding' | 'hidden' | 'error'
+-    updatedAt: serverTimestamp(),
+-    ...info                                       // { name, uid, seq など任意}
+-  };
+-  update(renderRef, payload).catch(console.error);
++function reportRender(phase, info = {}) {
 +  if (!canReportRender) {
-+    // Skip writes until approval is confirmed to avoid noisy PERMISSION_DENIED errors
 +    if (approvalChecked) {
 +      console.debug('render_state update skipped because this device is not approved.');
 +    }
 +    return Promise.resolve();
 +  }
++
 +  const payload = {
-    phase,
-    updatedAt: serverTimestamp(),
-    ...info
-  };
-  update(renderRef, payload).catch(console.error);
-}
++    phase,                                        // 'showing' | 'visible' | 'hiding' | 'hidden' | 'error'
++    updatedAt: serverTimestamp(),
++    ...info                                       // { name, uid, seq など任意}
++  };
++  return update(renderRef, payload).catch(console.error);
+ }
 ```
 
-Once this guard is in place the console noise disappears, and approved devices keep reporting render state normally.
+### 2. `updateAnswerStatus` / `batchUpdateStatus` write whatever comes from the client (code.gs)
+Both functions persist the raw `status` argument into the "回答済" column. Because the operator UI sends the string values "true"/"false", the sheet stores text instead of booleans, and `mirrorSheetToRtdb_()` later collapses the value back to `false`. Coerce the input once before writing so that RTDB mirrors remain stable.
+
+```diff
+diff --git a/code.gs b/code.gs
+--- a/code.gs
++++ b/code.gs
+@@
+-function updateAnswerStatus(uid, status) {
++function updateAnswerStatus(uid, status) {
+   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('answer');
+@@
+-      sheet.getRange(i + 1, answeredColIndex + 1).setValue(status);
++      const isAnswered = status === true || status === 'true' || status === 1;
++      sheet.getRange(i + 1, answeredColIndex + 1).setValue(isAnswered);
+@@
+-function batchUpdateStatus(uids, status) {
++function batchUpdateStatus(uids, status) {
+@@
+-    for (let i = 1; i < data.length; i++) {
+-    if (uidSet.has(String(data[i][uidColIndex]))) {
+-        sheet.getRange(i + 1, answeredColIndex + 1).setValue(status);
+-      }
+-    }
++    const isAnswered = status === true || status === 'true' || status === 1;
++    for (let i = 1; i < data.length; i++) {
++      if (uidSet.has(String(data[i][uidColIndex]))) {
++        sheet.getRange(i + 1, answeredColIndex + 1).setValue(isAnswered);
++      }
++    }
+```
+
+### 3. `updateSelectingStatus` still toggles rows one-by-one (code.gs)
+Clearing every "選択中" cell with `setValue(false)` inside the loop makes as many API calls as there are rows, firing `notifyUpdate()` repeatedly. Build a single 2D array and call `setValues()` once, just as `clearSelectingStatus()` does.
+
+```diff
+diff --git a/code.gs b/code.gs
+--- a/code.gs
++++ b/code.gs
+@@
+-  for (let i = 1; i < data.length; i++) {
+-    if (sheet.getRange(i + 1, selectingColIndex + 1).getValue() === true) {
+-      sheet.getRange(i + 1, selectingColIndex + 1).setValue(false);
+-    }
+-  }
++  const numRows = data.length - 1;
++  if (numRows > 0) {
++    const selectingRange = sheet.getRange(2, selectingColIndex + 1, numRows, 1);
++    const cleared = Array.from({ length: numRows }, () => [false]);
++    selectingRange.setValues(cleared);
++  }
+```
+
+### 4. `clearSelectingStatus` sometimes returns a `TextOutput` (code.gs)
+When the sheet has only the header row, the function returns a `ContentService.TextOutput`, but `doPost()` expects a plain object and wraps it with `jsonOk`. Always return a simple object instead of alternating types.
+
+```diff
+diff --git a/code.gs b/code.gs
+--- a/code.gs
++++ b/code.gs
+@@
+-    if (numRows <= 0) {
+-      return ContentService.createTextOutput(JSON.stringify({ success: true }))
+-        .setMimeType(ContentService.MimeType.JSON);
+-    }
++    if (numRows <= 0) {
++      return { success: true };
++    }
+@@
+-    return { success: true };
++    return { success: true };
+   } catch (error) {
+```
+
+### 5. Allow-list domain comparison is case-sensitive (code.gs)
+`requireAuth_()` compares `allowed.includes(domain)` without normalising either side. Firebase can report uppercase letters in `user.email`, which would incorrectly reject legitimate users. Lower-case both values first.
+
+```diff
+diff --git a/code.gs b/code.gs
+--- a/code.gs
++++ b/code.gs
+@@
+-  const allowed = getAllowedDomains_(); // 例：['example.ac.jp', 'another.edu']
+-  if (allowed.length && email) {
+-    const domain = String(email).split('@')[1] || '';
+-    if (!allowed.includes(domain)) throw new Error('Unauthorized domain');
+-  }
++  const allowed = getAllowedDomains_().map(d => String(d).toLowerCase());
++  if (allowed.length && email) {
++    const domain = String(email).split('@')[1] || '';
++    if (!allowed.includes(domain.toLowerCase())) throw new Error('Unauthorized domain');
++  }
+```
+
+### 6. Operator client re-check should normalise emails (operator.js)
+After fetching the `users` sheet, the operator UI does `authorizedUsers.includes(user.email)`. If the sheet stores lower-case addresses but Firebase returns mixed-case variants (quite common), the operator will be kicked back to the login view even though GAS would allow the same user. Mirror the lower-casing that the backend already expects.
+
+```diff
+diff --git a/operator.js b/operator.js
+--- a/operator.js
++++ b/operator.js
+@@
+-      if (result.success && result.data) {
+-        const authorizedUsers = result.data.map(item => item['メールアドレス']);
+-　　　　if (authorizedUsers.includes(user.email)) {
++      if (result.success && result.data) {
++        const authorizedUsers = result.data
++          .map(item => String(item['メールアドレス'] || '').trim().toLowerCase())
++          .filter(Boolean);
++        const loginEmail = String(user.email || '').trim().toLowerCase();
++        if (authorizedUsers.includes(loginEmail)) {
+```
 
 ## Suggestions
-- After addressing the issues above, consider extracting the sheet-column lookups into shared helpers to remove duplication between single and batch status updates.
-
+- Once the critical fixes above are in place, consider extracting the shared sheet-column lookups in `code.gs` into helper functions to reduce duplication between single and batch status updates.
+- In `display.html`, you may want to surface a dedicated banner when `canReportRender` is false so operators immediately know the device must be approved.
