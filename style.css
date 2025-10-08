@@ -24,6 +24,8 @@ body {
 .op-theme{ background:var(--bg); color:var(--text); }
 body.op-theme{ padding:20px; margin-bottom:100px; }
 
+.visually-hidden{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
+
 /* グリッド背景（オペ室っぽく） */
 #questions-content{
   background:
@@ -219,6 +221,8 @@ body.op-theme{ padding:20px; margin-bottom:100px; }
 #user-info { position: fixed; top: 10px; right: 20px; font-size: 14px; z-index: 100; }
 
 .panel { flex: 1; }
+
+
 /* ===== Questions Table ===== */
 table{ border-collapse:separate; border-spacing:0; width:100%; margin-top:12px; }
 #questions-table{ background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
