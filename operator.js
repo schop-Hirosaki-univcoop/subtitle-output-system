@@ -1,1096 +1,1188 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, set, update, remove, get, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
-    initializeAuth,
-    browserSessionPersistence,
-    browserPopupRedirectResolver,
-    GoogleAuthProvider,
-    signInWithPopup,
-    signOut,
-    onAuthStateChanged
+  getDatabase,
+  ref,
+  set,
+  update,
+  remove,
+  get,
+  onValue,
+  off
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import {
+  initializeAuth,
+  browserSessionPersistence,
+  browserPopupRedirectResolver,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
-    authDomain: "subtitle-output-system-9bc14.firebaseapp.com",
-    databaseURL: "https://subtitle-output-system-9bc14-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "subtitle-output-system-9bc14",
-    storageBucket: "subtitle-output-system-9bc14.firebasestorage.app",
-    messagingSenderId: "378400426909",
-    appId: "1:378400426909:web:f1549aad61e3f7aacebd74"
+  apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
+  authDomain: "subtitle-output-system-9bc14.firebaseapp.com",
+  databaseURL: "https://subtitle-output-system-9bc14-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "subtitle-output-system-9bc14",
+  storageBucket: "subtitle-output-system-9bc14.firebasestorage.app",
+  messagingSenderId: "378400426909",
+  appId: "1:378400426909:web:f1549aad61e3f7aacebd74"
 };
 
-const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec'; 
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec";
+const STEP_LABELS = [
+  "認証",
+  "在籍チェック",
+  "管理者付与",
+  "初期ミラー",
+  "購読開始",
+  "辞書取得",
+  "ログ取得",
+  "準備完了"
+];
 
-// --- 初期化処理 ---
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
-// ★ Display 側の状態ランプ購読
-const renderRef = ref(database, 'render_state');
-const displaySessionRef = ref(database, 'render_control/session');
-const questionsRef = ref(database, 'questions');
-const lampEl = document.getElementById('render-lamp');
-const phaseEl = document.getElementById('render-phase');
-const sumEl    = document.getElementById('render-summary');
-const titleEl  = document.getElementById('render-title');
-const qEl      = document.getElementById('render-question');
-const updEl    = document.getElementById('render-updated');
-const indicatorEl = document.querySelector('.render-indicator'); // ★ “古さ”の視覚表示に使用
-let lastUpdatedAt = 0;
-let renderTicker = null;
-
-function setLamp(phase){
-    lampEl.className = 'lamp';
-    switch (phase) {
-        case 'visible': lampEl.classList.add('is-visible'); break;
-        case 'showing':
-        case 'hiding':  lampEl.classList.add('is-showing'); break;
-        case 'hidden':  lampEl.classList.add('is-hidden');  break;
-        case 'error':   lampEl.classList.add('is-error');   break;
-        default:        lampEl.classList.add('is-hidden');  break;
-    }
-    phaseEl.textContent = phase || '-';
-}
-
-  function normalizeUpdatedAt(u){
-    if (!u) return 0;
-    if (typeof u === 'number') return u;        // RTDB: serverTimestamp → number(millis)
-    if (u.seconds) return u.seconds*1000;       // もしオブジェクト形式なら
-    return 0;
-  }
-  function formatRelative(ms){
-    if (!ms) return '—';
-    const diff = Math.max(0, Date.now() - ms);
-    const s = Math.floor(diff/1000);
-    if (s < 60) return `${s}秒前`;
-    const m = Math.floor(s/60);
-    if (m < 60) return `${m}分前`;
-    const h = Math.floor(m/60);
-    if (h < 24) return `${h}時間前`;
-    const d = Math.floor(h/24);
-    return `${d}日前`;
-  }
-
-  onValue(renderRef, (snap)=>{
-    const v = snap.val() || {};
-    setLamp(v.phase);
-    // 表示内容の反映（hidden のときは中身が来ていても“非表示”優先）
-    const isHidden = v.phase === 'hidden';
-    const now = isHidden ? null : (v.nowShowing || null);
-    if (!now){
-      titleEl.textContent = '（非表示）';
-      qEl.textContent     = '';
-    }else{
-      const name = (now.name || '').trim();
-      // “Pick Up Question” なら「ラジオネーム：」は付けない
-      titleEl.textContent = name === 'Pick Up Question' ? name : `ラジオネーム：${name}`;
-      qEl.textContent     = (now.question || '').replace(/\s+/g,' ').trim();
-    }
-    // 更新時刻（前回値と比較してフラッシュ）
-    const at = normalizeUpdatedAt(v.updatedAt) || 0;
-    const prev = lastUpdatedAt || 0;
-    if (at > 0) {
-      lastUpdatedAt = at;
-      redrawUpdatedAt();
-    } else {
-      lastUpdatedAt = 0;
-      redrawUpdatedAt();
-    }
-    if (at > prev){
-      sumEl.classList.add('is-updated');
-      document.querySelector('.render-indicator')?.classList.add('is-updated');
-      setTimeout(()=>{
-        sumEl.classList.remove('is-updated');
-        document.querySelector('.render-indicator')?.classList.remove('is-updated');
-      }, 800);
-    }
-    // ticker を起動（多重起動防止）
-    if (!renderTicker){
-      // 相対時刻と“古さ”の状態を毎秒更新
-      renderTicker = setInterval(()=>{ redrawUpdatedAt(); refreshStaleness(); }, 1000);
-     }
-    // 値が来たタイミングでも一度だけ評価
-    refreshStaleness();
-  });
-
-// タブを閉じたら消えるセッション保存 + ポップアップ resolver を設定
 const auth = initializeAuth(app, {
   persistence: browserSessionPersistence,
   popupRedirectResolver: browserPopupRedirectResolver
 });
 const provider = new GoogleAuthProvider();
-provider.setCustomParameters({ prompt: 'select_account' });
-const telopRef = ref(database, 'currentTelop');
-const updateTriggerRef = ref(database, 'update_trigger');
+provider.setCustomParameters({ prompt: "select_account" });
 
-// === 追加: 認証フローのゲート用フラグ ===
-let _authFlow = 'idle';           // 'idle' | 'prompting' | 'done'
-let _pendingAuthUser = null;      // prompting 中に onAuthStateChanged が渡してくる user を一時保持
-// ローダー制御
-function showLoader(msg){ document.getElementById('loading-overlay')?.removeAttribute('hidden'); updateLoader(msg); document.body.setAttribute('aria-busy','true'); }
-function updateLoader(msg){ if (msg) { const t = document.getElementById('loading-text'); if (t) t.textContent = msg; } }
-function hideLoader(){ document.getElementById('loading-overlay')?.setAttribute('hidden',''); document.body.removeAttribute('aria-busy'); }
+const renderRef = ref(database, "render_state");
+const displaySessionRef = ref(database, "render_control/session");
+const questionsRef = ref(database, "questions");
+const telopRef = ref(database, "currentTelop");
+const updateTriggerRef = ref(database, "update_trigger");
+const dictionaryRef = ref(database, "dictionary");
 
-// ===== 追加：段階ステップ（loader-steps が無ければ黙って何もしない） =====
-const domSteps = { list: document.getElementById('loader-steps') };
-const STEP_LABELS = [
-  '認証', '在籍チェック', '管理者付与',
-  '初期ミラー', '購読開始', '辞書取得', 'ログ取得', '準備完了'
-];
-function initLoaderSteps(){
-  if (!domSteps.list) return;
-  domSteps.list.innerHTML = STEP_LABELS.map((s,i)=>`<li data-step="${i}">${escapeHtml(s)}</li>`).join('');
-}
-function setStep(i, message){
-  if (message) updateLoader(message);
-  if (!domSteps.list) return;
-  const items = domSteps.list.querySelectorAll('li');
-  items.forEach((li, idx) => {
-    li.classList.toggle('current', idx === i);
-    li.classList.toggle('done', idx < i);
-  });
-}
-function finishSteps(msg){ setStep(STEP_LABELS.length - 1, msg || '準備完了'); }
-
-
-// 認証後の共通処理（元の onAuthStateChanged 内の “user あり” 分岐をそのまま移植）
-async function handleAfterLogin(user) {
-  if (!user) {
-    // --- ログアウト時 ---
-    dom.loginContainer.style.display = 'block';
-    dom.mainContainer.style.display = 'none';
-    dom.actionPanel.style.display = 'none';
-    dom.userInfo.innerHTML = '';
-    cleanupSubscriptions();
-    hideLoader();
-    setDisplayApprovalFeedback('');
-    return;
-  }
-  try {
-    showLoader('権限を確認しています…');
-    initLoaderSteps();
-    setStep(0, '認証OK。ユーザー情報を確認中…');
-    const result = await apiPost({ action: 'fetchSheet', sheet: 'users' });
-    setStep(1, '在籍チェック中…');
-      if (result.success && result.data) {
-        const authorizedUsers = result.data
-          .map(item => String(item['メールアドレス'] || '').trim().toLowerCase())
-          .filter(Boolean);
-        const loginEmail = String(user.email || '').trim().toLowerCase();
-        if (authorizedUsers.includes(loginEmail)) {
-        // ★ 管理者付与を“毎回”試す（冪等）: ルールで /admins 読めないため読まずに実行
-        setStep(2, '管理者権限の確認/付与…');
-        try {
-          await apiPost({ action: 'ensureAdmin' });
-        } catch (e) {
-          // users未在籍などはここに来るが致命ではない
-          console.warn('ensureAdmin non-fatal:', e);
-        }
-        dom.loginContainer.style.display = 'none';
-        dom.mainContainer.style.display = 'flex';
-        dom.actionPanel.style.display = 'flex';
-        // 表示名・メールアドレスはテキストノードとして挿入し、XSS を防止
-        dom.userInfo.innerHTML = '';
-        const userLabel = document.createElement('span');
-        userLabel.className = 'user-label';
-        const safeDisplayName = String(user.displayName || '').trim();
-        const safeEmail = String(user.email || '').trim();
-        userLabel.textContent = safeDisplayName && safeEmail
-          ? `${safeDisplayName} (${safeEmail})`
-          : (safeDisplayName || safeEmail || '');
-        const logoutBtn = document.createElement('button');
-        logoutBtn.id = 'logout-button';
-        logoutBtn.type = 'button';
-        logoutBtn.textContent = 'ログアウト';
-        dom.userInfo.append(userLabel, logoutBtn);
-        logoutBtn.addEventListener('click', logout);
-        // 初回だけシート→RTDB ミラー（空なら）
-        setStep(3, '初期ミラー実行中…');
-        updateLoader('初期データを準備しています…');
-        try {
-          const s = await get(questionsRef);
-          if (!s.exists()) await apiPost({ action: 'mirrorSheet' });
-        } catch(_) {}
-        // RTDB 初回データを取得 → UI へ反映 → ストリーム購読開始
-        setStep(4, '購読開始…');
-        updateLoader('データ同期中…');
-        const first = await get(questionsRef);
-        const m = first.val() || {};
-        state.allQuestions = Object.values(m).map(x => ({
-          'UID': x.uid, 'ラジオネーム': x.name, '質問・お悩み': x.question,
-          '回答済': !!x.answered, '選択中': !!x.selecting,
-        }));
-        renderQuestions();
-        startQuestionsStream(); // ← 以後リアルタイム
-        startDisplaySessionMonitor();
-        // 他パネルの初期読み込み
-        setStep(5, '辞書取得…');
-        await fetchDictionary();
-        setStep(6, 'ログ取得…');
-        await fetchLogs();
-        finishSteps('準備完了');
-        hideLoader();
-        showToast(`ようこそ、${user.displayName}さん`, 'success');
-        // update_trigger の購読（logs のリアルタイム反映）
-        let _rtTimer = null;
-        onValue(updateTriggerRef, (snapshot) => {
-          if (!snapshot.exists()) return;
-          clearTimeout(_rtTimer);
-          _rtTimer = setTimeout(()=>{ fetchLogs(); }, 150);
-        });
-      } else {
-        showToast("あなたのアカウントはこのシステムへのアクセスが許可されていません。", 'error');
-        await logout();
-        hideLoader();
-        setDisplayApprovalFeedback('');
-      }
-    } else {
-      showToast("ユーザー権限の確認に失敗しました。", 'error');
-      await logout();
-      hideLoader();
-      setDisplayApprovalFeedback('');
-    }
-  } catch (error) {
-    console.error("Authorization check failed:", error);
-    showToast("ユーザー権限の確認中にエラーが発生しました。", 'error');
-    await logout();
-    hideLoader();
-    setDisplayApprovalFeedback('');
-  }
-}
-
-// --- DOM要素の取得 ---
-const dom = {
-    loginContainer: document.getElementById('login-container'),
-    mainContainer: document.getElementById('main-container'),
-    actionPanel: document.getElementById('action-panel'),
-    userInfo: document.getElementById('user-info'),
-    questionsTableBody: null, // テーブルは廃止
-    cardsContainer: document.getElementById('questions-cards'),
-    dictionaryTableBody: document.querySelector('#dictionary-table tbody'),
-    logsTableBody: document.querySelector('#logs-table tbody'),
-    addTermForm: document.getElementById('add-term-form'),
-    newTermInput: document.getElementById('new-term'),
-    newRubyInput: document.getElementById('new-ruby'),
-    actionButtons: ['btn-display', 'btn-unanswer', 'btn-edit'].map(id => document.getElementById(id)),
-    selectedInfo: document.getElementById('selected-info'),
-    selectAllCheckbox: document.getElementById('select-all-checkbox'),
-    batchUnanswerBtn: document.getElementById('btn-batch-unanswer'),
-    clearButton: document.getElementById('btn-clear')
-};
-
-Object.assign(dom, {
-  logsStreamView: document.getElementById('logs-stream-view'),
-  logStream: document.getElementById('log-stream'),
-  logSearch: document.getElementById('log-search'),
-  logAutoscroll: document.getElementById('log-autoscroll'),
-});
-
-updateActionAvailability();
-
-// --- 状態管理変数 ---
-function createInitialState(){
+function createInitialState(autoScroll = true) {
   return {
     allQuestions: [],
     allLogs: [],
-    currentMainTab: 'questions',
-    currentSubTab: 'normal',
+    currentMainTab: "questions",
+    currentSubTab: "normal",
     selectedRowData: null,
     lastDisplayedUid: null,
-    autoScrollLogs: true,
+    autoScrollLogs: autoScroll,
     displaySession: null,
     displaySessionActive: false,
-    displaySessionLastActive: null,
+    displaySessionLastActive: null
   };
 }
 
-const state = createInitialState();
-
-function resetState(){
-  const fresh = createInitialState();
-  if (dom.logAutoscroll) {
-    fresh.autoScrollLogs = dom.logAutoscroll.checked;
-  }
-  Object.assign(state, fresh);
+function escapeHtml(value) {
+  const s = value == null ? "" : String(value);
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-resetState();
-
-updateActionAvailability();
-if (dom.logSearch) {
-  dom.logSearch.addEventListener('input', ()=>renderLogs());
-}
-if (dom.logAutoscroll) {
-  dom.logAutoscroll.addEventListener('change', (e)=>{ state.autoScrollLogs = e.target.checked; });
+function normalizeUpdatedAt(value) {
+  if (!value) return 0;
+  if (typeof value === "number") return value;
+  if (value.seconds) return value.seconds * 1000;
+  return 0;
 }
 
-// --- イベントリスナーの設定 ---
-document.getElementById('login-button').addEventListener('click', login);
-document.querySelectorAll('.main-tab-button').forEach(button => {
-    button.addEventListener('click', () => switchMainTab(button.dataset.tab));
-});
-document.querySelectorAll('.sub-tab-button').forEach(button => {
-    button.addEventListener('click', () => switchSubTab(button.dataset.subTab));
-});
-document.getElementById('manual-update-button').addEventListener('click', () => {
-    fetchLogs();
-});
-document.getElementById('btn-display').addEventListener('click', handleDisplay);
-document.getElementById('btn-unanswer').addEventListener('click', handleUnanswer);
-document.getElementById('btn-edit').addEventListener('click', handleEdit);
-document.getElementById('btn-clear').addEventListener('click', clearTelop);
-document.getElementById('fetch-dictionary-button').addEventListener('click', fetchDictionary);
-
-dom.addTermForm.addEventListener('submit', addTerm);
-dom.selectAllCheckbox.addEventListener('change', handleSelectAll);
-dom.batchUnanswerBtn.addEventListener('click', handleBatchUnanswer);
-// カード上のチェックは委譲
-dom.cardsContainer.addEventListener('change', (e)=>{
-  if (e.target && e.target.classList.contains('row-checkbox')) updateBatchButtonVisibility();
-});
-
-if (dom.approveDisplayForm) {
-  dom.approveDisplayForm.addEventListener('submit', handleApproveDisplay);
+function formatRelative(ms) {
+  if (!ms) return "—";
+  const diff = Math.max(0, Date.now() - ms);
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return `${seconds}秒前`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}分前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}時間前`;
+  const days = Math.floor(hours / 24);
+  return `${days}日前`;
 }
 
-// --- ログイン状態の監視 ---
-onAuthStateChanged(auth, (user) => {
-  // ポップアップ中は UI 更新を保留（ポップアップが閉じた後に反映）
-  if (_authFlow === 'prompting') {
-    _pendingAuthUser = user || null;
-    return;
-  }
-  handleAfterLogin(user);
-});
-
-function switchMainTab(tabName) {
-    if (!tabName) return;
-    state.currentMainTab = tabName;
-    document.querySelectorAll('.main-tab-button').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tabName);
-    });
-    document.querySelectorAll('.main-tab-content').forEach(content => {
-        content.classList.toggle('active', content.id === `${tabName}-content`);
-    });
-}
-
-function switchSubTab(tabName) {
-    if (!tabName) return;
-    state.currentSubTab = tabName;
-    document.querySelectorAll('.sub-tab-button').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.subTab === tabName);
-    });
-    renderQuestions(); // サブタブは質問リストを再描画するだけ
-}
-
-// --- データ取得処理 ---
-function startQuestionsStream(){
-  off(questionsRef);
-  onValue(questionsRef, (snap)=>{
-    const m = snap.val() || {};
-    // RTDB → レンダ用配列（班番号・tsも保持）
-    state.allQuestions = Object.values(m).map(x => ({
-      'UID': x.uid,
-      '班番号': (x.group ?? ''),     // ← 追加
-      'ラジオネーム': x.name,
-      '質問・お悩み': x.question,
-      '回答済': !!x.answered,
-      '選択中': !!x.selecting,
-      '__ts': Number(x.ts || 0)      // ← ソート用の内部フィールド
-    }));
-    renderQuestions();
-  });
-}
-
-function startDisplaySessionMonitor(){
-  off(displaySessionRef);
-  onValue(displaySessionRef, (snap) => {
-    const data = snap.val() || null;
-    const now = Date.now();
-    const expiresAt = Number(data && data.expiresAt) || 0;
-    const status = String(data && data.status || '');
-    const active = !!data && status === 'active' && (!expiresAt || expiresAt > now);
-    state.displaySession = data;
-    state.displaySessionActive = active;
-    if (state.displaySessionLastActive !== null && state.displaySessionLastActive !== active) {
-      showToast(active ? '表示端末とのセッションが確立されました。' : '表示端末の接続が確認できません。', active ? 'success' : 'error');
-    }
-    state.displaySessionLastActive = active;
-    updateActionAvailability();
-    updateBatchButtonVisibility();
-  }, (error) => {
-    console.error('Failed to monitor display session:', error);
-  });
-}
-
-async function fetchDictionary() {
-    try {
-        const result = await apiPost({ action: 'fetchSheet', sheet: 'dictionary' });
-        if (result.success) {
-            dom.dictionaryTableBody.innerHTML = '';
-            result.data.forEach(item => {
-                const tr = document.createElement('tr');
-
-                const toggleBtn = document.createElement('button');
-                toggleBtn.textContent = item.enabled ? '無効にする' : '有効にする';
-                toggleBtn.addEventListener('click', () => toggleTerm(item.term, !item.enabled));
-
-                const deleteBtn = document.createElement('button');
-                deleteBtn.textContent = '削除';
-                deleteBtn.addEventListener('click', () => deleteTerm(item.term));
-
-                tr.innerHTML = `
-                    <td>${escapeHtml(item.term)}</td>
-                    <td>${escapeHtml(item.ruby)}</td>
-                    <td>${item.enabled ? '有効' : '無効'}</td>
-                `;
-                const actionTd = document.createElement('td');
-                actionTd.appendChild(toggleBtn);
-                actionTd.appendChild(deleteBtn);
-                tr.appendChild(actionTd);
-                
-                if (!item.enabled) { tr.classList.add('disabled'); }
-                dom.dictionaryTableBody.appendChild(tr);
-            });
-
-            // ▼ 有効な辞書だけを Firebase にミラー（display が購読）
-            const enabledOnly = result.data.filter(i => i.enabled === true);
-            await set(ref(database, 'dictionary'), enabledOnly);
-        }
-    } catch (error) { alert('辞書の取得に失敗: ' + error.message); }
-}
-async function fetchLogs() {
-    try {
-        const result = await apiPost({ action: 'fetchSheet', sheet: 'logs' });
-        if (result.success) {
-            state.allLogs = result.data;
-            if (state.allLogs.length) console.debug('logs keys =', Object.keys(state.allLogs[0]));
-            renderLogs();
-        }
-    } catch (error) { console.error('ログの取得に失敗:', error); }
-}
-
-// --- データ描画関数（カードUIへ） ---
-async function renderQuestions() {
-  // 1) サブタブでフィルタ
-  let list = state.allQuestions.filter(item => {
-    const isPuq = item['ラジオネーム'] === 'Pick Up Question';
-    return state.currentSubTab === 'puq' ? isPuq : !isPuq;
-  });
-  // 2) 並び順：PUQ=「質問→ts→UID」、通常=「ts→名前→UID」
-  const isPUQ = state.currentSubTab === 'puq';
-  list.sort((a,b)=>{
-    if (isPUQ){
-      const ta = String(a['質問・お悩み'] ?? '');
-      const tb = String(b['質問・お悩み'] ?? '');
-      const t = ta.localeCompare(tb, 'ja', {numeric:true, sensitivity:'base'});
-      if (t) return t;
-      const da = a['__ts']||0, db = b['__ts']||0;
-      if (da!==db) return da-db;
-      return String(a['UID']).localeCompare(String(b['UID']));
-    }else{
-      const da = a['__ts']||0, db = b['__ts']||0;
-      if (da!==db) return da-db;                    // 古い→新しい
-      const na = String(a['ラジオネーム'] ?? ''), nb = String(b['ラジオネーム'] ?? '');
-      const n = na.localeCompare(nb, 'ja', {numeric:true, sensitivity:'base'});
-      if (n) return n;
-      return String(a['UID']).localeCompare(String(b['UID']));
-    }
-  });
-
-  const snap = await get(telopRef);
-  const live = snap.val();
-  const selectedUid = state.selectedRowData ? String(state.selectedRowData.uid) : null;
-  let nextSelection = null;
-
-  // --- カード描画 ---
-  const host = dom.cardsContainer;
-  host.innerHTML = '';
-  list.forEach(item=>{
-    const isAnswered = item['回答済'] === true;
-    const status = item['選択中'] ? 'live' : (isAnswered ? 'answered' : 'pending');
-    const statusText = status==='live' ? '表示中' : (status==='answered' ? '回答済' : '未回答');
-
-    const card = document.createElement('article');
-    card.className = `q-card ${status==='live'?'is-live':''} ${isAnswered?'is-answered':'is-pending'}`;
-    card.dataset.uid = String(item['UID']);
-
-    // 現在表示中のカードにマーキング（反応フラッシュ）
-    if (live && live.name === item['ラジオネーム'] && live.question === item['質問・お悩み']) {
-      card.classList.add('now-displaying');
-      if (state.lastDisplayedUid === item['UID']) {
-        card.classList.add('flash');
-        card.addEventListener('animationend', ()=>card.classList.remove('flash'), {once:true});
-        state.lastDisplayedUid = null;
-      }
-    }
-    const uid = String(item['UID']);
-    if (uid === selectedUid) {
-      card.classList.add('is-selected');
-      nextSelection = {
-        uid,
-        name: item['ラジオネーム'],
-        question: item['質問・お悩み'],
-        isAnswered
-      };
-    }
-
-    card.innerHTML = `
-      <header class="q-head">
-        <div class="q-title">
-          <span class="q-name">${escapeHtml(item['ラジオネーム'])}</span>
-          ${item['ラジオネーム']==='Pick Up Question' ? '<span class="q-badge q-badge--puq">PUQ</span>' : ''}
-        </div>
-        <div class="q-meta">
-          <span class="q-group">${escapeHtml(item['班番号'] ?? '') || ''}</span>
-          <span class="chip chip--${status}">${statusText}</span>
-          <label class="q-check">
-            <input type="checkbox" class="row-checkbox">
-          </label>
-        </div>
-      </header>
-      <div class="q-text">${escapeHtml(item['質問・お悩み'])}</div>
-    `;
-
-    const checkbox = card.querySelector('.row-checkbox');
-    if (checkbox) {
-      checkbox.dataset.uid = String(item['UID']);
-    }
-
-    // カード選択
-    card.addEventListener('click', (e)=>{
-      const t = e.target;
-      if (t instanceof Element && t.closest('.q-check')) return; // チェック操作は除外
-      host.querySelectorAll('.q-card').forEach(el => el.classList.remove('is-selected'));
-      card.classList.add('is-selected');
-      state.selectedRowData = {
-        uid,
-        name: item['ラジオネーム'],
-        question: item['質問・お悩み'],
-        isAnswered
-      };
-      updateActionAvailability();
-    });
-
-    host.appendChild(card);
-  });
-
-  if (selectedUid && nextSelection) {
-    state.selectedRowData = nextSelection;
-    updateActionAvailability();
-  } else if (!list.some(x => String(x['UID']) === selectedUid)) {
-    state.selectedRowData = null;
-    updateActionAvailability();
-  }
-  updateBatchButtonVisibility();
-}
-
-function renderLogs(){
-  const rows = applyLogFilters(state.allLogs || []);
-  renderLogsStream(rows);
-}
-
-function applyLogFilters(arr){
-  const q = (dom.logSearch?.value || '').trim().toLowerCase();
-  if (!q) return arr;
-  return arr.filter(row=>{
-    const rawTs = row.Timestamp ?? row.timestamp ?? row['時刻'] ?? row['タイムスタンプ'] ?? '';
-    const tsText = (parseLogTimestamp(rawTs)?.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}) || String(rawTs)).toLowerCase();
-    const user    = String(row.User    ?? row.user    ?? row['ユーザー'] ?? '').toLowerCase();
-    const action  = String(row.Action  ?? row.action  ?? row['アクション'] ?? '').toLowerCase();
-    const details = String(row.Details ?? row.details ?? row['詳細'] ?? '').toLowerCase();
-    const level   = getLogLevel(row).toLowerCase();
-    return tsText.includes(q)||user.includes(q)||action.includes(q)||details.includes(q)||level.includes(q);
-  });
-}
-function renderLogsStream(rows){
-  const max = 500; // 重くならないよう上限
-  const viewRows = rows.slice(-max);
-  dom.logStream.innerHTML = '';
-  for (const log of viewRows){
-    const rawTs = log.Timestamp ?? log.timestamp ?? log['時刻'] ?? log['タイムスタンプ'] ?? '';
-    const d = parseLogTimestamp(rawTs);
-    const tsText = d ? d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}) : String(rawTs||'');
-    const user = String(log.User ?? '');
-    const action = String(log.Action ?? '');
-    const details = String(log.Details ?? '');
-    const level = getLogLevel(log);      // ★ レベル判定
-    const levelCls = `lvl-${level}`;     // log-line 用クラス
-    const line = document.createElement('div');
-    line.className = `log-line ${levelCls}`;
-    line.innerHTML =
-      `<span class="ts">[${escapeHtml(tsText)}]</span> ` +
-      `<span class="badge level ${escapeHtml(level)}">${escapeHtml(level.toUpperCase())}</span> ` +
-      `<span class="badge user">@${escapeHtml(user)}</span> ` +
-      `<span class="badge action">${escapeHtml(action.toUpperCase())}</span> ` +
-      `<span class="details">${escapeHtml(details)}</span>`;
-    dom.logStream.appendChild(line);
-  }
-  if (state.autoScrollLogs) dom.logStream.scrollTop = dom.logStream.scrollHeight;
-}
-
-
-// 追記：相対時刻を毎秒更新する描画関数
-function redrawUpdatedAt(){
-  if (!lastUpdatedAt){
-    updEl.textContent = '—';
-    return;
-  }
-  const t = new Date(lastUpdatedAt).toLocaleTimeString('ja-JP', { hour12:false });
-  updEl.textContent = `${t}（${formatRelative(lastUpdatedAt)}）`;
-}
-
-// ★ “古さ”の視覚表示：30秒経過でごく僅かにトーンダウン
-function refreshStaleness(){
-  if (!indicatorEl) return;
-  if (!lastUpdatedAt) { indicatorEl.classList.remove('is-stale'); return; }
-  const age = Date.now() - lastUpdatedAt;
-  if (Number.isFinite(age) && age >= 30_000) indicatorEl.classList.add('is-stale');
-  else indicatorEl.classList.remove('is-stale');
+function normKey(key) {
+  return String(key || "")
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
 }
 
 function parseLogTimestamp(ts) {
   if (ts == null) return null;
   if (ts instanceof Date && !isNaN(ts)) return ts;
-  if (typeof ts === 'number') {
-    if (ts > 1e12) return new Date(ts);        // epoch ms
-    if (ts > 1e10) return new Date(ts * 1000); // epoch sec
-    // Excel 序数 (1899-12-30起点)
+  if (typeof ts === "number") {
+    if (ts > 1e12) return new Date(ts);
+    if (ts > 1e10) return new Date(ts * 1000);
     const ms = (ts - 25569) * 86400 * 1000;
     return new Date(ms);
   }
-  if (typeof ts === 'string') {
+  if (typeof ts === "string") {
     let s = ts.trim();
     if (!s) return null;
-    // 2025/10/05 12:34:56 → Safari 対策
     if (/^\d{4}\/\d{1,2}\/\d{1,2}/.test(s)) {
-      const [dPart, tPart='00:00:00'] = s.split(' ');
-      const [y,m,d] = dPart.split('/').map(Number);
-      const [hh=0,mm=0,ss=0] = tPart.split(':').map(Number);
-      return new Date(y, m-1, d, hh, mm, ss);
+      const [dPart, tPart = "00:00:00"] = s.split(" ");
+      const [y, m, d] = dPart.split("/").map(Number);
+      const [hh = 0, mm = 0, ss = 0] = tPart.split(":").map(Number);
+      return new Date(y, m - 1, d, hh, mm, ss);
     }
-    // 2025-10-05 12:34:56 → T 挿入
-    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) s = s.replace(' ', 'T');
-    const d = new Date(s);
-    if (!isNaN(d)) return d;
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) {
+      s = s.replace(" ", "T");
+    }
+    const date = new Date(s);
+    if (!isNaN(date)) return date;
   }
   return null;
 }
 
-// --- 操作関数 ---
-async function handleDisplay() {
-    if (!state.displaySessionActive) {
-        showToast('表示端末が接続されていません。', 'error');
-        return;
-    }
-    if (!state.selectedRowData || state.selectedRowData.isAnswered) return;
-    const snapshot = await get(telopRef);
-    const previousTelop = snapshot.val();
-    try {
-        // 1) RTDB を先に更新（UIは即反映）
-        const updates = {};
-        if (previousTelop) {
-          const prev = state.allQuestions.find(q => q['ラジオネーム'] === previousTelop.name && q['質問・お悩み'] === previousTelop.question);
-          if (prev) {
-            updates[`questions/${prev['UID']}/selecting`] = false;
-            updates[`questions/${prev['UID']}/answered`] = true;
-          }
-        }
-        updates[`questions/${state.selectedRowData.uid}/selecting`] = true;
-        updates[`questions/${state.selectedRowData.uid}/answered`] = false;
-        await update(ref(database), updates);
-        await set(telopRef, { name: state.selectedRowData.name, question: state.selectedRowData.question });
-
-        // 2) GAS へは“依頼”だけ（待たない）
-        fireAndForgetApi({ action:'updateSelectingStatus', uid: state.selectedRowData.uid });
-        if (previousTelop){
-          const prev = state.allQuestions.find(q => q['ラジオネーム'] === previousTelop.name && q['質問・お悩み'] === previousTelop.question);
-          if (prev) fireAndForgetApi({ action:'updateStatus', uid: prev['UID'], status: true });
-        }
-        state.lastDisplayedUid = state.selectedRowData.uid;
-        logAction('DISPLAY', `RN: ${state.selectedRowData.name}`);
-        showToast(`「${state.selectedRowData.name}」さんの質問を表示しました。`, 'success');
-    } catch (error) {
-        showToast('表示処理中にエラーが発生しました: ' + error.message, 'error');
-    }
-}
-async function handleAnswered() {
-    if (!state.selectedRowData) return;
-    if (!confirm(`「${state.selectedRowData.name}」の質問を「回答済」にしますか？`)) return;
-    try {
-        const result = await apiPost({ action: 'updateStatus', uid: state.selectedRowData.uid, status: true });
-        if (result.success) {
-           logAction('SET_ANSWERED', `UID: ${state.selectedRowData.uid}`);
-           showToast('ステータスを「回答済」に更新しました。', 'success');
-        } else { 
-            showToast('ステータスの更新に失敗しました: ' + result.error, 'error');
-        }
-    } catch (error) { 
-        showToast('通信エラー: ' + error.message, 'error');
-    }
-}
-async function updateStatusOnServer(uids, isAnswered, isSelectingUpdate = false, selectingUid = null) {
-    try {
-        const action = isSelectingUpdate
-          ? (selectingUid === -1 ? 'clearSelectingStatus' : 'updateSelectingStatus')
-          : 'batchUpdateStatus';
-        const payload =
-          action === 'updateSelectingStatus'   ? { action, uid: selectingUid } :
-          action === 'clearSelectingStatus'    ? { action } :
-                                                 { action, uids, status: isAnswered };
-        const result = await apiPost(payload);
-        if (result.success) {
-            if (!isSelectingUpdate) {
-                logAction(isAnswered ? 'BATCH_SET_ANSWERED' : 'BATCH_SET_UNANSWERED', `UIDs: ${uids.join(', ')}`);
-                showToast(`${uids.length}件を更新しました。`, 'success');
-            }
-        } else { showToast('更新に失敗しました: ' + result.error, 'error'); }
-    } catch (error) { showToast('通信エラー: ' + error.message, 'error'); }
-}
-function handleSelectAll(event) {
-    dom.cardsContainer.querySelectorAll('.row-checkbox')
-      .forEach(cb => { cb.checked = event.target.checked; });
-    updateBatchButtonVisibility();
-}
-function updateBatchButtonVisibility() {
-    if (!dom.batchUnanswerBtn) return;
-    const active = !!state.displaySessionActive;
-    const checkedCount = active ? document.querySelectorAll('.row-checkbox:checked').length : 0;
-    dom.batchUnanswerBtn.style.display = active && checkedCount > 0 ? 'inline-block' : 'none';
-    dom.batchUnanswerBtn.disabled = !active || checkedCount === 0;
-}
-async function handleEdit() {
-    if (!state.selectedRowData) return;
-    const newText = prompt("質問内容を編集してください：", state.selectedRowData.question);
-    if (newText === null || newText.trim() === state.selectedRowData.question.trim()) return;
-    try {
-        // RTDB 先行
-        await update(ref(database, `questions/${state.selectedRowData.uid}`), { question: newText.trim() });
-        // GAS 同期依頼（非同期）
-        fireAndForgetApi({ action:'editQuestion', uid: state.selectedRowData.uid, text: newText.trim() });
-        logAction('EDIT', `UID: ${state.selectedRowData.uid}`);
-        showToast('質問を更新しました。', 'success');
-    } catch (error) { 
-        showToast('通信エラー: ' + error.message, 'error');
-    }
-}
-async function clearTelop() {
-    if (!state.displaySessionActive) {
-        showToast('表示端末が接続されていません。', 'error');
-        return;
-    }
-    const snapshot = await get(telopRef);
-    const previousTelop = snapshot.val();
-    try {
-        if (previousTelop) {
-            const prevItem = state.allQuestions.find(q => q['ラジオネーム'] === previousTelop.name && q['質問・お悩み'] === previousTelop.question);
-            if (prevItem) { await updateStatusOnServer([prevItem['UID']], true); }
-        }
-        await remove(telopRef);
-        await updateStatusOnServer([], false, true, -1);
-        logAction('CLEAR');
-        showToast('テロップを消去しました。', 'success');
-    } catch(error) {
-        showToast('テロップの消去中にエラーが発生しました: ' + error.message, 'error');
-    }
-}
-function handleUnanswer() {
-    if (!state.displaySessionActive) {
-        showToast('表示端末が接続されていません。', 'error');
-        return;
-    }
-    if (!state.selectedRowData || !state.selectedRowData.isAnswered) return;
-    if (!confirm(`「${state.selectedRowData.name}」の質問を「未回答」に戻しますか？`)) return;
-    // RTDB 先行
-    update(ref(database, `questions/${state.selectedRowData.uid}`), { answered:false });
-    // GAS 同期依頼（非同期）
-    fireAndForgetApi({ action:'updateStatus', uid: state.selectedRowData.uid, status:false });
-}
-function handleBatchUnanswer() {
-    if (!state.displaySessionActive) {
-        showToast('表示端末が接続されていません。', 'error');
-        return;
-    }
-    const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
-    if (checkedBoxes.length === 0) return;
-    if (!confirm(`${checkedBoxes.length}件の質問を「未回答」に戻しますか？`)) return;
-    const uidsToUpdate = Array.from(checkedBoxes).map(cb => cb.dataset.uid);
-    // RTDB 先行（まとめて）
-    const updates = {};
-    for (const uid of uidsToUpdate){ updates[`questions/${uid}/answered`] = false; }
-    update(ref(database), updates);
-    // GAS 同期依頼（非同期）
-    fireAndForgetApi({ action:'batchUpdateStatus', uids: uidsToUpdate, status:false });
+function getLogLevel(log) {
+  const action = String(log.Action || "").toLowerCase();
+  const details = String(log.Details || "").toLowerCase();
+  if (/(error|failed|exception|timeout|unauthorized|forbidden|denied)/.test(action + details)) return "error";
+  if (/\b5\d{2}\b|\b4\d{2}\b/.test(details)) return "error";
+  if (/(delete|clear|remove|reset|unanswer)/.test(action)) return "warn";
+  if (/(display|send|answer|set_answered|batch_set_answered|edit|add|toggle|update)/.test(action)) return "success";
+  if (/(fetch|read|log|whoami)/.test(action)) return "info";
+  return "info";
 }
 
-function updateActionAvailability() {
-    if (!state) return;
-    const active = !!state.displaySessionActive;
-    const selection = state.selectedRowData;
-
-  dom.actionButtons.forEach(btn => { if (btn) btn.disabled = true; });
-  if (dom.clearButton) dom.clearButton.disabled = !active;
-
-  if (!dom.selectedInfo) {
-    updateBatchButtonVisibility();
-    return;
+function createApiClient(authInstance) {
+  async function getIdTokenSafe(force = false) {
+    const user =
+      authInstance.currentUser ||
+      (await new Promise((resolve) => {
+        const unsubscribe = onAuthStateChanged(authInstance, (u) => {
+          unsubscribe();
+          resolve(u);
+        });
+      }));
+    if (!user) throw new Error("Not signed in");
+    return await user.getIdToken(force);
   }
 
-  if (!active) {
-    dom.selectedInfo.textContent = '表示端末が接続されていません';
-    updateBatchButtonVisibility();
-    return;
-  }
-
-  if (!selection) {
-    dom.selectedInfo.textContent = '行を選択してください';
-    updateBatchButtonVisibility();
-    return;
-  }
-
-  dom.actionButtons.forEach(btn => { if (btn) btn.disabled = false; });
-  if (dom.actionButtons[0]) dom.actionButtons[0].disabled = !!selection.isAnswered;
-  if (dom.actionButtons[1]) dom.actionButtons[1].disabled = !selection.isAnswered;
-  const safeName = String(selection.name ?? '');
-  dom.selectedInfo.textContent = `選択中: ${safeName}`;
-  updateBatchButtonVisibility();
-}
-
-async function logAction(actionName, details = '') {
-  try {
-    await apiPost({
-      action: 'logAction',   // ← ディスパッチ用
-      action_type: actionName, // ← 保存したい「操作名」
-      details
+  async function apiPost(payload, retryOnAuthError = true) {
+    const idToken = await getIdTokenSafe();
+    const res = await fetch(GAS_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ ...payload, idToken })
     });
-  } catch(e){ console.error('Failed to write log:', e); }
-}
-
-// --- 辞書関連の関数 ---
-async function addTerm(event) {
-    event.preventDefault();
-    const term = dom.newTermInput.value.trim();
-    const ruby = dom.newRubyInput.value.trim();
-    if (!term || !ruby) return;
-
+    let json;
     try {
-        const result = await apiPost({ action: 'addTerm', term, ruby });
-        if (result.success) {
-            dom.newTermInput.value = '';
-            dom.newRubyInput.value = '';
-            fetchDictionary();
-        } else {
-            showToast('追加失敗: ' + result.error, 'error');
-        }
+      json = await res.json();
     } catch (error) {
-        showToast('通信エラー: ' + error.message, 'error');
+      throw new Error("Bad JSON response");
     }
+    if (!json.success) {
+      const message = String(json.error || "");
+      if (retryOnAuthError && /Auth/.test(message)) {
+        await getIdTokenSafe(true);
+        return await apiPost(payload, false);
+      }
+      throw new Error(`${message}${json.errorId ? " [" + json.errorId + "]" : ""}`);
+    }
+    return json;
+  }
+
+  function fireAndForgetApi(payload) {
+    apiPost(payload).catch((error) => {
+      console.warn("API fire-and-forget failed", error);
+    });
+  }
+
+  async function logAction(actionName, details = "") {
+    try {
+      await apiPost({
+        action: "logAction",
+        action_type: actionName,
+        details
+      });
+    } catch (error) {
+      console.error("Failed to write log:", error);
+    }
+  }
+
+  return { apiPost, fireAndForgetApi, logAction };
 }
 
-async function deleteTerm(term) {
+function showToast(message, type = "success") {
+  const backgroundColor =
+    type === "success"
+      ? "linear-gradient(to right, #4CAF50, #77dd77)"
+      : "linear-gradient(to right, #f06595, #ff6b6b)";
+  const safeMessage = escapeHtml(String(message ?? ""));
+  Toastify({
+    text: safeMessage,
+    duration: 3000,
+    close: true,
+    gravity: "top",
+    position: "right",
+    stopOnFocus: true,
+    style: { background: backgroundColor },
+    className: `toastify-${type}`
+  }).showToast();
+}
+
+class OperatorApp {
+  constructor() {
+    this.dom = {
+      loginButton: document.getElementById("login-button"),
+      loginContainer: document.getElementById("login-container"),
+      mainContainer: document.getElementById("main-container"),
+      actionPanel: document.getElementById("action-panel"),
+      userInfo: document.getElementById("user-info"),
+      cardsContainer: document.getElementById("questions-cards"),
+      dictionaryTableBody: document.querySelector("#dictionary-table tbody"),
+      logsTableBody: document.querySelector("#logs-table tbody"),
+      addTermForm: document.getElementById("add-term-form"),
+      newTermInput: document.getElementById("new-term"),
+      newRubyInput: document.getElementById("new-ruby"),
+      actionButtons: ["btn-display", "btn-unanswer", "btn-edit"].map((id) => document.getElementById(id)),
+      selectedInfo: document.getElementById("selected-info"),
+      selectAllCheckbox: document.getElementById("select-all-checkbox"),
+      batchUnanswerBtn: document.getElementById("btn-batch-unanswer"),
+      clearButton: document.getElementById("btn-clear"),
+      manualUpdateButton: document.getElementById("manual-update-button"),
+      fetchDictionaryButton: document.getElementById("fetch-dictionary-button"),
+      logSearch: document.getElementById("log-search"),
+      logAutoscroll: document.getElementById("log-autoscroll"),
+      logStream: document.getElementById("log-stream"),
+      logsStreamView: document.getElementById("logs-stream-view"),
+      approveDisplayForm: document.getElementById("approve-display-form"),
+      approveDisplayInput: document.getElementById("approve-display-uid"),
+      approveDisplayFeedback: document.getElementById("approve-display-feedback"),
+      loadingOverlay: document.getElementById("loading-overlay"),
+      loadingText: document.getElementById("loading-text"),
+      loaderSteps: document.getElementById("loader-steps"),
+      render: {
+        indicator: document.querySelector(".render-indicator"),
+        lamp: document.getElementById("render-lamp"),
+        phase: document.getElementById("render-phase"),
+        summary: document.getElementById("render-summary"),
+        title: document.getElementById("render-title"),
+        question: document.getElementById("render-question"),
+        updated: document.getElementById("render-updated")
+      }
+    };
+
+    const autoScroll = this.dom.logAutoscroll ? this.dom.logAutoscroll.checked : true;
+    this.state = createInitialState(autoScroll);
+
+    this.api = createApiClient(auth);
+
+    this.lastUpdatedAt = 0;
+    this.renderTicker = null;
+    this.questionsUnsubscribe = null;
+    this.displaySessionUnsubscribe = null;
+    this.updateTriggerUnsubscribe = null;
+    this.renderUnsubscribe = null;
+    this.logsUpdateTimer = null;
+    this.authFlow = "idle";
+    this.pendingAuthUser = null;
+
+    this.handleRenderUpdate = this.handleRenderUpdate.bind(this);
+    this.login = this.login.bind(this);
+    this.logout = this.logout.bind(this);
+    this.handleDisplay = this.handleDisplay.bind(this);
+    this.handleUnanswer = this.handleUnanswer.bind(this);
+    this.handleEdit = this.handleEdit.bind(this);
+    this.clearTelop = this.clearTelop.bind(this);
+    this.handleSelectAll = this.handleSelectAll.bind(this);
+    this.handleBatchUnanswer = this.handleBatchUnanswer.bind(this);
+    this.switchMainTab = this.switchMainTab.bind(this);
+    this.switchSubTab = this.switchSubTab.bind(this);
+    this.fetchDictionary = this.fetchDictionary.bind(this);
+    this.fetchLogs = this.fetchLogs.bind(this);
+    this.addTerm = this.addTerm.bind(this);
+    this.handleApproveDisplay = this.handleApproveDisplay.bind(this);
+  }
+
+  init() {
+    this.setupEventListeners();
+    this.updateActionAvailability();
+    this.attachRenderMonitor();
+    onAuthStateChanged(auth, (user) => {
+      if (this.authFlow === "prompting") {
+        this.pendingAuthUser = user || null;
+        return;
+      }
+      this.handleAuthState(user);
+    });
+  }
+
+  setupEventListeners() {
+    this.dom.loginButton?.addEventListener("click", this.login);
+    document.querySelectorAll(".main-tab-button").forEach((button) => {
+      button.addEventListener("click", () => this.switchMainTab(button.dataset.tab));
+    });
+    document.querySelectorAll(".sub-tab-button").forEach((button) => {
+      button.addEventListener("click", () => this.switchSubTab(button.dataset.subTab));
+    });
+    this.dom.manualUpdateButton?.addEventListener("click", this.fetchLogs);
+    this.dom.actionButtons[0]?.addEventListener("click", this.handleDisplay);
+    this.dom.actionButtons[1]?.addEventListener("click", this.handleUnanswer);
+    this.dom.actionButtons[2]?.addEventListener("click", this.handleEdit);
+    this.dom.clearButton?.addEventListener("click", this.clearTelop);
+    this.dom.fetchDictionaryButton?.addEventListener("click", this.fetchDictionary);
+    this.dom.addTermForm?.addEventListener("submit", this.addTerm);
+    this.dom.selectAllCheckbox?.addEventListener("change", this.handleSelectAll);
+    this.dom.batchUnanswerBtn?.addEventListener("click", this.handleBatchUnanswer);
+    this.dom.cardsContainer?.addEventListener("change", (event) => {
+      if (event.target instanceof HTMLInputElement && event.target.classList.contains("row-checkbox")) {
+        this.updateBatchButtonVisibility();
+      }
+    });
+    if (this.dom.approveDisplayForm) {
+      this.dom.approveDisplayForm.addEventListener("submit", this.handleApproveDisplay);
+    }
+    if (this.dom.logSearch) {
+      this.dom.logSearch.addEventListener("input", () => this.renderLogs());
+    }
+    if (this.dom.logAutoscroll) {
+      this.dom.logAutoscroll.addEventListener("change", (event) => {
+        this.state.autoScrollLogs = event.target.checked;
+      });
+    }
+  }
+
+  attachRenderMonitor() {
+    if (this.renderUnsubscribe) {
+      this.renderUnsubscribe();
+    }
+    this.renderUnsubscribe = onValue(renderRef, this.handleRenderUpdate, (error) => {
+      console.error("Failed to monitor render state:", error);
+    });
+  }
+
+  handleRenderUpdate(snapshot) {
+    const value = snapshot.val() || {};
+    this.setLamp(value.phase);
+    const isHidden = value.phase === "hidden";
+    const now = isHidden ? null : value.nowShowing || null;
+    if (!now) {
+      if (this.dom.render.title) this.dom.render.title.textContent = "（非表示）";
+      if (this.dom.render.question) this.dom.render.question.textContent = "";
+    } else {
+      const name = (now.name || "").trim();
+      if (this.dom.render.title) {
+        this.dom.render.title.textContent =
+          name === "Pick Up Question" ? name : `ラジオネーム：${name}`;
+      }
+      if (this.dom.render.question) {
+        this.dom.render.question.textContent = String(now.question || "").replace(/\s+/g, " ").trim();
+      }
+    }
+
+    const updatedAt = normalizeUpdatedAt(value.updatedAt) || 0;
+    const previous = this.lastUpdatedAt || 0;
+    this.lastUpdatedAt = updatedAt;
+    this.redrawUpdatedAt();
+    if (updatedAt > previous) {
+      this.dom.render.summary?.classList.add("is-updated");
+      this.dom.render.indicator?.classList.add("is-updated");
+      setTimeout(() => {
+        this.dom.render.summary?.classList.remove("is-updated");
+        this.dom.render.indicator?.classList.remove("is-updated");
+      }, 800);
+    }
+    if (!this.renderTicker) {
+      this.renderTicker = setInterval(() => {
+        this.redrawUpdatedAt();
+        this.refreshStaleness();
+      }, 1000);
+    }
+    this.refreshStaleness();
+  }
+
+  setLamp(phase) {
+    if (!this.dom.render.lamp) return;
+    this.dom.render.lamp.className = "lamp";
+    switch (phase) {
+      case "visible":
+        this.dom.render.lamp.classList.add("is-visible");
+        break;
+      case "showing":
+      case "hiding":
+        this.dom.render.lamp.classList.add("is-showing");
+        break;
+      case "hidden":
+        this.dom.render.lamp.classList.add("is-hidden");
+        break;
+      case "error":
+        this.dom.render.lamp.classList.add("is-error");
+        break;
+      default:
+        this.dom.render.lamp.classList.add("is-hidden");
+        break;
+    }
+    if (this.dom.render.phase) {
+      this.dom.render.phase.textContent = phase || "-";
+    }
+  }
+
+  redrawUpdatedAt() {
+    if (!this.dom.render.updated) return;
+    if (!this.lastUpdatedAt) {
+      this.dom.render.updated.textContent = "—";
+      return;
+    }
+    const timeText = new Date(this.lastUpdatedAt).toLocaleTimeString("ja-JP", { hour12: false });
+    this.dom.render.updated.textContent = `${timeText}（${formatRelative(this.lastUpdatedAt)}）`;
+  }
+
+  refreshStaleness() {
+    if (!this.dom.render.indicator) return;
+    if (!this.lastUpdatedAt) {
+      this.dom.render.indicator.classList.remove("is-stale");
+      return;
+    }
+    const age = Date.now() - this.lastUpdatedAt;
+    if (Number.isFinite(age) && age >= 30000) {
+      this.dom.render.indicator.classList.add("is-stale");
+    } else {
+      this.dom.render.indicator.classList.remove("is-stale");
+    }
+  }
+
+  async login() {
+    const btn = this.dom.loginButton;
+    const originalText = btn ? btn.textContent : "";
+    try {
+      this.authFlow = "prompting";
+      this.showLoader("サインイン中…");
+      if (btn) {
+        btn.disabled = true;
+        btn.classList.add("is-busy");
+        btn.textContent = "サインイン中…";
+      }
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Login failed:", error);
+      showToast("ログインに失敗しました。", "error");
+      this.hideLoader();
+    } finally {
+      this.authFlow = "done";
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove("is-busy");
+        btn.textContent = originalText;
+      }
+      if (this.pendingAuthUser !== null) {
+        const user = this.pendingAuthUser;
+        this.pendingAuthUser = null;
+        this.handleAuthState(user);
+      }
+    }
+  }
+
+  async logout() {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+    this.authFlow = "idle";
+    this.pendingAuthUser = null;
+    this.hideLoader();
+  }
+
+  async handleAuthState(user) {
+    if (!user) {
+      this.showLoggedOutState();
+      return;
+    }
+    try {
+      this.showLoader("権限を確認しています…");
+      this.initLoaderSteps();
+      this.setLoaderStep(0, "認証OK。ユーザー情報を確認中…");
+      const result = await this.api.apiPost({ action: "fetchSheet", sheet: "users" });
+      this.setLoaderStep(1, "在籍チェック中…");
+      if (!result.success || !result.data) {
+        throw new Error("ユーザー権限の確認に失敗しました。");
+      }
+      const authorizedUsers = result.data
+        .map((item) => String(item["メールアドレス"] || "").trim().toLowerCase())
+        .filter(Boolean);
+      const loginEmail = String(user.email || "").trim().toLowerCase();
+      if (!authorizedUsers.includes(loginEmail)) {
+        showToast("あなたのアカウントはこのシステムへのアクセスが許可されていません。", "error");
+        await this.logout();
+        this.hideLoader();
+        this.setDisplayApprovalFeedback("");
+        return;
+      }
+
+      this.setLoaderStep(2, "管理者権限の確認/付与…");
+      try {
+        await this.api.apiPost({ action: "ensureAdmin" });
+      } catch (error) {
+        console.warn("ensureAdmin non-fatal", error);
+      }
+
+      this.renderLoggedInUi(user);
+      this.setLoaderStep(3, "初期ミラー実行中…");
+      this.updateLoader("初期データを準備しています…");
+      try {
+        const snapshot = await get(questionsRef);
+        if (!snapshot.exists()) {
+          await this.api.apiPost({ action: "mirrorSheet" });
+        }
+      } catch (error) {
+        console.warn("mirrorSheet skipped", error);
+      }
+
+      this.setLoaderStep(4, "購読開始…");
+      this.updateLoader("データ同期中…");
+      const firstSnapshot = await get(questionsRef);
+      const firstValue = firstSnapshot.val() || {};
+      this.state.allQuestions = Object.values(firstValue).map((item) => ({
+        UID: item.uid,
+        班番号: item.group ?? "",
+        ラジオネーム: item.name,
+        "質問・お悩み": item.question,
+        回答済: !!item.answered,
+        選択中: !!item.selecting,
+        __ts: Number(item.ts || 0)
+      }));
+      await this.renderQuestions();
+      this.startQuestionsStream();
+      this.startDisplaySessionMonitor();
+      this.setLoaderStep(5, "辞書取得…");
+      await this.fetchDictionary();
+      this.setLoaderStep(6, "ログ取得…");
+      await this.fetchLogs();
+      this.finishLoaderSteps("準備完了");
+      this.hideLoader();
+      showToast(`ようこそ、${user.displayName || ""}さん`, "success");
+      this.startLogsUpdateMonitor();
+    } catch (error) {
+      console.error("Authorization check failed:", error);
+      showToast("ユーザー権限の確認中にエラーが発生しました。", "error");
+      await this.logout();
+      this.hideLoader();
+      this.setDisplayApprovalFeedback("");
+    }
+  }
+
+  renderLoggedInUi(user) {
+    if (this.dom.loginContainer) this.dom.loginContainer.style.display = "none";
+    if (this.dom.mainContainer) this.dom.mainContainer.style.display = "flex";
+    if (this.dom.actionPanel) this.dom.actionPanel.style.display = "flex";
+    if (this.dom.userInfo) {
+      this.dom.userInfo.innerHTML = "";
+      const label = document.createElement("span");
+      label.className = "user-label";
+      const safeDisplayName = String(user.displayName || "").trim();
+      const safeEmail = String(user.email || "").trim();
+      label.textContent = safeDisplayName && safeEmail ? `${safeDisplayName} (${safeEmail})` : safeDisplayName || safeEmail || "";
+      const logoutButton = document.createElement("button");
+      logoutButton.id = "logout-button";
+      logoutButton.type = "button";
+      logoutButton.textContent = "ログアウト";
+      logoutButton.addEventListener("click", this.logout);
+      this.dom.userInfo.append(label, logoutButton);
+    }
+  }
+
+  showLoggedOutState() {
+    if (this.dom.loginContainer) this.dom.loginContainer.style.display = "block";
+    if (this.dom.mainContainer) this.dom.mainContainer.style.display = "none";
+    if (this.dom.actionPanel) this.dom.actionPanel.style.display = "none";
+    if (this.dom.userInfo) this.dom.userInfo.innerHTML = "";
+    this.cleanupRealtime();
+    this.hideLoader();
+    this.setDisplayApprovalFeedback("");
+  }
+
+  cleanupRealtime() {
+    if (this.questionsUnsubscribe) {
+      this.questionsUnsubscribe();
+      this.questionsUnsubscribe = null;
+    }
+    if (this.displaySessionUnsubscribe) {
+      this.displaySessionUnsubscribe();
+      this.displaySessionUnsubscribe = null;
+    }
+    if (this.updateTriggerUnsubscribe) {
+      this.updateTriggerUnsubscribe();
+      this.updateTriggerUnsubscribe = null;
+    }
+    if (this.renderTicker) {
+      clearInterval(this.renderTicker);
+      this.renderTicker = null;
+    }
+    this.logsUpdateTimer && clearTimeout(this.logsUpdateTimer);
+    this.logsUpdateTimer = null;
+    const autoScroll = this.dom.logAutoscroll ? this.dom.logAutoscroll.checked : true;
+    this.state = createInitialState(autoScroll);
+    if (this.dom.selectAllCheckbox) this.dom.selectAllCheckbox.checked = false;
+    this.updateActionAvailability();
+    this.updateBatchButtonVisibility();
+    if (this.dom.cardsContainer) this.dom.cardsContainer.innerHTML = "";
+    if (this.dom.logStream) this.dom.logStream.innerHTML = "";
+  }
+
+  startQuestionsStream() {
+    if (this.questionsUnsubscribe) this.questionsUnsubscribe();
+    this.questionsUnsubscribe = onValue(questionsRef, (snapshot) => {
+      const value = snapshot.val() || {};
+      this.state.allQuestions = Object.values(value).map((item) => ({
+        UID: item.uid,
+        班番号: item.group ?? "",
+        ラジオネーム: item.name,
+        "質問・お悩み": item.question,
+        回答済: !!item.answered,
+        選択中: !!item.selecting,
+        __ts: Number(item.ts || 0)
+      }));
+      this.renderQuestions();
+    });
+  }
+
+  startDisplaySessionMonitor() {
+    if (this.displaySessionUnsubscribe) this.displaySessionUnsubscribe();
+    this.displaySessionUnsubscribe = onValue(
+      displaySessionRef,
+      (snapshot) => {
+        const data = snapshot.val() || null;
+        const now = Date.now();
+        const expiresAt = Number(data && data.expiresAt) || 0;
+        const status = String((data && data.status) || "");
+        const active = !!data && status === "active" && (!expiresAt || expiresAt > now);
+        this.state.displaySession = data;
+        this.state.displaySessionActive = active;
+        if (this.state.displaySessionLastActive !== null && this.state.displaySessionLastActive !== active) {
+          showToast(
+            active ? "表示端末とのセッションが確立されました。" : "表示端末の接続が確認できません。",
+            active ? "success" : "error"
+          );
+        }
+        this.state.displaySessionLastActive = active;
+        this.updateActionAvailability();
+        this.updateBatchButtonVisibility();
+      },
+      (error) => {
+        console.error("Failed to monitor display session:", error);
+      }
+    );
+  }
+
+  startLogsUpdateMonitor() {
+    if (this.updateTriggerUnsubscribe) this.updateTriggerUnsubscribe();
+    this.updateTriggerUnsubscribe = onValue(updateTriggerRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+      if (this.logsUpdateTimer) clearTimeout(this.logsUpdateTimer);
+      this.logsUpdateTimer = setTimeout(() => this.fetchLogs(), 150);
+    });
+  }
+
+  async fetchDictionary() {
+    try {
+      const result = await this.api.apiPost({ action: "fetchSheet", sheet: "dictionary" });
+      if (!result.success) return;
+      if (this.dom.dictionaryTableBody) this.dom.dictionaryTableBody.innerHTML = "";
+      (result.data || []).forEach((item) => {
+        const tr = document.createElement("tr");
+        const toggleBtn = document.createElement("button");
+        toggleBtn.textContent = item.enabled ? "無効にする" : "有効にする";
+        toggleBtn.addEventListener("click", () => this.toggleTerm(item.term, !item.enabled));
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "削除";
+        deleteBtn.addEventListener("click", () => this.deleteTerm(item.term));
+        tr.innerHTML = `
+          <td>${escapeHtml(item.term)}</td>
+          <td>${escapeHtml(item.ruby)}</td>
+          <td>${item.enabled ? "有効" : "無効"}</td>
+        `;
+        const actionTd = document.createElement("td");
+        actionTd.append(toggleBtn, deleteBtn);
+        tr.appendChild(actionTd);
+        if (!item.enabled) tr.classList.add("disabled");
+        this.dom.dictionaryTableBody?.appendChild(tr);
+      });
+      const enabledOnly = (result.data || []).filter((item) => item.enabled === true);
+      await set(dictionaryRef, enabledOnly);
+    } catch (error) {
+      alert("辞書の取得に失敗: " + error.message);
+    }
+  }
+
+  async fetchLogs() {
+    try {
+      const result = await this.api.apiPost({ action: "fetchSheet", sheet: "logs" });
+      if (result.success) {
+        this.state.allLogs = result.data || [];
+        this.renderLogs();
+      }
+    } catch (error) {
+      console.error("ログの取得に失敗:", error);
+    }
+  }
+
+  renderLogs() {
+    const rows = this.applyLogFilters(this.state.allLogs || []);
+    this.renderLogsStream(rows);
+  }
+
+  applyLogFilters(logs) {
+    const query = (this.dom.logSearch?.value || "").trim().toLowerCase();
+    if (!query) return logs;
+    return logs.filter((row) => {
+      const rawTs = row.Timestamp ?? row.timestamp ?? row["時刻"] ?? row["タイムスタンプ"] ?? "";
+      const tsText = (parseLogTimestamp(rawTs)?.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) || String(rawTs)).toLowerCase();
+      const user = String(row.User ?? row.user ?? row["ユーザー"] ?? "").toLowerCase();
+      const action = String(row.Action ?? row.action ?? row["アクション"] ?? "").toLowerCase();
+      const details = String(row.Details ?? row.details ?? row["詳細"] ?? "").toLowerCase();
+      const level = getLogLevel(row).toLowerCase();
+      return tsText.includes(query) || user.includes(query) || action.includes(query) || details.includes(query) || level.includes(query);
+    });
+  }
+
+  renderLogsStream(rows) {
+    if (!this.dom.logStream) return;
+    const max = 500;
+    const viewRows = rows.slice(-max);
+    this.dom.logStream.innerHTML = "";
+    for (const log of viewRows) {
+      const rawTs = log.Timestamp ?? log.timestamp ?? log["時刻"] ?? log["タイムスタンプ"] ?? "";
+      const d = parseLogTimestamp(rawTs);
+      const tsText = d ? d.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) : String(rawTs || "");
+      const user = String(log.User ?? "");
+      const action = String(log.Action ?? "");
+      const details = String(log.Details ?? "");
+      const level = getLogLevel(log);
+      const line = document.createElement("div");
+      line.className = `log-line lvl-${level}`;
+      line.innerHTML =
+        `<span class="ts">[${escapeHtml(tsText)}]</span> ` +
+        `<span class="badge level ${escapeHtml(level)}">${escapeHtml(level.toUpperCase())}</span> ` +
+        `<span class="badge user">@${escapeHtml(user)}</span> ` +
+        `<span class="badge action">${escapeHtml(action.toUpperCase())}</span> ` +
+        `<span class="details">${escapeHtml(details)}</span>`;
+      this.dom.logStream.appendChild(line);
+    }
+    if (this.state.autoScrollLogs) {
+      this.dom.logStream.scrollTop = this.dom.logStream.scrollHeight;
+    }
+  }
+
+  async renderQuestions() {
+    if (!this.dom.cardsContainer) return;
+    let list = this.state.allQuestions.filter((item) => {
+      const isPuq = item["ラジオネーム"] === "Pick Up Question";
+      return this.state.currentSubTab === "puq" ? isPuq : !isPuq;
+    });
+    const isPUQ = this.state.currentSubTab === "puq";
+    list.sort((a, b) => {
+      if (isPUQ) {
+        const ta = String(a["質問・お悩み"] ?? "");
+        const tb = String(b["質問・お悩み"] ?? "");
+        const t = ta.localeCompare(tb, "ja", { numeric: true, sensitivity: "base" });
+        if (t) return t;
+        const da = a.__ts || 0;
+        const db = b.__ts || 0;
+        if (da !== db) return da - db;
+        return String(a.UID).localeCompare(String(b.UID));
+      }
+      const da = a.__ts || 0;
+      const db = b.__ts || 0;
+      if (da !== db) return da - db;
+      const na = String(a["ラジオネーム"] ?? "");
+      const nb = String(b["ラジオネーム"] ?? "");
+      const n = na.localeCompare(nb, "ja", { numeric: true, sensitivity: "base" });
+      if (n) return n;
+      return String(a.UID).localeCompare(String(b.UID));
+    });
+
+    const snapshot = await get(telopRef);
+    const live = snapshot.val();
+    const selectedUid = this.state.selectedRowData ? String(this.state.selectedRowData.uid) : null;
+    let nextSelection = null;
+
+    this.dom.cardsContainer.innerHTML = "";
+    list.forEach((item) => {
+      const isAnswered = item["回答済"] === true;
+      const status = item["選択中"] ? "live" : isAnswered ? "answered" : "pending";
+      const statusText = status === "live" ? "表示中" : status === "answered" ? "回答済" : "未回答";
+      const card = document.createElement("article");
+      card.className = `q-card ${status === "live" ? "is-live" : ""} ${isAnswered ? "is-answered" : "is-pending"}`;
+      card.dataset.uid = String(item.UID);
+      if (live && live.name === item["ラジオネーム"] && live.question === item["質問・お悩み"]) {
+        card.classList.add("now-displaying");
+        if (this.state.lastDisplayedUid === item.UID) {
+          card.classList.add("flash");
+          card.addEventListener(
+            "animationend",
+            () => card.classList.remove("flash"),
+            { once: true }
+          );
+          this.state.lastDisplayedUid = null;
+        }
+      }
+      const uid = String(item.UID);
+      if (uid === selectedUid) {
+        card.classList.add("is-selected");
+        nextSelection = {
+          uid,
+          name: item["ラジオネーム"],
+          question: item["質問・お悩み"],
+          isAnswered
+        };
+      }
+      card.innerHTML = `
+        <header class="q-head">
+          <div class="q-title">
+            <span class="q-name">${escapeHtml(item["ラジオネーム"])}</span>
+            ${item["ラジオネーム"] === "Pick Up Question" ? '<span class="q-badge q-badge--puq">PUQ</span>' : ""}
+          </div>
+          <div class="q-meta">
+            <span class="q-group">${escapeHtml(item["班番号"] ?? "") || ""}</span>
+            <span class="chip chip--${status}">${statusText}</span>
+            <label class="q-check">
+              <input type="checkbox" class="row-checkbox" data-uid="${escapeHtml(uid)}">
+            </label>
+          </div>
+        </header>
+        <div class="q-text">${escapeHtml(item["質問・お悩み"])}</div>
+      `;
+      card.addEventListener("click", (event) => {
+        const target = event.target;
+        if (target instanceof Element && target.closest(".q-check")) return;
+        this.dom.cardsContainer?.querySelectorAll(".q-card").forEach((el) => el.classList.remove("is-selected"));
+        card.classList.add("is-selected");
+        this.state.selectedRowData = {
+          uid,
+          name: item["ラジオネーム"],
+          question: item["質問・お悩み"],
+          isAnswered
+        };
+        this.updateActionAvailability();
+      });
+      this.dom.cardsContainer.appendChild(card);
+    });
+
+    if (selectedUid && nextSelection) {
+      this.state.selectedRowData = nextSelection;
+      this.updateActionAvailability();
+    } else if (!list.some((item) => String(item.UID) === selectedUid)) {
+      this.state.selectedRowData = null;
+      this.updateActionAvailability();
+    }
+    this.updateBatchButtonVisibility();
+  }
+
+  async handleDisplay() {
+    if (!this.state.displaySessionActive) {
+      showToast("表示端末が接続されていません。", "error");
+      return;
+    }
+    if (!this.state.selectedRowData || this.state.selectedRowData.isAnswered) return;
+    const snapshot = await get(telopRef);
+    const previousTelop = snapshot.val();
+    try {
+      const updates = {};
+      if (previousTelop) {
+        const prev = this.state.allQuestions.find(
+          (q) => q["ラジオネーム"] === previousTelop.name && q["質問・お悩み"] === previousTelop.question
+        );
+        if (prev) {
+          updates[`questions/${prev.UID}/selecting`] = false;
+          updates[`questions/${prev.UID}/answered`] = true;
+        }
+      }
+      updates[`questions/${this.state.selectedRowData.uid}/selecting`] = true;
+      updates[`questions/${this.state.selectedRowData.uid}/answered`] = false;
+      await update(ref(database), updates);
+      await set(telopRef, {
+        name: this.state.selectedRowData.name,
+        question: this.state.selectedRowData.question
+      });
+      this.api.fireAndForgetApi({ action: "updateSelectingStatus", uid: this.state.selectedRowData.uid });
+      if (previousTelop) {
+        const prev = this.state.allQuestions.find(
+          (q) => q["ラジオネーム"] === previousTelop.name && q["質問・お悩み"] === previousTelop.question
+        );
+        if (prev) {
+          this.api.fireAndForgetApi({ action: "updateStatus", uid: prev.UID, status: true });
+        }
+      }
+      this.state.lastDisplayedUid = this.state.selectedRowData.uid;
+      this.api.logAction("DISPLAY", `RN: ${this.state.selectedRowData.name}`);
+      showToast(`「${this.state.selectedRowData.name}」さんの質問を表示しました。`, "success");
+    } catch (error) {
+      showToast("表示処理中にエラーが発生しました: " + error.message, "error");
+    }
+  }
+
+  async handleEdit() {
+    if (!this.state.selectedRowData) return;
+    const newText = prompt("質問内容を編集してください：", this.state.selectedRowData.question);
+    if (newText === null || newText.trim() === this.state.selectedRowData.question.trim()) return;
+    try {
+      await update(ref(database, `questions/${this.state.selectedRowData.uid}`), { question: newText.trim() });
+      this.api.fireAndForgetApi({ action: "editQuestion", uid: this.state.selectedRowData.uid, text: newText.trim() });
+      this.api.logAction("EDIT", `UID: ${this.state.selectedRowData.uid}`);
+      showToast("質問を更新しました。", "success");
+    } catch (error) {
+      showToast("通信エラー: " + error.message, "error");
+    }
+  }
+
+  async clearTelop() {
+    if (!this.state.displaySessionActive) {
+      showToast("表示端末が接続されていません。", "error");
+      return;
+    }
+    const snapshot = await get(telopRef);
+    const previousTelop = snapshot.val();
+    try {
+      if (previousTelop) {
+        const prevItem = this.state.allQuestions.find(
+          (q) => q["ラジオネーム"] === previousTelop.name && q["質問・お悩み"] === previousTelop.question
+        );
+        if (prevItem) {
+          await this.updateStatusOnServer([prevItem.UID], true);
+        }
+      }
+      await remove(telopRef);
+      await this.updateStatusOnServer([], false, true, -1);
+      this.api.logAction("CLEAR");
+      showToast("テロップを消去しました。", "success");
+    } catch (error) {
+      showToast("テロップの消去中にエラーが発生しました: " + error.message, "error");
+    }
+  }
+
+  handleUnanswer() {
+    if (!this.state.displaySessionActive) {
+      showToast("表示端末が接続されていません。", "error");
+      return;
+    }
+    if (!this.state.selectedRowData || !this.state.selectedRowData.isAnswered) return;
+    if (!confirm(`「${this.state.selectedRowData.name}」の質問を「未回答」に戻しますか？`)) return;
+    update(ref(database, `questions/${this.state.selectedRowData.uid}`), { answered: false });
+    this.api.fireAndForgetApi({ action: "updateStatus", uid: this.state.selectedRowData.uid, status: false });
+  }
+
+  handleSelectAll(event) {
+    this.dom.cardsContainer
+      ?.querySelectorAll(".row-checkbox")
+      .forEach((checkbox) => {
+        checkbox.checked = event.target.checked;
+      });
+    this.updateBatchButtonVisibility();
+  }
+
+  handleBatchUnanswer() {
+    if (!this.state.displaySessionActive) {
+      showToast("表示端末が接続されていません。", "error");
+      return;
+    }
+    const checkedBoxes = this.dom.cardsContainer?.querySelectorAll(".row-checkbox:checked");
+    if (!checkedBoxes || checkedBoxes.length === 0) return;
+    if (!confirm(`${checkedBoxes.length}件の質問を「未回答」に戻しますか？`)) return;
+    const uidsToUpdate = Array.from(checkedBoxes).map((checkbox) => checkbox.dataset.uid);
+    const updates = {};
+    for (const uid of uidsToUpdate) {
+      updates[`questions/${uid}/answered`] = false;
+    }
+    update(ref(database), updates);
+    this.api.fireAndForgetApi({ action: "batchUpdateStatus", uids: uidsToUpdate, status: false });
+  }
+
+  async updateStatusOnServer(uids, isAnswered, isSelectingUpdate = false, selectingUid = null) {
+    try {
+      const action = isSelectingUpdate
+        ? selectingUid === -1
+          ? "clearSelectingStatus"
+          : "updateSelectingStatus"
+        : "batchUpdateStatus";
+      const payload =
+        action === "updateSelectingStatus"
+          ? { action, uid: selectingUid }
+          : action === "clearSelectingStatus"
+          ? { action }
+          : { action, uids, status: isAnswered };
+      const result = await this.api.apiPost(payload);
+      if (result.success && !isSelectingUpdate) {
+        this.api.logAction(
+          isAnswered ? "BATCH_SET_ANSWERED" : "BATCH_SET_UNANSWERED",
+          `UIDs: ${uids.join(", ")}`
+        );
+        showToast(`${uids.length}件を更新しました。`, "success");
+      }
+    } catch (error) {
+      showToast("通信エラー: " + error.message, "error");
+    }
+  }
+
+  switchMainTab(tabName) {
+    if (!tabName) return;
+    this.state.currentMainTab = tabName;
+    document.querySelectorAll(".main-tab-button").forEach((button) => {
+      button.classList.toggle("active", button.dataset.tab === tabName);
+    });
+    document.querySelectorAll(".main-tab-content").forEach((content) => {
+      content.classList.toggle("active", content.id === `${tabName}-content`);
+    });
+  }
+
+  switchSubTab(tabName) {
+    if (!tabName) return;
+    this.state.currentSubTab = tabName;
+    document.querySelectorAll(".sub-tab-button").forEach((button) => {
+      button.classList.toggle("active", button.dataset.subTab === tabName);
+    });
+    this.renderQuestions();
+  }
+
+  updateActionAvailability() {
+    const active = !!this.state.displaySessionActive;
+    const selection = this.state.selectedRowData;
+    this.dom.actionButtons.forEach((button) => {
+      if (button) button.disabled = true;
+    });
+    if (this.dom.clearButton) this.dom.clearButton.disabled = !active;
+    if (!this.dom.selectedInfo) {
+      this.updateBatchButtonVisibility();
+      return;
+    }
+    if (!active) {
+      this.dom.selectedInfo.textContent = "表示端末が接続されていません";
+      this.updateBatchButtonVisibility();
+      return;
+    }
+    if (!selection) {
+      this.dom.selectedInfo.textContent = "行を選択してください";
+      this.updateBatchButtonVisibility();
+      return;
+    }
+    this.dom.actionButtons.forEach((button) => {
+      if (button) button.disabled = false;
+    });
+    if (this.dom.actionButtons[0]) this.dom.actionButtons[0].disabled = !!selection.isAnswered;
+    if (this.dom.actionButtons[1]) this.dom.actionButtons[1].disabled = !selection.isAnswered;
+    const safeName = String(selection.name ?? "");
+    this.dom.selectedInfo.textContent = `選択中: ${safeName}`;
+    this.updateBatchButtonVisibility();
+  }
+
+  updateBatchButtonVisibility() {
+    if (!this.dom.batchUnanswerBtn) return;
+    const active = !!this.state.displaySessionActive;
+    const checkedCount = active ? this.dom.cardsContainer?.querySelectorAll(".row-checkbox:checked").length || 0 : 0;
+    this.dom.batchUnanswerBtn.style.display = active && checkedCount > 0 ? "inline-block" : "none";
+    this.dom.batchUnanswerBtn.disabled = !active || checkedCount === 0;
+  }
+
+  async addTerm(event) {
+    event.preventDefault();
+    const term = this.dom.newTermInput?.value.trim();
+    const ruby = this.dom.newRubyInput?.value.trim();
+    if (!term || !ruby) return;
+    try {
+      const result = await this.api.apiPost({ action: "addTerm", term, ruby });
+      if (result.success) {
+        if (this.dom.newTermInput) this.dom.newTermInput.value = "";
+        if (this.dom.newRubyInput) this.dom.newRubyInput.value = "";
+        await this.fetchDictionary();
+      } else {
+        showToast("追加失敗: " + result.error, "error");
+      }
+    } catch (error) {
+      showToast("通信エラー: " + error.message, "error");
+    }
+  }
+
+  async deleteTerm(term) {
     if (!confirm(`「${term}」を辞書から削除しますか？`)) return;
     try {
-        const result = await apiPost({ action: 'deleteTerm', term });
-        if (result.success) {
-            fetchDictionary();
-        } else {
-            showToast('削除失敗: ' + result.error, 'error');
-        }
+      const result = await this.api.apiPost({ action: "deleteTerm", term });
+      if (result.success) {
+        await this.fetchDictionary();
+      } else {
+        showToast("削除失敗: " + result.error, "error");
+      }
     } catch (error) {
-        showToast('通信エラー: ' + error.message, 'error');
+      showToast("通信エラー: " + error.message, "error");
     }
-}
+  }
 
-async function toggleTerm(term, newStatus) {
+  async toggleTerm(term, newStatus) {
     try {
-        const result = await apiPost({ action: 'toggleTerm', term, enabled: newStatus });
-        if (result.success) {
-            fetchDictionary();
-        } else {
-            showToast('状態の更新失敗: ' + result.error, 'error');
-        }
+      const result = await this.api.apiPost({ action: "toggleTerm", term, enabled: newStatus });
+      if (result.success) {
+        await this.fetchDictionary();
+      } else {
+        showToast("状態の更新失敗: " + result.error, "error");
+      }
     } catch (error) {
-        showToast('通信エラー: ' + error.message, 'error');
-    }
-}
-
-// --- 認証関数 ---
-async function login() {
-  const btn = document.getElementById('login-button');
-  const origText = btn ? btn.textContent : '';
-  try {
-    _authFlow = 'prompting';                 // ← ポップアップ開始
-    showLoader('サインイン中…');
-    if (btn) {
-      btn.disabled = true;
-      btn.classList.add('is-busy');
-      btn.textContent = 'サインイン中…';
-    }
-    await signInWithPopup(auth, provider);   // ← この Promise が解決 = ポップアップが閉じた
-  } catch (error) {
-    console.error("Login failed:", error);
-    showToast("ログインに失敗しました。", 'error');
-    hideLoader();
-  } finally {
-    _authFlow = 'done';
-    if (btn) {
-      btn.disabled = false;
-      btn.classList.remove('is-busy');
-      btn.textContent = origText;
-    }
-    // prompting 中に来ていた onAuthStateChanged をここで反映
-    if (_pendingAuthUser !== null) {
-      const u = _pendingAuthUser;
-      _pendingAuthUser = null;
-      handleAfterLogin(u);
+      showToast("通信エラー: " + error.message, "error");
     }
   }
-}
-async function logout() {
+
+  setDisplayApprovalFeedback(message, type = "info") {
+    if (!this.dom.approveDisplayFeedback) return;
+    this.dom.approveDisplayFeedback.textContent = message;
+    if (message) {
+      this.dom.approveDisplayFeedback.dataset.state = type;
+    } else {
+      this.dom.approveDisplayFeedback.removeAttribute("data-state");
+    }
+  }
+
+  async handleApproveDisplay(event) {
+    event.preventDefault();
+    const uid = this.dom.approveDisplayInput?.value.trim();
+    if (!uid) return;
     try {
-        await signOut(auth);
+      await set(ref(database, `screens/approved/${uid}`), true);
+      this.api.logAction("APPROVE_DISPLAY", `UID: ${uid}`);
+      this.setDisplayApprovalFeedback("表示端末を承認しました。", "success");
+      if (this.dom.approveDisplayInput) this.dom.approveDisplayInput.value = "";
     } catch (error) {
-        console.error("Logout failed:", error);
+      console.error("Failed to approve display:", error);
+      this.setDisplayApprovalFeedback("承認に失敗しました: " + error.message, "error");
     }
-    // 念のためゲートを初期化
-    _authFlow = 'idle';
-    _pendingAuthUser = null;
-    hideLoader();
-}
-
-// --- ヘルパー関数 ---
-function escapeHtml(v) {
-  const s = v == null ? '' : String(v);
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-          .replace(/'/g, '&#039;');
-}
-
-function showToast(message, type = 'success') {
-    const backgroundColor = type === 'success'
-        ? "linear-gradient(to right, #4CAF50, #77dd77)"
-        : "linear-gradient(to right, #f06595, #ff6b6b)";
-
-    const safeMessage = escapeHtml(String(message ?? ''));
-
-    Toastify({
-        text: safeMessage,
-        duration: 3000,
-        close: true,
-        gravity: "top", // `top` or `bottom`
-        position: "right", // `left`, `center` or `right`
-        stopOnFocus: true, // Prevents dismissing of toast on hover
-        style: {
-            background: backgroundColor,
-        },
-        className: `toastify-${type}`
-    }).showToast();
-}
-
-async function getIdTokenSafe(force = false) {
-  const user = auth.currentUser || await new Promise(resolve => {
-    const un = onAuthStateChanged(auth, u => { un(); resolve(u); });
-  });
-  if (!user) throw new Error('Not signed in');
-  return await user.getIdToken(force);
-}
-
-async function apiPost(payload, retryOnAuthError = true) {
-  const idToken = await getIdTokenSafe();
-  const res = await fetch(GAS_API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' }, // ← プリフライト回避
-    body: JSON.stringify({ ...payload, idToken })
-  });
-  let json;
-  try { json = await res.json(); } catch (e) { throw new Error('Bad JSON response'); }
-
-  if (!json.success) {
-    // トークン期限切れ等を想定して一度だけリフレッシュ再試行
-    const msg = String(json.error || '');
-    if (retryOnAuthError && /Auth/.test(msg)) {
-      await getIdTokenSafe(true); // force refresh
-      return await apiPost(payload, false);
-    }
-    throw new Error(`${msg}${json.errorId ? ' [' + json.errorId + ']' : ''}`);
   }
-  return json;
-}
 
-function fireAndForgetApi(payload){
-  // 認証付き POST だが UI は待たない
-  apiPost(payload).catch(()=>{ /* ログに出すならここ */ });
-}
-
-function normKey(k){
-  return String(k || '')
-    .normalize('NFKC')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '') // ゼロ幅系を除去
-    .replace(/\s+/g, '')                   // 空白除去
-    .toLowerCase();
-}
-function pickUser(obj){
-  const map = {};
-  for (const [k,v] of Object.entries(obj)) map[normKey(k)] = v;
-  // 優先候補
-  for (const key of ['user','ユーザー','email','メールアドレス']) {
-    if (map.hasOwnProperty(normKey(key))) return map[normKey(key)];
+  showLoader(message) {
+    if (this.dom.loadingOverlay) this.dom.loadingOverlay.removeAttribute("hidden");
+    this.updateLoader(message);
+    document.body?.setAttribute("aria-busy", "true");
   }
-  // 部分一致（念のため）
-  for (const [k,v] of Object.entries(map)) {
-    if (k.includes('user') || k.includes('email')) return v;
+
+  updateLoader(message) {
+    if (message && this.dom.loadingText) this.dom.loadingText.textContent = message;
   }
-  return '';
-}
-function pickAction(obj){
-  const map = {};
-  for (const [k,v] of Object.entries(obj)) map[normKey(k)] = v;
-  for (const key of ['action','アクション']) {
-    if (map.hasOwnProperty(normKey(key))) return map[normKey(key)];
+
+  hideLoader() {
+    if (this.dom.loadingOverlay) this.dom.loadingOverlay.setAttribute("hidden", "");
+    document.body?.removeAttribute("aria-busy");
   }
-  for (const [k,v] of Object.entries(map)) if (k.includes('action')) return v;
-  return '';
-}
-function pickDetails(obj){
-  const map = {};
-  for (const [k,v] of Object.entries(obj)) map[normKey(k)] = v;
-  for (const key of ['details','詳細']) {
-    if (map.hasOwnProperty(normKey(key))) return map[normKey(key)];
+
+  initLoaderSteps() {
+    if (!this.dom.loaderSteps) return;
+    this.dom.loaderSteps.innerHTML = STEP_LABELS.map((label, index) => `<li data-step="${index}">${escapeHtml(label)}</li>`).join("");
   }
-  for (const [k,v] of Object.entries(map)) if (k.includes('detail')) return v;
-  return '';
+
+  setLoaderStep(stepIndex, message) {
+    this.updateLoader(message);
+    if (!this.dom.loaderSteps) return;
+    const items = this.dom.loaderSteps.querySelectorAll("li");
+    items.forEach((item, index) => {
+      item.classList.toggle("current", index === stepIndex);
+      item.classList.toggle("done", index < stepIndex);
+    });
+  }
+
+  finishLoaderSteps(message = "準備完了") {
+    this.setLoaderStep(STEP_LABELS.length - 1, message);
+  }
 }
 
-function getLogLevel(log){
-  const a = String(log.Action || '').toLowerCase();
-  const d = String(log.Details || '').toLowerCase();
-
-  // 明確なエラー語やHTTPエラーコード
-  if (/(error|failed|exception|timeout|unauthorized|forbidden|denied)/.test(a+d)) return 'error';
-  if (/\b5\d{2}\b|\b4\d{2}\b/.test(d)) return 'error';
-
-  // データ破壊・クリア系は注意喚起
-  if (/(delete|clear|remove|reset|unanswer)/.test(a)) return 'warn';
-
-  // 成功系（送出・回答更新・編集・追加 など）
-  if (/(display|send|answer|set_answered|batch_set_answered|edit|add|toggle|update)/.test(a)) return 'success';
-
-  // 取得系・ログ書き込みなどは情報レベル
-  if (/(fetch|read|log|whoami)/.test(a)) return 'info';
-
-  // デフォルト
-  return 'info';
-}
-
-function cleanupSubscriptions(){
-  try { off(questionsRef); } catch(_){}
-  try { off(updateTriggerRef); } catch(_){}
-  try { off(renderRef); } catch(_){}
-  try { off(displaySessionRef); } catch(_){}
-  if (renderTicker){ clearInterval(renderTicker); renderTicker = null; }
-  resetState();
-  state.displaySessionLastActive = null;
-  updateActionAvailability();
-  updateBatchButtonVisibility();
-}
+const appInstance = new OperatorApp();
+appInstance.init();
 
