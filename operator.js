@@ -289,10 +289,8 @@ Object.assign(dom, {
 updateActionAvailability();
 
 // --- 状態管理変数 ---
-let state = null;
-
-function initState(){
-  state = {
+function createInitialState(){
+  return {
     allQuestions: [],
     allLogs: [],
     currentMainTab: 'questions',
@@ -305,7 +303,19 @@ function initState(){
   };
 }
 
-initState();
+const state = createInitialState();
+
+function resetState(){
+  const fresh = createInitialState();
+  if (dom.logAutoscroll) {
+    fresh.autoScrollLogs = dom.logAutoscroll.checked;
+  }
+  for (const [key, value] of Object.entries(fresh)) {
+    state[key] = value;
+  }
+}
+
+resetState();
 
 updateActionAvailability();
 dom.logSearch.addEventListener('input', ()=>renderLogs());
@@ -800,8 +810,6 @@ function handleBatchUnanswer() {
 }
 
 function updateActionAvailability() {
-    if (!state) initState();
-
     const active = !!state.displaySessionActive;
     const selection = state.selectedRowData;
 
@@ -1065,8 +1073,7 @@ function cleanupSubscriptions(){
   try { off(renderRef); } catch(_){}
   try { off(displaySessionRef); } catch(_){}
   if (renderTicker){ clearInterval(renderTicker); renderTicker = null; }
-  state.displaySession = null;
-  state.displaySessionActive = false;
+  resetState();
   lastSessionActive = null;
   updateActionAvailability();
   updateBatchButtonVisibility();
