@@ -289,7 +289,10 @@ Object.assign(dom, {
 updateActionAvailability();
 
 // --- 状態管理変数 ---
-let state = {
+let state = null;
+
+function initState(){
+  state = {
     allQuestions: [],
     allLogs: [],
     currentMainTab: 'questions',
@@ -299,7 +302,10 @@ let state = {
     autoScrollLogs: true,
     displaySession: null,
     displaySessionActive: false,
-};
+  };
+}
+
+initState();
 
 updateActionAvailability();
 dom.logSearch.addEventListener('input', ()=>renderLogs());
@@ -794,8 +800,10 @@ function handleBatchUnanswer() {
 }
 
 function updateActionAvailability() {
-  const active = !!state.displaySessionActive;
-  const selection = state.selectedRowData;
+    if (!state) initState();
+
+    const active = !!state.displaySessionActive;
+    const selection = state.selectedRowData;
 
   dom.actionButtons.forEach(btn => { if (btn) btn.disabled = true; });
   if (dom.clearButton) dom.clearButton.disabled = !active;

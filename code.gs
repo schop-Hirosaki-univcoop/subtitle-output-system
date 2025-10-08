@@ -225,9 +225,11 @@ function requireAuth_(idToken, options){
   } catch (e) {
     tokenPayload = null;
   }
-  const providerIds = providerInfo.map(info => info && info.providerId).filter(Boolean);
+  const providerIds = providerInfo.map(info => String(info && info.providerId || '')).filter(Boolean);
+  const normalizedProviderIds = providerIds.map(id => id.toLowerCase());
   const signInProvider = tokenPayload && tokenPayload.firebase && tokenPayload.firebase['sign_in_provider'];
-  const isAnonymous = signInProvider === 'anonymous' || ((!user.email || user.email === '') && (providerIds.length === 0 || providerIds.every(id => id === 'anonymous')));
+  const providersLookAnonymous = normalizedProviderIds.length === 0 || normalizedProviderIds.every(id => id === 'anonymous' || id === 'firebase');
+  const isAnonymous = signInProvider === 'anonymous' || ((!user.email || user.email === '') && providersLookAnonymous);
   const allowAnonymous = options.allowAnonymous === true;
   if (isAnonymous && !allowAnonymous) throw new Error('Anonymous auth not allowed');
 
