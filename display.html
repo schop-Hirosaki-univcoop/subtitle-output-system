@@ -342,7 +342,7 @@
   <!-- Firebase スクリプトは既存のまま（IDも同じ） -->
   <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getDatabase, ref, onValue, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+        import { getDatabase, ref, onValue, update, serverTimestamp, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
         import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
         const firebaseConfig = {
@@ -362,25 +362,49 @@
         }
         const database = getDatabase(app);
         const auth = getAuth(app);
-        onAuthStateChanged(auth, (user) => {
+    
+        const telopRef = ref(database, 'currentTelop');
+        const renderRef = ref(database, 'render_state');
+        let canReportRender = false;
+        let approvalChecked = false;
+
+        onAuthStateChanged(auth, async (user) => {
           if (!user) {
             signInAnonymously(auth).catch(err => {
               console.error('Anonymous sign-in failed:', err);
             });
+            return;
+          }
+        
+          try {
+            const approvedSnap = await get(ref(database, `screens/approved/${user.uid}`));
+            canReportRender = approvedSnap.exists() && approvedSnap.val() === true;
+            approvalChecked = true;
+            if (!canReportRender) {
+              console.warn('Display UID is not approved; suppressing render_state updates.');
+            }
+          } catch (err) {
+            approvalChecked = true;
+            canReportRender = false;
+            console.error('Failed to confirm display approval status:', err);
           }
         });
     
-        const telopRef = ref(database, 'currentTelop');
-        const renderRef = ref(database, 'render_state');
-      
         // ★ 状態レポート（display → Firebase）
         function reportRender(phase, info = {}) {
+          if (!canReportRender) {
+            if (approvalChecked) {
+              console.debug('render_state update skipped because this device is not approved.');
+            }
+            return Promise.resolve();
+          }
+        
           const payload = {
             phase,                                        // 'showing' | 'visible' | 'hiding' | 'hidden' | 'error'
             updatedAt: serverTimestamp(),
             ...info                                       // { name, uid, seq など任意}
           };
-          update(renderRef, payload).catch(console.error);
+          return update(renderRef, payload).catch(console.error);
         }
     
         const radioNameEl = document.getElementById('radio-name');
