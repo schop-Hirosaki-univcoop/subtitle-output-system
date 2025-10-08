@@ -869,17 +869,70 @@
         // テキストにルビを適用する関数
         function applyRuby(text) {
             if (!text) return '';
-            let processedText = escapeHtml(text); // ベースをサニタイズ
-            dictionary.forEach(item => {
-                // 正規表現で単語を検索し、<ruby>タグに置換する
-                // 'g'フラグですべてのマッチを置換
-                const regex = new RegExp(escapeRegExp(item.term), 'g');
-                processedText = processedText.replace(
-                  regex,
-                  `<ruby>${escapeHtml(item.term)}<rt>${escapeHtml(item.ruby)}</rt></ruby>`
-                );
+            const base = document.createElement('div');
+            base.textContent = String(text);
+            const entries = Array.isArray(dictionary)
+              ? dictionary
+                  .map(item => ({
+                    term: String(item?.term ?? ''),
+                    ruby: String(item?.ruby ?? '')
+                  }))
+                  .filter(entry => entry.term && entry.ruby)
+              : [];
+            if (!entries.length) {
+              return base.innerHTML;
+            }
+
+            entries.sort((a, b) => b.term.length - a.term.length);
+            const patternSource = entries.map(entry => escapeRegExp(entry.term)).join('|');
+            if (!patternSource) {
+              return base.innerHTML;
+            }
+            const entryMap = new Map();
+            entries.forEach(entry => {
+              if (!entryMap.has(entry.term)) entryMap.set(entry.term, entry);
             });
-            return processedText;
+
+            const walker = document.createTreeWalker(base, NodeFilter.SHOW_TEXT);
+            const textNodes = [];
+            while (walker.nextNode()) {
+              textNodes.push(walker.currentNode);
+            }
+
+            for (const node of textNodes) {
+              const value = node.nodeValue;
+              if (!value) continue;
+              const regex = new RegExp(patternSource, 'g');
+              let match;
+              let lastIndex = 0;
+              const frag = document.createDocumentFragment();
+              while ((match = regex.exec(value)) !== null) {
+                const { index } = match;
+                if (index > lastIndex) {
+                  frag.appendChild(document.createTextNode(value.slice(lastIndex, index)));
+                }
+                const matchedText = match[0];
+                const entry = entryMap.get(matchedText);
+                if (entry) {
+                  const rubyEl = document.createElement('ruby');
+                  rubyEl.appendChild(document.createTextNode(matchedText));
+                  const rtEl = document.createElement('rt');
+                  rtEl.textContent = entry.ruby;
+                  rubyEl.appendChild(rtEl);
+                  frag.appendChild(rubyEl);
+                } else {
+                  frag.appendChild(document.createTextNode(matchedText));
+                }
+                lastIndex = index + matchedText.length;
+              }
+              if (lastIndex === 0) continue; // 置換なし
+              if (lastIndex < value.length) {
+                frag.appendChild(document.createTextNode(value.slice(lastIndex)));
+              }
+              node.replaceWith(frag);
+            }
+
+            return base.innerHTML;
         }
         
         function escapeHtml(s){
