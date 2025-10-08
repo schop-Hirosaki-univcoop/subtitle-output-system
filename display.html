@@ -362,49 +362,99 @@
         }
         const database = getDatabase(app);
         const auth = getAuth(app);
-    
-        const telopRef = ref(database, 'currentTelop');
-        const renderRef = ref(database, 'render_state');
+
         let canReportRender = false;
         let approvalChecked = false;
+        let unsubscribeApproval = null;
+        let approvalWaitingLogged = false;
+        let approvalEnabledLogged = false;
+        let approvalUnreadableLogged = false;
+        let reportSuppressedLogged = false;
 
-        onAuthStateChanged(auth, async (user) => {
+        onAuthStateChanged(auth, (user) => {
+          if (typeof unsubscribeApproval === 'function') {
+            unsubscribeApproval();
+            unsubscribeApproval = null;
+          }
+
           if (!user) {
+            canReportRender = false;
+            approvalChecked = false;
+            approvalWaitingLogged = false;
+            approvalEnabledLogged = false;
+            approvalUnreadableLogged = false;
+            reportSuppressedLogged = false;
             signInAnonymously(auth).catch(err => {
               console.error('Anonymous sign-in failed:', err);
             });
             return;
           }
-        
-          try {
-            const approvedSnap = await get(ref(database, `screens/approved/${user.uid}`));
-            canReportRender = approvedSnap.exists() && approvedSnap.val() === true;
+
+          const approvalRef = ref(database, `screens/approved/${user.uid}`);
+          unsubscribeApproval = onValue(approvalRef, (snapshot) => {
             approvalChecked = true;
-            if (!canReportRender) {
-              console.warn('Display UID is not approved; suppressing render_state updates.');
+            const approved = snapshot.exists() && snapshot.val() === true;
+
+            if (approved) {
+              canReportRender = true;
+              reportSuppressedLogged = false;
+              approvalWaitingLogged = false;
+              approvalUnreadableLogged = false;
+              if (!approvalEnabledLogged) {
+                console.info('Display UID approved; render_state updates enabled.');
+                approvalEnabledLogged = true;
+              }
+              return;
             }
-          } catch (err) {
+
+            canReportRender = false;
+            approvalEnabledLogged = false;
+            if (!approvalWaitingLogged) {
+              console.warn('Display UID is not yet approved. Waiting for operator approval before writing render_state.');
+              approvalWaitingLogged = true;
+            }
+          }, (error) => {
             approvalChecked = true;
             canReportRender = false;
-            console.error('Failed to confirm display approval status:', err);
-          }
+            approvalEnabledLogged = false;
+            if (error && error.code === 'PERMISSION_DENIED') {
+              if (!approvalUnreadableLogged) {
+                console.warn('Display approval status is not readable under current Firebase rules; render_state writes suppressed until approval is granted.');
+                approvalUnreadableLogged = true;
+              }
+              return;
+            }
+            console.error('Failed to confirm display approval status:', error);
+          });
         });
     
         // ★ 状態レポート（display → Firebase）
         function reportRender(phase, info = {}) {
           if (!canReportRender) {
-            if (approvalChecked) {
-              console.debug('render_state update skipped because this device is not approved.');
+            if (approvalChecked && !reportSuppressedLogged) {
+              console.debug('render_state update skipped because this display is not approved yet.');
+              reportSuppressedLogged = true;
             }
             return Promise.resolve();
           }
-        
+
           const payload = {
             phase,                                        // 'showing' | 'visible' | 'hiding' | 'hidden' | 'error'
             updatedAt: serverTimestamp(),
             ...info                                       // { name, uid, seq など任意}
           };
-          return update(renderRef, payload).catch(console.error);
+          return update(renderRef, payload).catch(err => {
+            if (err && err.code === 'PERMISSION_DENIED') {
+              canReportRender = false;
+              approvalEnabledLogged = false;
+              if (!approvalWaitingLogged) {
+                console.warn('render_state update was denied. Waiting for operator approval before retrying.');
+                approvalWaitingLogged = true;
+              }
+              return;
+            }
+            console.error(err);
+          });
         }
     
         const radioNameEl = document.getElementById('radio-name');
