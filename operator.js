@@ -289,6 +289,8 @@ Object.assign(dom, {
 updateActionAvailability();
 
 // --- 状態管理変数 ---
+let state;
+
 function createInitialState(){
   return {
     allQuestions: [],
@@ -303,12 +305,16 @@ function createInitialState(){
   };
 }
 
-const state = createInitialState();
+state = createInitialState();
 
 function resetState(){
   const fresh = createInitialState();
   if (dom.logAutoscroll) {
     fresh.autoScrollLogs = dom.logAutoscroll.checked;
+  }
+  if (!state) {
+    state = fresh;
+    return;
   }
   for (const [key, value] of Object.entries(fresh)) {
     state[key] = value;
@@ -810,6 +816,7 @@ function handleBatchUnanswer() {
 }
 
 function updateActionAvailability() {
+    if (!state) return;
     const active = !!state.displaySessionActive;
     const selection = state.selectedRowData;
 
