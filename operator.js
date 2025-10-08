@@ -500,7 +500,8 @@ async function renderQuestions() {
 
   const snap = await get(telopRef);
   const live = snap.val();
-  const selectedUid = state.selectedRowData ? state.selectedRowData.uid : null;
+  const selectedUid = state.selectedRowData ? String(state.selectedRowData.uid) : null;
+  let nextSelection = null;
 
   // --- カード描画 ---
   const host = dom.cardsContainer;
@@ -523,7 +524,16 @@ async function renderQuestions() {
         state.lastDisplayedUid = null;
       }
     }
-    if (item['UID'] === selectedUid) card.classList.add('is-selected');
+    const uid = String(item['UID']);
+    if (uid === selectedUid) {
+      card.classList.add('is-selected');
+      nextSelection = {
+        uid,
+        name: item['ラジオネーム'],
+        question: item['質問・お悩み'],
+        isAnswered
+      };
+    }
 
     card.innerHTML = `
       <header class="q-head">
@@ -554,7 +564,7 @@ async function renderQuestions() {
       host.querySelectorAll('.q-card').forEach(el => el.classList.remove('is-selected'));
       card.classList.add('is-selected');
       state.selectedRowData = {
-        uid: item['UID'],
+        uid,
         name: item['ラジオネーム'],
         question: item['質問・お悩み'],
         isAnswered
@@ -565,7 +575,10 @@ async function renderQuestions() {
     host.appendChild(card);
   });
 
-  if (!list.some(x => x['UID'] === selectedUid)) {
+  if (selectedUid && nextSelection) {
+    state.selectedRowData = nextSelection;
+    updateActionAvailability();
+  } else if (!list.some(x => String(x['UID']) === selectedUid)) {
     state.selectedRowData = null;
     updateActionAvailability();
   }
