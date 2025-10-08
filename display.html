@@ -320,6 +320,7 @@
     [data-probe],
     [data-probe] * { animation: none !important; transition: none !important; }
     [data-probe] .telop-box::after { content: none !important; }
+
   </style>
 </head>
 <body>
@@ -370,6 +371,37 @@
         let approvalEnabledLogged = false;
         let approvalUnreadableLogged = false;
         let reportSuppressedLogged = false;
+        let pendingRenderUpdate = null;
+        let pendingFlushTimer = null;
+
+        function clearPendingFlushTimer() {
+          if (pendingFlushTimer) {
+            clearTimeout(pendingFlushTimer);
+            pendingFlushTimer = null;
+          }
+        }
+
+        // Firebase ルールの都合で approvalRef が PERMISSION_DENIED になる環境では
+        // onValue で承認状態を監視できない。その場合でも承認後に即座に
+        // render_state を更新できるよう、一定間隔で再送するタイマーを持たせる。
+        function schedulePendingFlush(delayMs = 5000) {
+          if (pendingFlushTimer) return;
+          pendingFlushTimer = setTimeout(() => {
+            pendingFlushTimer = null;
+            if (!pendingRenderUpdate) return;
+            console.debug('Retrying deferred render_state update after approval denial.');
+            flushPendingRender('retry');
+          }, delayMs);
+        }
+
+        function cloneInfo(info) {
+          if (!info) return {};
+          try {
+            return JSON.parse(JSON.stringify(info));
+          } catch (_) {
+            return { ...info };
+          }
+        }
 
         onAuthStateChanged(auth, (user) => {
           if (typeof unsubscribeApproval === 'function') {
@@ -384,11 +416,16 @@
             approvalEnabledLogged = false;
             approvalUnreadableLogged = false;
             reportSuppressedLogged = false;
+            pendingRenderUpdate = null;
+            clearPendingFlushTimer();
             signInAnonymously(auth).catch(err => {
               console.error('Anonymous sign-in failed:', err);
             });
             return;
           }
+
+          // オペレーターが whitelisting するときに控えられるよう UID を通知
+          console.info('Display anonymous UID:', user.uid);
 
           const approvalRef = ref(database, `screens/approved/${user.uid}`);
           unsubscribeApproval = onValue(approvalRef, (snapshot) => {
@@ -404,6 +441,8 @@
                 console.info('Display UID approved; render_state updates enabled.');
                 approvalEnabledLogged = true;
               }
+              clearPendingFlushTimer();
+              flushPendingRender('approval granted');
               return;
             }
 
@@ -427,37 +466,70 @@
             console.error('Failed to confirm display approval status:', error);
           });
         });
-    
+
         const currentTelopRef = ref(database, 'currentTelop');
         const renderRef = ref(database, 'render_state');
-      
-        // ★ 状態レポート（display → Firebase）
-        function reportRender(phase, info = {}) {
-          if (!canReportRender) {
+
+        function flushPendingRender(reason) {
+          if (!pendingRenderUpdate) return;
+          const pending = pendingRenderUpdate;
+          if (reason === 'retry') {
+            console.debug('Flushing deferred render_state update (scheduled retry).');
+          } else if (reason) {
+            console.info(`Flushing deferred render_state update (${reason}).`);
+          } else {
+            console.info('Flushing deferred render_state update.');
+          }
+          writeRenderState(pending.phase, pending.info, { force: true });
+        }
+
+        function writeRenderState(phase, info = {}, { force = false } = {}) {
+          if (!force && !canReportRender) {
+            pendingRenderUpdate = { phase, info: cloneInfo(info) };
             if (approvalChecked && !reportSuppressedLogged) {
               console.debug('render_state update skipped because this display is not approved yet.');
               reportSuppressedLogged = true;
             }
+            schedulePendingFlush(2000);
             return Promise.resolve();
           }
 
           const payload = {
             phase,                                        // 'showing' | 'visible' | 'hiding' | 'hidden' | 'error'
             updatedAt: serverTimestamp(),
-            ...info                                       // { name, uid, seq など任意}
+            ...info
           };
-          return update(renderRef, payload).catch(err => {
+
+          return update(renderRef, payload).then(() => {
+            canReportRender = true;
+            pendingRenderUpdate = null;
+            clearPendingFlushTimer();
+            reportSuppressedLogged = false;
+            approvalWaitingLogged = false;
+            approvalUnreadableLogged = false;
+            if (!approvalEnabledLogged) {
+              console.info('Display UID approved; render_state updates enabled.');
+              approvalEnabledLogged = true;
+            }
+          }).catch(err => {
             if (err && err.code === 'PERMISSION_DENIED') {
               canReportRender = false;
               approvalEnabledLogged = false;
+              pendingRenderUpdate = { phase, info: cloneInfo(info) };
               if (!approvalWaitingLogged) {
                 console.warn('render_state update was denied. Waiting for operator approval before retrying.');
                 approvalWaitingLogged = true;
               }
+              schedulePendingFlush();
               return;
             }
             console.error(err);
           });
+        }
+
+        // ★ 状態レポート（display → Firebase）
+        function reportRender(phase, info = {}) {
+          return writeRenderState(phase, info);
         }
     
         const radioNameEl = document.getElementById('radio-name');
