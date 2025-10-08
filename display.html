@@ -428,6 +428,9 @@
           });
         });
     
+        const currentTelopRef = ref(database, 'currentTelop');
+        const renderRef = ref(database, 'render_state');
+      
         // ★ 状態レポート（display → Firebase）
         function reportRender(phase, info = {}) {
           if (!canReportRender) {
@@ -700,7 +703,7 @@
         }
 
         // Firebaseの 'currentTelop' の場所の変更を監視する
-        onValue(telopRef, (snapshot) => {
+        onValue(currentTelopRef, (snapshot) => {
           const telopData  = snapshot.val() || null;
           const name       = telopData?.name ?? '';
           const question   = telopData?.question ?? '';
@@ -716,7 +719,7 @@
           // ラベル制御（Pick Up Question はラベル非表示）※ ここでは切り替え“しない”
           const isPickup = (n) => String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
           const willNoLabel = isPickup(name);
-          // ★ ここが抜けていて ReferenceError → 以降の処理が止まっていました
+          // ★ currentTelop 更新時に前回値との差分を把握して、必要なDOMだけを入れ替える
           const nameChanged = name.trim() !== prevName.trim();
           const qChanged    = question.trim() !== prevQuestion.trim();
           const labelChanged = (radioNameEl.classList.contains('no-label') !== willNoLabel);
