@@ -93,6 +93,18 @@
         </div>
         <div class="panel" id="dictionary-panel">
             <h2>ルビ辞書管理</h2>
+            <section class="display-approval" aria-label="表示端末の承認">
+                <h3>表示端末の承認</h3>
+                <p class="form-note">表示画面のブラウザコンソールに表示された UID を入力し、承認を登録してください。</p>
+                <form id="approve-display-form" class="stacked-form">
+                    <label for="approve-display-uid" class="visually-hidden">Display UID</label>
+                    <div class="form-row">
+                        <input type="text" id="approve-display-uid" autocomplete="off" placeholder="例: h9rmnA1AzBZou3H0GJ1X564KGq33" required>
+                        <button type="submit">UIDを承認</button>
+                    </div>
+                </form>
+                <p id="approve-display-feedback" class="form-note" aria-live="polite"></p>
+            </section>
             <button id="fetch-dictionary-button">辞書を更新</button>
             <form id="add-term-form">
                 <input type="text" id="new-term" placeholder="単語" required>

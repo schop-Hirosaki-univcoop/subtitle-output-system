@@ -162,6 +162,7 @@ async function handleAfterLogin(user) {
     dom.userInfo.innerHTML = '';
     cleanupSubscriptions();
     hideLoader();
+    setDisplayApprovalFeedback('');
     return;
   }
   try {
@@ -187,8 +188,22 @@ async function handleAfterLogin(user) {
         dom.loginContainer.style.display = 'none';
         dom.mainContainer.style.display = 'flex';
         dom.actionPanel.style.display = 'flex';
-        dom.userInfo.innerHTML = `${user.displayName} (${user.email}) <button id="logout-button">ログアウト</button>`;
-        document.getElementById('logout-button').addEventListener('click', logout);
+        // 表示名・メールアドレスはテキストノードとして挿入し、XSS を防止
+        dom.userInfo.innerHTML = '';
+        const userLabel = document.createElement('span');
+        userLabel.className = 'user-label';
+        const safeDisplayName = String(user.displayName || '').trim();
+        const safeEmail = String(user.email || '').trim();
+        userLabel.textContent = safeDisplayName && safeEmail
+          ? `${safeDisplayName} (${safeEmail})`
+          : (safeDisplayName || safeEmail || '');
+        const logoutBtn = document.createElement('button');
+        logoutBtn.id = 'logout-button';
+        logoutBtn.type = 'button';
+        logoutBtn.textContent = 'ログアウト';
+        dom.userInfo.append(userLabel, logoutBtn);
+        logoutBtn.addEventListener('click', logout);
+        setDisplayApprovalFeedback('');
         // 初回だけシート→RTDB ミラー（空なら）
         setStep(3, '初期ミラー実行中…');
         updateLoader('初期データを準備しています…');
@@ -226,17 +241,20 @@ async function handleAfterLogin(user) {
         showToast("あなたのアカウントはこのシステムへのアクセスが許可されていません。", 'error');
         await logout();
         hideLoader();
+        setDisplayApprovalFeedback('');
       }
     } else {
       showToast("ユーザー権限の確認に失敗しました。", 'error');
       await logout();
       hideLoader();
+      setDisplayApprovalFeedback('');
     }
   } catch (error) {
     console.error("Authorization check failed:", error);
     showToast("ユーザー権限の確認中にエラーが発生しました。", 'error');
     await logout();
     hideLoader();
+    setDisplayApprovalFeedback('');
   }
 }
 
@@ -256,7 +274,10 @@ const dom = {
     actionButtons: ['btn-display', 'btn-unanswer', 'btn-edit'].map(id => document.getElementById(id)),
     selectedInfo: document.getElementById('selected-info'),
     selectAllCheckbox: document.getElementById('select-all-checkbox'),
-    batchUnanswerBtn: document.getElementById('btn-batch-unanswer')
+    batchUnanswerBtn: document.getElementById('btn-batch-unanswer'),
+    approveDisplayForm: document.getElementById('approve-display-form'),
+    approveDisplayUid: document.getElementById('approve-display-uid'),
+    approveDisplayFeedback: document.getElementById('approve-display-feedback')
 };
 
 Object.assign(dom, {
@@ -303,6 +324,10 @@ dom.batchUnanswerBtn.addEventListener('click', handleBatchUnanswer);
 dom.cardsContainer.addEventListener('change', (e)=>{
   if (e.target && e.target.classList.contains('row-checkbox')) updateBatchButtonVisibility();
 });
+
+if (dom.approveDisplayForm) {
+  dom.approveDisplayForm.addEventListener('submit', handleApproveDisplay);
+}
 
 // --- ログイン状態の監視 ---
 onAuthStateChanged(auth, (user) => {
@@ -465,12 +490,17 @@ async function renderQuestions() {
           <span class="q-group">${escapeHtml(item['班番号'] ?? '') || ''}</span>
           <span class="chip chip--${status}">${statusText}</span>
           <label class="q-check">
-            <input type="checkbox" class="row-checkbox" data-uid="${item['UID']}">
+            <input type="checkbox" class="row-checkbox">
           </label>
         </div>
       </header>
       <div class="q-text">${escapeHtml(item['質問・お悩み'])}</div>
     `;
+
+    const checkbox = card.querySelector('.row-checkbox');
+    if (checkbox) {
+      checkbox.dataset.uid = String(item['UID']);
+    }
 
     // カード選択
     card.addEventListener('click', (e)=>{
@@ -720,6 +750,41 @@ function handleBatchUnanswer() {
     fireAndForgetApi({ action:'batchUpdateStatus', uids: uidsToUpdate, status:false });
 }
 
+function setDisplayApprovalFeedback(message = '') {
+  if (!dom.approveDisplayFeedback) return;
+  dom.approveDisplayFeedback.textContent = message ? String(message) : '';
+}
+
+async function handleApproveDisplay(event) {
+  event.preventDefault();
+  if (!dom.approveDisplayUid) return;
+  const raw = String(dom.approveDisplayUid.value || '').trim();
+  if (!raw) {
+    showToast('承認したい表示端末のUIDを入力してください。', 'error');
+    setDisplayApprovalFeedback('UIDを入力してください。');
+    return;
+  }
+  const uid = raw.replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9:_-]{6,}$/.test(uid)) {
+    showToast('UIDの形式が正しくありません。', 'error');
+    setDisplayApprovalFeedback('UIDの形式を確認してください。');
+    return;
+  }
+
+  try {
+    setDisplayApprovalFeedback('承認を処理しています…');
+    await apiPost({ action: 'approveDisplay', displayUid: uid });
+    showToast(`UID ${uid} を承認しました。`);
+    setDisplayApprovalFeedback(`UID ${uid} を承認しました。ディスプレイの再接続後に書き込みが許可されます。`);
+    dom.approveDisplayUid.value = '';
+  } catch (error) {
+    console.error('Display approval failed:', error);
+    const message = error && error.message ? error.message : String(error);
+    showToast('表示端末の承認に失敗しました。', 'error');
+    setDisplayApprovalFeedback(`承認に失敗しました: ${message}`);
+  }
+}
+
 async function logAction(actionName, details = '') {
   try {
     await apiPost({
@@ -831,12 +896,14 @@ function escapeHtml(v) {
 }
 
 function showToast(message, type = 'success') {
-    const backgroundColor = type === 'success' 
-        ? "linear-gradient(to right, #4CAF50, #77dd77)" 
+    const backgroundColor = type === 'success'
+        ? "linear-gradient(to right, #4CAF50, #77dd77)"
         : "linear-gradient(to right, #f06595, #ff6b6b)";
 
+    const safeMessage = escapeHtml(String(message ?? ''));
+
     Toastify({
-        text: message,
+        text: safeMessage,
         duration: 3000,
         close: true,
         gravity: "top", // `top` or `bottom`
