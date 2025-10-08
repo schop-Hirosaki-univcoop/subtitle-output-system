@@ -250,9 +250,6 @@ class OperatorApp {
       logAutoscroll: document.getElementById("log-autoscroll"),
       logStream: document.getElementById("log-stream"),
       logsStreamView: document.getElementById("logs-stream-view"),
-      approveDisplayForm: document.getElementById("approve-display-form"),
-      approveDisplayInput: document.getElementById("approve-display-uid"),
-      approveDisplayFeedback: document.getElementById("approve-display-feedback"),
       loadingOverlay: document.getElementById("loading-overlay"),
       loadingText: document.getElementById("loading-text"),
       loaderSteps: document.getElementById("loader-steps"),
@@ -296,7 +293,6 @@ class OperatorApp {
     this.fetchDictionary = this.fetchDictionary.bind(this);
     this.fetchLogs = this.fetchLogs.bind(this);
     this.addTerm = this.addTerm.bind(this);
-    this.handleApproveDisplay = this.handleApproveDisplay.bind(this);
   }
 
   init() {
@@ -334,9 +330,6 @@ class OperatorApp {
         this.updateBatchButtonVisibility();
       }
     });
-    if (this.dom.approveDisplayForm) {
-      this.dom.approveDisplayForm.addEventListener("submit", this.handleApproveDisplay);
-    }
     if (this.dom.logSearch) {
       this.dom.logSearch.addEventListener("input", () => this.renderLogs());
     }
@@ -510,7 +503,6 @@ class OperatorApp {
         showToast("あなたのアカウントはこのシステムへのアクセスが許可されていません。", "error");
         await this.logout();
         this.hideLoader();
-        this.setDisplayApprovalFeedback("");
         return;
       }
 
@@ -562,7 +554,6 @@ class OperatorApp {
       showToast("ユーザー権限の確認中にエラーが発生しました。", "error");
       await this.logout();
       this.hideLoader();
-      this.setDisplayApprovalFeedback("");
     }
   }
 
@@ -593,7 +584,6 @@ class OperatorApp {
     if (this.dom.userInfo) this.dom.userInfo.innerHTML = "";
     this.cleanupRealtime();
     this.hideLoader();
-    this.setDisplayApprovalFeedback("");
   }
 
   cleanupRealtime() {
@@ -938,16 +928,25 @@ class OperatorApp {
     const snapshot = await get(telopRef);
     const previousTelop = snapshot.val();
     try {
+      const updates = {};
+      const selectingItems = this.state.allQuestions.filter((item) => item["選択中"] === true);
+      selectingItems.forEach((item) => {
+        updates[`questions/${item.UID}/selecting`] = false;
+      });
       if (previousTelop) {
         const prevItem = this.state.allQuestions.find(
           (q) => q["ラジオネーム"] === previousTelop.name && q["質問・お悩み"] === previousTelop.question
         );
         if (prevItem) {
-          await this.updateStatusOnServer([prevItem.UID], true);
+          updates[`questions/${prevItem.UID}/answered`] = true;
+          this.api.fireAndForgetApi({ action: "updateStatus", uid: prevItem.UID, status: true });
         }
       }
+      if (Object.keys(updates).length > 0) {
+        await update(ref(database), updates);
+      }
       await remove(telopRef);
-      await this.updateStatusOnServer([], false, true, -1);
+      this.api.fireAndForgetApi({ action: "clearSelectingStatus" });
       this.api.logAction("CLEAR");
       showToast("テロップを消去しました。", "success");
     } catch (error) {
@@ -990,32 +989,6 @@ class OperatorApp {
     }
     update(ref(database), updates);
     this.api.fireAndForgetApi({ action: "batchUpdateStatus", uids: uidsToUpdate, status: false });
-  }
-
-  async updateStatusOnServer(uids, isAnswered, isSelectingUpdate = false, selectingUid = null) {
-    try {
-      const action = isSelectingUpdate
-        ? selectingUid === -1
-          ? "clearSelectingStatus"
-          : "updateSelectingStatus"
-        : "batchUpdateStatus";
-      const payload =
-        action === "updateSelectingStatus"
-          ? { action, uid: selectingUid }
-          : action === "clearSelectingStatus"
-          ? { action }
-          : { action, uids, status: isAnswered };
-      const result = await this.api.apiPost(payload);
-      if (result.success && !isSelectingUpdate) {
-        this.api.logAction(
-          isAnswered ? "BATCH_SET_ANSWERED" : "BATCH_SET_UNANSWERED",
-          `UIDs: ${uids.join(", ")}`
-        );
-        showToast(`${uids.length}件を更新しました。`, "success");
-      }
-    } catch (error) {
-      showToast("通信エラー: " + error.message, "error");
-    }
   }
 
   switchMainTab(tabName) {
@@ -1120,31 +1093,6 @@ class OperatorApp {
       }
     } catch (error) {
       showToast("通信エラー: " + error.message, "error");
-    }
-  }
-
-  setDisplayApprovalFeedback(message, type = "info") {
-    if (!this.dom.approveDisplayFeedback) return;
-    this.dom.approveDisplayFeedback.textContent = message;
-    if (message) {
-      this.dom.approveDisplayFeedback.dataset.state = type;
-    } else {
-      this.dom.approveDisplayFeedback.removeAttribute("data-state");
-    }
-  }
-
-  async handleApproveDisplay(event) {
-    event.preventDefault();
-    const uid = this.dom.approveDisplayInput?.value.trim();
-    if (!uid) return;
-    try {
-      await set(ref(database, `screens/approved/${uid}`), true);
-      this.api.logAction("APPROVE_DISPLAY", `UID: ${uid}`);
-      this.setDisplayApprovalFeedback("表示端末を承認しました。", "success");
-      if (this.dom.approveDisplayInput) this.dom.approveDisplayInput.value = "";
-    } catch (error) {
-      console.error("Failed to approve display:", error);
-      this.setDisplayApprovalFeedback("承認に失敗しました: " + error.message, "error");
     }
   }
 
