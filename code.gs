@@ -225,19 +225,31 @@ function requireAuth_(idToken, options){
   } catch (e) {
     tokenPayload = null;
   }
+
   const providerIds = providerInfo.map(info => String(info && info.providerId || '')).filter(Boolean);
   const normalizedProviderIds = providerIds.map(id => id.toLowerCase());
   const signInProvider = tokenPayload && tokenPayload.firebase && tokenPayload.firebase['sign_in_provider'];
-  const providersLookAnonymous = normalizedProviderIds.length === 0 || normalizedProviderIds.every(id => id === 'anonymous' || id === 'firebase');
-  const isAnonymous = signInProvider === 'anonymous' || ((!user.email || user.email === '') && providersLookAnonymous);
   const allowAnonymous = options.allowAnonymous === true;
+
+  const resolvedEmail = user.email ||
+    (providerInfo.find(p => p.email) || {}).email ||
+    (tokenPayload && tokenPayload.email ? tokenPayload.email : '') || '';
+
+  const providersLookAnonymous = normalizedProviderIds.length === 0 || normalizedProviderIds.every(id => id === 'anonymous' || id === 'firebase');
+  let isAnonymous = signInProvider === 'anonymous';
+  if (!isAnonymous) {
+    if (!resolvedEmail && providersLookAnonymous) {
+      isAnonymous = true;
+    } else if (!resolvedEmail && allowAnonymous) {
+      isAnonymous = true;
+    }
+  }
+
   if (isAnonymous && !allowAnonymous) throw new Error('Anonymous auth not allowed');
 
   let email = '';
   if (!isAnonymous) {
-    email = user.email ||
-      (providerInfo.find(p => p.email) || {}).email ||
-      (tokenPayload && tokenPayload.email ? tokenPayload.email : '') || '';
+    email = String(resolvedEmail || '');
 
     const allowed = getAllowedDomains_().map(d => String(d).toLowerCase());
     if (allowed.length && email) {

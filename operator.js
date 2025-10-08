@@ -289,8 +289,6 @@ Object.assign(dom, {
 updateActionAvailability();
 
 // --- 状態管理変数 ---
-let state;
-
 function createInitialState(){
   return {
     allQuestions: [],
@@ -305,27 +303,27 @@ function createInitialState(){
   };
 }
 
-state = createInitialState();
+const state = createInitialState();
 
 function resetState(){
   const fresh = createInitialState();
   if (dom.logAutoscroll) {
     fresh.autoScrollLogs = dom.logAutoscroll.checked;
   }
-  if (!state) {
-    state = fresh;
-    return;
-  }
-  for (const [key, value] of Object.entries(fresh)) {
-    state[key] = value;
-  }
+  Object.assign(state, fresh);
 }
 
 resetState();
 
 updateActionAvailability();
-dom.logSearch.addEventListener('input', ()=>renderLogs());
-dom.logAutoscroll.addEventListener('change', (e)=>{ state.autoScrollLogs = e.target.checked; });
+if (dom.logSearch) {
+  dom.logSearch.addEventListener('input', ()=>renderLogs());
+}
+if (dom.logAutoscroll) {
+  dom.logAutoscroll.addEventListener('change', (e)=>{ state.autoScrollLogs = e.target.checked; });
+}
+
+let lastSessionActive = null;
 
 let lastSessionActive = null;
 
