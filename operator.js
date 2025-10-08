@@ -162,6 +162,7 @@ async function handleAfterLogin(user) {
     dom.userInfo.innerHTML = '';
     cleanupSubscriptions();
     hideLoader();
+    setDisplayApprovalFeedback('');
     return;
   }
   try {
@@ -202,6 +203,7 @@ async function handleAfterLogin(user) {
         logoutBtn.textContent = 'ログアウト';
         dom.userInfo.append(userLabel, logoutBtn);
         logoutBtn.addEventListener('click', logout);
+        setDisplayApprovalFeedback('');
         // 初回だけシート→RTDB ミラー（空なら）
         setStep(3, '初期ミラー実行中…');
         updateLoader('初期データを準備しています…');
@@ -239,17 +241,20 @@ async function handleAfterLogin(user) {
         showToast("あなたのアカウントはこのシステムへのアクセスが許可されていません。", 'error');
         await logout();
         hideLoader();
+        setDisplayApprovalFeedback('');
       }
     } else {
       showToast("ユーザー権限の確認に失敗しました。", 'error');
       await logout();
       hideLoader();
+      setDisplayApprovalFeedback('');
     }
   } catch (error) {
     console.error("Authorization check failed:", error);
     showToast("ユーザー権限の確認中にエラーが発生しました。", 'error');
     await logout();
     hideLoader();
+    setDisplayApprovalFeedback('');
   }
 }
 
@@ -269,7 +274,10 @@ const dom = {
     actionButtons: ['btn-display', 'btn-unanswer', 'btn-edit'].map(id => document.getElementById(id)),
     selectedInfo: document.getElementById('selected-info'),
     selectAllCheckbox: document.getElementById('select-all-checkbox'),
-    batchUnanswerBtn: document.getElementById('btn-batch-unanswer')
+    batchUnanswerBtn: document.getElementById('btn-batch-unanswer'),
+    approveDisplayForm: document.getElementById('approve-display-form'),
+    approveDisplayUid: document.getElementById('approve-display-uid'),
+    approveDisplayFeedback: document.getElementById('approve-display-feedback')
 };
 
 Object.assign(dom, {
@@ -316,6 +324,10 @@ dom.batchUnanswerBtn.addEventListener('click', handleBatchUnanswer);
 dom.cardsContainer.addEventListener('change', (e)=>{
   if (e.target && e.target.classList.contains('row-checkbox')) updateBatchButtonVisibility();
 });
+
+if (dom.approveDisplayForm) {
+  dom.approveDisplayForm.addEventListener('submit', handleApproveDisplay);
+}
 
 // --- ログイン状態の監視 ---
 onAuthStateChanged(auth, (user) => {
@@ -736,6 +748,41 @@ function handleBatchUnanswer() {
     update(ref(database), updates);
     // GAS 同期依頼（非同期）
     fireAndForgetApi({ action:'batchUpdateStatus', uids: uidsToUpdate, status:false });
+}
+
+function setDisplayApprovalFeedback(message = '') {
+  if (!dom.approveDisplayFeedback) return;
+  dom.approveDisplayFeedback.textContent = message ? String(message) : '';
+}
+
+async function handleApproveDisplay(event) {
+  event.preventDefault();
+  if (!dom.approveDisplayUid) return;
+  const raw = String(dom.approveDisplayUid.value || '').trim();
+  if (!raw) {
+    showToast('承認したい表示端末のUIDを入力してください。', 'error');
+    setDisplayApprovalFeedback('UIDを入力してください。');
+    return;
+  }
+  const uid = raw.replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9:_-]{6,}$/.test(uid)) {
+    showToast('UIDの形式が正しくありません。', 'error');
+    setDisplayApprovalFeedback('UIDの形式を確認してください。');
+    return;
+  }
+
+  try {
+    setDisplayApprovalFeedback('承認を処理しています…');
+    await apiPost({ action: 'approveDisplay', displayUid: uid });
+    showToast(`UID ${uid} を承認しました。`);
+    setDisplayApprovalFeedback(`UID ${uid} を承認しました。ディスプレイの再接続後に書き込みが許可されます。`);
+    dom.approveDisplayUid.value = '';
+  } catch (error) {
+    console.error('Display approval failed:', error);
+    const message = error && error.message ? error.message : String(error);
+    showToast('表示端末の承認に失敗しました。', 'error');
+    setDisplayApprovalFeedback(`承認に失敗しました: ${message}`);
+  }
 }
 
 async function logAction(actionName, details = '') {
