@@ -170,9 +170,12 @@ async function handleAfterLogin(user) {
     setStep(0, '認証OK。ユーザー情報を確認中…');
     const result = await apiPost({ action: 'fetchSheet', sheet: 'users' });
     setStep(1, '在籍チェック中…');
-    if (result.success && result.data) {
-      const authorizedUsers = result.data.map(item => item['メールアドレス']);
-　　　　if (authorizedUsers.includes(user.email)) {
+      if (result.success && result.data) {
+        const authorizedUsers = result.data
+          .map(item => String(item['メールアドレス'] || '').trim().toLowerCase())
+          .filter(Boolean);
+        const loginEmail = String(user.email || '').trim().toLowerCase();
+        if (authorizedUsers.includes(loginEmail)) {
         // ★ 管理者付与を“毎回”試す（冪等）: ルールで /admins 読めないため読まずに実行
         setStep(2, '管理者権限の確認/付与…');
         try {
