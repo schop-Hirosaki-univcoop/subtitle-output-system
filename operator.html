@@ -8,7 +8,7 @@
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 </head>
-<body class="op-theme dictionary-collapsed">
+<body class="op-theme dictionary-collapsed logs-collapsed">
     <!-- ローディングオーバーレイ -->
     <div id="loading-overlay" aria-live="polite" hidden>
       <div class="loading-backdrop"></div>
@@ -42,6 +42,12 @@
       </div>
     </div>
     <div class="header-aside">
+      <button id="logs-toggle" class="btn btn-ghost btn-icon" type="button" aria-expanded="false" aria-controls="logs-panel" aria-label="操作ログを開く" title="操作ログ">
+        <span class="icon icon-menu" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="img" focusable="false"><path d="M4 6.75A.75.75 0 0 1 4.75 6h14.5a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 6.75Zm0 5.25a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 12Zm.75 4.5a.75.75 0 0 0 0 1.5h14.5a.75.75 0 0 0 0-1.5H4.75Z"/></svg>
+        </span>
+        <span class="btn-label">ログ</span>
+      </button>
       <button id="dictionary-toggle" class="btn btn-ghost btn-icon" type="button" aria-expanded="false" aria-controls="dictionary-panel" aria-label="ルビ辞書管理を開く" title="ルビ辞書管理">
         <span class="icon icon-book" aria-hidden="true">
           <svg viewBox="0 0 24 24" role="img" focusable="false"><path d="M6.25 4C5.01 4 4 5.01 4 6.25v11.5C4 19.99 5.01 21 6.25 21H18a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H6.25Zm.25 2h11v12H6.25a.25.25 0 0 1-.25-.25V6.25c0-.138.112-.25.25-.25ZM8 8.25A.75.75 0 0 1 8.75 7.5h6.5a.75.75 0 0 1 0 1.5h-6.5A.75.75 0 0 1 8 8.25ZM8.75 11a.75.75 0 0 0 0 1.5h3.5a.75.75 0 0 0 0-1.5h-3.5Z"/></svg>
@@ -65,39 +71,20 @@
                     <h1 id="questions-title">テロップ操作パネル</h1>
                     <p class="module-description">質問の選択・表示とログ監視を一つの画面で行えます。</p>
                 </div>
-                <div class="module-actions">
-                    <button id="manual-update-button" class="btn btn-ghost" type="button">手動更新</button>
-                </div>
             </div>
-            <div class="main-tabs" id="main-tab-buttons" role="tablist" aria-label="メイン表示切替">
-                <button class="main-tab-button active" data-tab="questions" role="tab" aria-selected="true" aria-controls="questions-content">質問</button>
-                <button class="main-tab-button" data-tab="logs" role="tab" aria-selected="false" aria-controls="logs-content">操作ログ</button>
-            </div>
-
-            <div id="main-tab-contents" class="module-body">
-                <div class="main-tab-content active" id="questions-content" role="tabpanel" aria-labelledby="questions-tab">
-                    <div id="sub-tab-buttons" class="sub-tabs" role="tablist" aria-label="質問種別">
-                        <button class="sub-tab-button active" data-sub-tab="normal" role="tab" aria-selected="true">通常質問</button>
-                        <button class="sub-tab-button" data-sub-tab="puq" role="tab" aria-selected="false">Pick Up Question</button>
-                    </div>
-                    <!-- 質問リスト（カードビュー） -->
-                    <div class="cards-toolbar">
-                        <label class="chk">
-                            <input id="select-all-checkbox" type="checkbox" />
-                            全選択
-                        </label>
-                    </div>
-                    <div id="questions-cards" class="cards-list" aria-live="polite"></div>
+            <div class="module-body" id="questions-content">
+                <div id="sub-tab-buttons" class="sub-tabs" role="tablist" aria-label="質問種別">
+                    <button class="sub-tab-button active" data-sub-tab="normal" role="tab" aria-selected="true">通常質問</button>
+                    <button class="sub-tab-button" data-sub-tab="puq" role="tab" aria-selected="false">Pick Up Question</button>
                 </div>
-                <div class="main-tab-content" id="logs-content" role="tabpanel" aria-labelledby="logs-tab" data-layout="column">
-                    <div id="logs-toolbar" class="logs-toolbar">
-                      <input id="log-search" class="input" placeholder="検索 (user/action/details)">
-                      <label class="chk"><input type="checkbox" id="log-autoscroll" checked> 自動スクロール</label>
-                    </div>
-                    <div id="logs-stream-view">
-                      <div id="log-stream" class="log-stream"></div>
-                    </div>
+                <!-- 質問リスト（カードビュー） -->
+                <div class="cards-toolbar">
+                    <label class="chk">
+                        <input id="select-all-checkbox" type="checkbox" />
+                        全選択
+                    </label>
                 </div>
+                <div id="questions-cards" class="cards-list" aria-live="polite"></div>
             </div>
         </section>
         <aside class="module module--secondary" id="dictionary-panel" aria-labelledby="dictionary-title" hidden>
@@ -126,6 +113,26 @@
                 </div>
             </div>
         </aside>
+        <aside class="module module--secondary" id="logs-panel" aria-labelledby="logs-title" hidden>
+            <div class="module-header">
+                <div>
+                    <h2 id="logs-title">操作ログ</h2>
+                    <p class="module-description">直近の操作履歴を確認し、異常を素早く検知できます。</p>
+                </div>
+                <div class="module-actions">
+                    <button id="logs-refresh-button" class="btn btn-ghost" type="button">ログを更新</button>
+                </div>
+            </div>
+            <div class="module-body logs-body">
+                <div id="logs-toolbar" class="logs-toolbar">
+                  <input id="log-search" class="input" placeholder="検索 (user/action/details)">
+                  <label class="chk"><input type="checkbox" id="log-autoscroll" checked> 自動スクロール</label>
+                </div>
+                <div id="logs-stream-view">
+                  <div id="log-stream" class="log-stream"></div>
+                </div>
+            </div>
+        </aside>
     </main>
 
     <div id="action-panel" style="display: none;">
@@ -138,6 +145,11 @@
           <button id="btn-batch-unanswer" class="btn btn-ghost" style="display: none;">選択した項目を未回答にする</button>
         </div>
     </div>
+
+    <footer class="site-footer">
+      <div class="credit-line">Created by <span class="credit-highlight">23schop Maruo Kyohei</span></div>
+      <div class="credit-line">&copy; <span id="copyright-year">2025</span> Hirosaki Hirosaki Univ. Co-op. SCHOP</div>
+    </footer>
 
     <script type="module" src="operator.js"></script>
 </body>

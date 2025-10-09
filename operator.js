@@ -57,12 +57,12 @@ const telopRef = ref(database, "currentTelop");
 const updateTriggerRef = ref(database, "update_trigger");
 const dictionaryRef = ref(database, "dictionary");
 const DICTIONARY_STATE_KEY = "telop-ops-dictionary-open";
+const LOGS_STATE_KEY = "telop-ops-logs-open";
 
 function createInitialState(autoScroll = true) {
   return {
     allQuestions: [],
     allLogs: [],
-    currentMainTab: "questions",
     currentSubTab: "normal",
     selectedRowData: null,
     lastDisplayedUid: null,
@@ -101,6 +101,12 @@ function formatRelative(ms) {
   if (hours < 24) return `${hours}時間前`;
   const days = Math.floor(hours / 24);
   return `${days}日前`;
+}
+
+function formatOperatorName(name) {
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) return "";
+  return trimmed === "Pick Up Question" ? "PUQ" : trimmed;
 }
 
 function normKey(key) {
@@ -236,9 +242,10 @@ class OperatorApp {
       userInfo: document.getElementById("user-info"),
       dictionaryToggle: document.getElementById("dictionary-toggle"),
       dictionaryPanel: document.getElementById("dictionary-panel"),
+      logsToggle: document.getElementById("logs-toggle"),
+      logsPanel: document.getElementById("logs-panel"),
       cardsContainer: document.getElementById("questions-cards"),
       dictionaryTableBody: document.querySelector("#dictionary-table tbody"),
-      logsTableBody: document.querySelector("#logs-table tbody"),
       addTermForm: document.getElementById("add-term-form"),
       newTermInput: document.getElementById("new-term"),
       newRubyInput: document.getElementById("new-ruby"),
@@ -247,7 +254,7 @@ class OperatorApp {
       selectAllCheckbox: document.getElementById("select-all-checkbox"),
       batchUnanswerBtn: document.getElementById("btn-batch-unanswer"),
       clearButton: document.getElementById("btn-clear"),
-      manualUpdateButton: document.getElementById("manual-update-button"),
+      logsRefreshButton: document.getElementById("logs-refresh-button"),
       fetchDictionaryButton: document.getElementById("fetch-dictionary-button"),
       logSearch: document.getElementById("log-search"),
       logAutoscroll: document.getElementById("log-autoscroll"),
@@ -256,6 +263,7 @@ class OperatorApp {
       loadingOverlay: document.getElementById("loading-overlay"),
       loadingText: document.getElementById("loading-text"),
       loaderSteps: document.getElementById("loader-steps"),
+      copyrightYear: document.getElementById("copyright-year"),
       render: {
         indicator: document.querySelector(".render-indicator"),
         lamp: document.getElementById("render-lamp"),
@@ -284,6 +292,7 @@ class OperatorApp {
     this.isAuthorized = false;
     this.dictionaryLoaded = false;
     this.preferredDictionaryOpen = false;
+    this.preferredLogsOpen = false;
 
     this.handleRenderUpdate = this.handleRenderUpdate.bind(this);
     this.login = this.login.bind(this);
@@ -294,12 +303,14 @@ class OperatorApp {
     this.clearTelop = this.clearTelop.bind(this);
     this.handleSelectAll = this.handleSelectAll.bind(this);
     this.handleBatchUnanswer = this.handleBatchUnanswer.bind(this);
-    this.switchMainTab = this.switchMainTab.bind(this);
     this.switchSubTab = this.switchSubTab.bind(this);
     this.fetchDictionary = this.fetchDictionary.bind(this);
     this.fetchLogs = this.fetchLogs.bind(this);
     this.addTerm = this.addTerm.bind(this);
     this.toggleDictionaryDrawer = this.toggleDictionaryDrawer.bind(this);
+    this.toggleLogsDrawer = this.toggleLogsDrawer.bind(this);
+    this.applyInitialLogsState = this.applyInitialLogsState.bind(this);
+    this.updateCopyrightYear = this.updateCopyrightYear.bind(this);
   }
 
   init() {
@@ -307,6 +318,8 @@ class OperatorApp {
     this.updateActionAvailability();
     this.attachRenderMonitor();
     this.applyInitialDictionaryState();
+    this.applyInitialLogsState();
+    this.updateCopyrightYear();
     onAuthStateChanged(auth, (user) => {
       if (this.authFlow === "prompting") {
         this.pendingAuthUser = user || null;
@@ -318,14 +331,12 @@ class OperatorApp {
 
   setupEventListeners() {
     this.dom.loginButton?.addEventListener("click", this.login);
-    document.querySelectorAll(".main-tab-button").forEach((button) => {
-      button.addEventListener("click", () => this.switchMainTab(button.dataset.tab));
-    });
     document.querySelectorAll(".sub-tab-button").forEach((button) => {
       button.addEventListener("click", () => this.switchSubTab(button.dataset.subTab));
     });
     this.dom.dictionaryToggle?.addEventListener("click", () => this.toggleDictionaryDrawer());
-    this.dom.manualUpdateButton?.addEventListener("click", this.fetchLogs);
+    this.dom.logsToggle?.addEventListener("click", () => this.toggleLogsDrawer());
+    this.dom.logsRefreshButton?.addEventListener("click", this.fetchLogs);
     this.dom.actionButtons[0]?.addEventListener("click", this.handleDisplay);
     this.dom.actionButtons[1]?.addEventListener("click", this.handleUnanswer);
     this.dom.actionButtons[2]?.addEventListener("click", this.handleEdit);
@@ -369,8 +380,14 @@ class OperatorApp {
     } else {
       const name = (now.name || "").trim();
       if (this.dom.render.title) {
-        this.dom.render.title.textContent =
-          name === "Pick Up Question" ? name : `ラジオネーム：${name}`;
+        const formattedName = formatOperatorName(name);
+        if (!name) {
+          this.dom.render.title.textContent = "—";
+        } else if (name === "Pick Up Question") {
+          this.dom.render.title.textContent = formattedName || "—";
+        } else {
+          this.dom.render.title.textContent = `ラジオネーム：${formattedName || name}`;
+        }
       }
       if (this.dom.render.question) {
         this.dom.render.question.textContent = String(now.question || "").replace(/\s+/g, " ").trim();
@@ -559,6 +576,11 @@ class OperatorApp {
       }
       this.setLoaderStep(6, "ログ取得…");
       await this.fetchLogs();
+      if (this.preferredLogsOpen) {
+        this.toggleLogsDrawer(true, false);
+      } else {
+        this.toggleLogsDrawer(false, false);
+      }
       this.finishLoaderSteps("準備完了");
       this.hideLoader();
       showToast(`ようこそ、${user.displayName || ""}さん`, "success");
@@ -601,6 +623,7 @@ class OperatorApp {
     this.isAuthorized = false;
     this.dictionaryLoaded = false;
     this.toggleDictionaryDrawer(false, false);
+    this.toggleLogsDrawer(false, false);
     this.cleanupRealtime();
     this.hideLoader();
   }
@@ -825,6 +848,60 @@ class OperatorApp {
     }
   }
 
+  applyInitialLogsState() {
+    let saved = "0";
+    try {
+      saved = localStorage.getItem(LOGS_STATE_KEY) || "0";
+    } catch (error) {
+      saved = "0";
+    }
+    const shouldOpen = saved === "1";
+    this.preferredLogsOpen = shouldOpen;
+    this.toggleLogsDrawer(shouldOpen, false);
+  }
+
+  toggleLogsDrawer(force, persist = true) {
+    const body = document.body;
+    if (!body) return;
+    const currentOpen = body.classList.contains("logs-open");
+    const nextOpen = typeof force === "boolean" ? force : !currentOpen;
+    body.classList.toggle("logs-open", nextOpen);
+    body.classList.toggle("logs-collapsed", !nextOpen);
+    if (this.dom.logsPanel) {
+      if (nextOpen) {
+        this.dom.logsPanel.removeAttribute("hidden");
+      } else {
+        this.dom.logsPanel.setAttribute("hidden", "");
+      }
+    }
+    if (this.dom.logsToggle) {
+      this.dom.logsToggle.setAttribute("aria-expanded", String(nextOpen));
+      this.dom.logsToggle.setAttribute("aria-label", nextOpen ? "操作ログを閉じる" : "操作ログを開く");
+      this.dom.logsToggle.setAttribute("title", nextOpen ? "操作ログを閉じる" : "操作ログを開く");
+    }
+    if (persist) {
+      try {
+        localStorage.setItem(LOGS_STATE_KEY, nextOpen ? "1" : "0");
+      } catch (error) {
+        console.debug("logs toggle state not persisted", error);
+      }
+      this.preferredLogsOpen = nextOpen;
+    }
+    if (nextOpen && (!Array.isArray(this.state.allLogs) || this.state.allLogs.length === 0)) {
+      this.fetchLogs().catch((error) => console.error("ログの読み込みに失敗しました", error));
+    }
+  }
+
+  updateCopyrightYear() {
+    if (!this.dom.copyrightYear) return;
+    const currentYear = new Date().getFullYear();
+    if (currentYear <= 2025) {
+      this.dom.copyrightYear.textContent = "2025";
+    } else {
+      this.dom.copyrightYear.textContent = `2025 - ${currentYear}`;
+    }
+  }
+
   async renderQuestions() {
     if (!this.dom.cardsContainer) return;
     let list = this.state.allQuestions.filter((item) => {
@@ -865,6 +942,10 @@ class OperatorApp {
       const statusText = status === "live" ? "表示中" : status === "answered" ? "回答済" : "未回答";
       const card = document.createElement("article");
       card.className = `q-card ${status === "live" ? "is-live" : ""} ${isAnswered ? "is-answered" : "is-pending"}`;
+      const isPuq = item["ラジオネーム"] === "Pick Up Question";
+      if (isPuq) {
+        card.classList.add("is-puq");
+      }
       card.dataset.uid = String(item.UID);
       if (live && live.name === item["ラジオネーム"] && live.question === item["質問・お悩み"]) {
         card.classList.add("now-displaying");
@@ -888,11 +969,16 @@ class OperatorApp {
           isAnswered
         };
       }
+      const rawName = item["ラジオネーム"];
+      const displayName = formatOperatorName(rawName);
+      const nameMarkup = isPuq
+        ? `<span class="q-name q-name--puq" aria-label="Pick Up Question">${escapeHtml(displayName)}</span>`
+        : `<span class="q-name">${escapeHtml(displayName)}</span>`;
+
       card.innerHTML = `
         <header class="q-head">
           <div class="q-title">
-            <span class="q-name">${escapeHtml(item["ラジオネーム"])}</span>
-            ${item["ラジオネーム"] === "Pick Up Question" ? '<span class="q-badge q-badge--puq">PUQ</span>' : ""}
+            ${nameMarkup}
           </div>
           <div class="q-meta">
             <span class="q-group">${escapeHtml(item["班番号"] ?? "") || ""}</span>
@@ -967,7 +1053,8 @@ class OperatorApp {
       }
       this.state.lastDisplayedUid = this.state.selectedRowData.uid;
       this.api.logAction("DISPLAY", `RN: ${this.state.selectedRowData.name}`);
-      showToast(`「${this.state.selectedRowData.name}」さんの質問を表示しました。`, "success");
+      const displayLabel = formatOperatorName(this.state.selectedRowData.name) || this.state.selectedRowData.name;
+      showToast(`「${displayLabel}」の質問を表示しました。`, "success");
     } catch (error) {
       showToast("表示処理中にエラーが発生しました: " + error.message, "error");
     }
@@ -1027,7 +1114,8 @@ class OperatorApp {
       return;
     }
     if (!this.state.selectedRowData || !this.state.selectedRowData.isAnswered) return;
-    if (!confirm(`「${this.state.selectedRowData.name}」の質問を「未回答」に戻しますか？`)) return;
+    const displayLabel = formatOperatorName(this.state.selectedRowData.name) || this.state.selectedRowData.name;
+    if (!confirm(`「${displayLabel}」の質問を「未回答」に戻しますか？`)) return;
     update(ref(database, `questions/${this.state.selectedRowData.uid}`), { answered: false });
     this.api.fireAndForgetApi({ action: "updateStatus", uid: this.state.selectedRowData.uid, status: false });
   }
@@ -1056,17 +1144,6 @@ class OperatorApp {
     }
     update(ref(database), updates);
     this.api.fireAndForgetApi({ action: "batchUpdateStatus", uids: uidsToUpdate, status: false });
-  }
-
-  switchMainTab(tabName) {
-    if (!tabName) return;
-    this.state.currentMainTab = tabName;
-    document.querySelectorAll(".main-tab-button").forEach((button) => {
-      button.classList.toggle("active", button.dataset.tab === tabName);
-    });
-    document.querySelectorAll(".main-tab-content").forEach((content) => {
-      content.classList.toggle("active", content.id === `${tabName}-content`);
-    });
   }
 
   switchSubTab(tabName) {
@@ -1104,7 +1181,7 @@ class OperatorApp {
     });
     if (this.dom.actionButtons[0]) this.dom.actionButtons[0].disabled = !!selection.isAnswered;
     if (this.dom.actionButtons[1]) this.dom.actionButtons[1].disabled = !selection.isAnswered;
-    const safeName = String(selection.name ?? "");
+    const safeName = formatOperatorName(selection.name) || "—";
     this.dom.selectedInfo.textContent = `選択中: ${safeName}`;
     this.updateBatchButtonVisibility();
   }
