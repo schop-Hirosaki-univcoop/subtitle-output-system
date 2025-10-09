@@ -43,7 +43,6 @@ const STEP_LABELS = [
 
 const GENRE_OPTIONS = ["学び", "活動", "暮らし", "食・スポット", "移動・季節", "その他"];
 const GENRE_LOOKUP = new Map(GENRE_OPTIONS.map((label) => [normKey(label), label]));
-const GENRE_ALL_KEY = "all";
 
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
@@ -68,9 +67,9 @@ function createInitialState(autoScroll = true) {
     allQuestions: [],
     allLogs: [],
     currentSubTab: "normal",
-    currentGenre: GENRE_ALL_KEY,
-    currentSchedule: "all",
-    lastNormalSchedule: "all",
+    currentGenre: GENRE_OPTIONS[0],
+    currentSchedule: "",
+    lastNormalSchedule: "",
     availableSchedules: [],
     selectedRowData: null,
     lastDisplayedUid: null,
@@ -683,17 +682,17 @@ class OperatorApp {
       this.dom.selectAllCheckbox.checked = false;
       this.dom.selectAllCheckbox.indeterminate = false;
     }
-    document.querySelectorAll(".genre-tab-button").forEach((button) => {
-      const isAll = button.dataset.genre === GENRE_ALL_KEY;
-      button.classList.toggle("active", isAll);
-      button.setAttribute("aria-selected", String(isAll));
+    document.querySelectorAll(".genre-tab-button").forEach((button, index) => {
+      const isDefault = index === 0;
+      button.classList.toggle("active", isDefault);
+      button.setAttribute("aria-selected", String(isDefault));
     });
     if (this.dom.scheduleFilter) {
-      this.dom.scheduleFilter.innerHTML = "<option value=\"all\">すべて</option>";
-      this.dom.scheduleFilter.value = "all";
-      this.dom.scheduleFilter.disabled = false;
+      this.dom.scheduleFilter.innerHTML = "";
+      this.dom.scheduleFilter.value = "";
+      this.dom.scheduleFilter.disabled = true;
       const wrapper = this.dom.scheduleFilter.closest(".schedule-filter");
-      if (wrapper) wrapper.classList.remove("is-disabled");
+      if (wrapper) wrapper.classList.add("is-disabled");
     }
     this.updateActionAvailability();
     this.updateBatchButtonVisibility();
@@ -953,8 +952,8 @@ class OperatorApp {
   async renderQuestions() {
     if (!this.dom.cardsContainer) return;
     const viewingPuqTab = this.state.currentSubTab === "puq";
-    const selectedGenre = this.state.currentGenre || GENRE_ALL_KEY;
-    const selectedSchedule = this.state.currentSchedule || "all";
+    const selectedGenre = this.state.currentGenre || GENRE_OPTIONS[0];
+    const selectedSchedule = this.state.currentSchedule || "";
     let list = this.state.allQuestions.filter((item) => {
       const isPuq = item["ラジオネーム"] === "Pick Up Question";
       if (viewingPuqTab) {
@@ -963,9 +962,9 @@ class OperatorApp {
         return false;
       }
       const itemGenre = String(item["ジャンル"] ?? "").trim() || "その他";
-      if (selectedGenre !== GENRE_ALL_KEY && itemGenre !== selectedGenre) return false;
+      if (selectedGenre && itemGenre !== selectedGenre) return false;
       const itemSchedule = String(item["日程"] ?? "").trim();
-      if (selectedSchedule !== "all" && itemSchedule !== selectedSchedule) return false;
+      if (selectedSchedule && itemSchedule !== selectedSchedule) return false;
       return true;
     });
     list.sort((a, b) => {
@@ -1034,13 +1033,7 @@ class OperatorApp {
       const groupMarkup = groupLabel
         ? `<span class="q-group" aria-label="班番号">${escapeHtml(groupLabel)}</span>`
         : "";
-      const genreLabel = String(item["ジャンル"] ?? "").trim();
-      const genreMarkup = genreLabel ? `<span class="chip chip--genre" aria-label="ジャンル">${escapeHtml(genreLabel)}</span>` : "";
-      const scheduleLabel = String(item["日程"] ?? "").trim();
-      const scheduleMarkup = scheduleLabel
-        ? `<span class="chip chip--schedule" aria-label="日程">${escapeHtml(scheduleLabel)}</span>`
-        : "";
-      const tagsMarkup = [groupMarkup, genreMarkup, scheduleMarkup].filter(Boolean).join("\n            ");
+      const tagsMarkup = [groupMarkup].filter(Boolean).join("\n            ");
 
       card.innerHTML = `
         <header class="q-head">
@@ -1238,8 +1231,8 @@ class OperatorApp {
 
   switchGenre(genreKey) {
     if (!genreKey) return;
-    const current = this.state.currentGenre || GENRE_ALL_KEY;
-    const nextGenre = genreKey === GENRE_ALL_KEY ? GENRE_ALL_KEY : resolveGenreLabel(genreKey);
+    const current = this.state.currentGenre || GENRE_OPTIONS[0];
+    const nextGenre = resolveGenreLabel(genreKey);
     if (nextGenre === current) return;
     this.state.currentGenre = nextGenre;
     document.querySelectorAll(".genre-tab-button").forEach((button) => {
@@ -1248,10 +1241,10 @@ class OperatorApp {
       button.setAttribute("aria-selected", String(isActive));
     });
     if (this.state.currentSubTab !== "puq") {
-      this.state.lastNormalSchedule = "all";
-      this.state.currentSchedule = "all";
+      this.state.lastNormalSchedule = "";
+      this.state.currentSchedule = "";
       if (this.dom.scheduleFilter) {
-        this.dom.scheduleFilter.value = "all";
+        this.dom.scheduleFilter.value = "";
       }
     }
     this.updateScheduleOptions();
@@ -1261,7 +1254,7 @@ class OperatorApp {
   handleScheduleChange(event) {
     const select = event?.target;
     if (!(select instanceof HTMLSelectElement)) return;
-    const value = select.value || "all";
+    const value = select.value || "";
     this.state.currentSchedule = value;
     if (this.state.currentSubTab !== "puq") {
       this.state.lastNormalSchedule = value;
@@ -1273,14 +1266,14 @@ class OperatorApp {
     const select = this.dom.scheduleFilter;
     if (!select) return;
     const isNormalTab = this.state.currentSubTab !== "puq";
-    const selectedGenre = this.state.currentGenre || GENRE_ALL_KEY;
+    const selectedGenre = this.state.currentGenre || GENRE_OPTIONS[0];
     const scheduleSet = new Set();
     if (isNormalTab) {
       for (const item of this.state.allQuestions) {
         const isPuq = item["ラジオネーム"] === "Pick Up Question";
         if (isPuq) continue;
         const itemGenre = String(item["ジャンル"] ?? "").trim() || "その他";
-        if (selectedGenre !== GENRE_ALL_KEY && itemGenre !== selectedGenre) continue;
+        if (selectedGenre && itemGenre !== selectedGenre) continue;
         const scheduleLabel = String(item["日程"] ?? "").trim();
         if (!scheduleLabel) continue;
         scheduleSet.add(scheduleLabel);
@@ -1292,10 +1285,6 @@ class OperatorApp {
       nextList.length !== prevList.length || nextList.some((value, index) => value !== prevList[index]);
     if (changed) {
       select.innerHTML = "";
-      const optionAll = document.createElement("option");
-      optionAll.value = "all";
-      optionAll.textContent = "すべて";
-      select.appendChild(optionAll);
       nextList.forEach((value) => {
         const opt = document.createElement("option");
         opt.value = value;
@@ -1304,14 +1293,21 @@ class OperatorApp {
       });
     }
     this.state.availableSchedules = nextList;
-    let nextValue = this.state.currentSchedule || "all";
-    if (!isNormalTab) {
-      nextValue = "all";
-    } else if (nextValue !== "all" && !nextList.includes(nextValue)) {
-      nextValue = "all";
+    let nextValue = "";
+    if (isNormalTab && nextList.length > 0) {
+      const { currentSchedule, lastNormalSchedule } = this.state;
+      if (currentSchedule && nextList.includes(currentSchedule)) {
+        nextValue = currentSchedule;
+      } else if (lastNormalSchedule && nextList.includes(lastNormalSchedule)) {
+        nextValue = lastNormalSchedule;
+      } else {
+        nextValue = nextList[0];
+      }
     }
-    if (select.value !== nextValue) {
+    if (nextValue) {
       select.value = nextValue;
+    } else {
+      select.value = "";
     }
     this.state.currentSchedule = nextValue;
     if (isNormalTab) {
@@ -1339,9 +1335,9 @@ class OperatorApp {
     });
     if (tabName === "puq" && previous !== "puq") {
       this.state.lastNormalSchedule = this.state.currentSchedule;
-      this.state.currentSchedule = "all";
+      this.state.currentSchedule = "";
     } else if (previous === "puq" && tabName !== "puq") {
-      this.state.currentSchedule = this.state.lastNormalSchedule || "all";
+      this.state.currentSchedule = this.state.lastNormalSchedule || "";
     }
     this.updateScheduleOptions();
     this.renderQuestions();
