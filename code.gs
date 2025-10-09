@@ -36,7 +36,11 @@ function doPost(e) {
     if (!action) throw new Error('Missing action');
 
     const displayActions = new Set(['beginDisplaySession', 'heartbeatDisplaySession', 'endDisplaySession']);
-    const principal = requireAuth_(idToken, displayActions.has(action) ? { allowAnonymous: true } : {});
+    const noAuthActions = new Set(['submitQuestion']);
+    let principal = null;
+    if (!noAuthActions.has(action)) {
+      principal = requireAuth_(idToken, displayActions.has(action) ? { allowAnonymous: true } : {});
+    }
 
     switch (action) {
       case 'beginDisplaySession':
@@ -47,6 +51,8 @@ function doPost(e) {
         return jsonOk(endDisplaySession_(principal, req.sessionId, req.reason));
       case 'ensureAdmin':
         return jsonOk(ensureAdmin_(principal));
+      case 'submitQuestion':
+        return jsonOk(submitQuestion_(req));
       case 'mirrorSheet':
         assertOperator_(principal);
         return jsonOk(mirrorSheetToRtdb_());
@@ -88,6 +94,75 @@ function doPost(e) {
   } catch (err) {
     return jsonErr_(err);
   }
+}
+
+function submitQuestion_(payload) {
+  const radioName = String(payload.radioName || payload.name || '').trim();
+  const questionText = String(payload.question || payload.text || '').trim();
+  const groupNumber = String(payload.groupNumber || payload.group || '').trim();
+  const rawGenre = String(payload.genre || '').trim();
+  const rawSchedule = String(payload.schedule || payload.date || '').trim();
+  const rawAnswerTime = String(payload.answerTime || payload.answerSlot || '').trim();
+
+  if (!radioName) throw new Error('ラジオネームを入力してください。');
+  if (!questionText) throw new Error('質問・お悩みを入力してください。');
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('answer');
+  if (!sheet) throw new Error('Sheet "answer" not found.');
+
+  const lastColumn = sheet.getLastColumn();
+  if (lastColumn < 1) throw new Error('answer sheet has no headers.');
+
+  const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
+  const norm = s => String(s || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
+  const headerMap = new Map();
+  headers.forEach((header, index) => {
+    if (header == null) return;
+    headerMap.set(norm(header), index);
+  });
+
+  const requiredHeaders = ['ラジオネーム', '質問・お悩み', 'uid'];
+  requiredHeaders.forEach(key => {
+    if (!headerMap.has(norm(key))) {
+      throw new Error(`Column "${key}" not found in answer sheet.`);
+    }
+  });
+
+  const newRow = Array.from({ length: headers.length }, () => '');
+  const setValue = (headerKey, value) => {
+    const idx = headerMap.get(norm(headerKey));
+    if (idx == null || idx < 0) return;
+    newRow[idx] = value;
+  };
+
+  const timestamp = new Date();
+  const uid = Utilities.getUuid();
+
+  setValue('タイムスタンプ', timestamp);
+  setValue('Timestamp', timestamp);
+  setValue('ラジオネーム', radioName);
+  setValue('質問・お悩み', questionText);
+  if (groupNumber) {
+    setValue('班番号', groupNumber);
+  }
+  const genreValue = rawGenre || 'その他';
+  setValue('ジャンル', genreValue);
+  setValue('日程', rawSchedule);
+  if (rawAnswerTime) {
+    setValue('回答時間', rawAnswerTime);
+  }
+  setValue('回答済', false);
+  setValue('選択中', false);
+  setValue('UID', uid);
+
+  sheet.appendRow(newRow);
+  try {
+    notifyUpdate('answer');
+  } catch (e) {
+    console.warn('notifyUpdate failed after submitQuestion_', e);
+  }
+
+  return { uid, timestamp: toIsoJst_(timestamp) };
 }
 
 function ensureAdmin_(principal){
