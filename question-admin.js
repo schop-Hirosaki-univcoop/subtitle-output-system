@@ -1004,6 +1004,7 @@ async function verifyEnrollment(user) {
 async function ensureAdminAccess() {
   try {
     await api.apiPost({ action: "ensureAdmin" });
+    await waitForQuestionIntakeAccess({ attempts: 6, initialDelay: 250 });
   } catch (error) {
     throw new Error(error.message || "管理者権限の確認に失敗しました。");
   }
