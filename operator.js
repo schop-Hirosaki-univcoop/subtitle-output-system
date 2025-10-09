@@ -945,6 +945,10 @@ class OperatorApp {
       const statusText = status === "live" ? "表示中" : status === "answered" ? "回答済" : "未回答";
       const card = document.createElement("article");
       card.className = `q-card ${status === "live" ? "is-live" : ""} ${isAnswered ? "is-answered" : "is-pending"}`;
+      const isPuq = item["ラジオネーム"] === "Pick Up Question";
+      if (isPuq) {
+        card.classList.add("is-puq");
+      }
       card.dataset.uid = String(item.UID);
       if (live && live.name === item["ラジオネーム"] && live.question === item["質問・お悩み"]) {
         card.classList.add("now-displaying");
