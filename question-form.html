@@ -31,9 +31,10 @@
           <p id="welcome-line" class="context-text"></p>
           <p id="schedule-line" class="context-text"></p>
         </div>
-        <div id="context-guard" class="context-guard" role="alert" hidden></div>
+        <div id="context-guard" class="context-guard" role="alert" aria-live="assertive" hidden></div>
 
         <form id="question-form" class="intake-form" novalidate autocomplete="on" hidden>
+          <input id="access-token" name="access-token" type="hidden">
           <input id="event-id" name="event-id" type="hidden">
           <input id="event-name" name="event-name" type="hidden">
           <input id="schedule-id" name="schedule-id" type="hidden">
@@ -47,8 +48,10 @@
               <label for="radio-name">ラジオネーム</label>
               <span class="field-tag field-tag--required">必須</span>
             </div>
-            <input id="radio-name" name="radio-name" type="text" class="input" inputmode="text" autocomplete="name" required>
-            <p class="field-hint">必要に応じて編集いただけます。</p>
+            <input id="radio-name" name="radio-name" type="text" class="input" inputmode="text" autocomplete="name" maxlength="40" required>
+            <div class="field-footer">
+              <p class="field-hint">40文字まで。特殊文字は使用できない場合があります。</p>
+            </div>
           </div>
 
           <div class="form-field">
@@ -56,7 +59,11 @@
               <label for="question-text">質問・お悩み</label>
               <span class="field-tag field-tag--required">必須</span>
             </div>
-            <textarea id="question-text" name="question-text" class="input input--textarea" rows="6" placeholder="質問や相談内容を入力してください" required></textarea>
+            <textarea id="question-text" name="question-text" class="input input--textarea" rows="6" maxlength="400" placeholder="質問や相談内容を入力してください" required></textarea>
+            <div class="field-footer">
+              <p class="field-hint">句読点や改行を含めて400文字以内で入力してください。</p>
+              <p id="question-counter" class="field-hint field-hint--status" role="status" aria-live="polite">0 / 400文字</p>
+            </div>
           </div>
 
           <div class="form-field">
@@ -79,6 +86,11 @@
             <p class="form-feedback" id="form-feedback" role="alert" aria-live="polite"></p>
           </div>
         </form>
+        <div class="form-meta" id="form-meta" hidden>
+          <p class="form-meta-line" id="form-guidance" hidden></p>
+          <p class="form-meta-line">フォームの利用方法やリンクに関するお問い合わせは、運営からのご案内に従ってください。</p>
+          <p class="form-meta-line">送信後に内容を修正したい場合は、配布元までご連絡ください。</p>
+        </div>
       </div>
     </section>
   </main>

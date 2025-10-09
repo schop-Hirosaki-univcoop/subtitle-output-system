@@ -41,6 +41,78 @@
       ".write": "auth != null && root.child('admins').child(auth.uid).val() == true"
     },
 
+    "questionIntake": {
+      ".read": false,
+      ".write": false,
+      "events": {
+        "$eventId": {
+          ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+          ".write": "auth != null && root.child('admins').child(auth.uid).val() == true",
+          ".validate": "!newData.exists() || (newData.hasChildren(['name']) && newData.child('name').isString())",
+          "name": { ".validate": "newData.isString()" },
+          "createdAt": { ".validate": "newData.isNumber() || !newData.exists()" },
+          "updatedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
+          "$other": { ".validate": false }
+        }
+      },
+      "schedules": {
+        "$eventId": {
+          ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+          "$scheduleId": {
+            ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+            ".write": "auth != null && root.child('admins').child(auth.uid).val() == true",
+            ".validate": "!newData.exists() || (newData.hasChildren(['label']) && newData.child('label').isString())",
+            "label": { ".validate": "newData.isString()" },
+            "date": { ".validate": "newData.isString() || !newData.exists()" },
+            "participantCount": { ".validate": "newData.isNumber() || !newData.exists()" },
+            "createdAt": { ".validate": "newData.isNumber() || !newData.exists()" },
+            "updatedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
+            "$other": { ".validate": false }
+          }
+        }
+      },
+      "participants": {
+        "$eventId": {
+          ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+          "$scheduleId": {
+            ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+            "$participantId": {
+              ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+              ".write": "auth != null && root.child('admins').child(auth.uid).val() == true",
+              ".validate": "!newData.exists() || (newData.hasChildren(['participantId','name','groupNumber','token']) && newData.child('participantId').isString() && newData.child('name').isString() && newData.child('groupNumber').isString() && newData.child('token').isString())",
+              "participantId": { ".validate": "newData.isString()" },
+              "name": { ".validate": "newData.isString()" },
+              "groupNumber": { ".validate": "newData.isString()" },
+              "token": { ".validate": "newData.isString()" },
+              "guidance": { ".validate": "newData.isString() || !newData.exists()" },
+              "updatedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
+              "$other": { ".validate": false }
+            }
+          }
+        }
+      },
+      "tokens": {
+        "$token": {
+          ".read": true,
+          ".write": "auth != null && root.child('admins').child(auth.uid).val() == true",
+          ".validate": "!newData.exists() || (newData.hasChildren(['eventId','scheduleId','participantId','displayName','groupNumber']) && newData.child('eventId').isString() && newData.child('scheduleId').isString() && newData.child('participantId').isString() && newData.child('displayName').isString() && newData.child('groupNumber').isString())",
+          "eventId": { ".validate": "newData.isString()" },
+          "eventName": { ".validate": "newData.isString() || !newData.exists()" },
+          "scheduleId": { ".validate": "newData.isString()" },
+          "scheduleLabel": { ".validate": "newData.isString() || !newData.exists()" },
+          "scheduleDate": { ".validate": "newData.isString() || !newData.exists()" },
+          "participantId": { ".validate": "newData.isString()" },
+          "displayName": { ".validate": "newData.isString()" },
+          "groupNumber": { ".validate": "newData.isString()" },
+          "guidance": { ".validate": "newData.isString() || !newData.exists()" },
+          "updatedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
+          "createdAt": { ".validate": "newData.isNumber() || !newData.exists()" },
+          "revoked": { ".validate": "newData.isBoolean() || !newData.exists()" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+
     "update_trigger": {
       ".read": true,
       ".write": "auth != null"
