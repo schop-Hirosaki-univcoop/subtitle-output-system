@@ -301,6 +301,7 @@ class OperatorApp {
     this.clearTelop = this.clearTelop.bind(this);
     this.handleSelectAll = this.handleSelectAll.bind(this);
     this.handleBatchUnanswer = this.handleBatchUnanswer.bind(this);
+    this.syncSelectAllState = this.syncSelectAllState.bind(this);
     this.switchSubTab = this.switchSubTab.bind(this);
     this.fetchDictionary = this.fetchDictionary.bind(this);
     this.fetchLogs = this.fetchLogs.bind(this);
@@ -345,6 +346,7 @@ class OperatorApp {
     this.dom.batchUnanswerBtn?.addEventListener("click", this.handleBatchUnanswer);
     this.dom.cardsContainer?.addEventListener("change", (event) => {
       if (event.target instanceof HTMLInputElement && event.target.classList.contains("row-checkbox")) {
+        this.syncSelectAllState();
         this.updateBatchButtonVisibility();
       }
     });
@@ -647,7 +649,10 @@ class OperatorApp {
     this.logsUpdateTimer = null;
     const autoScroll = this.dom.logAutoscroll ? this.dom.logAutoscroll.checked : true;
     this.state = createInitialState(autoScroll);
-    if (this.dom.selectAllCheckbox) this.dom.selectAllCheckbox.checked = false;
+    if (this.dom.selectAllCheckbox) {
+      this.dom.selectAllCheckbox.checked = false;
+      this.dom.selectAllCheckbox.indeterminate = false;
+    }
     this.updateActionAvailability();
     this.updateBatchButtonVisibility();
     if (this.dom.cardsContainer) this.dom.cardsContainer.innerHTML = "";
@@ -1013,6 +1018,7 @@ class OperatorApp {
       this.state.selectedRowData = null;
       this.updateActionAvailability();
     }
+    this.syncSelectAllState();
     this.updateBatchButtonVisibility();
   }
 
@@ -1121,29 +1127,46 @@ class OperatorApp {
   }
 
   handleSelectAll(event) {
+    if (!(event.target instanceof HTMLInputElement)) return;
+    const isChecked = event.target.checked;
     this.dom.cardsContainer
       ?.querySelectorAll(".row-checkbox")
       .forEach((checkbox) => {
-        checkbox.checked = event.target.checked;
+        checkbox.checked = isChecked;
       });
+    this.syncSelectAllState();
     this.updateBatchButtonVisibility();
   }
 
-  handleBatchUnanswer() {
+  async handleBatchUnanswer() {
     if (!this.state.displaySessionActive) {
       showToast("表示端末が接続されていません。", "error");
       return;
     }
-    const checkedBoxes = this.dom.cardsContainer?.querySelectorAll(".row-checkbox:checked");
-    if (!checkedBoxes || checkedBoxes.length === 0) return;
+    const checkedBoxes = Array.from(this.dom.cardsContainer?.querySelectorAll(".row-checkbox:checked") || []);
+    if (checkedBoxes.length === 0) return;
     if (!confirm(`${checkedBoxes.length}件の質問を「未回答」に戻しますか？`)) return;
-    const uidsToUpdate = Array.from(checkedBoxes).map((checkbox) => checkbox.dataset.uid);
+    const uidsToUpdate = checkedBoxes.map((checkbox) => checkbox.dataset.uid);
     const updates = {};
     for (const uid of uidsToUpdate) {
       updates[`questions/${uid}/answered`] = false;
     }
-    update(ref(database), updates);
-    this.api.fireAndForgetApi({ action: "batchUpdateStatus", uids: uidsToUpdate, status: false });
+    try {
+      await update(ref(database), updates);
+      this.api.fireAndForgetApi({ action: "batchUpdateStatus", uids: uidsToUpdate, status: false });
+      checkedBoxes.forEach((checkbox) => {
+        checkbox.checked = false;
+      });
+      if (this.dom.selectAllCheckbox) {
+        this.dom.selectAllCheckbox.checked = false;
+        this.dom.selectAllCheckbox.indeterminate = false;
+      }
+      this.syncSelectAllState();
+      this.updateBatchButtonVisibility();
+    } catch (error) {
+      console.error("Failed to batch unanswer", error);
+      showToast("未回答への戻し中にエラーが発生しました。", "error");
+    }
   }
 
   switchSubTab(tabName) {
@@ -1192,6 +1215,23 @@ class OperatorApp {
     const checkedCount = active ? this.dom.cardsContainer?.querySelectorAll(".row-checkbox:checked").length || 0 : 0;
     this.dom.batchUnanswerBtn.style.display = active && checkedCount > 0 ? "inline-block" : "none";
     this.dom.batchUnanswerBtn.disabled = !active || checkedCount === 0;
+  }
+
+  syncSelectAllState() {
+    if (!this.dom.selectAllCheckbox) return;
+    const checkboxes = Array.from(this.dom.cardsContainer?.querySelectorAll(".row-checkbox") || []);
+    const total = checkboxes.length;
+    if (total === 0) {
+      this.dom.selectAllCheckbox.checked = false;
+      this.dom.selectAllCheckbox.indeterminate = false;
+      return;
+    }
+    let checked = 0;
+    checkboxes.forEach((checkbox) => {
+      if (checkbox instanceof HTMLInputElement && checkbox.checked) checked += 1;
+    });
+    this.dom.selectAllCheckbox.checked = checked === total;
+    this.dom.selectAllCheckbox.indeterminate = checked > 0 && checked < total;
   }
 
   async addTerm(event) {

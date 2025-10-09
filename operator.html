@@ -73,18 +73,21 @@
                 </div>
             </div>
             <div class="module-body" id="questions-content">
-                <div id="sub-tab-buttons" class="sub-tabs" role="tablist" aria-label="質問種別">
-                    <button class="sub-tab-button active" data-sub-tab="normal" role="tab" aria-selected="true">通常質問</button>
-                    <button class="sub-tab-button" data-sub-tab="puq" role="tab" aria-selected="false">Pick Up Question</button>
+                <div class="cards-sticky">
+                    <div id="sub-tab-buttons" class="sub-tabs" role="tablist" aria-label="質問種別">
+                        <button class="sub-tab-button active" data-sub-tab="normal" role="tab" aria-selected="true">通常質問</button>
+                        <button class="sub-tab-button" data-sub-tab="puq" role="tab" aria-selected="false">Pick Up Question</button>
+                    </div>
+                    <div class="cards-toolbar">
+                        <label class="chk">
+                            <input id="select-all-checkbox" type="checkbox" />
+                            全選択
+                        </label>
+                    </div>
                 </div>
-                <!-- 質問リスト（カードビュー） -->
-                <div class="cards-toolbar">
-                    <label class="chk">
-                        <input id="select-all-checkbox" type="checkbox" />
-                        全選択
-                    </label>
+                <div class="cards-scroll">
+                    <div id="questions-cards" class="cards-list" aria-live="polite"></div>
                 </div>
-                <div id="questions-cards" class="cards-list" aria-live="polite"></div>
             </div>
         </section>
         <aside class="module module--secondary" id="dictionary-panel" aria-labelledby="dictionary-title" hidden>
