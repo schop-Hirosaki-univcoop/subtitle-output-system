@@ -4,83 +4,98 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>質問受付フォーム</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2712%27%20fill%3D%2705111f%27%2F%3E%3Ctext%20x%3D%2732%27%20y%3D%2742%27%20text-anchor%3D%27middle%27%20font-family%3D%27Arial%2C%20sans-serif%27%20font-size%3D%2736%27%20fill%3D%2700eaff%27%3EQ%3C%2Ftext%3E%3C%2Fsvg%3E">
+  <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="question-form.css">
 </head>
-<body>
-  <main class="form-shell">
-    <header class="form-header">
-      <h1 class="form-title">質問受付フォーム</h1>
-      <p class="form-lead">ラジオネームと質問内容を入力して送信してください。URLに含まれる日程情報は自動的に反映されます。</p>
-    </header>
-
-    <section class="helper-card" aria-labelledby="csv-help-title">
-      <div class="helper-card__body">
-        <h2 id="csv-help-title">班番号リストの読み込み（任意）</h2>
-        <p>ラジオネームと班番号が対応した <code>CSV</code> ファイルを読み込むと、ラジオネーム入力時に班番号が自動入力されます。同じブラウザでは次回以降も自動で利用されます。</p>
-        <div class="helper-controls">
-          <label class="file-picker">
-            <span class="file-picker__label">CSVファイルを選択</span>
-            <input type="file" id="csv-upload" accept=".csv,text/csv">
-          </label>
-          <div class="helper-status" id="csv-status" role="status" aria-live="polite">班番号リストは未読み込みです。</div>
+<body class="op-theme question-form-page">
+  <header class="op-header">
+    <div class="header-inner">
+      <div class="brand-block" aria-label="フォーム情報">
+        <span class="brand-mark">TELoP OPS</span>
+        <span class="brand-tagline">Question Intake Desk</span>
+      </div>
+      <div class="header-actions">
+        <div class="header-controls">
+          <a class="btn btn-ghost btn-sm" href="question-admin.html">運営者向け管理</a>
         </div>
-        <details class="helper-details">
-          <summary>CSVの形式について</summary>
-          <p>1列目にラジオネーム、2列目に班番号を配置してください。ヘッダー行（例: <code>ラジオネーム,班番号</code>）があっても読み込めます。</p>
-        </details>
+      </div>
+    </div>
+  </header>
+
+  <main class="single-main" id="question-main">
+    <section class="module module--primary intake-module" aria-labelledby="form-title">
+      <div class="module-header">
+        <div class="module-heading">
+          <h1 id="form-title">質問受付フォーム</h1>
+          <p class="module-description">ラジオネームと質問内容を入力して送信してください。ページURLに含まれる日程が自動入力されます。</p>
+        </div>
+      </div>
+      <div class="module-body">
+        <form id="question-form" class="intake-form" novalidate autocomplete="on">
+          <div class="form-field">
+            <div class="field-header">
+              <label for="radio-name">ラジオネーム</label>
+              <span class="field-tag field-tag--required">必須</span>
+            </div>
+            <input id="radio-name" name="radio-name" type="text" class="input" inputmode="text" autocomplete="name" required>
+          </div>
+
+          <div class="form-field">
+            <div class="field-header">
+              <label for="question-text">質問・お悩み</label>
+              <span class="field-tag field-tag--required">必須</span>
+            </div>
+            <textarea id="question-text" name="question-text" class="input input--textarea" rows="6" placeholder="質問や相談内容を入力してください" required></textarea>
+          </div>
+
+          <div class="form-field">
+            <div class="field-header">
+              <label for="group-number">班番号</label>
+              <span class="field-tag">任意</span>
+            </div>
+            <input id="group-number" name="group-number" type="text" class="input" inputmode="text" autocomplete="off" placeholder="例: 3">
+            <p class="field-hint" id="group-hint">ラジオネームに対応する班番号が見つかった場合、自動で入力されます。</p>
+            <p class="field-hint field-hint--status" id="mapping-status" aria-live="polite"></p>
+          </div>
+
+          <div class="form-field">
+            <div class="field-header">
+              <label for="genre">ジャンル</label>
+              <span class="field-tag field-tag--required">必須</span>
+            </div>
+            <select id="genre" name="genre" class="input" required>
+              <option value="学び">学び</option>
+              <option value="活動">活動</option>
+              <option value="暮らし">暮らし</option>
+              <option value="食・スポット">食・スポット</option>
+              <option value="移動・季節">移動・季節</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <div class="field-header">
+              <label for="schedule">日程</label>
+              <span class="field-tag field-tag--required">必須</span>
+            </div>
+            <input id="schedule" name="schedule" type="text" class="input" placeholder="例: 2024-05-01" required readonly>
+            <p class="field-hint" id="schedule-hint">URLに設定された日程を使用しています。</p>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="submit-button">送信する</button>
+            <p class="form-feedback" id="form-feedback" role="alert" aria-live="polite"></p>
+          </div>
+        </form>
       </div>
     </section>
-
-    <form id="question-form" class="question-card" autocomplete="on" novalidate>
-      <fieldset class="form-fieldset">
-        <legend class="visually-hidden">質問内容</legend>
-
-        <label class="form-field" for="radio-name">
-          <span class="field-label">ラジオネーム <span class="required">必須</span></span>
-          <input id="radio-name" name="radio-name" type="text" inputmode="text" autocomplete="name" required>
-        </label>
-
-        <label class="form-field" for="question-text">
-          <span class="field-label">質問・お悩み <span class="required">必須</span></span>
-          <textarea id="question-text" name="question-text" rows="6" required placeholder="質問や相談内容を入力してください"></textarea>
-        </label>
-
-        <label class="form-field" for="group-number">
-          <span class="field-label">班番号 <span class="optional">任意</span></span>
-          <input id="group-number" name="group-number" type="text" inputmode="text" autocomplete="off" placeholder="例: 3">
-          <small class="field-hint" id="group-hint">CSVを読み込むとラジオネームから自動入力されます。</small>
-        </label>
-
-        <label class="form-field" for="genre">
-          <span class="field-label">ジャンル <span class="required">必須</span></span>
-          <select id="genre" name="genre" required>
-            <option value="学び">学び</option>
-            <option value="活動">活動</option>
-            <option value="暮らし">暮らし</option>
-            <option value="食・スポット">食・スポット</option>
-            <option value="移動・季節">移動・季節</option>
-            <option value="その他">その他</option>
-          </select>
-        </label>
-
-        <label class="form-field" for="schedule">
-          <span class="field-label">日程 <span class="required">必須</span></span>
-          <input id="schedule" name="schedule" type="text" required placeholder="例: 2024-05-01" readonly>
-          <small class="field-hint" id="schedule-hint">このページのURLに含まれる日程情報が自動入力されます。</small>
-        </label>
-
-        <label class="form-field" for="answer-time">
-          <span class="field-label">回答時間 <span class="optional">任意</span></span>
-          <input id="answer-time" name="answer-time" type="text" inputmode="text" placeholder="例: 19:30頃">
-        </label>
-      </fieldset>
-
-      <div class="form-actions">
-        <button type="submit" class="submit-button">送信する</button>
-        <p class="form-feedback" id="form-feedback" role="alert" aria-live="polite"></p>
-      </div>
-    </form>
   </main>
+
+  <footer class="site-footer">
+    <div class="credit-line">Created by <span class="credit-highlight">23schop Maruo Kyohei</span></div>
+    <div class="credit-line">&copy; <span id="copyright-year">2025</span> Hirosaki Univ. Co-op. SCHOP</div>
+  </footer>
 
   <script src="question-form.js" type="module"></script>
 </body>

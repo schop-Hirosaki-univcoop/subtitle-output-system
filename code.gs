@@ -36,7 +36,7 @@ function doPost(e) {
     if (!action) throw new Error('Missing action');
 
     const displayActions = new Set(['beginDisplaySession', 'heartbeatDisplaySession', 'endDisplaySession']);
-    const noAuthActions = new Set(['submitQuestion']);
+    const noAuthActions = new Set(['submitQuestion', 'fetchNameMappings']);
     let principal = null;
     if (!noAuthActions.has(action)) {
       principal = requireAuth_(idToken, displayActions.has(action) ? { allowAnonymous: true } : {});
@@ -53,6 +53,11 @@ function doPost(e) {
         return jsonOk(ensureAdmin_(principal));
       case 'submitQuestion':
         return jsonOk(submitQuestion_(req));
+      case 'fetchNameMappings':
+        return jsonOk({ mappings: fetchNameMappings_() });
+      case 'saveNameMappings':
+        assertOperator_(principal);
+        return jsonOk(saveNameMappings_(req.entries));
       case 'mirrorSheet':
         assertOperator_(principal);
         return jsonOk(mirrorSheetToRtdb_());
@@ -102,7 +107,6 @@ function submitQuestion_(payload) {
   const groupNumber = String(payload.groupNumber || payload.group || '').trim();
   const rawGenre = String(payload.genre || '').trim();
   const rawSchedule = String(payload.schedule || payload.date || '').trim();
-  const rawAnswerTime = String(payload.answerTime || payload.answerSlot || '').trim();
 
   if (!radioName) throw new Error('ラジオネームを入力してください。');
   if (!questionText) throw new Error('質問・お悩みを入力してください。');
@@ -148,9 +152,7 @@ function submitQuestion_(payload) {
   const genreValue = rawGenre || 'その他';
   setValue('ジャンル', genreValue);
   setValue('日程', rawSchedule);
-  if (rawAnswerTime) {
-    setValue('回答時間', rawAnswerTime);
-  }
+  setValue('uid', uid);
   setValue('回答済', false);
   setValue('選択中', false);
   setValue('UID', uid);
@@ -163,6 +165,87 @@ function submitQuestion_(payload) {
   }
 
   return { uid, timestamp: toIsoJst_(timestamp) };
+}
+
+const NAME_MAP_SHEET_NAME = 'name_mappings';
+
+function ensureNameMapSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(NAME_MAP_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(NAME_MAP_SHEET_NAME);
+  }
+
+  const headerRange = sheet.getRange(1, 1, 1, 2);
+  const headers = headerRange.getValues()[0];
+  const expected = ['ラジオネーム', '班番号'];
+  if (headers[0] !== expected[0] || headers[1] !== expected[1]) {
+    headerRange.setValues([expected]);
+  }
+
+  return sheet;
+}
+
+function normalizeNameKey_(value) {
+  return String(value || '')
+    .trim()
+    .normalize('NFKC');
+}
+
+function normalizeNameForLookup_(value) {
+  return normalizeNameKey_(value).replace(/[\u200B-\u200D\uFEFF]/g, '');
+}
+
+function readNameMappings_() {
+  const sheet = ensureNameMapSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return [];
+  }
+
+  const values = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  return values
+    .map(row => ({
+      name: normalizeNameKey_(row[0]),
+      groupNumber: String(row[1] || '').trim()
+    }))
+    .filter(entry => entry.name && entry.groupNumber);
+}
+
+function fetchNameMappings_() {
+  return readNameMappings_();
+}
+
+function saveNameMappings_(entries) {
+  if (!Array.isArray(entries)) {
+    throw new Error('Invalid payload: entries');
+  }
+
+  const deduped = [];
+  const seen = new Set();
+  entries.forEach(entry => {
+    if (!entry) return;
+    const name = normalizeNameKey_(entry.name || entry.radioName || '');
+    const groupNumber = String(entry.groupNumber || entry.group || '').trim();
+    if (!name || !groupNumber) return;
+    const lookup = normalizeNameForLookup_(name);
+    if (seen.has(lookup)) return;
+    seen.add(lookup);
+    deduped.push({ name, groupNumber });
+  });
+
+  const sheet = ensureNameMapSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, 2).clearContent();
+  }
+
+  if (deduped.length) {
+    const values = deduped.map(entry => [entry.name, entry.groupNumber]);
+    sheet.getRange(2, 1, values.length, 2).setValues(values);
+  }
+
+  return { count: deduped.length };
 }
 
 function ensureAdmin_(principal){
