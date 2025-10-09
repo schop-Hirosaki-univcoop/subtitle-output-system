@@ -56,6 +56,7 @@ const questionsRef = ref(database, "questions");
 const telopRef = ref(database, "currentTelop");
 const updateTriggerRef = ref(database, "update_trigger");
 const dictionaryRef = ref(database, "dictionary");
+const DICTIONARY_STATE_KEY = "telop-ops-dictionary-open";
 
 function createInitialState(autoScroll = true) {
   return {
@@ -233,6 +234,8 @@ class OperatorApp {
       mainContainer: document.getElementById("main-container"),
       actionPanel: document.getElementById("action-panel"),
       userInfo: document.getElementById("user-info"),
+      dictionaryToggle: document.getElementById("dictionary-toggle"),
+      dictionaryPanel: document.getElementById("dictionary-panel"),
       cardsContainer: document.getElementById("questions-cards"),
       dictionaryTableBody: document.querySelector("#dictionary-table tbody"),
       logsTableBody: document.querySelector("#logs-table tbody"),
@@ -278,6 +281,9 @@ class OperatorApp {
     this.logsUpdateTimer = null;
     this.authFlow = "idle";
     this.pendingAuthUser = null;
+    this.isAuthorized = false;
+    this.dictionaryLoaded = false;
+    this.preferredDictionaryOpen = false;
 
     this.handleRenderUpdate = this.handleRenderUpdate.bind(this);
     this.login = this.login.bind(this);
@@ -293,12 +299,14 @@ class OperatorApp {
     this.fetchDictionary = this.fetchDictionary.bind(this);
     this.fetchLogs = this.fetchLogs.bind(this);
     this.addTerm = this.addTerm.bind(this);
+    this.toggleDictionaryDrawer = this.toggleDictionaryDrawer.bind(this);
   }
 
   init() {
     this.setupEventListeners();
     this.updateActionAvailability();
     this.attachRenderMonitor();
+    this.applyInitialDictionaryState();
     onAuthStateChanged(auth, (user) => {
       if (this.authFlow === "prompting") {
         this.pendingAuthUser = user || null;
@@ -316,6 +324,7 @@ class OperatorApp {
     document.querySelectorAll(".sub-tab-button").forEach((button) => {
       button.addEventListener("click", () => this.switchSubTab(button.dataset.subTab));
     });
+    this.dom.dictionaryToggle?.addEventListener("click", () => this.toggleDictionaryDrawer());
     this.dom.manualUpdateButton?.addEventListener("click", this.fetchLogs);
     this.dom.actionButtons[0]?.addEventListener("click", this.handleDisplay);
     this.dom.actionButtons[1]?.addEventListener("click", this.handleUnanswer);
@@ -543,6 +552,11 @@ class OperatorApp {
       this.startDisplaySessionMonitor();
       this.setLoaderStep(5, "辞書取得…");
       await this.fetchDictionary();
+      if (this.preferredDictionaryOpen) {
+        this.toggleDictionaryDrawer(true, false);
+      } else {
+        this.toggleDictionaryDrawer(false, false);
+      }
       this.setLoaderStep(6, "ログ取得…");
       await this.fetchLogs();
       this.finishLoaderSteps("準備完了");
@@ -559,8 +573,9 @@ class OperatorApp {
 
   renderLoggedInUi(user) {
     if (this.dom.loginContainer) this.dom.loginContainer.style.display = "none";
-    if (this.dom.mainContainer) this.dom.mainContainer.style.display = "flex";
+    if (this.dom.mainContainer) this.dom.mainContainer.style.display = "";
     if (this.dom.actionPanel) this.dom.actionPanel.style.display = "flex";
+    this.isAuthorized = true;
     if (this.dom.userInfo) {
       this.dom.userInfo.innerHTML = "";
       const label = document.createElement("span");
@@ -572,6 +587,7 @@ class OperatorApp {
       logoutButton.id = "logout-button";
       logoutButton.type = "button";
       logoutButton.textContent = "ログアウト";
+      logoutButton.className = "btn btn-ghost btn-sm";
       logoutButton.addEventListener("click", this.logout);
       this.dom.userInfo.append(label, logoutButton);
     }
@@ -582,6 +598,9 @@ class OperatorApp {
     if (this.dom.mainContainer) this.dom.mainContainer.style.display = "none";
     if (this.dom.actionPanel) this.dom.actionPanel.style.display = "none";
     if (this.dom.userInfo) this.dom.userInfo.innerHTML = "";
+    this.isAuthorized = false;
+    this.dictionaryLoaded = false;
+    this.toggleDictionaryDrawer(false, false);
     this.cleanupRealtime();
     this.hideLoader();
   }
@@ -677,9 +696,13 @@ class OperatorApp {
         const tr = document.createElement("tr");
         const toggleBtn = document.createElement("button");
         toggleBtn.textContent = item.enabled ? "無効にする" : "有効にする";
+        toggleBtn.type = "button";
+        toggleBtn.className = "btn btn-ghost btn-sm";
         toggleBtn.addEventListener("click", () => this.toggleTerm(item.term, !item.enabled));
         const deleteBtn = document.createElement("button");
         deleteBtn.textContent = "削除";
+        deleteBtn.type = "button";
+        deleteBtn.className = "btn btn-danger btn-sm";
         deleteBtn.addEventListener("click", () => this.deleteTerm(item.term));
         tr.innerHTML = `
           <td>${escapeHtml(item.term)}</td>
@@ -687,11 +710,13 @@ class OperatorApp {
           <td>${item.enabled ? "有効" : "無効"}</td>
         `;
         const actionTd = document.createElement("td");
+        actionTd.className = "table-actions";
         actionTd.append(toggleBtn, deleteBtn);
         tr.appendChild(actionTd);
         if (!item.enabled) tr.classList.add("disabled");
         this.dom.dictionaryTableBody?.appendChild(tr);
       });
+      this.dictionaryLoaded = true;
       const enabledOnly = (result.data || []).filter((item) => item.enabled === true);
       await set(dictionaryRef, enabledOnly);
     } catch (error) {
@@ -755,6 +780,48 @@ class OperatorApp {
     }
     if (this.state.autoScrollLogs) {
       this.dom.logStream.scrollTop = this.dom.logStream.scrollHeight;
+    }
+  }
+
+  applyInitialDictionaryState() {
+    let saved = "0";
+    try {
+      saved = localStorage.getItem(DICTIONARY_STATE_KEY) || "0";
+    } catch (error) {
+      saved = "0";
+    }
+    this.preferredDictionaryOpen = saved === "1";
+    this.toggleDictionaryDrawer(false, false);
+  }
+
+  toggleDictionaryDrawer(force, persist = true) {
+    const body = document.body;
+    if (!body) return;
+    const currentOpen = body.classList.contains("dictionary-open");
+    const nextOpen = typeof force === "boolean" ? force : !currentOpen;
+    body.classList.toggle("dictionary-open", nextOpen);
+    body.classList.toggle("dictionary-collapsed", !nextOpen);
+    if (this.dom.dictionaryPanel) {
+      if (nextOpen) {
+        this.dom.dictionaryPanel.removeAttribute("hidden");
+      } else {
+        this.dom.dictionaryPanel.setAttribute("hidden", "");
+      }
+    }
+    if (this.dom.dictionaryToggle) {
+      this.dom.dictionaryToggle.setAttribute("aria-expanded", String(nextOpen));
+      this.dom.dictionaryToggle.setAttribute("aria-label", nextOpen ? "ルビ辞書管理を閉じる" : "ルビ辞書管理を開く");
+    }
+    if (persist) {
+      try {
+        localStorage.setItem(DICTIONARY_STATE_KEY, nextOpen ? "1" : "0");
+      } catch (error) {
+        console.debug("dictionary toggle state not persisted", error);
+      }
+      this.preferredDictionaryOpen = nextOpen;
+    }
+    if (nextOpen && this.isAuthorized && !this.dictionaryLoaded) {
+      this.fetchDictionary().catch((error) => console.error("辞書の読み込みに失敗しました", error));
     }
   }
 

@@ -8,7 +8,7 @@
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 </head>
-<body class="op-theme">
+<body class="op-theme dictionary-collapsed">
     <!-- ローディングオーバーレイ -->
     <div id="loading-overlay" aria-live="polite" hidden>
       <div class="loading-backdrop"></div>
@@ -42,6 +42,12 @@
       </div>
     </div>
     <div class="header-aside">
+      <button id="dictionary-toggle" class="btn btn-ghost btn-icon" type="button" aria-expanded="false" aria-controls="dictionary-panel" aria-label="ルビ辞書管理を開く" title="ルビ辞書管理">
+        <span class="icon icon-book" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="img" focusable="false"><path d="M6.25 4C5.01 4 4 5.01 4 6.25v11.5C4 19.99 5.01 21 6.25 21H18a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H6.25Zm.25 2h11v12H6.25a.25.25 0 0 1-.25-.25V6.25c0-.138.112-.25.25-.25ZM8 8.25A.75.75 0 0 1 8.75 7.5h6.5a.75.75 0 0 1 0 1.5h-6.5A.75.75 0 0 1 8 8.25ZM8.75 11a.75.75 0 0 0 0 1.5h3.5a.75.75 0 0 0 0-1.5h-3.5Z"/></svg>
+        </span>
+        <span class="btn-label">辞書</span>
+      </button>
       <div id="user-info" class="user-info"></div>
     </div>
   </header>
@@ -83,7 +89,7 @@
                     </div>
                     <div id="questions-cards" class="cards-list" aria-live="polite"></div>
                 </div>
-                <div class="main-tab-content" id="logs-content" role="tabpanel" aria-labelledby="logs-tab">
+                <div class="main-tab-content" id="logs-content" role="tabpanel" aria-labelledby="logs-tab" data-layout="column">
                     <div id="logs-toolbar" class="logs-toolbar">
                       <input id="log-search" class="input" placeholder="検索 (user/action/details)">
                       <label class="chk"><input type="checkbox" id="log-autoscroll" checked> 自動スクロール</label>
@@ -94,7 +100,7 @@
                 </div>
             </div>
         </section>
-        <aside class="module module--secondary" id="dictionary-panel" aria-labelledby="dictionary-title">
+        <aside class="module module--secondary" id="dictionary-panel" aria-labelledby="dictionary-title" hidden>
             <div class="module-header">
                 <div>
                     <h2 id="dictionary-title">ルビ辞書管理</h2>
@@ -104,18 +110,20 @@
                     <button id="fetch-dictionary-button" class="btn btn-ghost" type="button">辞書を更新</button>
                 </div>
             </div>
-            <form id="add-term-form" class="dictionary-form">
-                <input type="text" id="new-term" class="input" placeholder="単語" required>
-                <input type="text" id="new-ruby" class="input" placeholder="ルビ" required>
-                <button type="submit" class="btn btn-primary">追加</button>
-            </form>
-            <div class="table-scroller">
-                <table id="dictionary-table">
-                    <thead>
-                        <tr><th>単語</th><th>ルビ</th><th>状態</th><th>操作</th></tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
+            <div class="module-body dictionary-body">
+                <form id="add-term-form" class="dictionary-form">
+                    <input type="text" id="new-term" class="input" placeholder="単語" required>
+                    <input type="text" id="new-ruby" class="input" placeholder="ルビ" required>
+                    <button type="submit" class="btn btn-primary">追加</button>
+                </form>
+                <div class="table-scroller">
+                    <table id="dictionary-table">
+                        <thead>
+                            <tr><th>単語</th><th>ルビ</th><th>状態</th><th>操作</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </aside>
     </main>
