@@ -9,6 +9,15 @@
   <link rel="stylesheet" href="question-form.css">
 </head>
 <body class="op-theme question-admin-page">
+  <div id="loading-overlay" aria-live="polite" hidden>
+    <div class="loading-backdrop"></div>
+    <div class="loading-panel" role="status" aria-label="読み込み中">
+      <div class="spinner" aria-hidden="true"></div>
+      <div class="loading-text"><span id="loading-text">初期化中…</span></div>
+      <div class="loading-sub">数秒かかる場合があります</div>
+      <ol id="loader-steps" class="loader-steps" aria-label="初期化ステップ"></ol>
+    </div>
+  </div>
   <header class="op-header">
     <div class="header-inner">
       <div class="brand-block" aria-label="管理ページ情報">
@@ -69,7 +78,7 @@
       <div class="module-header">
         <div class="module-heading">
           <h2 id="participant-title">参加者リストの管理</h2>
-          <p class="module-description" id="participant-description">日程を選択し、参加者IDと班番号のリストをアップロードしてください。</p>
+          <p class="module-description" id="participant-description">日程を選択し、参加者IDと班番号のリストをアップロードしてください。保存後は各参加者ごとに専用リンクを発行できます。</p>
         </div>
       </div>
       <div class="module-body">
@@ -90,6 +99,7 @@
                 <th scope="col">参加者ID</th>
                 <th scope="col">氏名 / ラジオネーム</th>
                 <th scope="col">班番号</th>
+                <th scope="col">専用リンク</th>
               </tr>
             </thead>
             <tbody id="mapping-tbody"></tbody>
