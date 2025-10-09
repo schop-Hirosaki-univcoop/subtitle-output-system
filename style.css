@@ -57,7 +57,7 @@ body.op-theme{
   position:sticky;
   top:0;
   z-index:90;
-  width:100%;
+  width:96.5vw;
   margin-inline:calc(var(--page-pad-inline) * -1);
   padding:clamp(.55rem, 1.2vw, .85rem) var(--page-pad-inline);
   background:linear-gradient(180deg, rgba(14,20,34,.95), rgba(8,12,22,.84));
