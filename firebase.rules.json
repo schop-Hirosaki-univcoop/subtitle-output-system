@@ -45,6 +45,7 @@
       ".read": false,
       ".write": false,
       "events": {
+        ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
         "$eventId": {
           ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
           ".write": "auth != null && root.child('admins').child(auth.uid).val() == true",
