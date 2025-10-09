@@ -21,6 +21,35 @@ body.question-admin-page{
   overflow:visible;
 }
 
+.context-banner{
+  display:flex;
+  flex-direction:column;
+  gap:.35rem;
+  padding:.85rem 1rem;
+  margin-bottom:clamp(1rem, 2vw, 1.35rem);
+  border:1px solid rgba(80,104,142,.45);
+  border-radius:.75rem;
+  background:rgba(12,20,36,.75);
+}
+
+.context-text{
+  margin:0;
+  font-size:.95rem;
+  color:var(--muted);
+  line-height:1.6;
+}
+
+.context-guard{
+  margin:0 0 clamp(1.2rem, 2vw, 1.5rem);
+  padding:1rem 1.2rem;
+  border-radius:.75rem;
+  border:1px solid rgba(255,107,107,.45);
+  background:rgba(120,28,28,.22);
+  color:var(--danger);
+  font-size:.95rem;
+  line-height:1.6;
+}
+
 .intake-form{
   display:flex;
   flex-direction:column;
@@ -115,6 +144,101 @@ body.question-admin-page{
 .admin-module .module-actions{
   flex-wrap:wrap;
   gap:.75rem;
+}
+
+.entity-list{
+  display:flex;
+  flex-direction:column;
+  gap:.35rem;
+  margin:0;
+  padding:0;
+  list-style:none;
+}
+
+.entity-item{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:.75rem;
+  padding:.75rem 1rem;
+  border:1px solid rgba(60,84,120,.45);
+  border-radius:.75rem;
+  background:rgba(10,18,32,.65);
+  transition:border-color .18s ease, background .18s ease;
+  cursor:pointer;
+}
+
+.entity-item.is-active{
+  border-color:rgba(0,234,255,.6);
+  background:rgba(8,30,48,.85);
+}
+
+.entity-item:not(.is-active):hover{
+  border-color:rgba(0,234,255,.35);
+}
+
+.entity-label{
+  display:flex;
+  flex-direction:column;
+  gap:.25rem;
+}
+
+.entity-name{
+  font-weight:600;
+  letter-spacing:.03em;
+}
+
+.entity-meta{
+  font-size:.75rem;
+  color:var(--muted);
+}
+
+.entity-actions{
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+}
+
+.entity-actions .btn-icon{
+  width:2.1rem;
+  height:2.1rem;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid rgba(80,104,142,.45);
+  background:rgba(20,32,52,.75);
+  color:var(--muted);
+  cursor:pointer;
+  transition:color .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.entity-actions .btn-icon:hover{
+  color:var(--danger);
+  border-color:rgba(255,107,107,.55);
+  background:rgba(80,26,38,.4);
+}
+
+.entity-actions .btn-icon svg{
+  width:1rem;
+  height:1rem;
+}
+
+.entity-empty{
+  margin:0;
+  padding:1rem 1.2rem;
+  border-radius:.75rem;
+  border:1px dashed rgba(70,96,132,.4);
+  color:var(--muted);
+  font-size:.85rem;
+  text-align:center;
+}
+
+.admin-context{
+  margin:0 0 1rem;
+  font-size:.85rem;
+  color:var(--muted);
+  line-height:1.5;
 }
 
 .admin-controls{

@@ -1,30 +1,38 @@
 const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec";
 const GENRE_OPTIONS = ["学び", "活動", "暮らし", "食・スポット", "移動・季節", "その他"];
 
+const REQUIRED_PARAM_KEYS = {
+  eventId: ["event", "e", "eventId"],
+  scheduleId: ["schedule", "s", "scheduleId"],
+  participantId: ["participant", "member", "id", "participantId"]
+};
+
 const form = document.getElementById("question-form");
 const radioNameInput = document.getElementById("radio-name");
 const questionInput = document.getElementById("question-text");
-const groupInput = document.getElementById("group-number");
 const genreSelect = document.getElementById("genre");
+const groupInput = document.getElementById("group-number");
 const scheduleInput = document.getElementById("schedule");
-const scheduleHintEl = document.getElementById("schedule-hint");
-const mappingStatusEl = document.getElementById("mapping-status");
+const scheduleDateInput = document.getElementById("schedule-date");
+const eventIdInput = document.getElementById("event-id");
+const eventNameInput = document.getElementById("event-name");
+const scheduleIdInput = document.getElementById("schedule-id");
+const participantIdInput = document.getElementById("participant-id");
 const feedbackEl = document.getElementById("form-feedback");
 const submitButton = document.getElementById("submit-button");
+const contextBannerEl = document.getElementById("context-banner");
+const welcomeLineEl = document.getElementById("welcome-line");
+const scheduleLineEl = document.getElementById("schedule-line");
+const contextGuardEl = document.getElementById("context-guard");
 
 const state = {
-  nameMap: new Map(),
-  scheduleLockedValue: ""
+  context: null
 };
 
 function normalizeKey(value) {
   return String(value ?? "")
     .trim()
     .normalize("NFKC");
-}
-
-function normalizeNameForLookup(value) {
-  return normalizeKey(value).replace(/[\u200B-\u200D\uFEFF]/g, "");
 }
 
 function setFeedback(message, type = "") {
@@ -38,111 +46,131 @@ function setFeedback(message, type = "") {
   }
 }
 
-function setMappingStatus(message, variant = "") {
-  if (!mappingStatusEl) return;
-  mappingStatusEl.textContent = message || "";
-  mappingStatusEl.classList.remove("field-hint--status", "status-error");
-  if (variant === "active") {
-    mappingStatusEl.classList.add("field-hint--status");
-  } else if (variant === "error") {
-    mappingStatusEl.classList.add("status-error");
-  }
-}
-
-function fillGroupFromName({ force = false } = {}) {
-  const key = normalizeNameForLookup(radioNameInput.value);
-  const mapped = key ? state.nameMap.get(key) : null;
-  const alreadyAutoFilled = groupInput.dataset.autofilled === "true";
-
-  if (mapped) {
-    if (!force && groupInput.value && !alreadyAutoFilled) {
-      return;
-    }
-    groupInput.value = mapped;
-    groupInput.dataset.autofilled = "true";
-  } else if (alreadyAutoFilled || force) {
-    groupInput.value = "";
-    delete groupInput.dataset.autofilled;
-  }
-}
-
-function detectScheduleFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const keys = ["schedule", "date", "day", "d"];
-  let value = "";
-
-  for (const key of keys) {
-    const found = params.get(key);
-    if (found) {
-      value = found;
-      break;
-    }
-  }
-
-  if (!value) {
-    const parts = window.location.pathname.split("/").filter(Boolean);
-    const last = parts[parts.length - 1];
-    if (last) {
-      if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(last)) {
-        value = last;
-      } else if (/^\d{8}$/.test(last)) {
-        value = `${last.slice(0, 4)}-${last.slice(4, 6)}-${last.slice(6, 8)}`;
-      }
-    }
-  }
-
-  if (value) {
-    scheduleInput.value = value;
-    scheduleInput.readOnly = true;
-    scheduleInput.dataset.locked = "true";
-    state.scheduleLockedValue = value;
-    if (scheduleHintEl) {
-      scheduleHintEl.textContent = "URLに設定された日程を使用しています。";
-    }
+function setContextGuard(message) {
+  if (!contextGuardEl) return;
+  if (message) {
+    contextGuardEl.hidden = false;
+    contextGuardEl.textContent = message;
   } else {
-    scheduleInput.readOnly = false;
-    delete scheduleInput.dataset.locked;
-    if (scheduleHintEl) {
-      scheduleHintEl.textContent = "日程を直接入力してください。";
-    }
+    contextGuardEl.hidden = true;
+    contextGuardEl.textContent = "";
   }
 }
 
-async function fetchNameMappings() {
-  try {
-    setMappingStatus("班番号リストを読み込んでいます…", "active");
-    const response = await fetch(GAS_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "fetchNameMappings" })
-    });
+function hideForm() {
+  if (form) {
+    form.hidden = true;
+  }
+  if (contextBannerEl) {
+    contextBannerEl.hidden = true;
+  }
+}
 
-    const result = await response.json();
-    if (!response.ok || !result.success) {
-      throw new Error(result && result.error ? result.error : "読み込みに失敗しました。");
-    }
+function showForm() {
+  if (form) {
+    form.hidden = false;
+  }
+}
 
-    const entries = Array.isArray(result.mappings) ? result.mappings : [];
-    const map = new Map();
-    entries.forEach(entry => {
-      const name = normalizeNameForLookup(entry.name);
-      const groupNumber = normalizeKey(entry.groupNumber);
-      if (!name || !groupNumber) return;
-      if (!map.has(name)) {
-        map.set(name, groupNumber);
+function extractRequiredParams() {
+  const params = new URLSearchParams(window.location.search);
+  const resolved = {};
+
+  for (const [key, aliases] of Object.entries(REQUIRED_PARAM_KEYS)) {
+    let value = "";
+    for (const alias of aliases) {
+      const candidate = params.get(alias);
+      if (candidate) {
+        value = candidate;
+        break;
       }
-    });
-
-    state.nameMap = map;
-    if (map.size) {
-      setMappingStatus(`班番号リストを${map.size}件読み込みました。`, "active");
-      fillGroupFromName({ force: true });
-    } else {
-      setMappingStatus("現在登録されている班番号リストはありません。");
     }
+    if (!value) {
+      return null;
+    }
+    resolved[key] = value;
+  }
+
+  return resolved;
+}
+
+async function fetchContext(contextParams) {
+  const response = await fetch(GAS_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "fetchQuestionContext", ...contextParams })
+  });
+  const text = await response.text();
+  let result = {};
+  if (text) {
+    try {
+      result = JSON.parse(text);
+    } catch (error) {
+      throw new Error("サーバーからの応答を解析できませんでした。");
+    }
+  }
+  if (!response.ok || !result.success) {
+    throw new Error(result && result.error ? result.error : "アクセスが許可されていません。");
+  }
+  return result.context;
+}
+
+function applyContext(context) {
+  state.context = context;
+  if (!form || !context) {
+    hideForm();
+    return;
+  }
+
+  const displayName = String(context.participantName ?? "").trim();
+  const eventName = String(context.eventName ?? "").trim();
+  const scheduleLabel = String(context.scheduleLabel ?? "").trim();
+  const scheduleDate = String(context.scheduleDate ?? "").trim();
+
+  eventIdInput.value = context.eventId || "";
+  eventNameInput.value = eventName;
+  scheduleIdInput.value = context.scheduleId || "";
+  scheduleInput.value = scheduleLabel;
+  scheduleDateInput.value = scheduleDate;
+  participantIdInput.value = context.participantId || "";
+  groupInput.value = String(context.groupNumber ?? "").trim();
+
+  if (displayName) {
+    radioNameInput.value = displayName;
+  }
+
+  if (contextBannerEl) {
+    contextBannerEl.hidden = false;
+  }
+  if (welcomeLineEl) {
+    const targetName = displayName || "ゲスト";
+    const eventLabel = eventName ? `「${eventName}」` : "";
+    welcomeLineEl.textContent = `ようこそ${targetName}さん${eventLabel ? `、${eventLabel}` : ""}`;
+  }
+  if (scheduleLineEl) {
+    const scheduleInfo = scheduleLabel || scheduleDate || "未設定";
+    scheduleLineEl.textContent = `あなたの参加日程：${scheduleInfo}`;
+  }
+
+  setContextGuard("");
+  showForm();
+}
+
+async function prepareContext() {
+  const params = extractRequiredParams();
+  if (!params) {
+    hideForm();
+    setContextGuard("このフォームには、配布されたURLからアクセスしてください。");
+    return;
+  }
+
+  try {
+    const context = await fetchContext(params);
+    applyContext(context);
   } catch (error) {
     console.error(error);
-    setMappingStatus(error.message || "班番号リストの読み込みに失敗しました。", "error");
+    hideForm();
+    setContextGuard(error.message || "アクセスに必要な情報が不足しています。");
   }
 }
 
@@ -161,7 +189,12 @@ async function handleSubmit(event) {
     question: questionInput.value.trim(),
     groupNumber: groupInput.value.trim(),
     genre: genreSelect.value,
-    schedule: scheduleInput.value.trim()
+    schedule: scheduleInput.value.trim(),
+    scheduleDate: scheduleDateInput.value.trim(),
+    eventId: eventIdInput.value.trim(),
+    eventName: eventNameInput.value.trim(),
+    scheduleId: scheduleIdInput.value.trim(),
+    participantId: participantIdInput.value.trim()
   };
 
   if (!GENRE_OPTIONS.includes(payload.genre)) {
@@ -193,12 +226,6 @@ async function handleSubmit(event) {
 
     setFeedback("送信しました。ありがとうございました！", "success");
     questionInput.value = "";
-    if (!groupInput.dataset.autofilled) {
-      groupInput.value = "";
-    }
-    if (state.scheduleLockedValue) {
-      scheduleInput.value = state.scheduleLockedValue;
-    }
     questionInput.focus();
   } catch (error) {
     console.error(error);
@@ -209,17 +236,14 @@ async function handleSubmit(event) {
 }
 
 function init() {
-  detectScheduleFromUrl();
-  fetchNameMappings().catch(err => console.error(err));
-
-  radioNameInput.addEventListener("input", () => fillGroupFromName());
-  radioNameInput.addEventListener("blur", () => fillGroupFromName({ force: true }));
-  groupInput.addEventListener("input", () => {
-    if (groupInput.dataset.autofilled === "true") {
-      delete groupInput.dataset.autofilled;
-    }
+  prepareContext().catch(err => {
+    console.error(err);
+    hideForm();
+    setContextGuard("アクセスに失敗しました。時間をおいて再度お試しください。");
   });
-  form.addEventListener("submit", handleSubmit);
+  if (form) {
+    form.addEventListener("submit", handleSubmit);
+  }
 }
 
 init();

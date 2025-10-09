@@ -15,11 +15,6 @@
         <span class="brand-mark">TELoP OPS</span>
         <span class="brand-tagline">Question Intake Desk</span>
       </div>
-      <div class="header-actions">
-        <div class="header-controls">
-          <a class="btn btn-ghost btn-sm" href="question-admin.html">運営者向け管理</a>
-        </div>
-      </div>
     </div>
   </header>
 
@@ -28,17 +23,32 @@
       <div class="module-header">
         <div class="module-heading">
           <h1 id="form-title">質問受付フォーム</h1>
-          <p class="module-description">ラジオネームと質問内容を入力して送信してください。ページURLに含まれる日程が自動入力されます。</p>
+          <p class="module-description">お送りした専用URLからアクセスし、ラジオネームと質問内容を入力してください。</p>
         </div>
       </div>
       <div class="module-body">
-        <form id="question-form" class="intake-form" novalidate autocomplete="on">
+        <div id="context-banner" class="context-banner" hidden>
+          <p id="welcome-line" class="context-text"></p>
+          <p id="schedule-line" class="context-text"></p>
+        </div>
+        <div id="context-guard" class="context-guard" role="alert" hidden></div>
+
+        <form id="question-form" class="intake-form" novalidate autocomplete="on" hidden>
+          <input id="event-id" name="event-id" type="hidden">
+          <input id="event-name" name="event-name" type="hidden">
+          <input id="schedule-id" name="schedule-id" type="hidden">
+          <input id="schedule" name="schedule" type="hidden">
+          <input id="schedule-date" name="schedule-date" type="hidden">
+          <input id="participant-id" name="participant-id" type="hidden">
+          <input id="group-number" name="group-number" type="hidden">
+
           <div class="form-field">
             <div class="field-header">
               <label for="radio-name">ラジオネーム</label>
               <span class="field-tag field-tag--required">必須</span>
             </div>
             <input id="radio-name" name="radio-name" type="text" class="input" inputmode="text" autocomplete="name" required>
+            <p class="field-hint">必要に応じて編集いただけます。</p>
           </div>
 
           <div class="form-field">
@@ -47,16 +57,6 @@
               <span class="field-tag field-tag--required">必須</span>
             </div>
             <textarea id="question-text" name="question-text" class="input input--textarea" rows="6" placeholder="質問や相談内容を入力してください" required></textarea>
-          </div>
-
-          <div class="form-field">
-            <div class="field-header">
-              <label for="group-number">班番号</label>
-              <span class="field-tag">任意</span>
-            </div>
-            <input id="group-number" name="group-number" type="text" class="input" inputmode="text" autocomplete="off" placeholder="例: 3">
-            <p class="field-hint" id="group-hint">ラジオネームに対応する班番号が見つかった場合、自動で入力されます。</p>
-            <p class="field-hint field-hint--status" id="mapping-status" aria-live="polite"></p>
           </div>
 
           <div class="form-field">
@@ -72,15 +72,6 @@
               <option value="移動・季節">移動・季節</option>
               <option value="その他">その他</option>
             </select>
-          </div>
-
-          <div class="form-field">
-            <div class="field-header">
-              <label for="schedule">日程</label>
-              <span class="field-tag field-tag--required">必須</span>
-            </div>
-            <input id="schedule" name="schedule" type="text" class="input" placeholder="例: 2024-05-01" required readonly>
-            <p class="field-hint" id="schedule-hint">URLに設定された日程を使用しています。</p>
           </div>
 
           <div class="form-actions">
