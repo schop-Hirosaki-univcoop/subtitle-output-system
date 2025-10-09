@@ -8,7 +8,7 @@
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 </head>
-<body class="op-theme">
+<body class="op-theme dictionary-collapsed">
     <!-- ローディングオーバーレイ -->
     <div id="loading-overlay" aria-live="polite" hidden>
       <div class="loading-backdrop"></div>
@@ -21,11 +21,14 @@
       </div>
     </div>
   <header class="op-header">
-    <h1>Operator</h1>
-    <div class="status-bar">
-        <div class="brand">TELoP OPS</div>
+    <div class="header-cluster">
+      <div class="brand-block" aria-label="システム情報">
+        <span class="brand-mark">TELoP OPS</span>
+        <span class="brand-tagline">Broadcast Subtitle Console</span>
+      </div>
+      <div class="status-bar" role="group" aria-label="表示状態">
         <div class="render-indicator" title="Display 状態">
-            <span id="render-lamp" class="lamp"></span>
+            <span id="render-lamp" class="lamp" aria-hidden="true"></span>
             <span id="render-phase" class="lamp-label">-</span>
         </div>
         <div class="render-summary" id="render-summary">
@@ -36,42 +39,47 @@
             <div id="render-question" class="text-soft">—</div>
             <div id="render-updated" class="text-meta">—</div>
         </div>
+      </div>
     </div>
-    <div id="user-info"></div>
+    <div class="header-aside">
+      <button id="dictionary-toggle" class="btn btn-ghost btn-icon" type="button" aria-expanded="false" aria-controls="dictionary-panel" aria-label="ルビ辞書管理を開く" title="ルビ辞書管理">
+        <span class="icon icon-book" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="img" focusable="false"><path d="M6.25 4C5.01 4 4 5.01 4 6.25v11.5C4 19.99 5.01 21 6.25 21H18a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H6.25Zm.25 2h11v12H6.25a.25.25 0 0 1-.25-.25V6.25c0-.138.112-.25.25-.25ZM8 8.25A.75.75 0 0 1 8.75 7.5h6.5a.75.75 0 0 1 0 1.5h-6.5A.75.75 0 0 1 8 8.25ZM8.75 11a.75.75 0 0 0 0 1.5h3.5a.75.75 0 0 0 0-1.5h-3.5Z"/></svg>
+        </span>
+        <span class="btn-label">辞書</span>
+      </button>
+      <div id="user-info" class="user-info"></div>
+    </div>
   </header>
-      
-    <div id="login-container">
-        <h2>テロップ操作パネル ログイン</h2>
-        <button id="login-button">Googleアカウントでログイン</button>
+
+    <div id="login-container" class="auth-card" role="dialog" aria-labelledby="login-title">
+        <h2 id="login-title">テロップ操作パネル</h2>
+        <p class="auth-lead">番組用テロップを安全に運用するため、Googleアカウントでサインインしてください。</p>
+        <button id="login-button" class="btn btn-primary">Googleアカウントでログイン</button>
     </div>
 
-    <div id="main-container" style="display: none;">
-        <div class="panel" id="questions-panel">
-            <h1>テロップ操作パネル</h1>
-            <div id="main-tab-buttons">
-                <button class="main-tab-button active" data-tab="questions">質問</button>
-                <button class="main-tab-button" data-tab="logs">操作ログ</button>
-                <button id="manual-update-button">手動更新</button>
+    <main id="main-container" class="layout-grid" style="display: none;">
+        <section class="module module--primary" id="questions-panel" aria-labelledby="questions-title">
+            <div class="module-header">
+                <div>
+                    <h1 id="questions-title">テロップ操作パネル</h1>
+                    <p class="module-description">質問の選択・表示とログ監視を一つの画面で行えます。</p>
+                </div>
+                <div class="module-actions">
+                    <button id="manual-update-button" class="btn btn-ghost" type="button">手動更新</button>
+                </div>
+            </div>
+            <div class="main-tabs" id="main-tab-buttons" role="tablist" aria-label="メイン表示切替">
+                <button class="main-tab-button active" data-tab="questions" role="tab" aria-selected="true" aria-controls="questions-content">質問</button>
+                <button class="main-tab-button" data-tab="logs" role="tab" aria-selected="false" aria-controls="logs-content">操作ログ</button>
             </div>
 
-            <div id="main-tab-contents">
-                <div class="main-tab-content active" id="questions-content">
-                    <div id="sub-tab-buttons">
-                        <button class="sub-tab-button active" data-sub-tab="normal">通常質問</button>
-                        <button class="sub-tab-button" data-sub-tab="puq">Pick Up Question</button>
+            <div id="main-tab-contents" class="module-body">
+                <div class="main-tab-content active" id="questions-content" role="tabpanel" aria-labelledby="questions-tab">
+                    <div id="sub-tab-buttons" class="sub-tabs" role="tablist" aria-label="質問種別">
+                        <button class="sub-tab-button active" data-sub-tab="normal" role="tab" aria-selected="true">通常質問</button>
+                        <button class="sub-tab-button" data-sub-tab="puq" role="tab" aria-selected="false">Pick Up Question</button>
                     </div>
-<!--
-                    <table id="questions-table">
-                        <thead><tr>
-                            <th style="width:32px"><input type="checkbox" id="select-all-checkbox"></th>
-                            <th>班</th>
-                            <th>ラジオネーム</th>
-                            <th>質問・お悩み</th>
-                            <th>状態</th>
-                        </tr></thead>
-                        <tbody></tbody>
-                    </table>
--->
                     <!-- 質問リスト（カードビュー） -->
                     <div class="cards-toolbar">
                         <label class="chk">
@@ -81,44 +89,56 @@
                     </div>
                     <div id="questions-cards" class="cards-list" aria-live="polite"></div>
                 </div>
-                <div class="main-tab-content" id="logs-content">
-                    <div id="logs-toolbar" style="display:flex;gap:12px;align-items:center;margin:8px 0;">
-                      <input id="log-search" placeholder="検索 (user/action/details)" style="flex:1;max-width:340px;">
-                      <label style="margin-left:auto;"><input type="checkbox" id="log-autoscroll" checked> 自動スクロール</label>
+                <div class="main-tab-content" id="logs-content" role="tabpanel" aria-labelledby="logs-tab" data-layout="column">
+                    <div id="logs-toolbar" class="logs-toolbar">
+                      <input id="log-search" class="input" placeholder="検索 (user/action/details)">
+                      <label class="chk"><input type="checkbox" id="log-autoscroll" checked> 自動スクロール</label>
                     </div>
                     <div id="logs-stream-view">
                       <div id="log-stream" class="log-stream"></div>
                     </div>
                 </div>
             </div>
-        </div>
-        <div class="panel" id="dictionary-panel">
-            <h2>ルビ辞書管理</h2>
-            <button id="fetch-dictionary-button">辞書を更新</button>
-            <form id="add-term-form">
-                <input type="text" id="new-term" placeholder="単語" required>
-                <input type="text" id="new-ruby" placeholder="ルビ" required>
-                <button type="submit">追加</button>
-            </form>
-            <table id="dictionary-table">
-                <thead>
-                    <tr><th>単語</th><th>ルビ</th><th>状態</th><th>操作</th></tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
-    
+        </section>
+        <aside class="module module--secondary" id="dictionary-panel" aria-labelledby="dictionary-title" hidden>
+            <div class="module-header">
+                <div>
+                    <h2 id="dictionary-title">ルビ辞書管理</h2>
+                    <p class="module-description">登録語句の追加や更新が即座にディスプレイへ反映されます。</p>
+                </div>
+                <div class="module-actions">
+                    <button id="fetch-dictionary-button" class="btn btn-ghost" type="button">辞書を更新</button>
+                </div>
+            </div>
+            <div class="module-body dictionary-body">
+                <form id="add-term-form" class="dictionary-form">
+                    <input type="text" id="new-term" class="input" placeholder="単語" required>
+                    <input type="text" id="new-ruby" class="input" placeholder="ルビ" required>
+                    <button type="submit" class="btn btn-primary">追加</button>
+                </form>
+                <div class="table-scroller">
+                    <table id="dictionary-table">
+                        <thead>
+                            <tr><th>単語</th><th>ルビ</th><th>状態</th><th>操作</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </aside>
+    </main>
+
     <div id="action-panel" style="display: none;">
-        <button id="btn-display" disabled>表示</button>
-        <button id="btn-unanswer" disabled>未回答にする</button> <button id="btn-edit" disabled>編集</button>
-        <button id="btn-clear">テロップを消去</button>
+        <button id="btn-display" class="btn btn-primary" disabled>表示</button>
+        <button id="btn-unanswer" class="btn" disabled>未回答にする</button>
+        <button id="btn-edit" class="btn" disabled>編集</button>
+        <button id="btn-clear" class="btn btn-danger">テロップを消去</button>
         <span id="selected-info">行を選択してください</span>
-        <div style="margin-left: auto;">
-          <button id="btn-batch-unanswer" style="display: none;">選択した項目を未回答にする</button>
+        <div class="action-panel-right">
+          <button id="btn-batch-unanswer" class="btn btn-ghost" style="display: none;">選択した項目を未回答にする</button>
         </div>
     </div>
-    
+
     <script type="module" src="operator.js"></script>
 </body>
 </html>
