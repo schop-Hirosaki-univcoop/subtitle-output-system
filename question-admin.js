@@ -92,6 +92,45 @@ const loaderState = {
   currentIndex: -1
 };
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isPermissionDenied(error) {
+  if (!error || typeof error !== "object") return false;
+  const code = String(error.code || error?.message || "").toLowerCase();
+  return (
+    code.includes("permission_denied") ||
+    code.includes("permission-denied") ||
+    code.includes("permission denied")
+  );
+}
+
+async function waitForQuestionIntakeAccess({ attempts = 5, initialDelay = 300 } = {}) {
+  const targetRef = ref(database, "questionIntake/events");
+  let delay = initialDelay;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      await get(targetRef);
+      return;
+    } catch (error) {
+      if (isPermissionDenied(error)) {
+        lastError = error;
+        await sleep(delay);
+        delay = Math.min(delay * 2, 2500);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  const err = new Error("管理者権限の同期に失敗しました。時間をおいて再度お試しください。");
+  err.cause = lastError;
+  throw err;
+}
+
 async function applyQuestionIntakeUpdates(updates) {
   if (!updates || !Object.keys(updates).length) return;
   await update(ref(database, "questionIntake"), updates);
@@ -1046,6 +1085,7 @@ async function verifyEnrollment(user) {
 async function ensureAdminAccess() {
   try {
     await api.apiPost({ action: "ensureAdmin" });
+    await waitForQuestionIntakeAccess({ attempts: 6, initialDelay: 250 });
   } catch (error) {
     throw new Error(error.message || "管理者権限の確認に失敗しました。");
   }
