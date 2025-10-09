@@ -597,7 +597,7 @@ input[type="checkbox"]{
 .q-meta{
   display:flex;
   align-items:center;
-  justify-content:flex-end;
+  justify-content:space-between;
   gap:clamp(.45rem, 1vw, .7rem);
   flex-wrap:wrap;
   width:100%;
