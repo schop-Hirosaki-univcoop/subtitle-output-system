@@ -131,14 +131,32 @@ function renderUserSummary(user) {
 }
 
 function createApiClient(authInstance) {
-  async function getIdToken(force = false) {
-    const user = authInstance.currentUser;
+  async function getIdTokenSafe(force = false) {
+    const currentUser = authInstance.currentUser;
+    if (currentUser) {
+      return await currentUser.getIdToken(force);
+    }
+
+    const user = await new Promise((resolve, reject) => {
+      const unsubscribe = onAuthStateChanged(
+        authInstance,
+        nextUser => {
+          unsubscribe();
+          resolve(nextUser);
+        },
+        error => {
+          unsubscribe();
+          reject(error);
+        }
+      );
+    });
+
     if (!user) throw new Error("Not signed in");
     return await user.getIdToken(force);
   }
 
-  async function apiPost(payload, retry = true) {
-    const idToken = await getIdToken();
+  async function apiPost(payload, retryOnAuthError = true) {
+    const idToken = await getIdTokenSafe();
     const response = await fetch(GAS_API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
@@ -152,8 +170,8 @@ function createApiClient(authInstance) {
     }
     if (!json.success) {
       const message = String(json.error || "");
-      if (retry && /Auth/.test(message)) {
-        await getIdToken(true);
+      if (retryOnAuthError && /Auth/.test(message)) {
+        await getIdTokenSafe(true);
         return await apiPost(payload, false);
       }
       throw new Error(message || "APIリクエストに失敗しました。");
