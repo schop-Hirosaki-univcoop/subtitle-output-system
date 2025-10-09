@@ -38,6 +38,31 @@ const auth = initializeAuth(app, {
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
+async function getAuthIdToken(forceRefresh = false) {
+  const currentUser = auth.currentUser;
+  if (currentUser) {
+    return await currentUser.getIdToken(forceRefresh);
+  }
+
+  return await new Promise((resolve, reject) => {
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      user => {
+        unsubscribe();
+        if (!user) {
+          reject(new Error("認証情報が確認できません。再度ログインしてください。"));
+          return;
+        }
+        user.getIdToken(forceRefresh).then(resolve).catch(reject);
+      },
+      error => {
+        unsubscribe();
+        reject(error);
+      }
+    );
+  });
+}
+
 const dom = {
   loadingOverlay: document.getElementById("loading-overlay"),
   loadingText: document.getElementById("loading-text"),
@@ -154,33 +179,9 @@ function renderUserSummary(user) {
   dom.userInfo.removeAttribute("aria-hidden");
 }
 
-function createApiClient(authInstance) {
-  async function getIdTokenSafe(force = false) {
-    const currentUser = authInstance.currentUser;
-    if (currentUser) {
-      return await currentUser.getIdToken(force);
-    }
-
-    const user = await new Promise((resolve, reject) => {
-      const unsubscribe = onAuthStateChanged(
-        authInstance,
-        nextUser => {
-          unsubscribe();
-          resolve(nextUser);
-        },
-        error => {
-          unsubscribe();
-          reject(error);
-        }
-      );
-    });
-
-    if (!user) throw new Error("Not signed in");
-    return await user.getIdToken(force);
-  }
-
+function createApiClient(getIdToken) {
   async function apiPost(payload, retryOnAuthError = true) {
-    const idToken = await getIdTokenSafe();
+    const idToken = await getIdToken();
     const response = await fetch(GAS_API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
@@ -195,7 +196,7 @@ function createApiClient(authInstance) {
     if (!json.success) {
       const message = String(json.error || "");
       if (retryOnAuthError && /Auth/.test(message)) {
-        await getIdTokenSafe(true);
+        await getIdToken(true);
         return await apiPost(payload, false);
       }
       throw new Error(message || "APIリクエストに失敗しました。");
@@ -206,7 +207,7 @@ function createApiClient(authInstance) {
   return { apiPost };
 }
 
-const api = createApiClient(auth);
+const api = createApiClient(getAuthIdToken);
 
 async function mirrorQuestionIntake() {
   try {
@@ -999,6 +1000,65 @@ async function verifyEnrollment(user) {
   if (!authorized.includes(email)) {
     throw new Error("あなたのアカウントはこのシステムへのアクセスが許可されていません。");
   }
+}
+
+async function waitForQuestionIntakeAccess(options = {}) {
+  const {
+    attempts = 5,
+    initialDelay = 250,
+    backoffFactor = 1.8,
+    maxDelay = 2000
+  } = options || {};
+
+  const attemptCount = Number.isFinite(attempts) && attempts > 0 ? Math.ceil(attempts) : 1;
+  const sanitizedInitial = Number.isFinite(initialDelay) && initialDelay >= 0 ? initialDelay : 250;
+  const sanitizedBackoff = Number.isFinite(backoffFactor) && backoffFactor > 1 ? backoffFactor : 1.5;
+  const sanitizedMaxDelay = Number.isFinite(maxDelay) && maxDelay > 0 ? maxDelay : 4000;
+  const baseUrl = String(firebaseConfig.databaseURL || "").replace(/\/$/, "");
+
+  if (!baseUrl) {
+    throw new Error("リアルタイムデータベースのURLが設定されていません。");
+  }
+
+  let waitMs = sanitizedInitial || 250;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < attemptCount; attempt++) {
+    try {
+      const token = await getAuthIdToken(attempt > 0);
+      const url =
+        `${baseUrl}/questionIntake/events.json?shallow=true&limitToFirst=1&auth=${encodeURIComponent(token)}`;
+      const response = await fetch(url, { method: "GET" });
+      if (response.ok) {
+        return true;
+      }
+
+      const bodyText = await response.text().catch(() => "");
+      const permissionIssue =
+        response.status === 401 ||
+        response.status === 403 ||
+        /permission\s*denied/i.test(bodyText);
+
+      if (!permissionIssue) {
+        const message = bodyText || `Realtime Database request failed (${response.status})`;
+        throw new Error(message);
+      }
+
+      lastError = new Error("管理者権限の反映に時間がかかっています。数秒後に再度お試しください。");
+    } catch (error) {
+      lastError = error;
+    }
+
+    if (attempt < attemptCount - 1) {
+      if (waitMs > 0) {
+        await sleep(waitMs);
+      }
+      const nextDelay = Math.max(waitMs * sanitizedBackoff, sanitizedInitial || 250);
+      waitMs = Math.min(sanitizedMaxDelay, Math.round(nextDelay));
+    }
+  }
+
+  throw lastError || new Error("管理者権限の確認がタイムアウトしました。");
 }
 
 async function ensureAdminAccess() {
