@@ -8,6 +8,13 @@ import {
   signOut,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getDatabase,
+  ref,
+  get,
+  set,
+  update
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec";
 const FORM_PAGE_PATH = "question-form.html";
@@ -31,6 +38,7 @@ const firebaseConfig = {
 
 const apps = getApps();
 const app = apps.length ? getApp() : initializeApp(firebaseConfig);
+const database = getDatabase(app);
 const auth = initializeAuth(app, {
   persistence: browserSessionPersistence,
   popupRedirectResolver: browserPopupRedirectResolver
@@ -99,7 +107,11 @@ const state = {
   participants: [],
   lastSavedSignature: "",
   user: null,
-  saving: false
+  saving: false,
+  tokenRecords: {},
+  knownTokens: new Set(),
+  participantTokenMap: new Map(),
+  tokenSnapshotFetchedAt: 0
 };
 
 const loaderState = {
@@ -144,6 +156,105 @@ function toMillis(value) {
     return value.getTime();
   }
   return 0;
+}
+
+function rootDbRef(path = "") {
+  return path ? ref(database, path) : ref(database);
+}
+
+async function fetchDbValue(path) {
+  const snapshot = await get(rootDbRef(path));
+  return snapshot.exists() ? snapshot.val() : null;
+}
+
+function resetTokenState() {
+  state.tokenRecords = {};
+  state.knownTokens = new Set();
+  state.participantTokenMap = new Map();
+  state.tokenSnapshotFetchedAt = 0;
+}
+
+function ensureCrypto() {
+  return (typeof crypto !== "undefined" && crypto.getRandomValues) ? crypto : null;
+}
+
+function generateShortId(prefix = "") {
+  const cryptoObj = ensureCrypto();
+  if (cryptoObj) {
+    const bytes = new Uint8Array(8);
+    cryptoObj.getRandomValues(bytes);
+    let hex = "";
+    bytes.forEach(byte => {
+      hex += byte.toString(16).padStart(2, "0");
+    });
+    return `${prefix}${hex}`;
+  }
+
+  const fallback = Math.random().toString(16).slice(2, 10);
+  return `${prefix}${fallback}`;
+}
+
+function base64UrlFromBytes(bytes) {
+  let binary = "";
+  bytes.forEach(byte => {
+    binary += String.fromCharCode(byte);
+  });
+  const base64 = btoa(binary);
+  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function generateQuestionToken(existingTokens = state.knownTokens) {
+  const used = existingTokens instanceof Set ? existingTokens : new Set();
+  const cryptoObj = ensureCrypto();
+
+  while (true) {
+    let candidate = "";
+    if (cryptoObj) {
+      const bytes = new Uint8Array(24);
+      cryptoObj.getRandomValues(bytes);
+      candidate = base64UrlFromBytes(bytes).slice(0, 32);
+    } else {
+      const seed = `${Math.random()}::${Date.now()}::${Math.random()}`;
+      candidate = btoa(seed).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "").slice(0, 32);
+    }
+
+    if (!candidate || candidate.length < 12) {
+      continue;
+    }
+    if (!used.has(candidate)) {
+      used.add(candidate);
+      return candidate;
+    }
+  }
+}
+
+async function ensureTokenSnapshot(force = false) {
+  if (!force && state.tokenSnapshotFetchedAt && Date.now() - state.tokenSnapshotFetchedAt < 10000) {
+    return state.tokenRecords;
+  }
+  const tokens = (await fetchDbValue("questionIntake/tokens")) || {};
+  state.tokenRecords = tokens;
+  state.knownTokens = new Set(Object.keys(tokens));
+  state.tokenSnapshotFetchedAt = Date.now();
+  return state.tokenRecords;
+}
+
+function collectParticipantTokens(branch) {
+  const tokens = new Set();
+  if (!branch || typeof branch !== "object") {
+    return tokens;
+  }
+
+  Object.values(branch).forEach(scheduleBranch => {
+    if (!scheduleBranch || typeof scheduleBranch !== "object") return;
+    Object.values(scheduleBranch).forEach(participant => {
+      const token = participant?.token;
+      if (token) {
+        tokens.add(String(token));
+      }
+    });
+  });
+  return tokens;
 }
 
 async function fetchAuthorizedEmails() {
@@ -209,12 +320,16 @@ function createApiClient(getIdToken) {
 
 const api = createApiClient(getAuthIdToken);
 
-async function mirrorQuestionIntake() {
+async function requestSheetSync({ suppressError = true } = {}) {
   try {
-    await api.apiPost({ action: "mirrorQuestionIntake" });
+    await api.apiPost({ action: "syncQuestionIntakeToSheet" });
+    return true;
   } catch (error) {
-    console.error("Failed to mirror question intake", error);
-    throw error;
+    console.error("Failed to request sheet sync", error);
+    if (!suppressError) {
+      throw error;
+    }
+    return false;
   }
 }
 
@@ -626,28 +741,39 @@ async function loadEvents({ preserveSelection = true } = {}) {
   const previousEventId = preserveSelection ? state.selectedEventId : null;
   const previousScheduleId = preserveSelection ? state.selectedScheduleId : null;
 
-  const response = await api.apiPost({ action: "listQuestionEvents" });
-  const rawEvents = Array.isArray(response.events) ? response.events : [];
+  const [eventsBranch, schedulesBranch] = await Promise.all([
+    fetchDbValue("questionIntake/events"),
+    fetchDbValue("questionIntake/schedules")
+  ]);
 
-  const normalized = rawEvents.map(event => {
-    const schedules = Array.isArray(event.schedules) ? event.schedules.slice() : [];
-    schedules.sort((a, b) => {
-      const createdDiff = toMillis(a?.createdAt) - toMillis(b?.createdAt);
+  const events = eventsBranch && typeof eventsBranch === "object" ? eventsBranch : {};
+  const schedulesTree = schedulesBranch && typeof schedulesBranch === "object" ? schedulesBranch : {};
+
+  const normalized = Object.entries(events).map(([eventId, eventValue]) => {
+    const scheduleBranch = schedulesTree[eventId] && typeof schedulesTree[eventId] === "object"
+      ? schedulesTree[eventId]
+      : {};
+    const scheduleList = Object.entries(scheduleBranch).map(([scheduleId, scheduleValue]) => ({
+      id: String(scheduleId),
+      label: String(scheduleValue?.label || ""),
+      date: String(scheduleValue?.date || ""),
+      createdAt: scheduleValue?.createdAt || 0,
+      updatedAt: scheduleValue?.updatedAt || 0,
+      participantCount: Number(scheduleValue?.participantCount || 0)
+    }));
+
+    scheduleList.sort((a, b) => {
+      const createdDiff = toMillis(a.createdAt) - toMillis(b.createdAt);
       if (createdDiff !== 0) return createdDiff;
-      return String(a?.label || "").localeCompare(String(b?.label || ""), "ja", { numeric: true });
+      return a.label.localeCompare(b.label, "ja", { numeric: true });
     });
+
     return {
-      id: String(event.id || ""),
-      name: String(event.name || ""),
-      createdAt: event.createdAt || "",
-      updatedAt: event.updatedAt || "",
-      schedules: schedules.map(schedule => ({
-        id: String(schedule.id || ""),
-        label: String(schedule.label || ""),
-        date: String(schedule.date || ""),
-        createdAt: schedule.createdAt || "",
-        participantCount: Number(schedule.participantCount || 0)
-      }))
+      id: String(eventId),
+      name: String(eventValue?.name || ""),
+      createdAt: eventValue?.createdAt || 0,
+      updatedAt: eventValue?.updatedAt || 0,
+      schedules: scheduleList
     };
   });
 
@@ -684,28 +810,36 @@ async function loadParticipants() {
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) {
     state.participants = [];
+    state.participantTokenMap = new Map();
     renderParticipants();
     updateParticipantContext();
     return;
   }
 
   try {
-    const response = await api.apiPost({
-      action: "fetchQuestionParticipants",
-      eventId,
-      scheduleId
-    });
-    const entries = Array.isArray(response.participants) ? response.participants : [];
-    state.participants = sortParticipants(
-      entries.map(entry => ({
-        participantId: entry.participantId,
-        name: entry.name || "",
-        groupNumber: entry.groupNumber || "",
-        token: entry.token || "",
-        guidance: entry.guidance || ""
+    await ensureTokenSnapshot(false);
+    const branch = await fetchDbValue(`questionIntake/participants/${eventId}/${scheduleId}`);
+    const entries = branch && typeof branch === "object" ? branch : {};
+    const normalized = Object.values(entries)
+      .map(entry => ({
+        participantId: String(entry?.participantId || entry?.id || ""),
+        name: String(entry?.name || ""),
+        groupNumber: String(entry?.groupNumber || ""),
+        token: String(entry?.token || ""),
+        guidance: String(entry?.guidance || "")
       }))
-    );
+      .filter(entry => entry.participantId);
+
+    state.participants = sortParticipants(normalized);
     state.lastSavedSignature = signatureForEntries(state.participants);
+    state.participantTokenMap = new Map(
+      state.participants.map(entry => [entry.participantId, entry.token])
+    );
+    state.participantTokenMap.forEach(token => {
+      if (token) {
+        state.knownTokens.add(token);
+      }
+    });
     if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
     if (dom.csvInput) dom.csvInput.value = "";
     setUploadStatus("現在の参加者リストを読み込みました。", "success");
@@ -714,6 +848,7 @@ async function loadParticipants() {
   } catch (error) {
     console.error(error);
     state.participants = [];
+    state.participantTokenMap = new Map();
     setUploadStatus(error.message || "参加者リストの読み込みに失敗しました。", "error");
     renderParticipants();
     updateParticipantContext();
@@ -746,12 +881,22 @@ async function handleAddEvent() {
   if (!trimmed) return;
 
   try {
-    const response = await api.apiPost({ action: "createQuestionEvent", name: trimmed });
-    const createdId = response?.event?.id || null;
-    await loadEvents({ preserveSelection: false });
-    if (createdId) {
-      selectEvent(createdId);
+    const now = Date.now();
+    let eventId = generateShortId("evt_");
+    const existingIds = new Set(state.events.map(evt => evt.id));
+    while (existingIds.has(eventId)) {
+      eventId = generateShortId("evt_");
     }
+
+    await set(rootDbRef(`questionIntake/events/${eventId}`), {
+      name: trimmed,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    await loadEvents({ preserveSelection: false });
+    selectEvent(eventId);
+    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
   } catch (error) {
     console.error(error);
     alert(error.message || "イベントの追加に失敗しました。");
@@ -764,15 +909,37 @@ async function handleDeleteEvent(eventId, eventName) {
   }
 
   try {
-    await api.apiPost({ action: "deleteQuestionEvent", eventId });
+    const participantBranch = await fetchDbValue(`questionIntake/participants/${eventId}`);
+    const tokensToRemove = collectParticipantTokens(participantBranch);
+
+    const updates = {
+      [`questionIntake/events/${eventId}`]: null,
+      [`questionIntake/schedules/${eventId}`]: null,
+      [`questionIntake/participants/${eventId}`]: null
+    };
+
+    tokensToRemove.forEach(token => {
+      updates[`questionIntake/tokens/${token}`] = null;
+      if (token) {
+        state.knownTokens.delete(token);
+        delete state.tokenRecords[token];
+      }
+    });
+
+    await update(rootDbRef(), updates);
+
     if (state.selectedEventId === eventId) {
       state.selectedEventId = null;
       state.selectedScheduleId = null;
       state.participants = [];
+      state.participantTokenMap = new Map();
     }
+
     await loadEvents({ preserveSelection: false });
     renderParticipants();
     updateParticipantContext();
+    state.tokenSnapshotFetchedAt = Date.now();
+    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
   } catch (error) {
     console.error(error);
     alert(error.message || "イベントの削除に失敗しました。");
@@ -787,18 +954,29 @@ async function handleAddSchedule() {
   const date = normalizeKey(window.prompt("日程の日付（例: 2024-05-01）を入力してください。") || "");
 
   try {
-    const response = await api.apiPost({
-      action: "createQuestionSchedule",
-      eventId,
-      label,
-      date
+    const now = Date.now();
+    const event = state.events.find(evt => evt.id === eventId);
+    const existingSchedules = new Set((event?.schedules || []).map(schedule => schedule.id));
+    let scheduleId = generateShortId("sch_");
+    while (existingSchedules.has(scheduleId)) {
+      scheduleId = generateShortId("sch_");
+    }
+
+    await update(rootDbRef(), {
+      [`questionIntake/schedules/${eventId}/${scheduleId}`]: {
+        label,
+        date,
+        participantCount: 0,
+        createdAt: now,
+        updatedAt: now
+      },
+      [`questionIntake/events/${eventId}/updatedAt`]: now
     });
-    const scheduleId = response?.schedule?.id || null;
+
     await loadEvents({ preserveSelection: true });
     selectEvent(eventId);
-    if (scheduleId) {
-      selectSchedule(scheduleId);
-    }
+    selectSchedule(scheduleId);
+    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
   } catch (error) {
     console.error(error);
     alert(error.message || "日程の追加に失敗しました。");
@@ -813,14 +991,41 @@ async function handleDeleteSchedule(scheduleId, scheduleLabel) {
   }
 
   try {
-    await api.apiPost({ action: "deleteQuestionSchedule", eventId, scheduleId });
+    const participantBranch = await fetchDbValue(`questionIntake/participants/${eventId}/${scheduleId}`);
+    const tokensToRemove = new Set();
+    if (participantBranch && typeof participantBranch === "object") {
+      Object.values(participantBranch).forEach(entry => {
+        const token = entry?.token;
+        if (token) tokensToRemove.add(String(token));
+      });
+    }
+
+    const now = Date.now();
+    const updates = {
+      [`questionIntake/schedules/${eventId}/${scheduleId}`]: null,
+      [`questionIntake/participants/${eventId}/${scheduleId}`]: null,
+      [`questionIntake/events/${eventId}/updatedAt`]: now
+    };
+
+    tokensToRemove.forEach(token => {
+      updates[`questionIntake/tokens/${token}`] = null;
+      state.knownTokens.delete(token);
+      delete state.tokenRecords[token];
+    });
+
+    await update(rootDbRef(), updates);
+
     if (state.selectedScheduleId === scheduleId) {
       state.selectedScheduleId = null;
       state.participants = [];
+      state.participantTokenMap = new Map();
     }
+
     await loadEvents({ preserveSelection: true });
     renderParticipants();
     updateParticipantContext();
+    state.tokenSnapshotFetchedAt = Date.now();
+    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
   } catch (error) {
     console.error(error);
     alert(error.message || "日程の削除に失敗しました。");
@@ -886,35 +1091,101 @@ async function handleSave() {
   setUploadStatus("保存中です…");
 
   try {
-    const payloadEntries = state.participants.map(entry => ({
-      participantId: entry.participantId,
-      name: entry.name,
-      groupNumber: entry.groupNumber,
-      guidance: entry.guidance || ""
-    }));
+    await ensureTokenSnapshot(true);
+    const event = state.events.find(evt => evt.id === eventId);
+    if (!event) {
+      throw new Error("選択中のイベントが見つかりません。");
+    }
+    const schedule = event.schedules.find(s => s.id === scheduleId);
+    if (!schedule) {
+      throw new Error("選択中の日程が見つかりません。");
+    }
 
-    const response = await api.apiPost({
-      action: "saveQuestionParticipants",
-      eventId,
-      scheduleId,
-      entries: payloadEntries
+    const now = Date.now();
+    const previousTokens = new Map(state.participantTokenMap || []);
+    const tokensToRemove = new Set(previousTokens.values());
+    const participantsPayload = {};
+    const nextTokenMap = new Map();
+    const knownTokens = state.knownTokens instanceof Set ? state.knownTokens : new Set();
+    const tokenRecords = state.tokenRecords || {};
+    state.tokenRecords = tokenRecords;
+
+    state.participants.forEach(entry => {
+      const participantId = String(entry.participantId || "").trim();
+      if (!participantId) return;
+
+      let token = String(entry.token || "").trim();
+      const previousToken = previousTokens.get(participantId) || "";
+      if (previousToken) {
+        tokensToRemove.delete(previousToken);
+      }
+
+      if (!token || (token !== previousToken && knownTokens.has(token))) {
+        token = generateQuestionToken(knownTokens);
+      } else if (!knownTokens.has(token)) {
+        knownTokens.add(token);
+      }
+
+      entry.token = token;
+      nextTokenMap.set(participantId, token);
+
+      const guidance = String(entry.guidance || "");
+
+      participantsPayload[participantId] = {
+        participantId,
+        name: String(entry.name || ""),
+        groupNumber: String(entry.groupNumber || ""),
+        token,
+        guidance,
+        updatedAt: now
+      };
+
+      const existingTokenRecord = tokenRecords[token] || {};
+      tokenRecords[token] = {
+        eventId,
+        eventName: event.name || existingTokenRecord.eventName || "",
+        scheduleId,
+        scheduleLabel: schedule.label || existingTokenRecord.scheduleLabel || "",
+        scheduleDate: schedule.date || existingTokenRecord.scheduleDate || "",
+        participantId,
+        displayName: String(entry.name || ""),
+        groupNumber: String(entry.groupNumber || ""),
+        guidance: guidance || existingTokenRecord.guidance || "",
+        revoked: false,
+        createdAt: existingTokenRecord.createdAt || now,
+        updatedAt: now
+      };
     });
 
-    const participants = Array.isArray(response.participants) ? response.participants : [];
-    state.participants = sortParticipants(
-      participants.map(entry => ({
-        participantId: entry.participantId,
-        name: entry.name || "",
-        groupNumber: entry.groupNumber || "",
-        token: entry.token || "",
-        guidance: entry.guidance || ""
-      }))
-    );
+    tokensToRemove.forEach(token => {
+      if (!token) return;
+      knownTokens.delete(token);
+      delete state.tokenRecords[token];
+    });
+
+    state.knownTokens = knownTokens;
+
+    const updates = {
+      [`questionIntake/participants/${eventId}/${scheduleId}`]: participantsPayload,
+      [`questionIntake/schedules/${eventId}/${scheduleId}/participantCount`]: state.participants.length,
+      [`questionIntake/schedules/${eventId}/${scheduleId}/updatedAt`]: now,
+      [`questionIntake/events/${eventId}/updatedAt`]: now
+    };
+
+    Object.entries(state.tokenRecords).forEach(([token, record]) => {
+      updates[`questionIntake/tokens/${token}`] = record;
+    });
+
+    await update(rootDbRef(), updates);
+
+    state.participantTokenMap = nextTokenMap;
     state.lastSavedSignature = signatureForEntries(state.participants);
     setUploadStatus("参加者リストを更新しました。", "success");
     await loadEvents({ preserveSelection: true });
-    renderParticipants();
+    await loadParticipants();
+    state.tokenSnapshotFetchedAt = Date.now();
     updateParticipantContext({ preserveStatus: true });
+    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
   } catch (error) {
     console.error(error);
     setUploadStatus(error.message || "保存に失敗しました。", "error");
@@ -976,6 +1247,7 @@ function resetState() {
   state.selectedEventId = null;
   state.selectedScheduleId = null;
   state.lastSavedSignature = "";
+  resetTokenState();
   renderEvents();
   renderSchedules();
   renderParticipants();
@@ -1097,9 +1369,9 @@ function attachEventHandlers() {
   if (dom.refreshButton) {
     dom.refreshButton.addEventListener("click", async () => {
       try {
-        await mirrorQuestionIntake();
         await loadEvents({ preserveSelection: true });
         await loadParticipants();
+        requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
       } catch (error) {
         console.error(error);
       }
@@ -1183,13 +1455,14 @@ function initAuthWatcher() {
       await verifyEnrollment(user);
       setLoaderStep(1, "在籍チェック完了。管理者権限を確認しています…");
       await ensureAdminAccess();
-      setLoaderStep(2, "管理者権限を同期しました。初期データを読み込み中…");
-      await mirrorQuestionIntake();
+      setLoaderStep(2, "管理者権限を同期しました。データベースから読み込み中…");
+      await ensureTokenSnapshot(true);
       await loadEvents({ preserveSelection: false });
       await loadParticipants();
       setLoaderStep(3, "初期データの取得が完了しました。仕上げ中…");
       setAuthUi(true);
       finishLoaderSteps("準備完了");
+      requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
     } catch (error) {
       console.error(error);
       alert(error.message || "権限の確認に失敗しました。");
