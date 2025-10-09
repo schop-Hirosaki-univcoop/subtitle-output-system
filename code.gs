@@ -130,6 +130,8 @@ function mirrorSheetToRtdb_(){
   const nameIdx= idxOf('ラジオネーム');
   const qIdx   = idxOf('質問・お悩み');
   const grpIdx = idxOf('班番号');
+  const genreIdx = idxOf('ジャンル');
+  const dateIdx = idxOf('日程');
   const selIdx = idxOf('選択中');
   const ansIdx = idxOf('回答済');
   const uidIdx = idxOf('UID');
@@ -155,11 +157,15 @@ function mirrorSheetToRtdb_(){
       if (!isNaN(d)) tsMs = d.getTime();
     }
     const groupVal = grpIdx>=0 ? row[grpIdx] : '';
+    const genreVal = genreIdx>=0 ? row[genreIdx] : '';
+    const dateVal = dateIdx>=0 ? row[dateIdx] : '';
     map[uid] = {
       uid,
       name: String(row[nameIdx] ?? ''),
       question: String(row[qIdx] ?? ''),
       group: String(groupVal ?? ''),
+      genre: String(genreVal ?? ''),
+      schedule: String(dateVal ?? ''),
       ts: tsMs || 0,
       answered: Boolean(row[ansIdx] === true),
       selecting: Boolean(row[selIdx] === true),
