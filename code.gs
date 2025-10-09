@@ -36,7 +36,11 @@ function doPost(e) {
     if (!action) throw new Error('Missing action');
 
     const displayActions = new Set(['beginDisplaySession', 'heartbeatDisplaySession', 'endDisplaySession']);
-    const principal = requireAuth_(idToken, displayActions.has(action) ? { allowAnonymous: true } : {});
+    const noAuthActions = new Set(['submitQuestion', 'fetchNameMappings', 'fetchQuestionContext']);
+    let principal = null;
+    if (!noAuthActions.has(action)) {
+      principal = requireAuth_(idToken, displayActions.has(action) ? { allowAnonymous: true } : {});
+    }
 
     switch (action) {
       case 'beginDisplaySession':
@@ -47,12 +51,42 @@ function doPost(e) {
         return jsonOk(endDisplaySession_(principal, req.sessionId, req.reason));
       case 'ensureAdmin':
         return jsonOk(ensureAdmin_(principal));
+      case 'submitQuestion':
+        return jsonOk(submitQuestion_(req));
+      case 'fetchNameMappings':
+        return jsonOk({ mappings: fetchNameMappings_() });
+      case 'fetchQuestionContext':
+        return jsonOk({ context: fetchQuestionContext_(req) });
+      case 'saveNameMappings':
+        assertOperator_(principal);
+        return jsonOk(saveNameMappings_(req.entries));
       case 'mirrorSheet':
         assertOperator_(principal);
         return jsonOk(mirrorSheetToRtdb_());
       case 'fetchSheet':
         assertOperator_(principal);
         return jsonOk({ data: getSheetData_(req.sheet) });
+      case 'listQuestionEvents':
+        assertOperator_(principal);
+        return jsonOk({ events: listQuestionEvents_() });
+      case 'createQuestionEvent':
+        assertOperator_(principal);
+        return jsonOk({ event: createQuestionEvent_(req.name) });
+      case 'deleteQuestionEvent':
+        assertOperator_(principal);
+        return jsonOk(deleteQuestionEvent_(req.eventId));
+      case 'createQuestionSchedule':
+        assertOperator_(principal);
+        return jsonOk({ schedule: createQuestionSchedule_(req.eventId, req.label, req.date) });
+      case 'deleteQuestionSchedule':
+        assertOperator_(principal);
+        return jsonOk(deleteQuestionSchedule_(req.eventId, req.scheduleId));
+      case 'fetchQuestionParticipants':
+        assertOperator_(principal);
+        return jsonOk({ participants: fetchQuestionParticipants_(req.eventId, req.scheduleId) });
+      case 'saveQuestionParticipants':
+        assertOperator_(principal);
+        return jsonOk(saveQuestionParticipants_(req.eventId, req.scheduleId, req.entries));
       case 'addTerm':
         assertOperator_(principal);
         return jsonOk(addDictionaryTerm(req.term, req.ruby));
@@ -88,6 +122,554 @@ function doPost(e) {
   } catch (err) {
     return jsonErr_(err);
   }
+}
+
+function submitQuestion_(payload) {
+  const radioName = String(payload.radioName || payload.name || '').trim();
+  const questionText = String(payload.question || payload.text || '').trim();
+  const groupNumber = String(payload.groupNumber || payload.group || '').trim();
+  const rawGenre = String(payload.genre || '').trim();
+  const rawSchedule = String(payload.schedule || payload.date || '').trim();
+  const eventId = String(payload.eventId || '').trim();
+  const eventName = String(payload.eventName || '').trim();
+  const scheduleId = String(payload.scheduleId || '').trim();
+  const participantId = String(payload.participantId || '').trim();
+  const scheduleDate = String(payload.scheduleDate || '').trim();
+
+  if (!radioName) throw new Error('ラジオネームを入力してください。');
+  if (!questionText) throw new Error('質問・お悩みを入力してください。');
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('answer');
+  if (!sheet) throw new Error('Sheet "answer" not found.');
+
+  const lastColumn = sheet.getLastColumn();
+  if (lastColumn < 1) throw new Error('answer sheet has no headers.');
+
+  const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
+  const norm = s => String(s || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
+  const headerMap = new Map();
+  headers.forEach((header, index) => {
+    if (header == null) return;
+    headerMap.set(norm(header), index);
+  });
+
+  const requiredHeaders = ['ラジオネーム', '質問・お悩み', 'uid'];
+  requiredHeaders.forEach(key => {
+    if (!headerMap.has(norm(key))) {
+      throw new Error(`Column "${key}" not found in answer sheet.`);
+    }
+  });
+
+  const newRow = Array.from({ length: headers.length }, () => '');
+  const setValue = (headerKey, value) => {
+    const idx = headerMap.get(norm(headerKey));
+    if (idx == null || idx < 0) return;
+    newRow[idx] = value;
+  };
+
+  const timestamp = new Date();
+  const uid = Utilities.getUuid();
+
+  setValue('タイムスタンプ', timestamp);
+  setValue('Timestamp', timestamp);
+  setValue('ラジオネーム', radioName);
+  setValue('質問・お悩み', questionText);
+  if (groupNumber) {
+    setValue('班番号', groupNumber);
+  }
+  const genreValue = rawGenre || 'その他';
+  setValue('ジャンル', genreValue);
+  setValue('日程', rawSchedule);
+  if (rawSchedule) {
+    setValue('日程表示', rawSchedule);
+  }
+  if (scheduleDate) {
+    setValue('日程日付', scheduleDate);
+  }
+  if (eventId) {
+    setValue('イベントID', eventId);
+  }
+  if (eventName) {
+    setValue('イベント名', eventName);
+  }
+  if (scheduleId) {
+    setValue('日程ID', scheduleId);
+  }
+  if (participantId) {
+    setValue('参加者ID', participantId);
+  }
+  setValue('uid', uid);
+  setValue('回答済', false);
+  setValue('選択中', false);
+  setValue('UID', uid);
+
+  sheet.appendRow(newRow);
+  try {
+    notifyUpdate('answer');
+  } catch (e) {
+    console.warn('notifyUpdate failed after submitQuestion_', e);
+  }
+
+  return { uid, timestamp: toIsoJst_(timestamp) };
+}
+
+const NAME_MAP_SHEET_NAME = 'name_mappings';
+
+function ensureNameMapSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(NAME_MAP_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(NAME_MAP_SHEET_NAME);
+  }
+
+  const headerRange = sheet.getRange(1, 1, 1, 2);
+  const headers = headerRange.getValues()[0];
+  const expected = ['ラジオネーム', '班番号'];
+  if (headers[0] !== expected[0] || headers[1] !== expected[1]) {
+    headerRange.setValues([expected]);
+  }
+
+  return sheet;
+}
+
+function normalizeNameKey_(value) {
+  return String(value || '')
+    .trim()
+    .normalize('NFKC');
+}
+
+function normalizeNameForLookup_(value) {
+  return normalizeNameKey_(value).replace(/[\u200B-\u200D\uFEFF]/g, '');
+}
+
+function readNameMappings_() {
+  const sheet = ensureNameMapSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return [];
+  }
+
+  const values = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  return values
+    .map(row => ({
+      name: normalizeNameKey_(row[0]),
+      groupNumber: String(row[1] || '').trim()
+    }))
+    .filter(entry => entry.name && entry.groupNumber);
+}
+
+function fetchNameMappings_() {
+  return readNameMappings_();
+}
+
+function saveNameMappings_(entries) {
+  if (!Array.isArray(entries)) {
+    throw new Error('Invalid payload: entries');
+  }
+
+  const deduped = [];
+  const seen = new Set();
+  entries.forEach(entry => {
+    if (!entry) return;
+    const name = normalizeNameKey_(entry.name || entry.radioName || '');
+    const groupNumber = String(entry.groupNumber || entry.group || '').trim();
+    if (!name || !groupNumber) return;
+    const lookup = normalizeNameForLookup_(name);
+    if (seen.has(lookup)) return;
+    seen.add(lookup);
+    deduped.push({ name, groupNumber });
+  });
+
+  const sheet = ensureNameMapSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, 2).clearContent();
+  }
+
+  if (deduped.length) {
+    const values = deduped.map(entry => [entry.name, entry.groupNumber]);
+    sheet.getRange(2, 1, values.length, 2).setValues(values);
+  }
+
+  return { count: deduped.length };
+}
+
+const QUESTION_EVENT_SHEET = 'question_events';
+const QUESTION_SCHEDULE_SHEET = 'question_schedules';
+const QUESTION_PARTICIPANT_SHEET = 'question_participants';
+
+function ensureSheetWithHeaders_(sheetName, headers) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+
+  const headerRange = sheet.getRange(1, 1, 1, headers.length);
+  const existing = headerRange.getValues()[0];
+  let needsUpdate = false;
+  headers.forEach((header, idx) => {
+    if (existing[idx] !== header) {
+      needsUpdate = true;
+    }
+  });
+  if (needsUpdate) {
+    headerRange.setValues([headers]);
+  }
+
+  return sheet;
+}
+
+function ensureQuestionEventSheet_() {
+  return ensureSheetWithHeaders_(QUESTION_EVENT_SHEET, ['イベントID', 'イベント名', '作成日時']);
+}
+
+function ensureQuestionScheduleSheet_() {
+  return ensureSheetWithHeaders_(QUESTION_SCHEDULE_SHEET, ['イベントID', '日程ID', '表示名', '日付', '作成日時']);
+}
+
+function ensureQuestionParticipantSheet_() {
+  return ensureSheetWithHeaders_(QUESTION_PARTICIPANT_SHEET, ['イベントID', '日程ID', '参加者ID', '氏名', '班番号', '更新日時']);
+}
+
+function generateShortId_(prefix) {
+  const raw = Utilities.getUuid().replace(/-/g, '');
+  return (prefix || '') + raw.slice(0, 8);
+}
+
+function readEvents_() {
+  const sheet = ensureQuestionEventSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return [];
+  }
+  const values = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+  return values
+    .map(row => {
+      const id = String(row[0] || '').trim();
+      if (!id) return null;
+      return {
+        id,
+        name: String(row[1] || '').trim(),
+        createdAt: row[2] instanceof Date ? toIsoJst_(row[2]) : ''
+      };
+    })
+    .filter(Boolean);
+}
+
+function readSchedules_() {
+  const sheet = ensureQuestionScheduleSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return [];
+  }
+  const values = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  return values
+    .map(row => {
+      const eventId = String(row[0] || '').trim();
+      const scheduleId = String(row[1] || '').trim();
+      if (!eventId || !scheduleId) return null;
+      return {
+        eventId,
+        id: scheduleId,
+        label: String(row[2] || '').trim(),
+        date: String(row[3] || '').trim(),
+        createdAt: row[4] instanceof Date ? toIsoJst_(row[4]) : ''
+      };
+    })
+    .filter(Boolean);
+}
+
+function readParticipantEntries_() {
+  const sheet = ensureQuestionParticipantSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return [];
+  }
+  const values = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  return values
+    .map(row => {
+      const eventId = String(row[0] || '').trim();
+      const scheduleId = String(row[1] || '').trim();
+      const participantId = String(row[2] || '').trim();
+      if (!eventId || !scheduleId || !participantId) return null;
+      return {
+        eventId,
+        scheduleId,
+        participantId,
+        name: normalizeNameKey_(row[3] || ''),
+        groupNumber: String(row[4] || '').trim(),
+        updatedAt: row[5] instanceof Date ? toIsoJst_(row[5]) : ''
+      };
+    })
+    .filter(Boolean);
+}
+
+function listQuestionEvents_() {
+  const events = readEvents_();
+  const schedules = readSchedules_();
+  const participants = readParticipantEntries_();
+
+  const scheduleMap = new Map();
+  schedules.forEach(schedule => {
+    const list = scheduleMap.get(schedule.eventId) || [];
+    list.push(schedule);
+    scheduleMap.set(schedule.eventId, list);
+  });
+
+  const participantCounts = new Map();
+  participants.forEach(entry => {
+    const key = `${entry.eventId}::${entry.scheduleId}`;
+    participantCounts.set(key, (participantCounts.get(key) || 0) + 1);
+  });
+
+  return events.map(event => {
+    const scheduleList = scheduleMap.get(event.id) || [];
+    const enrichedSchedules = scheduleList.map(schedule => ({
+      id: schedule.id,
+      label: schedule.label,
+      date: schedule.date,
+      createdAt: schedule.createdAt,
+      participantCount: participantCounts.get(`${event.id}::${schedule.id}`) || 0
+    }));
+    return { ...event, schedules: enrichedSchedules };
+  });
+}
+
+function createQuestionEvent_(name) {
+  const trimmedName = String(name || '').trim();
+  if (!trimmedName) {
+    throw new Error('イベント名を入力してください。');
+  }
+
+  const sheet = ensureQuestionEventSheet_();
+  const id = generateShortId_('evt_');
+  const now = new Date();
+  sheet.appendRow([id, trimmedName, now]);
+  return { id, name: trimmedName, createdAt: toIsoJst_(now), schedules: [] };
+}
+
+function deleteQuestionEvent_(eventId) {
+  const id = String(eventId || '').trim();
+  if (!id) {
+    throw new Error('eventId is required');
+  }
+
+  const eventSheet = ensureQuestionEventSheet_();
+  const lastRow = eventSheet.getLastRow();
+  for (let row = lastRow; row >= 2; row--) {
+    const value = String(eventSheet.getRange(row, 1).getValue() || '').trim();
+    if (value === id) {
+      eventSheet.deleteRow(row);
+    }
+  }
+
+  const scheduleSheet = ensureQuestionScheduleSheet_();
+  const scheduleLast = scheduleSheet.getLastRow();
+  for (let row = scheduleLast; row >= 2; row--) {
+    const value = String(scheduleSheet.getRange(row, 1).getValue() || '').trim();
+    if (value === id) {
+      scheduleSheet.deleteRow(row);
+    }
+  }
+
+  const participantSheet = ensureQuestionParticipantSheet_();
+  const participantLast = participantSheet.getLastRow();
+  for (let row = participantLast; row >= 2; row--) {
+    const value = String(participantSheet.getRange(row, 1).getValue() || '').trim();
+    if (value === id) {
+      participantSheet.deleteRow(row);
+    }
+  }
+
+  return { deleted: true };
+}
+
+function assertEventExists_(eventId) {
+  const events = readEvents_();
+  const found = events.find(event => event.id === eventId);
+  if (!found) {
+    throw new Error('指定されたイベントが見つかりません。');
+  }
+  return found;
+}
+
+function createQuestionSchedule_(eventId, label, date) {
+  const trimmedEventId = String(eventId || '').trim();
+  if (!trimmedEventId) {
+    throw new Error('eventId is required');
+  }
+  assertEventExists_(trimmedEventId);
+
+  const trimmedLabel = String(label || '').trim();
+  const trimmedDate = String(date || '').trim();
+  if (!trimmedLabel) {
+    throw new Error('日程の表示名を入力してください。');
+  }
+
+  const sheet = ensureQuestionScheduleSheet_();
+  const id = generateShortId_('sch_');
+  const now = new Date();
+  sheet.appendRow([trimmedEventId, id, trimmedLabel, trimmedDate, now]);
+  return { id, label: trimmedLabel, date: trimmedDate, createdAt: toIsoJst_(now), participantCount: 0 };
+}
+
+function deleteQuestionSchedule_(eventId, scheduleId) {
+  const trimmedEventId = String(eventId || '').trim();
+  const trimmedScheduleId = String(scheduleId || '').trim();
+  if (!trimmedEventId || !trimmedScheduleId) {
+    throw new Error('eventId and scheduleId are required');
+  }
+
+  const scheduleSheet = ensureQuestionScheduleSheet_();
+  const lastRow = scheduleSheet.getLastRow();
+  for (let row = lastRow; row >= 2; row--) {
+    const eventValue = String(scheduleSheet.getRange(row, 1).getValue() || '').trim();
+    const scheduleValue = String(scheduleSheet.getRange(row, 2).getValue() || '').trim();
+    if (eventValue === trimmedEventId && scheduleValue === trimmedScheduleId) {
+      scheduleSheet.deleteRow(row);
+    }
+  }
+
+  const participantSheet = ensureQuestionParticipantSheet_();
+  const participantLast = participantSheet.getLastRow();
+  for (let row = participantLast; row >= 2; row--) {
+    const eventValue = String(participantSheet.getRange(row, 1).getValue() || '').trim();
+    const scheduleValue = String(participantSheet.getRange(row, 2).getValue() || '').trim();
+    if (eventValue === trimmedEventId && scheduleValue === trimmedScheduleId) {
+      participantSheet.deleteRow(row);
+    }
+  }
+
+  return { deleted: true };
+}
+
+function fetchQuestionParticipants_(eventId, scheduleId) {
+  const trimmedEventId = String(eventId || '').trim();
+  const trimmedScheduleId = String(scheduleId || '').trim();
+  if (!trimmedEventId || !trimmedScheduleId) {
+    throw new Error('eventId and scheduleId are required');
+  }
+
+  return readParticipantEntries_().filter(entry => entry.eventId === trimmedEventId && entry.scheduleId === trimmedScheduleId)
+    .map(entry => ({
+      participantId: entry.participantId,
+      name: entry.name,
+      groupNumber: entry.groupNumber
+    }));
+}
+
+function saveQuestionParticipants_(eventId, scheduleId, entries) {
+  const trimmedEventId = String(eventId || '').trim();
+  const trimmedScheduleId = String(scheduleId || '').trim();
+  if (!trimmedEventId || !trimmedScheduleId) {
+    throw new Error('eventId and scheduleId are required');
+  }
+  assertEventExists_(trimmedEventId);
+  const schedules = readSchedules_();
+  const scheduleFound = schedules.find(schedule => schedule.eventId === trimmedEventId && schedule.id === trimmedScheduleId);
+  if (!scheduleFound) {
+    throw new Error('指定された日程が見つかりません。');
+  }
+
+  if (!Array.isArray(entries)) {
+    throw new Error('entries must be an array');
+  }
+
+  const deduped = [];
+  const seen = new Set();
+  entries.forEach(entry => {
+    if (!entry) return;
+    const participantId = String(entry.participantId || entry.id || '').trim();
+    if (!participantId) return;
+    if (seen.has(participantId)) return;
+    seen.add(participantId);
+    const name = normalizeNameKey_(entry.name || entry.displayName || '');
+    const groupNumber = String(entry.groupNumber || entry.group || '').trim();
+    deduped.push({ participantId, name, groupNumber });
+  });
+
+  const sheet = ensureQuestionParticipantSheet_();
+  const lastRow = sheet.getLastRow();
+  let existing = [];
+  if (lastRow >= 2) {
+    existing = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  }
+
+  const nextRows = [];
+  existing.forEach(row => {
+    const eventValue = String(row[0] || '').trim();
+    const scheduleValue = String(row[1] || '').trim();
+    if (!eventValue || !scheduleValue) {
+      return;
+    }
+    if (eventValue === trimmedEventId && scheduleValue === trimmedScheduleId) {
+      return;
+    }
+    nextRows.push([eventValue, scheduleValue, String(row[2] || '').trim(), normalizeNameKey_(row[3] || ''), String(row[4] || '').trim(), row[5]]);
+  });
+
+  const now = new Date();
+  deduped.forEach(entry => {
+    nextRows.push([
+      trimmedEventId,
+      trimmedScheduleId,
+      entry.participantId,
+      entry.name,
+      entry.groupNumber,
+      now
+    ]);
+  });
+
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, 6).clearContent();
+  }
+  if (nextRows.length) {
+    const requiredRows = nextRows.length + 1;
+    if (sheet.getMaxRows() < requiredRows) {
+      sheet.insertRowsAfter(sheet.getMaxRows(), requiredRows - sheet.getMaxRows());
+    }
+    sheet.getRange(2, 1, nextRows.length, 6).setValues(nextRows);
+  }
+
+  return { count: deduped.length };
+}
+
+function fetchQuestionContext_(payload) {
+  const eventId = String(payload.eventId || payload.event || '').trim();
+  const scheduleId = String(payload.scheduleId || payload.schedule || '').trim();
+  const participantId = String(payload.participantId || payload.participant || payload.id || '').trim();
+
+  if (!eventId || !scheduleId || !participantId) {
+    throw new Error('アクセスに必要な情報が不足しています。');
+  }
+
+  const events = listQuestionEvents_();
+  const event = events.find(evt => evt.id === eventId);
+  if (!event) {
+    throw new Error('イベント情報が見つかりません。担当者にお問い合わせください。');
+  }
+  const schedule = (event.schedules || []).find(s => s.id === scheduleId);
+  if (!schedule) {
+    throw new Error('日程情報が見つかりません。担当者にお問い合わせください。');
+  }
+
+  const participants = fetchQuestionParticipants_(eventId, scheduleId);
+  const participant = participants.find(entry => entry.participantId === participantId);
+  if (!participant) {
+    throw new Error('参加者情報が確認できません。担当者にお問い合わせください。');
+  }
+
+  return {
+    eventId,
+    eventName: event.name,
+    scheduleId,
+    scheduleLabel: schedule.label || schedule.date || '',
+    scheduleDate: schedule.date || '',
+    participantId,
+    participantName: participant.name,
+    groupNumber: participant.groupNumber || ''
+  };
 }
 
 function ensureAdmin_(principal){
