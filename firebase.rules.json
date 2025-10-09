@@ -106,6 +106,7 @@
           "displayName": { ".validate": "newData.isString()" },
           "groupNumber": { ".validate": "newData.isString()" },
           "guidance": { ".validate": "newData.isString() || !newData.exists()" },
+          "expiresAt": { ".validate": "newData.isNumber() || !newData.exists()" },
           "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
           "createdAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
           "revoked": { ".validate": "newData.isBoolean() || !newData.exists()" },

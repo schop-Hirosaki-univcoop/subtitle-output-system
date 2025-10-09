@@ -63,6 +63,9 @@ function doPost(e) {
       case 'mirrorSheet':
         assertOperator_(principal);
         return jsonOk(mirrorSheetToRtdb_());
+      case 'mirrorQuestionIntake':
+        assertOperator_(principal);
+        return jsonOk(mirrorQuestionIntake_());
       case 'fetchSheet':
         assertOperator_(principal);
         return jsonOk({ data: getSheetData_(req.sheet) });
@@ -127,17 +130,70 @@ function doPost(e) {
 function submitQuestion_(payload) {
   const radioName = String(payload.radioName || payload.name || '').trim();
   const questionText = String(payload.question || payload.text || '').trim();
-  const groupNumber = String(payload.groupNumber || payload.group || '').trim();
+  const payloadGroupNumber = String(payload.groupNumber || payload.group || '').trim();
   const rawGenre = String(payload.genre || '').trim();
-  const rawSchedule = String(payload.schedule || payload.date || '').trim();
-  const eventId = String(payload.eventId || '').trim();
-  const eventName = String(payload.eventName || '').trim();
-  const scheduleId = String(payload.scheduleId || '').trim();
-  const participantId = String(payload.participantId || '').trim();
-  const scheduleDate = String(payload.scheduleDate || '').trim();
+  const payloadScheduleLabel = String(payload.schedule || payload.date || '').trim();
+  const payloadEventId = String(payload.eventId || '').trim();
+  const payloadEventName = String(payload.eventName || '').trim();
+  const payloadScheduleId = String(payload.scheduleId || '').trim();
+  const payloadParticipantId = String(payload.participantId || '').trim();
+  const payloadScheduleDate = String(payload.scheduleDate || '').trim();
+  const rawToken = String(payload.token || '').trim();
 
   if (!radioName) throw new Error('ラジオネームを入力してください。');
   if (!questionText) throw new Error('質問・お悩みを入力してください。');
+  if (!rawToken) {
+    throw new Error('アクセス情報を確認できませんでした。配布されたリンクから再度アクセスしてください。');
+  }
+  if (!/^[A-Za-z0-9_-]{12,128}$/.test(rawToken)) {
+    throw new Error('アクセスリンクが無効です。最新のURLからアクセスしてください。');
+  }
+
+  let tokenRecord = null;
+  try {
+    const accessToken = getFirebaseAccessToken_();
+    tokenRecord = fetchRtdb_('questionIntake/tokens/' + rawToken, accessToken);
+  } catch (error) {
+    throw new Error('アクセスリンクの検証に失敗しました。時間をおいて再試行してください。');
+  }
+
+  if (!tokenRecord) {
+    throw new Error('このリンクは無効化されています。運営までお問い合わせください。');
+  }
+  if (tokenRecord.revoked) {
+    throw new Error('このリンクは無効化されています。運営までお問い合わせください。');
+  }
+  const expiresAt = Number(tokenRecord.expiresAt || 0);
+  if (expiresAt && Date.now() > expiresAt) {
+    throw new Error('このリンクの有効期限が切れています。運営までお問い合わせください。');
+  }
+
+  const tokenEventId = String(tokenRecord.eventId || '').trim();
+  const tokenScheduleId = String(tokenRecord.scheduleId || '').trim();
+  const tokenParticipantId = String(tokenRecord.participantId || '').trim();
+  if (!tokenEventId || !tokenScheduleId || !tokenParticipantId) {
+    throw new Error('リンクに紐づくイベント情報が確認できません。運営までお問い合わせください。');
+  }
+
+  if (payloadEventId && payloadEventId !== tokenEventId) {
+    throw new Error('送信されたイベント情報が一致しません。リンクを再度開き直してください。');
+  }
+  if (payloadScheduleId && payloadScheduleId !== tokenScheduleId) {
+    throw new Error('送信された日程情報が一致しません。リンクを再度開き直してください。');
+  }
+  if (payloadParticipantId && payloadParticipantId !== tokenParticipantId) {
+    throw new Error('送信された参加者情報が一致しません。リンクを再度開き直してください。');
+  }
+
+  const eventId = tokenEventId;
+  const scheduleId = tokenScheduleId;
+  const participantId = tokenParticipantId;
+  const eventName = String(tokenRecord.eventName || payloadEventName || '').trim();
+  const scheduleLabel = String(tokenRecord.scheduleLabel || payloadScheduleLabel || '').trim();
+  const scheduleDate = String(tokenRecord.scheduleDate || payloadScheduleDate || '').trim();
+  const participantName = String(tokenRecord.displayName || '').trim();
+  const guidance = String(tokenRecord.guidance || payload.guidance || '').trim();
+  const groupNumber = String(tokenRecord.groupNumber || payloadGroupNumber || '').trim();
 
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('answer');
   if (!sheet) throw new Error('Sheet "answer" not found.');
@@ -179,29 +235,38 @@ function submitQuestion_(payload) {
   }
   const genreValue = rawGenre || 'その他';
   setValue('ジャンル', genreValue);
-  setValue('日程', rawSchedule);
-  if (rawSchedule) {
-    setValue('日程表示', rawSchedule);
+  setValue('日程', scheduleLabel);
+  if (scheduleLabel) {
+    setValue('日程表示', scheduleLabel);
   }
   if (scheduleDate) {
     setValue('日程日付', scheduleDate);
   }
-  if (eventId) {
-    setValue('イベントID', eventId);
-  }
+  setValue('イベントID', eventId);
   if (eventName) {
     setValue('イベント名', eventName);
   }
-  if (scheduleId) {
-    setValue('日程ID', scheduleId);
+  setValue('日程ID', scheduleId);
+  setValue('参加者ID', participantId);
+  if (participantName) {
+    setValue('参加者名', participantName);
+    setValue('氏名', participantName);
   }
-  if (participantId) {
-    setValue('参加者ID', participantId);
+  setValue('リンクトークン', rawToken);
+  setValue('Token', rawToken);
+  if (guidance) {
+    setValue('ガイダンス', guidance);
+    setValue('案内文', guidance);
   }
   setValue('uid', uid);
   setValue('回答済', false);
   setValue('選択中', false);
   setValue('UID', uid);
+
+  const payloadGenre = String(payload.genre || '').trim();
+  if (payloadGenre) {
+    setValue('ジャンル(送信時)', payloadGenre);
+  }
 
   sheet.appendRow(newRow);
   try {
@@ -337,6 +402,200 @@ function generateShortId_(prefix) {
   return (prefix || '') + raw.slice(0, 8);
 }
 
+function parseDateToMillis_(value, fallback) {
+  const fb = fallback == null ? Date.now() : fallback;
+  if (!value) return fb;
+  if (value instanceof Date && !isNaN(value)) return value.getTime();
+  if (typeof value === 'number' && !isNaN(value)) {
+    if (value > 1e12) return value;
+    if (value > 1e10) return value * 1000;
+    if (value > 20000 && value < 70000) {
+      return Math.round((value - 25569) * 86400 * 1000);
+    }
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return fb;
+    const isoLike = trimmed.replace(' ', 'T');
+    const parsed = new Date(isoLike);
+    if (!isNaN(parsed)) return parsed.getTime();
+  }
+  return fb;
+}
+
+function generateQuestionToken_(existingTokens) {
+  const used = existingTokens || new Set();
+  while (true) {
+    const seed = Utilities.getUuid() + ':' + Math.random() + ':' + Date.now();
+    const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, seed);
+    const token = Utilities.base64EncodeWebSafe(digest).replace(/=+/g, '').slice(0, 32);
+    if (!used.has(token)) {
+      used.add(token);
+      return token;
+    }
+  }
+}
+
+function mirrorQuestionIntake_() {
+  const events = readEvents_();
+  const schedules = readSchedules_();
+  const participants = readParticipantEntries_();
+  const now = Date.now();
+  const accessToken = getFirebaseAccessToken_();
+
+  const existingEvents = fetchRtdb_('questionIntake/events', accessToken) || {};
+  const existingSchedules = fetchRtdb_('questionIntake/schedules', accessToken) || {};
+  const existingParticipants = fetchRtdb_('questionIntake/participants', accessToken) || {};
+  const existingTokens = fetchRtdb_('questionIntake/tokens', accessToken) || {};
+
+  const usedTokens = new Set(Object.keys(existingTokens));
+  const tokenByKey = new Map();
+  Object.keys(existingTokens).forEach(key => {
+    const record = existingTokens[key];
+    if (!record) return;
+    const mapKey = `${record.eventId || ''}::${record.scheduleId || ''}::${record.participantId || ''}`;
+    tokenByKey.set(mapKey, { token: key, record });
+  });
+
+  const eventMap = {};
+  const scheduleTree = {};
+  const participantsTree = {};
+  const tokensMap = {};
+  const scheduleUpdateMap = {};
+  const eventUpdateMap = {};
+
+  const eventLookup = new Map();
+  events.forEach(event => {
+    if (!event || !event.id) return;
+    eventLookup.set(event.id, event);
+    const existing = existingEvents[event.id] || {};
+    const createdAt = existing.createdAt || parseDateToMillis_(event.createdAt, now);
+    eventMap[event.id] = {
+      name: event.name || '',
+      createdAt,
+      updatedAt: Math.max(existing.updatedAt || 0, createdAt)
+    };
+  });
+
+  const scheduleLookup = new Map();
+  schedules.forEach(schedule => {
+    if (!schedule || !schedule.eventId || !schedule.id) return;
+    const key = `${schedule.eventId}::${schedule.id}`;
+    scheduleLookup.set(key, schedule);
+    if (!scheduleTree[schedule.eventId]) {
+      scheduleTree[schedule.eventId] = {};
+    }
+    const existing = (existingSchedules[schedule.eventId] || {})[schedule.id] || {};
+    const createdAt = existing.createdAt || parseDateToMillis_(schedule.createdAt, now);
+    scheduleTree[schedule.eventId][schedule.id] = {
+      label: schedule.label || '',
+      date: schedule.date || '',
+      participantCount: 0,
+      createdAt,
+      updatedAt: Math.max(existing.updatedAt || 0, createdAt)
+    };
+  });
+
+  participants.forEach(entry => {
+    if (!entry || !entry.eventId || !entry.scheduleId || !entry.participantId) return;
+    if (!participantsTree[entry.eventId]) {
+      participantsTree[entry.eventId] = {};
+    }
+    if (!participantsTree[entry.eventId][entry.scheduleId]) {
+      participantsTree[entry.eventId][entry.scheduleId] = {};
+    }
+
+    const existingParticipant = (((existingParticipants[entry.eventId] || {})[entry.scheduleId] || {})[entry.participantId]) || {};
+    const key = `${entry.eventId}::${entry.scheduleId}::${entry.participantId}`;
+    const tokenInfo = tokenByKey.get(key) || {};
+    let tokenValue = tokenInfo.token;
+    let tokenRecord = tokenInfo.record || {};
+    if (!tokenValue) {
+      tokenValue = generateQuestionToken_(usedTokens);
+      tokenRecord = {};
+    }
+
+    const participantUpdatedAt = parseDateToMillis_(entry.updatedAt, now);
+    const guidance = existingParticipant.guidance || tokenRecord.guidance || '';
+
+    participantsTree[entry.eventId][entry.scheduleId][entry.participantId] = {
+      participantId: entry.participantId,
+      name: entry.name || '',
+      groupNumber: entry.groupNumber || '',
+      token: tokenValue,
+      guidance,
+      updatedAt: participantUpdatedAt
+    };
+
+    scheduleUpdateMap[key] = Math.max(scheduleUpdateMap[key] || 0, participantUpdatedAt);
+    eventUpdateMap[entry.eventId] = Math.max(eventUpdateMap[entry.eventId] || 0, participantUpdatedAt);
+
+    const event = eventLookup.get(entry.eventId) || { id: entry.eventId, name: '' };
+    const schedule = scheduleLookup.get(`${entry.eventId}::${entry.scheduleId}`) || { id: entry.scheduleId, label: entry.scheduleId, date: '' };
+    const tokenCreatedAt = tokenRecord.createdAt || participantUpdatedAt;
+    const tokenUpdatedAt = Math.max(tokenRecord.updatedAt || 0, participantUpdatedAt);
+
+    tokensMap[tokenValue] = {
+      eventId: entry.eventId,
+      eventName: event.name || tokenRecord.eventName || '',
+      scheduleId: entry.scheduleId,
+      scheduleLabel: schedule.label || tokenRecord.scheduleLabel || schedule.id || '',
+      scheduleDate: schedule.date || tokenRecord.scheduleDate || '',
+      participantId: entry.participantId,
+      displayName: entry.name || '',
+      groupNumber: entry.groupNumber || '',
+      guidance,
+      revoked: false,
+      createdAt: tokenCreatedAt,
+      updatedAt: tokenUpdatedAt
+    };
+  });
+
+  Object.keys(scheduleTree).forEach(eventId => {
+    const schedulesForEvent = scheduleTree[eventId];
+    Object.keys(schedulesForEvent).forEach(scheduleId => {
+      const branch = (participantsTree[eventId] || {})[scheduleId] || {};
+      const count = Object.keys(branch).length;
+      const scheduleKey = `${eventId}::${scheduleId}`;
+      const existing = (existingSchedules[eventId] || {})[scheduleId] || {};
+      schedulesForEvent[scheduleId].participantCount = count;
+      const candidateUpdated = Math.max(
+        schedulesForEvent[scheduleId].updatedAt || 0,
+        scheduleUpdateMap[scheduleKey] || 0,
+        existing.updatedAt || 0
+      );
+      schedulesForEvent[scheduleId].updatedAt = candidateUpdated;
+    });
+  });
+
+  Object.keys(eventMap).forEach(eventId => {
+    const existing = existingEvents[eventId] || {};
+    const candidate = Math.max(
+      eventMap[eventId].updatedAt || 0,
+      eventUpdateMap[eventId] || 0,
+      existing.updatedAt || 0
+    );
+    eventMap[eventId].updatedAt = candidate;
+  });
+
+  const updates = {
+    'questionIntake/events': eventMap,
+    'questionIntake/schedules': scheduleTree,
+    'questionIntake/participants': participantsTree,
+    'questionIntake/tokens': tokensMap
+  };
+
+  patchRtdb_(updates, accessToken);
+
+  return {
+    eventCount: Object.keys(eventMap).length,
+    scheduleCount: schedules.length,
+    participantCount: participants.length,
+    tokenCount: Object.keys(tokensMap).length
+  };
+}
+
 function readEvents_() {
   const sheet = ensureQuestionEventSheet_();
   const lastRow = sheet.getLastRow();
@@ -446,6 +705,7 @@ function createQuestionEvent_(name) {
   const id = generateShortId_('evt_');
   const now = new Date();
   sheet.appendRow([id, trimmedName, now]);
+  mirrorQuestionIntake_();
   return { id, name: trimmedName, createdAt: toIsoJst_(now), schedules: [] };
 }
 
@@ -482,6 +742,7 @@ function deleteQuestionEvent_(eventId) {
     }
   }
 
+  mirrorQuestionIntake_();
   return { deleted: true };
 }
 
@@ -511,6 +772,7 @@ function createQuestionSchedule_(eventId, label, date) {
   const id = generateShortId_('sch_');
   const now = new Date();
   sheet.appendRow([trimmedEventId, id, trimmedLabel, trimmedDate, now]);
+  mirrorQuestionIntake_();
   return { id, label: trimmedLabel, date: trimmedDate, createdAt: toIsoJst_(now), participantCount: 0 };
 }
 
@@ -541,6 +803,7 @@ function deleteQuestionSchedule_(eventId, scheduleId) {
     }
   }
 
+  mirrorQuestionIntake_();
   return { deleted: true };
 }
 
@@ -551,12 +814,24 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
     throw new Error('eventId and scheduleId are required');
   }
 
-  return readParticipantEntries_().filter(entry => entry.eventId === trimmedEventId && entry.scheduleId === trimmedScheduleId)
-    .map(entry => ({
+  const entries = readParticipantEntries_().filter(entry => entry.eventId === trimmedEventId && entry.scheduleId === trimmedScheduleId);
+  if (!entries.length) {
+    return [];
+  }
+
+  const accessToken = getFirebaseAccessToken_();
+  const participantBranch = fetchRtdb_(`questionIntake/participants/${trimmedEventId}/${trimmedScheduleId}`, accessToken) || {};
+
+  return entries.map(entry => {
+    const current = participantBranch[entry.participantId] || {};
+    return {
       participantId: entry.participantId,
       name: entry.name,
-      groupNumber: entry.groupNumber
-    }));
+      groupNumber: entry.groupNumber,
+      token: current.token || '',
+      guidance: current.guidance || ''
+    };
+  });
 }
 
 function saveQuestionParticipants_(eventId, scheduleId, entries) {
@@ -632,7 +907,11 @@ function saveQuestionParticipants_(eventId, scheduleId, entries) {
     sheet.getRange(2, 1, nextRows.length, 6).setValues(nextRows);
   }
 
-  return { count: deduped.length };
+  mirrorQuestionIntake_();
+  return {
+    count: deduped.length,
+    participants: fetchQuestionParticipants_(trimmedEventId, trimmedScheduleId)
+  };
 }
 
 function fetchQuestionContext_(payload) {

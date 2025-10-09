@@ -1,14 +1,5 @@
 import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getDatabase,
-  ref,
-  push,
-  set,
-  update,
-  get,
-  serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-import {
   initializeAuth,
   browserSessionPersistence,
   browserPopupRedirectResolver,
@@ -40,7 +31,6 @@ const firebaseConfig = {
 
 const apps = getApps();
 const app = apps.length ? getApp() : initializeApp(firebaseConfig);
-const database = getDatabase(app);
 const auth = initializeAuth(app, {
   persistence: browserSessionPersistence,
   popupRedirectResolver: browserPopupRedirectResolver
@@ -92,9 +82,43 @@ const loaderState = {
   currentIndex: -1
 };
 
-async function applyQuestionIntakeUpdates(updates) {
-  if (!updates || !Object.keys(updates).length) return;
-  await update(ref(database, "questionIntake"), updates);
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isPermissionDenied(error) {
+  if (!error || typeof error !== "object") return false;
+  const code = String(error.code || error?.message || "").toLowerCase();
+  return (
+    code.includes("permission_denied") ||
+    code.includes("permission-denied") ||
+    code.includes("permission denied")
+  );
+}
+
+function toMillis(value) {
+  if (value == null) return 0;
+  if (typeof value === "number" && !Number.isNaN(value)) {
+    if (value > 1e12) return value;
+    if (value > 1e10) return value * 1000;
+    return value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return 0;
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.getTime();
+    }
+    const numeric = Number(trimmed);
+    if (!Number.isNaN(numeric)) {
+      return numeric;
+    }
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.getTime();
+  }
+  return 0;
 }
 
 async function fetchAuthorizedEmails() {
@@ -131,14 +155,32 @@ function renderUserSummary(user) {
 }
 
 function createApiClient(authInstance) {
-  async function getIdToken(force = false) {
-    const user = authInstance.currentUser;
+  async function getIdTokenSafe(force = false) {
+    const currentUser = authInstance.currentUser;
+    if (currentUser) {
+      return await currentUser.getIdToken(force);
+    }
+
+    const user = await new Promise((resolve, reject) => {
+      const unsubscribe = onAuthStateChanged(
+        authInstance,
+        nextUser => {
+          unsubscribe();
+          resolve(nextUser);
+        },
+        error => {
+          unsubscribe();
+          reject(error);
+        }
+      );
+    });
+
     if (!user) throw new Error("Not signed in");
     return await user.getIdToken(force);
   }
 
-  async function apiPost(payload, retry = true) {
-    const idToken = await getIdToken();
+  async function apiPost(payload, retryOnAuthError = true) {
+    const idToken = await getIdTokenSafe();
     const response = await fetch(GAS_API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
@@ -152,8 +194,8 @@ function createApiClient(authInstance) {
     }
     if (!json.success) {
       const message = String(json.error || "");
-      if (retry && /Auth/.test(message)) {
-        await getIdToken(true);
+      if (retryOnAuthError && /Auth/.test(message)) {
+        await getIdTokenSafe(true);
         return await apiPost(payload, false);
       }
       throw new Error(message || "APIリクエストに失敗しました。");
@@ -165,6 +207,15 @@ function createApiClient(authInstance) {
 }
 
 const api = createApiClient(auth);
+
+async function mirrorQuestionIntake() {
+  try {
+    await api.apiPost({ action: "mirrorQuestionIntake" });
+  } catch (error) {
+    console.error("Failed to mirror question intake", error);
+    throw error;
+  }
+}
 
 function normalizeKey(value) {
   return String(value ?? "")
@@ -357,44 +408,10 @@ function sortParticipants(entries) {
   });
 }
 
-function generateToken() {
-  if (typeof crypto !== "undefined") {
-    if (crypto.randomUUID) {
-      return crypto.randomUUID().replace(/-/g, "");
-    }
-    if (crypto.getRandomValues) {
-      const bytes = new Uint8Array(24);
-      crypto.getRandomValues(bytes);
-      return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
-    }
-  }
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
 function createShareUrl(token) {
   const url = new URL(FORM_PAGE_PATH, window.location.href);
   url.searchParams.set("token", token);
   return url.toString();
-}
-
-function buildTokenPayload(entry, event, schedule, { isNew = false } = {}) {
-  const payload = {
-    eventId: event?.id || state.selectedEventId || "",
-    eventName: event?.name || "",
-    scheduleId: schedule?.id || state.selectedScheduleId || "",
-    scheduleLabel: schedule?.label || schedule?.id || "",
-    scheduleDate: schedule?.date || "",
-    participantId: entry.participantId,
-    displayName: entry.name,
-    groupNumber: entry.groupNumber,
-    guidance: entry.guidance || "",
-    updatedAt: serverTimestamp(),
-    revoked: false
-  };
-  if (isNew) {
-    payload.createdAt = serverTimestamp();
-  }
-  return payload;
 }
 
 async function copyShareLink(token) {
@@ -604,47 +621,52 @@ function updateParticipantContext(options = {}) {
   }
 }
 
-async function loadEvents() {
-  const eventsSnap = await get(ref(database, "questionIntake/events"));
-  const eventsData = eventsSnap.val() || {};
+async function loadEvents({ preserveSelection = true } = {}) {
+  const previousEventId = preserveSelection ? state.selectedEventId : null;
+  const previousScheduleId = preserveSelection ? state.selectedScheduleId : null;
 
-  const events = await Promise.all(
-    Object.entries(eventsData).map(async ([eventId, eventValue]) => {
-      let scheduleEntries = [];
-      try {
-        const schedulesSnap = await get(ref(database, `questionIntake/schedules/${eventId}`));
-        const schedulesData = schedulesSnap.val() || {};
-        scheduleEntries = Object.entries(schedulesData).map(([scheduleId, scheduleValue]) => ({
-          id: scheduleId,
-          label: scheduleValue.label || "",
-          date: scheduleValue.date || "",
-          participantCount: Number(scheduleValue.participantCount || 0),
-          createdAt: scheduleValue.createdAt || 0
-        }));
-      } catch (error) {
-        if (error?.code !== "PERMISSION_DENIED") {
-          console.error("Failed to load schedules for event", eventId, error);
-        }
-      }
+  const response = await api.apiPost({ action: "listQuestionEvents" });
+  const rawEvents = Array.isArray(response.events) ? response.events : [];
 
-      scheduleEntries.sort(
-        (a, b) => (a.createdAt || 0) - (b.createdAt || 0) || a.label.localeCompare(b.label, "ja", { numeric: true })
-      );
+  const normalized = rawEvents.map(event => {
+    const schedules = Array.isArray(event.schedules) ? event.schedules.slice() : [];
+    schedules.sort((a, b) => {
+      const createdDiff = toMillis(a?.createdAt) - toMillis(b?.createdAt);
+      if (createdDiff !== 0) return createdDiff;
+      return String(a?.label || "").localeCompare(String(b?.label || ""), "ja", { numeric: true });
+    });
+    return {
+      id: String(event.id || ""),
+      name: String(event.name || ""),
+      createdAt: event.createdAt || "",
+      updatedAt: event.updatedAt || "",
+      schedules: schedules.map(schedule => ({
+        id: String(schedule.id || ""),
+        label: String(schedule.label || ""),
+        date: String(schedule.date || ""),
+        createdAt: schedule.createdAt || "",
+        participantCount: Number(schedule.participantCount || 0)
+      }))
+    };
+  });
 
-      return {
-        id: eventId,
-        name: eventValue.name || "",
-        createdAt: eventValue.createdAt || 0,
-        updatedAt: eventValue.updatedAt || 0,
-        schedules: scheduleEntries
-      };
-    })
-  );
+  normalized.sort((a, b) => {
+    const createdDiff = toMillis(a.createdAt) - toMillis(b.createdAt);
+    if (createdDiff !== 0) return createdDiff;
+    return a.name.localeCompare(b.name, "ja", { numeric: true });
+  });
 
-  events.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || a.name.localeCompare(b.name, "ja", { numeric: true }));
-  state.events = events;
+  state.events = normalized;
 
-  if (state.selectedEventId && !state.events.some(evt => evt.id === state.selectedEventId)) {
+  if (previousEventId && state.events.some(evt => evt.id === previousEventId)) {
+    state.selectedEventId = previousEventId;
+    const schedules = state.events.find(evt => evt.id === previousEventId)?.schedules || [];
+    if (previousScheduleId && schedules.some(s => s.id === previousScheduleId)) {
+      state.selectedScheduleId = previousScheduleId;
+    } else {
+      state.selectedScheduleId = null;
+    }
+  } else {
     state.selectedEventId = null;
     state.selectedScheduleId = null;
   }
@@ -652,6 +674,8 @@ async function loadEvents() {
   renderEvents();
   renderSchedules();
   updateParticipantContext();
+
+  return state.events;
 }
 
 async function loadParticipants() {
@@ -664,45 +688,35 @@ async function loadParticipants() {
     return;
   }
 
-  const participantsRef = ref(database, `questionIntake/participants/${eventId}/${scheduleId}`);
-  const snapshot = await get(participantsRef);
-  const data = snapshot.val() || {};
-  const event = state.events.find(evt => evt.id === eventId);
-  const schedule = event?.schedules?.find(s => s.id === scheduleId);
-
-  const entries = Object.entries(data).map(([participantId, value]) => ({
-    participantId,
-    name: value.name || "",
-    groupNumber: value.groupNumber || "",
-    token: value.token || "",
-    guidance: value.guidance || ""
-  }));
-
-  const updates = {};
-  let needsUpdate = false;
-  entries.forEach(entry => {
-    if (!entry.token) {
-      entry.token = generateToken();
-      updates[`participants/${eventId}/${scheduleId}/${entry.participantId}/token`] = entry.token;
-      updates[`tokens/${entry.token}`] = buildTokenPayload(entry, event, schedule, { isNew: true });
-      needsUpdate = true;
-    }
-  });
-
-  if (needsUpdate) {
-    updates[`schedules/${eventId}/${scheduleId}/participantCount`] = entries.length;
-    updates[`schedules/${eventId}/${scheduleId}/updatedAt`] = serverTimestamp();
-    updates[`events/${eventId}/updatedAt`] = serverTimestamp();
-    await applyQuestionIntakeUpdates(updates);
+  try {
+    const response = await api.apiPost({
+      action: "fetchQuestionParticipants",
+      eventId,
+      scheduleId
+    });
+    const entries = Array.isArray(response.participants) ? response.participants : [];
+    state.participants = sortParticipants(
+      entries.map(entry => ({
+        participantId: entry.participantId,
+        name: entry.name || "",
+        groupNumber: entry.groupNumber || "",
+        token: entry.token || "",
+        guidance: entry.guidance || ""
+      }))
+    );
+    state.lastSavedSignature = signatureForEntries(state.participants);
+    if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
+    if (dom.csvInput) dom.csvInput.value = "";
+    setUploadStatus("現在の参加者リストを読み込みました。", "success");
+    renderParticipants();
+    updateParticipantContext({ preserveStatus: true });
+  } catch (error) {
+    console.error(error);
+    state.participants = [];
+    setUploadStatus(error.message || "参加者リストの読み込みに失敗しました。", "error");
+    renderParticipants();
+    updateParticipantContext();
   }
-
-  state.participants = sortParticipants(entries);
-  state.lastSavedSignature = signatureForEntries(state.participants);
-  if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
-  if (dom.csvInput) dom.csvInput.value = "";
-  setUploadStatus("現在の参加者リストを読み込みました。", "success");
-  renderParticipants();
-  updateParticipantContext({ preserveStatus: true });
 }
 
 function selectEvent(eventId) {
@@ -724,35 +738,22 @@ function selectSchedule(scheduleId) {
   updateParticipantContext();
   loadParticipants().catch(err => console.error(err));
 }
+
 async function handleAddEvent() {
   const name = window.prompt("追加するイベント名を入力してください。");
   const trimmed = normalizeKey(name || "");
   if (!trimmed) return;
-  const eventsRef = ref(database, "questionIntake/events");
-  const newRef = push(eventsRef);
-  await set(newRef, {
-    name: trimmed,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  });
-  await loadEvents();
-  if (newRef.key) {
-    selectEvent(newRef.key);
-  }
-}
 
-async function purgeTokens(predicate) {
-  const snapshot = await get(ref(database, "questionIntake/tokens"));
-  if (!snapshot.exists()) return;
-  const updates = {};
-  snapshot.forEach(child => {
-    const value = child.val();
-    if (predicate(value, child.key)) {
-      updates[`tokens/${child.key}`] = null;
+  try {
+    const response = await api.apiPost({ action: "createQuestionEvent", name: trimmed });
+    const createdId = response?.event?.id || null;
+    await loadEvents({ preserveSelection: false });
+    if (createdId) {
+      selectEvent(createdId);
     }
-  });
-  if (Object.keys(updates).length) {
-    await applyQuestionIntakeUpdates(updates);
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "イベントの追加に失敗しました。");
   }
 }
 
@@ -760,21 +761,21 @@ async function handleDeleteEvent(eventId, eventName) {
   if (!window.confirm(`イベント「${eventName}」を削除しますか？\n関連する日程と参加者も削除されます。`)) {
     return;
   }
-  const updates = {
-    [`events/${eventId}`]: null,
-    [`schedules/${eventId}`]: null,
-    [`participants/${eventId}`]: null
-  };
-  await applyQuestionIntakeUpdates(updates);
-  await purgeTokens(value => value?.eventId === eventId);
-  if (state.selectedEventId === eventId) {
-    state.selectedEventId = null;
-    state.selectedScheduleId = null;
-    state.participants = [];
+
+  try {
+    await api.apiPost({ action: "deleteQuestionEvent", eventId });
+    if (state.selectedEventId === eventId) {
+      state.selectedEventId = null;
+      state.selectedScheduleId = null;
+      state.participants = [];
+    }
+    await loadEvents({ preserveSelection: false });
+    renderParticipants();
+    updateParticipantContext();
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "イベントの削除に失敗しました。");
   }
-  await loadEvents();
-  renderParticipants();
-  updateParticipantContext();
 }
 
 async function handleAddSchedule() {
@@ -783,19 +784,23 @@ async function handleAddSchedule() {
   const label = normalizeKey(window.prompt("日程の表示名を入力してください。") || "");
   if (!label) return;
   const date = normalizeKey(window.prompt("日程の日付（例: 2024-05-01）を入力してください。") || "");
-  const schedulesRef = ref(database, `questionIntake/schedules/${eventId}`);
-  const newRef = push(schedulesRef);
-  await set(newRef, {
-    label,
-    date,
-    participantCount: 0,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  });
-  await loadEvents();
-  selectEvent(eventId);
-  if (newRef.key) {
-    selectSchedule(newRef.key);
+
+  try {
+    const response = await api.apiPost({
+      action: "createQuestionSchedule",
+      eventId,
+      label,
+      date
+    });
+    const scheduleId = response?.schedule?.id || null;
+    await loadEvents({ preserveSelection: true });
+    selectEvent(eventId);
+    if (scheduleId) {
+      selectSchedule(scheduleId);
+    }
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "日程の追加に失敗しました。");
   }
 }
 
@@ -805,19 +810,20 @@ async function handleDeleteSchedule(scheduleId, scheduleLabel) {
   if (!window.confirm(`日程「${scheduleLabel || scheduleId}」を削除しますか？\n関連する参加者も削除されます。`)) {
     return;
   }
-  const updates = {
-    [`schedules/${eventId}/${scheduleId}`]: null,
-    [`participants/${eventId}/${scheduleId}`]: null
-  };
-  await applyQuestionIntakeUpdates(updates);
-  await purgeTokens(value => value?.eventId === eventId && value?.scheduleId === scheduleId);
-  if (state.selectedScheduleId === scheduleId) {
-    state.selectedScheduleId = null;
-    state.participants = [];
+
+  try {
+    await api.apiPost({ action: "deleteQuestionSchedule", eventId, scheduleId });
+    if (state.selectedScheduleId === scheduleId) {
+      state.selectedScheduleId = null;
+      state.participants = [];
+    }
+    await loadEvents({ preserveSelection: true });
+    renderParticipants();
+    updateParticipantContext();
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "日程の削除に失敗しました。");
   }
-  await loadEvents();
-  renderParticipants();
-  updateParticipantContext();
 }
 
 function handleCsvChange(event) {
@@ -874,70 +880,40 @@ async function handleSave() {
     return;
   }
 
-  const signature = signatureForEntries(state.participants);
   state.saving = true;
   if (dom.saveButton) dom.saveButton.disabled = true;
   setUploadStatus("保存中です…");
 
   try {
-    const participantsRef = ref(database, `questionIntake/participants/${eventId}/${scheduleId}`);
-    const existingSnap = await get(participantsRef);
-    const existingData = existingSnap.val() || {};
-    const existingTokensByParticipant = new Map();
-    Object.entries(existingData).forEach(([participantId, value]) => {
-      if (value && value.token) {
-        existingTokensByParticipant.set(participantId, value.token);
-      }
+    const payloadEntries = state.participants.map(entry => ({
+      participantId: entry.participantId,
+      name: entry.name,
+      groupNumber: entry.groupNumber,
+      guidance: entry.guidance || ""
+    }));
+
+    const response = await api.apiPost({
+      action: "saveQuestionParticipants",
+      eventId,
+      scheduleId,
+      entries: payloadEntries
     });
 
-    const event = state.events.find(evt => evt.id === eventId);
-    const schedule = event?.schedules?.find(s => s.id === scheduleId);
-
-    const updates = {};
-    const nextIds = new Set();
-
-    state.participants.forEach(entry => {
-      const participantId = entry.participantId;
-      nextIds.add(participantId);
-      let token = entry.token || existingTokensByParticipant.get(participantId);
-      const isNewToken = !token;
-      if (!token) {
-        token = generateToken();
-      }
-      entry.token = token;
-
-      updates[`participants/${eventId}/${scheduleId}/${participantId}`] = {
-        participantId,
-        name: entry.name,
-        groupNumber: entry.groupNumber,
-        token,
-        guidance: entry.guidance || "",
-        updatedAt: serverTimestamp()
-      };
-
-      updates[`tokens/${token}`] = buildTokenPayload(entry, event, schedule, { isNew: isNewToken });
-    });
-
-    Object.keys(existingData).forEach(participantId => {
-      if (!nextIds.has(participantId)) {
-        updates[`participants/${eventId}/${scheduleId}/${participantId}`] = null;
-        const token = existingData[participantId]?.token;
-        if (token) {
-          updates[`tokens/${token}`] = null;
-        }
-      }
-    });
-
-    updates[`schedules/${eventId}/${scheduleId}/participantCount`] = state.participants.length;
-    updates[`schedules/${eventId}/${scheduleId}/updatedAt`] = serverTimestamp();
-    updates[`events/${eventId}/updatedAt`] = serverTimestamp();
-
-    await applyQuestionIntakeUpdates(updates);
-
-    state.lastSavedSignature = signature;
+    const participants = Array.isArray(response.participants) ? response.participants : [];
+    state.participants = sortParticipants(
+      participants.map(entry => ({
+        participantId: entry.participantId,
+        name: entry.name || "",
+        groupNumber: entry.groupNumber || "",
+        token: entry.token || "",
+        guidance: entry.guidance || ""
+      }))
+    );
+    state.lastSavedSignature = signatureForEntries(state.participants);
     setUploadStatus("参加者リストを更新しました。", "success");
-    await loadEvents();
-    await loadParticipants();
+    await loadEvents({ preserveSelection: true });
+    renderParticipants();
+    updateParticipantContext({ preserveStatus: true });
   } catch (error) {
     console.error(error);
     setUploadStatus(error.message || "保存に失敗しました。", "error");
@@ -1058,10 +1034,14 @@ function attachEventHandlers() {
   }
 
   if (dom.refreshButton) {
-    dom.refreshButton.addEventListener("click", () => {
-      loadEvents()
-        .then(() => loadParticipants())
-        .catch(err => console.error(err));
+    dom.refreshButton.addEventListener("click", async () => {
+      try {
+        await mirrorQuestionIntake();
+        await loadEvents({ preserveSelection: true });
+        await loadParticipants();
+      } catch (error) {
+        console.error(error);
+      }
     });
   }
 
@@ -1143,7 +1123,8 @@ function initAuthWatcher() {
       setLoaderStep(1, "在籍チェック完了。管理者権限を確認しています…");
       await ensureAdminAccess();
       setLoaderStep(2, "管理者権限を同期しました。初期データを読み込み中…");
-      await loadEvents();
+      await mirrorQuestionIntake();
+      await loadEvents({ preserveSelection: false });
       await loadParticipants();
       setLoaderStep(3, "初期データの取得が完了しました。仕上げ中…");
       setAuthUi(true);
