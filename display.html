@@ -148,6 +148,7 @@
     #telop-canvas .telop-box::before,
     #telop-canvas .telop-box::after{
       content:""; position:absolute; inset:0; border-radius: inherit; pointer-events:none;
+      z-index: 0;
     }
     
     /* 細いネオンチューブ（輪郭） */
@@ -249,6 +250,8 @@
 
     /* ─ ここが“1行23文字”の肝 ─*/
     #question {
+      position: relative;
+      z-index: 1;
       width: fit-content;
       font-family: "GenEiGothicP-HKL","GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
       font-weight: 800;
