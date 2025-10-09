@@ -92,6 +92,45 @@ const loaderState = {
   currentIndex: -1
 };
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isPermissionDenied(error) {
+  if (!error || typeof error !== "object") return false;
+  const code = String(error.code || error?.message || "").toLowerCase();
+  return (
+    code.includes("permission_denied") ||
+    code.includes("permission-denied") ||
+    code.includes("permission denied")
+  );
+}
+
+async function waitForQuestionIntakeAccess({ attempts = 5, initialDelay = 300 } = {}) {
+  const targetRef = ref(database, "questionIntake/events");
+  let delay = initialDelay;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      await get(targetRef);
+      return;
+    } catch (error) {
+      if (isPermissionDenied(error)) {
+        lastError = error;
+        await sleep(delay);
+        delay = Math.min(delay * 2, 2500);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  const err = new Error("管理者権限の同期に失敗しました。時間をおいて再度お試しください。");
+  err.cause = lastError;
+  throw err;
+}
+
 async function applyQuestionIntakeUpdates(updates) {
   if (!updates || !Object.keys(updates).length) return;
   await update(ref(database, "questionIntake"), updates);
@@ -131,14 +170,32 @@ function renderUserSummary(user) {
 }
 
 function createApiClient(authInstance) {
-  async function getIdToken(force = false) {
-    const user = authInstance.currentUser;
+  async function getIdTokenSafe(force = false) {
+    const currentUser = authInstance.currentUser;
+    if (currentUser) {
+      return await currentUser.getIdToken(force);
+    }
+
+    const user = await new Promise((resolve, reject) => {
+      const unsubscribe = onAuthStateChanged(
+        authInstance,
+        nextUser => {
+          unsubscribe();
+          resolve(nextUser);
+        },
+        error => {
+          unsubscribe();
+          reject(error);
+        }
+      );
+    });
+
     if (!user) throw new Error("Not signed in");
     return await user.getIdToken(force);
   }
 
-  async function apiPost(payload, retry = true) {
-    const idToken = await getIdToken();
+  async function apiPost(payload, retryOnAuthError = true) {
+    const idToken = await getIdTokenSafe();
     const response = await fetch(GAS_API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
@@ -152,8 +209,8 @@ function createApiClient(authInstance) {
     }
     if (!json.success) {
       const message = String(json.error || "");
-      if (retry && /Auth/.test(message)) {
-        await getIdToken(true);
+      if (retryOnAuthError && /Auth/.test(message)) {
+        await getIdTokenSafe(true);
         return await apiPost(payload, false);
       }
       throw new Error(message || "APIリクエストに失敗しました。");
@@ -1028,6 +1085,7 @@ async function verifyEnrollment(user) {
 async function ensureAdminAccess() {
   try {
     await api.apiPost({ action: "ensureAdmin" });
+    await waitForQuestionIntakeAccess({ attempts: 6, initialDelay: 250 });
   } catch (error) {
     throw new Error(error.message || "管理者権限の確認に失敗しました。");
   }
