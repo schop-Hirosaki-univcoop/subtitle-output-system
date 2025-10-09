@@ -951,20 +951,23 @@ class OperatorApp {
 
   async renderQuestions() {
     if (!this.dom.cardsContainer) return;
-    const viewingPuqTab = this.state.currentSubTab === "puq";
+    const currentTab = this.state.currentSubTab;
+    const viewingPuqTab = currentTab === "puq";
+    const viewingNormalTab = currentTab === "normal";
     const selectedGenre = this.state.currentGenre || GENRE_OPTIONS[0];
-    const selectedSchedule = this.state.currentSchedule || "";
+    const selectedSchedule = viewingNormalTab ? this.state.currentSchedule || "" : "";
     let list = this.state.allQuestions.filter((item) => {
       const isPuq = item["ラジオネーム"] === "Pick Up Question";
-      if (viewingPuqTab) {
-        if (!isPuq) return false;
-      } else if (isPuq) {
+      if (viewingPuqTab && !isPuq) {
+        return false;
+      }
+      if (viewingNormalTab && isPuq) {
         return false;
       }
       const itemGenre = String(item["ジャンル"] ?? "").trim() || "その他";
       if (selectedGenre && itemGenre !== selectedGenre) return false;
       const itemSchedule = String(item["日程"] ?? "").trim();
-      if (selectedSchedule && itemSchedule !== selectedSchedule) return false;
+      if (viewingNormalTab && selectedSchedule && itemSchedule !== selectedSchedule) return false;
       return true;
     });
     list.sort((a, b) => {
@@ -1240,7 +1243,7 @@ class OperatorApp {
       button.classList.toggle("active", isActive);
       button.setAttribute("aria-selected", String(isActive));
     });
-    if (this.state.currentSubTab !== "puq") {
+    if (this.state.currentSubTab === "normal") {
       this.state.lastNormalSchedule = "";
       this.state.currentSchedule = "";
       if (this.dom.scheduleFilter) {
@@ -1256,7 +1259,7 @@ class OperatorApp {
     if (!(select instanceof HTMLSelectElement)) return;
     const value = select.value || "";
     this.state.currentSchedule = value;
-    if (this.state.currentSubTab !== "puq") {
+    if (this.state.currentSubTab === "normal") {
       this.state.lastNormalSchedule = value;
     }
     this.renderQuestions();
@@ -1265,7 +1268,7 @@ class OperatorApp {
   updateScheduleOptions() {
     const select = this.dom.scheduleFilter;
     if (!select) return;
-    const isNormalTab = this.state.currentSubTab !== "puq";
+    const isNormalTab = this.state.currentSubTab === "normal";
     const selectedGenre = this.state.currentGenre || GENRE_OPTIONS[0];
     const scheduleSet = new Set();
     if (isNormalTab) {
@@ -1333,11 +1336,13 @@ class OperatorApp {
       button.classList.toggle("active", isActive);
       button.setAttribute("aria-selected", String(isActive));
     });
-    if (tabName === "puq" && previous !== "puq") {
-      this.state.lastNormalSchedule = this.state.currentSchedule;
-      this.state.currentSchedule = "";
-    } else if (previous === "puq" && tabName !== "puq") {
+    if (previous === "normal" && tabName !== "normal") {
+      this.state.lastNormalSchedule = this.state.currentSchedule || "";
+    }
+    if (tabName === "normal") {
       this.state.currentSchedule = this.state.lastNormalSchedule || "";
+    } else {
+      this.state.currentSchedule = "";
     }
     this.updateScheduleOptions();
     this.renderQuestions();
