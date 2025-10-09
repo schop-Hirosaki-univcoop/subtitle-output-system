@@ -375,7 +375,7 @@ class OperatorApp {
     const isHidden = value.phase === "hidden";
     const now = isHidden ? null : value.nowShowing || null;
     if (!now) {
-      if (this.dom.render.title) this.dom.render.title.textContent = "（非表示）";
+      if (this.dom.render.title) this.dom.render.title.textContent = "（送出なし）";
       if (this.dom.render.question) this.dom.render.question.textContent = "";
     } else {
       const name = (now.name || "").trim();
@@ -690,7 +690,7 @@ class OperatorApp {
         this.state.displaySessionActive = active;
         if (this.state.displaySessionLastActive !== null && this.state.displaySessionLastActive !== active) {
           showToast(
-            active ? "表示端末とのセッションが確立されました。" : "表示端末の接続が確認できません。",
+            active ? "送出端末とのセッションが確立されました。" : "送出端末の接続が確認できません。",
             active ? "success" : "error"
           );
         }
@@ -942,7 +942,7 @@ class OperatorApp {
     list.forEach((item) => {
       const isAnswered = item["回答済"] === true;
       const status = item["選択中"] ? "live" : isAnswered ? "answered" : "pending";
-      const statusText = status === "live" ? "表示中" : status === "answered" ? "回答済" : "未回答";
+      const statusText = status === "live" ? "送出中" : status === "answered" ? "回答済" : "未回答";
       const card = document.createElement("article");
       card.className = `q-card ${status === "live" ? "is-live" : ""} ${isAnswered ? "is-answered" : "is-pending"}`;
       const isPuq = item["ラジオネーム"] === "Pick Up Question";
@@ -1024,7 +1024,7 @@ class OperatorApp {
 
   async handleDisplay() {
     if (!this.state.displaySessionActive) {
-      showToast("表示端末が接続されていません。", "error");
+      showToast("送出端末が接続されていません。", "error");
       return;
     }
     if (!this.state.selectedRowData || this.state.selectedRowData.isAnswered) return;
@@ -1060,15 +1060,15 @@ class OperatorApp {
       this.state.lastDisplayedUid = this.state.selectedRowData.uid;
       this.api.logAction("DISPLAY", `RN: ${this.state.selectedRowData.name}`);
       const displayLabel = formatOperatorName(this.state.selectedRowData.name) || this.state.selectedRowData.name;
-      showToast(`「${displayLabel}」の質問を表示しました。`, "success");
+      showToast(`「${displayLabel}」の質問を送出しました。`, "success");
     } catch (error) {
-      showToast("表示処理中にエラーが発生しました: " + error.message, "error");
+      showToast("送出処理中にエラーが発生しました: " + error.message, "error");
     }
   }
 
   async handleEdit() {
     if (!this.state.selectedRowData) return;
-    const newText = prompt("質問内容を編集してください：", this.state.selectedRowData.question);
+    const newText = prompt("質問原稿を修正してください：", this.state.selectedRowData.question);
     if (newText === null || newText.trim() === this.state.selectedRowData.question.trim()) return;
     try {
       await update(ref(database, `questions/${this.state.selectedRowData.uid}`), { question: newText.trim() });
@@ -1082,7 +1082,7 @@ class OperatorApp {
 
   async clearTelop() {
     if (!this.state.displaySessionActive) {
-      showToast("表示端末が接続されていません。", "error");
+      showToast("送出端末が接続されていません。", "error");
       return;
     }
     const snapshot = await get(telopRef);
@@ -1108,15 +1108,15 @@ class OperatorApp {
       await remove(telopRef);
       this.api.fireAndForgetApi({ action: "clearSelectingStatus" });
       this.api.logAction("CLEAR");
-      showToast("テロップを消去しました。", "success");
+      showToast("送出をクリアしました。", "success");
     } catch (error) {
-      showToast("テロップの消去中にエラーが発生しました: " + error.message, "error");
+      showToast("送出クリア中にエラーが発生しました: " + error.message, "error");
     }
   }
 
   handleUnanswer() {
     if (!this.state.displaySessionActive) {
-      showToast("表示端末が接続されていません。", "error");
+      showToast("送出端末が接続されていません。", "error");
       return;
     }
     if (!this.state.selectedRowData || !this.state.selectedRowData.isAnswered) return;
@@ -1140,7 +1140,7 @@ class OperatorApp {
 
   async handleBatchUnanswer() {
     if (!this.state.displaySessionActive) {
-      showToast("表示端末が接続されていません。", "error");
+      showToast("送出端末が接続されていません。", "error");
       return;
     }
     const checkedBoxes = Array.from(this.dom.cardsContainer?.querySelectorAll(".row-checkbox:checked") || []);
@@ -1190,7 +1190,7 @@ class OperatorApp {
       return;
     }
     if (!active) {
-      this.dom.selectedInfo.textContent = "表示端末が接続されていません";
+      this.dom.selectedInfo.textContent = "送出端末が接続されていません";
       this.updateBatchButtonVisibility();
       return;
     }
