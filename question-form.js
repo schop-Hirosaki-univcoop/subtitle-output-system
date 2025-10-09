@@ -51,7 +51,8 @@ const state = {
   context: null,
   token: null,
   submittingController: null,
-  dirty: false
+  dirty: false,
+  locked: true
 };
 
 function countGraphemes(value) {
@@ -104,9 +105,11 @@ function setContextGuard(message) {
   if (!contextGuardEl) return;
   if (message) {
     contextGuardEl.hidden = false;
+    contextGuardEl.removeAttribute("aria-hidden");
     contextGuardEl.textContent = message;
   } else {
     contextGuardEl.hidden = true;
+    contextGuardEl.setAttribute("aria-hidden", "true");
     contextGuardEl.textContent = "";
   }
 }
@@ -114,23 +117,47 @@ function setContextGuard(message) {
 function setFormMetaVisible(visible) {
   if (formMetaEl) {
     formMetaEl.hidden = !visible;
+    if (visible) {
+      formMetaEl.removeAttribute("aria-hidden");
+    } else {
+      formMetaEl.setAttribute("aria-hidden", "true");
+    }
   }
 }
 
 function hideForm() {
   if (form) {
     form.hidden = true;
+    form.setAttribute("aria-hidden", "true");
+    form.setAttribute("inert", "");
+    form.dataset.locked = "true";
+    setFormControlsDisabled(true);
   }
   if (contextBannerEl) {
     contextBannerEl.hidden = true;
+    contextBannerEl.setAttribute("aria-hidden", "true");
   }
   setFormMetaVisible(false);
+  state.locked = true;
 }
 
 function showForm() {
   if (form) {
     form.hidden = false;
+    form.removeAttribute("aria-hidden");
+    form.removeAttribute("inert");
+    form.dataset.locked = "false";
+    setFormControlsDisabled(false);
   }
+  state.locked = false;
+}
+
+function setFormControlsDisabled(disabled) {
+  if (!form) return;
+  const elements = form.querySelectorAll("input:not([type=\"hidden\"]), select, textarea, button");
+  elements.forEach(element => {
+    element.disabled = disabled;
+  });
 }
 
 function extractToken() {
@@ -199,6 +226,7 @@ function applyContext(context) {
 
   if (contextBannerEl) {
     contextBannerEl.hidden = false;
+    contextBannerEl.removeAttribute("aria-hidden");
   }
   if (welcomeLineEl) {
     const targetName = displayName || "ゲスト";
@@ -265,10 +293,14 @@ function updateQuestionCounter() {
 }
 
 function setFormBusy(isBusy) {
-  if (submitButton) {
-    submitButton.disabled = isBusy;
-    submitButton.setAttribute("aria-busy", String(isBusy));
+  if (!submitButton) return;
+  if (state.locked) {
+    submitButton.disabled = true;
+    submitButton.setAttribute("aria-busy", "false");
+    return;
   }
+  submitButton.disabled = isBusy;
+  submitButton.setAttribute("aria-busy", String(isBusy));
 }
 
 function markDirty() {

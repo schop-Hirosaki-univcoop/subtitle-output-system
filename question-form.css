@@ -6,6 +6,11 @@ body.question-admin-page{
   padding-block-end:clamp(3rem, 7vh, 4.5rem);
 }
 
+.question-form-page [hidden],
+.question-admin-page [hidden]{
+  display:none !important;
+}
+
 .single-main,
 .admin-main{
   width:min(960px, 94vw);

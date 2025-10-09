@@ -20,7 +20,16 @@ import {
 
 const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec";
 const FORM_PAGE_PATH = "question-form.html";
-const LOADER_LABELS = ["認証", "在籍チェック", "データ同期", "完了"];
+const STEP_LABELS = [
+  "認証",
+  "在籍チェック",
+  "管理者付与",
+  "初期ミラー",
+  "購読開始",
+  "辞書取得",
+  "ログ取得",
+  "準備完了"
+];
 
 const firebaseConfig = {
   apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
@@ -282,6 +291,18 @@ function finishLoaderSteps(message) {
   const lastIndex = loaderState.items.length - 1;
   setLoaderStep(lastIndex, message || loaderState.items[lastIndex].textContent);
   loaderState.items.forEach(li => li.classList.add("done"));
+}
+
+function toggleSectionVisibility(element, visible) {
+  if (!element) return;
+  element.hidden = !visible;
+  if (visible) {
+    element.removeAttribute("aria-hidden");
+    element.removeAttribute("inert");
+  } else {
+    element.setAttribute("aria-hidden", "true");
+    element.setAttribute("inert", "");
+  }
 }
 
 function sortParticipants(entries) {
@@ -892,9 +913,102 @@ async function handleSave() {
   }
 }
 function setAuthUi(signedIn) {
-  if (dom.loginCard) dom.loginCard.hidden = signedIn;
-  if (dom.adminMain) dom.adminMain.hidden = !signedIn;
-  if (dom.headerLogout) dom.headerLogout.hidden = !signedIn;
+  toggleSectionVisibility(dom.loginCard, !signedIn);
+  toggleSectionVisibility(dom.adminMain, signedIn);
+
+  if (dom.headerLogout) {
+    dom.headerLogout.hidden = !signedIn;
+    if (signedIn) {
+      dom.headerLogout.removeAttribute("aria-hidden");
+      dom.headerLogout.removeAttribute("inert");
+      dom.headerLogout.disabled = false;
+    } else {
+      dom.headerLogout.setAttribute("aria-hidden", "true");
+      dom.headerLogout.setAttribute("inert", "");
+      dom.headerLogout.disabled = true;
+    }
+  }
+
+  if (dom.logoutButton) {
+    dom.logoutButton.hidden = !signedIn;
+    dom.logoutButton.disabled = !signedIn;
+    if (signedIn) {
+      dom.logoutButton.removeAttribute("aria-hidden");
+      dom.logoutButton.removeAttribute("inert");
+    } else {
+      dom.logoutButton.setAttribute("aria-hidden", "true");
+      dom.logoutButton.setAttribute("inert", "");
+    }
+  }
+
+  if (dom.addEventButton) {
+    dom.addEventButton.disabled = !signedIn;
+  }
+
+  if (!signedIn) {
+    if (dom.addScheduleButton) dom.addScheduleButton.disabled = true;
+    if (dom.csvInput) dom.csvInput.disabled = true;
+    if (dom.saveButton) dom.saveButton.disabled = true;
+  }
+}
+
+function resetState() {
+  state.events = [];
+  state.participants = [];
+  state.selectedEventId = null;
+  state.selectedScheduleId = null;
+  state.lastSavedSignature = "";
+  renderEvents();
+  renderSchedules();
+  renderParticipants();
+  updateParticipantContext();
+  setUploadStatus("日程を選択してください。");
+  if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
+  if (dom.csvInput) dom.csvInput.value = "";
+}
+
+function handleMappingTableClick(event) {
+  const button = event.target.closest(".copy-link-btn");
+  if (!button) return;
+  event.preventDefault();
+  const token = button.dataset.token;
+  copyShareLink(token).catch(err => console.error(err));
+}
+
+async function verifyEnrollment(user) {
+  const result = await api.apiPost({ action: "fetchSheet", sheet: "users" });
+  const rows = Array.isArray(result.data) ? result.data : [];
+  const authorized = rows
+    .map(item => String(item["メールアドレス"] || item.email || "").trim().toLowerCase())
+    .filter(Boolean);
+  const email = String(user.email || "").trim().toLowerCase();
+  if (!authorized.includes(email)) {
+    throw new Error("あなたのアカウントはこのシステムへのアクセスが許可されていません。");
+  }
+}
+
+async function ensureAdminAccess() {
+  try {
+    await api.apiPost({ action: "ensureAdmin" });
+  } catch (error) {
+    throw new Error(error.message || "管理者権限の確認に失敗しました。");
+  }
+}
+
+async function runInitialMirror() {
+  await loadEvents();
+}
+
+async function startRealtimeSync() {
+  // Question admin does not maintain realtime listeners yet but keeps the step for parity with operator login.
+}
+
+async function fetchReferenceData() {
+  await loadParticipants();
+}
+
+async function fetchOperationalLogs() {
+  // No log feed is required for the admin console; the step is recorded to mirror the operator flow.
 }
 
 function resetState() {
@@ -1042,17 +1156,23 @@ function initAuthWatcher() {
     }
 
     showLoader("権限を確認しています…");
-    initLoaderSteps(LOADER_LABELS);
+    initLoaderSteps(STEP_LABELS);
 
     try {
-      setLoaderStep(0, "認証済み。ユーザー情報を確認中…");
+      setLoaderStep(0, "認証OK。ユーザー情報を確認中…");
       await verifyEnrollment(user);
-      setLoaderStep(1, "在籍チェック完了。権限を同期しています…");
+      setLoaderStep(1, "在籍チェック完了。管理者権限を確認しています…");
       await ensureAdminAccess();
-      setLoaderStep(2, "データ同期中…");
+      setLoaderStep(2, "管理者権限を同期しました。初期データを読み込み中…");
+      await runInitialMirror();
+      setLoaderStep(3, "初期ミラー完了。購読を準備しています…");
+      await startRealtimeSync();
+      setLoaderStep(4, "購読開始済み。関連データを取得しています…");
+      await fetchReferenceData();
+      setLoaderStep(5, "辞書情報の取得が完了しました。ログを確認しています…");
+      await fetchOperationalLogs();
+      setLoaderStep(6, "ログ取得完了。仕上げ中…");
       setAuthUi(true);
-      await loadEvents();
-      await loadParticipants();
       finishLoaderSteps("準備完了");
     } catch (error) {
       console.error(error);
@@ -1067,7 +1187,7 @@ function initAuthWatcher() {
 
 function init() {
   attachEventHandlers();
-  initLoaderSteps(LOADER_LABELS);
+  initLoaderSteps(STEP_LABELS);
   resetState();
   initAuthWatcher();
 }
