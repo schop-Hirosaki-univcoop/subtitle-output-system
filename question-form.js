@@ -322,7 +322,19 @@ async function handleSubmit(event) {
   }
 
   const sanitizedName = sanitizeRadioName(radioNameInput.value);
-  radioNameInput.value = sanitizedName;
+  if (radioNameInput.value !== sanitizedName) {
+    radioNameInput.value = sanitizedName;
+  }
+  if (!sanitizedName) {
+    if (typeof radioNameInput.setCustomValidity === "function") {
+      radioNameInput.setCustomValidity("ラジオネームを入力してください。");
+      radioNameInput.reportValidity();
+      radioNameInput.setCustomValidity("");
+    }
+    radioNameInput.focus();
+    setFeedback("ラジオネームを入力してください。", "error");
+    return;
+  }
   const normalizedQuestion = normalizeMultiline(questionInput.value).trim();
   questionInput.value = normalizedQuestion;
   const questionLength = countGraphemes(normalizedQuestion);
