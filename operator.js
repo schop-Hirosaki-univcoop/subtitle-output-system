@@ -1034,19 +1034,17 @@ class OperatorApp {
       const displayName = formatOperatorName(rawName) || "—";
       const groupLabel = String(item["班番号"] ?? "").trim();
       card.innerHTML = `
-        ${groupLabel ? `<div class="q-group-corner"><span class="q-group" role="text" aria-label="班番号 ${escapeHtml(groupLabel)}">${escapeHtml(groupLabel)}</span></div>` : ""}
+        <span class="status-text visually-hidden">${statusText}</span>
+        <div class="q-corner">
+          ${groupLabel ? `<span class="q-group" role="text" aria-label="班番号 ${escapeHtml(groupLabel)}">${escapeHtml(groupLabel)}</span>` : ""}
+          <label class="q-check" aria-label="${statusText}の質問をバッチ選択">
+            <input type="checkbox" class="row-checkbox" data-uid="${escapeHtml(uid)}">
+            <span class="visually-hidden">選択</span>
+          </label>
+        </div>
         <header class="q-head">
           <div class="q-title">
             <span class="q-name">${escapeHtml(displayName)}</span>
-          </div>
-          <div class="q-meta">
-            <span class="status-text visually-hidden">${statusText}</span>
-            <div class="q-meta-actions">
-              <label class="q-check" aria-label="${statusText}の質問をバッチ選択">
-                <input type="checkbox" class="row-checkbox" data-uid="${escapeHtml(uid)}">
-                <span class="visually-hidden">選択</span>
-              </label>
-            </div>
           </div>
         </header>
         <div class="q-text">${escapeHtml(item["質問・お悩み"])}</div>
