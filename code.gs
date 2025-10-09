@@ -66,6 +66,9 @@ function doPost(e) {
       case 'mirrorQuestionIntake':
         assertOperator_(principal);
         return jsonOk(mirrorQuestionIntake_());
+      case 'syncQuestionIntakeToSheet':
+        assertOperator_(principal);
+        return jsonOk(syncQuestionIntakeToSheet_());
       case 'fetchSheet':
         assertOperator_(principal);
         return jsonOk({ data: getSheetData_(req.sheet) });
@@ -386,15 +389,36 @@ function ensureSheetWithHeaders_(sheetName, headers) {
 }
 
 function ensureQuestionEventSheet_() {
-  return ensureSheetWithHeaders_(QUESTION_EVENT_SHEET, ['イベントID', 'イベント名', '作成日時']);
+  const sheet = ensureSheetWithHeaders_(QUESTION_EVENT_SHEET, ['イベントID', 'イベント名', '作成日時']);
+  sheet.getRange('C2:C').setNumberFormat('yyyy/MM/dd HH:mm:ss');
+  return sheet;
 }
 
 function ensureQuestionScheduleSheet_() {
-  return ensureSheetWithHeaders_(QUESTION_SCHEDULE_SHEET, ['イベントID', '日程ID', '表示名', '日付', '作成日時']);
+  const sheet = ensureSheetWithHeaders_(QUESTION_SCHEDULE_SHEET, ['イベントID', '日程ID', '表示名', '日付', '作成日時']);
+  sheet.getRange('E2:E').setNumberFormat('yyyy/MM/dd HH:mm:ss');
+  return sheet;
 }
 
 function ensureQuestionParticipantSheet_() {
-  return ensureSheetWithHeaders_(QUESTION_PARTICIPANT_SHEET, ['イベントID', '日程ID', '参加者ID', '氏名', '班番号', '更新日時']);
+  const sheet = ensureSheetWithHeaders_(QUESTION_PARTICIPANT_SHEET, ['イベントID', '日程ID', '参加者ID', '氏名', '班番号', '更新日時']);
+  sheet.getRange('F2:F').setNumberFormat('yyyy/MM/dd HH:mm:ss');
+  return sheet;
+}
+
+function replaceSheetRows_(sheet, rows, columnCount) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, columnCount).clearContent();
+  }
+  if (!rows.length) {
+    return;
+  }
+  const requiredRows = rows.length + 1;
+  if (sheet.getMaxRows() < requiredRows) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), requiredRows - sheet.getMaxRows());
+  }
+  sheet.getRange(2, 1, rows.length, columnCount).setValues(rows);
 }
 
 function generateShortId_(prefix) {
@@ -593,6 +617,122 @@ function mirrorQuestionIntake_() {
     scheduleCount: schedules.length,
     participantCount: participants.length,
     tokenCount: Object.keys(tokensMap).length
+  };
+}
+
+function syncQuestionIntakeToSheet_() {
+  const accessToken = getFirebaseAccessToken_();
+  const eventsBranch = fetchRtdb_('questionIntake/events', accessToken) || {};
+  const schedulesBranch = fetchRtdb_('questionIntake/schedules', accessToken) || {};
+  const participantsBranch = fetchRtdb_('questionIntake/participants', accessToken) || {};
+
+  const toSheetDate = (value) => {
+    const ms = parseDateToMillis_(value, 0);
+    return ms ? new Date(ms) : '';
+  };
+
+  const eventRows = Object.keys(eventsBranch).map(eventId => {
+    const event = eventsBranch[eventId] || {};
+    const createdAt = parseDateToMillis_(event.createdAt, 0);
+    return {
+      id: eventId,
+      name: String(event.name || ''),
+      createdAt
+    };
+  });
+
+  eventRows.sort((a, b) => {
+    if (a.createdAt !== b.createdAt) {
+      return a.createdAt - b.createdAt;
+    }
+    return a.id.localeCompare(b.id);
+  });
+
+  const eventSheetRows = eventRows.map(row => [row.id, row.name, toSheetDate(row.createdAt)]);
+  replaceSheetRows_(ensureQuestionEventSheet_(), eventSheetRows, 3);
+
+  const scheduleRows = [];
+  Object.keys(schedulesBranch).forEach(eventId => {
+    const branch = schedulesBranch[eventId] || {};
+    Object.keys(branch).forEach(scheduleId => {
+      const schedule = branch[scheduleId] || {};
+      const createdAt = parseDateToMillis_(schedule.createdAt, 0);
+      scheduleRows.push({
+        eventId,
+        scheduleId,
+        label: String(schedule.label || ''),
+        date: String(schedule.date || ''),
+        createdAt
+      });
+    });
+  });
+
+  scheduleRows.sort((a, b) => {
+    if (a.eventId !== b.eventId) {
+      return a.eventId.localeCompare(b.eventId);
+    }
+    if (a.createdAt !== b.createdAt) {
+      return a.createdAt - b.createdAt;
+    }
+    return a.scheduleId.localeCompare(b.scheduleId);
+  });
+
+  const scheduleSheetRows = scheduleRows.map(row => [
+    row.eventId,
+    row.scheduleId,
+    row.label,
+    row.date,
+    toSheetDate(row.createdAt)
+  ]);
+  replaceSheetRows_(ensureQuestionScheduleSheet_(), scheduleSheetRows, 5);
+
+  const participantRows = [];
+  Object.keys(participantsBranch).forEach(eventId => {
+    const schedules = participantsBranch[eventId] || {};
+    Object.keys(schedules).forEach(scheduleId => {
+      const entries = schedules[scheduleId] || {};
+      Object.keys(entries).forEach(participantId => {
+        const participant = entries[participantId] || {};
+        const updatedAt = parseDateToMillis_(participant.updatedAt, 0);
+        participantRows.push({
+          eventId,
+          scheduleId,
+          participantId,
+          name: String(participant.name || ''),
+          groupNumber: String(participant.groupNumber || ''),
+          updatedAt
+        });
+      });
+    });
+  });
+
+  participantRows.sort((a, b) => {
+    if (a.eventId !== b.eventId) {
+      return a.eventId.localeCompare(b.eventId);
+    }
+    if (a.scheduleId !== b.scheduleId) {
+      return a.scheduleId.localeCompare(b.scheduleId);
+    }
+    if (a.participantId !== b.participantId) {
+      return a.participantId.localeCompare(b.participantId);
+    }
+    return a.updatedAt - b.updatedAt;
+  });
+
+  const participantSheetRows = participantRows.map(row => [
+    row.eventId,
+    row.scheduleId,
+    row.participantId,
+    row.name,
+    row.groupNumber,
+    toSheetDate(row.updatedAt)
+  ]);
+  replaceSheetRows_(ensureQuestionParticipantSheet_(), participantSheetRows, 6);
+
+  return {
+    events: eventRows.length,
+    schedules: scheduleRows.length,
+    participants: participantRows.length
   };
 }
 
