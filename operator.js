@@ -1040,9 +1040,9 @@ class OperatorApp {
             <span class="q-name">${escapeHtml(displayName)}</span>
           </div>
           <div class="q-meta">
+            <span class="status-text visually-hidden">${statusText}</span>
             <div class="q-meta-actions">
-              <span class="chip chip--${status}">${statusText}</span>
-              <label class="q-check" aria-label="この質問をバッチ選択">
+              <label class="q-check" aria-label="${statusText}の質問をバッチ選択">
                 <input type="checkbox" class="row-checkbox" data-uid="${escapeHtml(uid)}">
                 <span class="visually-hidden">選択</span>
               </label>
