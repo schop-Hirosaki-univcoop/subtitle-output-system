@@ -104,9 +104,7 @@ function formatRelative(ms) {
 }
 
 function formatOperatorName(name) {
-  const trimmed = String(name ?? "").trim();
-  if (!trimmed) return "";
-  return trimmed === "Pick Up Question" ? "PUQ" : trimmed;
+  return String(name ?? "").trim();
 }
 
 function normKey(key) {
@@ -908,9 +906,9 @@ class OperatorApp {
       const isPuq = item["ラジオネーム"] === "Pick Up Question";
       return this.state.currentSubTab === "puq" ? isPuq : !isPuq;
     });
-    const isPUQ = this.state.currentSubTab === "puq";
+    const viewingPuqTab = this.state.currentSubTab === "puq";
     list.sort((a, b) => {
-      if (isPUQ) {
+      if (viewingPuqTab) {
         const ta = String(a["質問・お悩み"] ?? "");
         const tb = String(b["質問・お悩み"] ?? "");
         const t = ta.localeCompare(tb, "ja", { numeric: true, sensitivity: "base" });
@@ -970,21 +968,23 @@ class OperatorApp {
         };
       }
       const rawName = item["ラジオネーム"];
-      const displayName = formatOperatorName(rawName);
-      const nameMarkup = isPuq
-        ? `<span class="q-name q-name--puq" aria-label="Pick Up Question">${escapeHtml(displayName)}</span>`
-        : `<span class="q-name">${escapeHtml(displayName)}</span>`;
+      const displayName = formatOperatorName(rawName) || "—";
+      const groupLabel = String(item["班番号"] ?? "").trim();
+      const groupMarkup = groupLabel
+        ? `<span class="q-group" aria-label="班番号">${escapeHtml(groupLabel)}</span>`
+        : "";
 
       card.innerHTML = `
         <header class="q-head">
           <div class="q-title">
-            ${nameMarkup}
+            <span class="q-name">${escapeHtml(displayName)}</span>
           </div>
           <div class="q-meta">
-            <span class="q-group">${escapeHtml(item["班番号"] ?? "") || ""}</span>
+            ${groupMarkup}
             <span class="chip chip--${status}">${statusText}</span>
-            <label class="q-check">
+            <label class="q-check" aria-label="この質問をバッチ選択">
               <input type="checkbox" class="row-checkbox" data-uid="${escapeHtml(uid)}">
+              <span class="visually-hidden">選択</span>
             </label>
           </div>
         </header>
