@@ -21,28 +21,13 @@
       </div>
     </div>
   <header class="op-header">
-    <div class="header-grid">
+    <div class="header-inner">
       <div class="brand-block" aria-label="システム情報">
         <span class="brand-mark">TELoP OPS</span>
         <span class="brand-tagline">Broadcast Subtitle Console</span>
       </div>
-      <div id="user-info" class="user-info"></div>
-      <div class="status-bar" role="group" aria-label="表示状態">
-        <div class="render-indicator" title="Display 状態">
-            <span id="render-lamp" class="lamp" aria-hidden="true"></span>
-            <span id="render-phase" class="lamp-label">-</span>
-        </div>
-        <div class="render-summary" id="render-summary">
-            <div class="render-line">
-                <span class="label">表示中:</span>
-                <span id="render-title" class="text-strong">—</span>
-            </div>
-            <div id="render-question" class="text-soft">—</div>
-            <div id="render-updated" class="text-meta">—</div>
-        </div>
-      </div>
-      <div class="header-controls" aria-label="サブパネル制御">
-        <div class="toggle-stack" role="group" aria-label="補助パネル">
+      <div class="header-actions">
+        <div class="header-controls" role="group" aria-label="補助パネル">
           <button id="logs-toggle" class="btn btn-ghost btn-icon" type="button" aria-expanded="false" aria-controls="logs-panel" aria-label="操作ログを開く" title="操作ログ">
             <span class="icon icon-menu" aria-hidden="true">
               <svg viewBox="0 0 24 24" role="img" focusable="false"><path d="M4 6.75A.75.75 0 0 1 4.75 6h14.5a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 6.75Zm0 5.25a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 12Zm.75 4.5a.75.75 0 0 0 0 1.5h14.5a.75.75 0 0 0 0-1.5H4.75Z"/></svg>
@@ -56,6 +41,7 @@
             <span class="btn-label">辞書</span>
           </button>
         </div>
+        <div id="user-info" class="user-info"></div>
       </div>
     </div>
   </header>
@@ -69,9 +55,23 @@
     <main id="main-container" class="layout-grid" style="display: none;">
         <section class="module module--primary" id="questions-panel" aria-labelledby="questions-title">
             <div class="module-header">
-                <div>
+                <div class="module-heading">
                     <h1 id="questions-title">テロップ操作パネル</h1>
                     <p class="module-description">質問の選択・表示とログ監視を一つの画面で行えます。</p>
+                </div>
+                <div class="status-bar" role="group" aria-label="表示状態">
+                    <div class="render-indicator" title="Display 状態">
+                        <span id="render-lamp" class="lamp" aria-hidden="true"></span>
+                        <span id="render-phase" class="lamp-label">-</span>
+                    </div>
+                    <div class="render-summary" id="render-summary">
+                        <div class="render-line">
+                            <span class="label">表示中:</span>
+                            <span id="render-title" class="text-strong">—</span>
+                        </div>
+                        <div id="render-question" class="text-soft">—</div>
+                        <div id="render-updated" class="text-meta">—</div>
+                    </div>
                 </div>
             </div>
             <div class="module-body" id="questions-content">
@@ -94,7 +94,7 @@
         </section>
         <aside class="module module--secondary" id="dictionary-panel" aria-labelledby="dictionary-title" hidden>
             <div class="module-header">
-                <div>
+                <div class="module-heading">
                     <h2 id="dictionary-title">ルビ辞書管理</h2>
                     <p class="module-description">登録語句の追加や更新が即座にディスプレイへ反映されます。</p>
                 </div>
@@ -120,7 +120,7 @@
         </aside>
         <aside class="module module--secondary" id="logs-panel" aria-labelledby="logs-title" hidden>
             <div class="module-header">
-                <div>
+                <div class="module-heading">
                     <h2 id="logs-title">操作ログ</h2>
                     <p class="module-description">直近の操作履歴を確認し、異常を素早く検知できます。</p>
                 </div>
