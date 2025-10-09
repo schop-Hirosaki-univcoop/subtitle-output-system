@@ -9,7 +9,7 @@ import {
 
 const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec";
 const firebaseConfig = {
-  apiKey: "AIzaSyDLv4p0m03pWxca_HPnBkm2ZkfTgGe0uyE",
+  apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
   authDomain: "subtitle-output-system-9bc14.firebaseapp.com",
   databaseURL: "https://subtitle-output-system-9bc14-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "subtitle-output-system-9bc14",
