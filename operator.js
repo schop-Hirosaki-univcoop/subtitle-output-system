@@ -41,6 +41,9 @@ const STEP_LABELS = [
   "準備完了"
 ];
 
+const GENRE_OPTIONS = ["学び", "活動", "暮らし", "食・スポット", "移動・季節", "その他"];
+const GENRE_LOOKUP = new Map(GENRE_OPTIONS.map((label) => [normKey(label), label]));
+
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 const auth = initializeAuth(app, {
@@ -64,6 +67,10 @@ function createInitialState(autoScroll = true) {
     allQuestions: [],
     allLogs: [],
     currentSubTab: "normal",
+    currentGenre: GENRE_OPTIONS[0],
+    currentSchedule: "",
+    lastNormalSchedule: "",
+    availableSchedules: [],
     selectedRowData: null,
     lastDisplayedUid: null,
     autoScrollLogs: autoScroll,
@@ -113,6 +120,13 @@ function normKey(key) {
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
     .replace(/\s+/g, "")
     .toLowerCase();
+}
+
+function resolveGenreLabel(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "その他";
+  const mapped = GENRE_LOOKUP.get(normKey(raw));
+  return mapped || raw;
 }
 
 function parseLogTimestamp(ts) {
@@ -243,6 +257,8 @@ class OperatorApp {
       logsToggle: document.getElementById("logs-toggle"),
       logsPanel: document.getElementById("logs-panel"),
       cardsContainer: document.getElementById("questions-cards"),
+      genreTabContainer: document.getElementById("genre-tab-buttons"),
+      scheduleFilter: document.getElementById("schedule-filter"),
       dictionaryTableBody: document.querySelector("#dictionary-table tbody"),
       addTermForm: document.getElementById("add-term-form"),
       newTermInput: document.getElementById("new-term"),
@@ -303,6 +319,9 @@ class OperatorApp {
     this.handleBatchUnanswer = this.handleBatchUnanswer.bind(this);
     this.syncSelectAllState = this.syncSelectAllState.bind(this);
     this.switchSubTab = this.switchSubTab.bind(this);
+    this.switchGenre = this.switchGenre.bind(this);
+    this.handleScheduleChange = this.handleScheduleChange.bind(this);
+    this.updateScheduleOptions = this.updateScheduleOptions.bind(this);
     this.fetchDictionary = this.fetchDictionary.bind(this);
     this.fetchLogs = this.fetchLogs.bind(this);
     this.addTerm = this.addTerm.bind(this);
@@ -333,6 +352,9 @@ class OperatorApp {
     document.querySelectorAll(".sub-tab-button").forEach((button) => {
       button.addEventListener("click", () => this.switchSubTab(button.dataset.subTab));
     });
+    document.querySelectorAll(".genre-tab-button").forEach((button) => {
+      button.addEventListener("click", () => this.switchGenre(button.dataset.genre));
+    });
     this.dom.dictionaryToggle?.addEventListener("click", () => this.toggleDictionaryDrawer());
     this.dom.logsToggle?.addEventListener("click", () => this.toggleLogsDrawer());
     this.dom.logsRefreshButton?.addEventListener("click", this.fetchLogs);
@@ -344,6 +366,10 @@ class OperatorApp {
     this.dom.addTermForm?.addEventListener("submit", this.addTerm);
     this.dom.selectAllCheckbox?.addEventListener("change", this.handleSelectAll);
     this.dom.batchUnanswerBtn?.addEventListener("click", this.handleBatchUnanswer);
+    if (this.dom.scheduleFilter) {
+      this.dom.scheduleFilter.value = this.state.currentSchedule;
+      this.dom.scheduleFilter.addEventListener("change", this.handleScheduleChange);
+    }
     this.dom.cardsContainer?.addEventListener("change", (event) => {
       if (event.target instanceof HTMLInputElement && event.target.classList.contains("row-checkbox")) {
         this.syncSelectAllState();
@@ -560,10 +586,13 @@ class OperatorApp {
         班番号: item.group ?? "",
         ラジオネーム: item.name,
         "質問・お悩み": item.question,
+        ジャンル: resolveGenreLabel(item.genre),
+        日程: String(item.schedule ?? "").trim(),
         回答済: !!item.answered,
         選択中: !!item.selecting,
         __ts: Number(item.ts || 0)
       }));
+      this.updateScheduleOptions();
       await this.renderQuestions();
       this.startQuestionsStream();
       this.startDisplaySessionMonitor();
@@ -653,6 +682,18 @@ class OperatorApp {
       this.dom.selectAllCheckbox.checked = false;
       this.dom.selectAllCheckbox.indeterminate = false;
     }
+    document.querySelectorAll(".genre-tab-button").forEach((button, index) => {
+      const isDefault = index === 0;
+      button.classList.toggle("active", isDefault);
+      button.setAttribute("aria-selected", String(isDefault));
+    });
+    if (this.dom.scheduleFilter) {
+      this.dom.scheduleFilter.innerHTML = "";
+      this.dom.scheduleFilter.value = "";
+      this.dom.scheduleFilter.disabled = true;
+      const wrapper = this.dom.scheduleFilter.closest(".schedule-filter");
+      if (wrapper) wrapper.classList.add("is-disabled");
+    }
     this.updateActionAvailability();
     this.updateBatchButtonVisibility();
     if (this.dom.cardsContainer) this.dom.cardsContainer.innerHTML = "";
@@ -668,10 +709,13 @@ class OperatorApp {
         班番号: item.group ?? "",
         ラジオネーム: item.name,
         "質問・お悩み": item.question,
+        ジャンル: resolveGenreLabel(item.genre),
+        日程: String(item.schedule ?? "").trim(),
         回答済: !!item.answered,
         選択中: !!item.selecting,
         __ts: Number(item.ts || 0)
       }));
+      this.updateScheduleOptions();
       this.renderQuestions();
     });
   }
@@ -907,11 +951,25 @@ class OperatorApp {
 
   async renderQuestions() {
     if (!this.dom.cardsContainer) return;
+    const currentTab = this.state.currentSubTab;
+    const viewingPuqTab = currentTab === "puq";
+    const viewingNormalTab = currentTab === "normal";
+    const selectedGenre = this.state.currentGenre || GENRE_OPTIONS[0];
+    const selectedSchedule = viewingNormalTab ? this.state.currentSchedule || "" : "";
     let list = this.state.allQuestions.filter((item) => {
       const isPuq = item["ラジオネーム"] === "Pick Up Question";
-      return this.state.currentSubTab === "puq" ? isPuq : !isPuq;
+      if (viewingPuqTab && !isPuq) {
+        return false;
+      }
+      if (viewingNormalTab && isPuq) {
+        return false;
+      }
+      const itemGenre = String(item["ジャンル"] ?? "").trim() || "その他";
+      if (selectedGenre && itemGenre !== selectedGenre) return false;
+      const itemSchedule = String(item["日程"] ?? "").trim();
+      if (viewingNormalTab && selectedSchedule && itemSchedule !== selectedSchedule) return false;
+      return true;
     });
-    const viewingPuqTab = this.state.currentSubTab === "puq";
     list.sort((a, b) => {
       if (viewingPuqTab) {
         const ta = String(a["質問・お悩み"] ?? "");
@@ -978,6 +1036,7 @@ class OperatorApp {
       const groupMarkup = groupLabel
         ? `<span class="q-group" aria-label="班番号">${escapeHtml(groupLabel)}</span>`
         : "";
+      const tagsMarkup = [groupMarkup].filter(Boolean).join("\n            ");
 
       card.innerHTML = `
         <header class="q-head">
@@ -985,12 +1044,16 @@ class OperatorApp {
             <span class="q-name">${escapeHtml(displayName)}</span>
           </div>
           <div class="q-meta">
-            ${groupMarkup}
-            <span class="chip chip--${status}">${statusText}</span>
-            <label class="q-check" aria-label="この質問をバッチ選択">
-              <input type="checkbox" class="row-checkbox" data-uid="${escapeHtml(uid)}">
-              <span class="visually-hidden">選択</span>
-            </label>
+            <div class="q-flags">
+              ${tagsMarkup}
+            </div>
+            <div class="q-meta-actions">
+              <span class="chip chip--${status}">${statusText}</span>
+              <label class="q-check" aria-label="この質問をバッチ選択">
+                <input type="checkbox" class="row-checkbox" data-uid="${escapeHtml(uid)}">
+                <span class="visually-hidden">選択</span>
+              </label>
+            </div>
           </div>
         </header>
         <div class="q-text">${escapeHtml(item["質問・お悩み"])}</div>
@@ -1169,12 +1232,119 @@ class OperatorApp {
     }
   }
 
+  switchGenre(genreKey) {
+    if (!genreKey) return;
+    const current = this.state.currentGenre || GENRE_OPTIONS[0];
+    const nextGenre = resolveGenreLabel(genreKey);
+    if (nextGenre === current) return;
+    this.state.currentGenre = nextGenre;
+    document.querySelectorAll(".genre-tab-button").forEach((button) => {
+      const isActive = button.dataset.genre === nextGenre;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-selected", String(isActive));
+    });
+    if (this.state.currentSubTab === "normal") {
+      this.state.lastNormalSchedule = "";
+      this.state.currentSchedule = "";
+      if (this.dom.scheduleFilter) {
+        this.dom.scheduleFilter.value = "";
+      }
+    }
+    this.updateScheduleOptions();
+    this.renderQuestions();
+  }
+
+  handleScheduleChange(event) {
+    const select = event?.target;
+    if (!(select instanceof HTMLSelectElement)) return;
+    const value = select.value || "";
+    this.state.currentSchedule = value;
+    if (this.state.currentSubTab === "normal") {
+      this.state.lastNormalSchedule = value;
+    }
+    this.renderQuestions();
+  }
+
+  updateScheduleOptions() {
+    const select = this.dom.scheduleFilter;
+    if (!select) return;
+    const isNormalTab = this.state.currentSubTab === "normal";
+    const selectedGenre = this.state.currentGenre || GENRE_OPTIONS[0];
+    const scheduleSet = new Set();
+    if (isNormalTab) {
+      for (const item of this.state.allQuestions) {
+        const isPuq = item["ラジオネーム"] === "Pick Up Question";
+        if (isPuq) continue;
+        const itemGenre = String(item["ジャンル"] ?? "").trim() || "その他";
+        if (selectedGenre && itemGenre !== selectedGenre) continue;
+        const scheduleLabel = String(item["日程"] ?? "").trim();
+        if (!scheduleLabel) continue;
+        scheduleSet.add(scheduleLabel);
+      }
+    }
+    const nextList = Array.from(scheduleSet).sort((a, b) => a.localeCompare(b, "ja", { numeric: true, sensitivity: "base" }));
+    const prevList = this.state.availableSchedules || [];
+    const changed =
+      nextList.length !== prevList.length || nextList.some((value, index) => value !== prevList[index]);
+    if (changed) {
+      select.innerHTML = "";
+      nextList.forEach((value) => {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = value;
+        select.appendChild(opt);
+      });
+    }
+    this.state.availableSchedules = nextList;
+    let nextValue = "";
+    if (isNormalTab && nextList.length > 0) {
+      const { currentSchedule, lastNormalSchedule } = this.state;
+      if (currentSchedule && nextList.includes(currentSchedule)) {
+        nextValue = currentSchedule;
+      } else if (lastNormalSchedule && nextList.includes(lastNormalSchedule)) {
+        nextValue = lastNormalSchedule;
+      } else {
+        nextValue = nextList[0];
+      }
+    }
+    if (nextValue) {
+      select.value = nextValue;
+    } else {
+      select.value = "";
+    }
+    this.state.currentSchedule = nextValue;
+    if (isNormalTab) {
+      this.state.lastNormalSchedule = nextValue;
+    }
+    const shouldDisable = !isNormalTab || nextList.length === 0;
+    select.disabled = shouldDisable;
+    const wrapper = select.closest(".schedule-filter");
+    if (wrapper) {
+      wrapper.classList.toggle("is-disabled", shouldDisable);
+    }
+  }
+
   switchSubTab(tabName) {
     if (!tabName) return;
+    const previous = this.state.currentSubTab;
+    if (tabName === previous) {
+      return;
+    }
     this.state.currentSubTab = tabName;
     document.querySelectorAll(".sub-tab-button").forEach((button) => {
-      button.classList.toggle("active", button.dataset.subTab === tabName);
+      const isActive = button.dataset.subTab === tabName;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-selected", String(isActive));
     });
+    if (previous === "normal" && tabName !== "normal") {
+      this.state.lastNormalSchedule = this.state.currentSchedule || "";
+    }
+    if (tabName === "normal") {
+      this.state.currentSchedule = this.state.lastNormalSchedule || "";
+    } else {
+      this.state.currentSchedule = "";
+    }
+    this.updateScheduleOptions();
     this.renderQuestions();
   }
 
