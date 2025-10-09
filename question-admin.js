@@ -1007,6 +1007,12 @@ async function fetchReferenceData() {
   await loadParticipants();
 }
 
+async function fetchOperationalLogs() {
+  // Logs are not displayed in the current admin interface yet but the loader
+  // expects the step to complete without errors. Provide a no-op placeholder
+  // so that initialization can finish successfully.
+}
+
 function attachEventHandlers() {
   if (dom.loginButton) {
     dom.loginButton.addEventListener("click", async () => {
