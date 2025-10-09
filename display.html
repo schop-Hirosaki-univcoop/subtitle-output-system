@@ -247,13 +247,12 @@
     }
     #radio-name.no-label::before{ content:none; }
 
-    /* ─ ここが“1行23文字”の肝 ─
-       23ic（CJK全角23文字幅）に固定。非対応ブラウザは 23em にフォールバック。 */
+    /* ─ ここが“1行23文字”の肝 ─*/
     #question {
       width: fit-content;
       font-family: "GenEiGothicP-HKL","GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
       font-weight: 800;
-      font-size: calc(90vw / 22);              /* 56–72pxあたりで微調整OK */
+      font-size: calc(90vw / 23);              /* 56–72pxあたりで微調整OK */
       line-height: 1.25;
       letter-spacing: .01em;
       white-space: normal;
