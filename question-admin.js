@@ -548,30 +548,41 @@ function updateParticipantContext(options = {}) {
 }
 
 async function loadEvents() {
-  const [eventsSnap, schedulesSnap] = await Promise.all([
-    get(ref(database, "questionIntake/events")),
-    get(ref(database, "questionIntake/schedules"))
-  ]);
+  const eventsSnap = await get(ref(database, "questionIntake/events"));
   const eventsData = eventsSnap.val() || {};
-  const schedulesData = schedulesSnap.val() || {};
 
-  const events = Object.entries(eventsData).map(([eventId, eventValue]) => {
-    const scheduleEntries = Object.entries(schedulesData[eventId] || {}).map(([scheduleId, scheduleValue]) => ({
-      id: scheduleId,
-      label: scheduleValue.label || "",
-      date: scheduleValue.date || "",
-      participantCount: Number(scheduleValue.participantCount || 0),
-      createdAt: scheduleValue.createdAt || 0
-    }));
-    scheduleEntries.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || a.label.localeCompare(b.label, "ja", { numeric: true }));
-    return {
-      id: eventId,
-      name: eventValue.name || "",
-      createdAt: eventValue.createdAt || 0,
-      updatedAt: eventValue.updatedAt || 0,
-      schedules: scheduleEntries
-    };
-  });
+  const events = await Promise.all(
+    Object.entries(eventsData).map(async ([eventId, eventValue]) => {
+      let scheduleEntries = [];
+      try {
+        const schedulesSnap = await get(ref(database, `questionIntake/schedules/${eventId}`));
+        const schedulesData = schedulesSnap.val() || {};
+        scheduleEntries = Object.entries(schedulesData).map(([scheduleId, scheduleValue]) => ({
+          id: scheduleId,
+          label: scheduleValue.label || "",
+          date: scheduleValue.date || "",
+          participantCount: Number(scheduleValue.participantCount || 0),
+          createdAt: scheduleValue.createdAt || 0
+        }));
+      } catch (error) {
+        if (error?.code !== "PERMISSION_DENIED") {
+          console.error("Failed to load schedules for event", eventId, error);
+        }
+      }
+
+      scheduleEntries.sort(
+        (a, b) => (a.createdAt || 0) - (b.createdAt || 0) || a.label.localeCompare(b.label, "ja", { numeric: true })
+      );
+
+      return {
+        id: eventId,
+        name: eventValue.name || "",
+        createdAt: eventValue.createdAt || 0,
+        updatedAt: eventValue.updatedAt || 0,
+        schedules: scheduleEntries
+      };
+    })
+  );
 
   events.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || a.name.localeCompare(b.name, "ja", { numeric: true }));
   state.events = events;
