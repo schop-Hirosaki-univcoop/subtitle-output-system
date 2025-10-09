@@ -389,15 +389,36 @@ function ensureSheetWithHeaders_(sheetName, headers) {
 }
 
 function ensureQuestionEventSheet_() {
-  return ensureSheetWithHeaders_(QUESTION_EVENT_SHEET, ['イベントID', 'イベント名', '作成日時']);
+  const sheet = ensureSheetWithHeaders_(QUESTION_EVENT_SHEET, ['イベントID', 'イベント名', '作成日時']);
+  sheet.getRange('C2:C').setNumberFormat('yyyy/MM/dd HH:mm:ss');
+  return sheet;
 }
 
 function ensureQuestionScheduleSheet_() {
-  return ensureSheetWithHeaders_(QUESTION_SCHEDULE_SHEET, ['イベントID', '日程ID', '表示名', '日付', '作成日時']);
+  const sheet = ensureSheetWithHeaders_(QUESTION_SCHEDULE_SHEET, ['イベントID', '日程ID', '表示名', '日付', '作成日時']);
+  sheet.getRange('E2:E').setNumberFormat('yyyy/MM/dd HH:mm:ss');
+  return sheet;
 }
 
 function ensureQuestionParticipantSheet_() {
-  return ensureSheetWithHeaders_(QUESTION_PARTICIPANT_SHEET, ['イベントID', '日程ID', '参加者ID', '氏名', '班番号', '更新日時']);
+  const sheet = ensureSheetWithHeaders_(QUESTION_PARTICIPANT_SHEET, ['イベントID', '日程ID', '参加者ID', '氏名', '班番号', '更新日時']);
+  sheet.getRange('F2:F').setNumberFormat('yyyy/MM/dd HH:mm:ss');
+  return sheet;
+}
+
+function replaceSheetRows_(sheet, rows, columnCount) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, columnCount).clearContent();
+  }
+  if (!rows.length) {
+    return;
+  }
+  const requiredRows = rows.length + 1;
+  if (sheet.getMaxRows() < requiredRows) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), requiredRows - sheet.getMaxRows());
+  }
+  sheet.getRange(2, 1, rows.length, columnCount).setValues(rows);
 }
 
 function replaceSheetRows_(sheet, rows, columnCount) {
