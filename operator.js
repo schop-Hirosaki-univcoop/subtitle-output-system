@@ -1033,20 +1033,13 @@ class OperatorApp {
       const rawName = item["ラジオネーム"];
       const displayName = formatOperatorName(rawName) || "—";
       const groupLabel = String(item["班番号"] ?? "").trim();
-      const groupMarkup = groupLabel
-        ? `<span class="q-group" aria-label="班番号">${escapeHtml(groupLabel)}</span>`
-        : "";
-      const tagsMarkup = [groupMarkup].filter(Boolean).join("\n            ");
-
       card.innerHTML = `
+        ${groupLabel ? `<div class="q-group-corner"><span class="q-group" role="text" aria-label="班番号 ${escapeHtml(groupLabel)}">${escapeHtml(groupLabel)}</span></div>` : ""}
         <header class="q-head">
           <div class="q-title">
             <span class="q-name">${escapeHtml(displayName)}</span>
           </div>
           <div class="q-meta">
-            <div class="q-flags">
-              ${tagsMarkup}
-            </div>
             <div class="q-meta-actions">
               <span class="chip chip--${status}">${statusText}</span>
               <label class="q-check" aria-label="この質問をバッチ選択">

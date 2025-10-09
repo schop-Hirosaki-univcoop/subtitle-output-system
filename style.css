@@ -557,6 +557,7 @@ input[type="checkbox"]{
   border:1px solid rgba(46,68,96,.68);
   box-shadow:0 10px 24px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.04);
   padding:clamp(.75rem, 1.5vw, 1.05rem) clamp(.85rem, 1.8vw, 1.2rem);
+  padding-top:clamp(1.2rem, 2vw, 1.5rem);
   color:var(--txt);
   transition:border-color .18s ease, box-shadow .18s ease;
   width:100%;
@@ -601,20 +602,18 @@ input[type="checkbox"]{
   flex-wrap:wrap;
   width:100%;
 }
-.q-flags{
-  display:flex;
-  align-items:center;
-  gap:clamp(.4rem, .9vw, .6rem);
-  flex-wrap:wrap;
-  flex:1 1 auto;
-  min-width:0;
-}
 .q-meta-actions{
   display:flex;
   align-items:center;
   gap:clamp(.45rem, 1vw, .7rem);
   flex-wrap:wrap;
   justify-content:flex-end;
+}
+.q-group-corner{
+  position:absolute;
+  top:clamp(.6rem, 1.4vw, .95rem);
+  right:clamp(.7rem, 1.6vw, 1.05rem);
+  pointer-events:none;
 }
 .q-group{
   display:inline-flex;
