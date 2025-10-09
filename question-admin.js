@@ -24,10 +24,7 @@ const STEP_LABELS = [
   "認証",
   "在籍チェック",
   "管理者付与",
-  "初期ミラー",
-  "購読開始",
-  "辞書取得",
-  "ログ取得",
+  "初期データ取得",
   "準備完了"
 ];
 
@@ -59,6 +56,7 @@ const dom = {
   loginButton: document.getElementById("login-button"),
   adminMain: document.getElementById("admin-main"),
   headerLogout: document.getElementById("header-logout"),
+  userInfo: document.getElementById("user-info"),
   logoutButton: document.getElementById("logout-button"),
   refreshButton: document.getElementById("refresh-button"),
   addEventButton: document.getElementById("add-event-button"),
@@ -93,6 +91,44 @@ const loaderState = {
   items: [],
   currentIndex: -1
 };
+
+async function applyQuestionIntakeUpdates(updates) {
+  if (!updates || !Object.keys(updates).length) return;
+  await update(ref(database, "questionIntake"), updates);
+}
+
+async function fetchAuthorizedEmails() {
+  const result = await api.apiPost({ action: "fetchSheet", sheet: "users" });
+  if (!result || !result.success || !Array.isArray(result.data)) {
+    throw new Error("ユーザー権限の確認に失敗しました。");
+  }
+  return result.data
+    .map(entry =>
+      String(entry["メールアドレス"] || entry.email || "")
+        .trim()
+        .toLowerCase()
+    )
+    .filter(Boolean);
+}
+
+function renderUserSummary(user) {
+  if (!dom.userInfo) return;
+  dom.userInfo.innerHTML = "";
+  if (!user) {
+    dom.userInfo.hidden = true;
+    dom.userInfo.setAttribute("aria-hidden", "true");
+    return;
+  }
+
+  const safeName = String(user.displayName || "").trim();
+  const safeEmail = String(user.email || "").trim();
+  const label = document.createElement("span");
+  label.className = "user-label";
+  label.textContent = safeName && safeEmail ? `${safeName} (${safeEmail})` : safeName || safeEmail || "";
+  dom.userInfo.appendChild(label);
+  dom.userInfo.hidden = false;
+  dom.userInfo.removeAttribute("aria-hidden");
+}
 
 function createApiClient(authInstance) {
   async function getIdToken(force = false) {
@@ -647,17 +683,17 @@ async function loadParticipants() {
   entries.forEach(entry => {
     if (!entry.token) {
       entry.token = generateToken();
-      updates[`questionIntake/participants/${eventId}/${scheduleId}/${entry.participantId}/token`] = entry.token;
-      updates[`questionIntake/tokens/${entry.token}`] = buildTokenPayload(entry, event, schedule, { isNew: true });
+      updates[`participants/${eventId}/${scheduleId}/${entry.participantId}/token`] = entry.token;
+      updates[`tokens/${entry.token}`] = buildTokenPayload(entry, event, schedule, { isNew: true });
       needsUpdate = true;
     }
   });
 
   if (needsUpdate) {
-    updates[`questionIntake/schedules/${eventId}/${scheduleId}/participantCount`] = entries.length;
-    updates[`questionIntake/schedules/${eventId}/${scheduleId}/updatedAt`] = serverTimestamp();
-    updates[`questionIntake/events/${eventId}/updatedAt`] = serverTimestamp();
-    await update(ref(database), updates);
+    updates[`schedules/${eventId}/${scheduleId}/participantCount`] = entries.length;
+    updates[`schedules/${eventId}/${scheduleId}/updatedAt`] = serverTimestamp();
+    updates[`events/${eventId}/updatedAt`] = serverTimestamp();
+    await applyQuestionIntakeUpdates(updates);
   }
 
   state.participants = sortParticipants(entries);
@@ -712,11 +748,11 @@ async function purgeTokens(predicate) {
   snapshot.forEach(child => {
     const value = child.val();
     if (predicate(value, child.key)) {
-      updates[`questionIntake/tokens/${child.key}`] = null;
+      updates[`tokens/${child.key}`] = null;
     }
   });
   if (Object.keys(updates).length) {
-    await update(ref(database), updates);
+    await applyQuestionIntakeUpdates(updates);
   }
 }
 
@@ -725,11 +761,11 @@ async function handleDeleteEvent(eventId, eventName) {
     return;
   }
   const updates = {
-    [`questionIntake/events/${eventId}`]: null,
-    [`questionIntake/schedules/${eventId}`]: null,
-    [`questionIntake/participants/${eventId}`]: null
+    [`events/${eventId}`]: null,
+    [`schedules/${eventId}`]: null,
+    [`participants/${eventId}`]: null
   };
-  await update(ref(database), updates);
+  await applyQuestionIntakeUpdates(updates);
   await purgeTokens(value => value?.eventId === eventId);
   if (state.selectedEventId === eventId) {
     state.selectedEventId = null;
@@ -770,19 +806,18 @@ async function handleDeleteSchedule(scheduleId, scheduleLabel) {
     return;
   }
   const updates = {
-    [`questionIntake/schedules/${eventId}/${scheduleId}`]: null,
-    [`questionIntake/participants/${eventId}/${scheduleId}`]: null
+    [`schedules/${eventId}/${scheduleId}`]: null,
+    [`participants/${eventId}/${scheduleId}`]: null
   };
-  await update(ref(database), updates);
+  await applyQuestionIntakeUpdates(updates);
   await purgeTokens(value => value?.eventId === eventId && value?.scheduleId === scheduleId);
   if (state.selectedScheduleId === scheduleId) {
     state.selectedScheduleId = null;
     state.participants = [];
   }
   await loadEvents();
-  if (state.selectedEventId) {
-    selectEvent(state.selectedEventId);
-  }
+  renderParticipants();
+  updateParticipantContext();
 }
 
 function handleCsvChange(event) {
@@ -871,7 +906,7 @@ async function handleSave() {
       }
       entry.token = token;
 
-      updates[`questionIntake/participants/${eventId}/${scheduleId}/${participantId}`] = {
+      updates[`participants/${eventId}/${scheduleId}/${participantId}`] = {
         participantId,
         name: entry.name,
         groupNumber: entry.groupNumber,
@@ -880,24 +915,24 @@ async function handleSave() {
         updatedAt: serverTimestamp()
       };
 
-      updates[`questionIntake/tokens/${token}`] = buildTokenPayload(entry, event, schedule, { isNew: isNewToken });
+      updates[`tokens/${token}`] = buildTokenPayload(entry, event, schedule, { isNew: isNewToken });
     });
 
     Object.keys(existingData).forEach(participantId => {
       if (!nextIds.has(participantId)) {
-        updates[`questionIntake/participants/${eventId}/${scheduleId}/${participantId}`] = null;
+        updates[`participants/${eventId}/${scheduleId}/${participantId}`] = null;
         const token = existingData[participantId]?.token;
         if (token) {
-          updates[`questionIntake/tokens/${token}`] = null;
+          updates[`tokens/${token}`] = null;
         }
       }
     });
 
-    updates[`questionIntake/schedules/${eventId}/${scheduleId}/participantCount`] = state.participants.length;
-    updates[`questionIntake/schedules/${eventId}/${scheduleId}/updatedAt`] = serverTimestamp();
-    updates[`questionIntake/events/${eventId}/updatedAt`] = serverTimestamp();
+    updates[`schedules/${eventId}/${scheduleId}/participantCount`] = state.participants.length;
+    updates[`schedules/${eventId}/${scheduleId}/updatedAt`] = serverTimestamp();
+    updates[`events/${eventId}/updatedAt`] = serverTimestamp();
 
-    await update(ref(database), updates);
+    await applyQuestionIntakeUpdates(updates);
 
     state.lastSavedSignature = signature;
     setUploadStatus("参加者リストを更新しました。", "success");
@@ -915,6 +950,12 @@ async function handleSave() {
 function setAuthUi(signedIn) {
   toggleSectionVisibility(dom.loginCard, !signedIn);
   toggleSectionVisibility(dom.adminMain, signedIn);
+
+  if (signedIn) {
+    renderUserSummary(state.user);
+  } else {
+    renderUserSummary(null);
+  }
 
   if (dom.headerLogout) {
     dom.headerLogout.hidden = !signedIn;
@@ -965,6 +1006,7 @@ function resetState() {
   setUploadStatus("日程を選択してください。");
   if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
   if (dom.csvInput) dom.csvInput.value = "";
+  renderUserSummary(null);
 }
 
 function handleMappingTableClick(event) {
@@ -976,70 +1018,7 @@ function handleMappingTableClick(event) {
 }
 
 async function verifyEnrollment(user) {
-  const result = await api.apiPost({ action: "fetchSheet", sheet: "users" });
-  const rows = Array.isArray(result.data) ? result.data : [];
-  const authorized = rows
-    .map(item => String(item["メールアドレス"] || item.email || "").trim().toLowerCase())
-    .filter(Boolean);
-  const email = String(user.email || "").trim().toLowerCase();
-  if (!authorized.includes(email)) {
-    throw new Error("あなたのアカウントはこのシステムへのアクセスが許可されていません。");
-  }
-}
-
-async function ensureAdminAccess() {
-  try {
-    await api.apiPost({ action: "ensureAdmin" });
-  } catch (error) {
-    throw new Error(error.message || "管理者権限の確認に失敗しました。");
-  }
-}
-
-async function runInitialMirror() {
-  await loadEvents();
-}
-
-async function startRealtimeSync() {
-  // Question admin does not maintain realtime listeners yet but keeps the step for parity with operator login.
-}
-
-async function fetchReferenceData() {
-  await loadParticipants();
-}
-
-async function fetchOperationalLogs() {
-  // No log feed is required for the admin console; the step is recorded to mirror the operator flow.
-}
-
-function resetState() {
-  state.events = [];
-  state.participants = [];
-  state.selectedEventId = null;
-  state.selectedScheduleId = null;
-  state.lastSavedSignature = "";
-  renderEvents();
-  renderSchedules();
-  renderParticipants();
-  updateParticipantContext();
-  setUploadStatus("日程を選択してください。");
-  if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
-  if (dom.csvInput) dom.csvInput.value = "";
-}
-
-function handleMappingTableClick(event) {
-  const button = event.target.closest(".copy-link-btn");
-  if (!button) return;
-  event.preventDefault();
-  const token = button.dataset.token;
-  copyShareLink(token).catch(err => console.error(err));
-}
-
-async function verifyEnrollment(user) {
-  const result = await api.apiPost({ action: "fetchSheet", sheet: "users" });
-  const rows = Array.isArray(result.data) ? result.data : [];
-  const authorized = rows
-    .map(item => String(item["メールアドレス"] || item.email || "").trim().toLowerCase())
-    .filter(Boolean);
+  const authorized = await fetchAuthorizedEmails();
   const email = String(user.email || "").trim().toLowerCase();
   if (!authorized.includes(email)) {
     throw new Error("あなたのアカウントはこのシステムへのアクセスが許可されていません。");
@@ -1164,14 +1143,9 @@ function initAuthWatcher() {
       setLoaderStep(1, "在籍チェック完了。管理者権限を確認しています…");
       await ensureAdminAccess();
       setLoaderStep(2, "管理者権限を同期しました。初期データを読み込み中…");
-      await runInitialMirror();
-      setLoaderStep(3, "初期ミラー完了。購読を準備しています…");
-      await startRealtimeSync();
-      setLoaderStep(4, "購読開始済み。関連データを取得しています…");
-      await fetchReferenceData();
-      setLoaderStep(5, "辞書情報の取得が完了しました。ログを確認しています…");
-      await fetchOperationalLogs();
-      setLoaderStep(6, "ログ取得完了。仕上げ中…");
+      await loadEvents();
+      await loadParticipants();
+      setLoaderStep(3, "初期データの取得が完了しました。仕上げ中…");
       setAuthUi(true);
       finishLoaderSteps("準備完了");
     } catch (error) {
