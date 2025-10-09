@@ -399,6 +399,13 @@ input[type="checkbox"]{
   margin:0;
   flex-wrap:wrap;
 }
+.genre-tabs{
+  display:flex;
+  gap:clamp(.5rem, 1.2vw, .75rem);
+  margin:0;
+  flex-wrap:wrap;
+}
+.genre-tab-button,
 .sub-tab-button{
   padding:clamp(.45rem, 1vw, .6rem) clamp(.9rem, 2vw, 1.15rem);
   border-radius:999px;
@@ -409,10 +416,15 @@ input[type="checkbox"]{
   cursor:pointer;
   transition:background .18s ease, color .18s ease, border-color .18s ease;
 }
+.genre-tab-button.active,
 .sub-tab-button.active{
   color:var(--text);
   border-color:rgba(30,200,255,.6);
   background:linear-gradient(180deg, rgba(30,200,255,.22), rgba(14,110,190,.18));
+}
+.genre-tab-button[disabled]{
+  opacity:.5;
+  cursor:not-allowed;
 }
 #questions-content{
   display:flex;
@@ -473,10 +485,51 @@ input[type="checkbox"]{
 .cards-toolbar{
   display:flex;
   align-items:center;
-  justify-content:flex-end;
+  justify-content:space-between;
   gap:clamp(.45rem, 1vw, .7rem);
   padding:0 0 4px;
   color:var(--muted);
+  flex-wrap:wrap;
+}
+.cards-toolbar .toolbar-left{
+  display:flex;
+  align-items:center;
+  gap:clamp(.45rem, 1vw, .7rem);
+  flex-wrap:wrap;
+}
+.schedule-filter{
+  display:inline-flex;
+  align-items:center;
+  gap:clamp(.35rem, .9vw, .55rem);
+  font-size:.9rem;
+  color:var(--muted);
+  padding:.3rem .55rem;
+  border-radius:clamp(.65rem, 1.1vw, .85rem);
+  background:rgba(15,23,36,.55);
+  border:1px solid rgba(70,94,128,.4);
+}
+.schedule-filter.is-disabled{
+  opacity:.5;
+}
+.schedule-filter select{
+  appearance:none;
+  border:none;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  padding:.1rem .25rem;
+  min-width:7.5rem;
+}
+.schedule-filter select:focus{
+  outline:none;
+}
+.schedule-filter select:disabled{
+  opacity:.4;
+  cursor:not-allowed;
+}
+.schedule-label{
+  font-weight:600;
+  letter-spacing:.05em;
 }
 .chk{
   display:flex;
@@ -500,15 +553,25 @@ input[type="checkbox"]{
   flex-direction:column;
   gap:clamp(.5rem, 1.1vw, .8rem);
   border-radius:clamp(.9rem, 1.5vw, 1.2rem);
-  background:linear-gradient(180deg, rgba(17,24,37,.9), rgba(11,16,26,.94));
-  border:1px solid rgba(46,68,96,.68);
-  box-shadow:0 10px 24px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.04);
-  padding:clamp(.75rem, 1.5vw, 1.05rem) clamp(.85rem, 1.8vw, 1.2rem);
+  --card-bg:linear-gradient(180deg, rgba(17,24,37,.9), rgba(11,16,26,.94));
+  --card-border:rgba(46,68,96,.68);
+  --card-hover-border:#3b5672;
+  --card-shadow:0 10px 24px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.04);
+  --card-shadow-hover:0 12px 34px rgba(0,0,0,.44);
+  --card-check-bg:rgba(14,20,32,.6);
+  --card-check-hover-bg:rgba(30,200,255,.1);
+  --card-check-focus-border:rgba(30,200,255,.65);
+  --card-checkbox-accent:var(--accent);
+  background:var(--card-bg);
+  border:1px solid var(--card-border);
+  box-shadow:var(--card-shadow);
+  padding:clamp(.7rem, 1.4vw, 1rem) clamp(.85rem, 1.8vw, 1.2rem) clamp(.85rem, 1.6vw, 1.15rem);
+  padding-top:clamp(1.3rem, 2.1vw, 1.6rem);
   color:var(--txt);
   transition:border-color .18s ease, box-shadow .18s ease;
   width:100%;
 }
-.q-card:hover{ border-color:#3b5672; box-shadow:0 12px 34px rgba(0,0,0,.44); }
+.q-card:hover{ border-color:var(--card-hover-border); box-shadow:var(--card-shadow-hover); }
 .q-card.is-selected{ box-shadow:0 0 0 2px rgba(41,182,246,.8), 0 16px 38px rgba(0,0,0,.5); border-color:rgba(41,182,246,.75); }
 .q-card.locked{ opacity:.55; }
 .q-card:focus-visible{
@@ -516,13 +579,50 @@ input[type="checkbox"]{
   outline-offset:3px;
 }
 
+.q-card.is-live{
+  --card-bg:linear-gradient(180deg, rgba(86,16,24,.92), rgba(45,10,14,.96));
+  --card-border:rgba(239,68,68,.55);
+  --card-hover-border:rgba(248,113,113,.85);
+  --card-shadow:0 12px 32px rgba(127,0,0,.4), inset 0 1px 0 rgba(255,255,255,.05);
+  --card-shadow-hover:0 18px 40px rgba(127,0,0,.5);
+  --card-check-bg:rgba(127,29,29,.42);
+  --card-check-hover-bg:rgba(248,113,113,.24);
+  --card-check-focus-border:rgba(248,113,113,.6);
+  --card-checkbox-accent:#f87171;
+  color:#ffe4e6;
+}
+
+.q-card.is-answered{
+  --card-bg:linear-gradient(180deg, rgba(71,85,105,.86), rgba(51,65,85,.94));
+  --card-border:rgba(148,163,184,.7);
+  --card-hover-border:rgba(226,232,240,.85);
+  --card-shadow:0 10px 28px rgba(30,41,59,.32), inset 0 1px 0 rgba(255,255,255,.05);
+  --card-shadow-hover:0 14px 34px rgba(30,41,59,.42);
+  --card-check-bg:rgba(100,116,139,.4);
+  --card-check-hover-bg:rgba(226,232,240,.25);
+  --card-check-focus-border:rgba(226,232,240,.55);
+  --card-checkbox-accent:#f1f5f9;
+  color:#f8fafc;
+}
+
+.q-card.is-answered .q-name{
+  background:linear-gradient(180deg, rgba(226,232,240,.22), rgba(148,163,184,.14));
+  border-color:rgba(226,232,240,.5);
+  color:#0f172a;
+}
+
+.q-card.is-live .q-name{
+  background:linear-gradient(180deg, rgba(248,113,113,.18), rgba(127,29,29,.12));
+  border-color:rgba(248,113,113,.45);
+  color:#fff5f5;
+}
+
 /* 上段：RN & 班・状態 */
 .q-head{
   display:flex;
-  align-items:flex-start;
+  align-items:center;
   justify-content:space-between;
-  gap:clamp(.5rem, 1vw, .8rem);
-  flex-wrap:wrap;
+  gap:clamp(.35rem, .9vw, .6rem);
 }
 .q-title{
   flex:1 1 auto;
@@ -540,12 +640,14 @@ input[type="checkbox"]{
   letter-spacing:.03em;
   font-size:0.9rem;
 }
-.q-meta{
+.q-corner{
+  position:absolute;
+  top:clamp(.55rem, 1.3vw, .9rem);
+  right:clamp(.65rem, 1.5vw, 1rem);
   display:flex;
   align-items:center;
   justify-content:flex-end;
-  gap:clamp(.45rem, 1vw, .7rem);
-  flex-wrap:wrap;
+  gap:clamp(.35rem, .8vw, .55rem);
 }
 .q-group{
   display:inline-flex;
@@ -564,38 +666,24 @@ input[type="checkbox"]{
   display:flex;
   align-items:center;
   justify-content:center;
-  padding:clamp(.3rem, .7vw, .45rem);
+  padding:clamp(.28rem, .65vw, .4rem);
   border-radius:clamp(.65rem, 1.1vw, .85rem);
-  background:rgba(14,20,32,.6);
+  background:var(--card-check-bg);
   border:1px solid transparent;
-  transition:border-color .2s ease, background .2s ease;
+  transition:border-color .2s ease, background .2s ease, box-shadow .2s ease;
+  cursor:pointer;
 }
-.q-check:hover{ background:rgba(30,200,255,.1); }
-.q-check:focus-within{ border-color:rgba(30,200,255,.65); background:rgba(30,200,255,.14); }
+.q-check:hover{ background:var(--card-check-hover-bg); }
+.q-check:focus-within{ border-color:var(--card-check-focus-border); background:var(--card-check-hover-bg); }
 .q-check input.row-checkbox{
   width:1.1rem;
   height:1.1rem;
 }
 
-.chip{
-  display:inline-flex;
-  align-items:center;
-  gap:.4em;
-  padding:.3em .75em;
-  border-radius:999px;
-  font:600 0.8rem/1 "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
-  letter-spacing:.05em;
-  background:rgba(17,24,38,.7);
-  border:1px solid rgba(72,96,132,.45);
-  color:var(--muted);
-}
-.chip--pending{ background:rgba(245,158,11,.16); border:1px solid rgba(245,158,11,.4); color:#fcd34d; }
-.chip--answered{ background:rgba(59,130,246,.16); border:1px solid rgba(59,130,246,.4); color:#c7d2fe; }
-.chip--live{ background:rgba(16,185,129,.16); border:1px solid rgba(16,185,129,.35); color:#6ee7b7; animation:pulse 1.8s ease-in-out infinite; }
-@keyframes pulse{
-  0%,100%{ box-shadow:0 0 0 0 rgba(110,231,183,.0); }
-  50%{ box-shadow:0 0 0 6px rgba(110,231,183,.25); }
-}
+.q-card.is-live .q-check:hover{ box-shadow:0 0 0 1px rgba(248,113,113,.35) inset; }
+.q-card.is-live .q-check:focus-within{ box-shadow:0 0 0 1px rgba(248,113,113,.45) inset; }
+.q-card.is-answered .q-check:hover{ box-shadow:0 0 0 1px rgba(148,163,184,.28) inset; }
+.q-card.is-answered .q-check:focus-within{ box-shadow:0 0 0 1px rgba(148,163,184,.35) inset; }
 
 /* 下段：質問文 */
 .q-text{
@@ -607,7 +695,7 @@ input[type="checkbox"]{
 
 /* 右上：チェックボックス（バッチ操作） */
 .q-card input.row-checkbox{
-  accent-color: var(--accent);
+  accent-color: var(--card-checkbox-accent);
 }
 
 /* login 中の簡易スタイル（任意） */
