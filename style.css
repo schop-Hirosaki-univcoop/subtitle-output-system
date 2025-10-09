@@ -33,11 +33,13 @@ html, body{ height:100%; }
 html{ overflow:hidden; }
 .op-theme{ background:var(--bg); color:var(--text); }
 body.op-theme{
-  --page-gap:clamp(1.5rem, 3vw, 2.75rem);
-  --page-pad-inline:clamp(1.5rem, 5vw, 3rem);
+  --page-gap:clamp(1.25rem, 2.8vw, 2.25rem);
+  --page-pad-inline:clamp(1.6rem, 4.6vw, 3.1rem);
   min-height:100dvh;
   height:100dvh;
-  padding:clamp(1.5rem, 3vh, 2.75rem) var(--page-pad-inline) calc(var(--footer-clearance) + var(--footer-gap) + 3.5rem);
+  padding-inline:var(--page-pad-inline);
+  padding-block-start:clamp(.75rem, 2.1vh, 1.25rem);
+  padding-block-end:calc(var(--footer-clearance) + var(--footer-gap) + 3.5rem);
   background:
     radial-gradient(circle at top left, rgba(46,141,255,.18), transparent 42%),
     radial-gradient(circle at 85% 10%, rgba(255,79,216,.12), transparent 46%),
@@ -52,19 +54,16 @@ body.op-theme{
 
 /* ===== Header ===== */
 .op-header{
-  padding:clamp(1.1rem, 2.2vw, 1.7rem) clamp(1.25rem, 3vw, 2.2rem);
-  border-radius:clamp(1.1rem, 2vw, 1.6rem);
-  border:1px solid rgba(38,55,74,.7);
-  background:linear-gradient(180deg, rgba(24,33,56,.92), rgba(15,21,36,.92));
-  box-shadow:0 18px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
   position:sticky;
-  top:var(--page-gap);
-  z-index:70;
-  backdrop-filter: blur(14px);
+  top:0;
+  z-index:90;
   width:100%;
-  max-width:min(96rem, 94vw);
-  margin-inline:auto;
-  margin-bottom:clamp(.75rem, 1.8vw, 1.4rem);
+  margin-inline:calc(var(--page-pad-inline) * -1);
+  padding:clamp(.85rem, 1.6vw, 1.25rem) var(--page-pad-inline) clamp(1.1rem, 2.2vw, 1.6rem);
+  background:linear-gradient(180deg, rgba(14,20,34,.94), rgba(8,12,22,.82));
+  border-bottom:1px solid rgba(56,80,114,.6);
+  box-shadow:0 18px 40px rgba(0,0,0,.32);
+  backdrop-filter:blur(12px);
 }
 .header-grid{
   display:grid;
@@ -75,6 +74,9 @@ body.op-theme{
   align-items:start;
   column-gap:clamp(1rem, 2.4vw, 1.75rem);
   row-gap:clamp(.6rem, 1.4vw, 1rem);
+  width:100%;
+  max-width:min(96rem, 100%);
+  margin-inline:auto;
 }
 .brand-block{
   display:flex;
@@ -135,7 +137,32 @@ body.op-theme{
 }
 
 @media (max-width: 720px){
-  .op-header{ margin-bottom:0; }
+  .header-grid{
+    grid-template-columns:minmax(0,1fr) minmax(0,.95fr);
+    column-gap:clamp(.75rem, 2.6vw, 1.1rem);
+    row-gap:clamp(.5rem, 1.6vw, .85rem);
+  }
+  .user-info{
+    justify-self:end;
+    align-items:flex-end;
+    text-align:right;
+    gap:.45rem;
+  }
+  .header-controls{
+    align-items:flex-end;
+    justify-self:end;
+  }
+  .toggle-stack{
+    flex-direction:row;
+    gap:clamp(.4rem, 1.2vw, .6rem);
+  }
+  .toggle-stack .btn-icon{
+    width:auto;
+    justify-content:center;
+  }
+}
+
+@media (max-width: 540px){
   .header-grid{
     grid-template-columns:minmax(0,1fr);
     grid-template-areas:
@@ -145,24 +172,18 @@ body.op-theme{
       "controls";
   }
   .user-info{
-    justify-self:stretch;
+    justify-self:start;
     align-items:flex-start;
     text-align:left;
-    gap:.4rem;
   }
   .header-controls{
-    justify-self:stretch;
+    justify-self:start;
     align-items:flex-start;
-    gap:.5rem;
   }
   .toggle-stack{
-    flex-direction:row;
     width:100%;
-    gap:.5rem;
   }
   .toggle-stack .btn-icon{
-    width:auto;
-    justify-content:center;
     flex:1 1 50%;
   }
 }
@@ -254,7 +275,6 @@ body.logs-open #logs-panel{ display:flex; }
   margin:.25rem 0 0;
   font-size:clamp(.72rem, 1.05vw, .88rem);
   color:var(--muted);
-  max-width:28ch;
   line-height:1.45;
 }
 .module-actions{
@@ -302,8 +322,9 @@ body.logs-open #logs-panel{ display:flex; }
 
 @media (max-width: 1180px){
   .layout-grid{ grid-template-columns:1fr; }
-  .op-header{ position:static; }
-  body.op-theme{ padding-bottom:140px; }
+  body.op-theme{
+    padding-block-end:calc(var(--footer-clearance) + var(--footer-gap) + clamp(6rem, 12vh, 8.75rem));
+  }
 }
 
 /* ===== Controls ===== */
@@ -895,7 +916,6 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  gap:.35rem;
   padding:0;
   background:none;
   border:none;
