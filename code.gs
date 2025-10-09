@@ -63,6 +63,9 @@ function doPost(e) {
       case 'mirrorSheet':
         assertOperator_(principal);
         return jsonOk(mirrorSheetToRtdb_());
+      case 'mirrorQuestionIntake':
+        assertOperator_(principal);
+        return jsonOk(mirrorQuestionIntake_());
       case 'fetchSheet':
         assertOperator_(principal);
         return jsonOk({ data: getSheetData_(req.sheet) });
@@ -399,6 +402,200 @@ function generateShortId_(prefix) {
   return (prefix || '') + raw.slice(0, 8);
 }
 
+function parseDateToMillis_(value, fallback) {
+  const fb = fallback == null ? Date.now() : fallback;
+  if (!value) return fb;
+  if (value instanceof Date && !isNaN(value)) return value.getTime();
+  if (typeof value === 'number' && !isNaN(value)) {
+    if (value > 1e12) return value;
+    if (value > 1e10) return value * 1000;
+    if (value > 20000 && value < 70000) {
+      return Math.round((value - 25569) * 86400 * 1000);
+    }
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return fb;
+    const isoLike = trimmed.replace(' ', 'T');
+    const parsed = new Date(isoLike);
+    if (!isNaN(parsed)) return parsed.getTime();
+  }
+  return fb;
+}
+
+function generateQuestionToken_(existingTokens) {
+  const used = existingTokens || new Set();
+  while (true) {
+    const seed = Utilities.getUuid() + ':' + Math.random() + ':' + Date.now();
+    const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, seed);
+    const token = Utilities.base64EncodeWebSafe(digest).replace(/=+/g, '').slice(0, 32);
+    if (!used.has(token)) {
+      used.add(token);
+      return token;
+    }
+  }
+}
+
+function mirrorQuestionIntake_() {
+  const events = readEvents_();
+  const schedules = readSchedules_();
+  const participants = readParticipantEntries_();
+  const now = Date.now();
+  const accessToken = getFirebaseAccessToken_();
+
+  const existingEvents = fetchRtdb_('questionIntake/events', accessToken) || {};
+  const existingSchedules = fetchRtdb_('questionIntake/schedules', accessToken) || {};
+  const existingParticipants = fetchRtdb_('questionIntake/participants', accessToken) || {};
+  const existingTokens = fetchRtdb_('questionIntake/tokens', accessToken) || {};
+
+  const usedTokens = new Set(Object.keys(existingTokens));
+  const tokenByKey = new Map();
+  Object.keys(existingTokens).forEach(key => {
+    const record = existingTokens[key];
+    if (!record) return;
+    const mapKey = `${record.eventId || ''}::${record.scheduleId || ''}::${record.participantId || ''}`;
+    tokenByKey.set(mapKey, { token: key, record });
+  });
+
+  const eventMap = {};
+  const scheduleTree = {};
+  const participantsTree = {};
+  const tokensMap = {};
+  const scheduleUpdateMap = {};
+  const eventUpdateMap = {};
+
+  const eventLookup = new Map();
+  events.forEach(event => {
+    if (!event || !event.id) return;
+    eventLookup.set(event.id, event);
+    const existing = existingEvents[event.id] || {};
+    const createdAt = existing.createdAt || parseDateToMillis_(event.createdAt, now);
+    eventMap[event.id] = {
+      name: event.name || '',
+      createdAt,
+      updatedAt: Math.max(existing.updatedAt || 0, createdAt)
+    };
+  });
+
+  const scheduleLookup = new Map();
+  schedules.forEach(schedule => {
+    if (!schedule || !schedule.eventId || !schedule.id) return;
+    const key = `${schedule.eventId}::${schedule.id}`;
+    scheduleLookup.set(key, schedule);
+    if (!scheduleTree[schedule.eventId]) {
+      scheduleTree[schedule.eventId] = {};
+    }
+    const existing = (existingSchedules[schedule.eventId] || {})[schedule.id] || {};
+    const createdAt = existing.createdAt || parseDateToMillis_(schedule.createdAt, now);
+    scheduleTree[schedule.eventId][schedule.id] = {
+      label: schedule.label || '',
+      date: schedule.date || '',
+      participantCount: 0,
+      createdAt,
+      updatedAt: Math.max(existing.updatedAt || 0, createdAt)
+    };
+  });
+
+  participants.forEach(entry => {
+    if (!entry || !entry.eventId || !entry.scheduleId || !entry.participantId) return;
+    if (!participantsTree[entry.eventId]) {
+      participantsTree[entry.eventId] = {};
+    }
+    if (!participantsTree[entry.eventId][entry.scheduleId]) {
+      participantsTree[entry.eventId][entry.scheduleId] = {};
+    }
+
+    const existingParticipant = (((existingParticipants[entry.eventId] || {})[entry.scheduleId] || {})[entry.participantId]) || {};
+    const key = `${entry.eventId}::${entry.scheduleId}::${entry.participantId}`;
+    const tokenInfo = tokenByKey.get(key) || {};
+    let tokenValue = tokenInfo.token;
+    let tokenRecord = tokenInfo.record || {};
+    if (!tokenValue) {
+      tokenValue = generateQuestionToken_(usedTokens);
+      tokenRecord = {};
+    }
+
+    const participantUpdatedAt = parseDateToMillis_(entry.updatedAt, now);
+    const guidance = existingParticipant.guidance || tokenRecord.guidance || '';
+
+    participantsTree[entry.eventId][entry.scheduleId][entry.participantId] = {
+      participantId: entry.participantId,
+      name: entry.name || '',
+      groupNumber: entry.groupNumber || '',
+      token: tokenValue,
+      guidance,
+      updatedAt: participantUpdatedAt
+    };
+
+    scheduleUpdateMap[key] = Math.max(scheduleUpdateMap[key] || 0, participantUpdatedAt);
+    eventUpdateMap[entry.eventId] = Math.max(eventUpdateMap[entry.eventId] || 0, participantUpdatedAt);
+
+    const event = eventLookup.get(entry.eventId) || { id: entry.eventId, name: '' };
+    const schedule = scheduleLookup.get(`${entry.eventId}::${entry.scheduleId}`) || { id: entry.scheduleId, label: entry.scheduleId, date: '' };
+    const tokenCreatedAt = tokenRecord.createdAt || participantUpdatedAt;
+    const tokenUpdatedAt = Math.max(tokenRecord.updatedAt || 0, participantUpdatedAt);
+
+    tokensMap[tokenValue] = {
+      eventId: entry.eventId,
+      eventName: event.name || tokenRecord.eventName || '',
+      scheduleId: entry.scheduleId,
+      scheduleLabel: schedule.label || tokenRecord.scheduleLabel || schedule.id || '',
+      scheduleDate: schedule.date || tokenRecord.scheduleDate || '',
+      participantId: entry.participantId,
+      displayName: entry.name || '',
+      groupNumber: entry.groupNumber || '',
+      guidance,
+      revoked: false,
+      createdAt: tokenCreatedAt,
+      updatedAt: tokenUpdatedAt
+    };
+  });
+
+  Object.keys(scheduleTree).forEach(eventId => {
+    const schedulesForEvent = scheduleTree[eventId];
+    Object.keys(schedulesForEvent).forEach(scheduleId => {
+      const branch = (participantsTree[eventId] || {})[scheduleId] || {};
+      const count = Object.keys(branch).length;
+      const scheduleKey = `${eventId}::${scheduleId}`;
+      const existing = (existingSchedules[eventId] || {})[scheduleId] || {};
+      schedulesForEvent[scheduleId].participantCount = count;
+      const candidateUpdated = Math.max(
+        schedulesForEvent[scheduleId].updatedAt || 0,
+        scheduleUpdateMap[scheduleKey] || 0,
+        existing.updatedAt || 0
+      );
+      schedulesForEvent[scheduleId].updatedAt = candidateUpdated;
+    });
+  });
+
+  Object.keys(eventMap).forEach(eventId => {
+    const existing = existingEvents[eventId] || {};
+    const candidate = Math.max(
+      eventMap[eventId].updatedAt || 0,
+      eventUpdateMap[eventId] || 0,
+      existing.updatedAt || 0
+    );
+    eventMap[eventId].updatedAt = candidate;
+  });
+
+  const updates = {
+    'questionIntake/events': eventMap,
+    'questionIntake/schedules': scheduleTree,
+    'questionIntake/participants': participantsTree,
+    'questionIntake/tokens': tokensMap
+  };
+
+  patchRtdb_(updates, accessToken);
+
+  return {
+    eventCount: Object.keys(eventMap).length,
+    scheduleCount: schedules.length,
+    participantCount: participants.length,
+    tokenCount: Object.keys(tokensMap).length
+  };
+}
+
 function readEvents_() {
   const sheet = ensureQuestionEventSheet_();
   const lastRow = sheet.getLastRow();
@@ -508,6 +705,7 @@ function createQuestionEvent_(name) {
   const id = generateShortId_('evt_');
   const now = new Date();
   sheet.appendRow([id, trimmedName, now]);
+  mirrorQuestionIntake_();
   return { id, name: trimmedName, createdAt: toIsoJst_(now), schedules: [] };
 }
 
@@ -544,6 +742,7 @@ function deleteQuestionEvent_(eventId) {
     }
   }
 
+  mirrorQuestionIntake_();
   return { deleted: true };
 }
 
@@ -573,6 +772,7 @@ function createQuestionSchedule_(eventId, label, date) {
   const id = generateShortId_('sch_');
   const now = new Date();
   sheet.appendRow([trimmedEventId, id, trimmedLabel, trimmedDate, now]);
+  mirrorQuestionIntake_();
   return { id, label: trimmedLabel, date: trimmedDate, createdAt: toIsoJst_(now), participantCount: 0 };
 }
 
@@ -603,6 +803,7 @@ function deleteQuestionSchedule_(eventId, scheduleId) {
     }
   }
 
+  mirrorQuestionIntake_();
   return { deleted: true };
 }
 
@@ -613,12 +814,24 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
     throw new Error('eventId and scheduleId are required');
   }
 
-  return readParticipantEntries_().filter(entry => entry.eventId === trimmedEventId && entry.scheduleId === trimmedScheduleId)
-    .map(entry => ({
+  const entries = readParticipantEntries_().filter(entry => entry.eventId === trimmedEventId && entry.scheduleId === trimmedScheduleId);
+  if (!entries.length) {
+    return [];
+  }
+
+  const accessToken = getFirebaseAccessToken_();
+  const participantBranch = fetchRtdb_(`questionIntake/participants/${trimmedEventId}/${trimmedScheduleId}`, accessToken) || {};
+
+  return entries.map(entry => {
+    const current = participantBranch[entry.participantId] || {};
+    return {
       participantId: entry.participantId,
       name: entry.name,
-      groupNumber: entry.groupNumber
-    }));
+      groupNumber: entry.groupNumber,
+      token: current.token || '',
+      guidance: current.guidance || ''
+    };
+  });
 }
 
 function saveQuestionParticipants_(eventId, scheduleId, entries) {
@@ -694,7 +907,11 @@ function saveQuestionParticipants_(eventId, scheduleId, entries) {
     sheet.getRange(2, 1, nextRows.length, 6).setValues(nextRows);
   }
 
-  return { count: deduped.length };
+  mirrorQuestionIntake_();
+  return {
+    count: deduped.length,
+    participants: fetchQuestionParticipants_(trimmedEventId, trimmedScheduleId)
+  };
 }
 
 function fetchQuestionContext_(payload) {
