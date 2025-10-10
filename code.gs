@@ -1,8 +1,10 @@
 // WebAppとしてアクセスされたときに実行されるメイン関数
 function doGet(e) {
-  return ContentService
-    .createTextOutput(JSON.stringify({ success: false, error: 'GET not allowed' }))
-    .setMimeType(ContentService.MimeType.JSON);
+  return withCors_(
+    ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: 'GET not allowed' }))
+      .setMimeType(ContentService.MimeType.JSON)
+  );
 }
 
 // 指定されたシートのデータを読み込んでオブジェクトの配列に変換するヘルパー関数
@@ -27,6 +29,7 @@ function getSheetData(sheetName) {
 }
 
 const DISPLAY_SESSION_TTL_MS = 60 * 1000;
+const ALLOWED_ORIGIN = 'https://schop-hirosaki-univcoop.github.io';
 
 // WebAppにPOSTリクエストが送られたときに実行される関数
 function doPost(e) {
@@ -1343,10 +1346,63 @@ function logAction_(principal, actionType, details) {
 }
 
 function parseBody_(e) {
-  if (!e || !e.postData) throw new Error('No body');
-  const text = e.postData.contents || '';
-  try { return JSON.parse(text); }
-  catch (e2) { throw new Error('Invalid JSON'); }
+  if (!e) throw new Error('No body');
+
+  const postData = e.postData;
+  const parameter = e && typeof e.parameter === 'object' ? e.parameter : null;
+  const parameters = e && typeof e.parameters === 'object' ? e.parameters : null;
+
+  if (postData) {
+    const type = String(postData.type || '').toLowerCase();
+    const contents = postData.contents || '';
+
+    if (type.indexOf('application/json') !== -1) {
+      try {
+        return contents ? JSON.parse(contents) : {};
+      } catch (error) {
+        throw new Error('Invalid JSON');
+      }
+    }
+
+    if (type.indexOf('application/x-www-form-urlencoded') !== -1 || type.indexOf('multipart/form-data') !== -1) {
+      return parseParameterObject_(parameter, parameters);
+    }
+
+    if (contents) {
+      try {
+        return JSON.parse(contents);
+      } catch (error) {
+        if (!parameter || !Object.keys(parameter).length) {
+          throw new Error('Invalid JSON');
+        }
+      }
+    }
+  }
+
+  if (parameter && Object.keys(parameter).length) {
+    return parseParameterObject_(parameter, parameters);
+  }
+
+  throw new Error('No body');
+}
+
+function parseParameterObject_(parameter, parameters) {
+  const single = parameter && typeof parameter === 'object' ? parameter : {};
+  const multi = parameters && typeof parameters === 'object' ? parameters : {};
+  const result = {};
+
+  Object.keys(single).forEach(key => {
+    result[key] = single[key];
+  });
+
+  Object.keys(multi).forEach(key => {
+    const values = multi[key];
+    if (Array.isArray(values) && values.length > 1) {
+      result[key] = values.slice();
+    }
+  });
+
+  return result;
 }
 
 function requireAuth_(idToken, options){
@@ -1444,18 +1500,35 @@ function assertOperator_(principal){
 
 function jsonOk(payload){
   const body = Object.assign({ success: true }, payload || {});
-  return ContentService.createTextOutput(JSON.stringify(body))
-    .setMimeType(ContentService.MimeType.JSON);
+  return withCors_(
+    ContentService.createTextOutput(JSON.stringify(body))
+      .setMimeType(ContentService.MimeType.JSON)
+  );
 }
 
 function jsonErr_(err){
   const id = Utilities.getUuid().slice(0, 8);
   console.error('[' + id + ']', err && err.stack || err);
-  return ContentService.createTextOutput(JSON.stringify({
-    success: false,
-    error: String(err && err.message || err),
-    errorId: id
-  })).setMimeType(ContentService.MimeType.JSON);
+  return withCors_(
+    ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: String(err && err.message || err),
+      errorId: id
+    })).setMimeType(ContentService.MimeType.JSON)
+  );
+}
+
+function withCors_(output) {
+  if (!output || typeof output.setHeader !== 'function') {
+    return output;
+  }
+  const origin = ALLOWED_ORIGIN || '*';
+  return output
+    .setHeader('Access-Control-Allow-Origin', origin)
+    .setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    .setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With')
+    .setHeader('Access-Control-Max-Age', '600')
+    .setHeader('Vary', 'Origin');
 }
 
 function requireSessionId_(raw) {
