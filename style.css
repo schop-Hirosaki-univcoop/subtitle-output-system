@@ -30,7 +30,7 @@ body{
   line-height:1.6;
 }
 html, body{ height:100%; }
-html{ overflow:hidden; }
+html{ overflow:auto; }
 .op-theme{ background:var(--bg); color:var(--text); }
 body.op-theme{
   --page-gap:clamp(1rem, 2.2vw, 1.8rem);
@@ -47,12 +47,12 @@ body.op-theme{
   display:flex;
   flex-direction:column;
   gap:var(--page-gap);
-  overflow:hidden;
+  overflow:auto;
 }
 
-body.modal-open{
-  overflow:hidden;
-}
+body.modal-open{ overflow:hidden; }
+
+body.question-admin-page.modal-open{ overflow:hidden; }
 
 .visually-hidden{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
 
