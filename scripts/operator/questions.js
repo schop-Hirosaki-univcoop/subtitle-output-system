@@ -30,7 +30,7 @@ export function renderQuestions(app) {
     return bTs - aTs;
   });
 
-  const live = app.state.displaySession?.nowShowing || null;
+  const live = app.state.renderState?.nowShowing || app.state.displaySession?.nowShowing || null;
   const liveUid = live && typeof live.uid !== "undefined" ? String(live.uid || "") : "";
   const liveParticipantId = String(live?.participantId || "").trim();
   const liveQuestion = live?.question ?? "";
