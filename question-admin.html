@@ -94,7 +94,7 @@
             </thead>
             <tbody id="schedule-calendar-body"></tbody>
           </table>
-          <p class="calendar-helper">カレンダーのイベントをクリックすると、該当する日程が選択されます。</p>
+          <p class="calendar-helper">カレンダーの日付をクリックすると入力欄に反映され、イベントをクリックすると該当する日程が選択されます。</p>
         </section>
         <ul id="schedule-list" class="entity-list" aria-live="polite"></ul>
         <p id="schedule-empty" class="entity-empty" hidden>選択中のイベントにはまだ日程が登録されていません。</p>
@@ -189,12 +189,17 @@
             <input id="schedule-label-input" name="schedule-label" class="input" type="text" autocomplete="off" required data-autofocus>
           </div>
           <div class="modal-field">
-            <label for="schedule-start-input">開始日時</label>
-            <input id="schedule-start-input" name="schedule-start" class="input" type="datetime-local" required>
+            <label for="schedule-date-input">日付</label>
+            <input id="schedule-date-input" name="schedule-date" class="input" type="date" required>
+            <p class="modal-helper">カレンダーの日付をクリックするか、直接入力して選択してください。</p>
           </div>
           <div class="modal-field">
-            <label for="schedule-end-input">終了日時</label>
-            <input id="schedule-end-input" name="schedule-end" class="input" type="datetime-local" required>
+            <label for="schedule-start-time-input">開始時刻</label>
+            <input id="schedule-start-time-input" name="schedule-start-time" class="input" type="time" required>
+          </div>
+          <div class="modal-field">
+            <label for="schedule-end-time-input">終了時刻</label>
+            <input id="schedule-end-time-input" name="schedule-end-time" class="input" type="time" required>
           </div>
           <p class="modal-helper">入力した開始・終了の時刻は参加者向けの案内にも使用されます。</p>
           <p id="schedule-error" class="form-error" role="alert" hidden></p>
