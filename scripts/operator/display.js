@@ -44,6 +44,39 @@ export function handleRenderUpdate(app, snapshot) {
     }, 1000);
   }
   refreshStaleness(app);
+
+  const previousNow = app.state.renderState?.nowShowing || null;
+  const normalizedNow = normalizeNowShowing(now);
+  app.state.renderState = { ...value, nowShowing: normalizedNow };
+  if (!areNowShowingEqual(previousNow, normalizedNow) && typeof app.renderQuestions === "function") {
+    app.renderQuestions();
+  }
+}
+
+function normalizeNowShowing(now) {
+  if (!now) return null;
+  const normalized = {
+    name: typeof now.name === "string" ? now.name : String(now.name || ""),
+    question: typeof now.question === "string" ? now.question : String(now.question || "")
+  };
+  if (Object.prototype.hasOwnProperty.call(now, "uid")) {
+    normalized.uid = String(now.uid || "");
+  }
+  if (Object.prototype.hasOwnProperty.call(now, "participantId")) {
+    normalized.participantId = String(now.participantId || "");
+  }
+  return normalized;
+}
+
+function areNowShowingEqual(a, b) {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return (
+    (a.uid || "") === (b.uid || "") &&
+    (a.participantId || "") === (b.participantId || "") &&
+    (a.question || "") === (b.question || "") &&
+    (a.name || "") === (b.name || "")
+  );
 }
 
 export function setLamp(app, phase) {
