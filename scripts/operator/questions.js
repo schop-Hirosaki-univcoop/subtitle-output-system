@@ -59,7 +59,7 @@ export function renderQuestions(app) {
       : (liveParticipantId && participantId && liveParticipantId === participantId && liveQuestion === item["質問・お悩み"]) ||
         (liveName === item["ラジオネーム"] && liveQuestion === item["質問・お悩み"]);
     if (isLiveMatch) {
-      card.classList.add("now-displaying");
+      card.classList.add("is-live", "now-displaying");
       if (app.state.lastDisplayedUid === item.UID) {
         card.classList.add("flash");
         card.addEventListener(
