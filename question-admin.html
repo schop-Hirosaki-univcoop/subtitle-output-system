@@ -70,32 +70,6 @@
         </div>
       </div>
       <div class="module-body">
-        <section id="schedule-calendar" class="schedule-calendar" hidden aria-hidden="true" aria-label="日程カレンダー">
-          <div class="calendar-header">
-            <button id="schedule-calendar-prev" class="calendar-nav" type="button" aria-label="前の月へ">
-              <span aria-hidden="true">‹</span>
-            </button>
-            <h3 id="schedule-calendar-title" class="calendar-title" aria-live="polite">&nbsp;</h3>
-            <button id="schedule-calendar-next" class="calendar-nav" type="button" aria-label="次の月へ">
-              <span aria-hidden="true">›</span>
-            </button>
-          </div>
-          <table class="calendar-table">
-            <thead>
-              <tr>
-                <th scope="col">日</th>
-                <th scope="col">月</th>
-                <th scope="col">火</th>
-                <th scope="col">水</th>
-                <th scope="col">木</th>
-                <th scope="col">金</th>
-                <th scope="col">土</th>
-              </tr>
-            </thead>
-            <tbody id="schedule-calendar-body"></tbody>
-          </table>
-          <p class="calendar-helper">カレンダーのイベントをクリックすると、該当する日程が選択されます。</p>
-        </section>
         <ul id="schedule-list" class="entity-list" aria-live="polite"></ul>
         <p id="schedule-empty" class="entity-empty" hidden>選択中のイベントにはまだ日程が登録されていません。</p>
       </div>
@@ -189,12 +163,40 @@
             <input id="schedule-label-input" name="schedule-label" class="input" type="text" autocomplete="off" required data-autofocus>
           </div>
           <div class="modal-field">
-            <label for="schedule-start-input">開始日時</label>
-            <input id="schedule-start-input" name="schedule-start" class="input" type="datetime-local" required>
+            <label for="schedule-date-input">日付</label>
+            <input id="schedule-date-input" name="schedule-date" class="input" type="date" required>
+            <p class="modal-helper">カレンダーの日付をクリックするか、直接入力して選択してください。</p>
+          </div>
+          <div class="modal-field modal-calendar-field">
+            <div id="schedule-dialog-calendar" class="dialog-calendar" aria-label="カレンダーから日付を選択">
+              <div class="dialog-calendar-header">
+                <button id="schedule-dialog-calendar-prev" class="dialog-calendar-nav" type="button" aria-label="前の月へ">
+                  <span aria-hidden="true">‹</span>
+                </button>
+                <div id="schedule-dialog-calendar-title" class="dialog-calendar-title" aria-live="polite">&nbsp;</div>
+                <button id="schedule-dialog-calendar-next" class="dialog-calendar-nav" type="button" aria-label="次の月へ">
+                  <span aria-hidden="true">›</span>
+                </button>
+              </div>
+              <div class="dialog-calendar-weekdays" aria-hidden="true">
+                <span>日</span>
+                <span>月</span>
+                <span>火</span>
+                <span>水</span>
+                <span>木</span>
+                <span>金</span>
+                <span>土</span>
+              </div>
+              <div id="schedule-dialog-calendar-grid" class="dialog-calendar-grid" role="grid" aria-label="日付一覧"></div>
+            </div>
           </div>
           <div class="modal-field">
-            <label for="schedule-end-input">終了日時</label>
-            <input id="schedule-end-input" name="schedule-end" class="input" type="datetime-local" required>
+            <label for="schedule-start-time-input">開始時刻</label>
+            <input id="schedule-start-time-input" name="schedule-start-time" class="input" type="time" required>
+          </div>
+          <div class="modal-field">
+            <label for="schedule-end-time-input">終了時刻</label>
+            <input id="schedule-end-time-input" name="schedule-end-time" class="input" type="time" required>
           </div>
           <p class="modal-helper">入力した開始・終了の時刻は参加者向けの案内にも使用されます。</p>
           <p id="schedule-error" class="form-error" role="alert" hidden></p>
