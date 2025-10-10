@@ -12,6 +12,7 @@ export function createInitialState(autoScroll = true) {
     selectedRowData: null,
     lastDisplayedUid: null,
     autoScrollLogs: autoScroll,
+    renderState: null,
     displaySession: null,
     displaySessionActive: false,
     displaySessionLastActive: null
