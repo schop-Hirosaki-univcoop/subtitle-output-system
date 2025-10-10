@@ -25,6 +25,16 @@ const STEP_LABELS = [
   "初期データ取得",
   "準備完了"
 ];
+const PARTICIPANT_TEMPLATE_HEADERS = [
+  "参加者ID",
+  "名前",
+  "フリガナ",
+  "性別",
+  "学部学科",
+  "携帯電話",
+  "メールアドレス"
+];
+const TEAM_TEMPLATE_HEADERS = ["参加者ID", "班番号"];
 
 const firebaseConfig = {
   apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
@@ -107,14 +117,33 @@ const dom = {
   scheduleDescription: document.getElementById("schedule-description"),
   participantContext: document.getElementById("participant-context"),
   participantDescription: document.getElementById("participant-description"),
+  downloadParticipantTemplateButton: document.getElementById("download-participant-template"),
   csvInput: document.getElementById("csv-input"),
+  downloadTeamTemplateButton: document.getElementById("download-team-template"),
+  teamCsvInput: document.getElementById("team-csv-input"),
   saveButton: document.getElementById("save-button"),
   uploadStatus: document.getElementById("upload-status"),
   fileLabel: document.getElementById("file-label"),
+  teamFileLabel: document.getElementById("team-file-label"),
   mappingTbody: document.getElementById("mapping-tbody"),
   adminSummary: document.getElementById("admin-summary"),
   copyrightYear: document.getElementById("copyright-year")
 };
+
+dom.eventDialogTitle = document.getElementById("event-dialog-title");
+dom.scheduleDialogTitle = document.getElementById("schedule-dialog-title");
+dom.participantDialog = document.getElementById("participant-dialog");
+dom.participantForm = document.getElementById("participant-form");
+dom.participantDialogTitle = document.getElementById("participant-dialog-title");
+dom.participantError = document.getElementById("participant-error");
+dom.participantIdInput = document.getElementById("participant-id-input");
+dom.participantNameInput = document.getElementById("participant-name-input");
+dom.participantPhoneticInput = document.getElementById("participant-phonetic-input");
+dom.participantGenderInput = document.getElementById("participant-gender-input");
+dom.participantDepartmentInput = document.getElementById("participant-department-input");
+dom.participantTeamInput = document.getElementById("participant-team-input");
+dom.participantPhoneInput = document.getElementById("participant-phone-input");
+dom.participantEmailInput = document.getElementById("participant-email-input");
 
 const state = {
   events: [],
@@ -127,7 +156,12 @@ const state = {
   tokenRecords: {},
   knownTokens: new Set(),
   participantTokenMap: new Map(),
-  tokenSnapshotFetchedAt: 0
+  eventParticipantCache: new Map(),
+  duplicateMatches: new Map(),
+  duplicateGroups: new Map(),
+  teamAssignments: new Map(),
+  tokenSnapshotFetchedAt: 0,
+  editingParticipantId: null
 };
 
 const calendarState = {
@@ -407,44 +441,291 @@ function parseCsv(text) {
   return rows.map(cols => cols.map(col => col.trim()));
 }
 
+function participantIdentityKey(entry) {
+  if (!entry) return "";
+  const phonetic = entry.phonetic ?? entry.furigana ?? "";
+  const department = entry.department ?? entry.groupNumber ?? "";
+  return [
+    normalizeKey(entry.name),
+    normalizeKey(phonetic),
+    normalizeKey(department)
+  ].join("::");
+}
+
+function normalizeDuplicateField(value) {
+  return normalizeKey(value)
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+function duplicateKeyFromValues(name, department) {
+  const nameKey = normalizeDuplicateField(name);
+  const deptKey = normalizeDuplicateField(department);
+  if (!nameKey || !deptKey) return "";
+  return `${nameKey}::${deptKey}`;
+}
+
+function duplicateKeyFor(entry) {
+  if (!entry) return "";
+  const department = entry.department ?? entry.groupNumber ?? "";
+  return duplicateKeyFromValues(entry.name, department);
+}
+
+function getScheduleLabel(eventId, scheduleId) {
+  if (!eventId || !scheduleId) return "";
+  const event = state.events.find(evt => evt.id === eventId);
+  if (!event) return "";
+  const schedule = event.schedules?.find(s => s.id === scheduleId);
+  if (!schedule) return "";
+  return schedule.label || schedule.date || schedule.id || "";
+}
+
+function normalizeEventParticipantCache(eventBranch) {
+  const cache = {};
+  if (!eventBranch || typeof eventBranch !== "object") {
+    return cache;
+  }
+  Object.entries(eventBranch).forEach(([scheduleId, scheduleBranch]) => {
+    if (!scheduleBranch || typeof scheduleBranch !== "object") {
+      cache[String(scheduleId)] = [];
+      return;
+    }
+    const normalized = Object.values(scheduleBranch).map(entry => ({
+      participantId: String(entry?.participantId || entry?.id || ""),
+      name: String(entry?.name || ""),
+      department: String(entry?.department || entry?.groupNumber || ""),
+      groupNumber: String(entry?.groupNumber || entry?.teamNumber || ""),
+      teamNumber: String(entry?.teamNumber || entry?.groupNumber || ""),
+      scheduleId: String(scheduleId)
+    }));
+    cache[String(scheduleId)] = normalized;
+  });
+  return cache;
+}
+
+function describeDuplicateMatch(match, eventId, currentScheduleId) {
+  if (!match) return "";
+  const name = String(match.name || "").trim();
+  const idLabel = match.participantId ? `ID:${match.participantId}` : "ID未登録";
+  const scheduleId = String(match.scheduleId || "").trim();
+  if (match.isCurrent && scheduleId === String(currentScheduleId || "")) {
+    const label = name || "同日程";
+    return `${label}（同日程・${idLabel}）`;
+  }
+  const scheduleLabel = getScheduleLabel(eventId, scheduleId) || (scheduleId ? `日程ID:${scheduleId}` : "");
+  if (name && scheduleLabel) {
+    return `${name}（${scheduleLabel}・${idLabel}）`;
+  }
+  if (scheduleLabel) {
+    return `${scheduleLabel}（${idLabel}）`;
+  }
+  if (name) {
+    return `${name}（${idLabel}）`;
+  }
+  return idLabel;
+}
+
+function updateDuplicateMatches() {
+  const eventId = state.selectedEventId;
+  const scheduleId = state.selectedScheduleId;
+  if (!eventId || !scheduleId) {
+    state.duplicateMatches = new Map();
+    state.duplicateGroups = new Map();
+    return;
+  }
+
+  if (!(state.eventParticipantCache instanceof Map)) {
+    state.eventParticipantCache = new Map();
+  }
+
+  const eventCache = state.eventParticipantCache.get(eventId);
+  const scheduleCache = eventCache && typeof eventCache === "object" ? eventCache : {};
+  const keyMap = new Map();
+  const addRecord = (key, record) => {
+    if (!key) return;
+    if (!keyMap.has(key)) {
+      keyMap.set(key, []);
+    }
+    keyMap.get(key).push(record);
+  };
+
+  Object.entries(scheduleCache).forEach(([cacheScheduleId, entries]) => {
+    if (String(cacheScheduleId) === String(scheduleId)) return;
+    const list = Array.isArray(entries) ? entries : [];
+    list.forEach(entry => {
+      const record = {
+        participantId: String(entry?.participantId || ""),
+        name: String(entry?.name || ""),
+        department: String(entry?.department || ""),
+        scheduleId: String(entry?.scheduleId || cacheScheduleId),
+        isCurrent: false
+      };
+      const key = duplicateKeyFromValues(record.name, record.department);
+      addRecord(key, record);
+    });
+  });
+
+  state.participants.forEach((entry, index) => {
+    const record = {
+      key: String(entry?.participantId || `__row${index}`),
+      participantId: String(entry?.participantId || ""),
+      name: String(entry?.name || ""),
+      department: String(entry?.department || entry?.groupNumber || ""),
+      scheduleId: String(scheduleId),
+      isCurrent: true
+    };
+    const key = duplicateKeyFromValues(record.name, record.department);
+    addRecord(key, record);
+  });
+
+  const duplicates = new Map();
+  const groups = new Map();
+  keyMap.forEach((records, groupKey) => {
+    const current = records.filter(record => record.isCurrent);
+    if (!current.length) return;
+    if (records.length <= 1) return;
+    const normalizedRecords = records.map(record => ({ ...record }));
+    groups.set(groupKey, {
+      key: groupKey,
+      totalCount: records.length,
+      records: normalizedRecords
+    });
+    current.forEach(record => {
+      const others = records.filter(candidate => {
+        if (!candidate) return false;
+        if (candidate.isCurrent && candidate.key && record.key && candidate.key === record.key) {
+          return false;
+        }
+        return candidate !== record;
+      });
+      if (!others.length) return;
+      duplicates.set(record.key, {
+        groupKey,
+        totalCount: records.length,
+        others: others.map(candidate => ({
+          participantId: candidate.participantId,
+          name: candidate.name,
+          department: candidate.department,
+          scheduleId: candidate.scheduleId,
+          isCurrent: candidate.isCurrent
+        }))
+      });
+    });
+  });
+
+  state.duplicateMatches = duplicates;
+  state.duplicateGroups = groups;
+}
+
+function syncCurrentScheduleCache() {
+  const eventId = state.selectedEventId;
+  const scheduleId = state.selectedScheduleId;
+  if (!eventId || !scheduleId) return;
+  if (!(state.eventParticipantCache instanceof Map)) {
+    state.eventParticipantCache = new Map();
+  }
+  const cache = state.eventParticipantCache.get(eventId) || {};
+  cache[scheduleId] = state.participants.map(entry => ({
+    participantId: String(entry?.participantId || ""),
+    name: String(entry?.name || ""),
+    department: String(entry?.department || entry?.groupNumber || ""),
+    groupNumber: String(entry?.teamNumber || entry?.groupNumber || ""),
+    teamNumber: String(entry?.teamNumber || entry?.groupNumber || ""),
+    scheduleId: String(scheduleId),
+    isCurrent: true
+  }));
+  state.eventParticipantCache.set(eventId, cache);
+}
+
 function parseParticipantRows(rows) {
   if (!rows.length) {
     throw new Error("CSVにデータがありません。");
   }
 
-  const headerCandidate = rows[0].map(cell => cell.toLowerCase());
-  const hasHeader = headerCandidate.some(cell => /id|氏名|name|班/.test(cell));
+  const headerCandidate = rows[0].map(cell => normalizeKey(cell).toLowerCase());
+  const hasHeader =
+    headerCandidate.some(cell => /id|参加|member/.test(cell)) &&
+    headerCandidate.some(cell => /name|氏名|ラジオ|radio/.test(cell));
 
-  let dataRows = rows;
-  let idIndex = 0;
-  let nameIndex = 1;
-  let groupIndex = 2;
-
-  if (hasHeader) {
-    const findIndex = (keywords, fallback) => {
-      for (const keyword of keywords) {
-        const idx = headerCandidate.findIndex(cell => cell.includes(keyword));
-        if (idx !== -1) return idx;
-      }
-      return fallback;
-    };
-    idIndex = findIndex(["id", "参加", "member"], 0);
-    nameIndex = findIndex(["name", "氏名", "ラジオ", "radio"], 1);
-    groupIndex = findIndex(["group", "班", "number"], 2);
-    dataRows = rows.slice(1);
+  if (!hasHeader) {
+    throw new Error("ヘッダー行が見つかりません。テンプレートを利用してヘッダーを追加してください。");
   }
 
+  const findIndex = (keywords, fallback = -1) => {
+    for (const keyword of keywords) {
+      const idx = headerCandidate.findIndex(cell => cell.includes(keyword));
+      if (idx !== -1) return idx;
+    }
+    return fallback;
+  };
+
+  const indexMap = {
+    id: findIndex(["id", "参加", "member"], -1),
+    name: findIndex(["name", "氏名", "ラジオ", "radio"], 1),
+    phonetic: findIndex(["フリ", "ふり", "furigana", "yomi", "reading"], 2),
+    gender: findIndex(["性別", "gender"], 3),
+    department: findIndex(["学部", "department", "学科", "faculty"], 4),
+    phone: findIndex(["電話", "tel", "phone"], 5),
+    email: findIndex(["mail", "メール", "email"], 6),
+    team: findIndex(["班", "group", "team"], -1)
+  };
+
+  const dataRows = rows.slice(1);
+
+  const normalizeColumn = (cols, index) => {
+    if (index == null || index < 0 || index >= cols.length) return "";
+    return normalizeKey(cols[index]);
+  };
+
   const entries = [];
-  const seen = new Set();
+  const seenIds = new Set();
+  const seenKeys = new Set();
+
   dataRows.forEach(cols => {
-    const participantId = normalizeKey(cols[idIndex]);
-    const name = normalizeKey(cols[nameIndex]);
-    const group = normalizeKey(cols[groupIndex]);
-    if (!participantId || seen.has(participantId)) {
+    const participantId = normalizeColumn(cols, indexMap.id);
+    const name = normalizeColumn(cols, indexMap.name);
+    const phonetic = normalizeColumn(cols, indexMap.phonetic);
+    const gender = normalizeColumn(cols, indexMap.gender);
+    const department = normalizeColumn(cols, indexMap.department);
+    const phone = normalizeColumn(cols, indexMap.phone);
+    const email = normalizeColumn(cols, indexMap.email);
+    const teamNumber = normalizeColumn(cols, indexMap.team);
+
+    if (!participantId && !name && !phonetic && !gender && !department && !phone && !email) {
       return;
     }
-    seen.add(participantId);
-    entries.push({ participantId, name, groupNumber: group });
+
+    if (!name) {
+      throw new Error("氏名のない行があります。CSVを確認してください。");
+    }
+
+    if (participantId) {
+      if (seenIds.has(participantId)) {
+        return;
+      }
+      seenIds.add(participantId);
+    } else {
+      const key = participantIdentityKey({ name, phonetic, department });
+      if (key) {
+        if (seenKeys.has(key)) {
+          return;
+        }
+        seenKeys.add(key);
+      }
+    }
+
+    entries.push({
+      participantId,
+      name,
+      phonetic,
+      furigana: phonetic,
+      gender,
+      department,
+      teamNumber,
+      groupNumber: teamNumber,
+      phone,
+      email
+    });
   });
 
   if (!entries.length) {
@@ -454,8 +735,236 @@ function parseParticipantRows(rows) {
   return entries;
 }
 
+function parseTeamAssignmentRows(rows) {
+  if (!rows.length) {
+    throw new Error("CSVにデータがありません。");
+  }
+
+  const headerCandidate = rows[0].map(cell => normalizeKey(cell).toLowerCase());
+  const hasHeader =
+    headerCandidate.some(cell => /id|参加|member/.test(cell)) &&
+    headerCandidate.some(cell => /班|group|team/.test(cell));
+
+  if (!hasHeader) {
+    throw new Error("ヘッダー行が見つかりません。テンプレートを利用して参加者IDと班番号の列を用意してください。");
+  }
+
+  const findIndex = (keywords, fallback) => {
+    for (const keyword of keywords) {
+      const idx = headerCandidate.findIndex(cell => cell.includes(keyword));
+      if (idx !== -1) return idx;
+    }
+    return fallback;
+  };
+
+  const idIndex = findIndex(["id", "参加", "member"], -1);
+  const teamIndex = findIndex(["班", "group", "team"], -1);
+
+  if (idIndex < 0 || teamIndex < 0) {
+    throw new Error("CSVの列が認識できません。参加者IDと班番号の列をヘッダーに含めてください。");
+  }
+
+  const dataRows = rows.slice(1);
+
+  const assignments = new Map();
+  dataRows.forEach(cols => {
+    const participantId = normalizeKey(cols[idIndex] ?? "");
+    const teamNumber = normalizeKey(cols[teamIndex] ?? "");
+    if (!participantId) {
+      return;
+    }
+    assignments.set(participantId, teamNumber);
+  });
+
+  if (!assignments.size) {
+    throw new Error("有効な参加者IDが含まれていません。");
+  }
+
+  return assignments;
+}
+
+function ensureTeamAssignmentMap(eventId) {
+  if (!eventId) return null;
+  if (!(state.teamAssignments instanceof Map)) {
+    state.teamAssignments = new Map();
+  }
+  if (!state.teamAssignments.has(eventId)) {
+    state.teamAssignments.set(eventId, new Map());
+  }
+  const map = state.teamAssignments.get(eventId);
+  return map instanceof Map ? map : null;
+}
+
+function getTeamAssignmentMap(eventId) {
+  if (!eventId) return null;
+  if (!(state.teamAssignments instanceof Map)) return null;
+  const map = state.teamAssignments.get(eventId);
+  return map instanceof Map ? map : null;
+}
+
+function applyAssignmentsToEntries(entries, assignmentMap) {
+  if (!Array.isArray(entries) || !(assignmentMap instanceof Map) || !assignmentMap.size) {
+    return { entries, matchedIds: new Set(), updatedIds: new Set() };
+  }
+  const matchedIds = new Set();
+  const updatedIds = new Set();
+  const updatedEntries = entries.map(entry => {
+    const participantId = String(entry?.participantId || "");
+    if (!participantId || !assignmentMap.has(participantId)) {
+      return entry;
+    }
+    matchedIds.add(participantId);
+    const teamNumber = String(assignmentMap.get(participantId) || "");
+    const currentTeam = String(entry?.teamNumber || entry?.groupNumber || "");
+    if (currentTeam === teamNumber) {
+      return entry;
+    }
+    updatedIds.add(participantId);
+    return {
+      ...entry,
+      teamNumber,
+      groupNumber: teamNumber
+    };
+  });
+
+  return { entries: updatedEntries, matchedIds, updatedIds };
+}
+
+function applyAssignmentsToEventCache(eventId, assignmentMap) {
+  if (!eventId || !(assignmentMap instanceof Map) || !assignmentMap.size) {
+    return new Set();
+  }
+  if (!(state.eventParticipantCache instanceof Map)) {
+    state.eventParticipantCache = new Map();
+  }
+  const cache = state.eventParticipantCache.get(eventId);
+  if (!cache || typeof cache !== "object") {
+    return new Set();
+  }
+  const matchedIds = new Set();
+  Object.keys(cache).forEach(scheduleId => {
+    const list = Array.isArray(cache[scheduleId]) ? cache[scheduleId] : [];
+    cache[scheduleId] = list.map(record => {
+      const participantId = String(record?.participantId || "");
+      if (!participantId || !assignmentMap.has(participantId)) {
+        return record;
+      }
+      matchedIds.add(participantId);
+      const teamNumber = String(assignmentMap.get(participantId) || "");
+      return {
+        ...record,
+        groupNumber: teamNumber,
+        teamNumber
+      };
+    });
+  });
+  state.eventParticipantCache.set(eventId, cache);
+  return matchedIds;
+}
+
+function normalizeParticipantRecord(entry) {
+  const participantId = String(entry?.participantId || entry?.id || "");
+  const name = String(entry?.name || "");
+  const phonetic = String(entry?.phonetic || entry?.furigana || "");
+  const gender = String(entry?.gender || "");
+  const department = String(entry?.department || entry?.faculty || entry?.groupNumber || "");
+  const rawGroup = entry?.teamNumber ?? entry?.groupNumber ?? "";
+  const teamNumber = String(rawGroup || "");
+  const phone = String(entry?.phone || "");
+  const email = String(entry?.email || "");
+  const token = String(entry?.token || "");
+  const guidance = String(entry?.guidance || "");
+  return {
+    participantId,
+    name,
+    phonetic,
+    furigana: phonetic,
+    gender,
+    department,
+    groupNumber: teamNumber,
+    teamNumber,
+    phone,
+    email,
+    token,
+    guidance
+  };
+}
+
+function assignParticipantIds(entries, existingParticipants = []) {
+  const resolved = entries.map(entry => ({ ...entry }));
+
+  const usedIds = new Set();
+  const existingByKey = new Map();
+
+  existingParticipants.forEach(participant => {
+    const participantId = normalizeKey(participant.participantId || participant.id || "");
+    if (participantId) {
+      usedIds.add(participantId);
+    }
+    const key = participantIdentityKey(participant);
+    if (key && participantId && !existingByKey.has(key)) {
+      existingByKey.set(key, participantId);
+    }
+  });
+
+  resolved.forEach(entry => {
+    if (entry.participantId) {
+      usedIds.add(entry.participantId);
+    }
+  });
+
+  const assignedExistingIds = new Set();
+  resolved.forEach(entry => {
+    if (entry.participantId) return;
+    const key = participantIdentityKey(entry);
+    if (!key) return;
+    const existingId = existingByKey.get(key);
+    if (existingId && !assignedExistingIds.has(existingId)) {
+      entry.participantId = existingId;
+      usedIds.add(existingId);
+      assignedExistingIds.add(existingId);
+    }
+  });
+
+  const numericInfo = Array.from(usedIds)
+    .map(id => {
+      const match = id.match(/^\d+$/);
+      if (!match) return null;
+      return { value: Number(id), length: id.length };
+    })
+    .filter(Boolean);
+
+  const maxNumber = numericInfo.reduce((acc, info) => Math.max(acc, info.value), 0);
+  const padLength = numericInfo.reduce((acc, info) => Math.max(acc, info.length), 0) || 1;
+  let nextNumber = maxNumber ? maxNumber + 1 : 1;
+
+  resolved.forEach(entry => {
+    if (entry.participantId) return;
+    let candidateNumber = nextNumber;
+    let candidateId = "";
+    while (!candidateId || usedIds.has(candidateId)) {
+      candidateId = String(candidateNumber).padStart(padLength, "0");
+      candidateNumber += 1;
+    }
+    nextNumber = candidateNumber;
+    entry.participantId = candidateId;
+    usedIds.add(candidateId);
+  });
+
+  return resolved;
+}
+
 function signatureForEntries(entries) {
-  return JSON.stringify(entries.map(entry => [entry.participantId, entry.name, entry.groupNumber]));
+  return JSON.stringify(entries.map(entry => [
+    entry.participantId,
+    entry.name,
+    entry.phonetic || entry.furigana || "",
+    entry.gender || "",
+    entry.teamNumber || entry.groupNumber || "",
+    entry.department || entry.groupNumber || "",
+    entry.phone || "",
+    entry.email || ""
+  ]));
 }
 
 function setUploadStatus(message, variant = "") {
@@ -501,6 +1010,13 @@ function closeDialog(element) {
   if (!element) return;
   if (!element.hasAttribute("hidden")) {
     element.setAttribute("hidden", "");
+  }
+  if (element === dom.participantDialog) {
+    state.editingParticipantId = null;
+    if (dom.participantForm) {
+      dom.participantForm.reset();
+    }
+    setFormError(dom.participantError);
   }
   if (dialogState.active === element) {
     document.body.classList.remove("modal-open");
@@ -840,18 +1356,53 @@ function toggleSectionVisibility(element, visible) {
 
 function sortParticipants(entries) {
   return entries.slice().sort((a, b) => {
-    const groupA = a.groupNumber || "";
-    const groupB = b.groupNumber || "";
-    const numA = Number(groupA);
-    const numB = Number(groupB);
+    const idA = String(a.participantId || "");
+    const idB = String(b.participantId || "");
+    const numA = Number(idA);
+    const numB = Number(idB);
     if (!Number.isNaN(numA) && !Number.isNaN(numB) && numA !== numB) {
       return numA - numB;
     }
-    if (groupA !== groupB) {
-      return groupA.localeCompare(groupB, "ja", { numeric: true });
+    if (idA !== idB) {
+      return idA.localeCompare(idB, "ja", { numeric: true });
     }
-    return a.participantId.localeCompare(b.participantId, "ja", { numeric: true });
+    return String(a.name || "").localeCompare(String(b.name || ""), "ja", { numeric: true });
   });
+}
+
+function formatDateForFilename(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
+}
+
+function encodeCsvValue(value) {
+  if (value == null) return "";
+  const text = String(value);
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function createCsvContent(rows) {
+  return rows.map(row => row.map(encodeCsvValue).join(",")).join("\r\n");
+}
+
+function downloadCsvFile(filename, rows) {
+  if (!rows || !rows.length) return;
+  const content = "\ufeff" + createCsvContent(rows);
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }
 
 function createShareUrl(token) {
@@ -886,38 +1437,138 @@ function renderParticipants() {
   if (!tbody) return;
   tbody.innerHTML = "";
 
-  sortParticipants(state.participants).forEach(entry => {
+  const eventId = state.selectedEventId;
+  const scheduleId = state.selectedScheduleId;
+  const duplicateMap = state.duplicateMatches instanceof Map ? state.duplicateMatches : new Map();
+  const participants = sortParticipants(state.participants);
+
+  participants.forEach((entry, index) => {
     const tr = document.createElement("tr");
     const idTd = document.createElement("td");
     idTd.textContent = entry.participantId;
     const nameTd = document.createElement("td");
     nameTd.textContent = entry.name;
-    const groupTd = document.createElement("td");
-    groupTd.textContent = entry.groupNumber;
+    const phoneticTd = document.createElement("td");
+    phoneticTd.textContent = entry.phonetic || entry.furigana || "";
+    const genderTd = document.createElement("td");
+    genderTd.textContent = entry.gender || "";
+    const departmentTd = document.createElement("td");
+    departmentTd.textContent = entry.department || entry.groupNumber || "";
+    const teamTd = document.createElement("td");
+    teamTd.className = "team-cell";
+    teamTd.textContent = entry.teamNumber || entry.groupNumber || "";
     const linkTd = document.createElement("td");
     linkTd.className = "link-cell";
+    const linkActions = document.createElement("div");
+    linkActions.className = "link-action-row";
+
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "edit-link-btn";
+    editButton.dataset.participantId = entry.participantId;
+    editButton.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z\" fill=\"currentColor\"/></svg><span>編集</span>";
+
+    let shareUrl = "";
     if (entry.token) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "copy-link-btn";
-      button.dataset.token = entry.token;
-      button.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M6.25 1.75A2.25 2.25 0 0 0 4 4v7A2.25 2.25 0 0 0 6.25 13.25h4A2.25 2.25 0 0 0 12.5 11V4A2.25 2.25 0 0 0 10.25 1.75h-4Zm0 1.5h4c.414 0 .75.336.75.75v7c0 .414-.336.75-.75.75h-4a.75.75 0 0 1-.75-.75V4c0-.414.336-.75.75-.75ZM3 4.75A.75.75 0 0 0 2.25 5.5v7A2.25 2.25 0 0 0 4.5 14.75h4a.75.75 0 0 0 0-1.5h-4a.75.75 0 0 1-.75-.75v-7A.75.75 0 0 0 3 4.75Z\" fill=\"currentColor\"/></svg><span>コピー</span>";
-      linkTd.appendChild(button);
+      shareUrl = createShareUrl(entry.token);
+      const copyButton = document.createElement("button");
+      copyButton.type = "button";
+      copyButton.className = "copy-link-btn";
+      copyButton.dataset.token = entry.token;
+      copyButton.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M6.25 1.75A2.25 2.25 0 0 0 4 4v7A2.25 2.25 0 0 0 6.25 13.25h4A2.25 2.25 0 0 0 12.5 11V4A2.25 2.25 0 0 0 10.25 1.75h-4Zm0 1.5h4c.414 0 .75.336.75.75v7c0 .414-.336.75-.75.75h-4a.75.75 0 0 1-.75-.75V4c0-.414.336-.75.75-.75ZM3 4.75A.75.75 0 0 0 2.25 5.5v7A2.25 2.25 0 0 0 4.5 14.75h4a.75.75 0 0 0 0-1.5h-4a.75.75 0 0 1-.75-.75v-7A.75.75 0 0 0 3 4.75Z\" fill=\"currentColor\"/></svg><span>コピー</span>";
+      linkActions.appendChild(copyButton);
     } else {
-      linkTd.textContent = "-";
+      const placeholder = document.createElement("span");
+      placeholder.className = "link-placeholder";
+      placeholder.textContent = "リンク未発行";
+      linkActions.appendChild(placeholder);
     }
-    tr.append(idTd, nameTd, groupTd, linkTd);
+
+    linkActions.appendChild(editButton);
+    linkTd.appendChild(linkActions);
+
+    if (shareUrl) {
+      const previewLink = document.createElement("a");
+      previewLink.href = shareUrl;
+      previewLink.target = "_blank";
+      previewLink.rel = "noopener noreferrer";
+      previewLink.className = "share-link-preview";
+      previewLink.textContent = shareUrl;
+      linkTd.appendChild(previewLink);
+    }
+
+    const duplicateKey = entry.participantId ? String(entry.participantId) : `__row${index}`;
+    const duplicateInfo = duplicateMap.get(duplicateKey);
+    const matches = duplicateInfo?.others || [];
+    const duplicateCount = duplicateInfo?.totalCount || (matches.length ? matches.length + 1 : 0);
+    if (matches.length) {
+      tr.classList.add("is-duplicate");
+      const warning = document.createElement("div");
+      warning.className = "duplicate-warning";
+      warning.setAttribute("role", "text");
+
+      const icon = document.createElement("span");
+      icon.className = "duplicate-warning__icon";
+      icon.innerHTML =
+        "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M8 1.333a6.667 6.667 0 1 0 0 13.334A6.667 6.667 0 0 0 8 1.333Zm0 2a.833.833 0 0 1 .833.834v3.75a.833.833 0 1 1-1.666 0v-3.75A.833.833 0 0 1 8 3.333Zm0 7a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z\"/></svg>";
+
+      const text = document.createElement("span");
+      text.className = "duplicate-warning__text";
+      const detail = matches
+        .map(match => describeDuplicateMatch(match, eventId, scheduleId))
+        .filter(Boolean)
+        .join("、");
+      if (duplicateCount > 1) {
+        text.textContent = detail
+          ? `重複候補 (${duplicateCount}件): ${detail}`
+          : `重複候補 (${duplicateCount}件)`;
+      } else {
+        text.textContent = detail ? `重複候補: ${detail}` : "重複候補があります";
+      }
+
+      warning.append(icon, text);
+      departmentTd.appendChild(warning);
+    }
+
+    tr.append(idTd, nameTd, phoneticTd, genderTd, departmentTd, teamTd, linkTd);
     tbody.appendChild(tr);
   });
 
   if (dom.adminSummary) {
     const total = state.participants.length;
-    dom.adminSummary.textContent = total
+    const summaryEntries = [];
+    const groupMap = state.duplicateGroups instanceof Map ? state.duplicateGroups : new Map();
+    groupMap.forEach(group => {
+      if (!group || !Array.isArray(group.records) || !group.records.length) return;
+      const hasCurrent = group.records.some(record => record.isCurrent && String(record.scheduleId) === String(scheduleId));
+      if (!hasCurrent) return;
+      const detail = group.records
+        .map(record => describeDuplicateMatch(record, eventId, scheduleId))
+        .filter(Boolean)
+        .join(" / ");
+      if (!detail) return;
+      const totalCount = group.totalCount || group.records.length;
+      summaryEntries.push({ detail, totalCount });
+    });
+
+    let summaryText = total
       ? `登録済みの参加者: ${total}名`
       : "参加者リストはまだ登録されていません。";
+
+    if (summaryEntries.length) {
+      const preview = summaryEntries
+        .slice(0, 3)
+        .map(entry => `${entry.detail}（${entry.totalCount}件）`)
+        .join(" / ");
+      const remainder = summaryEntries.length > 3 ? ` / 他${summaryEntries.length - 3}件` : "";
+      summaryText += ` / 重複候補 ${summaryEntries.length}件 (${preview}${remainder})`;
+    }
+
+    dom.adminSummary.textContent = summaryText;
   }
 
   syncSaveButtonState();
+  syncTemplateButtons();
 }
 function renderEvents() {
   const list = dom.eventList;
@@ -952,6 +1603,15 @@ function renderEvents() {
 
     const actions = document.createElement("div");
     actions.className = "entity-actions";
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn-icon";
+    editBtn.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z\" fill=\"currentColor\"/></svg>";
+    editBtn.title = "イベントを編集";
+    editBtn.addEventListener("click", evt => {
+      evt.stopPropagation();
+      openEventForm({ mode: "edit", event });
+    });
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "btn-icon";
@@ -961,7 +1621,7 @@ function renderEvents() {
       eventObj.stopPropagation();
       handleDeleteEvent(event.id, event.name).catch(err => console.error(err));
     });
-    actions.appendChild(deleteBtn);
+    actions.append(editBtn, deleteBtn);
 
     li.append(label, actions);
     li.addEventListener("click", () => selectEvent(event.id));
@@ -1016,6 +1676,15 @@ function renderSchedules() {
 
     const actions = document.createElement("div");
     actions.className = "entity-actions";
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn-icon";
+    editBtn.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z\" fill=\"currentColor\"/></svg>";
+    editBtn.title = "日程を編集";
+    editBtn.addEventListener("click", evt => {
+      evt.stopPropagation();
+      openScheduleForm({ mode: "edit", schedule });
+    });
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "btn-icon";
@@ -1025,7 +1694,7 @@ function renderSchedules() {
       evt.stopPropagation();
       handleDeleteSchedule(schedule.id, schedule.label).catch(err => console.error(err));
     });
-    actions.appendChild(deleteBtn);
+    actions.append(editBtn, deleteBtn);
 
     li.append(label, actions);
     li.addEventListener("click", () => selectSchedule(schedule.id));
@@ -1040,6 +1709,31 @@ function syncSaveButtonState() {
   dom.saveButton.disabled = state.saving || currentSignature === state.lastSavedSignature;
 }
 
+function syncTemplateButtons() {
+  const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
+  const hasParticipants = hasSelection && state.participants.some(entry => entry.participantId);
+
+  if (dom.downloadParticipantTemplateButton) {
+    dom.downloadParticipantTemplateButton.disabled = !hasSelection;
+    if (hasSelection) {
+      dom.downloadParticipantTemplateButton.removeAttribute("aria-disabled");
+    } else {
+      dom.downloadParticipantTemplateButton.setAttribute("aria-disabled", "true");
+    }
+  }
+
+  if (dom.downloadTeamTemplateButton) {
+    dom.downloadTeamTemplateButton.disabled = !hasParticipants;
+    if (hasParticipants) {
+      dom.downloadTeamTemplateButton.removeAttribute("aria-disabled");
+      dom.downloadTeamTemplateButton.removeAttribute("title");
+    } else {
+      dom.downloadTeamTemplateButton.setAttribute("aria-disabled", "true");
+      dom.downloadTeamTemplateButton.setAttribute("title", "参加者リストを読み込むとダウンロードできます。");
+    }
+  }
+}
+
 function updateParticipantContext(options = {}) {
   const { preserveStatus = false } = options;
   const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
@@ -1050,30 +1744,39 @@ function updateParticipantContext(options = {}) {
       dom.participantContext.textContent = "日程を選択すると、現在登録されている参加者が表示されます。";
     }
     if (dom.participantDescription) {
-      dom.participantDescription.textContent = "日程を選択し、参加者IDと班番号のリストをアップロードしてください。保存後は各参加者ごとに専用リンクを発行できます。";
+      dom.participantDescription.textContent = "日程を選択し、参加者ID・名前・フリガナ・性別・学部学科・携帯電話・メールアドレスを含むCSVをアップロードしてください。保存後は各参加者ごとに専用リンクを発行できます。";
     }
     if (dom.saveButton) dom.saveButton.disabled = true;
     if (dom.csvInput) {
       dom.csvInput.disabled = true;
       dom.csvInput.value = "";
     }
+    if (dom.teamCsvInput) {
+      dom.teamCsvInput.disabled = true;
+      dom.teamCsvInput.value = "";
+    }
     if (!preserveStatus) setUploadStatus("日程を選択してください。");
     if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
+    if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
     if (dom.mappingTbody) dom.mappingTbody.innerHTML = "";
     if (dom.adminSummary) dom.adminSummary.textContent = "";
+    syncTemplateButtons();
     return;
   }
 
   if (dom.csvInput) dom.csvInput.disabled = false;
+  if (dom.teamCsvInput) dom.teamCsvInput.disabled = false;
   if (dom.participantContext) {
     const scheduleName = selectedSchedule.label || selectedSchedule.id;
     const scheduleRange = describeScheduleRange(selectedSchedule);
     const rangeSuffix = scheduleRange ? `（${scheduleRange}）` : "";
-    dom.participantContext.textContent = `イベント「${selectedEvent.name}」/ 日程「${scheduleName}」${rangeSuffix}の参加者を管理しています。専用リンクは各行の「コピー」から取得できます。`;
+    dom.participantContext.textContent = `イベント「${selectedEvent.name}」/ 日程「${scheduleName}」${rangeSuffix}の参加者を管理しています。専用リンクは各行のボタンまたはURLから取得できます。`;
   }
   if (!preserveStatus) {
     setUploadStatus("ファイルを選択して参加者リストを更新してください。");
   }
+
+  syncTemplateButtons();
 }
 
 async function loadEvents({ preserveSelection = true } = {}) {
@@ -1154,6 +1857,8 @@ async function loadParticipants() {
   if (!eventId || !scheduleId) {
     state.participants = [];
     state.participantTokenMap = new Map();
+    state.duplicateMatches = new Map();
+    state.duplicateGroups = new Map();
     renderParticipants();
     updateParticipantContext();
     return;
@@ -1161,20 +1866,30 @@ async function loadParticipants() {
 
   try {
     await ensureTokenSnapshot(false);
-    const branch = await fetchDbValue(`questionIntake/participants/${eventId}/${scheduleId}`);
-    const entries = branch && typeof branch === "object" ? branch : {};
-    const normalized = Object.values(entries)
-      .map(entry => ({
-        participantId: String(entry?.participantId || entry?.id || ""),
-        name: String(entry?.name || ""),
-        groupNumber: String(entry?.groupNumber || ""),
-        token: String(entry?.token || ""),
-        guidance: String(entry?.guidance || "")
-      }))
+    const eventBranchRaw = await fetchDbValue(`questionIntake/participants/${eventId}`);
+    const eventBranch = eventBranchRaw && typeof eventBranchRaw === "object" ? eventBranchRaw : {};
+    if (!(state.eventParticipantCache instanceof Map)) {
+      state.eventParticipantCache = new Map();
+    }
+    state.eventParticipantCache.set(eventId, normalizeEventParticipantCache(eventBranch));
+
+    const scheduleBranch = eventBranch && typeof eventBranch[scheduleId] === "object"
+      ? eventBranch[scheduleId]
+      : {};
+    const normalized = Object.values(scheduleBranch)
+      .map(normalizeParticipantRecord)
       .filter(entry => entry.participantId);
 
-    state.participants = sortParticipants(normalized);
-    state.lastSavedSignature = signatureForEntries(state.participants);
+    let participants = sortParticipants(normalized);
+    const savedSignature = signatureForEntries(participants);
+    const assignmentMap = getTeamAssignmentMap(eventId);
+    if (assignmentMap?.size) {
+      const applyResult = applyAssignmentsToEntries(participants, assignmentMap);
+      participants = sortParticipants(applyResult.entries);
+    }
+
+    state.participants = participants;
+    state.lastSavedSignature = savedSignature;
     state.participantTokenMap = new Map(
       state.participants.map(entry => [entry.participantId, entry.token])
     );
@@ -1183,15 +1898,20 @@ async function loadParticipants() {
         state.knownTokens.add(token);
       }
     });
+    syncCurrentScheduleCache();
     if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
+    if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
     if (dom.csvInput) dom.csvInput.value = "";
     setUploadStatus("現在の参加者リストを読み込みました。", "success");
+    updateDuplicateMatches();
     renderParticipants();
     updateParticipantContext({ preserveStatus: true });
   } catch (error) {
     console.error(error);
     state.participants = [];
     state.participantTokenMap = new Map();
+    state.duplicateMatches = new Map();
+    state.duplicateGroups = new Map();
     setUploadStatus(error.message || "参加者リストの読み込みに失敗しました。", "error");
     renderParticipants();
     updateParticipantContext();
@@ -1199,12 +1919,19 @@ async function loadParticipants() {
 }
 
 function selectEvent(eventId) {
-  if (state.selectedEventId === eventId) return;
+  const previousEventId = state.selectedEventId;
+  if (previousEventId === eventId) return;
   state.selectedEventId = eventId;
   state.selectedScheduleId = null;
   setCalendarPickedDate("", { updateInput: true });
   state.participants = [];
+  state.participantTokenMap = new Map();
   state.lastSavedSignature = "";
+  state.duplicateMatches = new Map();
+  state.duplicateGroups = new Map();
+  if (state.eventParticipantCache instanceof Map && previousEventId) {
+    state.eventParticipantCache.delete(previousEventId);
+  }
   renderEvents();
   renderSchedules();
   updateParticipantContext();
@@ -1225,6 +1952,110 @@ function selectSchedule(scheduleId) {
   renderSchedules();
   updateParticipantContext();
   loadParticipants().catch(err => console.error(err));
+}
+
+function resolveScheduleFormValues({ label, date, startTime, endTime }) {
+  const trimmedLabel = normalizeKey(label || "");
+  if (!trimmedLabel) {
+    throw new Error("日程の表示名を入力してください。");
+  }
+
+  const normalizedDate = normalizeDateInputValue(date);
+  if (!normalizedDate) {
+    throw new Error("日付を入力してください。");
+  }
+
+  const startTimeValue = String(startTime || "").trim();
+  const endTimeValue = String(endTime || "").trim();
+  if (!startTimeValue || !endTimeValue) {
+    throw new Error("開始と終了の時刻を入力してください。");
+  }
+
+  const startValueText = combineDateAndTime(normalizedDate, startTimeValue);
+  const endValueText = combineDateAndTime(normalizedDate, endTimeValue);
+  let startDate = parseDateTimeLocal(startValueText);
+  let endDate = parseDateTimeLocal(endValueText);
+  if (!startDate || !endDate) {
+    throw new Error("開始・終了時刻の形式が正しくありません。");
+  }
+
+  if (endDate <= startDate) {
+    endDate = new Date(endDate.getTime() + MS_PER_DAY);
+  }
+
+  const startValue = formatDateTimeLocal(startDate);
+  const endValue = formatDateTimeLocal(endDate);
+
+  return {
+    label: trimmedLabel,
+    date: normalizedDate,
+    startValue,
+    endValue,
+    startTimeValue,
+    endTimeValue
+  };
+}
+
+function openEventForm({ mode = "create", event = null } = {}) {
+  if (!dom.eventForm) return;
+  dom.eventForm.reset();
+  dom.eventForm.dataset.mode = mode;
+  dom.eventForm.dataset.eventId = event?.id || "";
+  setFormError(dom.eventError);
+  if (dom.eventDialogTitle) {
+    dom.eventDialogTitle.textContent = mode === "edit" ? "イベントを編集" : "イベントを追加";
+  }
+  if (dom.eventNameInput) {
+    dom.eventNameInput.value = mode === "edit" ? String(event?.name || "") : "";
+  }
+  const submitButton = dom.eventForm.querySelector("button[type='submit']");
+  if (submitButton) {
+    submitButton.textContent = mode === "edit" ? "保存" : "追加";
+  }
+  openDialog(dom.eventDialog);
+}
+
+function openScheduleForm({ mode = "create", schedule = null } = {}) {
+  if (!dom.scheduleForm) return;
+  dom.scheduleForm.reset();
+  dom.scheduleForm.dataset.mode = mode;
+  dom.scheduleForm.dataset.scheduleId = schedule?.id || "";
+  setFormError(dom.scheduleError);
+  if (dom.scheduleDialogTitle) {
+    dom.scheduleDialogTitle.textContent = mode === "edit" ? "日程を編集" : "日程を追加";
+  }
+  const submitButton = dom.scheduleForm.querySelector("button[type='submit']");
+  if (submitButton) {
+    submitButton.textContent = mode === "edit" ? "保存" : "追加";
+  }
+
+  const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
+  if (mode === "edit" && schedule) {
+    if (dom.scheduleLabelInput) dom.scheduleLabelInput.value = schedule.label || "";
+    const dateValue = schedule.date || (schedule.startAt ? String(schedule.startAt).slice(0, 10) : "");
+    if (dom.scheduleDateInput) dom.scheduleDateInput.value = normalizeDateInputValue(dateValue);
+    const startTime = schedule.startAt ? String(schedule.startAt).slice(11, 16) : "";
+    const endTime = schedule.endAt ? String(schedule.endAt).slice(11, 16) : "";
+    if (dom.scheduleStartTimeInput) dom.scheduleStartTimeInput.value = startTime;
+    if (dom.scheduleEndTimeInput) dom.scheduleEndTimeInput.value = endTime;
+    setCalendarPickedDate(dom.scheduleDateInput?.value || dateValue || "", { updateInput: true });
+  } else {
+    if (dom.scheduleLabelInput) {
+      dom.scheduleLabelInput.value = selectedEvent?.name ? `${selectedEvent.name}` : "";
+    }
+    if (dom.scheduleDateInput) {
+      dom.scheduleDateInput.value = calendarState.pickedDate || "";
+    }
+    setCalendarPickedDate(dom.scheduleDateInput?.value || calendarState.pickedDate || "", { updateInput: true });
+  }
+
+  const initialDateValue = dom.scheduleDateInput?.value || calendarState.pickedDate || "";
+  prepareScheduleDialogCalendar(initialDateValue);
+  if (dom.scheduleEndTimeInput) {
+    dom.scheduleEndTimeInput.min = dom.scheduleStartTimeInput?.value || "";
+  }
+  syncScheduleEndMin();
+  openDialog(dom.scheduleDialog);
 }
 
 async function handleAddEvent(name) {
@@ -1253,6 +2084,30 @@ async function handleAddEvent(name) {
   } catch (error) {
     console.error(error);
     throw new Error(error.message || "イベントの追加に失敗しました。");
+  }
+}
+
+async function handleUpdateEvent(eventId, name) {
+  const trimmed = normalizeKey(name || "");
+  if (!trimmed) {
+    throw new Error("イベント名を入力してください。");
+  }
+  if (!eventId) {
+    throw new Error("イベントIDが不明です。");
+  }
+
+  try {
+    const now = Date.now();
+    await update(rootDbRef(), {
+      [`questionIntake/events/${eventId}/name`]: trimmed,
+      [`questionIntake/events/${eventId}/updatedAt`]: now
+    });
+    await loadEvents({ preserveSelection: true });
+    selectEvent(eventId);
+    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
+  } catch (error) {
+    console.error(error);
+    throw new Error(error.message || "イベントの更新に失敗しました。");
   }
 }
 
@@ -1286,6 +2141,17 @@ async function handleDeleteEvent(eventId, eventName) {
       state.selectedScheduleId = null;
       state.participants = [];
       state.participantTokenMap = new Map();
+      state.lastSavedSignature = "";
+      state.duplicateMatches = new Map();
+      state.duplicateGroups = new Map();
+    }
+
+    if (state.eventParticipantCache instanceof Map) {
+      state.eventParticipantCache.delete(eventId);
+    }
+
+    if (state.teamAssignments instanceof Map) {
+      state.teamAssignments.delete(eventId);
     }
 
     await loadEvents({ preserveSelection: false });
@@ -1305,36 +2171,12 @@ async function handleAddSchedule({ label, date, startTime, endTime }) {
     throw new Error("イベントを選択してください。");
   }
 
-  const trimmedLabel = normalizeKey(label || "");
-  if (!trimmedLabel) {
-    throw new Error("日程の表示名を入力してください。");
-  }
-
-  const normalizedDate = normalizeDateInputValue(date);
-  if (!normalizedDate) {
-    throw new Error("日付を入力してください。");
-  }
-
-  const startTimeValue = String(startTime || "").trim();
-  const endTimeValue = String(endTime || "").trim();
-  if (!startTimeValue || !endTimeValue) {
-    throw new Error("開始と終了の時刻を入力してください。");
-  }
-
-  const startValueText = combineDateAndTime(normalizedDate, startTimeValue);
-  const endValueText = combineDateAndTime(normalizedDate, endTimeValue);
-  let startDate = parseDateTimeLocal(startValueText);
-  let endDate = parseDateTimeLocal(endValueText);
-  if (!startDate || !endDate) {
-    throw new Error("開始・終了時刻の形式が正しくありません。");
-  }
-
-  if (endDate <= startDate) {
-    endDate = new Date(endDate.getTime() + MS_PER_DAY);
-  }
-
-  const startValue = formatDateTimeLocal(startDate);
-  const endValue = formatDateTimeLocal(endDate);
+  const { label: trimmedLabel, date: normalizedDate, startValue, endValue } = resolveScheduleFormValues({
+    label,
+    date,
+    startTime,
+    endTime
+  });
 
   try {
     const now = Date.now();
@@ -1366,6 +2208,44 @@ async function handleAddSchedule({ label, date, startTime, endTime }) {
   } catch (error) {
     console.error(error);
     throw new Error(error.message || "日程の追加に失敗しました。");
+  }
+}
+
+async function handleUpdateSchedule(scheduleId, { label, date, startTime, endTime }) {
+  const eventId = state.selectedEventId;
+  if (!eventId) {
+    throw new Error("イベントを選択してください。");
+  }
+  if (!scheduleId) {
+    throw new Error("日程IDが不明です。");
+  }
+
+  const { label: trimmedLabel, date: normalizedDate, startValue, endValue } = resolveScheduleFormValues({
+    label,
+    date,
+    startTime,
+    endTime
+  });
+
+  try {
+    const now = Date.now();
+    await update(rootDbRef(), {
+      [`questionIntake/schedules/${eventId}/${scheduleId}/label`]: trimmedLabel,
+      [`questionIntake/schedules/${eventId}/${scheduleId}/date`]: normalizedDate,
+      [`questionIntake/schedules/${eventId}/${scheduleId}/startAt`]: startValue,
+      [`questionIntake/schedules/${eventId}/${scheduleId}/endAt`]: endValue,
+      [`questionIntake/schedules/${eventId}/${scheduleId}/updatedAt`]: now,
+      [`questionIntake/events/${eventId}/updatedAt`]: now
+    });
+
+    await loadEvents({ preserveSelection: true });
+    selectEvent(eventId);
+    selectSchedule(scheduleId);
+    setCalendarPickedDate(normalizedDate, { updateInput: true });
+    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
+  } catch (error) {
+    console.error(error);
+    throw new Error(error.message || "日程の更新に失敗しました。");
   }
 }
 
@@ -1405,6 +2285,17 @@ async function handleDeleteSchedule(scheduleId, scheduleLabel) {
       state.selectedScheduleId = null;
       state.participants = [];
       state.participantTokenMap = new Map();
+      state.lastSavedSignature = "";
+      state.duplicateMatches = new Map();
+      state.duplicateGroups = new Map();
+    }
+
+    if (state.eventParticipantCache instanceof Map) {
+      const cache = state.eventParticipantCache.get(eventId);
+      if (cache && typeof cache === "object") {
+        delete cache[scheduleId];
+        state.eventParticipantCache.set(eventId, cache);
+      }
     }
 
     await loadEvents({ preserveSelection: true });
@@ -1428,15 +2319,30 @@ function handleCsvChange(event) {
   reader.onload = e => {
     try {
       const rows = parseCsv(String(e.target.result || ""));
-      const entries = parseParticipantRows(rows);
+      const entries = assignParticipantIds(parseParticipantRows(rows), state.participants);
       const existingMap = new Map(state.participants.map(entry => [entry.participantId, entry]));
-      state.participants = sortParticipants(entries.map(entry => ({
-        participantId: entry.participantId,
-        name: entry.name,
-        groupNumber: entry.groupNumber,
-        token: existingMap.get(entry.participantId)?.token || "",
-        guidance: existingMap.get(entry.participantId)?.guidance || ""
-      })));
+      state.participants = sortParticipants(entries.map(entry => {
+        const existing = existingMap.get(entry.participantId) || {};
+        const department = entry.department || existing.department || "";
+        const teamNumber = entry.teamNumber || existing.teamNumber || existing.groupNumber || "";
+        const phonetic = entry.phonetic || entry.furigana || existing.phonetic || existing.furigana || "";
+        return {
+          participantId: entry.participantId,
+          name: entry.name || existing.name || "",
+          phonetic,
+          furigana: phonetic,
+          gender: entry.gender || existing.gender || "",
+          department,
+          groupNumber: teamNumber,
+          teamNumber,
+          phone: entry.phone || existing.phone || "",
+          email: entry.email || existing.email || "",
+          token: existing.token || "",
+          guidance: existing.guidance || ""
+        };
+      }));
+      syncCurrentScheduleCache();
+      updateDuplicateMatches();
       if (dom.fileLabel) dom.fileLabel.textContent = file.name;
       renderParticipants();
       const signature = signatureForEntries(state.participants);
@@ -1460,6 +2366,104 @@ function handleCsvChange(event) {
     setUploadStatus("ファイルの読み込みに失敗しました。", "error");
   };
   reader.readAsText(file, "utf-8");
+}
+
+function handleTeamCsvChange(event) {
+  const files = event.target.files;
+  if (!files || !files.length) {
+    return;
+  }
+
+  const file = files[0];
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const eventId = state.selectedEventId;
+      if (!eventId) {
+        throw new Error("イベントを選択してください。");
+      }
+      const text = String(e.target.result || "");
+      const rows = parseCsv(text);
+      const assignments = parseTeamAssignmentRows(rows);
+      const scheduleId = state.selectedScheduleId;
+      const eventAssignmentMap = ensureTeamAssignmentMap(eventId);
+      const currentMapMatches = applyAssignmentsToEntries(state.participants, assignments);
+
+      assignments.forEach((teamNumber, participantId) => {
+        if (eventAssignmentMap) {
+          eventAssignmentMap.set(participantId, teamNumber);
+        }
+      });
+
+      const aggregateMap = eventAssignmentMap || assignments;
+      const applyResult = applyAssignmentsToEntries(state.participants, aggregateMap);
+      state.participants = sortParticipants(applyResult.entries);
+      syncCurrentScheduleCache();
+      const cacheMatched = applyAssignmentsToEventCache(eventId, aggregateMap);
+      updateDuplicateMatches();
+      renderParticipants();
+      syncSaveButtonState();
+
+      if (dom.teamFileLabel) {
+        dom.teamFileLabel.textContent = file.name;
+      }
+
+      const matchedIds = currentMapMatches.matchedIds || new Set();
+      const updatedIds = currentMapMatches.updatedIds || new Set();
+      const allMatched = new Set([...(matchedIds || []), ...(cacheMatched || [])]);
+      const unmatchedCount = Math.max(assignments.size - allMatched.size, 0);
+      const summaryParts = [];
+      summaryParts.push(`班番号を照合: ${allMatched.size}名`);
+      summaryParts.push(`変更: ${updatedIds.size}件`);
+      if (unmatchedCount > 0) {
+        summaryParts.push(`未一致: ${unmatchedCount}名`);
+      }
+      setUploadStatus(summaryParts.join(" / "), "success");
+    } catch (error) {
+      console.error(error);
+      setUploadStatus(error.message || "班番号CSVの読み込みに失敗しました。", "error");
+    } finally {
+      if (dom.teamCsvInput) {
+        dom.teamCsvInput.value = "";
+      }
+    }
+  };
+  reader.onerror = () => {
+    setUploadStatus("班番号CSVの読み込みに失敗しました。", "error");
+    if (dom.teamCsvInput) {
+      dom.teamCsvInput.value = "";
+    }
+  };
+  reader.readAsText(file, "utf-8");
+}
+
+function downloadParticipantTemplate() {
+  const filename = `participants_template_${formatDateForFilename()}.csv`;
+  downloadCsvFile(filename, [PARTICIPANT_TEMPLATE_HEADERS]);
+  setUploadStatus("参加者CSVテンプレートをダウンロードしました。", "success");
+}
+
+function downloadTeamTemplate() {
+  if (!state.selectedEventId || !state.selectedScheduleId) {
+    setUploadStatus("班番号テンプレートを作成するにはイベントと日程を選択してください。", "error");
+    return;
+  }
+
+  const rows = sortParticipants(state.participants)
+    .filter(entry => entry.participantId)
+    .map(entry => [
+      String(entry.participantId || ""),
+      String(entry.teamNumber || entry.groupNumber || "")
+    ]);
+
+  if (!rows.length) {
+    setUploadStatus("テンプレートに出力できる参加者が見つかりません。参加者リストを読み込んでからお試しください。", "error");
+    return;
+  }
+
+  const filename = `team_assignments_${formatDateForFilename()}.csv`;
+  downloadCsvFile(filename, [TEAM_TEMPLATE_HEADERS, ...rows]);
+  setUploadStatus(`班番号テンプレートをダウンロードしました。（${rows.length}名）`, "success");
 }
 
 async function handleSave() {
@@ -1520,11 +2524,21 @@ async function handleSave() {
       nextTokenMap.set(participantId, token);
 
       const guidance = String(entry.guidance || "");
+      const departmentValue = String(entry.department || "");
+      const storedDepartment = departmentValue;
+      const teamNumber = String(entry.teamNumber || entry.groupNumber || "");
 
       participantsPayload[participantId] = {
         participantId,
         name: String(entry.name || ""),
-        groupNumber: String(entry.groupNumber || ""),
+        phonetic: String(entry.phonetic || entry.furigana || ""),
+        furigana: String(entry.phonetic || entry.furigana || ""),
+        gender: String(entry.gender || ""),
+        department: storedDepartment,
+        groupNumber: teamNumber,
+        teamNumber,
+        phone: String(entry.phone || ""),
+        email: String(entry.email || ""),
         token,
         guidance,
         updatedAt: now
@@ -1541,7 +2555,8 @@ async function handleSave() {
         scheduleEnd: scheduleEndAt || existingTokenRecord.scheduleEnd || "",
         participantId,
         displayName: String(entry.name || ""),
-        groupNumber: String(entry.groupNumber || ""),
+        groupNumber: teamNumber,
+        teamNumber,
         guidance: guidance || existingTokenRecord.guidance || "",
         revoked: false,
         createdAt: existingTokenRecord.createdAt || now,
@@ -1639,6 +2654,12 @@ function resetState() {
   state.selectedEventId = null;
   state.selectedScheduleId = null;
   state.lastSavedSignature = "";
+  state.participantTokenMap = new Map();
+  state.duplicateMatches = new Map();
+  state.duplicateGroups = new Map();
+  state.eventParticipantCache = new Map();
+  state.teamAssignments = new Map();
+  state.editingParticipantId = null;
   resetTokenState();
   renderEvents();
   renderSchedules();
@@ -1646,16 +2667,108 @@ function resetState() {
   updateParticipantContext();
   setUploadStatus("日程を選択してください。");
   if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
+  if (dom.teamCsvInput) dom.teamCsvInput.value = "";
   if (dom.csvInput) dom.csvInput.value = "";
   renderUserSummary(null);
+  syncTemplateButtons();
 }
 
 function handleMappingTableClick(event) {
-  const button = event.target.closest(".copy-link-btn");
-  if (!button) return;
-  event.preventDefault();
-  const token = button.dataset.token;
-  copyShareLink(token).catch(err => console.error(err));
+  const copyButton = event.target.closest(".copy-link-btn");
+  if (copyButton) {
+    event.preventDefault();
+    const token = copyButton.dataset.token;
+    copyShareLink(token).catch(err => console.error(err));
+    return;
+  }
+
+  const editButton = event.target.closest(".edit-link-btn");
+  if (editButton) {
+    event.preventDefault();
+    const participantId = editButton.dataset.participantId;
+    openParticipantEditor(participantId);
+  }
+}
+
+function openParticipantEditor(participantId) {
+  if (!dom.participantDialog || !participantId) {
+    setUploadStatus("編集対象の参加者が見つかりません。", "error");
+    return;
+  }
+  const entry = state.participants.find(item => String(item.participantId) === String(participantId));
+  if (!entry) {
+    setUploadStatus("指定された参加者が現在のリストに存在しません。", "error");
+    return;
+  }
+  state.editingParticipantId = entry.participantId;
+  if (dom.participantDialogTitle) {
+    dom.participantDialogTitle.textContent = `参加者情報を編集（ID: ${entry.participantId}）`;
+  }
+  if (dom.participantIdInput) dom.participantIdInput.value = entry.participantId;
+  if (dom.participantNameInput) dom.participantNameInput.value = entry.name || "";
+  if (dom.participantPhoneticInput) dom.participantPhoneticInput.value = entry.phonetic || entry.furigana || "";
+  if (dom.participantGenderInput) dom.participantGenderInput.value = entry.gender || "";
+  if (dom.participantDepartmentInput) dom.participantDepartmentInput.value = entry.department || "";
+  if (dom.participantTeamInput) dom.participantTeamInput.value = entry.teamNumber || entry.groupNumber || "";
+  if (dom.participantPhoneInput) dom.participantPhoneInput.value = entry.phone || "";
+  if (dom.participantEmailInput) dom.participantEmailInput.value = entry.email || "";
+  setFormError(dom.participantError);
+  openDialog(dom.participantDialog);
+}
+
+function saveParticipantEdits() {
+  const eventId = state.selectedEventId;
+  const participantId = state.editingParticipantId || String(dom.participantIdInput?.value || "").trim();
+  if (!participantId) {
+    throw new Error("参加者IDが不明です。");
+  }
+  const index = state.participants.findIndex(entry => String(entry.participantId) === String(participantId));
+  if (index === -1) {
+    throw new Error("対象の参加者が見つかりません。");
+  }
+  const name = String(dom.participantNameInput?.value || "").trim();
+  if (!name) {
+    throw new Error("氏名を入力してください。");
+  }
+  const phonetic = String(dom.participantPhoneticInput?.value || "").trim();
+  const gender = String(dom.participantGenderInput?.value || "").trim();
+  const department = String(dom.participantDepartmentInput?.value || "").trim();
+  const teamNumber = String(dom.participantTeamInput?.value || "").trim();
+  const phone = String(dom.participantPhoneInput?.value || "").trim();
+  const email = String(dom.participantEmailInput?.value || "").trim();
+
+  const existing = state.participants[index];
+  const updated = {
+    ...existing,
+    name,
+    phonetic,
+    furigana: phonetic,
+    gender,
+    department,
+    teamNumber,
+    groupNumber: teamNumber,
+    phone,
+    email
+  };
+
+  state.participants[index] = updated;
+  state.participants = sortParticipants(state.participants);
+
+  if (eventId) {
+    const assignmentMap = ensureTeamAssignmentMap(eventId);
+    if (assignmentMap) {
+      assignmentMap.set(participantId, teamNumber);
+    }
+    const singleMap = new Map([[participantId, teamNumber]]);
+    applyAssignmentsToEventCache(eventId, singleMap);
+  }
+
+  syncCurrentScheduleCache();
+  updateDuplicateMatches();
+  renderParticipants();
+  syncSaveButtonState();
+
+  state.editingParticipantId = null;
 }
 
 async function verifyEnrollment(user) {
@@ -1770,14 +2883,25 @@ function attachEventHandlers() {
     });
   }
 
+  if (dom.downloadParticipantTemplateButton) {
+    dom.downloadParticipantTemplateButton.addEventListener("click", () => {
+      downloadParticipantTemplate();
+    });
+  }
+
+  if (dom.downloadTeamTemplateButton) {
+    dom.downloadTeamTemplateButton.addEventListener("click", () => {
+      downloadTeamTemplate();
+    });
+  }
+
   bindDialogDismiss(dom.eventDialog);
   bindDialogDismiss(dom.scheduleDialog);
+  bindDialogDismiss(dom.participantDialog);
 
   if (dom.addEventButton) {
     dom.addEventButton.addEventListener("click", () => {
-      if (dom.eventForm) dom.eventForm.reset();
-      setFormError(dom.eventError);
-      openDialog(dom.eventDialog);
+      openEventForm({ mode: "create" });
     });
   }
 
@@ -1789,12 +2913,21 @@ function attachEventHandlers() {
       if (submitButton) submitButton.disabled = true;
       setFormError(dom.eventError);
       try {
-        await handleAddEvent(dom.eventNameInput.value);
+        const mode = dom.eventForm.dataset.mode || "create";
+        const targetEventId = dom.eventForm.dataset.eventId || "";
+        if (mode === "edit") {
+          await handleUpdateEvent(targetEventId, dom.eventNameInput.value);
+        } else {
+          await handleAddEvent(dom.eventNameInput.value);
+        }
         dom.eventForm.reset();
         closeDialog(dom.eventDialog);
       } catch (error) {
         console.error(error);
-        setFormError(dom.eventError, error.message || "イベントの追加に失敗しました。");
+        const message = dom.eventForm.dataset.mode === "edit"
+          ? error.message || "イベントの更新に失敗しました。"
+          : error.message || "イベントの追加に失敗しました。";
+        setFormError(dom.eventError, message);
       } finally {
         if (submitButton) submitButton.disabled = false;
       }
@@ -1803,22 +2936,7 @@ function attachEventHandlers() {
 
   if (dom.addScheduleButton) {
     dom.addScheduleButton.addEventListener("click", () => {
-      if (dom.scheduleForm) dom.scheduleForm.reset();
-      setFormError(dom.scheduleError);
-      const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
-      if (dom.scheduleLabelInput) {
-        dom.scheduleLabelInput.value = selectedEvent?.name ? `${selectedEvent.name}` : "";
-      }
-      if (dom.scheduleDateInput) {
-        dom.scheduleDateInput.value = calendarState.pickedDate || "";
-      }
-      const initialDateValue = dom.scheduleDateInput?.value || calendarState.pickedDate || "";
-      prepareScheduleDialogCalendar(initialDateValue);
-      if (dom.scheduleEndTimeInput) {
-        dom.scheduleEndTimeInput.min = dom.scheduleStartTimeInput?.value || "";
-      }
-      syncScheduleEndMin();
-      openDialog(dom.scheduleDialog);
+      openScheduleForm({ mode: "create" });
     });
   }
 
@@ -1829,17 +2947,27 @@ function attachEventHandlers() {
       if (submitButton) submitButton.disabled = true;
       setFormError(dom.scheduleError);
       try {
-        await handleAddSchedule({
+        const mode = dom.scheduleForm.dataset.mode || "create";
+        const scheduleId = dom.scheduleForm.dataset.scheduleId || "";
+        const payload = {
           label: dom.scheduleLabelInput?.value,
           date: dom.scheduleDateInput?.value,
           startTime: dom.scheduleStartTimeInput?.value,
           endTime: dom.scheduleEndTimeInput?.value
-        });
+        };
+        if (mode === "edit") {
+          await handleUpdateSchedule(scheduleId, payload);
+        } else {
+          await handleAddSchedule(payload);
+        }
         dom.scheduleForm.reset();
         closeDialog(dom.scheduleDialog);
       } catch (error) {
         console.error(error);
-        setFormError(dom.scheduleError, error.message || "日程の追加に失敗しました。");
+        const message = dom.scheduleForm.dataset.mode === "edit"
+          ? error.message || "日程の更新に失敗しました。"
+          : error.message || "日程の追加に失敗しました。";
+        setFormError(dom.scheduleError, message);
       } finally {
         if (submitButton) submitButton.disabled = false;
       }
@@ -1869,6 +2997,30 @@ function attachEventHandlers() {
     dom.csvInput.disabled = true;
   }
 
+  if (dom.teamCsvInput) {
+    dom.teamCsvInput.addEventListener("change", handleTeamCsvChange);
+    dom.teamCsvInput.disabled = true;
+  }
+
+  if (dom.participantForm) {
+    dom.participantForm.addEventListener("submit", event => {
+      event.preventDefault();
+      const submitButton = dom.participantForm.querySelector("button[type='submit']");
+      if (submitButton) submitButton.disabled = true;
+      try {
+        setFormError(dom.participantError);
+        saveParticipantEdits();
+        closeDialog(dom.participantDialog);
+        setUploadStatus("参加者情報を更新しました。保存ボタンから反映してください。", "success");
+      } catch (error) {
+        console.error(error);
+        setFormError(dom.participantError, error.message || "参加者情報の更新に失敗しました。");
+      } finally {
+        if (submitButton) submitButton.disabled = false;
+      }
+    });
+  }
+
   if (dom.saveButton) {
     dom.saveButton.addEventListener("click", () => {
       handleSave().catch(err => {
@@ -1895,6 +3047,7 @@ function attachEventHandlers() {
   }
 
   if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
+  if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
 
   if (dom.copyrightYear) {
     dom.copyrightYear.textContent = String(new Date().getFullYear());
