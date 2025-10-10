@@ -1,8 +1,10 @@
 // WebAppとしてアクセスされたときに実行されるメイン関数
 function doGet(e) {
-  return ContentService
-    .createTextOutput(JSON.stringify({ success: false, error: 'GET not allowed' }))
-    .setMimeType(ContentService.MimeType.JSON);
+  return withCors_(
+    ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: 'GET not allowed' }))
+      .setMimeType(ContentService.MimeType.JSON)
+  );
 }
 
 // 指定されたシートのデータを読み込んでオブジェクトの配列に変換するヘルパー関数
@@ -27,6 +29,7 @@ function getSheetData(sheetName) {
 }
 
 const DISPLAY_SESSION_TTL_MS = 60 * 1000;
+const ALLOWED_ORIGIN = 'https://schop-hirosaki-univcoop.github.io';
 
 // WebAppにPOSTリクエストが送られたときに実行される関数
 function doPost(e) {
@@ -1444,18 +1447,33 @@ function assertOperator_(principal){
 
 function jsonOk(payload){
   const body = Object.assign({ success: true }, payload || {});
-  return ContentService.createTextOutput(JSON.stringify(body))
-    .setMimeType(ContentService.MimeType.JSON);
+  return withCors_(
+    ContentService.createTextOutput(JSON.stringify(body))
+      .setMimeType(ContentService.MimeType.JSON)
+  );
 }
 
 function jsonErr_(err){
   const id = Utilities.getUuid().slice(0, 8);
   console.error('[' + id + ']', err && err.stack || err);
-  return ContentService.createTextOutput(JSON.stringify({
-    success: false,
-    error: String(err && err.message || err),
-    errorId: id
-  })).setMimeType(ContentService.MimeType.JSON);
+  return withCors_(
+    ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: String(err && err.message || err),
+      errorId: id
+    })).setMimeType(ContentService.MimeType.JSON)
+  );
+}
+
+function withCors_(output) {
+  if (!output || typeof output.setHeader !== 'function') {
+    return output;
+  }
+  const origin = ALLOWED_ORIGIN || '*';
+  return output
+    .setHeader('Access-Control-Allow-Origin', origin)
+    .setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    .setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
 function requireSessionId_(raw) {

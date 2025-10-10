@@ -387,7 +387,6 @@ export class QuestionFormApp {
 
     const response = await fetch(GAS_API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       signal: controller.signal,
       mode: "cors",

@@ -14,7 +14,8 @@ const state = {
   duplicateGroups: new Map(),
   teamAssignments: new Map(),
   tokenSnapshotFetchedAt: 0,
-  editingParticipantId: null
+  editingParticipantId: null,
+  editingRowKey: null
 };
 
 const calendarState = {
