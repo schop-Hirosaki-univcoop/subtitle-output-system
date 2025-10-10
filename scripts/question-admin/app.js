@@ -3,7 +3,8 @@ import {
   FORM_PAGE_PATH,
   STEP_LABELS,
   PARTICIPANT_TEMPLATE_HEADERS,
-  TEAM_TEMPLATE_HEADERS
+  TEAM_TEMPLATE_HEADERS,
+  firebaseConfig
 } from "./constants.js";
 import {
   auth,
