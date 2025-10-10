@@ -263,6 +263,10 @@ class OperatorApp {
       addTermForm: document.getElementById("add-term-form"),
       newTermInput: document.getElementById("new-term"),
       newRubyInput: document.getElementById("new-ruby"),
+      editDialog: document.getElementById("edit-dialog"),
+      editTextarea: document.getElementById("edit-textarea"),
+      editSaveButton: document.getElementById("edit-save-button"),
+      editCancelButton: document.getElementById("edit-cancel-button"),
       actionButtons: ["btn-display", "btn-unanswer", "btn-edit"].map((id) => document.getElementById(id)),
       selectedInfo: document.getElementById("selected-info"),
       selectAllCheckbox: document.getElementById("select-all-checkbox"),
@@ -307,6 +311,11 @@ class OperatorApp {
     this.dictionaryLoaded = false;
     this.preferredDictionaryOpen = false;
     this.preferredLogsOpen = false;
+    this.activeDialog = null;
+    this.dialogLastFocused = null;
+    this.pendingEditUid = null;
+    this.pendingEditOriginal = "";
+    this.editSubmitting = false;
 
     this.handleRenderUpdate = this.handleRenderUpdate.bind(this);
     this.login = this.login.bind(this);
@@ -314,6 +323,7 @@ class OperatorApp {
     this.handleDisplay = this.handleDisplay.bind(this);
     this.handleUnanswer = this.handleUnanswer.bind(this);
     this.handleEdit = this.handleEdit.bind(this);
+    this.handleEditSubmit = this.handleEditSubmit.bind(this);
     this.clearTelop = this.clearTelop.bind(this);
     this.handleSelectAll = this.handleSelectAll.bind(this);
     this.handleBatchUnanswer = this.handleBatchUnanswer.bind(this);
@@ -329,6 +339,8 @@ class OperatorApp {
     this.toggleLogsDrawer = this.toggleLogsDrawer.bind(this);
     this.applyInitialLogsState = this.applyInitialLogsState.bind(this);
     this.updateCopyrightYear = this.updateCopyrightYear.bind(this);
+    this.closeEditDialog = this.closeEditDialog.bind(this);
+    this.handleDialogKeydown = this.handleDialogKeydown.bind(this);
   }
 
   init() {
@@ -366,6 +378,16 @@ class OperatorApp {
     this.dom.addTermForm?.addEventListener("submit", this.addTerm);
     this.dom.selectAllCheckbox?.addEventListener("change", this.handleSelectAll);
     this.dom.batchUnanswerBtn?.addEventListener("click", this.handleBatchUnanswer);
+    if (this.dom.editDialog) {
+      this.dom.editDialog.addEventListener("click", (event) => {
+        if (event.target instanceof HTMLElement && event.target.dataset.dialogDismiss) {
+          event.preventDefault();
+          this.closeEditDialog();
+        }
+      });
+    }
+    this.dom.editCancelButton?.addEventListener("click", this.closeEditDialog);
+    this.dom.editSaveButton?.addEventListener("click", this.handleEditSubmit);
     if (this.dom.scheduleFilter) {
       this.dom.scheduleFilter.value = this.state.currentSchedule;
       this.dom.scheduleFilter.addEventListener("change", this.handleScheduleChange);
@@ -383,6 +405,51 @@ class OperatorApp {
       this.dom.logAutoscroll.addEventListener("change", (event) => {
         this.state.autoScrollLogs = event.target.checked;
       });
+    }
+  }
+
+  openDialog(element, focusTarget) {
+    if (!element) return;
+    if (this.activeDialog === element) return;
+    this.activeDialog = element;
+    this.dialogLastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    element.removeAttribute("hidden");
+    document.body.classList.add("modal-open");
+    document.addEventListener("keydown", this.handleDialogKeydown);
+    const focusEl = focusTarget || element.querySelector("[data-autofocus]") || element.querySelector("input, textarea, button");
+    if (focusEl instanceof HTMLElement) {
+      requestAnimationFrame(() => focusEl.focus());
+    }
+  }
+
+  closeEditDialog() {
+    const dialog = this.dom.editDialog;
+    const wasActive = this.activeDialog === dialog;
+    if (dialog && !dialog.hasAttribute("hidden")) {
+      dialog.setAttribute("hidden", "");
+    }
+    if (wasActive) {
+      document.body.classList.remove("modal-open");
+      document.removeEventListener("keydown", this.handleDialogKeydown);
+      const toFocus = this.dialogLastFocused;
+      this.activeDialog = null;
+      this.dialogLastFocused = null;
+      if (toFocus && typeof toFocus.focus === "function") {
+        toFocus.focus();
+      }
+    }
+    this.editSubmitting = false;
+    this.pendingEditUid = null;
+    this.pendingEditOriginal = "";
+    if (this.dom.editSaveButton) {
+      this.dom.editSaveButton.disabled = false;
+    }
+  }
+
+  handleDialogKeydown(event) {
+    if (event.key === "Escape" && this.activeDialog) {
+      event.preventDefault();
+      this.closeEditDialog();
     }
   }
 
@@ -655,6 +722,7 @@ class OperatorApp {
     this.toggleLogsDrawer(false, false);
     this.cleanupRealtime();
     this.hideLoader();
+    this.closeEditDialog();
   }
 
   cleanupRealtime() {
@@ -790,7 +858,7 @@ class OperatorApp {
       const enabledOnly = (result.data || []).filter((item) => item.enabled === true);
       await set(dictionaryRef, enabledOnly);
     } catch (error) {
-      alert("辞書の取得に失敗: " + error.message);
+      showToast("辞書の取得に失敗: " + error.message, "error");
     }
   }
 
@@ -1120,16 +1188,48 @@ class OperatorApp {
     }
   }
 
-  async handleEdit() {
-    if (!this.state.selectedRowData) return;
-    const newText = prompt("質問原稿を修正してください：", this.state.selectedRowData.question);
-    if (newText === null || newText.trim() === this.state.selectedRowData.question.trim()) return;
+  handleEdit() {
+    if (!this.state.selectedRowData || !this.dom.editDialog || !this.dom.editTextarea) return;
+    this.pendingEditUid = this.state.selectedRowData.uid;
+    this.pendingEditOriginal = String(this.state.selectedRowData.question || "");
+    this.dom.editTextarea.value = this.pendingEditOriginal;
+    if (typeof this.dom.editTextarea.setSelectionRange === "function") {
+      const length = this.pendingEditOriginal.length;
+      this.dom.editTextarea.setSelectionRange(length, length);
+    }
+    this.openDialog(this.dom.editDialog, this.dom.editTextarea);
+  }
+
+  async handleEditSubmit() {
+    if (!this.dom.editTextarea || !this.pendingEditUid) return;
+    const newText = this.dom.editTextarea.value.trim();
+    const original = (this.pendingEditOriginal || "").trim();
+    if (!newText) {
+      showToast("質問内容を入力してください。", "error");
+      this.dom.editTextarea.focus();
+      return;
+    }
+    if (newText === original) {
+      this.closeEditDialog();
+      return;
+    }
+    if (this.editSubmitting) return;
+    this.editSubmitting = true;
+    if (this.dom.editSaveButton) {
+      this.dom.editSaveButton.disabled = true;
+    }
     try {
-      await update(ref(database, `questions/${this.state.selectedRowData.uid}`), { question: newText.trim() });
-      this.api.fireAndForgetApi({ action: "editQuestion", uid: this.state.selectedRowData.uid, text: newText.trim() });
-      this.api.logAction("EDIT", `UID: ${this.state.selectedRowData.uid}`);
+      await update(ref(database, `questions/${this.pendingEditUid}`), { question: newText });
+      this.api.fireAndForgetApi({ action: "editQuestion", uid: this.pendingEditUid, text: newText });
+      this.api.logAction("EDIT", `UID: ${this.pendingEditUid}`);
       showToast("質問を更新しました。", "success");
+      this.closeEditDialog();
     } catch (error) {
+      console.error(error);
+      this.editSubmitting = false;
+      if (this.dom.editSaveButton) {
+        this.dom.editSaveButton.disabled = false;
+      }
       showToast("通信エラー: " + error.message, "error");
     }
   }

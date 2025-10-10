@@ -167,6 +167,26 @@
         </div>
     </div>
 
+    <div id="edit-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="edit-dialog-title" hidden>
+      <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+      <div class="modal-panel">
+        <div class="modal-header">
+          <h2 id="edit-dialog-title">質問原稿の編集</h2>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label for="edit-textarea">質問内容</label>
+            <textarea id="edit-textarea" class="input" rows="8" data-autofocus></textarea>
+          </div>
+          <p class="modal-helper">送出前に内容を整えてください。更新するとディスプレイにも即座に反映されます。</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="edit-cancel-button">キャンセル</button>
+          <button type="button" class="btn btn-primary" id="edit-save-button">更新</button>
+        </div>
+      </div>
+    </div>
+
     <footer class="site-footer">
       <div class="credit-line">Created by <span class="credit-highlight">23schop Maruo Kyohei</span></div>
       <div class="credit-line">&copy; <span id="copyright-year">2025</span> Hirosaki Hirosaki Univ. Co-op. SCHOP</div>

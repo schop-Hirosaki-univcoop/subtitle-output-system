@@ -84,6 +84,16 @@ const dom = {
   refreshButton: document.getElementById("refresh-button"),
   addEventButton: document.getElementById("add-event-button"),
   addScheduleButton: document.getElementById("add-schedule-button"),
+  eventDialog: document.getElementById("event-dialog"),
+  eventForm: document.getElementById("event-form"),
+  eventNameInput: document.getElementById("event-name-input"),
+  eventError: document.getElementById("event-error"),
+  scheduleDialog: document.getElementById("schedule-dialog"),
+  scheduleForm: document.getElementById("schedule-form"),
+  scheduleLabelInput: document.getElementById("schedule-label-input"),
+  scheduleStartInput: document.getElementById("schedule-start-input"),
+  scheduleEndInput: document.getElementById("schedule-end-input"),
+  scheduleError: document.getElementById("schedule-error"),
   eventList: document.getElementById("event-list"),
   eventEmpty: document.getElementById("event-empty"),
   scheduleList: document.getElementById("schedule-list"),
@@ -444,6 +454,150 @@ function setUploadStatus(message, variant = "") {
   }
 }
 
+const dialogState = {
+  active: null,
+  lastFocused: null
+};
+
+function handleDialogKeydown(event) {
+  if (event.key === "Escape" && dialogState.active) {
+    event.preventDefault();
+    closeDialog(dialogState.active);
+  }
+}
+
+function openDialog(element) {
+  if (!element) return;
+  if (dialogState.active && dialogState.active !== element) {
+    closeDialog(dialogState.active);
+  }
+  dialogState.active = element;
+  dialogState.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  element.removeAttribute("hidden");
+  document.body.classList.add("modal-open");
+  document.addEventListener("keydown", handleDialogKeydown);
+  const focusTarget = element.querySelector("[data-autofocus]") || element.querySelector("input, select, textarea, button");
+  if (focusTarget instanceof HTMLElement) {
+    requestAnimationFrame(() => focusTarget.focus());
+  }
+}
+
+function closeDialog(element) {
+  if (!element) return;
+  if (!element.hasAttribute("hidden")) {
+    element.setAttribute("hidden", "");
+  }
+  if (dialogState.active === element) {
+    document.body.classList.remove("modal-open");
+    document.removeEventListener("keydown", handleDialogKeydown);
+    const toFocus = dialogState.lastFocused;
+    dialogState.active = null;
+    dialogState.lastFocused = null;
+    if (toFocus && typeof toFocus.focus === "function") {
+      toFocus.focus();
+    }
+  }
+}
+
+function bindDialogDismiss(element) {
+  if (!element) return;
+  element.addEventListener("click", event => {
+    if (event.target instanceof HTMLElement && event.target.dataset.dialogDismiss) {
+      event.preventDefault();
+      closeDialog(element);
+    }
+  });
+}
+
+function setFormError(element, message = "") {
+  if (!element) return;
+  if (message) {
+    element.textContent = message;
+    element.hidden = false;
+  } else {
+    element.textContent = "";
+    element.hidden = true;
+  }
+}
+
+function parseDateTimeLocal(value) {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
+}
+
+function formatDatePart(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatTimePart(date) {
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function describeScheduleRange(schedule) {
+  if (!schedule) return "";
+  const start = parseDateTimeLocal(schedule.startAt || "");
+  const end = parseDateTimeLocal(schedule.endAt || "");
+  const baseDate = String(schedule.date || "").trim();
+  if (start && end) {
+    const startDate = formatDatePart(start);
+    const endDate = formatDatePart(end);
+    const startText = `${startDate} ${formatTimePart(start)}`;
+    const endTimeText = formatTimePart(end);
+    const endText = startDate === endDate ? endTimeText : `${endDate} ${endTimeText}`;
+    return `${startText}〜${endText}`;
+  }
+  if (start) {
+    return `${formatDatePart(start)} ${formatTimePart(start)}〜`;
+  }
+  if (end) {
+    return `${formatDatePart(end)} ${formatTimePart(end)}まで`;
+  }
+  if (baseDate) {
+    return `日程: ${baseDate}`;
+  }
+  return "";
+}
+
+function syncScheduleEndMin() {
+  if (!dom.scheduleStartInput || !dom.scheduleEndInput) return;
+  const startValue = dom.scheduleStartInput.value || "";
+  dom.scheduleEndInput.min = startValue;
+  if (startValue && dom.scheduleEndInput.value && dom.scheduleEndInput.value < startValue) {
+    dom.scheduleEndInput.value = startValue;
+  }
+}
+
+function legacyCopyToClipboard(text) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  let success = false;
+  try {
+    success = typeof document.execCommand === "function" ? document.execCommand("copy") : false;
+  } catch (error) {
+    success = false;
+  }
+  document.body.removeChild(textarea);
+  return success;
+}
+
 function showLoader(message = "初期化しています…") {
   if (dom.loadingOverlay) dom.loadingOverlay.hidden = false;
   updateLoaderText(message);
@@ -542,9 +696,11 @@ async function copyShareLink(token) {
     }
   } catch (error) {
     console.error(error);
-    const fallback = window.prompt("以下のURLをコピーしてください", url);
-    if (fallback !== null) {
-      setUploadStatus("URLを手動でコピーしてください。", "");
+    const copied = legacyCopyToClipboard(url);
+    if (copied) {
+      setUploadStatus("専用リンクをクリップボードへコピーしました。", "success");
+    } else {
+      setUploadStatus(`クリップボードにコピーできませんでした。URL: ${url}`, "error");
     }
   }
 }
@@ -675,8 +831,11 @@ function renderSchedules() {
     nameEl.textContent = schedule.label || schedule.id;
     const metaEl = document.createElement("span");
     metaEl.className = "entity-meta";
-    const datePart = schedule.date ? `日程: ${schedule.date}` : "";
-    metaEl.textContent = `${datePart}${datePart && schedule.participantCount ? " / " : ""}参加者 ${schedule.participantCount || 0} 名`;
+    const rangeText = describeScheduleRange(schedule);
+    const metaParts = [];
+    if (rangeText) metaParts.push(rangeText);
+    metaParts.push(`参加者 ${schedule.participantCount || 0} 名`);
+    metaEl.textContent = metaParts.join(" / ");
     label.append(nameEl, metaEl);
 
     const actions = document.createElement("div");
@@ -730,7 +889,10 @@ function updateParticipantContext(options = {}) {
 
   if (dom.csvInput) dom.csvInput.disabled = false;
   if (dom.participantContext) {
-    dom.participantContext.textContent = `イベント「${selectedEvent.name}」/ 日程「${selectedSchedule.label || selectedSchedule.id}」の参加者を管理しています。専用リンクは各行の「コピー」から取得できます。`;
+    const scheduleName = selectedSchedule.label || selectedSchedule.id;
+    const scheduleRange = describeScheduleRange(selectedSchedule);
+    const rangeSuffix = scheduleRange ? `（${scheduleRange}）` : "";
+    dom.participantContext.textContent = `イベント「${selectedEvent.name}」/ 日程「${scheduleName}」${rangeSuffix}の参加者を管理しています。専用リンクは各行の「コピー」から取得できます。`;
   }
   if (!preserveStatus) {
     setUploadStatus("ファイルを選択して参加者リストを更新してください。");
@@ -757,12 +919,16 @@ async function loadEvents({ preserveSelection = true } = {}) {
       id: String(scheduleId),
       label: String(scheduleValue?.label || ""),
       date: String(scheduleValue?.date || ""),
+      startAt: String(scheduleValue?.startAt || ""),
+      endAt: String(scheduleValue?.endAt || ""),
       createdAt: scheduleValue?.createdAt || 0,
       updatedAt: scheduleValue?.updatedAt || 0,
       participantCount: Number(scheduleValue?.participantCount || 0)
     }));
 
     scheduleList.sort((a, b) => {
+      const startDiff = toMillis(a.startAt || `${a.date}T00:00`) - toMillis(b.startAt || `${b.date}T00:00`);
+      if (startDiff !== 0) return startDiff;
       const createdDiff = toMillis(a.createdAt) - toMillis(b.createdAt);
       if (createdDiff !== 0) return createdDiff;
       return a.label.localeCompare(b.label, "ja", { numeric: true });
@@ -875,10 +1041,11 @@ function selectSchedule(scheduleId) {
   loadParticipants().catch(err => console.error(err));
 }
 
-async function handleAddEvent() {
-  const name = window.prompt("追加するイベント名を入力してください。");
+async function handleAddEvent(name) {
   const trimmed = normalizeKey(name || "");
-  if (!trimmed) return;
+  if (!trimmed) {
+    throw new Error("イベント名を入力してください。");
+  }
 
   try {
     const now = Date.now();
@@ -899,7 +1066,7 @@ async function handleAddEvent() {
     requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
   } catch (error) {
     console.error(error);
-    alert(error.message || "イベントの追加に失敗しました。");
+    throw new Error(error.message || "イベントの追加に失敗しました。");
   }
 }
 
@@ -946,12 +1113,33 @@ async function handleDeleteEvent(eventId, eventName) {
   }
 }
 
-async function handleAddSchedule() {
+async function handleAddSchedule({ label, startAt, endAt }) {
   const eventId = state.selectedEventId;
-  if (!eventId) return;
-  const label = normalizeKey(window.prompt("日程の表示名を入力してください。") || "");
-  if (!label) return;
-  const date = normalizeKey(window.prompt("日程の日付（例: 2024-05-01）を入力してください。") || "");
+  if (!eventId) {
+    throw new Error("イベントを選択してください。");
+  }
+
+  const trimmedLabel = normalizeKey(label || "");
+  if (!trimmedLabel) {
+    throw new Error("日程の表示名を入力してください。");
+  }
+
+  const startValue = String(startAt || "").trim();
+  const endValue = String(endAt || "").trim();
+  if (!startValue || !endValue) {
+    throw new Error("開始と終了の日時を入力してください。");
+  }
+
+  const startDate = parseDateTimeLocal(startValue);
+  const endDate = parseDateTimeLocal(endValue);
+  if (!startDate || !endDate) {
+    throw new Error("開始・終了日時の形式が正しくありません。");
+  }
+  if (endDate <= startDate) {
+    throw new Error("終了日時は開始日時より後に設定してください。");
+  }
+
+  const date = startValue.slice(0, 10);
 
   try {
     const now = Date.now();
@@ -964,8 +1152,10 @@ async function handleAddSchedule() {
 
     await update(rootDbRef(), {
       [`questionIntake/schedules/${eventId}/${scheduleId}`]: {
-        label,
+        label: trimmedLabel,
         date,
+        startAt: startValue,
+        endAt: endValue,
         participantCount: 0,
         createdAt: now,
         updatedAt: now
@@ -979,7 +1169,7 @@ async function handleAddSchedule() {
     requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
   } catch (error) {
     console.error(error);
-    alert(error.message || "日程の追加に失敗しました。");
+    throw new Error(error.message || "日程の追加に失敗しました。");
   }
 }
 
@@ -1101,6 +1291,10 @@ async function handleSave() {
       throw new Error("選択中の日程が見つかりません。");
     }
 
+    const scheduleDateText = schedule.date || (schedule.startAt ? String(schedule.startAt).slice(0, 10) : "");
+    const scheduleStartAt = schedule.startAt || "";
+    const scheduleEndAt = schedule.endAt || "";
+
     const now = Date.now();
     const previousTokens = new Map(state.participantTokenMap || []);
     const tokensToRemove = new Set(previousTokens.values());
@@ -1146,7 +1340,9 @@ async function handleSave() {
         eventName: event.name || existingTokenRecord.eventName || "",
         scheduleId,
         scheduleLabel: schedule.label || existingTokenRecord.scheduleLabel || "",
-        scheduleDate: schedule.date || existingTokenRecord.scheduleDate || "",
+        scheduleDate: scheduleDateText || existingTokenRecord.scheduleDate || "",
+        scheduleStart: scheduleStartAt || existingTokenRecord.scheduleStart || "",
+        scheduleEnd: scheduleEndAt || existingTokenRecord.scheduleEnd || "",
         participantId,
         displayName: String(entry.name || ""),
         groupNumber: String(entry.groupNumber || ""),
@@ -1378,22 +1574,75 @@ function attachEventHandlers() {
     });
   }
 
+  bindDialogDismiss(dom.eventDialog);
+  bindDialogDismiss(dom.scheduleDialog);
+
   if (dom.addEventButton) {
     dom.addEventButton.addEventListener("click", () => {
-      handleAddEvent().catch(err => {
-        console.error(err);
-        alert(err.message || "イベントの追加に失敗しました。");
-      });
+      if (dom.eventForm) dom.eventForm.reset();
+      setFormError(dom.eventError);
+      openDialog(dom.eventDialog);
+    });
+  }
+
+  if (dom.eventForm) {
+    dom.eventForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!dom.eventNameInput) return;
+      const submitButton = dom.eventForm.querySelector("button[type='submit']");
+      if (submitButton) submitButton.disabled = true;
+      setFormError(dom.eventError);
+      try {
+        await handleAddEvent(dom.eventNameInput.value);
+        dom.eventForm.reset();
+        closeDialog(dom.eventDialog);
+      } catch (error) {
+        console.error(error);
+        setFormError(dom.eventError, error.message || "イベントの追加に失敗しました。");
+      } finally {
+        if (submitButton) submitButton.disabled = false;
+      }
     });
   }
 
   if (dom.addScheduleButton) {
     dom.addScheduleButton.addEventListener("click", () => {
-      handleAddSchedule().catch(err => {
-        console.error(err);
-        alert(err.message || "日程の追加に失敗しました。");
-      });
+      if (dom.scheduleForm) dom.scheduleForm.reset();
+      setFormError(dom.scheduleError);
+      const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
+      if (dom.scheduleLabelInput) {
+        dom.scheduleLabelInput.value = selectedEvent?.name ? `${selectedEvent.name}` : "";
+      }
+      syncScheduleEndMin();
+      openDialog(dom.scheduleDialog);
     });
+  }
+
+  if (dom.scheduleForm) {
+    dom.scheduleForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      const submitButton = dom.scheduleForm.querySelector("button[type='submit']");
+      if (submitButton) submitButton.disabled = true;
+      setFormError(dom.scheduleError);
+      try {
+        await handleAddSchedule({
+          label: dom.scheduleLabelInput?.value,
+          startAt: dom.scheduleStartInput?.value,
+          endAt: dom.scheduleEndInput?.value
+        });
+        dom.scheduleForm.reset();
+        closeDialog(dom.scheduleDialog);
+      } catch (error) {
+        console.error(error);
+        setFormError(dom.scheduleError, error.message || "日程の追加に失敗しました。");
+      } finally {
+        if (submitButton) submitButton.disabled = false;
+      }
+    });
+  }
+
+  if (dom.scheduleStartInput) {
+    dom.scheduleStartInput.addEventListener("input", () => syncScheduleEndMin());
   }
 
   if (dom.csvInput) {
