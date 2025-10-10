@@ -95,6 +95,11 @@ const dom = {
   scheduleStartTimeInput: document.getElementById("schedule-start-time-input"),
   scheduleEndTimeInput: document.getElementById("schedule-end-time-input"),
   scheduleError: document.getElementById("schedule-error"),
+  scheduleDialogCalendar: document.getElementById("schedule-dialog-calendar"),
+  scheduleDialogCalendarTitle: document.getElementById("schedule-dialog-calendar-title"),
+  scheduleDialogCalendarGrid: document.getElementById("schedule-dialog-calendar-grid"),
+  scheduleDialogCalendarPrev: document.getElementById("schedule-dialog-calendar-prev"),
+  scheduleDialogCalendarNext: document.getElementById("schedule-dialog-calendar-next"),
   eventList: document.getElementById("event-list"),
   eventEmpty: document.getElementById("event-empty"),
   scheduleList: document.getElementById("schedule-list"),
@@ -136,6 +141,11 @@ const calendarState = {
   locked: false,
   lastSignature: "",
   pickedDate: ""
+};
+
+const dialogCalendarState = {
+  referenceDate: new Date(),
+  selectedDate: ""
 };
 
 const loaderState = {
@@ -588,12 +598,104 @@ function setCalendarPickedDate(value, { updateInput = true } = {}) {
   if (updateInput && dom.scheduleDateInput) {
     dom.scheduleDateInput.value = normalized;
   }
+  setDialogCalendarPickedDate(normalized);
+}
+
+function setDialogCalendarPickedDate(value) {
+  const normalized = normalizeDateInputValue(value);
+  dialogCalendarState.selectedDate = normalized;
+  const parsed = normalized ? parseDateOnly(normalized) : null;
+  if (parsed) {
+    dialogCalendarState.referenceDate = startOfMonth(parsed);
+  } else if (!normalized) {
+    dialogCalendarState.referenceDate = startOfMonth(new Date());
+  }
+  renderScheduleDialogCalendar();
 }
 
 function refreshScheduleCalendar() {
   const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
   if (!selectedEvent) return;
   renderScheduleCalendar(selectedEvent);
+}
+
+function renderScheduleDialogCalendar() {
+  const grid = dom.scheduleDialogCalendarGrid;
+  const title = dom.scheduleDialogCalendarTitle;
+  if (!grid || !title) return;
+
+  const referenceMonth = startOfMonth(
+    dialogCalendarState.referenceDate instanceof Date ? dialogCalendarState.referenceDate : new Date()
+  );
+  dialogCalendarState.referenceDate = referenceMonth;
+
+  title.textContent = formatMonthTitle(referenceMonth);
+
+  const today = startOfDay(new Date());
+  const firstVisible = startOfDay(new Date(referenceMonth));
+  firstVisible.setDate(firstVisible.getDate() - firstVisible.getDay());
+
+  grid.innerHTML = "";
+
+  for (let index = 0; index < 42; index++) {
+    const cellDate = new Date(firstVisible);
+    cellDate.setDate(firstVisible.getDate() + index);
+
+    const key = formatDatePart(cellDate);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "dialog-calendar-date";
+    button.dataset.date = key;
+    button.setAttribute("aria-label", `${key} を選択`);
+    button.setAttribute("role", "gridcell");
+
+    if (cellDate.getMonth() !== referenceMonth.getMonth()) {
+      button.classList.add("is-outside");
+    }
+    if (isSameDay(cellDate, today)) {
+      button.classList.add("is-today");
+    }
+    if (dialogCalendarState.selectedDate && dialogCalendarState.selectedDate === key) {
+      button.classList.add("is-selected");
+    }
+
+    const label = document.createElement("span");
+    label.textContent = String(cellDate.getDate());
+    button.appendChild(label);
+
+    button.addEventListener("click", () => {
+      setCalendarPickedDate(key);
+      if (dom.scheduleDateInput) {
+        dom.scheduleDateInput.focus();
+      }
+    });
+
+    grid.appendChild(button);
+  }
+}
+
+function shiftScheduleDialogCalendarMonth(offset) {
+  if (!offset) return;
+  const base = startOfMonth(
+    dialogCalendarState.referenceDate instanceof Date ? dialogCalendarState.referenceDate : new Date()
+  );
+  base.setMonth(base.getMonth() + offset);
+  dialogCalendarState.referenceDate = base;
+  renderScheduleDialogCalendar();
+}
+
+function prepareScheduleDialogCalendar(initialValue) {
+  const normalized = normalizeDateInputValue(initialValue);
+  if (normalized) {
+    const parsed = parseDateOnly(normalized);
+    if (parsed) {
+      dialogCalendarState.referenceDate = startOfMonth(parsed);
+    }
+  } else {
+    dialogCalendarState.referenceDate = startOfMonth(new Date());
+  }
+  dialogCalendarState.selectedDate = normalized;
+  renderScheduleDialogCalendar();
 }
 
 function startOfDay(date) {
@@ -2002,6 +2104,8 @@ function attachEventHandlers() {
       if (dom.scheduleDateInput) {
         dom.scheduleDateInput.value = calendarState.pickedDate || "";
       }
+      const initialDateValue = dom.scheduleDateInput?.value || calendarState.pickedDate || "";
+      prepareScheduleDialogCalendar(initialDateValue);
       if (dom.scheduleEndTimeInput) {
         dom.scheduleEndTimeInput.min = dom.scheduleStartTimeInput?.value || "";
       }
@@ -2044,6 +2148,14 @@ function attachEventHandlers() {
       calendarState.locked = true;
       refreshScheduleCalendar();
     });
+  }
+
+  if (dom.scheduleDialogCalendarPrev) {
+    dom.scheduleDialogCalendarPrev.addEventListener("click", () => shiftScheduleDialogCalendarMonth(-1));
+  }
+
+  if (dom.scheduleDialogCalendarNext) {
+    dom.scheduleDialogCalendarNext.addEventListener("click", () => shiftScheduleDialogCalendarMonth(1));
   }
 
   if (dom.scheduleCalendarPrev) {

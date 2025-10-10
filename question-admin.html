@@ -193,6 +193,29 @@
             <input id="schedule-date-input" name="schedule-date" class="input" type="date" required>
             <p class="modal-helper">カレンダーの日付をクリックするか、直接入力して選択してください。</p>
           </div>
+          <div class="modal-field modal-calendar-field">
+            <div id="schedule-dialog-calendar" class="dialog-calendar" aria-label="カレンダーから日付を選択">
+              <div class="dialog-calendar-header">
+                <button id="schedule-dialog-calendar-prev" class="dialog-calendar-nav" type="button" aria-label="前の月へ">
+                  <span aria-hidden="true">‹</span>
+                </button>
+                <div id="schedule-dialog-calendar-title" class="dialog-calendar-title" aria-live="polite">&nbsp;</div>
+                <button id="schedule-dialog-calendar-next" class="dialog-calendar-nav" type="button" aria-label="次の月へ">
+                  <span aria-hidden="true">›</span>
+                </button>
+              </div>
+              <div class="dialog-calendar-weekdays" aria-hidden="true">
+                <span>日</span>
+                <span>月</span>
+                <span>火</span>
+                <span>水</span>
+                <span>木</span>
+                <span>金</span>
+                <span>土</span>
+              </div>
+              <div id="schedule-dialog-calendar-grid" class="dialog-calendar-grid" role="grid" aria-label="日付一覧"></div>
+            </div>
+          </div>
           <div class="modal-field">
             <label for="schedule-start-time-input">開始時刻</label>
             <input id="schedule-start-time-input" name="schedule-start-time" class="input" type="time" required>
