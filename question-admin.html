@@ -70,6 +70,32 @@
         </div>
       </div>
       <div class="module-body">
+        <section id="schedule-calendar" class="schedule-calendar" hidden aria-hidden="true" aria-label="日程カレンダー">
+          <div class="calendar-header">
+            <button id="schedule-calendar-prev" class="calendar-nav" type="button" aria-label="前の月へ">
+              <span aria-hidden="true">‹</span>
+            </button>
+            <h3 id="schedule-calendar-title" class="calendar-title" aria-live="polite">&nbsp;</h3>
+            <button id="schedule-calendar-next" class="calendar-nav" type="button" aria-label="次の月へ">
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
+          <table class="calendar-table">
+            <thead>
+              <tr>
+                <th scope="col">日</th>
+                <th scope="col">月</th>
+                <th scope="col">火</th>
+                <th scope="col">水</th>
+                <th scope="col">木</th>
+                <th scope="col">金</th>
+                <th scope="col">土</th>
+              </tr>
+            </thead>
+            <tbody id="schedule-calendar-body"></tbody>
+          </table>
+          <p class="calendar-helper">カレンダーのイベントをクリックすると、該当する日程が選択されます。</p>
+        </section>
         <ul id="schedule-list" class="entity-list" aria-live="polite"></ul>
         <p id="schedule-empty" class="entity-empty" hidden>選択中のイベントにはまだ日程が登録されていません。</p>
       </div>
@@ -126,6 +152,60 @@
       </div>
     </section>
   </main>
+
+  <div id="event-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="event-dialog-title" hidden>
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <form id="event-form">
+        <div class="modal-header">
+          <h2 id="event-dialog-title">イベントを追加</h2>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label for="event-name-input">イベント名</label>
+            <input id="event-name-input" name="event-name" class="input" type="text" autocomplete="off" required data-autofocus>
+          </div>
+          <p class="modal-helper">質問フォーム上で表示されるイベント名を入力してください。</p>
+          <p id="event-error" class="form-error" role="alert" hidden></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-dialog-dismiss="true">キャンセル</button>
+          <button type="submit" class="btn btn-primary">追加</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="schedule-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="schedule-dialog-title" hidden>
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <form id="schedule-form">
+        <div class="modal-header">
+          <h2 id="schedule-dialog-title">日程を追加</h2>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label for="schedule-label-input">日程の表示名</label>
+            <input id="schedule-label-input" name="schedule-label" class="input" type="text" autocomplete="off" required data-autofocus>
+          </div>
+          <div class="modal-field">
+            <label for="schedule-start-input">開始日時</label>
+            <input id="schedule-start-input" name="schedule-start" class="input" type="datetime-local" required>
+          </div>
+          <div class="modal-field">
+            <label for="schedule-end-input">終了日時</label>
+            <input id="schedule-end-input" name="schedule-end" class="input" type="datetime-local" required>
+          </div>
+          <p class="modal-helper">入力した開始・終了の時刻は参加者向けの案内にも使用されます。</p>
+          <p id="schedule-error" class="form-error" role="alert" hidden></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-dialog-dismiss="true">キャンセル</button>
+          <button type="submit" class="btn btn-primary">追加</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <footer class="site-footer">
     <div class="credit-line">Created by <span class="credit-highlight">23schop Maruo Kyohei</span></div>
