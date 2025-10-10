@@ -66,6 +66,8 @@
             ".validate": "!newData.exists() || (newData.hasChildren(['label']) && newData.child('label').isString())",
             "label": { ".validate": "newData.isString()" },
             "date": { ".validate": "newData.isString() || !newData.exists()" },
+            "startAt": { ".validate": "newData.isString() || !newData.exists()" },
+            "endAt": { ".validate": "newData.isString() || !newData.exists()" },
             "participantCount": { ".validate": "newData.isNumber() || !newData.exists()" },
             "createdAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
             "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },

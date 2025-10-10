@@ -83,7 +83,9 @@ function doPost(e) {
         return jsonOk(deleteQuestionEvent_(req.eventId));
       case 'createQuestionSchedule':
         assertOperator_(principal);
-        return jsonOk({ schedule: createQuestionSchedule_(req.eventId, req.label, req.date) });
+        return jsonOk({
+          schedule: createQuestionSchedule_(req.eventId, req.label, req.date, req.startAt, req.endAt)
+        });
       case 'deleteQuestionSchedule':
         assertOperator_(principal);
         return jsonOk(deleteQuestionSchedule_(req.eventId, req.scheduleId));
@@ -395,8 +397,13 @@ function ensureQuestionEventSheet_() {
 }
 
 function ensureQuestionScheduleSheet_() {
-  const sheet = ensureSheetWithHeaders_(QUESTION_SCHEDULE_SHEET, ['イベントID', '日程ID', '表示名', '日付', '作成日時']);
+  const sheet = ensureSheetWithHeaders_(
+    QUESTION_SCHEDULE_SHEET,
+    ['イベントID', '日程ID', '表示名', '日付', '開始日時', '終了日時', '作成日時']
+  );
   sheet.getRange('E2:E').setNumberFormat('yyyy/MM/dd HH:mm:ss');
+  sheet.getRange('F2:F').setNumberFormat('yyyy/MM/dd HH:mm:ss');
+  sheet.getRange('G2:G').setNumberFormat('yyyy/MM/dd HH:mm:ss');
   return sheet;
 }
 
@@ -527,9 +534,13 @@ function mirrorQuestionIntake_() {
     }
     const existing = (existingSchedules[schedule.eventId] || {})[schedule.id] || {};
     const createdAt = existing.createdAt || parseDateToMillis_(schedule.createdAt, now);
+    const startAt = schedule.startAt || existing.startAt || '';
+    const endAt = schedule.endAt || existing.endAt || '';
     scheduleTree[schedule.eventId][schedule.id] = {
       label: schedule.label || '',
       date: schedule.date || '',
+      startAt,
+      endAt,
       participantCount: 0,
       createdAt,
       updatedAt: Math.max(existing.updatedAt || 0, createdAt)
@@ -677,6 +688,8 @@ function syncQuestionIntakeToSheet_() {
         scheduleId,
         label: String(schedule.label || ''),
         date: String(schedule.date || ''),
+        startAt: String(schedule.startAt || ''),
+        endAt: String(schedule.endAt || ''),
         createdAt
       });
     });
@@ -692,14 +705,21 @@ function syncQuestionIntakeToSheet_() {
     return a.scheduleId.localeCompare(b.scheduleId);
   });
 
+  const toSheetDateTime = value => {
+    const ms = parseDateToMillis_(value, 0);
+    return ms ? new Date(ms) : '';
+  };
+
   const scheduleSheetRows = scheduleRows.map(row => [
     row.eventId,
     row.scheduleId,
     row.label,
     row.date,
+    toSheetDateTime(row.startAt),
+    toSheetDateTime(row.endAt),
     toSheetDate(row.createdAt)
   ]);
-  replaceSheetRows_(ensureQuestionScheduleSheet_(), scheduleSheetRows, 5);
+  replaceSheetRows_(ensureQuestionScheduleSheet_(), scheduleSheetRows, 7);
 
   const participantRows = [];
   Object.keys(participantsBranch).forEach(eventId => {
@@ -777,7 +797,7 @@ function readSchedules_() {
   if (lastRow < 2) {
     return [];
   }
-  const values = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  const values = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
   return values
     .map(row => {
       const eventId = String(row[0] || '').trim();
@@ -788,7 +808,9 @@ function readSchedules_() {
         id: scheduleId,
         label: String(row[2] || '').trim(),
         date: String(row[3] || '').trim(),
-        createdAt: row[4] instanceof Date ? toIsoJst_(row[4]) : ''
+        startAt: row[4] instanceof Date ? toIsoJst_(row[4]) : String(row[4] || '').trim(),
+        endAt: row[5] instanceof Date ? toIsoJst_(row[5]) : String(row[5] || '').trim(),
+        createdAt: row[6] instanceof Date ? toIsoJst_(row[6]) : ''
       };
     })
     .filter(Boolean);
@@ -843,6 +865,8 @@ function listQuestionEvents_() {
       id: schedule.id,
       label: schedule.label,
       date: schedule.date,
+      startAt: schedule.startAt,
+      endAt: schedule.endAt,
       createdAt: schedule.createdAt,
       participantCount: participantCounts.get(`${event.id}::${schedule.id}`) || 0
     }));
@@ -910,7 +934,7 @@ function assertEventExists_(eventId) {
   return found;
 }
 
-function createQuestionSchedule_(eventId, label, date) {
+function createQuestionSchedule_(eventId, label, date, startAt, endAt) {
   const trimmedEventId = String(eventId || '').trim();
   if (!trimmedEventId) {
     throw new Error('eventId is required');
@@ -919,6 +943,8 @@ function createQuestionSchedule_(eventId, label, date) {
 
   const trimmedLabel = String(label || '').trim();
   const trimmedDate = String(date || '').trim();
+  const trimmedStartAt = String(startAt || '').trim();
+  const trimmedEndAt = String(endAt || '').trim();
   if (!trimmedLabel) {
     throw new Error('日程の表示名を入力してください。');
   }
@@ -926,9 +952,30 @@ function createQuestionSchedule_(eventId, label, date) {
   const sheet = ensureQuestionScheduleSheet_();
   const id = generateShortId_('sch_');
   const now = new Date();
-  sheet.appendRow([trimmedEventId, id, trimmedLabel, trimmedDate, now]);
+  const toSheetDate = value => {
+    const ms = parseDateToMillis_(value, 0);
+    return ms ? new Date(ms) : '';
+  };
+
+  sheet.appendRow([
+    trimmedEventId,
+    id,
+    trimmedLabel,
+    trimmedDate,
+    toSheetDate(trimmedStartAt),
+    toSheetDate(trimmedEndAt),
+    now
+  ]);
   mirrorQuestionIntake_();
-  return { id, label: trimmedLabel, date: trimmedDate, createdAt: toIsoJst_(now), participantCount: 0 };
+  return {
+    id,
+    label: trimmedLabel,
+    date: trimmedDate,
+    startAt: trimmedStartAt,
+    endAt: trimmedEndAt,
+    createdAt: toIsoJst_(now),
+    participantCount: 0
+  };
 }
 
 function deleteQuestionSchedule_(eventId, scheduleId) {
