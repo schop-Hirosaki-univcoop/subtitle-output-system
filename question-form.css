@@ -44,6 +44,21 @@ body.question-admin-page{
   line-height:1.6;
 }
 
+.context-text--welcome{
+  font-size:1.02rem;
+  font-weight:600;
+  color:var(--text);
+}
+
+.context-text--intro{
+  color:var(--muted);
+}
+
+.context-text--schedule{
+  color:var(--accent);
+  font-weight:500;
+}
+
 .context-guard{
   margin:0 0 clamp(1.2rem, 2vw, 1.5rem);
   padding:1rem 1.2rem;
@@ -373,6 +388,33 @@ body.question-admin-page{
 }
 
 .copy-link-btn svg{
+  width:.85rem;
+  height:.85rem;
+  fill:currentColor;
+}
+
+.delete-link-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:.35rem;
+  padding:.35rem .65rem;
+  border-radius:.6rem;
+  border:1px solid rgba(239,68,68,.55);
+  background:rgba(127,29,29,.35);
+  color:#fca5a5;
+  font-size:.75rem;
+  cursor:pointer;
+  transition:color .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.delete-link-btn:hover,
+.delete-link-btn:focus-visible{
+  color:#fecaca;
+  border-color:rgba(248,113,113,.65);
+  background:rgba(127,29,29,.55);
+}
+
+.delete-link-btn svg{
   width:.85rem;
   height:.85rem;
   fill:currentColor;

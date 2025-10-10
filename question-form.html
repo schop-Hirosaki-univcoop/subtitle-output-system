@@ -22,8 +22,9 @@
       </div>
       <div class="module-body">
         <div id="context-banner" class="context-banner" hidden>
-          <p id="welcome-line" class="context-text"></p>
-          <p id="schedule-line" class="context-text"></p>
+          <p id="welcome-line" class="context-text context-text--welcome"></p>
+          <p id="intro-line" class="context-text context-text--intro" hidden></p>
+          <p id="schedule-line" class="context-text context-text--schedule"></p>
         </div>
         <div id="context-guard" class="context-guard" role="alert" aria-live="assertive" hidden></div>
 
@@ -42,9 +43,9 @@
               <label for="radio-name">ラジオネーム</label>
               <span class="field-tag field-tag--required">必須</span>
             </div>
-            <input id="radio-name" name="radio-name" type="text" class="input" inputmode="text" autocomplete="name" maxlength="40" required>
+            <input id="radio-name" name="radio-name" type="text" class="input" inputmode="text" autocomplete="off" maxlength="20" required>
             <div class="field-footer">
-              <p class="field-hint">40文字まで。特殊文字は使用できない場合があります。</p>
+              <p class="field-hint">20文字まで。本名ではなく番組用のお名前をご入力ください。</p>
             </div>
           </div>
 
@@ -53,10 +54,10 @@
               <label for="question-text">質問・お悩み</label>
               <span class="field-tag field-tag--required">必須</span>
             </div>
-            <textarea id="question-text" name="question-text" class="input input--textarea" rows="6" maxlength="400" placeholder="質問や相談内容を入力してください" required></textarea>
+            <textarea id="question-text" name="question-text" class="input input--textarea" rows="6" maxlength="60" placeholder="質問や相談内容を入力してください" required></textarea>
             <div class="field-footer">
-              <p class="field-hint">句読点や改行を含めて400文字以内で入力してください。</p>
-              <p id="question-counter" class="field-hint field-hint--status" role="status" aria-live="polite">0 / 400文字</p>
+              <p class="field-hint">句読点や改行を含めて60文字以内で入力してください。</p>
+              <p id="question-counter" class="field-hint field-hint--status" role="status" aria-live="polite">0 / 60文字</p>
             </div>
           </div>
 

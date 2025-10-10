@@ -3,7 +3,8 @@ import {
   FORM_PAGE_PATH,
   STEP_LABELS,
   PARTICIPANT_TEMPLATE_HEADERS,
-  TEAM_TEMPLATE_HEADERS
+  TEAM_TEMPLATE_HEADERS,
+  firebaseConfig
 } from "./constants.js";
 import {
   auth,
@@ -402,6 +403,15 @@ function renderParticipants() {
     }
 
     linkActions.appendChild(editButton);
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "delete-link-btn";
+    deleteButton.dataset.participantId = entry.participantId;
+    deleteButton.dataset.rowIndex = String(index);
+    deleteButton.title = "参加者を削除";
+    deleteButton.innerHTML =
+      "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z\"/></svg><span>削除</span>";
+    linkActions.appendChild(deleteButton);
     linkTd.appendChild(linkActions);
 
     if (shareUrl) {
@@ -1394,104 +1404,6 @@ function downloadTeamTemplate() {
   setUploadStatus(`${filename} をダウンロードしました。（${rows.length}名）`, "success");
 }
 
-function handleTeamCsvChange(event) {
-  const files = event.target.files;
-  if (!files || !files.length) {
-    return;
-  }
-
-  const file = files[0];
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const eventId = state.selectedEventId;
-      if (!eventId) {
-        throw new Error("イベントを選択してください。");
-      }
-      const text = String(e.target.result || "");
-      const rows = parseCsv(text);
-      const assignments = parseTeamAssignmentRows(rows);
-      const scheduleId = state.selectedScheduleId;
-      const eventAssignmentMap = ensureTeamAssignmentMap(eventId);
-      const currentMapMatches = applyAssignmentsToEntries(state.participants, assignments);
-
-      assignments.forEach((teamNumber, participantId) => {
-        if (eventAssignmentMap) {
-          eventAssignmentMap.set(participantId, teamNumber);
-        }
-      });
-
-      const aggregateMap = eventAssignmentMap || assignments;
-      const applyResult = applyAssignmentsToEntries(state.participants, aggregateMap);
-      state.participants = sortParticipants(applyResult.entries);
-      syncCurrentScheduleCache();
-      const cacheMatched = applyAssignmentsToEventCache(eventId, aggregateMap);
-      updateDuplicateMatches();
-      renderParticipants();
-      syncSaveButtonState();
-
-      if (dom.teamFileLabel) {
-        dom.teamFileLabel.textContent = file.name;
-      }
-
-      const matchedIds = currentMapMatches.matchedIds || new Set();
-      const updatedIds = currentMapMatches.updatedIds || new Set();
-      const allMatched = new Set([...(matchedIds || []), ...(cacheMatched || [])]);
-      const unmatchedCount = Math.max(assignments.size - allMatched.size, 0);
-      const summaryParts = [];
-      summaryParts.push(`班番号を照合: ${allMatched.size}名`);
-      summaryParts.push(`変更: ${updatedIds.size}件`);
-      if (unmatchedCount > 0) {
-        summaryParts.push(`未一致: ${unmatchedCount}名`);
-      }
-      setUploadStatus(summaryParts.join(" / "), "success");
-    } catch (error) {
-      console.error(error);
-      setUploadStatus(error.message || "班番号CSVの読み込みに失敗しました。", "error");
-    } finally {
-      if (dom.teamCsvInput) {
-        dom.teamCsvInput.value = "";
-      }
-    }
-  };
-  reader.onerror = () => {
-    setUploadStatus("班番号CSVの読み込みに失敗しました。", "error");
-    if (dom.teamCsvInput) {
-      dom.teamCsvInput.value = "";
-    }
-  };
-  reader.readAsText(file, "utf-8");
-}
-
-function downloadParticipantTemplate() {
-  const filename = `participants_template_${formatDateForFilename()}.csv`;
-  downloadCsvFile(filename, [PARTICIPANT_TEMPLATE_HEADERS]);
-  setUploadStatus("参加者CSVテンプレートをダウンロードしました。", "success");
-}
-
-function downloadTeamTemplate() {
-  if (!state.selectedEventId || !state.selectedScheduleId) {
-    setUploadStatus("班番号テンプレートを作成するにはイベントと日程を選択してください。", "error");
-    return;
-  }
-
-  const rows = sortParticipants(state.participants)
-    .filter(entry => entry.participantId)
-    .map(entry => [
-      String(entry.participantId || ""),
-      String(entry.teamNumber || entry.groupNumber || "")
-    ]);
-
-  if (!rows.length) {
-    setUploadStatus("テンプレートに出力できる参加者が見つかりません。参加者リストを読み込んでからお試しください。", "error");
-    return;
-  }
-
-  const filename = `team_assignments_${formatDateForFilename()}.csv`;
-  downloadCsvFile(filename, [TEAM_TEMPLATE_HEADERS, ...rows]);
-  setUploadStatus(`班番号テンプレートをダウンロードしました。（${rows.length}名）`, "success");
-}
-
 async function handleSave() {
   if (state.saving) return;
   const eventId = state.selectedEventId;
@@ -1700,6 +1612,15 @@ function resetState() {
 }
 
 function handleMappingTableClick(event) {
+  const deleteButton = event.target.closest(".delete-link-btn");
+  if (deleteButton) {
+    event.preventDefault();
+    const participantId = deleteButton.dataset.participantId || "";
+    const rowIndex = Number.parseInt(deleteButton.dataset.rowIndex || "", 10);
+    handleDeleteParticipant(participantId, Number.isFinite(rowIndex) ? rowIndex : null);
+    return;
+  }
+
   const copyButton = event.target.closest(".copy-link-btn");
   if (copyButton) {
     event.preventDefault();
@@ -1714,6 +1635,46 @@ function handleMappingTableClick(event) {
     const participantId = editButton.dataset.participantId;
     openParticipantEditor(participantId);
   }
+}
+
+function handleDeleteParticipant(participantId, rowIndex) {
+  let entry = null;
+  if (participantId) {
+    entry = state.participants.find(item => String(item.participantId) === String(participantId));
+  }
+  if (!entry && Number.isInteger(rowIndex) && rowIndex >= 0) {
+    const sorted = sortParticipants(state.participants);
+    const candidate = sorted[rowIndex];
+    if (candidate) {
+      entry = state.participants.find(item => String(item.participantId) === String(candidate.participantId));
+    }
+  }
+
+  if (!entry) {
+    setUploadStatus("削除対象の参加者が見つかりません。", "error");
+    return;
+  }
+
+  const nameLabel = entry.name ? `「${entry.name}」` : "";
+  const idLabel = entry.participantId ? `ID: ${entry.participantId}` : "ID未設定";
+  const message = nameLabel
+    ? `参加者${nameLabel}（${idLabel}）を一覧から削除しますか？\n保存するとデータベースからも削除されます。`
+    : `参加者（${idLabel}）を一覧から削除しますか？\n保存するとデータベースからも削除されます。`;
+
+  if (!window.confirm(message)) {
+    return;
+  }
+
+  const removed = removeParticipantFromState(entry.participantId, entry);
+  if (!removed) {
+    setUploadStatus("参加者の削除に失敗しました。", "error");
+    return;
+  }
+
+  const identifier = removed.name
+    ? `参加者「${removed.name}」`
+    : `参加者ID: ${removed.participantId}`;
+  setUploadStatus(`${identifier}を削除しました。保存ボタンから反映してください。`, "success");
 }
 
 function openParticipantEditor(participantId) {
@@ -1795,6 +1756,48 @@ function saveParticipantEdits() {
   syncSaveButtonState();
 
   state.editingParticipantId = null;
+}
+
+function removeParticipantFromState(participantId, fallbackEntry) {
+  const targetId = String(participantId || "").trim();
+  let removed = null;
+  let nextList = [];
+
+  if (targetId) {
+    removed = state.participants.find(entry => String(entry.participantId) === targetId) || null;
+    if (!removed) {
+      return null;
+    }
+    nextList = state.participants.filter(entry => String(entry.participantId) !== targetId);
+  } else if (fallbackEntry) {
+    const index = state.participants.findIndex(entry => entry === fallbackEntry);
+    if (index === -1) {
+      return null;
+    }
+    removed = state.participants[index];
+    nextList = state.participants.filter((_, idx) => idx !== index);
+  } else {
+    return null;
+  }
+
+  state.participants = sortParticipants(nextList);
+
+  syncCurrentScheduleCache();
+  updateDuplicateMatches();
+
+  const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
+  if (selectedEvent?.schedules) {
+    const schedule = selectedEvent.schedules.find(s => s.id === state.selectedScheduleId);
+    if (schedule) {
+      schedule.participantCount = state.participants.length;
+    }
+  }
+
+  renderParticipants();
+  renderSchedules();
+  renderEvents();
+  updateParticipantContext({ preserveStatus: true });
+  return removed;
 }
 
 async function verifyEnrollment(user) {

@@ -421,6 +421,7 @@ export class OperatorApp {
         this.state.displaySessionLastActive = active;
         this.updateActionAvailability();
         this.updateBatchButtonVisibility();
+        this.renderQuestions();
       },
       (error) => {
         console.error("Failed to monitor display session:", error);
