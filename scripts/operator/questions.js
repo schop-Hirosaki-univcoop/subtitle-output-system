@@ -298,14 +298,21 @@ export async function handleDisplay(app) {
   }
 }
 
-export function handleUnanswer(app) {
+export async function handleUnanswer(app) {
   if (!app.state.displaySessionActive) {
     app.toast("送出端末が接続されていません。", "error");
     return;
   }
   if (!app.state.selectedRowData || !app.state.selectedRowData.isAnswered) return;
   const displayLabel = formatOperatorName(app.state.selectedRowData.name) || app.state.selectedRowData.name;
-  if (!confirm(`「${displayLabel}」の質問を「未回答」に戻しますか？`)) return;
+  const confirmed = await app.confirmAction({
+    title: "質問を未回答へ戻す",
+    description: `「${displayLabel}」の質問を「未回答」に戻します。よろしいですか？`,
+    confirmLabel: "未回答に戻す",
+    cancelLabel: "キャンセル",
+    tone: "danger"
+  });
+  if (!confirmed) return;
   update(ref(database, `questions/${app.state.selectedRowData.uid}`), { answered: false });
   app.api.fireAndForgetApi({ action: "updateStatus", uid: app.state.selectedRowData.uid, status: false });
 }
@@ -329,7 +336,14 @@ export async function handleBatchUnanswer(app) {
   }
   const checkedBoxes = Array.from(app.dom.cardsContainer?.querySelectorAll(".row-checkbox:checked") || []);
   if (checkedBoxes.length === 0) return;
-  if (!confirm(`${checkedBoxes.length}件の質問を「未回答」に戻しますか？`)) return;
+  const confirmed = await app.confirmAction({
+    title: "一括で未回答に戻す",
+    description: `${checkedBoxes.length}件の質問を「未回答」に戻します。よろしいですか？`,
+    confirmLabel: "未回答に戻す",
+    cancelLabel: "キャンセル",
+    tone: "danger"
+  });
+  if (!confirmed) return;
   const uidsToUpdate = checkedBoxes.map((checkbox) => checkbox.dataset.uid);
   const updates = {};
   for (const uid of uidsToUpdate) {

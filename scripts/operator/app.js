@@ -47,6 +47,7 @@ export class OperatorApp {
     this.pendingEditUid = null;
     this.pendingEditOriginal = "";
     this.editSubmitting = false;
+    this.confirmState = { resolver: null, keydownHandler: null, lastFocused: null, initialized: false };
 
     this.toast = showToast;
 
@@ -158,6 +159,105 @@ export class OperatorApp {
         this.state.autoScrollLogs = event.target.checked;
       });
     }
+    this.setupConfirmDialog();
+  }
+
+  setupConfirmDialog() {
+    if (!this.dom.confirmDialog || this.confirmState.initialized) {
+      return;
+    }
+    this.confirmState.initialized = true;
+    this.dom.confirmDialog.addEventListener("click", (event) => {
+      if (event.target instanceof HTMLElement && event.target.dataset.dialogDismiss) {
+        event.preventDefault();
+        this.finishConfirm(false);
+      }
+    });
+    this.dom.confirmCancelButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      this.finishConfirm(false);
+    });
+    this.dom.confirmAcceptButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      this.finishConfirm(true);
+    });
+  }
+
+  openConfirmDialog() {
+    const dialog = this.dom.confirmDialog;
+    if (!dialog) return;
+    dialog.removeAttribute("hidden");
+    document.body.classList.add("modal-open");
+    this.confirmState.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    this.confirmState.keydownHandler = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        this.finishConfirm(false);
+      }
+    };
+    document.addEventListener("keydown", this.confirmState.keydownHandler, true);
+    const focusTarget = this.dom.confirmAcceptButton || dialog.querySelector("button");
+    if (focusTarget instanceof HTMLElement) {
+      requestAnimationFrame(() => focusTarget.focus());
+    }
+  }
+
+  finishConfirm(result) {
+    const dialog = this.dom.confirmDialog;
+    if (!dialog) return;
+    if (!dialog.hasAttribute("hidden")) {
+      dialog.setAttribute("hidden", "");
+    }
+    document.body.classList.remove("modal-open");
+    if (this.confirmState.keydownHandler) {
+      document.removeEventListener("keydown", this.confirmState.keydownHandler, true);
+      this.confirmState.keydownHandler = null;
+    }
+    const resolver = this.confirmState.resolver;
+    this.confirmState.resolver = null;
+    const toFocus = this.confirmState.lastFocused;
+    this.confirmState.lastFocused = null;
+    if (toFocus && typeof toFocus.focus === "function") {
+      requestAnimationFrame(() => toFocus.focus());
+    }
+    if (typeof resolver === "function") {
+      resolver(result);
+    }
+  }
+
+  async confirmAction({
+    title = "確認",
+    description = "",
+    confirmLabel = "実行する",
+    cancelLabel = "キャンセル",
+    tone = "danger"
+  } = {}) {
+    if (!this.dom.confirmDialog) {
+      return false;
+    }
+    this.setupConfirmDialog();
+    if (this.confirmState.resolver) {
+      this.finishConfirm(false);
+    }
+    if (this.dom.confirmTitle) {
+      this.dom.confirmTitle.textContent = title || "確認";
+    }
+    if (this.dom.confirmMessage) {
+      this.dom.confirmMessage.textContent = description || "";
+    }
+    if (this.dom.confirmAcceptButton) {
+      this.dom.confirmAcceptButton.textContent = confirmLabel || "実行する";
+      this.dom.confirmAcceptButton.classList.remove("btn-danger", "btn-primary");
+      this.dom.confirmAcceptButton.classList.add(tone === "danger" ? "btn-danger" : "btn-primary");
+    }
+    if (this.dom.confirmCancelButton) {
+      this.dom.confirmCancelButton.textContent = cancelLabel || "キャンセル";
+    }
+    this.openConfirmDialog();
+    return await new Promise((resolve) => {
+      this.confirmState.resolver = resolve;
+    });
   }
 
   attachRenderMonitor() {

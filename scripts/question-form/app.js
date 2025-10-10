@@ -95,11 +95,14 @@ function formatScheduleSummary({ label = "", date = "", start = "", end = "" } =
   }
 
   const needsLabelSuffix = trimmedLabel && trimmedLabel !== dateText;
-  const rangeText = timeText ? `${dateText}、${timeText}` : dateText;
-  if (needsLabelSuffix) {
-    return `${rangeText}（${trimmedLabel}）`;
+  const rangeText = timeText ? `${dateText} ${timeText}` : dateText;
+  if (rangeText) {
+    return rangeText;
   }
-  return rangeText;
+  if (needsLabelSuffix) {
+    return trimmedLabel;
+  }
+  return fallback || "未設定";
 }
 
 export class QuestionFormApp {

@@ -28,6 +28,7 @@
     <h2 id="login-title">質問フォーム管理</h2>
     <p class="auth-lead">イベント・日程・参加者リストを管理するには、Googleアカウントでサインインしてください。</p>
     <button id="login-button" class="btn btn-primary" type="button">Googleアカウントでログイン</button>
+    <p id="login-error" class="form-error" role="alert" hidden></p>
   </div>
 
   <main id="admin-main" class="admin-main" hidden>
@@ -70,7 +71,7 @@
       <div class="module-header">
         <div class="module-heading">
           <h2 id="participant-title">参加者リストの管理</h2>
-          <p class="module-description" id="participant-description">日程を選択し、参加者情報（参加者IDを空欄にすると自動採番されます）をアップロードしてください。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。同じイベント内で名前と学部学科が一致する参加者は、日程が異なる場合でも重複候補として件数付きで表示されます。</p>
+          <p class="module-description" id="participant-description">日程を選択し、参加者情報（参加者IDを空欄にすると自動採番されます）をアップロードしてください。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。</p>
         </div>
       </div>
       <div class="module-body">
@@ -86,6 +87,7 @@
             <span id="team-file-label">班番号CSVを選択</span>
             <input id="team-csv-input" type="file" accept=".csv,text/csv">
           </label>
+          <button id="clear-participants-button" class="btn btn-danger btn-sm" type="button" disabled>参加者リストを全削除</button>
           <button id="save-button" class="btn btn-primary" type="button" disabled>参加者リストを保存</button>
           <span id="upload-status" class="status-pill">日程を選択してください。</span>
         </div>
@@ -99,6 +101,8 @@
                 <th scope="col">フリガナ</th>
                 <th scope="col">性別</th>
                 <th scope="col">学部学科</th>
+                <th scope="col">携帯電話</th>
+                <th scope="col">メールアドレス</th>
                 <th scope="col">班番号</th>
                 <th scope="col">専用リンク</th>
               </tr>
@@ -121,7 +125,7 @@
           <li>ヘッダー行（例: <code>参加者ID,名前,フリガナ,性別,学部学科,携帯電話,メールアドレス</code>）が必須です。</li>
           <li>同じ参加者IDが複数行ある場合は最初の行のみ採用されます。</li>
           <li>参加者IDが空欄の場合は氏名などの情報から既存レコードを照合し、自動で番号を割り当てます。</li>
-          <li>同じイベント内で名前と学部学科が一致する参加者は、日程が異なっても重複候補（件数付き）として一覧に表示されます。</li>
+          <li>同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補（件数付き）として一覧に表示されます。</li>
           <li>各列は空欄でもアップロードできますが、氏名は必須です。</li>
           <li>保存後はフォームに即座に反映されます。</li>
           <li>班番号は別途、<code>参加者ID,班番号</code>形式のCSV（ヘッダー必須）をアップロードすると一括で紐付けられます（キャンセルの場合は班番号に「キャンセル」と入力してください）。テンプレートには現在の参加者IDがあらかじめ記載されます。ファイル名は「イベントID_日程ID_teams.csv」としてください。</li>
@@ -259,6 +263,22 @@
           <button type="submit" class="btn btn-primary">追加</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div id="confirm-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" hidden>
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="confirm-dialog-title">確認</h2>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-dialog-message"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" id="confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
+        <button type="button" class="btn btn-danger" id="confirm-accept-button">実行する</button>
+      </div>
     </div>
   </div>
 

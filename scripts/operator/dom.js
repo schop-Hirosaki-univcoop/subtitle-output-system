@@ -35,6 +35,11 @@ export function queryDom() {
     loadingText: document.getElementById("loading-text"),
     loaderSteps: document.getElementById("loader-steps"),
     copyrightYear: document.getElementById("copyright-year"),
+    confirmDialog: document.getElementById("confirm-dialog"),
+    confirmTitle: document.getElementById("confirm-dialog-title"),
+    confirmMessage: document.getElementById("confirm-dialog-message"),
+    confirmAcceptButton: document.getElementById("confirm-accept-button"),
+    confirmCancelButton: document.getElementById("confirm-cancel-button"),
     render: {
       indicator: document.querySelector(".render-indicator"),
       lamp: document.getElementById("render-lamp"),

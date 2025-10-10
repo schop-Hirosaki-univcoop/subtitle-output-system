@@ -1,6 +1,20 @@
 import { state } from "./state.js";
 import { normalizeKey } from "./utils.js";
 
+function sanitizePrefixComponent(value) {
+  return normalizeKey(value)
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+}
+
+function createParticipantIdPrefix(eventId, scheduleId) {
+  const eventPart = sanitizePrefixComponent(eventId);
+  const schedulePart = sanitizePrefixComponent(scheduleId);
+  const prefix = [eventPart, schedulePart].filter(Boolean).join("-");
+  return prefix || "participant";
+}
+
 function participantIdentityKey(entry) {
   if (!entry) return "";
   const phonetic = entry.phonetic ?? entry.furigana ?? "";
@@ -51,6 +65,7 @@ function normalizeEventParticipantCache(eventBranch) {
       return;
     }
     const normalized = Object.values(scheduleBranch).map(entry => ({
+      key: String(entry?.participantId || entry?.id || ""),
       participantId: String(entry?.participantId || entry?.id || ""),
       name: String(entry?.name || ""),
       department: String(entry?.department || entry?.groupNumber || ""),
@@ -68,7 +83,7 @@ function describeDuplicateMatch(match, eventId, currentScheduleId) {
   const name = String(match.name || "").trim();
   const idLabel = match.participantId ? `ID:${match.participantId}` : "ID未登録";
   const scheduleId = String(match.scheduleId || "").trim();
-  if (match.isCurrent && scheduleId === String(currentScheduleId || "")) {
+  if (scheduleId === String(currentScheduleId || "")) {
     const label = name || "同日程";
     return `${label}（同日程・${idLabel}）`;
   }
@@ -110,16 +125,20 @@ function updateDuplicateMatches() {
   };
 
   Object.entries(scheduleCache).forEach(([cacheScheduleId, entries]) => {
-    if (String(cacheScheduleId) === String(scheduleId)) return;
     const list = Array.isArray(entries) ? entries : [];
     list.forEach(entry => {
       const record = {
+        key: String(entry?.key || entry?.participantId || ""),
         participantId: String(entry?.participantId || ""),
         name: String(entry?.name || ""),
         department: String(entry?.department || ""),
         scheduleId: String(entry?.scheduleId || cacheScheduleId),
-        isCurrent: false
+        isCurrent: Boolean(entry?.isCurrent)
       };
+      const isCurrentSchedule = record.scheduleId === String(scheduleId);
+      if (isCurrentSchedule && record.isCurrent) {
+        return;
+      }
       const key = duplicateKeyFromValues(record.name, record.department);
       addRecord(key, record);
     });
@@ -186,6 +205,7 @@ function syncCurrentScheduleCache() {
   }
   const cache = state.eventParticipantCache.get(eventId) || {};
   cache[scheduleId] = state.participants.map(entry => ({
+    key: String(entry?.participantId || ""),
     participantId: String(entry?.participantId || ""),
     name: String(entry?.name || ""),
     department: String(entry?.department || entry?.groupNumber || ""),
@@ -450,7 +470,7 @@ function normalizeParticipantRecord(entry) {
   };
 }
 
-function assignParticipantIds(entries, existingParticipants = []) {
+function assignParticipantIds(entries, existingParticipants = [], options = {}) {
   const resolved = entries.map(entry => ({ ...entry }));
 
   const usedIds = new Set();
@@ -486,24 +506,31 @@ function assignParticipantIds(entries, existingParticipants = []) {
     }
   });
 
-  const numericInfo = Array.from(usedIds)
-    .map(id => {
-      const match = id.match(/^\d+$/);
-      if (!match) return null;
-      return { value: Number(id), length: id.length };
-    })
-    .filter(Boolean);
+  const { eventId = "", scheduleId = "" } = options || {};
+  const prefix = createParticipantIdPrefix(eventId, scheduleId);
+  const prefixPattern = new RegExp(`^${prefix.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}_(\\d+)$`);
+  let prefixMax = 0;
+  let prefixPad = 3;
 
-  const maxNumber = numericInfo.reduce((acc, info) => Math.max(acc, info.value), 0);
-  const padLength = numericInfo.reduce((acc, info) => Math.max(acc, info.length), 0) || 1;
-  let nextNumber = maxNumber ? maxNumber + 1 : 1;
+  usedIds.forEach(id => {
+    const match = id.match(prefixPattern);
+    if (!match) return;
+    const value = Number(match[1]);
+    if (Number.isFinite(value)) {
+      prefixMax = Math.max(prefixMax, value);
+      prefixPad = Math.max(prefixPad, match[1].length);
+    }
+  });
+
+  let nextNumber = prefixMax ? prefixMax + 1 : 1;
 
   resolved.forEach(entry => {
     if (entry.participantId) return;
     let candidateNumber = nextNumber;
     let candidateId = "";
     while (!candidateId || usedIds.has(candidateId)) {
-      candidateId = String(candidateNumber).padStart(padLength, "0");
+      const suffix = String(candidateNumber).padStart(prefixPad, "0");
+      candidateId = `${prefix}_${suffix}`;
       candidateNumber += 1;
     }
     nextNumber = candidateNumber;

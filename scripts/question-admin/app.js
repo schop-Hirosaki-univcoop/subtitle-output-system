@@ -222,6 +222,109 @@ function setUploadStatus(message, variant = "") {
   }
 }
 
+const confirmState = {
+  resolver: null,
+  keydownHandler: null
+};
+
+function cleanupConfirmState() {
+  if (confirmState.keydownHandler) {
+    document.removeEventListener("keydown", confirmState.keydownHandler, true);
+    confirmState.keydownHandler = null;
+  }
+  confirmState.resolver = null;
+}
+
+function finalizeConfirm(result) {
+  const resolver = confirmState.resolver;
+  cleanupConfirmState();
+  if (dom.confirmDialog) {
+    closeDialog(dom.confirmDialog);
+  }
+  if (typeof resolver === "function") {
+    resolver(result);
+  }
+}
+
+function setupConfirmDialog() {
+  if (!dom.confirmDialog) return;
+  dom.confirmDialog.addEventListener("click", event => {
+    if (event.target instanceof HTMLElement && event.target.dataset.dialogDismiss) {
+      event.preventDefault();
+      finalizeConfirm(false);
+    }
+  });
+  if (dom.confirmCancelButton) {
+    dom.confirmCancelButton.addEventListener("click", event => {
+      event.preventDefault();
+      finalizeConfirm(false);
+    });
+  }
+  if (dom.confirmAcceptButton) {
+    dom.confirmAcceptButton.addEventListener("click", event => {
+      event.preventDefault();
+      finalizeConfirm(true);
+    });
+  }
+}
+
+async function confirmAction({
+  title = "確認",
+  description = "",
+  confirmLabel = "実行する",
+  cancelLabel = "キャンセル",
+  tone = "danger"
+} = {}) {
+  if (!dom.confirmDialog) {
+    console.warn("Confirm dialog is unavailable; skipping confirmation.");
+    return false;
+  }
+
+  if (confirmState.resolver) {
+    finalizeConfirm(false);
+  }
+
+  if (dom.confirmDialogTitle) {
+    dom.confirmDialogTitle.textContent = title || "確認";
+  }
+  if (dom.confirmDialogMessage) {
+    dom.confirmDialogMessage.textContent = description || "";
+  }
+  if (dom.confirmAcceptButton) {
+    dom.confirmAcceptButton.textContent = confirmLabel || "実行する";
+    dom.confirmAcceptButton.classList.remove("btn-danger", "btn-primary");
+    dom.confirmAcceptButton.classList.add(tone === "danger" ? "btn-danger" : "btn-primary");
+  }
+  if (dom.confirmCancelButton) {
+    dom.confirmCancelButton.textContent = cancelLabel || "キャンセル";
+  }
+
+  openDialog(dom.confirmDialog);
+
+  return await new Promise(resolve => {
+    confirmState.resolver = resolve;
+    confirmState.keydownHandler = event => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        finalizeConfirm(false);
+      }
+    };
+    document.addEventListener("keydown", confirmState.keydownHandler, true);
+  });
+}
+
+function setLoginError(message = "") {
+  if (!dom.loginError) return;
+  if (message) {
+    dom.loginError.textContent = message;
+    dom.loginError.hidden = false;
+  } else {
+    dom.loginError.textContent = "";
+    dom.loginError.hidden = true;
+  }
+}
+
 function legacyCopyToClipboard(text) {
   const textarea = document.createElement("textarea");
   textarea.value = text;
@@ -372,6 +475,10 @@ function renderParticipants() {
     genderTd.textContent = entry.gender || "";
     const departmentTd = document.createElement("td");
     departmentTd.textContent = entry.department || entry.groupNumber || "";
+    const phoneTd = document.createElement("td");
+    phoneTd.textContent = entry.phone || "";
+    const emailTd = document.createElement("td");
+    emailTd.textContent = entry.email || "";
     const teamTd = document.createElement("td");
     teamTd.className = "team-cell";
     teamTd.textContent = entry.teamNumber || entry.groupNumber || "";
@@ -457,7 +564,7 @@ function renderParticipants() {
       departmentTd.appendChild(warning);
     }
 
-    tr.append(idTd, nameTd, phoneticTd, genderTd, departmentTd, teamTd, linkTd);
+    tr.append(idTd, nameTd, phoneticTd, genderTd, departmentTd, phoneTd, emailTd, teamTd, linkTd);
     tbody.appendChild(tr);
   });
 
@@ -495,6 +602,7 @@ function renderParticipants() {
   }
 
   syncSaveButtonState();
+  syncClearButtonState();
   syncTemplateButtons();
 }
 function renderEvents() {
@@ -636,6 +744,13 @@ function syncSaveButtonState() {
   dom.saveButton.disabled = state.saving || currentSignature === state.lastSavedSignature;
 }
 
+function syncClearButtonState() {
+  if (!dom.clearParticipantsButton) return;
+  const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
+  const hasParticipants = hasSelection && state.participants.length > 0;
+  dom.clearParticipantsButton.disabled = !hasSelection || !hasParticipants || state.saving;
+}
+
 function syncTemplateButtons() {
   const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
   const hasParticipants = hasSelection && state.participants.some(entry => entry.participantId);
@@ -688,6 +803,7 @@ function updateParticipantContext(options = {}) {
     if (dom.mappingTbody) dom.mappingTbody.innerHTML = "";
     if (dom.adminSummary) dom.adminSummary.textContent = "";
     syncTemplateButtons();
+    syncClearButtonState();
     return;
   }
 
@@ -704,6 +820,7 @@ function updateParticipantContext(options = {}) {
   }
 
   syncTemplateButtons();
+  syncClearButtonState();
 }
 
 async function loadEvents({ preserveSelection = true } = {}) {
@@ -1039,7 +1156,16 @@ async function handleUpdateEvent(eventId, name) {
 }
 
 async function handleDeleteEvent(eventId, eventName) {
-  if (!window.confirm(`イベント「${eventName}」を削除しますか？\n関連する日程と参加者も削除されます。`)) {
+  const label = eventName || eventId;
+  const confirmed = await confirmAction({
+    title: "イベントの削除",
+    description: `イベント「${label}」と、その日程・参加者・発行済みリンクをすべて削除します。よろしいですか？`,
+    confirmLabel: "削除する",
+    cancelLabel: "キャンセル",
+    tone: "danger"
+  });
+
+  if (!confirmed) {
     return;
   }
 
@@ -1086,9 +1212,10 @@ async function handleDeleteEvent(eventId, eventName) {
     updateParticipantContext();
     state.tokenSnapshotFetchedAt = Date.now();
     requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
+    setUploadStatus(`イベント「${label}」を削除しました。`, "success");
   } catch (error) {
     console.error(error);
-    alert(error.message || "イベントの削除に失敗しました。");
+    setUploadStatus(error.message || "イベントの削除に失敗しました。", "error");
   }
 }
 
@@ -1179,7 +1306,16 @@ async function handleUpdateSchedule(scheduleId, { label, date, startTime, endTim
 async function handleDeleteSchedule(scheduleId, scheduleLabel) {
   const eventId = state.selectedEventId;
   if (!eventId) return;
-  if (!window.confirm(`日程「${scheduleLabel || scheduleId}」を削除しますか？\n関連する参加者も削除されます。`)) {
+  const label = scheduleLabel || scheduleId;
+  const confirmed = await confirmAction({
+    title: "日程の削除",
+    description: `日程「${label}」と、紐づく参加者・専用リンクをすべて削除します。よろしいですか？`,
+    confirmLabel: "削除する",
+    cancelLabel: "キャンセル",
+    tone: "danger"
+  });
+
+  if (!confirmed) {
     return;
   }
 
@@ -1230,9 +1366,10 @@ async function handleDeleteSchedule(scheduleId, scheduleLabel) {
     updateParticipantContext();
     state.tokenSnapshotFetchedAt = Date.now();
     requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
+    setUploadStatus(`日程「${label}」を削除しました。`, "success");
   } catch (error) {
     console.error(error);
-    alert(error.message || "日程の削除に失敗しました。");
+    setUploadStatus(error.message || "日程の削除に失敗しました。", "error");
   }
 }
 
@@ -1257,7 +1394,11 @@ async function handleCsvChange(event) {
 
     const text = await readFileAsText(file);
     const rows = parseCsv(text);
-    const entries = assignParticipantIds(parseParticipantRows(rows), state.participants);
+    const entries = assignParticipantIds(
+      parseParticipantRows(rows),
+      state.participants,
+      { eventId: state.selectedEventId, scheduleId: state.selectedScheduleId }
+    );
     const existingMap = new Map(state.participants.map(entry => [entry.participantId, entry]));
     state.participants = sortParticipants(
       entries.map(entry => {
@@ -1404,19 +1545,21 @@ function downloadTeamTemplate() {
   setUploadStatus(`${filename} をダウンロードしました。（${rows.length}名）`, "success");
 }
 
-async function handleSave() {
+async function handleSave(options = {}) {
+  const { allowEmpty = false, successMessage = "参加者リストを更新しました。" } = options || {};
   if (state.saving) return;
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) return;
-  if (!state.participants.length) {
+  if (!allowEmpty && !state.participants.length) {
     setUploadStatus("保存する参加者がありません。", "error");
-    return;
+    return false;
   }
 
   state.saving = true;
   if (dom.saveButton) dom.saveButton.disabled = true;
   setUploadStatus("保存中です…");
+  syncClearButtonState();
 
   try {
     await ensureTokenSnapshot(true);
@@ -1525,19 +1668,72 @@ async function handleSave() {
 
     state.participantTokenMap = nextTokenMap;
     state.lastSavedSignature = signatureForEntries(state.participants);
-    setUploadStatus("参加者リストを更新しました。", "success");
+    setUploadStatus(successMessage || "参加者リストを更新しました。", "success");
     await loadEvents({ preserveSelection: true });
     await loadParticipants();
     state.tokenSnapshotFetchedAt = Date.now();
     updateParticipantContext({ preserveStatus: true });
     requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
+    return true;
   } catch (error) {
     console.error(error);
     setUploadStatus(error.message || "保存に失敗しました。", "error");
     if (dom.saveButton) dom.saveButton.disabled = false;
+    return false;
   } finally {
     state.saving = false;
     syncSaveButtonState();
+    syncClearButtonState();
+  }
+}
+
+async function handleClearParticipants() {
+  const eventId = state.selectedEventId;
+  const scheduleId = state.selectedScheduleId;
+  if (!eventId || !scheduleId) {
+    setUploadStatus("イベントと日程を選択してください。", "error");
+    return;
+  }
+
+  if (!state.participants.length) {
+    setUploadStatus("参加者リストは既に空です。", "success");
+    return;
+  }
+
+  const selectedEvent = state.events.find(evt => evt.id === eventId);
+  const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === scheduleId);
+  const label = selectedSchedule?.label || scheduleId;
+
+  const confirmed = await confirmAction({
+    title: "参加者リストの全削除",
+    description: `日程「${label}」に登録されている参加者を全て削除します。保存すると元に戻せません。よろしいですか？`,
+    confirmLabel: "全て削除する",
+    cancelLabel: "キャンセル",
+    tone: "danger"
+  });
+
+  if (!confirmed) {
+    return;
+  }
+
+  const previousParticipants = state.participants.slice();
+  const previousTokenMap = new Map(state.participantTokenMap);
+  const previousSignature = state.lastSavedSignature;
+
+  state.participants = [];
+  state.participantTokenMap = new Map();
+  state.lastSavedSignature = signatureForEntries(state.participants);
+  state.duplicateMatches = new Map();
+  state.duplicateGroups = new Map();
+  renderParticipants();
+
+  const success = await handleSave({ allowEmpty: true, successMessage: "参加者リストを全て削除しました。" });
+  if (!success) {
+    state.participants = previousParticipants;
+    state.participantTokenMap = previousTokenMap;
+    state.lastSavedSignature = previousSignature;
+    updateDuplicateMatches();
+    renderParticipants();
   }
 }
 function setAuthUi(signedIn) {
@@ -1546,6 +1742,7 @@ function setAuthUi(signedIn) {
 
   if (signedIn) {
     renderUserSummary(state.user);
+    setLoginError("");
   } else {
     renderUserSummary(null);
   }
@@ -1617,7 +1814,10 @@ function handleMappingTableClick(event) {
     event.preventDefault();
     const participantId = deleteButton.dataset.participantId || "";
     const rowIndex = Number.parseInt(deleteButton.dataset.rowIndex || "", 10);
-    handleDeleteParticipant(participantId, Number.isFinite(rowIndex) ? rowIndex : null);
+    handleDeleteParticipant(participantId, Number.isFinite(rowIndex) ? rowIndex : null).catch(err => {
+      console.error(err);
+      setUploadStatus(err.message || "参加者の削除に失敗しました。", "error");
+    });
     return;
   }
 
@@ -1637,7 +1837,7 @@ function handleMappingTableClick(event) {
   }
 }
 
-function handleDeleteParticipant(participantId, rowIndex) {
+async function handleDeleteParticipant(participantId, rowIndex) {
   let entry = null;
   if (participantId) {
     entry = state.participants.find(item => String(item.participantId) === String(participantId));
@@ -1657,11 +1857,19 @@ function handleDeleteParticipant(participantId, rowIndex) {
 
   const nameLabel = entry.name ? `「${entry.name}」` : "";
   const idLabel = entry.participantId ? `ID: ${entry.participantId}` : "ID未設定";
-  const message = nameLabel
-    ? `参加者${nameLabel}（${idLabel}）を一覧から削除しますか？\n保存するとデータベースからも削除されます。`
-    : `参加者（${idLabel}）を一覧から削除しますか？\n保存するとデータベースからも削除されます。`;
+  const description = nameLabel
+    ? `参加者${nameLabel}（${idLabel}）を一覧から削除します。保存を実行するとデータベースからも削除されます。`
+    : `参加者（${idLabel}）を一覧から削除します。保存を実行するとデータベースからも削除されます。`;
 
-  if (!window.confirm(message)) {
+  const confirmed = await confirmAction({
+    title: "参加者の削除",
+    description,
+    confirmLabel: "削除する",
+    cancelLabel: "キャンセル",
+    tone: "danger"
+  });
+
+  if (!confirmed) {
     return;
   }
 
@@ -1880,13 +2088,14 @@ function attachEventHandlers() {
   if (dom.loginButton) {
     dom.loginButton.addEventListener("click", async () => {
       if (dom.loginButton.disabled) return;
+      setLoginError("");
       dom.loginButton.disabled = true;
       dom.loginButton.classList.add("is-busy");
       try {
         await signInWithPopup(auth, provider);
       } catch (error) {
         console.error(error);
-        alert("ログインに失敗しました。時間をおいて再度お試しください。");
+        setLoginError("ログインに失敗しました。時間をおいて再度お試しください。");
         dom.loginButton.disabled = false;
         dom.loginButton.classList.remove("is-busy");
       }
@@ -2068,6 +2277,15 @@ function attachEventHandlers() {
     dom.addScheduleButton.disabled = true;
   }
 
+  if (dom.clearParticipantsButton) {
+    dom.clearParticipantsButton.addEventListener("click", () => {
+      handleClearParticipants().catch(err => {
+        console.error(err);
+        setUploadStatus(err.message || "参加者リストの削除に失敗しました。", "error");
+      });
+    });
+  }
+
   if (dom.eventEmpty) dom.eventEmpty.hidden = true;
   if (dom.scheduleEmpty) dom.scheduleEmpty.hidden = true;
 
@@ -2081,6 +2299,8 @@ function attachEventHandlers() {
   if (dom.copyrightYear) {
     dom.copyrightYear.textContent = String(new Date().getFullYear());
   }
+
+  setupConfirmDialog();
 }
 
 function initAuthWatcher() {
@@ -2115,7 +2335,7 @@ function initAuthWatcher() {
       requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
     } catch (error) {
       console.error(error);
-      alert(error.message || "権限の確認に失敗しました。");
+      setLoginError(error.message || "権限の確認に失敗しました。");
       await signOut(auth);
       resetState();
     } finally {

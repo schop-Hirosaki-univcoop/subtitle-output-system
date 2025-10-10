@@ -39,11 +39,13 @@ const dom = {
   downloadTeamTemplateButton: document.getElementById("download-team-template"),
   teamCsvInput: document.getElementById("team-csv-input"),
   saveButton: document.getElementById("save-button"),
+  clearParticipantsButton: document.getElementById("clear-participants-button"),
   uploadStatus: document.getElementById("upload-status"),
   fileLabel: document.getElementById("file-label"),
   teamFileLabel: document.getElementById("team-file-label"),
   mappingTbody: document.getElementById("mapping-tbody"),
   adminSummary: document.getElementById("admin-summary"),
+  loginError: document.getElementById("login-error"),
   copyrightYear: document.getElementById("copyright-year")
 };
 
@@ -81,5 +83,11 @@ dom.participantFormFields = {
   phone: dom.participantPhoneInput,
   email: dom.participantEmailInput
 };
+
+dom.confirmDialog = document.getElementById("confirm-dialog");
+dom.confirmDialogTitle = document.getElementById("confirm-dialog-title");
+dom.confirmDialogMessage = document.getElementById("confirm-dialog-message");
+dom.confirmAcceptButton = document.getElementById("confirm-accept-button");
+dom.confirmCancelButton = document.getElementById("confirm-cancel-button");
 
 export { dom };
