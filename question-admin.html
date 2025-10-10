@@ -70,6 +70,32 @@
         </div>
       </div>
       <div class="module-body">
+        <section id="schedule-calendar" class="schedule-calendar" hidden aria-hidden="true" aria-label="日程カレンダー">
+          <div class="calendar-header">
+            <button id="schedule-calendar-prev" class="calendar-nav" type="button" aria-label="前の月へ">
+              <span aria-hidden="true">‹</span>
+            </button>
+            <h3 id="schedule-calendar-title" class="calendar-title" aria-live="polite">&nbsp;</h3>
+            <button id="schedule-calendar-next" class="calendar-nav" type="button" aria-label="次の月へ">
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
+          <table class="calendar-table">
+            <thead>
+              <tr>
+                <th scope="col">日</th>
+                <th scope="col">月</th>
+                <th scope="col">火</th>
+                <th scope="col">水</th>
+                <th scope="col">木</th>
+                <th scope="col">金</th>
+                <th scope="col">土</th>
+              </tr>
+            </thead>
+            <tbody id="schedule-calendar-body"></tbody>
+          </table>
+          <p class="calendar-helper">カレンダーのイベントをクリックすると、該当する日程が選択されます。</p>
+        </section>
         <ul id="schedule-list" class="entity-list" aria-live="polite"></ul>
         <p id="schedule-empty" class="entity-empty" hidden>選択中のイベントにはまだ日程が登録されていません。</p>
       </div>
