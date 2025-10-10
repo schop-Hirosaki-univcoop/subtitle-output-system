@@ -2,9 +2,9 @@ export const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxYtklsVbr2O
 
 export const GENRE_OPTIONS = ["学び", "活動", "暮らし", "食・スポット", "移動・季節", "その他"];
 export const TOKEN_PARAM_KEYS = ["token", "t", "key"];
-export const MAX_RADIO_NAME_LENGTH = 40;
-export const MAX_QUESTION_LENGTH = 400;
-export const FORM_VERSION = "question-form@2024.10";
+export const MAX_RADIO_NAME_LENGTH = 20;
+export const MAX_QUESTION_LENGTH = 60;
+export const FORM_VERSION = "question-form@2024.11";
 
 export const firebaseConfig = {
   apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
