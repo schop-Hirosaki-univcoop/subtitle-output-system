@@ -205,7 +205,7 @@ function parseParticipantRows(rows) {
   const headerCandidate = rows[0].map(cell => normalizeKey(cell).toLowerCase());
   const hasHeader =
     headerCandidate.some(cell => /id|参加|member/.test(cell)) &&
-    headerCandidate.some(cell => /name|氏名|ラジオ|radio/.test(cell));
+    headerCandidate.some(cell => /name|氏名|名前|ラジオ|radio/.test(cell));
 
   if (!hasHeader) {
     throw new Error("ヘッダー行が見つかりません。テンプレートを利用してヘッダーを追加してください。");
@@ -221,7 +221,7 @@ function parseParticipantRows(rows) {
 
   const indexMap = {
     id: findIndex(["id", "参加", "member"], -1),
-    name: findIndex(["name", "氏名", "ラジオ", "radio"], 1),
+    name: findIndex(["name", "氏名", "名前", "ラジオ", "radio"], 1),
     phonetic: findIndex(["フリ", "ふり", "furigana", "yomi", "reading"], 2),
     gender: findIndex(["性別", "gender"], 3),
     department: findIndex(["学部", "department", "学科", "faculty"], 4),
