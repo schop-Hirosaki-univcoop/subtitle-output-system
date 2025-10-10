@@ -41,6 +41,7 @@ import {
 import {
   normalizeEventParticipantCache,
   describeDuplicateMatch,
+  formatParticipantIdDisplay,
   updateDuplicateMatches,
   syncCurrentScheduleCache,
   parseParticipantRows,
@@ -197,6 +198,27 @@ function createApiClient(getIdToken) {
 }
 
 const api = createApiClient(getAuthIdToken);
+
+function getDisplayParticipantId(participantId) {
+  const raw = String(participantId || "").trim();
+  if (!raw) {
+    return "";
+  }
+  const display = formatParticipantIdDisplay(raw);
+  return display || raw;
+}
+
+function applyParticipantIdText(element, participantId) {
+  if (!element) return;
+  const raw = String(participantId || "").trim();
+  const displayId = getDisplayParticipantId(participantId);
+  element.textContent = displayId;
+  if (raw && displayId !== raw) {
+    element.setAttribute("title", raw);
+  } else {
+    element.removeAttribute("title");
+  }
+}
 
 async function requestSheetSync({ suppressError = true } = {}) {
   try {
@@ -466,7 +488,7 @@ function renderParticipants() {
   participants.forEach((entry, index) => {
     const tr = document.createElement("tr");
     const idTd = document.createElement("td");
-    idTd.textContent = entry.participantId;
+    applyParticipantIdText(idTd, entry.participantId);
     const nameTd = document.createElement("td");
     nameTd.textContent = entry.name;
     const phoneticTd = document.createElement("td");
@@ -1868,7 +1890,8 @@ async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
   }
 
   const nameLabel = entry.name ? `「${entry.name}」` : "";
-  const idLabel = entry.participantId ? `ID: ${entry.participantId}` : "ID未設定";
+  const displayId = getDisplayParticipantId(entry.participantId);
+  const idLabel = entry.participantId ? `ID: ${displayId}` : "ID未設定";
   const description = nameLabel
     ? `参加者${nameLabel}（${idLabel}）を一覧から削除します。保存を実行するとデータベースからも削除されます。`
     : `参加者（${idLabel}）を一覧から削除します。保存を実行するとデータベースからも削除されます。`;
@@ -1891,9 +1914,12 @@ async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
     return;
   }
 
+  const removedDisplayId = getDisplayParticipantId(removed.participantId);
   const identifier = removed.name
     ? `参加者「${removed.name}」`
-    : `参加者ID: ${removed.participantId}`;
+    : removed.participantId
+      ? `参加者ID: ${removedDisplayId}`
+      : "参加者ID未設定";
   setUploadStatus(`${identifier}を削除しました。保存ボタンから反映してください。`, "success");
 }
 
@@ -1916,7 +1942,18 @@ function openParticipantEditor(participantId, rowKey) {
   state.editingParticipantId = entry.participantId;
   state.editingRowKey = entry.rowKey || null;
   if (dom.participantDialogTitle) {
-    dom.participantDialogTitle.textContent = `参加者情報を編集（ID: ${entry.participantId}）`;
+    const displayId = getDisplayParticipantId(entry.participantId);
+    if (entry.participantId) {
+      dom.participantDialogTitle.textContent = `参加者情報を編集（ID: ${displayId}）`;
+      if (displayId !== String(entry.participantId).trim()) {
+        dom.participantDialogTitle.setAttribute("title", `内部ID: ${entry.participantId}`);
+      } else {
+        dom.participantDialogTitle.removeAttribute("title");
+      }
+    } else {
+      dom.participantDialogTitle.textContent = "参加者情報を編集";
+      dom.participantDialogTitle.removeAttribute("title");
+    }
   }
   if (dom.participantIdInput) dom.participantIdInput.value = entry.participantId;
   if (dom.participantNameInput) dom.participantNameInput.value = entry.name || "";

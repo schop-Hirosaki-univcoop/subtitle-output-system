@@ -33,6 +33,25 @@ function createParticipantIdPrefix(eventId, scheduleId) {
   return prefix || "participant";
 }
 
+function formatParticipantIdDisplay(participantId) {
+  const raw = String(participantId || "").trim();
+  if (!raw) {
+    return "";
+  }
+  const trailingDigits = raw.match(/(\d+)\s*$/);
+  if (trailingDigits && trailingDigits[1]) {
+    return trailingDigits[1];
+  }
+  const segments = raw.split(/[-_]/);
+  if (segments.length > 1) {
+    const tail = segments[segments.length - 1];
+    if (/^\d+$/.test(tail)) {
+      return tail;
+    }
+  }
+  return raw;
+}
+
 function participantIdentityKey(entry) {
   if (!entry) return "";
   const phonetic = entry.phonetic ?? entry.furigana ?? "";
@@ -100,7 +119,10 @@ function normalizeEventParticipantCache(eventBranch) {
 function describeDuplicateMatch(match, eventId, currentScheduleId) {
   if (!match) return "";
   const name = String(match.name || "").trim();
-  const idLabel = match.participantId ? `ID:${match.participantId}` : "ID未登録";
+  const displayId = formatParticipantIdDisplay(match.participantId);
+  const idLabel = match.participantId
+    ? `ID:${displayId || match.participantId}`
+    : "ID未登録";
   const scheduleId = String(match.scheduleId || "").trim();
   if (scheduleId === String(currentScheduleId || "")) {
     const label = name || "同日程";
@@ -579,6 +601,7 @@ export {
   applyAssignmentsToEventCache,
   normalizeParticipantRecord,
   assignParticipantIds,
-  signatureForEntries
+  signatureForEntries,
+  formatParticipantIdDisplay
 };
 

@@ -385,9 +385,21 @@ export class QuestionFormApp {
       guidance: this.state.context?.guidance || ""
     };
 
+    const formPayload = new URLSearchParams();
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value === undefined || value === null) {
+        return;
+      }
+      if (typeof value === "object") {
+        formPayload.append(key, JSON.stringify(value));
+      } else {
+        formPayload.append(key, String(value));
+      }
+    });
+
     const response = await fetch(GAS_API_URL, {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: formPayload,
       signal: controller.signal,
       mode: "cors",
       credentials: "omit",

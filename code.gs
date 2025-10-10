@@ -1346,10 +1346,63 @@ function logAction_(principal, actionType, details) {
 }
 
 function parseBody_(e) {
-  if (!e || !e.postData) throw new Error('No body');
-  const text = e.postData.contents || '';
-  try { return JSON.parse(text); }
-  catch (e2) { throw new Error('Invalid JSON'); }
+  if (!e) throw new Error('No body');
+
+  const postData = e.postData;
+  const parameter = e && typeof e.parameter === 'object' ? e.parameter : null;
+  const parameters = e && typeof e.parameters === 'object' ? e.parameters : null;
+
+  if (postData) {
+    const type = String(postData.type || '').toLowerCase();
+    const contents = postData.contents || '';
+
+    if (type.indexOf('application/json') !== -1) {
+      try {
+        return contents ? JSON.parse(contents) : {};
+      } catch (error) {
+        throw new Error('Invalid JSON');
+      }
+    }
+
+    if (type.indexOf('application/x-www-form-urlencoded') !== -1 || type.indexOf('multipart/form-data') !== -1) {
+      return parseParameterObject_(parameter, parameters);
+    }
+
+    if (contents) {
+      try {
+        return JSON.parse(contents);
+      } catch (error) {
+        if (!parameter || !Object.keys(parameter).length) {
+          throw new Error('Invalid JSON');
+        }
+      }
+    }
+  }
+
+  if (parameter && Object.keys(parameter).length) {
+    return parseParameterObject_(parameter, parameters);
+  }
+
+  throw new Error('No body');
+}
+
+function parseParameterObject_(parameter, parameters) {
+  const single = parameter && typeof parameter === 'object' ? parameter : {};
+  const multi = parameters && typeof parameters === 'object' ? parameters : {};
+  const result = {};
+
+  Object.keys(single).forEach(key => {
+    result[key] = single[key];
+  });
+
+  Object.keys(multi).forEach(key => {
+    const values = multi[key];
+    if (Array.isArray(values) && values.length > 1) {
+      result[key] = values.slice();
+    }
+  });
+
+  return result;
 }
 
 function requireAuth_(idToken, options){
@@ -1473,7 +1526,9 @@ function withCors_(output) {
   return output
     .setHeader('Access-Control-Allow-Origin', origin)
     .setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-    .setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    .setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With')
+    .setHeader('Access-Control-Max-Age', '600')
+    .setHeader('Vary', 'Origin');
 }
 
 function requireSessionId_(raw) {
