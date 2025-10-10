@@ -50,6 +50,10 @@ body.op-theme{
   overflow:hidden;
 }
 
+body.modal-open{
+  overflow:hidden;
+}
+
 .visually-hidden{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
 
 /* ===== Header ===== */
@@ -344,6 +348,12 @@ body.logs-open #logs-panel{ display:flex; }
   color:var(--text);
   font-size:.95rem;
   transition:border-color .18s ease, box-shadow .18s ease;
+}
+
+textarea.input{
+  min-height:8.5rem;
+  resize:vertical;
+  line-height:1.6;
 }
 .input:focus-visible,
 .btn:focus-visible,
@@ -988,3 +998,92 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   text-align:center;
 }
 .credit-highlight{ color:rgba(173,189,208,.75); font-weight:500; }
+
+/* ===== Modal Dialog ===== */
+.modal{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:200;
+}
+
+.modal[hidden]{
+  display:none;
+}
+
+.modal-backdrop{
+  position:absolute;
+  inset:0;
+  background:rgba(5,11,23,.72);
+  backdrop-filter:blur(6px);
+}
+
+.modal-panel{
+  position:relative;
+  z-index:1;
+  width:min(32rem, 92vw);
+  max-height:88vh;
+  padding:clamp(1.4rem, 3vw, 1.8rem);
+  border-radius:clamp(1rem, 1.6vw, 1.2rem);
+  background:linear-gradient(180deg, rgba(18,26,42,.96), rgba(10,16,28,.94));
+  border:1px solid rgba(58,86,126,.6);
+  box-shadow:0 32px 60px rgba(0,0,0,.4);
+  display:flex;
+  flex-direction:column;
+  gap:1.1rem;
+  overflow:auto;
+}
+
+.modal-panel form{
+  display:flex;
+  flex-direction:column;
+  gap:1.1rem;
+}
+
+.modal-header h2,
+.modal-header h3{
+  margin:0;
+  font-size:1.25rem;
+  letter-spacing:.02em;
+}
+
+.modal-body{
+  display:flex;
+  flex-direction:column;
+  gap:.9rem;
+}
+
+.modal-footer{
+  display:flex;
+  justify-content:flex-end;
+  gap:.75rem;
+}
+
+.modal-field{
+  display:flex;
+  flex-direction:column;
+  gap:.45rem;
+}
+
+.modal-field label{
+  font-size:.9rem;
+  color:var(--muted);
+}
+
+.form-error{
+  margin:0;
+  padding:.5rem .75rem;
+  border-radius:.75rem;
+  background:rgba(220,38,38,.1);
+  border:1px solid rgba(248,113,113,.4);
+  color:#fca5a5;
+  font-size:.85rem;
+}
+
+.modal-helper{
+  font-size:.85rem;
+  color:var(--muted);
+  margin:0;
+}
