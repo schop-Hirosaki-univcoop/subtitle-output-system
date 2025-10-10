@@ -25,6 +25,16 @@ const STEP_LABELS = [
   "初期データ取得",
   "準備完了"
 ];
+const PARTICIPANT_TEMPLATE_HEADERS = [
+  "参加者ID",
+  "名前",
+  "フリガナ",
+  "性別",
+  "学部学科",
+  "携帯電話",
+  "メールアドレス"
+];
+const TEAM_TEMPLATE_HEADERS = ["参加者ID", "班番号"];
 
 const firebaseConfig = {
   apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
@@ -107,7 +117,9 @@ const dom = {
   scheduleDescription: document.getElementById("schedule-description"),
   participantContext: document.getElementById("participant-context"),
   participantDescription: document.getElementById("participant-description"),
+  downloadParticipantTemplateButton: document.getElementById("download-participant-template"),
   csvInput: document.getElementById("csv-input"),
+  downloadTeamTemplateButton: document.getElementById("download-team-template"),
   teamCsvInput: document.getElementById("team-csv-input"),
   saveButton: document.getElementById("save-button"),
   uploadStatus: document.getElementById("upload-status"),
@@ -630,39 +642,35 @@ function parseParticipantRows(rows) {
     throw new Error("CSVにデータがありません。");
   }
 
-  const headerCandidate = rows[0].map(cell => cell.toLowerCase());
-  const hasHeader = headerCandidate.some(cell => /id|氏名|name|フリ|furigana|性別|gender|学部|department|mail|メール|phone|電話/.test(cell));
+  const headerCandidate = rows[0].map(cell => normalizeKey(cell).toLowerCase());
+  const hasHeader =
+    headerCandidate.some(cell => /id|参加|member/.test(cell)) &&
+    headerCandidate.some(cell => /name|氏名|ラジオ|radio/.test(cell));
 
-  let dataRows = rows;
-  const indexMap = {
-    id: 0,
-    name: 1,
-    phonetic: 2,
-    gender: 3,
-    department: 4,
-    phone: 5,
-    email: 6,
-    team: -1
+  if (!hasHeader) {
+    throw new Error("ヘッダー行が見つかりません。テンプレートを利用してヘッダーを追加してください。");
+  }
+
+  const findIndex = (keywords, fallback = -1) => {
+    for (const keyword of keywords) {
+      const idx = headerCandidate.findIndex(cell => cell.includes(keyword));
+      if (idx !== -1) return idx;
+    }
+    return fallback;
   };
 
-  if (hasHeader) {
-    const findIndex = (keywords, fallback = -1) => {
-      for (const keyword of keywords) {
-        const idx = headerCandidate.findIndex(cell => cell.includes(keyword));
-        if (idx !== -1) return idx;
-      }
-      return fallback;
-    };
-    indexMap.id = findIndex(["id", "参加", "member"], -1);
-    indexMap.name = findIndex(["name", "氏名", "ラジオ", "radio"], 1);
-    indexMap.phonetic = findIndex(["フリ", "ふり", "furigana", "yomi", "reading"], 2);
-    indexMap.gender = findIndex(["性別", "gender"], 3);
-    indexMap.department = findIndex(["学部", "department", "学科", "faculty"], 4);
-    indexMap.phone = findIndex(["電話", "tel", "phone"], 5);
-    indexMap.email = findIndex(["mail", "メール", "email"], 6);
-    indexMap.team = findIndex(["班", "group", "team"], -1);
-    dataRows = rows.slice(1);
-  }
+  const indexMap = {
+    id: findIndex(["id", "参加", "member"], -1),
+    name: findIndex(["name", "氏名", "ラジオ", "radio"], 1),
+    phonetic: findIndex(["フリ", "ふり", "furigana", "yomi", "reading"], 2),
+    gender: findIndex(["性別", "gender"], 3),
+    department: findIndex(["学部", "department", "学科", "faculty"], 4),
+    phone: findIndex(["電話", "tel", "phone"], 5),
+    email: findIndex(["mail", "メール", "email"], 6),
+    team: findIndex(["班", "group", "team"], -1)
+  };
+
+  const dataRows = rows.slice(1);
 
   const normalizeColumn = (cols, index) => {
     if (index == null || index < 0 || index >= cols.length) return "";
@@ -732,29 +740,31 @@ function parseTeamAssignmentRows(rows) {
     throw new Error("CSVにデータがありません。");
   }
 
-  const headerCandidate = rows[0].map(cell => cell.toLowerCase());
-  const hasHeader = headerCandidate.some(cell => /id|参加/.test(cell)) && headerCandidate.some(cell => /班|group|team/.test(cell));
+  const headerCandidate = rows[0].map(cell => normalizeKey(cell).toLowerCase());
+  const hasHeader =
+    headerCandidate.some(cell => /id|参加|member/.test(cell)) &&
+    headerCandidate.some(cell => /班|group|team/.test(cell));
 
-  let dataRows = rows;
-  let idIndex = 0;
-  let teamIndex = 1;
-
-  if (hasHeader) {
-    const findIndex = (keywords, fallback) => {
-      for (const keyword of keywords) {
-        const idx = headerCandidate.findIndex(cell => cell.includes(keyword));
-        if (idx !== -1) return idx;
-      }
-      return fallback;
-    };
-    idIndex = findIndex(["id", "参加", "member"], 0);
-    teamIndex = findIndex(["班", "group", "team"], 1);
-    dataRows = rows.slice(1);
+  if (!hasHeader) {
+    throw new Error("ヘッダー行が見つかりません。テンプレートを利用して参加者IDと班番号の列を用意してください。");
   }
+
+  const findIndex = (keywords, fallback) => {
+    for (const keyword of keywords) {
+      const idx = headerCandidate.findIndex(cell => cell.includes(keyword));
+      if (idx !== -1) return idx;
+    }
+    return fallback;
+  };
+
+  const idIndex = findIndex(["id", "参加", "member"], -1);
+  const teamIndex = findIndex(["班", "group", "team"], -1);
 
   if (idIndex < 0 || teamIndex < 0) {
-    throw new Error("CSVの列が認識できません。参加者IDと班番号の列を用意してください。");
+    throw new Error("CSVの列が認識できません。参加者IDと班番号の列をヘッダーに含めてください。");
   }
+
+  const dataRows = rows.slice(1);
 
   const assignments = new Map();
   dataRows.forEach(cols => {
@@ -1360,6 +1370,41 @@ function sortParticipants(entries) {
   });
 }
 
+function formatDateForFilename(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
+}
+
+function encodeCsvValue(value) {
+  if (value == null) return "";
+  const text = String(value);
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function createCsvContent(rows) {
+  return rows.map(row => row.map(encodeCsvValue).join(",")).join("\r\n");
+}
+
+function downloadCsvFile(filename, rows) {
+  if (!rows || !rows.length) return;
+  const content = "\ufeff" + createCsvContent(rows);
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
 function createShareUrl(token) {
   const url = new URL(FORM_PAGE_PATH, window.location.href);
   url.searchParams.set("token", token);
@@ -1414,25 +1459,43 @@ function renderParticipants() {
     teamTd.textContent = entry.teamNumber || entry.groupNumber || "";
     const linkTd = document.createElement("td");
     linkTd.className = "link-cell";
-    if (entry.token) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "copy-link-btn";
-      button.dataset.token = entry.token;
-      button.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M6.25 1.75A2.25 2.25 0 0 0 4 4v7A2.25 2.25 0 0 0 6.25 13.25h4A2.25 2.25 0 0 0 12.5 11V4A2.25 2.25 0 0 0 10.25 1.75h-4Zm0 1.5h4c.414 0 .75.336.75.75v7c0 .414-.336.75-.75.75h-4a.75.75 0 0 1-.75-.75V4c0-.414.336-.75.75-.75ZM3 4.75A.75.75 0 0 0 2.25 5.5v7A2.25 2.25 0 0 0 4.5 14.75h4a.75.75 0 0 0 0-1.5h-4a.75.75 0 0 1-.75-.75v-7A.75.75 0 0 0 3 4.75Z\" fill=\"currentColor\"/></svg><span>コピー</span>";
-      linkTd.appendChild(button);
-    } else {
-      const placeholder = document.createElement("span");
-      placeholder.textContent = "-";
-      linkTd.appendChild(placeholder);
-    }
+    const linkActions = document.createElement("div");
+    linkActions.className = "link-action-row";
 
     const editButton = document.createElement("button");
     editButton.type = "button";
     editButton.className = "edit-link-btn";
     editButton.dataset.participantId = entry.participantId;
     editButton.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z\" fill=\"currentColor\"/></svg><span>編集</span>";
-    linkTd.appendChild(editButton);
+
+    let shareUrl = "";
+    if (entry.token) {
+      shareUrl = createShareUrl(entry.token);
+      const copyButton = document.createElement("button");
+      copyButton.type = "button";
+      copyButton.className = "copy-link-btn";
+      copyButton.dataset.token = entry.token;
+      copyButton.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M6.25 1.75A2.25 2.25 0 0 0 4 4v7A2.25 2.25 0 0 0 6.25 13.25h4A2.25 2.25 0 0 0 12.5 11V4A2.25 2.25 0 0 0 10.25 1.75h-4Zm0 1.5h4c.414 0 .75.336.75.75v7c0 .414-.336.75-.75.75h-4a.75.75 0 0 1-.75-.75V4c0-.414.336-.75.75-.75ZM3 4.75A.75.75 0 0 0 2.25 5.5v7A2.25 2.25 0 0 0 4.5 14.75h4a.75.75 0 0 0 0-1.5h-4a.75.75 0 0 1-.75-.75v-7A.75.75 0 0 0 3 4.75Z\" fill=\"currentColor\"/></svg><span>コピー</span>";
+      linkActions.appendChild(copyButton);
+    } else {
+      const placeholder = document.createElement("span");
+      placeholder.className = "link-placeholder";
+      placeholder.textContent = "リンク未発行";
+      linkActions.appendChild(placeholder);
+    }
+
+    linkActions.appendChild(editButton);
+    linkTd.appendChild(linkActions);
+
+    if (shareUrl) {
+      const previewLink = document.createElement("a");
+      previewLink.href = shareUrl;
+      previewLink.target = "_blank";
+      previewLink.rel = "noopener noreferrer";
+      previewLink.className = "share-link-preview";
+      previewLink.textContent = shareUrl;
+      linkTd.appendChild(previewLink);
+    }
 
     const duplicateKey = entry.participantId ? String(entry.participantId) : `__row${index}`;
     const duplicateInfo = duplicateMap.get(duplicateKey);
@@ -1505,6 +1568,7 @@ function renderParticipants() {
   }
 
   syncSaveButtonState();
+  syncTemplateButtons();
 }
 function renderEvents() {
   const list = dom.eventList;
@@ -1645,6 +1709,31 @@ function syncSaveButtonState() {
   dom.saveButton.disabled = state.saving || currentSignature === state.lastSavedSignature;
 }
 
+function syncTemplateButtons() {
+  const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
+  const hasParticipants = hasSelection && state.participants.some(entry => entry.participantId);
+
+  if (dom.downloadParticipantTemplateButton) {
+    dom.downloadParticipantTemplateButton.disabled = !hasSelection;
+    if (hasSelection) {
+      dom.downloadParticipantTemplateButton.removeAttribute("aria-disabled");
+    } else {
+      dom.downloadParticipantTemplateButton.setAttribute("aria-disabled", "true");
+    }
+  }
+
+  if (dom.downloadTeamTemplateButton) {
+    dom.downloadTeamTemplateButton.disabled = !hasParticipants;
+    if (hasParticipants) {
+      dom.downloadTeamTemplateButton.removeAttribute("aria-disabled");
+      dom.downloadTeamTemplateButton.removeAttribute("title");
+    } else {
+      dom.downloadTeamTemplateButton.setAttribute("aria-disabled", "true");
+      dom.downloadTeamTemplateButton.setAttribute("title", "参加者リストを読み込むとダウンロードできます。");
+    }
+  }
+}
+
 function updateParticipantContext(options = {}) {
   const { preserveStatus = false } = options;
   const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
@@ -1671,6 +1760,7 @@ function updateParticipantContext(options = {}) {
     if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
     if (dom.mappingTbody) dom.mappingTbody.innerHTML = "";
     if (dom.adminSummary) dom.adminSummary.textContent = "";
+    syncTemplateButtons();
     return;
   }
 
@@ -1680,11 +1770,13 @@ function updateParticipantContext(options = {}) {
     const scheduleName = selectedSchedule.label || selectedSchedule.id;
     const scheduleRange = describeScheduleRange(selectedSchedule);
     const rangeSuffix = scheduleRange ? `（${scheduleRange}）` : "";
-    dom.participantContext.textContent = `イベント「${selectedEvent.name}」/ 日程「${scheduleName}」${rangeSuffix}の参加者を管理しています。専用リンクは各行の「コピー」から取得できます。`;
+    dom.participantContext.textContent = `イベント「${selectedEvent.name}」/ 日程「${scheduleName}」${rangeSuffix}の参加者を管理しています。専用リンクは各行のボタンまたはURLから取得できます。`;
   }
   if (!preserveStatus) {
     setUploadStatus("ファイルを選択して参加者リストを更新してください。");
   }
+
+  syncTemplateButtons();
 }
 
 async function loadEvents({ preserveSelection = true } = {}) {
@@ -2345,6 +2437,35 @@ function handleTeamCsvChange(event) {
   reader.readAsText(file, "utf-8");
 }
 
+function downloadParticipantTemplate() {
+  const filename = `participants_template_${formatDateForFilename()}.csv`;
+  downloadCsvFile(filename, [PARTICIPANT_TEMPLATE_HEADERS]);
+  setUploadStatus("参加者CSVテンプレートをダウンロードしました。", "success");
+}
+
+function downloadTeamTemplate() {
+  if (!state.selectedEventId || !state.selectedScheduleId) {
+    setUploadStatus("班番号テンプレートを作成するにはイベントと日程を選択してください。", "error");
+    return;
+  }
+
+  const rows = sortParticipants(state.participants)
+    .filter(entry => entry.participantId)
+    .map(entry => [
+      String(entry.participantId || ""),
+      String(entry.teamNumber || entry.groupNumber || "")
+    ]);
+
+  if (!rows.length) {
+    setUploadStatus("テンプレートに出力できる参加者が見つかりません。参加者リストを読み込んでからお試しください。", "error");
+    return;
+  }
+
+  const filename = `team_assignments_${formatDateForFilename()}.csv`;
+  downloadCsvFile(filename, [TEAM_TEMPLATE_HEADERS, ...rows]);
+  setUploadStatus(`班番号テンプレートをダウンロードしました。（${rows.length}名）`, "success");
+}
+
 async function handleSave() {
   if (state.saving) return;
   const eventId = state.selectedEventId;
@@ -2549,6 +2670,7 @@ function resetState() {
   if (dom.teamCsvInput) dom.teamCsvInput.value = "";
   if (dom.csvInput) dom.csvInput.value = "";
   renderUserSummary(null);
+  syncTemplateButtons();
 }
 
 function handleMappingTableClick(event) {
@@ -2758,6 +2880,18 @@ function attachEventHandlers() {
       } catch (error) {
         console.error(error);
       }
+    });
+  }
+
+  if (dom.downloadParticipantTemplateButton) {
+    dom.downloadParticipantTemplateButton.addEventListener("click", () => {
+      downloadParticipantTemplate();
+    });
+  }
+
+  if (dom.downloadTeamTemplateButton) {
+    dom.downloadTeamTemplateButton.addEventListener("click", () => {
+      downloadTeamTemplate();
     });
   }
 

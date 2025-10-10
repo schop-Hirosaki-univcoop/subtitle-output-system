@@ -85,10 +85,12 @@
       <div class="module-body">
         <p id="participant-context" class="admin-context">日程を選択すると、現在登録されている参加者が表示されます。</p>
         <div class="admin-controls">
+          <button id="download-participant-template" class="btn btn-ghost btn-sm" type="button">参加者CSVテンプレート</button>
           <label class="btn btn-ghost file-input" for="csv-input">
             <span id="file-label">CSVファイルを選択</span>
             <input id="csv-input" type="file" accept=".csv,text/csv">
           </label>
+          <button id="download-team-template" class="btn btn-ghost btn-sm" type="button" disabled>班番号テンプレート</button>
           <label class="btn btn-ghost file-input" for="team-csv-input">
             <span id="team-file-label">班番号CSVを選択</span>
             <input id="team-csv-input" type="file" accept=".csv,text/csv">
@@ -120,18 +122,18 @@
       <div class="module-header">
         <div class="module-heading">
           <h2 id="format-title">CSVの形式について</h2>
-          <p class="module-description">1列目から順に「参加者ID」「名前」「フリガナ」「性別」「学部学科」「携帯電話」「メールアドレス」を配置してください（参加者IDは空欄でも構いません）。</p>
+          <p class="module-description">1列目から順に「参加者ID」「名前」「フリガナ」「性別」「学部学科」「携帯電話」「メールアドレス」を配置してください（参加者IDは空欄でも構いません）。アップロード時には必ずヘッダー行が必要です。テンプレートボタンからダウンロードできます。</p>
         </div>
       </div>
       <div class="module-body">
         <ul>
-          <li>ヘッダー行（例: <code>参加者ID,名前,フリガナ,性別,学部学科,携帯電話,メールアドレス</code>）があっても問題ありません。</li>
+          <li>ヘッダー行（例: <code>参加者ID,名前,フリガナ,性別,学部学科,携帯電話,メールアドレス</code>）が必須です。</li>
           <li>同じ参加者IDが複数行ある場合は最初の行のみ採用されます。</li>
           <li>参加者IDが空欄の場合は氏名などの情報から既存レコードを照合し、自動で番号を割り当てます。</li>
           <li>同じイベント内で名前と学部学科が一致する参加者は、日程が異なっても重複候補（件数付き）として一覧に表示されます。</li>
           <li>各列は空欄でもアップロードできますが、氏名は必須です。</li>
           <li>保存後はフォームに即座に反映されます。</li>
-          <li>班番号は別途、<code>参加者ID,班番号</code>形式のCSVをアップロードすると一括で紐付けられます（キャンセルの場合は班番号に「キャンセル」と入力してください）。</li>
+          <li>班番号は別途、<code>参加者ID,班番号</code>形式のCSV（ヘッダー必須）をアップロードすると一括で紐付けられます（キャンセルの場合は班番号に「キャンセル」と入力してください）。テンプレートには現在の参加者IDがあらかじめ記載されます。</li>
         </ul>
       </div>
     </section>
