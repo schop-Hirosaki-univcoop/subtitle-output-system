@@ -398,16 +398,93 @@ function normalizeKey(value) {
     .normalize("NFKC");
 }
 
+function stripBom(text) {
+  if (!text) return "";
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+function decodeCsvBytes(bytes) {
+  if (!(bytes instanceof Uint8Array)) {
+    return "";
+  }
+
+  const attempts = [
+    () => new TextDecoder("utf-8", { fatal: true }),
+    () => new TextDecoder("utf-8"),
+    () => new TextDecoder("shift_jis"),
+    () => new TextDecoder("windows-31j"),
+    () => new TextDecoder("ms932")
+  ];
+
+  for (const createDecoder of attempts) {
+    try {
+      const decoder = createDecoder();
+      const text = decoder.decode(bytes);
+      if (typeof text === "string") {
+        return stripBom(text);
+      }
+    } catch (error) {
+      // Try the next decoder.
+    }
+  }
+
+  throw new Error("CSVの文字エンコーディングを判別できませんでした。UTF-8形式で保存したファイルをアップロードしてください。");
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const handleError = () => {
+      reject(new Error("ファイルの読み込みに失敗しました。"));
+    };
+
+    if (typeof TextDecoder === "undefined") {
+      const fallbackReader = new FileReader();
+      fallbackReader.onload = () => {
+        resolve(stripBom(String(fallbackReader.result || "")));
+      };
+      fallbackReader.onerror = handleError;
+      fallbackReader.readAsText(file, "utf-8");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const result = reader.result;
+        const buffer =
+          result instanceof ArrayBuffer
+            ? result
+            : result?.buffer instanceof ArrayBuffer
+              ? result.buffer
+              : null;
+
+        if (!buffer) {
+          resolve(stripBom(String(result || "")));
+          return;
+        }
+
+        const bytes = new Uint8Array(buffer);
+        resolve(decodeCsvBytes(bytes));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.onerror = handleError;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 function parseCsv(text) {
+  const sanitized = stripBom(String(text || ""));
   const rows = [];
   let current = "";
   let row = [];
   let inQuotes = false;
 
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
+  for (let i = 0; i < sanitized.length; i++) {
+    const char = sanitized[i];
     if (char === "\"") {
-      if (inQuotes && text[i + 1] === "\"") {
+      if (inQuotes && sanitized[i + 1] === "\"") {
         current += "\"";
         i++;
       } else {
@@ -421,7 +498,7 @@ function parseCsv(text) {
       continue;
     }
     if (!inQuotes && (char === "\n" || char === "\r")) {
-      if (char === "\r" && text[i + 1] === "\n") {
+      if (char === "\r" && sanitized[i + 1] === "\n") {
         i++;
       }
       row.push(current);
@@ -1370,13 +1447,6 @@ function sortParticipants(entries) {
   });
 }
 
-function formatDateForFilename(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}${month}${day}`;
-}
-
 function encodeCsvValue(value) {
   if (value == null) return "";
   const text = String(value);
@@ -1390,10 +1460,35 @@ function createCsvContent(rows) {
   return rows.map(row => row.map(encodeCsvValue).join(",")).join("\r\n");
 }
 
+function getSelectionIdentifiers() {
+  return {
+    eventId: state.selectedEventId ? String(state.selectedEventId) : "",
+    scheduleId: state.selectedScheduleId ? String(state.selectedScheduleId) : ""
+  };
+}
+
+function buildParticipantCsvFilename(eventId, scheduleId) {
+  return `${eventId}_${scheduleId}_participants.csv`;
+}
+
+function buildTeamCsvFilename(eventId, scheduleId) {
+  return `${eventId}_${scheduleId}_teams.csv`;
+}
+
 function downloadCsvFile(filename, rows) {
   if (!rows || !rows.length) return;
-  const content = "\ufeff" + createCsvContent(rows);
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const content = createCsvContent(rows);
+  const bomBytes = new Uint8Array([0xef, 0xbb, 0xbf]);
+  let blob;
+
+  if (typeof TextEncoder !== "undefined") {
+    const encoder = new TextEncoder();
+    const body = encoder.encode(content);
+    blob = new Blob([bomBytes, body], { type: "text/csv;charset=utf-8;" });
+  } else {
+    blob = new Blob(["\ufeff" + content], { type: "text/csv;charset=utf-8;" });
+  }
+
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -2309,19 +2404,31 @@ async function handleDeleteSchedule(scheduleId, scheduleLabel) {
   }
 }
 
-function handleCsvChange(event) {
+async function handleCsvChange(event) {
   const files = event.target.files;
   if (!files || !files.length) {
     return;
   }
+
   const file = files[0];
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const rows = parseCsv(String(e.target.result || ""));
-      const entries = assignParticipantIds(parseParticipantRows(rows), state.participants);
-      const existingMap = new Map(state.participants.map(entry => [entry.participantId, entry]));
-      state.participants = sortParticipants(entries.map(entry => {
+  const { eventId, scheduleId } = getSelectionIdentifiers();
+
+  try {
+    if (!eventId || !scheduleId) {
+      throw new Error("イベントと日程を選択してください。");
+    }
+
+    const expectedName = buildParticipantCsvFilename(eventId, scheduleId);
+    if (file.name !== expectedName) {
+      throw new Error(`ファイル名が一致しません。${expectedName} をアップロードしてください。`);
+    }
+
+    const text = await readFileAsText(file);
+    const rows = parseCsv(text);
+    const entries = assignParticipantIds(parseParticipantRows(rows), state.participants);
+    const existingMap = new Map(state.participants.map(entry => [entry.participantId, entry]));
+    state.participants = sortParticipants(
+      entries.map(entry => {
         const existing = existingMap.get(entry.participantId) || {};
         const department = entry.department || existing.department || "";
         const teamNumber = entry.teamNumber || existing.teamNumber || existing.groupNumber || "";
@@ -2340,32 +2447,129 @@ function handleCsvChange(event) {
           token: existing.token || "",
           guidance: existing.guidance || ""
         };
-      }));
-      syncCurrentScheduleCache();
-      updateDuplicateMatches();
-      if (dom.fileLabel) dom.fileLabel.textContent = file.name;
-      renderParticipants();
-      const signature = signatureForEntries(state.participants);
-      if (signature === state.lastSavedSignature) {
-        if (dom.saveButton) dom.saveButton.disabled = true;
-        setUploadStatus("既存のデータと同じ内容です。", "success");
-      } else {
-        if (dom.saveButton) dom.saveButton.disabled = false;
-        setUploadStatus(`読み込み成功: ${state.participants.length}名`, "success");
-      }
-      if (dom.csvInput) {
-        dom.csvInput.value = "";
-      }
-    } catch (error) {
-      console.error(error);
-      setUploadStatus(error.message || "CSVの読み込みに失敗しました。", "error");
-      if (dom.csvInput) dom.csvInput.value = "";
+      })
+    );
+    syncCurrentScheduleCache();
+    updateDuplicateMatches();
+    if (dom.fileLabel) dom.fileLabel.textContent = file.name;
+    renderParticipants();
+    const signature = signatureForEntries(state.participants);
+    if (signature === state.lastSavedSignature) {
+      if (dom.saveButton) dom.saveButton.disabled = true;
+      setUploadStatus("既存のデータと同じ内容です。", "success");
+    } else {
+      if (dom.saveButton) dom.saveButton.disabled = false;
+      setUploadStatus(`読み込み成功: ${state.participants.length}名`, "success");
     }
-  };
-  reader.onerror = () => {
-    setUploadStatus("ファイルの読み込みに失敗しました。", "error");
-  };
-  reader.readAsText(file, "utf-8");
+  } catch (error) {
+    console.error(error);
+    setUploadStatus(error.message || "CSVの読み込みに失敗しました。", "error");
+  } finally {
+    if (dom.csvInput) {
+      dom.csvInput.value = "";
+    }
+  }
+}
+
+async function handleTeamCsvChange(event) {
+  const files = event.target.files;
+  if (!files || !files.length) {
+    return;
+  }
+
+  const file = files[0];
+  const { eventId, scheduleId } = getSelectionIdentifiers();
+
+  try {
+    if (!eventId || !scheduleId) {
+      throw new Error("イベントと日程を選択してください。");
+    }
+
+    const expectedName = buildTeamCsvFilename(eventId, scheduleId);
+    if (file.name !== expectedName) {
+      throw new Error(`ファイル名が一致しません。${expectedName} をアップロードしてください。`);
+    }
+
+    const text = await readFileAsText(file);
+    const rows = parseCsv(text);
+    const assignments = parseTeamAssignmentRows(rows);
+    const eventAssignmentMap = ensureTeamAssignmentMap(eventId);
+    const currentMapMatches = applyAssignmentsToEntries(state.participants, assignments);
+
+    assignments.forEach((teamNumber, participantId) => {
+      if (eventAssignmentMap) {
+        eventAssignmentMap.set(participantId, teamNumber);
+      }
+    });
+
+    const aggregateMap = eventAssignmentMap || assignments;
+    const applyResult = applyAssignmentsToEntries(state.participants, aggregateMap);
+    state.participants = sortParticipants(applyResult.entries);
+    syncCurrentScheduleCache();
+    const cacheMatched = applyAssignmentsToEventCache(eventId, aggregateMap);
+    updateDuplicateMatches();
+    renderParticipants();
+    syncSaveButtonState();
+
+    if (dom.teamFileLabel) {
+      dom.teamFileLabel.textContent = file.name;
+    }
+
+    const matchedIds = currentMapMatches.matchedIds || new Set();
+    const updatedIds = currentMapMatches.updatedIds || new Set();
+    const allMatched = new Set([...(matchedIds || []), ...(cacheMatched || [])]);
+    const unmatchedCount = Math.max(assignments.size - allMatched.size, 0);
+    const summaryParts = [];
+    summaryParts.push(`班番号を照合: ${allMatched.size}名`);
+    summaryParts.push(`変更: ${updatedIds.size}件`);
+    if (unmatchedCount > 0) {
+      summaryParts.push(`未一致: ${unmatchedCount}名`);
+    }
+    setUploadStatus(summaryParts.join(" / "), "success");
+  } catch (error) {
+    console.error(error);
+    setUploadStatus(error.message || "班番号CSVの読み込みに失敗しました。", "error");
+  } finally {
+    if (dom.teamCsvInput) {
+      dom.teamCsvInput.value = "";
+    }
+  }
+}
+
+function downloadParticipantTemplate() {
+  const { eventId, scheduleId } = getSelectionIdentifiers();
+  if (!eventId || !scheduleId) {
+    setUploadStatus("参加者CSVテンプレートを作成するにはイベントと日程を選択してください。", "error");
+    return;
+  }
+
+  const filename = buildParticipantCsvFilename(eventId, scheduleId);
+  downloadCsvFile(filename, [PARTICIPANT_TEMPLATE_HEADERS]);
+  setUploadStatus(`${filename} をダウンロードしました。`, "success");
+}
+
+function downloadTeamTemplate() {
+  const { eventId, scheduleId } = getSelectionIdentifiers();
+  if (!eventId || !scheduleId) {
+    setUploadStatus("班番号テンプレートを作成するにはイベントと日程を選択してください。", "error");
+    return;
+  }
+
+  const rows = sortParticipants(state.participants)
+    .filter(entry => entry.participantId)
+    .map(entry => [
+      String(entry.participantId || ""),
+      String(entry.teamNumber || entry.groupNumber || "")
+    ]);
+
+  if (!rows.length) {
+    setUploadStatus("テンプレートに出力できる参加者が見つかりません。参加者リストを読み込んでからお試しください。", "error");
+    return;
+  }
+
+  const filename = buildTeamCsvFilename(eventId, scheduleId);
+  downloadCsvFile(filename, [TEAM_TEMPLATE_HEADERS, ...rows]);
+  setUploadStatus(`${filename} をダウンロードしました。（${rows.length}名）`, "success");
 }
 
 function handleTeamCsvChange(event) {
