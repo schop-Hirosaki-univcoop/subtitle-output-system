@@ -120,6 +120,8 @@
           "scheduleId": { ".validate": "newData.isString()" },
           "scheduleLabel": { ".validate": "newData.isString() || !newData.exists()" },
           "scheduleDate": { ".validate": "newData.isString() || !newData.exists()" },
+          "scheduleStart": { ".validate": "newData.isString() || !newData.exists()" },
+          "scheduleEnd": { ".validate": "newData.isString() || !newData.exists()" },
           "participantId": { ".validate": "newData.isString()" },
           "displayName": { ".validate": "newData.isString()" },
           "groupNumber": { ".validate": "newData.isString()" },
