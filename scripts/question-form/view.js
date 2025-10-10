@@ -20,6 +20,7 @@ export class FormView {
     this.submitButton = doc.getElementById("submit-button");
     this.contextBannerEl = doc.getElementById("context-banner");
     this.welcomeLineEl = doc.getElementById("welcome-line");
+    this.introLineEl = doc.getElementById("intro-line");
     this.scheduleLineEl = doc.getElementById("schedule-line");
     this.contextGuardEl = doc.getElementById("context-guard");
     this.questionCounterEl = doc.getElementById("question-counter");
@@ -55,6 +56,19 @@ export class FormView {
     elements.forEach((element) => {
       element.disabled = disabled;
     });
+  }
+
+  #assignContextLine(element, text) {
+    if (!element) return;
+    const hasText = Boolean(text);
+    element.textContent = text || "";
+    if (hasText) {
+      element.hidden = false;
+      element.removeAttribute("aria-hidden");
+    } else {
+      element.hidden = true;
+      element.setAttribute("aria-hidden", "true");
+    }
   }
 
   setFeedback(message, type = "") {
@@ -95,17 +109,14 @@ export class FormView {
     }
   }
 
-  setContextBanner({ welcomeText = "", scheduleText = "" } = {}) {
+  setContextBanner({ welcomeText = "", descriptionText = "", scheduleText = "" } = {}) {
     if (!this.contextBannerEl) return;
-    if (welcomeText || scheduleText) {
+    if (welcomeText || descriptionText || scheduleText) {
       this.contextBannerEl.hidden = false;
       this.contextBannerEl.removeAttribute("aria-hidden");
-      if (this.welcomeLineEl) {
-        this.welcomeLineEl.textContent = welcomeText;
-      }
-      if (this.scheduleLineEl) {
-        this.scheduleLineEl.textContent = scheduleText;
-      }
+      this.#assignContextLine(this.welcomeLineEl, welcomeText);
+      this.#assignContextLine(this.introLineEl, descriptionText);
+      this.#assignContextLine(this.scheduleLineEl, scheduleText);
     } else {
       this.clearContextBanner();
     }
@@ -115,12 +126,9 @@ export class FormView {
     if (!this.contextBannerEl) return;
     this.contextBannerEl.hidden = true;
     this.contextBannerEl.setAttribute("aria-hidden", "true");
-    if (this.welcomeLineEl) {
-      this.welcomeLineEl.textContent = "";
-    }
-    if (this.scheduleLineEl) {
-      this.scheduleLineEl.textContent = "";
-    }
+    this.#assignContextLine(this.welcomeLineEl, "");
+    this.#assignContextLine(this.introLineEl, "");
+    this.#assignContextLine(this.scheduleLineEl, "");
   }
 
   setGuidance(text) {

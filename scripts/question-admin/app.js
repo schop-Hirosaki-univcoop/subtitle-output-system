@@ -3,7 +3,8 @@ import {
   FORM_PAGE_PATH,
   STEP_LABELS,
   PARTICIPANT_TEMPLATE_HEADERS,
-  TEAM_TEMPLATE_HEADERS
+  TEAM_TEMPLATE_HEADERS,
+  firebaseConfig
 } from "./constants.js";
 import {
   auth,
@@ -221,6 +222,109 @@ function setUploadStatus(message, variant = "") {
   }
 }
 
+const confirmState = {
+  resolver: null,
+  keydownHandler: null
+};
+
+function cleanupConfirmState() {
+  if (confirmState.keydownHandler) {
+    document.removeEventListener("keydown", confirmState.keydownHandler, true);
+    confirmState.keydownHandler = null;
+  }
+  confirmState.resolver = null;
+}
+
+function finalizeConfirm(result) {
+  const resolver = confirmState.resolver;
+  cleanupConfirmState();
+  if (dom.confirmDialog) {
+    closeDialog(dom.confirmDialog);
+  }
+  if (typeof resolver === "function") {
+    resolver(result);
+  }
+}
+
+function setupConfirmDialog() {
+  if (!dom.confirmDialog) return;
+  dom.confirmDialog.addEventListener("click", event => {
+    if (event.target instanceof HTMLElement && event.target.dataset.dialogDismiss) {
+      event.preventDefault();
+      finalizeConfirm(false);
+    }
+  });
+  if (dom.confirmCancelButton) {
+    dom.confirmCancelButton.addEventListener("click", event => {
+      event.preventDefault();
+      finalizeConfirm(false);
+    });
+  }
+  if (dom.confirmAcceptButton) {
+    dom.confirmAcceptButton.addEventListener("click", event => {
+      event.preventDefault();
+      finalizeConfirm(true);
+    });
+  }
+}
+
+async function confirmAction({
+  title = "確認",
+  description = "",
+  confirmLabel = "実行する",
+  cancelLabel = "キャンセル",
+  tone = "danger"
+} = {}) {
+  if (!dom.confirmDialog) {
+    console.warn("Confirm dialog is unavailable; skipping confirmation.");
+    return false;
+  }
+
+  if (confirmState.resolver) {
+    finalizeConfirm(false);
+  }
+
+  if (dom.confirmDialogTitle) {
+    dom.confirmDialogTitle.textContent = title || "確認";
+  }
+  if (dom.confirmDialogMessage) {
+    dom.confirmDialogMessage.textContent = description || "";
+  }
+  if (dom.confirmAcceptButton) {
+    dom.confirmAcceptButton.textContent = confirmLabel || "実行する";
+    dom.confirmAcceptButton.classList.remove("btn-danger", "btn-primary");
+    dom.confirmAcceptButton.classList.add(tone === "danger" ? "btn-danger" : "btn-primary");
+  }
+  if (dom.confirmCancelButton) {
+    dom.confirmCancelButton.textContent = cancelLabel || "キャンセル";
+  }
+
+  openDialog(dom.confirmDialog);
+
+  return await new Promise(resolve => {
+    confirmState.resolver = resolve;
+    confirmState.keydownHandler = event => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        finalizeConfirm(false);
+      }
+    };
+    document.addEventListener("keydown", confirmState.keydownHandler, true);
+  });
+}
+
+function setLoginError(message = "") {
+  if (!dom.loginError) return;
+  if (message) {
+    dom.loginError.textContent = message;
+    dom.loginError.hidden = false;
+  } else {
+    dom.loginError.textContent = "";
+    dom.loginError.hidden = true;
+  }
+}
+
 function legacyCopyToClipboard(text) {
   const textarea = document.createElement("textarea");
   textarea.value = text;
@@ -371,6 +475,10 @@ function renderParticipants() {
     genderTd.textContent = entry.gender || "";
     const departmentTd = document.createElement("td");
     departmentTd.textContent = entry.department || entry.groupNumber || "";
+    const phoneTd = document.createElement("td");
+    phoneTd.textContent = entry.phone || "";
+    const emailTd = document.createElement("td");
+    emailTd.textContent = entry.email || "";
     const teamTd = document.createElement("td");
     teamTd.className = "team-cell";
     teamTd.textContent = entry.teamNumber || entry.groupNumber || "";
@@ -402,6 +510,15 @@ function renderParticipants() {
     }
 
     linkActions.appendChild(editButton);
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "delete-link-btn";
+    deleteButton.dataset.participantId = entry.participantId;
+    deleteButton.dataset.rowIndex = String(index);
+    deleteButton.title = "参加者を削除";
+    deleteButton.innerHTML =
+      "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z\"/></svg><span>削除</span>";
+    linkActions.appendChild(deleteButton);
     linkTd.appendChild(linkActions);
 
     if (shareUrl) {
@@ -447,7 +564,7 @@ function renderParticipants() {
       departmentTd.appendChild(warning);
     }
 
-    tr.append(idTd, nameTd, phoneticTd, genderTd, departmentTd, teamTd, linkTd);
+    tr.append(idTd, nameTd, phoneticTd, genderTd, departmentTd, phoneTd, emailTd, teamTd, linkTd);
     tbody.appendChild(tr);
   });
 
@@ -485,6 +602,7 @@ function renderParticipants() {
   }
 
   syncSaveButtonState();
+  syncClearButtonState();
   syncTemplateButtons();
 }
 function renderEvents() {
@@ -626,6 +744,13 @@ function syncSaveButtonState() {
   dom.saveButton.disabled = state.saving || currentSignature === state.lastSavedSignature;
 }
 
+function syncClearButtonState() {
+  if (!dom.clearParticipantsButton) return;
+  const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
+  const hasParticipants = hasSelection && state.participants.length > 0;
+  dom.clearParticipantsButton.disabled = !hasSelection || !hasParticipants || state.saving;
+}
+
 function syncTemplateButtons() {
   const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
   const hasParticipants = hasSelection && state.participants.some(entry => entry.participantId);
@@ -678,6 +803,7 @@ function updateParticipantContext(options = {}) {
     if (dom.mappingTbody) dom.mappingTbody.innerHTML = "";
     if (dom.adminSummary) dom.adminSummary.textContent = "";
     syncTemplateButtons();
+    syncClearButtonState();
     return;
   }
 
@@ -694,6 +820,7 @@ function updateParticipantContext(options = {}) {
   }
 
   syncTemplateButtons();
+  syncClearButtonState();
 }
 
 async function loadEvents({ preserveSelection = true } = {}) {
@@ -1029,7 +1156,16 @@ async function handleUpdateEvent(eventId, name) {
 }
 
 async function handleDeleteEvent(eventId, eventName) {
-  if (!window.confirm(`イベント「${eventName}」を削除しますか？\n関連する日程と参加者も削除されます。`)) {
+  const label = eventName || eventId;
+  const confirmed = await confirmAction({
+    title: "イベントの削除",
+    description: `イベント「${label}」と、その日程・参加者・発行済みリンクをすべて削除します。よろしいですか？`,
+    confirmLabel: "削除する",
+    cancelLabel: "キャンセル",
+    tone: "danger"
+  });
+
+  if (!confirmed) {
     return;
   }
 
@@ -1076,9 +1212,10 @@ async function handleDeleteEvent(eventId, eventName) {
     updateParticipantContext();
     state.tokenSnapshotFetchedAt = Date.now();
     requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
+    setUploadStatus(`イベント「${label}」を削除しました。`, "success");
   } catch (error) {
     console.error(error);
-    alert(error.message || "イベントの削除に失敗しました。");
+    setUploadStatus(error.message || "イベントの削除に失敗しました。", "error");
   }
 }
 
@@ -1169,7 +1306,16 @@ async function handleUpdateSchedule(scheduleId, { label, date, startTime, endTim
 async function handleDeleteSchedule(scheduleId, scheduleLabel) {
   const eventId = state.selectedEventId;
   if (!eventId) return;
-  if (!window.confirm(`日程「${scheduleLabel || scheduleId}」を削除しますか？\n関連する参加者も削除されます。`)) {
+  const label = scheduleLabel || scheduleId;
+  const confirmed = await confirmAction({
+    title: "日程の削除",
+    description: `日程「${label}」と、紐づく参加者・専用リンクをすべて削除します。よろしいですか？`,
+    confirmLabel: "削除する",
+    cancelLabel: "キャンセル",
+    tone: "danger"
+  });
+
+  if (!confirmed) {
     return;
   }
 
@@ -1220,9 +1366,10 @@ async function handleDeleteSchedule(scheduleId, scheduleLabel) {
     updateParticipantContext();
     state.tokenSnapshotFetchedAt = Date.now();
     requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
+    setUploadStatus(`日程「${label}」を削除しました。`, "success");
   } catch (error) {
     console.error(error);
-    alert(error.message || "日程の削除に失敗しました。");
+    setUploadStatus(error.message || "日程の削除に失敗しました。", "error");
   }
 }
 
@@ -1247,7 +1394,11 @@ async function handleCsvChange(event) {
 
     const text = await readFileAsText(file);
     const rows = parseCsv(text);
-    const entries = assignParticipantIds(parseParticipantRows(rows), state.participants);
+    const entries = assignParticipantIds(
+      parseParticipantRows(rows),
+      state.participants,
+      { eventId: state.selectedEventId, scheduleId: state.selectedScheduleId }
+    );
     const existingMap = new Map(state.participants.map(entry => [entry.participantId, entry]));
     state.participants = sortParticipants(
       entries.map(entry => {
@@ -1394,117 +1545,21 @@ function downloadTeamTemplate() {
   setUploadStatus(`${filename} をダウンロードしました。（${rows.length}名）`, "success");
 }
 
-function handleTeamCsvChange(event) {
-  const files = event.target.files;
-  if (!files || !files.length) {
-    return;
-  }
-
-  const file = files[0];
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const eventId = state.selectedEventId;
-      if (!eventId) {
-        throw new Error("イベントを選択してください。");
-      }
-      const text = String(e.target.result || "");
-      const rows = parseCsv(text);
-      const assignments = parseTeamAssignmentRows(rows);
-      const scheduleId = state.selectedScheduleId;
-      const eventAssignmentMap = ensureTeamAssignmentMap(eventId);
-      const currentMapMatches = applyAssignmentsToEntries(state.participants, assignments);
-
-      assignments.forEach((teamNumber, participantId) => {
-        if (eventAssignmentMap) {
-          eventAssignmentMap.set(participantId, teamNumber);
-        }
-      });
-
-      const aggregateMap = eventAssignmentMap || assignments;
-      const applyResult = applyAssignmentsToEntries(state.participants, aggregateMap);
-      state.participants = sortParticipants(applyResult.entries);
-      syncCurrentScheduleCache();
-      const cacheMatched = applyAssignmentsToEventCache(eventId, aggregateMap);
-      updateDuplicateMatches();
-      renderParticipants();
-      syncSaveButtonState();
-
-      if (dom.teamFileLabel) {
-        dom.teamFileLabel.textContent = file.name;
-      }
-
-      const matchedIds = currentMapMatches.matchedIds || new Set();
-      const updatedIds = currentMapMatches.updatedIds || new Set();
-      const allMatched = new Set([...(matchedIds || []), ...(cacheMatched || [])]);
-      const unmatchedCount = Math.max(assignments.size - allMatched.size, 0);
-      const summaryParts = [];
-      summaryParts.push(`班番号を照合: ${allMatched.size}名`);
-      summaryParts.push(`変更: ${updatedIds.size}件`);
-      if (unmatchedCount > 0) {
-        summaryParts.push(`未一致: ${unmatchedCount}名`);
-      }
-      setUploadStatus(summaryParts.join(" / "), "success");
-    } catch (error) {
-      console.error(error);
-      setUploadStatus(error.message || "班番号CSVの読み込みに失敗しました。", "error");
-    } finally {
-      if (dom.teamCsvInput) {
-        dom.teamCsvInput.value = "";
-      }
-    }
-  };
-  reader.onerror = () => {
-    setUploadStatus("班番号CSVの読み込みに失敗しました。", "error");
-    if (dom.teamCsvInput) {
-      dom.teamCsvInput.value = "";
-    }
-  };
-  reader.readAsText(file, "utf-8");
-}
-
-function downloadParticipantTemplate() {
-  const filename = `participants_template_${formatDateForFilename()}.csv`;
-  downloadCsvFile(filename, [PARTICIPANT_TEMPLATE_HEADERS]);
-  setUploadStatus("参加者CSVテンプレートをダウンロードしました。", "success");
-}
-
-function downloadTeamTemplate() {
-  if (!state.selectedEventId || !state.selectedScheduleId) {
-    setUploadStatus("班番号テンプレートを作成するにはイベントと日程を選択してください。", "error");
-    return;
-  }
-
-  const rows = sortParticipants(state.participants)
-    .filter(entry => entry.participantId)
-    .map(entry => [
-      String(entry.participantId || ""),
-      String(entry.teamNumber || entry.groupNumber || "")
-    ]);
-
-  if (!rows.length) {
-    setUploadStatus("テンプレートに出力できる参加者が見つかりません。参加者リストを読み込んでからお試しください。", "error");
-    return;
-  }
-
-  const filename = `team_assignments_${formatDateForFilename()}.csv`;
-  downloadCsvFile(filename, [TEAM_TEMPLATE_HEADERS, ...rows]);
-  setUploadStatus(`班番号テンプレートをダウンロードしました。（${rows.length}名）`, "success");
-}
-
-async function handleSave() {
+async function handleSave(options = {}) {
+  const { allowEmpty = false, successMessage = "参加者リストを更新しました。" } = options || {};
   if (state.saving) return;
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) return;
-  if (!state.participants.length) {
+  if (!allowEmpty && !state.participants.length) {
     setUploadStatus("保存する参加者がありません。", "error");
-    return;
+    return false;
   }
 
   state.saving = true;
   if (dom.saveButton) dom.saveButton.disabled = true;
   setUploadStatus("保存中です…");
+  syncClearButtonState();
 
   try {
     await ensureTokenSnapshot(true);
@@ -1613,19 +1668,72 @@ async function handleSave() {
 
     state.participantTokenMap = nextTokenMap;
     state.lastSavedSignature = signatureForEntries(state.participants);
-    setUploadStatus("参加者リストを更新しました。", "success");
+    setUploadStatus(successMessage || "参加者リストを更新しました。", "success");
     await loadEvents({ preserveSelection: true });
     await loadParticipants();
     state.tokenSnapshotFetchedAt = Date.now();
     updateParticipantContext({ preserveStatus: true });
     requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
+    return true;
   } catch (error) {
     console.error(error);
     setUploadStatus(error.message || "保存に失敗しました。", "error");
     if (dom.saveButton) dom.saveButton.disabled = false;
+    return false;
   } finally {
     state.saving = false;
     syncSaveButtonState();
+    syncClearButtonState();
+  }
+}
+
+async function handleClearParticipants() {
+  const eventId = state.selectedEventId;
+  const scheduleId = state.selectedScheduleId;
+  if (!eventId || !scheduleId) {
+    setUploadStatus("イベントと日程を選択してください。", "error");
+    return;
+  }
+
+  if (!state.participants.length) {
+    setUploadStatus("参加者リストは既に空です。", "success");
+    return;
+  }
+
+  const selectedEvent = state.events.find(evt => evt.id === eventId);
+  const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === scheduleId);
+  const label = selectedSchedule?.label || scheduleId;
+
+  const confirmed = await confirmAction({
+    title: "参加者リストの全削除",
+    description: `日程「${label}」に登録されている参加者を全て削除します。保存すると元に戻せません。よろしいですか？`,
+    confirmLabel: "全て削除する",
+    cancelLabel: "キャンセル",
+    tone: "danger"
+  });
+
+  if (!confirmed) {
+    return;
+  }
+
+  const previousParticipants = state.participants.slice();
+  const previousTokenMap = new Map(state.participantTokenMap);
+  const previousSignature = state.lastSavedSignature;
+
+  state.participants = [];
+  state.participantTokenMap = new Map();
+  state.lastSavedSignature = signatureForEntries(state.participants);
+  state.duplicateMatches = new Map();
+  state.duplicateGroups = new Map();
+  renderParticipants();
+
+  const success = await handleSave({ allowEmpty: true, successMessage: "参加者リストを全て削除しました。" });
+  if (!success) {
+    state.participants = previousParticipants;
+    state.participantTokenMap = previousTokenMap;
+    state.lastSavedSignature = previousSignature;
+    updateDuplicateMatches();
+    renderParticipants();
   }
 }
 function setAuthUi(signedIn) {
@@ -1634,6 +1742,7 @@ function setAuthUi(signedIn) {
 
   if (signedIn) {
     renderUserSummary(state.user);
+    setLoginError("");
   } else {
     renderUserSummary(null);
   }
@@ -1700,6 +1809,18 @@ function resetState() {
 }
 
 function handleMappingTableClick(event) {
+  const deleteButton = event.target.closest(".delete-link-btn");
+  if (deleteButton) {
+    event.preventDefault();
+    const participantId = deleteButton.dataset.participantId || "";
+    const rowIndex = Number.parseInt(deleteButton.dataset.rowIndex || "", 10);
+    handleDeleteParticipant(participantId, Number.isFinite(rowIndex) ? rowIndex : null).catch(err => {
+      console.error(err);
+      setUploadStatus(err.message || "参加者の削除に失敗しました。", "error");
+    });
+    return;
+  }
+
   const copyButton = event.target.closest(".copy-link-btn");
   if (copyButton) {
     event.preventDefault();
@@ -1714,6 +1835,54 @@ function handleMappingTableClick(event) {
     const participantId = editButton.dataset.participantId;
     openParticipantEditor(participantId);
   }
+}
+
+async function handleDeleteParticipant(participantId, rowIndex) {
+  let entry = null;
+  if (participantId) {
+    entry = state.participants.find(item => String(item.participantId) === String(participantId));
+  }
+  if (!entry && Number.isInteger(rowIndex) && rowIndex >= 0) {
+    const sorted = sortParticipants(state.participants);
+    const candidate = sorted[rowIndex];
+    if (candidate) {
+      entry = state.participants.find(item => String(item.participantId) === String(candidate.participantId));
+    }
+  }
+
+  if (!entry) {
+    setUploadStatus("削除対象の参加者が見つかりません。", "error");
+    return;
+  }
+
+  const nameLabel = entry.name ? `「${entry.name}」` : "";
+  const idLabel = entry.participantId ? `ID: ${entry.participantId}` : "ID未設定";
+  const description = nameLabel
+    ? `参加者${nameLabel}（${idLabel}）を一覧から削除します。保存を実行するとデータベースからも削除されます。`
+    : `参加者（${idLabel}）を一覧から削除します。保存を実行するとデータベースからも削除されます。`;
+
+  const confirmed = await confirmAction({
+    title: "参加者の削除",
+    description,
+    confirmLabel: "削除する",
+    cancelLabel: "キャンセル",
+    tone: "danger"
+  });
+
+  if (!confirmed) {
+    return;
+  }
+
+  const removed = removeParticipantFromState(entry.participantId, entry);
+  if (!removed) {
+    setUploadStatus("参加者の削除に失敗しました。", "error");
+    return;
+  }
+
+  const identifier = removed.name
+    ? `参加者「${removed.name}」`
+    : `参加者ID: ${removed.participantId}`;
+  setUploadStatus(`${identifier}を削除しました。保存ボタンから反映してください。`, "success");
 }
 
 function openParticipantEditor(participantId) {
@@ -1797,6 +1966,48 @@ function saveParticipantEdits() {
   state.editingParticipantId = null;
 }
 
+function removeParticipantFromState(participantId, fallbackEntry) {
+  const targetId = String(participantId || "").trim();
+  let removed = null;
+  let nextList = [];
+
+  if (targetId) {
+    removed = state.participants.find(entry => String(entry.participantId) === targetId) || null;
+    if (!removed) {
+      return null;
+    }
+    nextList = state.participants.filter(entry => String(entry.participantId) !== targetId);
+  } else if (fallbackEntry) {
+    const index = state.participants.findIndex(entry => entry === fallbackEntry);
+    if (index === -1) {
+      return null;
+    }
+    removed = state.participants[index];
+    nextList = state.participants.filter((_, idx) => idx !== index);
+  } else {
+    return null;
+  }
+
+  state.participants = sortParticipants(nextList);
+
+  syncCurrentScheduleCache();
+  updateDuplicateMatches();
+
+  const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
+  if (selectedEvent?.schedules) {
+    const schedule = selectedEvent.schedules.find(s => s.id === state.selectedScheduleId);
+    if (schedule) {
+      schedule.participantCount = state.participants.length;
+    }
+  }
+
+  renderParticipants();
+  renderSchedules();
+  renderEvents();
+  updateParticipantContext({ preserveStatus: true });
+  return removed;
+}
+
 async function verifyEnrollment(user) {
   const authorized = await fetchAuthorizedEmails();
   const email = String(user.email || "").trim().toLowerCase();
@@ -1877,13 +2088,14 @@ function attachEventHandlers() {
   if (dom.loginButton) {
     dom.loginButton.addEventListener("click", async () => {
       if (dom.loginButton.disabled) return;
+      setLoginError("");
       dom.loginButton.disabled = true;
       dom.loginButton.classList.add("is-busy");
       try {
         await signInWithPopup(auth, provider);
       } catch (error) {
         console.error(error);
-        alert("ログインに失敗しました。時間をおいて再度お試しください。");
+        setLoginError("ログインに失敗しました。時間をおいて再度お試しください。");
         dom.loginButton.disabled = false;
         dom.loginButton.classList.remove("is-busy");
       }
@@ -2065,6 +2277,15 @@ function attachEventHandlers() {
     dom.addScheduleButton.disabled = true;
   }
 
+  if (dom.clearParticipantsButton) {
+    dom.clearParticipantsButton.addEventListener("click", () => {
+      handleClearParticipants().catch(err => {
+        console.error(err);
+        setUploadStatus(err.message || "参加者リストの削除に失敗しました。", "error");
+      });
+    });
+  }
+
   if (dom.eventEmpty) dom.eventEmpty.hidden = true;
   if (dom.scheduleEmpty) dom.scheduleEmpty.hidden = true;
 
@@ -2078,6 +2299,8 @@ function attachEventHandlers() {
   if (dom.copyrightYear) {
     dom.copyrightYear.textContent = String(new Date().getFullYear());
   }
+
+  setupConfirmDialog();
 }
 
 function initAuthWatcher() {
@@ -2112,7 +2335,7 @@ function initAuthWatcher() {
       requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
     } catch (error) {
       console.error(error);
-      alert(error.message || "権限の確認に失敗しました。");
+      setLoginError(error.message || "権限の確認に失敗しました。");
       await signOut(auth);
       resetState();
     } finally {

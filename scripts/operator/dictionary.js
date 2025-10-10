@@ -104,7 +104,15 @@ export async function addTerm(app, event) {
 }
 
 export async function deleteTerm(app, term) {
-  if (!confirm(`「${term}」を辞書から削除しますか？`)) return;
+  if (!term) return;
+  const confirmed = await app.confirmAction({
+    title: "辞書から削除",
+    description: `「${term}」を辞書から削除します。よろしいですか？`,
+    confirmLabel: "削除する",
+    cancelLabel: "キャンセル",
+    tone: "danger"
+  });
+  if (!confirmed) return;
   try {
     const result = await app.api.apiPost({ action: "deleteTerm", term });
     if (result.success) {

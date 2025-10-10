@@ -178,6 +178,22 @@
       </div>
     </div>
 
+    <div id="confirm-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" hidden>
+      <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+      <div class="modal-panel">
+        <div class="modal-header">
+          <h2 id="confirm-dialog-title">確認</h2>
+        </div>
+        <div class="modal-body">
+          <p id="confirm-dialog-message"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
+          <button type="button" class="btn btn-danger" id="confirm-accept-button">実行する</button>
+        </div>
+      </div>
+    </div>
+
     <footer class="site-footer">
       <div class="credit-line">Created by <span class="credit-highlight">23schop Maruo Kyohei</span></div>
       <div class="credit-line">&copy; <span id="copyright-year">2025</span> Hirosaki Hirosaki Univ. Co-op. SCHOP</div>

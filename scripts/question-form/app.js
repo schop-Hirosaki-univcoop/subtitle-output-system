@@ -15,6 +15,96 @@ import {
   sanitizeRadioName
 } from "./string-utils.js";
 
+const hasIntlDateTime = typeof Intl !== "undefined" && typeof Intl.DateTimeFormat === "function";
+const DATE_FORMATTER = hasIntlDateTime
+  ? new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" })
+  : null;
+const TIME_FORMATTER = hasIntlDateTime
+  ? new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false })
+  : null;
+
+function parseDateTimeValue(value) {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [year, month, day] = trimmed.split("-").map(Number);
+    if ([year, month, day].some(Number.isNaN)) return null;
+    return new Date(year, month - 1, day);
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(trimmed)) {
+    const [datePart, timePart] = trimmed.split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const timeParts = timePart.split(":").map(Number);
+    if ([year, month, day, ...timeParts].some(Number.isNaN)) return null;
+    const [hour, minute, second = 0] = timeParts;
+    return new Date(year, month - 1, day, hour, minute, second);
+  }
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function formatDateDisplay(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  if (DATE_FORMATTER) return DATE_FORMATTER.format(date);
+  return date.toISOString().split("T")[0];
+}
+
+function formatTimeDisplay(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  if (TIME_FORMATTER) return TIME_FORMATTER.format(date);
+  return date.toTimeString().slice(0, 5);
+}
+
+function formatScheduleSummary({ label = "", date = "", start = "", end = "" } = {}) {
+  const trimmedLabel = String(label || "").trim();
+  const trimmedDate = String(date || "").trim();
+  const startDate = parseDateTimeValue(start);
+  const endDate = parseDateTimeValue(end);
+  const baseDate = startDate || parseDateTimeValue(trimmedDate);
+  const fallback = trimmedLabel || trimmedDate;
+
+  if (!baseDate && !fallback) {
+    return "未設定";
+  }
+
+  const dateText = baseDate ? formatDateDisplay(baseDate) : "";
+  if (!dateText) {
+    return fallback || "未設定";
+  }
+
+  let timeText = "";
+  if (startDate) {
+    const startTime = formatTimeDisplay(startDate);
+    if (startTime) {
+      if (endDate && !Number.isNaN(endDate.getTime())) {
+        const endTime = formatTimeDisplay(endDate);
+        if (endTime) {
+          if (startDate.toDateString() === endDate.toDateString()) {
+            timeText = `${startTime}〜${endTime}`;
+          } else {
+            const endDateText = formatDateDisplay(endDate);
+            timeText = endDateText ? `${startTime}〜${endDateText} ${endTime}` : `${startTime}〜${endTime}`;
+          }
+        }
+      } else {
+        timeText = `${startTime}〜`;
+      }
+    }
+  }
+
+  const needsLabelSuffix = trimmedLabel && trimmedLabel !== dateText;
+  const rangeText = timeText ? `${dateText} ${timeText}` : dateText;
+  if (rangeText) {
+    return rangeText;
+  }
+  if (needsLabelSuffix) {
+    return trimmedLabel;
+  }
+  return fallback || "未設定";
+}
+
 export class QuestionFormApp {
   constructor({ view, database } = {}) {
     this.database = database ?? getDatabaseInstance(firebaseConfig);
@@ -89,6 +179,8 @@ export class QuestionFormApp {
     const eventName = context.eventName.trim();
     const scheduleLabel = context.scheduleLabel.trim();
     const scheduleDate = context.scheduleDate.trim();
+    const scheduleStart = context.scheduleStart.trim();
+    const scheduleEnd = context.scheduleEnd.trim();
 
     this.view.setHiddenContext({
       eventId: context.eventId,
@@ -100,17 +192,23 @@ export class QuestionFormApp {
       groupNumber: context.groupNumber
     });
 
-    if (displayName) {
-      const limitedName = displayName.slice(0, MAX_RADIO_NAME_LENGTH);
-      this.view.setRadioNameValue(limitedName);
-    }
+    this.view.setRadioNameValue("");
 
     const targetName = displayName || "ゲスト";
-    const eventLabel = eventName ? `「${eventName}」` : "";
-    const scheduleText = `あなたの参加日程：${scheduleLabel || scheduleDate || "未設定"}`;
+    const scheduleSummary = formatScheduleSummary({
+      label: scheduleLabel,
+      date: scheduleDate,
+      start: scheduleStart,
+      end: scheduleEnd
+    });
+    const scheduleText = `あなたの参加日程：${scheduleSummary}`;
+    const descriptionText = eventName
+      ? `こちらは「${eventName}」の中で行われる【なんでも相談ラジオ】の質問受付フォームです。気になることや相談したいことをお気軽にお寄せください。`
+      : "こちらは【なんでも相談ラジオ】の質問受付フォームです。気になることや相談したいことをお気軽にお寄せください。";
 
     this.view.setContextBanner({
-      welcomeText: `ようこそ${targetName}さん${eventLabel ? `、${eventLabel}` : ""}`,
+      welcomeText: `ようこそ${targetName}さん`,
+      descriptionText,
       scheduleText
     });
 
@@ -218,7 +316,7 @@ export class QuestionFormApp {
       return;
     }
     if (questionLength > MAX_QUESTION_LENGTH) {
-      this.view.setFeedback("質問は400文字以内で入力してください。", "error");
+      this.view.setFeedback(`質問は${MAX_QUESTION_LENGTH}文字以内で入力してください。`, "error");
       this.view.focusQuestion();
       return;
     }

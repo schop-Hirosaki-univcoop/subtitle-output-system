@@ -409,8 +409,11 @@ function ensureQuestionScheduleSheet_() {
 }
 
 function ensureQuestionParticipantSheet_() {
-  const sheet = ensureSheetWithHeaders_(QUESTION_PARTICIPANT_SHEET, ['イベントID', '日程ID', '参加者ID', '氏名', '班番号', '更新日時']);
-  sheet.getRange('F2:F').setNumberFormat('yyyy/MM/dd HH:mm:ss');
+  const sheet = ensureSheetWithHeaders_(
+    QUESTION_PARTICIPANT_SHEET,
+    ['イベントID', '日程ID', '参加者ID', '氏名', 'フリガナ', '性別', '学部学科', '携帯電話', 'メールアドレス', '班番号', '更新日時']
+  );
+  sheet.getRange('K2:K').setNumberFormat('yyyy/MM/dd HH:mm:ss');
   return sheet;
 }
 
@@ -575,6 +578,12 @@ function mirrorQuestionIntake_() {
     participantsTree[entry.eventId][entry.scheduleId][entry.participantId] = {
       participantId: entry.participantId,
       name: entry.name || '',
+      phonetic: entry.phonetic || entry.furigana || '',
+      furigana: entry.furigana || entry.phonetic || '',
+      gender: entry.gender || '',
+      department: entry.department || '',
+      phone: entry.phone || '',
+      email: entry.email || '',
       groupNumber: teamValue,
       teamNumber: teamValue,
       token: tokenValue,
@@ -596,6 +605,8 @@ function mirrorQuestionIntake_() {
       scheduleId: entry.scheduleId,
       scheduleLabel: schedule.label || tokenRecord.scheduleLabel || schedule.id || '',
       scheduleDate: schedule.date || tokenRecord.scheduleDate || '',
+      scheduleStart: schedule.startAt || tokenRecord.scheduleStart || '',
+      scheduleEnd: schedule.endAt || tokenRecord.scheduleEnd || '',
       participantId: entry.participantId,
       displayName: entry.name || '',
       groupNumber: teamValue,
@@ -739,6 +750,11 @@ function syncQuestionIntakeToSheet_() {
           scheduleId,
           participantId,
           name: String(participant.name || ''),
+          phonetic: String(participant.phonetic || participant.furigana || ''),
+          gender: String(participant.gender || ''),
+          department: String(participant.department || ''),
+          phone: String(participant.phone || ''),
+          email: String(participant.email || ''),
           groupNumber: String(participant.teamNumber || participant.groupNumber || ''),
           updatedAt
         });
@@ -764,10 +780,15 @@ function syncQuestionIntakeToSheet_() {
     row.scheduleId,
     row.participantId,
     row.name,
+    row.phonetic,
+    row.gender,
+    row.department,
+    row.phone,
+    row.email,
     row.groupNumber,
     toSheetDate(row.updatedAt)
   ]);
-  replaceSheetRows_(ensureQuestionParticipantSheet_(), participantSheetRows, 6);
+  replaceSheetRows_(ensureQuestionParticipantSheet_(), participantSheetRows, 11);
 
   return {
     events: eventRows.length,
@@ -827,22 +848,33 @@ function readParticipantEntries_() {
   if (lastRow < 2) {
     return [];
   }
-  const values = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  const values = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
   return values
     .map(row => {
       const eventId = String(row[0] || '').trim();
       const scheduleId = String(row[1] || '').trim();
       const participantId = String(row[2] || '').trim();
       if (!eventId || !scheduleId || !participantId) return null;
-      const teamNumber = String(row[4] || '').trim();
+      const phonetic = normalizeNameKey_(row[4] || '');
+      const gender = String(row[5] || '').trim();
+      const department = String(row[6] || '').trim();
+      const phone = String(row[7] || '').trim();
+      const email = String(row[8] || '').trim();
+      const teamNumber = String(row[9] || '').trim();
       return {
         eventId,
         scheduleId,
         participantId,
         name: normalizeNameKey_(row[3] || ''),
+        phonetic,
+        furigana: phonetic,
+        gender,
+        department,
+        phone,
+        email,
         groupNumber: teamNumber,
         teamNumber,
-        updatedAt: row[5] instanceof Date ? toIsoJst_(row[5]) : ''
+        updatedAt: row[10] instanceof Date ? toIsoJst_(row[10]) : ''
       };
     })
     .filter(Boolean);
@@ -1036,6 +1068,12 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
     return {
       participantId: entry.participantId,
       name: entry.name,
+      phonetic: entry.phonetic || entry.furigana || '',
+      furigana: entry.furigana || entry.phonetic || '',
+      gender: entry.gender || '',
+      department: entry.department || '',
+      phone: entry.phone || '',
+      email: entry.email || '',
       groupNumber: entry.teamNumber || entry.groupNumber,
       teamNumber: entry.teamNumber || entry.groupNumber,
       token: current.token || '',
@@ -1070,15 +1108,29 @@ function saveQuestionParticipants_(eventId, scheduleId, entries) {
     if (seen.has(participantId)) return;
     seen.add(participantId);
     const name = normalizeNameKey_(entry.name || entry.displayName || '');
-    const groupNumber = String(entry.groupNumber || entry.group || '').trim();
-    deduped.push({ participantId, name, groupNumber });
+    const phonetic = normalizeNameKey_(entry.phonetic || entry.furigana || '');
+    const gender = String(entry.gender || '').trim();
+    const department = String(entry.department || entry.faculty || '').trim();
+    const phone = String(entry.phone || '').trim();
+    const email = String(entry.email || '').trim();
+    const groupNumber = String(entry.groupNumber || entry.group || entry.teamNumber || '').trim();
+    deduped.push({
+      participantId,
+      name,
+      phonetic,
+      gender,
+      department,
+      phone,
+      email,
+      groupNumber
+    });
   });
 
   const sheet = ensureQuestionParticipantSheet_();
   const lastRow = sheet.getLastRow();
   let existing = [];
   if (lastRow >= 2) {
-    existing = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+    existing = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
   }
 
   const nextRows = [];
@@ -1091,7 +1143,19 @@ function saveQuestionParticipants_(eventId, scheduleId, entries) {
     if (eventValue === trimmedEventId && scheduleValue === trimmedScheduleId) {
       return;
     }
-    nextRows.push([eventValue, scheduleValue, String(row[2] || '').trim(), normalizeNameKey_(row[3] || ''), String(row[4] || '').trim(), row[5]]);
+    nextRows.push([
+      eventValue,
+      scheduleValue,
+      String(row[2] || '').trim(),
+      normalizeNameKey_(row[3] || ''),
+      normalizeNameKey_(row[4] || ''),
+      String(row[5] || '').trim(),
+      String(row[6] || '').trim(),
+      String(row[7] || '').trim(),
+      String(row[8] || '').trim(),
+      String(row[9] || '').trim(),
+      row[10]
+    ]);
   });
 
   const now = new Date();
@@ -1101,20 +1165,25 @@ function saveQuestionParticipants_(eventId, scheduleId, entries) {
       trimmedScheduleId,
       entry.participantId,
       entry.name,
+      entry.phonetic,
+      entry.gender,
+      entry.department,
+      entry.phone,
+      entry.email,
       entry.groupNumber,
       now
     ]);
   });
 
   if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, 6).clearContent();
+    sheet.getRange(2, 1, lastRow - 1, 11).clearContent();
   }
   if (nextRows.length) {
     const requiredRows = nextRows.length + 1;
     if (sheet.getMaxRows() < requiredRows) {
       sheet.insertRowsAfter(sheet.getMaxRows(), requiredRows - sheet.getMaxRows());
     }
-    sheet.getRange(2, 1, nextRows.length, 6).setValues(nextRows);
+    sheet.getRange(2, 1, nextRows.length, 11).setValues(nextRows);
   }
 
   mirrorQuestionIntake_();
@@ -1155,6 +1224,8 @@ function fetchQuestionContext_(payload) {
     scheduleId,
     scheduleLabel: schedule.label || schedule.date || '',
     scheduleDate: schedule.date || '',
+    scheduleStart: schedule.startAt || '',
+    scheduleEnd: schedule.endAt || '',
     participantId,
     participantName: participant.name,
     groupNumber: participant.teamNumber || participant.groupNumber || '',
