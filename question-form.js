@@ -195,7 +195,7 @@ async function fetchContextFromToken(token) {
     scheduleDate: String(data.scheduleDate || ""),
     participantId: String(data.participantId || ""),
     participantName: String(data.displayName || ""),
-    groupNumber: String(data.groupNumber || ""),
+    groupNumber: String(data.teamNumber || data.groupNumber || ""),
     guidance: String(data.guidance || "")
   };
 }

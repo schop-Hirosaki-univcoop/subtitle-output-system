@@ -136,6 +136,7 @@ function submitQuestion_(payload) {
   const radioName = String(payload.radioName || payload.name || '').trim();
   const questionText = String(payload.question || payload.text || '').trim();
   const payloadGroupNumber = String(payload.groupNumber || payload.group || '').trim();
+  const payloadTeamNumber = String(payload.teamNumber || payload.team || '').trim();
   const rawGenre = String(payload.genre || '').trim();
   const payloadScheduleLabel = String(payload.schedule || payload.date || '').trim();
   const payloadEventId = String(payload.eventId || '').trim();
@@ -198,7 +199,7 @@ function submitQuestion_(payload) {
   const scheduleDate = String(tokenRecord.scheduleDate || payloadScheduleDate || '').trim();
   const participantName = String(tokenRecord.displayName || '').trim();
   const guidance = String(tokenRecord.guidance || payload.guidance || '').trim();
-  const groupNumber = String(tokenRecord.groupNumber || payloadGroupNumber || '').trim();
+  const groupNumber = String(tokenRecord.teamNumber || tokenRecord.groupNumber || payloadTeamNumber || payloadGroupNumber || '').trim();
 
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('answer');
   if (!sheet) throw new Error('Sheet "answer" not found.');
@@ -569,10 +570,13 @@ function mirrorQuestionIntake_() {
     const participantUpdatedAt = parseDateToMillis_(entry.updatedAt, now);
     const guidance = existingParticipant.guidance || tokenRecord.guidance || '';
 
+    const teamValue = String(entry.teamNumber || entry.groupNumber || '');
+
     participantsTree[entry.eventId][entry.scheduleId][entry.participantId] = {
       participantId: entry.participantId,
       name: entry.name || '',
-      groupNumber: entry.groupNumber || '',
+      groupNumber: teamValue,
+      teamNumber: teamValue,
       token: tokenValue,
       guidance,
       updatedAt: participantUpdatedAt
@@ -594,7 +598,8 @@ function mirrorQuestionIntake_() {
       scheduleDate: schedule.date || tokenRecord.scheduleDate || '',
       participantId: entry.participantId,
       displayName: entry.name || '',
-      groupNumber: entry.groupNumber || '',
+      groupNumber: teamValue,
+      teamNumber: teamValue,
       guidance,
       revoked: false,
       createdAt: tokenCreatedAt,
@@ -734,7 +739,7 @@ function syncQuestionIntakeToSheet_() {
           scheduleId,
           participantId,
           name: String(participant.name || ''),
-          groupNumber: String(participant.groupNumber || ''),
+          groupNumber: String(participant.teamNumber || participant.groupNumber || ''),
           updatedAt
         });
       });
@@ -829,12 +834,14 @@ function readParticipantEntries_() {
       const scheduleId = String(row[1] || '').trim();
       const participantId = String(row[2] || '').trim();
       if (!eventId || !scheduleId || !participantId) return null;
+      const teamNumber = String(row[4] || '').trim();
       return {
         eventId,
         scheduleId,
         participantId,
         name: normalizeNameKey_(row[3] || ''),
-        groupNumber: String(row[4] || '').trim(),
+        groupNumber: teamNumber,
+        teamNumber,
         updatedAt: row[5] instanceof Date ? toIsoJst_(row[5]) : ''
       };
     })
@@ -1029,7 +1036,8 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
     return {
       participantId: entry.participantId,
       name: entry.name,
-      groupNumber: entry.groupNumber,
+      groupNumber: entry.teamNumber || entry.groupNumber,
+      teamNumber: entry.teamNumber || entry.groupNumber,
       token: current.token || '',
       guidance: current.guidance || ''
     };
@@ -1149,7 +1157,8 @@ function fetchQuestionContext_(payload) {
     scheduleDate: schedule.date || '',
     participantId,
     participantName: participant.name,
-    groupNumber: participant.groupNumber || ''
+    groupNumber: participant.teamNumber || participant.groupNumber || '',
+    teamNumber: participant.teamNumber || participant.groupNumber || ''
   };
 }
 
@@ -1195,6 +1204,7 @@ function mirrorSheetToRtdb_(){
   const grpIdx = idxOf('班番号');
   const genreIdx = idxOf('ジャンル');
   const dateIdx = idxOf('日程');
+  const participantIdx = idxOf('参加者ID');
   const selIdx = idxOf('選択中');
   const ansIdx = idxOf('回答済');
   const uidIdx = idxOf('UID');
@@ -1222,6 +1232,7 @@ function mirrorSheetToRtdb_(){
     const groupVal = grpIdx>=0 ? row[grpIdx] : '';
     const genreVal = genreIdx>=0 ? row[genreIdx] : '';
     const dateVal = dateIdx>=0 ? row[dateIdx] : '';
+    const participantId = participantIdx >= 0 ? String(row[participantIdx] ?? '').trim() : '';
     map[uid] = {
       uid,
       name: String(row[nameIdx] ?? ''),
@@ -1229,6 +1240,7 @@ function mirrorSheetToRtdb_(){
       group: String(groupVal ?? ''),
       genre: String(genreVal ?? ''),
       schedule: String(dateVal ?? ''),
+      participantId,
       ts: tsMs || 0,
       answered: Boolean(row[ansIdx] === true),
       selecting: Boolean(row[selIdx] === true),
