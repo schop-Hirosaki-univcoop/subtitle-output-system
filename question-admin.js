@@ -576,6 +576,12 @@ function normalizeDateInputValue(value) {
   return parsed ? formatDatePart(parsed) : "";
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function formatDateTimeLocal(date) {
+  return `${formatDatePart(date)}T${formatTimePart(date)}`;
+}
+
 function combineDateAndTime(dateValue, timeValue) {
   const datePart = normalizeDateInputValue(dateValue);
   const timePart = String(timeValue || "").trim();
@@ -745,11 +751,7 @@ function describeScheduleRange(schedule) {
 
 function syncScheduleEndMin() {
   if (!dom.scheduleStartTimeInput || !dom.scheduleEndTimeInput) return;
-  const startValue = dom.scheduleStartTimeInput.value || "";
-  dom.scheduleEndTimeInput.min = startValue;
-  if (startValue && dom.scheduleEndTimeInput.value && dom.scheduleEndTimeInput.value < startValue) {
-    dom.scheduleEndTimeInput.value = startValue;
-  }
+  dom.scheduleEndTimeInput.removeAttribute("min");
 }
 
 function legacyCopyToClipboard(text) {
@@ -1319,16 +1321,20 @@ async function handleAddSchedule({ label, date, startTime, endTime }) {
     throw new Error("開始と終了の時刻を入力してください。");
   }
 
-  const startValue = combineDateAndTime(normalizedDate, startTimeValue);
-  const endValue = combineDateAndTime(normalizedDate, endTimeValue);
-  const startDate = parseDateTimeLocal(startValue);
-  const endDate = parseDateTimeLocal(endValue);
+  const startValueText = combineDateAndTime(normalizedDate, startTimeValue);
+  const endValueText = combineDateAndTime(normalizedDate, endTimeValue);
+  let startDate = parseDateTimeLocal(startValueText);
+  let endDate = parseDateTimeLocal(endValueText);
   if (!startDate || !endDate) {
     throw new Error("開始・終了時刻の形式が正しくありません。");
   }
+
   if (endDate <= startDate) {
-    throw new Error("終了時刻は開始時刻より後に設定してください。");
+    endDate = new Date(endDate.getTime() + MS_PER_DAY);
   }
+
+  const startValue = formatDateTimeLocal(startDate);
+  const endValue = formatDateTimeLocal(endDate);
 
   try {
     const now = Date.now();
