@@ -655,6 +655,7 @@ class OperatorApp {
         "質問・お悩み": item.question,
         ジャンル: resolveGenreLabel(item.genre),
         日程: String(item.schedule ?? "").trim(),
+        参加者ID: item.participantId ?? "",
         回答済: !!item.answered,
         選択中: !!item.selecting,
         __ts: Number(item.ts || 0)
@@ -779,6 +780,7 @@ class OperatorApp {
         "質問・お悩み": item.question,
         ジャンル: resolveGenreLabel(item.genre),
         日程: String(item.schedule ?? "").trim(),
+        参加者ID: item.participantId ?? "",
         回答済: !!item.answered,
         選択中: !!item.selecting,
         __ts: Number(item.ts || 0)
@@ -1061,6 +1063,10 @@ class OperatorApp {
 
     const snapshot = await get(telopRef);
     const live = snapshot.val();
+    const liveUid = live && typeof live.uid !== "undefined" ? String(live.uid || "") : "";
+    const liveName = String(live?.name ?? "");
+    const liveQuestion = String(live?.question ?? "");
+    const liveParticipantId = String(live?.participantId ?? "");
     const selectedUid = this.state.selectedRowData ? String(this.state.selectedRowData.uid) : null;
     let nextSelection = null;
 
@@ -1075,8 +1081,14 @@ class OperatorApp {
       if (isPuq) {
         card.classList.add("is-puq");
       }
-      card.dataset.uid = String(item.UID);
-      if (live && live.name === item["ラジオネーム"] && live.question === item["質問・お悩み"]) {
+      const uid = String(item.UID);
+      card.dataset.uid = uid;
+      const participantId = String(item["参加者ID"] ?? "").trim();
+      const isLiveMatch = liveUid
+        ? liveUid === uid
+        : (liveParticipantId && participantId && liveParticipantId === participantId && liveQuestion === item["質問・お悩み"]) ||
+          (liveName === item["ラジオネーム"] && liveQuestion === item["質問・お悩み"]);
+      if (isLiveMatch) {
         card.classList.add("now-displaying");
         if (this.state.lastDisplayedUid === item.UID) {
           card.classList.add("flash");
@@ -1088,22 +1100,26 @@ class OperatorApp {
           this.state.lastDisplayedUid = null;
         }
       }
-      const uid = String(item.UID);
       if (uid === selectedUid) {
         card.classList.add("is-selected");
         nextSelection = {
           uid,
           name: item["ラジオネーム"],
           question: item["質問・お悩み"],
-          isAnswered
+          isAnswered,
+          participantId
         };
       }
       const rawName = item["ラジオネーム"];
       const displayName = formatOperatorName(rawName) || "—";
       const groupLabel = String(item["班番号"] ?? "").trim();
+      const participantBadge = participantId
+        ? `<span class="q-participant" role="text" aria-label="参加者ID ${escapeHtml(participantId)}">${escapeHtml(participantId)}</span>`
+        : "";
       card.innerHTML = `
         <span class="status-text visually-hidden">${statusText}</span>
         <div class="q-corner">
+          ${participantBadge}
           ${groupLabel ? `<span class="q-group" role="text" aria-label="班番号 ${escapeHtml(groupLabel)}">${escapeHtml(groupLabel)}</span>` : ""}
           <label class="q-check" aria-label="${statusText}の質問をバッチ選択">
             <input type="checkbox" class="row-checkbox" data-uid="${escapeHtml(uid)}">
@@ -1126,7 +1142,8 @@ class OperatorApp {
           uid,
           name: item["ラジオネーム"],
           question: item["質問・お悩み"],
-          isAnswered
+          isAnswered,
+          participantId
         };
         this.updateActionAvailability();
       });
@@ -1152,9 +1169,15 @@ class OperatorApp {
     if (!this.state.selectedRowData || this.state.selectedRowData.isAnswered) return;
     const snapshot = await get(telopRef);
     const previousTelop = snapshot.val();
+    const previousUid = previousTelop && typeof previousTelop.uid !== "undefined"
+      ? String(previousTelop.uid || "")
+      : "";
     try {
       const updates = {};
-      if (previousTelop) {
+      if (previousUid) {
+        updates[`questions/${previousUid}/selecting`] = false;
+        updates[`questions/${previousUid}/answered`] = true;
+      } else if (previousTelop) {
         const prev = this.state.allQuestions.find(
           (q) => q["ラジオネーム"] === previousTelop.name && q["質問・お悩み"] === previousTelop.question
         );
@@ -1167,11 +1190,15 @@ class OperatorApp {
       updates[`questions/${this.state.selectedRowData.uid}/answered`] = false;
       await update(ref(database), updates);
       await set(telopRef, {
+        uid: this.state.selectedRowData.uid,
+        participantId: this.state.selectedRowData.participantId || "",
         name: this.state.selectedRowData.name,
         question: this.state.selectedRowData.question
       });
       this.api.fireAndForgetApi({ action: "updateSelectingStatus", uid: this.state.selectedRowData.uid });
-      if (previousTelop) {
+      if (previousUid) {
+        this.api.fireAndForgetApi({ action: "updateStatus", uid: previousUid, status: true });
+      } else if (previousTelop) {
         const prev = this.state.allQuestions.find(
           (q) => q["ラジオネーム"] === previousTelop.name && q["質問・お悩み"] === previousTelop.question
         );

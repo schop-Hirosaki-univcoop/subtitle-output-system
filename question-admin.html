@@ -44,7 +44,7 @@
       <div class="module-header">
         <div class="module-heading">
           <h1 id="event-title">イベントの管理</h1>
-          <p class="module-description">質問フォームで使用するイベントを追加・削除できます。</p>
+          <p class="module-description">質問フォームで使用するイベントを追加・編集・削除できます。</p>
         </div>
         <div class="module-actions">
           <button id="add-event-button" class="btn btn-primary btn-sm" type="button" disabled>イベントを追加</button>
@@ -63,7 +63,7 @@
       <div class="module-header">
         <div class="module-heading">
           <h2 id="schedule-title">日程の管理</h2>
-          <p class="module-description" id="schedule-description">イベントを選択すると、日程の一覧が表示されます。</p>
+          <p class="module-description" id="schedule-description">イベントを選択すると、日程の一覧が表示され、編集や削除も行えます。</p>
         </div>
         <div class="module-actions">
           <button id="add-schedule-button" class="btn btn-primary btn-sm" type="button" disabled>日程を追加</button>
@@ -79,7 +79,7 @@
       <div class="module-header">
         <div class="module-heading">
           <h2 id="participant-title">参加者リストの管理</h2>
-          <p class="module-description" id="participant-description">日程を選択し、参加者IDと班番号のリストをアップロードしてください。保存後は各参加者ごとに専用リンクを発行できます。</p>
+          <p class="module-description" id="participant-description">日程を選択し、参加者情報（参加者IDを空欄にすると自動採番されます）をアップロードしてください。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。同じイベント内で名前と学部学科が一致する参加者は、日程が異なる場合でも重複候補として件数付きで表示されます。</p>
         </div>
       </div>
       <div class="module-body">
@@ -88,6 +88,10 @@
           <label class="btn btn-ghost file-input" for="csv-input">
             <span id="file-label">CSVファイルを選択</span>
             <input id="csv-input" type="file" accept=".csv,text/csv">
+          </label>
+          <label class="btn btn-ghost file-input" for="team-csv-input">
+            <span id="team-file-label">班番号CSVを選択</span>
+            <input id="team-csv-input" type="file" accept=".csv,text/csv">
           </label>
           <button id="save-button" class="btn btn-primary" type="button" disabled>参加者リストを保存</button>
           <span id="upload-status" class="status-pill">日程を選択してください。</span>
@@ -99,6 +103,9 @@
               <tr>
                 <th scope="col">参加者ID</th>
                 <th scope="col">氏名 / ラジオネーム</th>
+                <th scope="col">フリガナ</th>
+                <th scope="col">性別</th>
+                <th scope="col">学部学科</th>
                 <th scope="col">班番号</th>
                 <th scope="col">専用リンク</th>
               </tr>
@@ -113,15 +120,18 @@
       <div class="module-header">
         <div class="module-heading">
           <h2 id="format-title">CSVの形式について</h2>
-          <p class="module-description">1列目に参加者ID、2列目に氏名、3列目に班番号を配置してください。</p>
+          <p class="module-description">1列目から順に「参加者ID」「名前」「フリガナ」「性別」「学部学科」「携帯電話」「メールアドレス」を配置してください（参加者IDは空欄でも構いません）。</p>
         </div>
       </div>
       <div class="module-body">
         <ul>
-          <li>ヘッダー行（例: <code>参加者ID,氏名,班番号</code>）があっても問題ありません。</li>
+          <li>ヘッダー行（例: <code>参加者ID,名前,フリガナ,性別,学部学科,携帯電話,メールアドレス</code>）があっても問題ありません。</li>
           <li>同じ参加者IDが複数行ある場合は最初の行のみ採用されます。</li>
-          <li>班番号が空欄の行は無視されます。</li>
+          <li>参加者IDが空欄の場合は氏名などの情報から既存レコードを照合し、自動で番号を割り当てます。</li>
+          <li>同じイベント内で名前と学部学科が一致する参加者は、日程が異なっても重複候補（件数付き）として一覧に表示されます。</li>
+          <li>各列は空欄でもアップロードできますが、氏名は必須です。</li>
           <li>保存後はフォームに即座に反映されます。</li>
+          <li>班番号は別途、<code>参加者ID,班番号</code>形式のCSVをアップロードすると一括で紐付けられます（キャンセルの場合は班番号に「キャンセル」と入力してください）。</li>
         </ul>
       </div>
     </section>
@@ -145,6 +155,56 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost" data-dialog-dismiss="true">キャンセル</button>
           <button type="submit" class="btn btn-primary">追加</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="participant-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="participant-dialog-title" hidden>
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <form id="participant-form">
+        <div class="modal-header">
+          <h2 id="participant-dialog-title">参加者情報を編集</h2>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label for="participant-id-input">参加者ID</label>
+            <input id="participant-id-input" name="participant-id" class="input" type="text" readonly>
+          </div>
+          <div class="modal-field">
+            <label for="participant-name-input">氏名 / ラジオネーム</label>
+            <input id="participant-name-input" name="participant-name" class="input" type="text" autocomplete="off" required>
+          </div>
+          <div class="modal-field">
+            <label for="participant-phonetic-input">フリガナ</label>
+            <input id="participant-phonetic-input" name="participant-phonetic" class="input" type="text" autocomplete="off">
+          </div>
+          <div class="modal-field">
+            <label for="participant-gender-input">性別</label>
+            <input id="participant-gender-input" name="participant-gender" class="input" type="text" autocomplete="off">
+          </div>
+          <div class="modal-field">
+            <label for="participant-department-input">学部学科</label>
+            <input id="participant-department-input" name="participant-department" class="input" type="text" autocomplete="off">
+          </div>
+          <div class="modal-field">
+            <label for="participant-team-input">班番号</label>
+            <input id="participant-team-input" name="participant-team" class="input" type="text" autocomplete="off" placeholder="例: A-1 / キャンセルなど">
+          </div>
+          <div class="modal-field">
+            <label for="participant-phone-input">携帯電話</label>
+            <input id="participant-phone-input" name="participant-phone" class="input" type="tel" autocomplete="tel">
+          </div>
+          <div class="modal-field">
+            <label for="participant-email-input">メールアドレス</label>
+            <input id="participant-email-input" name="participant-email" class="input" type="email" autocomplete="email">
+          </div>
+          <p id="participant-error" class="form-error" role="alert" hidden></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-dialog-dismiss="true">キャンセル</button>
+          <button type="submit" class="btn btn-primary">保存</button>
         </div>
       </form>
     </div>

@@ -682,6 +682,21 @@ input[type="checkbox"]{
   font-weight:700;
   letter-spacing:.08em;
 }
+
+.q-participant{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:3.1em;
+  padding:clamp(.28rem, .75vw, .42rem) clamp(.65rem, 1.4vw, .85rem);
+  border-radius:clamp(.65rem, 1.1vw, .85rem);
+  background:linear-gradient(180deg, rgba(94,234,212,.18), rgba(16,185,129,.1));
+  border:1px solid rgba(45,212,191,.35);
+  color:#c7f9e0;
+  font-weight:600;
+  letter-spacing:.08em;
+  font-variant-numeric:tabular-nums;
+}
 .q-check{
   display:flex;
   align-items:center;
