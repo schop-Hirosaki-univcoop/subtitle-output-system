@@ -1,0 +1,56 @@
+import { dom } from "./dom.js";
+import { loaderState } from "./state.js";
+
+function showLoader(message = "初期化しています…") {
+  if (dom.loadingOverlay) dom.loadingOverlay.hidden = false;
+  updateLoaderText(message);
+}
+
+function hideLoader() {
+  if (dom.loadingOverlay) dom.loadingOverlay.hidden = true;
+}
+
+function updateLoaderText(message) {
+  if (dom.loadingText && message) {
+    dom.loadingText.textContent = message;
+  }
+}
+
+function initLoaderSteps(labels = []) {
+  if (!dom.loaderSteps) return;
+  dom.loaderSteps.innerHTML = "";
+  loaderState.items = labels.map(label => {
+    const li = document.createElement("li");
+    li.textContent = label;
+    dom.loaderSteps.appendChild(li);
+    return li;
+  });
+  loaderState.currentIndex = -1;
+}
+
+function setLoaderStep(index, message) {
+  if (!loaderState.items.length) return;
+  loaderState.items.forEach((li, idx) => {
+    li.classList.remove("current", "done");
+    if (idx < index) {
+      li.classList.add("done");
+    }
+    if (idx === index) {
+      li.classList.add("current");
+      if (message) {
+        li.textContent = message;
+      }
+    }
+  });
+  loaderState.currentIndex = index;
+  updateLoaderText(message);
+}
+
+function finishLoaderSteps(message) {
+  if (!loaderState.items.length) return;
+  const lastIndex = loaderState.items.length - 1;
+  setLoaderStep(lastIndex, message || loaderState.items[lastIndex].textContent);
+  loaderState.items.forEach(li => li.classList.add("done"));
+}
+
+export { showLoader, hideLoader, updateLoaderText, initLoaderSteps, setLoaderStep, finishLoaderSteps };
