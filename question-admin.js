@@ -91,9 +91,15 @@ const dom = {
   scheduleDialog: document.getElementById("schedule-dialog"),
   scheduleForm: document.getElementById("schedule-form"),
   scheduleLabelInput: document.getElementById("schedule-label-input"),
-  scheduleStartInput: document.getElementById("schedule-start-input"),
-  scheduleEndInput: document.getElementById("schedule-end-input"),
+  scheduleDateInput: document.getElementById("schedule-date-input"),
+  scheduleStartTimeInput: document.getElementById("schedule-start-time-input"),
+  scheduleEndTimeInput: document.getElementById("schedule-end-time-input"),
   scheduleError: document.getElementById("schedule-error"),
+  scheduleDialogCalendar: document.getElementById("schedule-dialog-calendar"),
+  scheduleDialogCalendarTitle: document.getElementById("schedule-dialog-calendar-title"),
+  scheduleDialogCalendarGrid: document.getElementById("schedule-dialog-calendar-grid"),
+  scheduleDialogCalendarPrev: document.getElementById("schedule-dialog-calendar-prev"),
+  scheduleDialogCalendarNext: document.getElementById("schedule-dialog-calendar-next"),
   eventList: document.getElementById("event-list"),
   eventEmpty: document.getElementById("event-empty"),
   scheduleList: document.getElementById("schedule-list"),
@@ -133,7 +139,13 @@ const calendarState = {
   activeEventId: null,
   referenceDate: new Date(),
   locked: false,
-  lastSignature: ""
+  lastSignature: "",
+  pickedDate: ""
+};
+
+const dialogCalendarState = {
+  referenceDate: new Date(),
+  selectedDate: ""
 };
 
 const loaderState = {
@@ -568,6 +580,124 @@ function parseDateOnly(value) {
   return parsed;
 }
 
+function normalizeDateInputValue(value) {
+  const parsed = parseDateOnly(value || "");
+  return parsed ? formatDatePart(parsed) : "";
+}
+
+function combineDateAndTime(dateValue, timeValue) {
+  const datePart = normalizeDateInputValue(dateValue);
+  const timePart = String(timeValue || "").trim();
+  if (!datePart || !timePart) return "";
+  return `${datePart}T${timePart}`;
+}
+
+function setCalendarPickedDate(value, { updateInput = true } = {}) {
+  const normalized = normalizeDateInputValue(value);
+  calendarState.pickedDate = normalized;
+  if (updateInput && dom.scheduleDateInput) {
+    dom.scheduleDateInput.value = normalized;
+  }
+  setDialogCalendarPickedDate(normalized);
+}
+
+function setDialogCalendarPickedDate(value) {
+  const normalized = normalizeDateInputValue(value);
+  dialogCalendarState.selectedDate = normalized;
+  const parsed = normalized ? parseDateOnly(normalized) : null;
+  if (parsed) {
+    dialogCalendarState.referenceDate = startOfMonth(parsed);
+  } else if (!normalized) {
+    dialogCalendarState.referenceDate = startOfMonth(new Date());
+  }
+  renderScheduleDialogCalendar();
+}
+
+function refreshScheduleCalendar() {
+  const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
+  if (!selectedEvent) return;
+  renderScheduleCalendar(selectedEvent);
+}
+
+function renderScheduleDialogCalendar() {
+  const grid = dom.scheduleDialogCalendarGrid;
+  const title = dom.scheduleDialogCalendarTitle;
+  if (!grid || !title) return;
+
+  const referenceMonth = startOfMonth(
+    dialogCalendarState.referenceDate instanceof Date ? dialogCalendarState.referenceDate : new Date()
+  );
+  dialogCalendarState.referenceDate = referenceMonth;
+
+  title.textContent = formatMonthTitle(referenceMonth);
+
+  const today = startOfDay(new Date());
+  const firstVisible = startOfDay(new Date(referenceMonth));
+  firstVisible.setDate(firstVisible.getDate() - firstVisible.getDay());
+
+  grid.innerHTML = "";
+
+  for (let index = 0; index < 42; index++) {
+    const cellDate = new Date(firstVisible);
+    cellDate.setDate(firstVisible.getDate() + index);
+
+    const key = formatDatePart(cellDate);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "dialog-calendar-date";
+    button.dataset.date = key;
+    button.setAttribute("aria-label", `${key} を選択`);
+    button.setAttribute("role", "gridcell");
+
+    if (cellDate.getMonth() !== referenceMonth.getMonth()) {
+      button.classList.add("is-outside");
+    }
+    if (isSameDay(cellDate, today)) {
+      button.classList.add("is-today");
+    }
+    if (dialogCalendarState.selectedDate && dialogCalendarState.selectedDate === key) {
+      button.classList.add("is-selected");
+    }
+
+    const label = document.createElement("span");
+    label.textContent = String(cellDate.getDate());
+    button.appendChild(label);
+
+    button.addEventListener("click", () => {
+      setCalendarPickedDate(key);
+      if (dom.scheduleDateInput) {
+        dom.scheduleDateInput.focus();
+      }
+    });
+
+    grid.appendChild(button);
+  }
+}
+
+function shiftScheduleDialogCalendarMonth(offset) {
+  if (!offset) return;
+  const base = startOfMonth(
+    dialogCalendarState.referenceDate instanceof Date ? dialogCalendarState.referenceDate : new Date()
+  );
+  base.setMonth(base.getMonth() + offset);
+  dialogCalendarState.referenceDate = base;
+  renderScheduleDialogCalendar();
+}
+
+function prepareScheduleDialogCalendar(initialValue) {
+  const normalized = normalizeDateInputValue(initialValue);
+  if (normalized) {
+    const parsed = parseDateOnly(normalized);
+    if (parsed) {
+      dialogCalendarState.referenceDate = startOfMonth(parsed);
+    }
+  } else {
+    dialogCalendarState.referenceDate = startOfMonth(new Date());
+  }
+  dialogCalendarState.selectedDate = normalized;
+  renderScheduleDialogCalendar();
+}
+
 function startOfDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -667,6 +797,7 @@ function updateCalendarReferenceForEvent(event) {
     calendarState.referenceDate = new Date();
     calendarState.locked = false;
     calendarState.lastSignature = "";
+    setCalendarPickedDate("", { updateInput: true });
     return;
   }
 
@@ -775,24 +906,37 @@ function renderScheduleCalendar(selectedEvent) {
       const cellDate = new Date(firstVisible);
       cellDate.setDate(firstVisible.getDate() + offset);
 
+      const key = formatDatePart(cellDate);
+
       const cell = document.createElement("td");
       cell.className = "calendar-cell";
+      cell.dataset.date = key;
       if (cellDate.getMonth() !== referenceMonth.getMonth()) {
         cell.classList.add("is-outside");
       }
       if (isSameDay(cellDate, today)) {
         cell.classList.add("is-today");
       }
+      if (calendarState.pickedDate && calendarState.pickedDate === key) {
+        cell.classList.add("is-picked");
+      }
 
-      const dateLabel = document.createElement("div");
-      dateLabel.className = "calendar-date";
-      dateLabel.textContent = String(cellDate.getDate());
-      cell.appendChild(dateLabel);
+      const dateButton = document.createElement("button");
+      dateButton.type = "button";
+      dateButton.className = "calendar-date calendar-date-button";
+      dateButton.textContent = String(cellDate.getDate());
+      dateButton.setAttribute("aria-label", `${key} を選択`);
+      dateButton.setAttribute("aria-pressed", calendarState.pickedDate === key ? "true" : "false");
+      dateButton.addEventListener("click", evt => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        handleCalendarDatePick(key);
+      });
+      cell.appendChild(dateButton);
 
       const eventsWrapper = document.createElement("div");
       eventsWrapper.className = "calendar-events";
 
-      const key = formatDatePart(cellDate);
       const schedulesForDay = (index.get(key) || []).slice().sort((a, b) => {
         const startA = parseDateTimeLocal(a?.startAt || "");
         const startB = parseDateTimeLocal(b?.startAt || "");
@@ -833,11 +977,27 @@ function renderScheduleCalendar(selectedEvent) {
         cell.classList.add("has-selection");
       }
 
+      if (dateButton) {
+        dateButton.setAttribute("aria-pressed", calendarState.pickedDate === key ? "true" : "false");
+      }
+
       cell.appendChild(eventsWrapper);
       row.appendChild(cell);
     }
     body.appendChild(row);
   }
+}
+
+function handleCalendarDatePick(dateKey, options = {}) {
+  if (!dateKey) return;
+  const { focusInput = true } = options;
+  setCalendarPickedDate(dateKey, { updateInput: true });
+  const dialogOpen = dom.scheduleDialog && !dom.scheduleDialog.hasAttribute("hidden");
+  if (focusInput && dialogOpen && dom.scheduleDateInput) {
+    dom.scheduleDateInput.focus();
+  }
+  calendarState.locked = true;
+  refreshScheduleCalendar();
 }
 
 function shiftCalendarMonth(offset) {
@@ -879,11 +1039,11 @@ function describeScheduleRange(schedule) {
 }
 
 function syncScheduleEndMin() {
-  if (!dom.scheduleStartInput || !dom.scheduleEndInput) return;
-  const startValue = dom.scheduleStartInput.value || "";
-  dom.scheduleEndInput.min = startValue;
-  if (startValue && dom.scheduleEndInput.value && dom.scheduleEndInput.value < startValue) {
-    dom.scheduleEndInput.value = startValue;
+  if (!dom.scheduleStartTimeInput || !dom.scheduleEndTimeInput) return;
+  const startValue = dom.scheduleStartTimeInput.value || "";
+  dom.scheduleEndTimeInput.min = startValue;
+  if (startValue && dom.scheduleEndTimeInput.value && dom.scheduleEndTimeInput.value < startValue) {
+    dom.scheduleEndTimeInput.value = startValue;
   }
 }
 
@@ -1338,6 +1498,7 @@ function selectEvent(eventId) {
   if (state.selectedEventId === eventId) return;
   state.selectedEventId = eventId;
   state.selectedScheduleId = null;
+  setCalendarPickedDate("", { updateInput: true });
   state.participants = [];
   state.lastSavedSignature = "";
   renderEvents();
@@ -1349,6 +1510,14 @@ function selectEvent(eventId) {
 function selectSchedule(scheduleId) {
   if (state.selectedScheduleId === scheduleId) return;
   state.selectedScheduleId = scheduleId;
+  const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
+  const schedule = selectedEvent?.schedules?.find(s => s.id === scheduleId);
+  if (schedule) {
+    const primaryDate = getSchedulePrimaryDate(schedule);
+    if (primaryDate) {
+      setCalendarPickedDate(formatDatePart(primaryDate), { updateInput: true });
+    }
+  }
   renderSchedules();
   updateParticipantContext();
   loadParticipants().catch(err => console.error(err));
@@ -1426,7 +1595,7 @@ async function handleDeleteEvent(eventId, eventName) {
   }
 }
 
-async function handleAddSchedule({ label, startAt, endAt }) {
+async function handleAddSchedule({ label, date, startTime, endTime }) {
   const eventId = state.selectedEventId;
   if (!eventId) {
     throw new Error("イベントを選択してください。");
@@ -1437,22 +1606,27 @@ async function handleAddSchedule({ label, startAt, endAt }) {
     throw new Error("日程の表示名を入力してください。");
   }
 
-  const startValue = String(startAt || "").trim();
-  const endValue = String(endAt || "").trim();
-  if (!startValue || !endValue) {
-    throw new Error("開始と終了の日時を入力してください。");
+  const normalizedDate = normalizeDateInputValue(date);
+  if (!normalizedDate) {
+    throw new Error("日付を入力してください。");
   }
 
+  const startTimeValue = String(startTime || "").trim();
+  const endTimeValue = String(endTime || "").trim();
+  if (!startTimeValue || !endTimeValue) {
+    throw new Error("開始と終了の時刻を入力してください。");
+  }
+
+  const startValue = combineDateAndTime(normalizedDate, startTimeValue);
+  const endValue = combineDateAndTime(normalizedDate, endTimeValue);
   const startDate = parseDateTimeLocal(startValue);
   const endDate = parseDateTimeLocal(endValue);
   if (!startDate || !endDate) {
-    throw new Error("開始・終了日時の形式が正しくありません。");
+    throw new Error("開始・終了時刻の形式が正しくありません。");
   }
   if (endDate <= startDate) {
-    throw new Error("終了日時は開始日時より後に設定してください。");
+    throw new Error("終了時刻は開始時刻より後に設定してください。");
   }
-
-  const date = startValue.slice(0, 10);
 
   try {
     const now = Date.now();
@@ -1466,7 +1640,7 @@ async function handleAddSchedule({ label, startAt, endAt }) {
     await update(rootDbRef(), {
       [`questionIntake/schedules/${eventId}/${scheduleId}`]: {
         label: trimmedLabel,
-        date,
+        date: normalizedDate,
         startAt: startValue,
         endAt: endValue,
         participantCount: 0,
@@ -1479,6 +1653,7 @@ async function handleAddSchedule({ label, startAt, endAt }) {
     await loadEvents({ preserveSelection: true });
     selectEvent(eventId);
     selectSchedule(scheduleId);
+    setCalendarPickedDate(normalizedDate, { updateInput: true });
     requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
   } catch (error) {
     console.error(error);
@@ -1926,6 +2101,14 @@ function attachEventHandlers() {
       if (dom.scheduleLabelInput) {
         dom.scheduleLabelInput.value = selectedEvent?.name ? `${selectedEvent.name}` : "";
       }
+      if (dom.scheduleDateInput) {
+        dom.scheduleDateInput.value = calendarState.pickedDate || "";
+      }
+      const initialDateValue = dom.scheduleDateInput?.value || calendarState.pickedDate || "";
+      prepareScheduleDialogCalendar(initialDateValue);
+      if (dom.scheduleEndTimeInput) {
+        dom.scheduleEndTimeInput.min = dom.scheduleStartTimeInput?.value || "";
+      }
       syncScheduleEndMin();
       openDialog(dom.scheduleDialog);
     });
@@ -1940,8 +2123,9 @@ function attachEventHandlers() {
       try {
         await handleAddSchedule({
           label: dom.scheduleLabelInput?.value,
-          startAt: dom.scheduleStartInput?.value,
-          endAt: dom.scheduleEndInput?.value
+          date: dom.scheduleDateInput?.value,
+          startTime: dom.scheduleStartTimeInput?.value,
+          endTime: dom.scheduleEndTimeInput?.value
         });
         dom.scheduleForm.reset();
         closeDialog(dom.scheduleDialog);
@@ -1954,8 +2138,24 @@ function attachEventHandlers() {
     });
   }
 
-  if (dom.scheduleStartInput) {
-    dom.scheduleStartInput.addEventListener("input", () => syncScheduleEndMin());
+  if (dom.scheduleStartTimeInput) {
+    dom.scheduleStartTimeInput.addEventListener("input", () => syncScheduleEndMin());
+  }
+
+  if (dom.scheduleDateInput) {
+    dom.scheduleDateInput.addEventListener("input", () => {
+      setCalendarPickedDate(dom.scheduleDateInput.value, { updateInput: false });
+      calendarState.locked = true;
+      refreshScheduleCalendar();
+    });
+  }
+
+  if (dom.scheduleDialogCalendarPrev) {
+    dom.scheduleDialogCalendarPrev.addEventListener("click", () => shiftScheduleDialogCalendarMonth(-1));
+  }
+
+  if (dom.scheduleDialogCalendarNext) {
+    dom.scheduleDialogCalendarNext.addEventListener("click", () => shiftScheduleDialogCalendarMonth(1));
   }
 
   if (dom.scheduleCalendarPrev) {
