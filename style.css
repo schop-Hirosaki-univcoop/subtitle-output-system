@@ -1200,9 +1200,47 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 
 .calendar-date{
+  display:inline-flex;
+  align-items:center;
+  justify-content:flex-start;
   font-size:.95rem;
   font-weight:700;
   letter-spacing:.06em;
+}
+
+.calendar-date-button{
+  padding:.2rem .45rem;
+  border-radius:.6rem;
+  border:1px solid transparent;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  cursor:pointer;
+  outline:none;
+  transition:background .18s ease, border-color .18s ease, color .18s ease;
+}
+
+.calendar-date-button:hover,
+.calendar-date-button:focus-visible{
+  background:rgba(30,200,255,.2);
+  border-color:rgba(30,200,255,.35);
+  color:var(--accent);
+}
+
+.calendar-date-button:focus-visible{
+  outline:2px solid rgba(30,200,255,.45);
+  outline-offset:2px;
+}
+
+.calendar-cell.is-picked{
+  border-color:rgba(255,79,216,.6);
+  box-shadow:0 0 0 1px rgba(255,79,216,.28) inset;
+}
+
+.calendar-cell.is-picked .calendar-date-button{
+  background:rgba(255,79,216,.24);
+  border-color:rgba(255,79,216,.55);
+  color:#fce7ff;
 }
 
 .calendar-events{
