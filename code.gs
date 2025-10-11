@@ -567,6 +567,8 @@ function processQuestionSubmissionQueue_(providedAccessToken) {
 
   const rowsToAppend = [];
   const updates = {};
+  const processedAt = Date.now();
+  const questionUpdates = {};
   let processed = 0;
   let discarded = 0;
 
@@ -650,6 +652,8 @@ function processQuestionSubmissionQueue_(providedAccessToken) {
         const scheduleEndMs = parseDateToMillis_(scheduleEnd, 0);
         const scheduleStartValue = scheduleStartMs ? new Date(scheduleStartMs) : (scheduleStart || '');
         const scheduleEndValue = scheduleEndMs ? new Date(scheduleEndMs) : (scheduleEnd || '');
+        const scheduleStartIso = scheduleStartValue ? toIsoStringOrValue_(scheduleStartValue) : '';
+        const scheduleEndIso = scheduleEndValue ? toIsoStringOrValue_(scheduleEndValue) : '';
         if (scheduleStartValue) {
           setValue('日程開始', scheduleStartValue);
           setValue('開始日時', scheduleStartValue);
@@ -682,6 +686,23 @@ function processQuestionSubmissionQueue_(providedAccessToken) {
         setValue('質問文字数', questionLength);
 
         rowsToAppend.push(newRow);
+        const questionPayload = {
+          uid,
+          name: radioName,
+          question: questionText,
+          group: groupNumber,
+          genre: genreValue,
+          schedule: scheduleLabel,
+          scheduleStart: scheduleStartIso,
+          scheduleEnd: scheduleEndIso,
+          participantId,
+          ts: timestamp.getTime(),
+          answered: false,
+          selecting: false,
+          updatedAt: processedAt,
+          type: 'normal'
+        };
+        questionUpdates[`questions/${uid}`] = questionPayload;
         updates[submissionPath] = null;
         processed += 1;
       } catch (err) {
@@ -697,6 +718,14 @@ function processQuestionSubmissionQueue_(providedAccessToken) {
       }
     });
   });
+
+  if (Object.keys(questionUpdates).length) {
+    try {
+      patchRtdb_(questionUpdates, accessToken);
+    } catch (err) {
+      console.warn('Failed to patch RTDB questions during queue processing', err);
+    }
+  }
 
   if (rowsToAppend.length) {
     const startRow = sheet.getLastRow() + 1;
@@ -780,23 +809,24 @@ function applyParticipantGroupsToQuestionSheet_(participantsBranch) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(QUESTION_SHEET_NAME);
   if (!sheet) {
-    return { updated: 0 };
+    return { updated: 0, questionUpdates: 0 };
   }
 
   const info = readSheetWithHeaders_(sheet);
   if (!info.sheet || !info.headers || !info.headers.length || !info.rows) {
-    return { updated: 0 };
+    return { updated: 0, questionUpdates: 0 };
   }
 
   const groupIdx = getHeaderIndex_(info.headerMap, ['班番号']);
   if (groupIdx == null) {
-    return { updated: 0 };
+    return { updated: 0, questionUpdates: 0 };
   }
 
   const participantIdx = getHeaderIndex_(info.headerMap, ['参加者ID', 'participantid', 'participant_id']);
   const tokenIdx = getHeaderIndex_(info.headerMap, ['リンクトークン', 'token']);
-  if (participantIdx == null && tokenIdx == null) {
-    return { updated: 0 };
+  const uidIdx = getHeaderIndex_(info.headerMap, ['uid', 'UID']);
+  if ((participantIdx == null && tokenIdx == null) || uidIdx == null) {
+    return { updated: 0, questionUpdates: 0 };
   }
 
   const groupByParticipant = new Map();
@@ -821,7 +851,7 @@ function applyParticipantGroupsToQuestionSheet_(participantsBranch) {
   });
 
   if (!groupByParticipant.size && !groupByToken.size) {
-    return { updated: 0 };
+    return { updated: 0, questionUpdates: 0 };
   }
 
   const updates = [];
@@ -847,14 +877,33 @@ function applyParticipantGroupsToQuestionSheet_(participantsBranch) {
     if (current === normalizedDesired) {
       return;
     }
-    updates.push({ rowNumber: index + 2, value: normalizedDesired });
+    const uid = String(row[uidIdx] || '').trim();
+    if (!uid) {
+      return;
+    }
+    updates.push({ rowNumber: index + 2, value: normalizedDesired, uid });
   });
 
-  updates.forEach(update => {
-    sheet.getRange(update.rowNumber, groupIdx + 1).setValue(update.value || '');
-  });
+  let patchedCount = 0;
+  if (updates.length) {
+    const now = Date.now();
+    const questionUpdates = {};
+    updates.forEach(update => {
+      questionUpdates[`questions/${update.uid}/group`] = update.value || '';
+      questionUpdates[`questions/${update.uid}/updatedAt`] = now;
+    });
+    try {
+      patchRtdb_(questionUpdates, getFirebaseAccessToken_());
+      patchedCount = updates.length;
+    } catch (error) {
+      console.warn('applyParticipantGroupsToQuestionSheet_ failed to update RTDB questions', error);
+    }
+    updates.forEach(update => {
+      sheet.getRange(update.rowNumber, groupIdx + 1).setValue(update.value || '');
+    });
+  }
 
-  return { updated: updates.length };
+  return { updated: updates.length, questionUpdates: patchedCount };
 }
 
 const NAME_MAP_SHEET_NAME = 'name_mappings';
@@ -1411,6 +1460,7 @@ function syncQuestionIntakeToSheet_() {
     queueDiscarded: queueResult ? queueResult.discarded || 0 : 0,
     tokensRemoved: cleanupResult ? cleanupResult.removed || 0 : 0,
     questionGroupUpdates: groupUpdateResult ? groupUpdateResult.updated || 0 : 0,
+    questionFeedUpdates: groupUpdateResult ? groupUpdateResult.questionUpdates || 0 : 0,
     questionsMirrored: mirrorResult ? mirrorResult.count || 0 : 0
   };
 }
