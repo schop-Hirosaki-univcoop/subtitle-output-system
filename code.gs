@@ -261,7 +261,7 @@ function doPost(e) {
     if (!action) throw new Error('Missing action');
 
     const displayActions = new Set(['beginDisplaySession', 'heartbeatDisplaySession', 'endDisplaySession']);
-    const noAuthActions = new Set(['submitQuestion', 'fetchNameMappings', 'fetchQuestionContext']);
+    const noAuthActions = new Set(['submitQuestion', 'fetchNameMappings', 'fetchQuestionContext', 'processQuestionQueueForToken']);
     let principal = null;
     if (!noAuthActions.has(action)) {
       principal = requireAuth_(idToken, displayActions.has(action) ? { allowAnonymous: true } : {});
@@ -299,6 +299,8 @@ function doPost(e) {
       case 'processQuestionQueue':
         assertOperator_(principal);
         return ok(processQuestionSubmissionQueue_());
+      case 'processQuestionQueueForToken':
+        return ok(processQuestionQueueForToken_(req.token));
       case 'fetchSheet':
         assertOperator_(principal);
         return ok({ data: getSheetData_(req.sheet) });
@@ -515,10 +517,63 @@ function submitQuestion_(payload) {
   return { queued: true, entryId, submittedAt: toIsoJst_(new Date(now)) };
 }
 
-function processQuestionSubmissionQueue_(providedAccessToken) {
+function processQuestionQueueForToken_(rawToken) {
+  const token = String(rawToken || '').trim();
+  if (!token) {
+    throw new Error('アクセスリンクが無効です。最新のURLからアクセスしてください。');
+  }
+  if (!/^[A-Za-z0-9_-]{12,128}$/.test(token)) {
+    throw new Error('アクセスリンクが無効です。最新のURLからアクセスしてください。');
+  }
+
+  const accessToken = getFirebaseAccessToken_();
+  let tokenRecord = null;
+  try {
+    tokenRecord = fetchRtdb_('questionIntake/tokens/' + token, accessToken);
+  } catch (error) {
+    throw new Error('アクセスリンクの検証に失敗しました。時間をおいて再試行してください。');
+  }
+
+  if (!tokenRecord || tokenRecord.revoked) {
+    throw new Error('このリンクは無効化されています。運営までお問い合わせください。');
+  }
+  const expiresAt = Number(tokenRecord.expiresAt || 0);
+  if (expiresAt && Date.now() > expiresAt) {
+    throw new Error('このリンクの有効期限が切れています。運営までお問い合わせください。');
+  }
+
+  const result = processQuestionSubmissionQueue_(accessToken, { tokenFilter: [token] }) || {};
+  return {
+    processed: Number(result.processed || 0),
+    discarded: Number(result.discarded || 0)
+  };
+}
+
+function processQuestionSubmissionQueue_(providedAccessToken, options) {
   const accessToken = providedAccessToken || getFirebaseAccessToken_();
   const queueBranch = fetchRtdb_('questionIntake/submissions', accessToken) || {};
-  const queueTokens = Object.keys(queueBranch);
+  const opts = options || {};
+  let tokenFilter = null;
+  if (opts && opts.tokenFilter != null) {
+    const list = Array.isArray(opts.tokenFilter) ? opts.tokenFilter : [opts.tokenFilter];
+    tokenFilter = new Set(
+      list
+        .map(value => String(value || '').trim())
+        .filter(Boolean)
+    );
+  }
+
+  let queueTokens = Object.keys(queueBranch || {});
+  queueTokens = queueTokens
+    .map(token => String(token || '').trim())
+    .filter(token => {
+      if (!token) return false;
+      if (tokenFilter && !tokenFilter.has(token)) {
+        return false;
+      }
+      return true;
+    });
+
   if (!queueTokens.length) {
     return { processed: 0, discarded: 0 };
   }
