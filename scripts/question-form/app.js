@@ -2,6 +2,7 @@ import { getDatabaseInstance } from "./firebase.js";
 import { fetchContextFromToken, extractToken } from "./context-service.js";
 import { FormView } from "./view.js";
 import {
+  GAS_API_URL,
   GENRE_OPTIONS,
   FORM_VERSION,
   firebaseConfig,
@@ -338,13 +339,17 @@ export class QuestionFormApp {
     this.view.setFeedback("送信中です…");
 
     try {
-      await this.submitQuestion(controller, {
+      const result = await this.submitQuestion(controller, {
         radioName: sanitizedName,
         question: normalizedQuestion,
         questionLength,
         genre
       });
-      this.view.setFeedback("送信しました。ありがとうございました！", "success");
+      if (result?.queueProcessed) {
+        this.view.setFeedback("送信しました。ありがとうございました！", "success");
+      } else {
+        this.view.setFeedback("送信しました。反映まで数秒かかる場合があります。", "success");
+      }
       this.view.setQuestionValue("");
       this.updateQuestionCounter();
       this.view.focusQuestion();
@@ -381,6 +386,7 @@ export class QuestionFormApp {
       questionLength,
       genre,
       groupNumber: this.view.getGroupNumber(),
+      teamNumber: this.view.getGroupNumber(),
       scheduleLabel: this.view.getScheduleLabel(),
       scheduleDate: this.view.getScheduleDate(),
       scheduleStart: String(this.state.context?.scheduleStart || ""),
@@ -428,5 +434,47 @@ export class QuestionFormApp {
       error.cause = networkError;
       throw error;
     }
+
+    let queueProcessed = false;
+    try {
+      const response = await this.triggerQueueProcessing(token);
+      queueProcessed = Number(response?.processed || 0) > 0;
+    } catch (error) {
+      console.warn("Failed to trigger queue processing", error);
+    }
+
+    return { queueProcessed };
+  }
+
+  async triggerQueueProcessing(token) {
+    if (!token) {
+      throw new Error("アクセス情報を確認できませんでした。運営までお問い合わせください。");
+    }
+
+    const response = await fetch(GAS_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "processQuestionQueueForToken", token })
+    });
+
+    let json;
+    try {
+      json = await response.json();
+    } catch (error) {
+      const err = new Error("送信内容の反映処理に失敗しました。時間をおいて再度お試しください。");
+      err.cause = error;
+      throw err;
+    }
+
+    if (!json?.success) {
+      const message = typeof json?.error === "string" && json.error.trim()
+        ? json.error.trim()
+        : "送信内容の反映処理に失敗しました。時間をおいて再度お試しください。";
+      const error = new Error(message);
+      error.code = "QUEUE_PROCESSING_FAILED";
+      throw error;
+    }
+
+    return json;
   }
 }
