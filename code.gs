@@ -1075,7 +1075,7 @@ function cleanupUnusedQuestionTokens_(participantsBranch, tokensBranch, accessTo
   return { removed };
 }
 
-function applyParticipantGroupsToQuestionSheet_(participantsBranch) {
+function applyParticipantGroupsToQuestionSheet_(participantsBranch, questionsBranch) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = QUESTION_SHEET_NAMES
     .map(name => ss.getSheetByName(name))
@@ -1163,6 +1163,37 @@ function applyParticipantGroupsToQuestionSheet_(participantsBranch) {
       sheetUpdates.push({ sheet, rowNumber: index + 2, column: groupIdx + 1, value: normalizedDesired, uid });
       uidUpdateMap.set(uid, normalizedDesired);
     });
+  });
+
+  const pendingQuestionUpdates = new Map();
+  if (questionsBranch && typeof questionsBranch === 'object') {
+    Object.keys(questionsBranch).forEach(uid => {
+      const question = questionsBranch[uid] || {};
+      const participantId = String(question.participantId || '').trim();
+      const token = String(question.token || '').trim();
+      let desired = null;
+      if (participantId && groupByParticipant.has(participantId)) {
+        desired = groupByParticipant.get(participantId) || '';
+      }
+      if (desired === null && token && groupByToken.has(token)) {
+        desired = groupByToken.get(token) || '';
+      }
+      if (desired === null) {
+        return;
+      }
+
+      const current = String(question.group || '').trim();
+      const normalizedDesired = String(desired || '').trim();
+      if (current === normalizedDesired) {
+        return;
+      }
+
+      pendingQuestionUpdates.set(uid, normalizedDesired);
+    });
+  }
+
+  pendingQuestionUpdates.forEach((value, uid) => {
+    uidUpdateMap.set(uid, value);
   });
 
   let patchedCount = 0;
@@ -1549,14 +1580,80 @@ function mirrorQuestionIntake_() {
     eventMap[eventId].updatedAt = candidate;
   });
 
-  const updates = {
-    'questionIntake/events': eventMap,
-    'questionIntake/schedules': scheduleTree,
-    'questionIntake/participants': participantsTree,
-    'questionIntake/tokens': tokensMap
-  };
+  const updates = {};
 
-  patchRtdb_(updates, accessToken);
+  Object.keys(eventMap).forEach(eventId => {
+    updates[`questionIntake/events/${eventId}`] = eventMap[eventId];
+  });
+  Object.keys(existingEvents).forEach(eventId => {
+    if (!eventMap[eventId]) {
+      updates[`questionIntake/events/${eventId}`] = null;
+    }
+  });
+
+  Object.keys(scheduleTree).forEach(eventId => {
+    const schedulesForEvent = scheduleTree[eventId] || {};
+    Object.keys(schedulesForEvent).forEach(scheduleId => {
+      updates[`questionIntake/schedules/${eventId}/${scheduleId}`] = schedulesForEvent[scheduleId];
+    });
+  });
+  Object.keys(existingSchedules).forEach(eventId => {
+    const existingSchedulesForEvent = existingSchedules[eventId] || {};
+    const nextSchedulesForEvent = scheduleTree[eventId];
+    if (!nextSchedulesForEvent) {
+      updates[`questionIntake/schedules/${eventId}`] = null;
+      return;
+    }
+    Object.keys(existingSchedulesForEvent).forEach(scheduleId => {
+      if (!nextSchedulesForEvent[scheduleId]) {
+        updates[`questionIntake/schedules/${eventId}/${scheduleId}`] = null;
+      }
+    });
+  });
+
+  Object.keys(participantsTree).forEach(eventId => {
+    const participantsForEvent = participantsTree[eventId] || {};
+    Object.keys(participantsForEvent).forEach(scheduleId => {
+      const participantEntries = participantsForEvent[scheduleId] || {};
+      Object.keys(participantEntries).forEach(participantId => {
+        updates[`questionIntake/participants/${eventId}/${scheduleId}/${participantId}`] = participantEntries[participantId];
+      });
+    });
+  });
+  Object.keys(existingParticipants).forEach(eventId => {
+    const existingSchedulesForEvent = existingParticipants[eventId] || {};
+    const nextSchedulesForEvent = participantsTree[eventId];
+    if (!nextSchedulesForEvent) {
+      updates[`questionIntake/participants/${eventId}`] = null;
+      return;
+    }
+    Object.keys(existingSchedulesForEvent).forEach(scheduleId => {
+      const existingParticipantsForSchedule = existingSchedulesForEvent[scheduleId] || {};
+      const nextParticipantsForSchedule = nextSchedulesForEvent[scheduleId];
+      if (!nextParticipantsForSchedule) {
+        updates[`questionIntake/participants/${eventId}/${scheduleId}`] = null;
+        return;
+      }
+      Object.keys(existingParticipantsForSchedule).forEach(participantId => {
+        if (!nextParticipantsForSchedule[participantId]) {
+          updates[`questionIntake/participants/${eventId}/${scheduleId}/${participantId}`] = null;
+        }
+      });
+    });
+  });
+
+  Object.keys(tokensMap).forEach(token => {
+    updates[`questionIntake/tokens/${token}`] = tokensMap[token];
+  });
+  Object.keys(existingTokens).forEach(token => {
+    if (!tokensMap[token]) {
+      updates[`questionIntake/tokens/${token}`] = null;
+    }
+  });
+
+  if (Object.keys(updates).length) {
+    patchRtdb_(updates, accessToken);
+  }
 
   return {
     eventCount: Object.keys(eventMap).length,
@@ -1585,6 +1682,14 @@ function syncQuestionIntakeToSheet_() {
     console.warn('Failed to fetch questionIntake/tokens during sync', error);
     tokensBranch = {};
   }
+  let questionsBranch = {};
+  try {
+    questionsBranch = fetchRtdb_('questions', accessToken) || {};
+  } catch (error) {
+    console.warn('Failed to fetch questions during sync', error);
+    questionsBranch = {};
+  }
+
   let cleanupResult = { removed: 0 };
   try {
     cleanupResult = cleanupUnusedQuestionTokens_(participantsBranch, tokensBranch, accessToken);
@@ -1717,7 +1822,7 @@ function syncQuestionIntakeToSheet_() {
 
   let groupUpdateResult = { updated: 0 };
   try {
-    groupUpdateResult = applyParticipantGroupsToQuestionSheet_(participantsBranch);
+    groupUpdateResult = applyParticipantGroupsToQuestionSheet_(participantsBranch, questionsBranch);
   } catch (error) {
     console.warn('applyParticipantGroupsToQuestionSheet_ failed during syncQuestionIntakeToSheet_', error);
     groupUpdateResult = { updated: 0 };
