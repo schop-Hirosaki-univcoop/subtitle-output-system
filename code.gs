@@ -171,6 +171,7 @@ function findQuestionRowByUid_(uid) {
   if (!targetUid) {
     return null;
   }
+  ensureQuestionUids_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   for (let i = 0; i < QUESTION_SHEET_NAMES.length; i++) {
     const sheetName = QUESTION_SHEET_NAMES[i];
@@ -192,6 +193,57 @@ function findQuestionRowByUid_(uid) {
     }
   }
   return null;
+}
+
+function ensureQuestionSheetUids_(sheet) {
+  if (!sheet) {
+    return 0;
+  }
+  const info = readSheetWithHeaders_(sheet);
+  if (!info.sheet || !info.rows.length) {
+    return 0;
+  }
+  const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
+  if (uidIdx == null) {
+    return 0;
+  }
+
+  const seen = new Set();
+  const updates = [];
+  info.rows.forEach((row, rowIndex) => {
+    const current = String(row[uidIdx] || '').trim();
+    if (current && !seen.has(current)) {
+      seen.add(current);
+      return;
+    }
+    let nextUid = '';
+    do {
+      nextUid = Utilities.getUuid();
+    } while (seen.has(nextUid));
+    seen.add(nextUid);
+    updates.push({ rowIndex, value: nextUid });
+  });
+
+  if (!updates.length) {
+    return 0;
+  }
+
+  updates.forEach(update => {
+    sheet.getRange(update.rowIndex + 2, uidIdx + 1).setValue(update.value);
+  });
+
+  return updates.length;
+}
+
+function ensureQuestionUids_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let updated = 0;
+  QUESTION_SHEET_NAMES.forEach(name => {
+    const sheet = ss.getSheetByName(name);
+    if (!sheet) return;
+    updated += ensureQuestionSheetUids_(sheet);
+  });
+  return updated;
 }
 
 // WebAppにPOSTリクエストが送られたときに実行される関数
@@ -1628,6 +1680,7 @@ function rtdbUrl_(path){
 
 function mirrorSheetToRtdb_(){
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureQuestionUids_();
   const questionSheet = ss.getSheetByName(QUESTION_SHEET_NAME);
   if (!questionSheet) throw new Error(`Sheet "${QUESTION_SHEET_NAME}" not found.`);
   const pickupSheet = ss.getSheetByName(PICKUP_QUESTION_SHEET_NAME);
@@ -2154,6 +2207,7 @@ function endDisplaySession_(principal, rawSessionId, reason) {
 
 function updateSelectingStatus(uid) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureQuestionUids_();
   const infos = QUESTION_SHEET_NAMES.map(name => {
     const sheet = ss.getSheetByName(name);
     if (!sheet) return null;
@@ -2405,6 +2459,7 @@ function batchUpdateStatus(uids, status) {
   }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
+    ensureQuestionUids_();
     const uidSet = new Set((uids || []).map(value => String(value || '').trim()).filter(Boolean));
     if (!uidSet.size) {
       return { success: true, message: '0 items updated.' };
@@ -2496,6 +2551,10 @@ function getSheetData_(sheetKey) {
 
   const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
   if (!sh) throw new Error('Sheet not found: ' + sheetName);
+
+  if (sheetKey === 'question' || sheetKey === 'pick_up_question') {
+    ensureQuestionUids_();
+  }
 
   const range = sh.getDataRange();
   const values = range.getValues();
