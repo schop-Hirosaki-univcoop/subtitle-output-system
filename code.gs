@@ -394,9 +394,15 @@ function submitQuestion_(payload) {
     throw new Error('アクセスリンクが無効です。最新のURLからアクセスしてください。');
   }
 
+  let accessToken;
+  try {
+    accessToken = getFirebaseAccessToken_();
+  } catch (error) {
+    throw new Error('アクセスリンクの検証に失敗しました。時間をおいて再試行してください。');
+  }
+
   let tokenRecord = null;
   try {
-    const accessToken = getFirebaseAccessToken_();
     tokenRecord = fetchRtdb_('questionIntake/tokens/' + rawToken, accessToken);
   } catch (error) {
     throw new Error('アクセスリンクの検証に失敗しました。時間をおいて再試行してください。');
@@ -442,103 +448,71 @@ function submitQuestion_(payload) {
   const guidance = String(tokenRecord.guidance || payload.guidance || '').trim();
   const groupNumber = String(tokenRecord.teamNumber || tokenRecord.groupNumber || payloadTeamNumber || payloadGroupNumber || '').trim();
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(QUESTION_SHEET_NAME);
-  if (!sheet) throw new Error(`Sheet "${QUESTION_SHEET_NAME}" not found.`);
-
-  const lastColumn = sheet.getLastColumn();
-  if (lastColumn < 1) throw new Error('question sheet has no headers.');
-
-  const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
-  const norm = s => String(s || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
-  const headerMap = new Map();
-  headers.forEach((header, index) => {
-    if (header == null) return;
-    headerMap.set(norm(header), index);
-  });
-
-  const requiredHeaders = ['ラジオネーム', '質問・お悩み', 'uid'];
-  requiredHeaders.forEach(key => {
-    if (!headerMap.has(norm(key))) {
-      throw new Error(`Column "${key}" not found in question sheet.`);
-    }
-  });
-
-  const newRow = Array.from({ length: headers.length }, () => '');
-  const setValue = (headerKey, value) => {
-    const idx = headerMap.get(norm(headerKey));
-    if (idx == null || idx < 0) return;
-    newRow[idx] = value;
+  const now = Date.now();
+  const questionLength = Number.isFinite(payloadQuestionLength) && payloadQuestionLength > 0
+    ? Math.floor(payloadQuestionLength)
+    : String(questionText).length;
+  const clientTimestampRaw = Number(payload.clientTimestamp || 0);
+  const clientTimestamp = Number.isFinite(clientTimestampRaw) && clientTimestampRaw > 0
+    ? clientTimestampRaw
+    : now;
+  const submissionBase = {
+    token: rawToken,
+    radioName,
+    question: questionText,
+    questionLength,
+    genre: rawGenre || 'その他',
+    groupNumber,
+    teamNumber: groupNumber,
+    scheduleLabel,
+    scheduleDate,
+    scheduleStart: scheduleStartRaw,
+    scheduleEnd: scheduleEndRaw,
+    eventId,
+    eventName,
+    scheduleId,
+    participantId,
+    participantName,
+    guidance,
+    clientTimestamp,
+    language: String(payload.language || '').trim(),
+    userAgent: String(payload.userAgent || '').trim(),
+    referrer: String(payload.referrer || '').trim(),
+    formVersion: String(payload.formVersion || '').trim(),
+    origin: sanitizeOrigin_(payload.origin || payload.requestOrigin || ''),
+    status: 'pending'
   };
 
-  const timestamp = new Date();
-  const timestampLabel = formatQuestionTimestamp_(timestamp);
-  const uid = Utilities.getUuid();
+  const submission = {};
+  Object.keys(submissionBase).forEach(key => {
+    const value = submissionBase[key];
+    if (value == null || value === '') {
+      return;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) {
+        submission[key] = trimmed;
+      }
+      return;
+    }
+    submission[key] = value;
+  });
 
-  setValue('タイムスタンプ', timestampLabel);
-  setValue('Timestamp', timestampLabel);
-  setValue('ラジオネーム', radioName);
-  setValue('質問・お悩み', questionText);
-  if (Number.isFinite(payloadQuestionLength) && payloadQuestionLength > 0) {
-    setValue('質問文字数', payloadQuestionLength);
-  }
-  if (groupNumber) {
-    setValue('班番号', groupNumber);
-  }
-  const genreValue = rawGenre || 'その他';
-  setValue('ジャンル', genreValue);
-  setValue('日程', scheduleLabel);
-  if (scheduleLabel) {
-    setValue('日程表示', scheduleLabel);
-  }
-  if (scheduleDate) {
-    setValue('日程日付', scheduleDate);
-  }
-  const scheduleStartMs = parseDateToMillis_(scheduleStartRaw, 0);
-  const scheduleEndMs = parseDateToMillis_(scheduleEndRaw, 0);
-  const scheduleStartValue = scheduleStartMs ? new Date(scheduleStartMs) : (scheduleStartRaw || '');
-  const scheduleEndValue = scheduleEndMs ? new Date(scheduleEndMs) : (scheduleEndRaw || '');
-  if (scheduleStartValue) {
-    setValue('開始日時', scheduleStartValue);
-    setValue('日程開始', scheduleStartValue);
-  }
-  if (scheduleEndValue) {
-    setValue('終了日時', scheduleEndValue);
-    setValue('日程終了', scheduleEndValue);
-  }
-  setValue('イベントID', eventId);
-  if (eventName) {
-    setValue('イベント名', eventName);
-  }
-  setValue('日程ID', scheduleId);
-  setValue('参加者ID', participantId);
-  if (participantName) {
-    setValue('参加者名', participantName);
-    setValue('氏名', participantName);
-  }
-  setValue('リンクトークン', rawToken);
-  setValue('Token', rawToken);
-  if (guidance) {
-    setValue('ガイダンス', guidance);
-    setValue('案内文', guidance);
-  }
-  setValue('uid', uid);
-  setValue('回答済', false);
-  setValue('選択中', false);
-  setValue('UID', uid);
+  submission.submittedAt = now;
 
-  const payloadGenre = String(payload.genre || '').trim();
-  if (payloadGenre) {
-    setValue('ジャンル(送信時)', payloadGenre);
-  }
+  const entryId = Utilities.getUuid().replace(/-/g, '');
+  const updates = {};
+  updates[`questionIntake/submissions/${rawToken}/${entryId}`] = submission;
 
-  sheet.appendRow(newRow);
   try {
-    notifyUpdate('question');
-  } catch (e) {
-    console.warn('notifyUpdate failed after submitQuestion_', e);
+    patchRtdb_(updates, accessToken);
+  } catch (error) {
+    console.warn('Failed to queue question submission', error);
+    throw new Error('質問の登録に失敗しました。時間をおいて再試行してください。');
   }
 
-  return { uid, timestamp: toIsoJst_(timestamp) };
+  return { queued: true, entryId, submittedAt: toIsoJst_(new Date(now)) };
 }
 
 function processQuestionSubmissionQueue_(providedAccessToken) {
