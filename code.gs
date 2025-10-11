@@ -251,6 +251,240 @@ function ensureQuestionUids_() {
   return updated;
 }
 
+function mirrorQuestionsFromRtdbToSheet_(providedAccessToken) {
+  const accessToken = providedAccessToken || getFirebaseAccessToken_();
+  const questionsBranch = fetchRtdb_('questions', accessToken) || {};
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const ensureString = value => {
+    if (value == null) return '';
+    if (typeof value === 'string') return value.trim();
+    return String(value).trim();
+  };
+
+  const sheetDataMap = new Map();
+  const initSheetData = (type) => {
+    if (sheetDataMap.has(type)) {
+      return sheetDataMap.get(type);
+    }
+    const sheetName = type === 'pickup' ? PICKUP_QUESTION_SHEET_NAME : QUESTION_SHEET_NAME;
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) {
+      sheetDataMap.set(type, null);
+      return null;
+    }
+    const info = readSheetWithHeaders_(sheet);
+    if (!info.sheet || !info.headers || !info.headers.length) {
+      sheetDataMap.set(type, null);
+      return null;
+    }
+    const uidIdx = getHeaderIndex_(info.headerMap, ['uid', 'UID']);
+    if (uidIdx == null) {
+      sheetDataMap.set(type, null);
+      return null;
+    }
+    const existingByUid = new Map();
+    info.rows.forEach((row, index) => {
+      const uid = String(row[uidIdx] || '').trim();
+      if (uid && !existingByUid.has(uid)) {
+        existingByUid.set(uid, { rowNumber: index + 2, values: row });
+      }
+    });
+    const data = {
+      sheet,
+      info,
+      uidIdx,
+      existingByUid,
+      updates: [],
+      appends: []
+    };
+    sheetDataMap.set(type, data);
+    return data;
+  };
+
+  const valuesEqual = (a, b) => {
+    if (a === b) return true;
+    const aDate = a instanceof Date ? a : null;
+    const bDate = b instanceof Date ? b : null;
+    if (aDate || bDate) {
+      const aTime = aDate ? aDate.getTime() : parseDateToMillis_(a, NaN);
+      const bTime = bDate ? bDate.getTime() : parseDateToMillis_(b, NaN);
+      if (!isNaN(aTime) && !isNaN(bTime)) {
+        return aTime === bTime;
+      }
+    }
+    if (typeof a === 'number' || typeof b === 'number') {
+      if (Number.isNaN(a) && Number.isNaN(b)) return true;
+      return Number(a) === Number(b);
+    }
+    if (typeof a === 'boolean' || typeof b === 'boolean') {
+      return Boolean(a) === Boolean(b);
+    }
+    return String(a == null ? '' : a).trim() === String(b == null ? '' : b).trim();
+  };
+
+  const results = {
+    total: 0,
+    updated: 0,
+    appended: 0,
+    pickupUpdated: 0,
+    pickupAppended: 0
+  };
+
+  Object.keys(questionsBranch || {}).forEach(uidKey => {
+    const record = questionsBranch[uidKey];
+    if (!record || typeof record !== 'object') {
+      return;
+    }
+    const resolvedUid = ensureString(record.uid || uidKey);
+    if (!resolvedUid) {
+      return;
+    }
+    const isPickup = record.type === 'pickup' || record.pickup === true;
+    const data = initSheetData(isPickup ? 'pickup' : 'normal');
+    if (!data) {
+      return;
+    }
+
+    const existing = data.existingByUid.get(resolvedUid);
+    const currentRow = existing ? existing.values : null;
+    const columnCount = data.info.headers.length;
+    const nextRow = currentRow ? currentRow.slice() : Array(columnCount).fill('');
+    const touched = new Set();
+
+    const setValue = (headerKeys, value) => {
+      const list = Array.isArray(headerKeys) ? headerKeys : [headerKeys];
+      list.forEach(headerKey => {
+        const idx = getHeaderIndex_(data.info.headerMap, headerKey);
+        if (idx == null) return;
+        nextRow[idx] = value;
+        touched.add(idx);
+      });
+    };
+
+    const tsValue = Number(record.ts || record.timestamp || 0);
+    const tsDate = Number.isFinite(tsValue) && tsValue > 0 ? new Date(tsValue) : null;
+    const timestampLabel = formatQuestionTimestamp_(tsDate || new Date());
+    setValue(['タイムスタンプ', 'Timestamp'], timestampLabel);
+    if (tsValue) {
+      setValue('__ts', tsValue);
+    }
+
+    setValue('ラジオネーム', ensureString(record.name));
+    setValue('質問・お悩み', ensureString(record.question));
+
+    const groupValue = ensureString(record.group);
+    setValue('班番号', groupValue);
+
+    const genreValue = ensureString(record.genre) || 'その他';
+    setValue('ジャンル', genreValue);
+    if (record.genre != null) {
+      setValue('ジャンル(送信時)', ensureString(record.genre));
+    }
+
+    const scheduleStartMs = parseDateToMillis_(record.scheduleStart, 0);
+    const scheduleEndMs = parseDateToMillis_(record.scheduleEnd, 0);
+    const scheduleStartValue = scheduleStartMs ? new Date(scheduleStartMs) : ensureString(record.scheduleStart);
+    const scheduleEndValue = scheduleEndMs ? new Date(scheduleEndMs) : ensureString(record.scheduleEnd);
+    setValue(['日程開始', '開始日時'], scheduleStartValue || '');
+    setValue(['日程終了', '終了日時'], scheduleEndValue || '');
+
+    const scheduleLabel = ensureString(record.schedule) || formatScheduleLabel_(scheduleStartValue, scheduleEndValue);
+    setValue(['日程', '日程表示'], scheduleLabel);
+    setValue('日程日付', ensureString(record.scheduleDate));
+
+    setValue('イベントID', ensureString(record.eventId));
+    setValue('日程ID', ensureString(record.scheduleId));
+    setValue('参加者ID', ensureString(record.participantId));
+    if (record.participantName != null) {
+      const participantName = ensureString(record.participantName);
+      setValue(['参加者名', '氏名'], participantName);
+    }
+    if (record.eventName != null) {
+      setValue('イベント名', ensureString(record.eventName));
+    }
+
+    const tokenValue = ensureString(record.token);
+    setValue(['リンクトークン', 'Token'], tokenValue);
+
+    if (record.guidance != null) {
+      setValue(['ガイダンス', '案内文'], ensureString(record.guidance));
+    }
+
+    const questionLength = Number(record.questionLength);
+    setValue('質問文字数', Number.isFinite(questionLength) && questionLength > 0 ? questionLength : '');
+
+    setValue(['uid', 'UID'], resolvedUid);
+    setValue('回答済', record.answered === true);
+    setValue('選択中', record.selecting === true);
+
+    if (record.language != null) {
+      setValue('言語', ensureString(record.language));
+    }
+    if (record.origin != null) {
+      setValue('起点', ensureString(record.origin));
+    }
+    if (record.formVersion != null) {
+      setValue('フォームバージョン', ensureString(record.formVersion));
+    }
+    const updatedAtMs = Number(record.updatedAt);
+    if (Number.isFinite(updatedAtMs) && updatedAtMs > 0) {
+      setValue('更新日時', new Date(updatedAtMs));
+    }
+    setValue('タイプ', ensureString(record.type));
+    if (isPickup) {
+      setValue('ピックアップ', true);
+    } else {
+      setValue('ピックアップ', false);
+    }
+
+    const touchedIndexes = Array.from(touched);
+    let rowChanged = !currentRow;
+    if (currentRow) {
+      rowChanged = touchedIndexes.some(idx => !valuesEqual(currentRow[idx], nextRow[idx]));
+    }
+
+    results.total += 1;
+    if (!rowChanged) {
+      return;
+    }
+
+    if (currentRow) {
+      data.updates.push({ rowNumber: existing.rowNumber, values: nextRow });
+      if (isPickup) {
+        results.pickupUpdated += 1;
+      } else {
+        results.updated += 1;
+      }
+    } else {
+      data.appends.push(nextRow);
+      if (isPickup) {
+        results.pickupAppended += 1;
+      } else {
+        results.appended += 1;
+      }
+    }
+  });
+
+  sheetDataMap.forEach(data => {
+    if (!data) return;
+    const columnCount = data.info.headers.length;
+    data.updates.forEach(entry => {
+      data.sheet.getRange(entry.rowNumber, 1, 1, columnCount).setValues([entry.values]);
+    });
+    if (data.appends.length) {
+      const startRow = data.sheet.getLastRow() + 1;
+      const requiredRows = startRow + data.appends.length - 1;
+      if (data.sheet.getMaxRows() < requiredRows) {
+        data.sheet.insertRowsAfter(data.sheet.getMaxRows(), requiredRows - data.sheet.getMaxRows());
+      }
+      data.sheet.getRange(startRow, 1, data.appends.length, columnCount).setValues(data.appends);
+    }
+  });
+
+  return results;
+}
+
 // WebAppにPOSTリクエストが送られたときに実行される関数
 function doPost(e) {
   let requestOrigin = getRequestOrigin_(e);
@@ -1477,6 +1711,26 @@ function syncQuestionIntakeToSheet_() {
     groupUpdateResult = { updated: 0 };
   }
 
+  let questionMirrorResult = {
+    total: 0,
+    updated: 0,
+    appended: 0,
+    pickupUpdated: 0,
+    pickupAppended: 0
+  };
+  try {
+    questionMirrorResult = mirrorQuestionsFromRtdbToSheet_(accessToken);
+  } catch (error) {
+    console.warn('mirrorQuestionsFromRtdbToSheet_ failed during syncQuestionIntakeToSheet_', error);
+    questionMirrorResult = {
+      total: 0,
+      updated: 0,
+      appended: 0,
+      pickupUpdated: 0,
+      pickupAppended: 0
+    };
+  }
+
   let mirrorResult = null;
   const shouldMirrorQuestions = (groupUpdateResult && groupUpdateResult.updated > 0);
   if (shouldMirrorQuestions) {
@@ -1497,7 +1751,11 @@ function syncQuestionIntakeToSheet_() {
     tokensRemoved: cleanupResult ? cleanupResult.removed || 0 : 0,
     questionGroupUpdates: groupUpdateResult ? groupUpdateResult.updated || 0 : 0,
     questionFeedUpdates: groupUpdateResult ? groupUpdateResult.questionUpdates || 0 : 0,
-    questionsMirrored: mirrorResult ? mirrorResult.count || 0 : 0
+    questionsMirrored: mirrorResult ? mirrorResult.count || 0 : 0,
+    questionSheetAppended: questionMirrorResult.appended || 0,
+    questionSheetUpdated: questionMirrorResult.updated || 0,
+    pickupSheetAppended: questionMirrorResult.pickupAppended || 0,
+    pickupSheetUpdated: questionMirrorResult.pickupUpdated || 0
   };
 }
 
