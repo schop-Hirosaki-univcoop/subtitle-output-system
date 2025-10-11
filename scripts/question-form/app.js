@@ -484,6 +484,57 @@ export class QuestionFormApp {
 
     return { queueProcessed };
   }
+
+  async submitQuestionViaGas(payload, signal) {
+    const body = JSON.stringify({
+      ...payload,
+      requestOrigin:
+        (typeof window !== "undefined" && window.location && window.location.origin) || ""
+    });
+
+    let response;
+    try {
+      response = await fetch(GAS_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body,
+        signal
+      });
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw error;
+      }
+      const fallbackError = error instanceof Error ? error : new Error("Network error");
+      fallbackError.shouldFallback = true;
+      throw fallbackError;
+    }
+
+    if (!response.ok) {
+      const statusError = new Error("フォームの送信に失敗しました。時間をおいて再試行してください。");
+      statusError.shouldFallback = response.status >= 500;
+      throw statusError;
+    }
+
+    let json;
+    try {
+      json = await response.json();
+    } catch (error) {
+      const parseError = new Error("サーバーの応答が正しくありませんでした。");
+      parseError.shouldFallback = true;
+      throw parseError;
+    }
+
+    if (!json?.success) {
+      const message = typeof json?.error === "string" && json.error.trim()
+        ? json.error.trim()
+        : "質問の送信に失敗しました。";
+      const apiError = new Error(message);
+      apiError.shouldFallback = false;
+      throw apiError;
+    }
+
+    return json;
+  }
 }
 
 function generateQuestionUid(entryRef) {
