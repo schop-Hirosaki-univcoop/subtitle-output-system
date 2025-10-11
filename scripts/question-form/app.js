@@ -381,6 +381,7 @@ export class QuestionFormApp {
       questionLength,
       genre,
       groupNumber: this.view.getGroupNumber(),
+      teamNumber: this.view.getGroupNumber(),
       scheduleLabel: this.view.getScheduleLabel(),
       scheduleDate: this.view.getScheduleDate(),
       scheduleStart: String(this.state.context?.scheduleStart || ""),
