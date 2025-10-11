@@ -199,6 +199,14 @@ function createApiClient(getIdToken) {
 
 const api = createApiClient(getAuthIdToken);
 
+async function drainQuestionQueue() {
+  try {
+    await api.apiPost({ action: "processQuestionQueue" });
+  } catch (error) {
+    console.warn("processQuestionQueue failed", error);
+  }
+}
+
 function getDisplayParticipantId(participantId) {
   const raw = String(participantId || "").trim();
   if (!raw) {
@@ -218,6 +226,10 @@ function applyParticipantIdText(element, participantId) {
   } else {
     element.removeAttribute("title");
   }
+}
+
+function hasUnsavedChanges() {
+  return signatureForEntries(state.participants) !== state.lastSavedSignature;
 }
 
 async function requestSheetSync({ suppressError = true } = {}) {
@@ -767,9 +779,19 @@ function renderSchedules() {
 }
 
 function syncSaveButtonState() {
-  if (!dom.saveButton) return;
-  const currentSignature = signatureForEntries(state.participants);
-  dom.saveButton.disabled = state.saving || currentSignature === state.lastSavedSignature;
+  const unsaved = hasUnsavedChanges();
+  if (dom.saveButton) {
+    dom.saveButton.disabled = state.saving || !unsaved;
+  }
+  if (dom.discardButton) {
+    const disabled = state.saving || !unsaved;
+    dom.discardButton.disabled = disabled;
+    if (disabled) {
+      dom.discardButton.setAttribute("aria-disabled", "true");
+    } else {
+      dom.discardButton.removeAttribute("aria-disabled");
+    }
+  }
 }
 
 function syncClearButtonState() {
@@ -923,7 +945,8 @@ async function loadEvents({ preserveSelection = true } = {}) {
   return state.events;
 }
 
-async function loadParticipants() {
+async function loadParticipants(options = {}) {
+  const { statusMessage, statusVariant = "success", suppressStatus = false } = options || {};
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) {
@@ -933,6 +956,7 @@ async function loadParticipants() {
     state.duplicateGroups = new Map();
     renderParticipants();
     updateParticipantContext();
+    syncSaveButtonState();
     return;
   }
 
@@ -974,10 +998,13 @@ async function loadParticipants() {
     if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
     if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
     if (dom.csvInput) dom.csvInput.value = "";
-    setUploadStatus("現在の参加者リストを読み込みました。", "success");
+    if (!suppressStatus) {
+      setUploadStatus(statusMessage || "現在の参加者リストを読み込みました。", statusVariant);
+    }
     updateDuplicateMatches();
     renderParticipants();
     updateParticipantContext({ preserveStatus: true });
+    syncSaveButtonState();
   } catch (error) {
     console.error(error);
     state.participants = [];
@@ -987,6 +1014,7 @@ async function loadParticipants() {
     setUploadStatus(error.message || "参加者リストの読み込みに失敗しました。", "error");
     renderParticipants();
     updateParticipantContext();
+    syncSaveButtonState();
   }
 }
 
@@ -1586,6 +1614,7 @@ async function handleSave(options = {}) {
 
   state.saving = true;
   if (dom.saveButton) dom.saveButton.disabled = true;
+  syncSaveButtonState();
   setUploadStatus("保存中です…");
   syncClearButtonState();
 
@@ -1715,6 +1744,32 @@ async function handleSave(options = {}) {
   }
 }
 
+async function handleRevertParticipants() {
+  if (!hasUnsavedChanges()) {
+    setUploadStatus("取り消す変更はありません。");
+    return;
+  }
+
+  const confirmed = await confirmAction({
+    title: "変更の取り消し",
+    description: "未保存の変更をすべて破棄し、最新の参加者リストを読み込み直します。よろしいですか？",
+    confirmLabel: "取り消す",
+    cancelLabel: "キャンセル"
+  });
+
+  if (!confirmed) {
+    return;
+  }
+
+  setUploadStatus("未保存の変更を破棄しています…");
+  try {
+    await loadParticipants({ statusMessage: "未保存の変更を取り消しました。", statusVariant: "success" });
+  } catch (error) {
+    console.error(error);
+    setUploadStatus(error.message || "変更の取り消しに失敗しました。", "error");
+  }
+}
+
 async function handleClearParticipants() {
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
@@ -1835,6 +1890,7 @@ function resetState() {
   if (dom.csvInput) dom.csvInput.value = "";
   renderUserSummary(null);
   syncTemplateButtons();
+  syncSaveButtonState();
 }
 
 function handleMappingTableClick(event) {
@@ -1893,8 +1949,8 @@ async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
   const displayId = getDisplayParticipantId(entry.participantId);
   const idLabel = entry.participantId ? `ID: ${displayId}` : "ID未設定";
   const description = nameLabel
-    ? `参加者${nameLabel}（${idLabel}）を一覧から削除します。保存を実行するとデータベースからも削除されます。`
-    : `参加者（${idLabel}）を一覧から削除します。保存を実行するとデータベースからも削除されます。`;
+    ? `参加者${nameLabel}（${idLabel}）を削除します。この操作は直ちに保存されます。よろしいですか？`
+    : `参加者（${idLabel}）を削除します。この操作は直ちに保存されます。よろしいですか？`;
 
   const confirmed = await confirmAction({
     title: "参加者の削除",
@@ -1920,7 +1976,15 @@ async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
     : removed.participantId
       ? `参加者ID: ${removedDisplayId}`
       : "参加者ID未設定";
-  setUploadStatus(`${identifier}を削除しました。保存ボタンから反映してください。`, "success");
+
+  const saveSuccess = await handleSave({ allowEmpty: true, successMessage: `${identifier}を削除しました。` });
+  if (!saveSuccess) {
+    try {
+      await loadParticipants({ suppressStatus: true });
+    } catch (reloadError) {
+      console.error(reloadError);
+    }
+  }
 }
 
 function openParticipantEditor(participantId, rowKey) {
@@ -2329,7 +2393,7 @@ function attachEventHandlers() {
         setFormError(dom.participantError);
         saveParticipantEdits();
         closeDialog(dom.participantDialog);
-        setUploadStatus("参加者情報を更新しました。保存ボタンから反映してください。", "success");
+        setUploadStatus("参加者情報を更新しました。保存または取り消しを選択してください。", "success");
       } catch (error) {
         console.error(error);
         setFormError(dom.participantError, error.message || "参加者情報の更新に失敗しました。");
@@ -2347,6 +2411,16 @@ function attachEventHandlers() {
       });
     });
     dom.saveButton.disabled = true;
+  }
+
+  if (dom.discardButton) {
+    dom.discardButton.addEventListener("click", () => {
+      handleRevertParticipants().catch(err => {
+        console.error(err);
+        setUploadStatus(err.message || "変更の取り消しに失敗しました。", "error");
+      });
+    });
+    dom.discardButton.disabled = true;
   }
 
   if (dom.mappingTbody) {
@@ -2409,6 +2483,7 @@ function initAuthWatcher() {
       await ensureTokenSnapshot(true);
       await loadEvents({ preserveSelection: false });
       await loadParticipants();
+      await drainQuestionQueue();
       setLoaderStep(3, "初期データの取得が完了しました。仕上げ中…");
       setAuthUi(true);
       finishLoaderSteps("準備完了");
