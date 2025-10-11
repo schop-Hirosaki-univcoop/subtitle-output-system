@@ -10,7 +10,7 @@ export function renderQuestions(app) {
   const selectedGenre = app.state.currentGenre || GENRE_OPTIONS[0];
   const selectedSchedule = viewingNormalTab ? app.state.currentSchedule || "" : "";
   let list = app.state.allQuestions.filter((item) => {
-    const isPuq = item["ラジオネーム"] === "Pick Up Question";
+    const isPuq = item["ピックアップ"] === true || item["ラジオネーム"] === "Pick Up Question";
     if (viewingPuqTab && !isPuq) {
       return false;
     }
@@ -47,7 +47,7 @@ export function renderQuestions(app) {
     const statusText = isSelecting ? "送出準備中" : isAnswered ? "送出済" : "未送出";
     if (isAnswered) card.classList.add("is-answered");
     if (isSelecting) card.classList.add("is-selecting");
-    const isPuq = item["ラジオネーム"] === "Pick Up Question";
+    const isPuq = item["ピックアップ"] === true || item["ラジオネーム"] === "Pick Up Question";
     if (isPuq) {
       card.classList.add("is-puq");
     }
@@ -77,7 +77,8 @@ export function renderQuestions(app) {
         name: item["ラジオネーム"],
         question: item["質問・お悩み"],
         isAnswered,
-        participantId
+        participantId,
+        isPickup: isPuq
       };
     }
     const rawName = item["ラジオネーム"];
@@ -117,7 +118,8 @@ export function renderQuestions(app) {
         name: item["ラジオネーム"],
         question: item["質問・お悩み"],
         isAnswered,
-        participantId
+        participantId,
+        isPickup: isPuq
       };
       updateActionAvailability(app);
     });
@@ -143,7 +145,7 @@ export function updateScheduleOptions(app) {
   const scheduleSet = new Set();
   if (isNormalTab) {
     for (const item of app.state.allQuestions) {
-      const isPuq = item["ラジオネーム"] === "Pick Up Question";
+      const isPuq = item["ピックアップ"] === true || item["ラジオネーム"] === "Pick Up Question";
       if (isPuq) continue;
       const itemGenre = String(item["ジャンル"] ?? "").trim() || "その他";
       if (selectedGenre && itemGenre !== selectedGenre) continue;
@@ -276,7 +278,8 @@ export async function handleDisplay(app) {
       uid: app.state.selectedRowData.uid,
       participantId: app.state.selectedRowData.participantId || "",
       name: app.state.selectedRowData.name,
-      question: app.state.selectedRowData.question
+      question: app.state.selectedRowData.question,
+      pickup: app.state.selectedRowData.isPickup === true
     });
     app.api.fireAndForgetApi({ action: "updateSelectingStatus", uid: app.state.selectedRowData.uid });
     if (previousUid) {
