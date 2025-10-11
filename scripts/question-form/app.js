@@ -422,6 +422,34 @@ export class QuestionFormApp {
       return acc;
     }, {});
 
+    const directPayload = {
+      action: "submitQuestion",
+      ...submission
+    };
+
+    let deliveredDirect = false;
+    try {
+      await this.submitQuestionViaGas(directPayload, controller?.signal);
+      deliveredDirect = true;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw error;
+      }
+      if (error?.shouldFallback === false) {
+        throw error;
+      }
+      console.warn("Primary submitQuestion request failed; falling back to RTDB queue", error);
+    }
+
+    if (deliveredDirect) {
+      return;
+    }
+
+    if (controller?.signal?.aborted) {
+      const error = new DOMException("Aborted", "AbortError");
+      throw error;
+    }
+
     submission.submittedAt = serverTimestamp();
 
     const submissionsRef = ref(this.database, `${QUESTION_SUBMISSIONS_PATH}/${token}`);
@@ -476,5 +504,48 @@ export class QuestionFormApp {
     }
 
     return json;
+  }
+
+  async submitQuestionViaGas(payload, signal) {
+    if (!payload || typeof payload !== "object") {
+      const error = new Error("送信内容が正しくありません。再度お試しください。");
+      error.shouldFallback = false;
+      throw error;
+    }
+
+    let response;
+    try {
+      response = await fetch(GAS_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        body: JSON.stringify(payload),
+        signal
+      });
+    } catch (networkError) {
+      if (networkError?.name === "AbortError") {
+        throw networkError;
+      }
+      networkError.shouldFallback = true;
+      throw networkError;
+    }
+
+    let body = null;
+    try {
+      body = await response.json();
+    } catch (parseError) {
+      parseError.shouldFallback = true;
+      throw parseError;
+    }
+
+    if (!body || body.success !== true) {
+      const error = new Error(body?.error || "フォームを送信できませんでした。入力内容を確認して再度お試しください。");
+      error.shouldFallback = false;
+      throw error;
+    }
+
+    return body;
   }
 }
