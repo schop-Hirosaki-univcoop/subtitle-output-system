@@ -39,6 +39,7 @@ const dom = {
   downloadTeamTemplateButton: document.getElementById("download-team-template"),
   teamCsvInput: document.getElementById("team-csv-input"),
   saveButton: document.getElementById("save-button"),
+  discardButton: document.getElementById("discard-button"),
   clearParticipantsButton: document.getElementById("clear-participants-button"),
   uploadStatus: document.getElementById("upload-status"),
   fileLabel: document.getElementById("file-label"),

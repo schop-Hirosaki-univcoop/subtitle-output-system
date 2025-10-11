@@ -1,8 +1,11 @@
 // WebAppとしてアクセスされたときに実行されるメイン関数
 function doGet(e) {
-  return ContentService
-    .createTextOutput(JSON.stringify({ success: false, error: 'GET not allowed' }))
-    .setMimeType(ContentService.MimeType.JSON);
+  return withCors_(
+    ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: 'GET not allowed' }))
+      .setMimeType(ContentService.MimeType.JSON),
+    getRequestOrigin_(e)
+  );
 }
 
 // 指定されたシートのデータを読み込んでオブジェクトの配列に変換するヘルパー関数
@@ -27,11 +30,17 @@ function getSheetData(sheetName) {
 }
 
 const DISPLAY_SESSION_TTL_MS = 60 * 1000;
+const ALLOWED_ORIGINS = [
+  'https://schop-hirosaki-univcoop.github.io',
+  'https://schop-hirosaki-univcoop.github.io/'
+];
 
 // WebAppにPOSTリクエストが送られたときに実行される関数
 function doPost(e) {
+  let requestOrigin = getRequestOrigin_(e);
   try {
     const req = parseBody_(e);
+    requestOrigin = getRequestOrigin_(e, req) || requestOrigin;
     const { action, idToken } = req;
     if (!action) throw new Error('Missing action');
 
@@ -42,93 +51,98 @@ function doPost(e) {
       principal = requireAuth_(idToken, displayActions.has(action) ? { allowAnonymous: true } : {});
     }
 
+    const ok = (payload) => jsonOk(payload, requestOrigin);
+
     switch (action) {
       case 'beginDisplaySession':
-        return jsonOk(beginDisplaySession_(principal));
+        return ok(beginDisplaySession_(principal));
       case 'heartbeatDisplaySession':
-        return jsonOk(heartbeatDisplaySession_(principal, req.sessionId));
+        return ok(heartbeatDisplaySession_(principal, req.sessionId));
       case 'endDisplaySession':
-        return jsonOk(endDisplaySession_(principal, req.sessionId, req.reason));
+        return ok(endDisplaySession_(principal, req.sessionId, req.reason));
       case 'ensureAdmin':
-        return jsonOk(ensureAdmin_(principal));
+        return ok(ensureAdmin_(principal));
       case 'submitQuestion':
-        return jsonOk(submitQuestion_(req));
+        return ok(submitQuestion_(req));
       case 'fetchNameMappings':
-        return jsonOk({ mappings: fetchNameMappings_() });
+        return ok({ mappings: fetchNameMappings_() });
       case 'fetchQuestionContext':
-        return jsonOk({ context: fetchQuestionContext_(req) });
+        return ok({ context: fetchQuestionContext_(req) });
       case 'saveNameMappings':
         assertOperator_(principal);
-        return jsonOk(saveNameMappings_(req.entries));
+        return ok(saveNameMappings_(req.entries));
       case 'mirrorSheet':
         assertOperator_(principal);
-        return jsonOk(mirrorSheetToRtdb_());
+        return ok(mirrorSheetToRtdb_());
       case 'mirrorQuestionIntake':
         assertOperator_(principal);
-        return jsonOk(mirrorQuestionIntake_());
+        return ok(mirrorQuestionIntake_());
       case 'syncQuestionIntakeToSheet':
         assertOperator_(principal);
-        return jsonOk(syncQuestionIntakeToSheet_());
+        return ok(syncQuestionIntakeToSheet_());
+      case 'processQuestionQueue':
+        assertOperator_(principal);
+        return ok(processQuestionSubmissionQueue_());
       case 'fetchSheet':
         assertOperator_(principal);
-        return jsonOk({ data: getSheetData_(req.sheet) });
+        return ok({ data: getSheetData_(req.sheet) });
       case 'listQuestionEvents':
         assertOperator_(principal);
-        return jsonOk({ events: listQuestionEvents_() });
+        return ok({ events: listQuestionEvents_() });
       case 'createQuestionEvent':
         assertOperator_(principal);
-        return jsonOk({ event: createQuestionEvent_(req.name) });
+        return ok({ event: createQuestionEvent_(req.name) });
       case 'deleteQuestionEvent':
         assertOperator_(principal);
-        return jsonOk(deleteQuestionEvent_(req.eventId));
+        return ok(deleteQuestionEvent_(req.eventId));
       case 'createQuestionSchedule':
         assertOperator_(principal);
-        return jsonOk({
+        return ok({
           schedule: createQuestionSchedule_(req.eventId, req.label, req.date, req.startAt, req.endAt)
         });
       case 'deleteQuestionSchedule':
         assertOperator_(principal);
-        return jsonOk(deleteQuestionSchedule_(req.eventId, req.scheduleId));
+        return ok(deleteQuestionSchedule_(req.eventId, req.scheduleId));
       case 'fetchQuestionParticipants':
         assertOperator_(principal);
-        return jsonOk({ participants: fetchQuestionParticipants_(req.eventId, req.scheduleId) });
+        return ok({ participants: fetchQuestionParticipants_(req.eventId, req.scheduleId) });
       case 'saveQuestionParticipants':
         assertOperator_(principal);
-        return jsonOk(saveQuestionParticipants_(req.eventId, req.scheduleId, req.entries));
+        return ok(saveQuestionParticipants_(req.eventId, req.scheduleId, req.entries));
       case 'addTerm':
         assertOperator_(principal);
-        return jsonOk(addDictionaryTerm(req.term, req.ruby));
+        return ok(addDictionaryTerm(req.term, req.ruby));
       case 'deleteTerm':
         assertOperator_(principal);
-        return jsonOk(deleteDictionaryTerm(req.term));
+        return ok(deleteDictionaryTerm(req.term));
       case 'toggleTerm':
         assertOperator_(principal);
-        return jsonOk(toggleDictionaryTerm(req.term, req.enabled));
+        return ok(toggleDictionaryTerm(req.term, req.enabled));
       case 'updateStatus':
         assertOperator_(principal);
-        return jsonOk(updateAnswerStatus(req.uid, req.status));
+        return ok(updateAnswerStatus(req.uid, req.status));
       case 'editQuestion':
         assertOperator_(principal);
-        return jsonOk(editQuestionText(req.uid, req.text));
+        return ok(editQuestionText(req.uid, req.text));
       case 'batchUpdateStatus':
         assertOperator_(principal);
-        return jsonOk(batchUpdateStatus(req.uids, req.status, principal));
+        return ok(batchUpdateStatus(req.uids, req.status, principal));
       case 'updateSelectingStatus':
         assertOperator_(principal);
-        return jsonOk(updateSelectingStatus(req.uid, principal));
+        return ok(updateSelectingStatus(req.uid, principal));
       case 'clearSelectingStatus':
         assertOperator_(principal);
-        return jsonOk(clearSelectingStatus(principal));
+        return ok(clearSelectingStatus(principal));
       case 'logAction':
         assertOperator_(principal);
-        return jsonOk(logAction_(principal, req.action_type, req.details));
+        return ok(logAction_(principal, req.action_type, req.details));
       case 'whoami':
-        return jsonOk({ principal });
+        return ok({ principal });
       default:
         throw new Error('Unknown action: ' + action);
     }
   } catch (err) {
-    return jsonErr_(err);
+    return jsonErr_(err, requestOrigin);
   }
 }
 
@@ -282,6 +296,172 @@ function submitQuestion_(payload) {
   }
 
   return { uid, timestamp: toIsoJst_(timestamp) };
+}
+
+function processQuestionSubmissionQueue_() {
+  const accessToken = getFirebaseAccessToken_();
+  const queueBranch = fetchRtdb_('questionIntake/submissions', accessToken) || {};
+  const queueTokens = Object.keys(queueBranch);
+  if (!queueTokens.length) {
+    return { processed: 0, discarded: 0 };
+  }
+
+  const tokenRecords = fetchRtdb_('questionIntake/tokens', accessToken) || {};
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('answer');
+  if (!sheet) throw new Error('Sheet "answer" not found.');
+
+  const lastColumn = sheet.getLastColumn();
+  if (lastColumn < 1) throw new Error('answer sheet has no headers.');
+
+  const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
+  const norm = s => String(s || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
+  const headerMap = new Map();
+  headers.forEach((header, index) => {
+    if (header == null) return;
+    headerMap.set(norm(header), index);
+  });
+
+  const rowsToAppend = [];
+  const updates = {};
+  let processed = 0;
+  let discarded = 0;
+
+  const ensureString = value => String(value || '').trim();
+  const nowIso = () => new Date().toISOString();
+
+  queueTokens.forEach(token => {
+    const submissions = queueBranch[token] && typeof queueBranch[token] === 'object'
+      ? queueBranch[token]
+      : {};
+    const tokenRecord = tokenRecords[token] || {};
+    const revoked = tokenRecord && tokenRecord.revoked === true;
+    const expiresAt = Number(tokenRecord && tokenRecord.expiresAt || 0);
+    const eventId = ensureString(tokenRecord && tokenRecord.eventId);
+    const scheduleId = ensureString(tokenRecord && tokenRecord.scheduleId);
+    const participantId = ensureString(tokenRecord && tokenRecord.participantId);
+
+    Object.keys(submissions).forEach(entryId => {
+      const submissionPath = `questionIntake/submissions/${token}/${entryId}`;
+      const entry = submissions[entryId] && typeof submissions[entryId] === 'object'
+        ? submissions[entryId]
+        : null;
+
+      if (!entry) {
+        updates[submissionPath] = null;
+        discarded += 1;
+        return;
+      }
+
+      if (!tokenRecord || !eventId || !scheduleId || !participantId || revoked || (expiresAt && Date.now() > expiresAt)) {
+        updates[submissionPath] = null;
+        discarded += 1;
+        return;
+      }
+
+      try {
+        const radioName = ensureString(entry.radioName);
+        const questionText = ensureString(entry.question);
+        if (!radioName) throw new Error('ラジオネームが空です。');
+        if (!questionText) throw new Error('質問内容が空です。');
+
+        const questionLength = Number(entry.questionLength);
+        if (!Number.isFinite(questionLength) || questionLength <= 0) {
+          throw new Error('質問文字数が不正です。');
+        }
+
+        const genreValue = ensureString(entry.genre) || 'その他';
+        const groupNumber = ensureString(entry.groupNumber || tokenRecord.teamNumber || tokenRecord.groupNumber);
+        const scheduleLabel = ensureString(entry.scheduleLabel || tokenRecord.scheduleLabel);
+        const scheduleDate = ensureString(entry.scheduleDate || tokenRecord.scheduleDate);
+        const scheduleStart = ensureString(entry.scheduleStart || tokenRecord.scheduleStart);
+        const scheduleEnd = ensureString(entry.scheduleEnd || tokenRecord.scheduleEnd);
+        const eventName = ensureString(entry.eventName || tokenRecord.eventName);
+        const participantName = ensureString(entry.participantName || tokenRecord.displayName);
+        const guidance = ensureString(entry.guidance || tokenRecord.guidance);
+
+        const timestampMs = Number(entry.submittedAt || entry.clientTimestamp || Date.now());
+        const timestamp = Number.isFinite(timestampMs) && timestampMs > 0 ? new Date(timestampMs) : new Date();
+        const uid = Utilities.getUuid();
+
+        const newRow = Array.from({ length: headers.length }, () => '');
+        const setValue = (headerKey, value) => {
+          const idx = headerMap.get(norm(headerKey));
+          if (idx == null || idx < 0) return;
+          newRow[idx] = value;
+        };
+
+        setValue('タイムスタンプ', timestamp);
+        setValue('Timestamp', timestamp);
+        setValue('ラジオネーム', radioName);
+        setValue('質問・お悩み', questionText);
+        if (groupNumber) setValue('班番号', groupNumber);
+        setValue('ジャンル', genreValue);
+        if (scheduleLabel) {
+          setValue('日程', scheduleLabel);
+          setValue('日程表示', scheduleLabel);
+        }
+        if (scheduleDate) setValue('日程日付', scheduleDate);
+        if (scheduleStart) setValue('日程開始', scheduleStart);
+        if (scheduleEnd) setValue('日程終了', scheduleEnd);
+        setValue('イベントID', eventId);
+        if (eventName) setValue('イベント名', eventName);
+        setValue('日程ID', scheduleId);
+        setValue('参加者ID', participantId);
+        if (participantName) {
+          setValue('参加者名', participantName);
+          setValue('氏名', participantName);
+        }
+        setValue('リンクトークン', token);
+        setValue('Token', token);
+        if (guidance) {
+          setValue('ガイダンス', guidance);
+          setValue('案内文', guidance);
+        }
+        setValue('uid', uid);
+        setValue('UID', uid);
+        setValue('回答済', false);
+        setValue('選択中', false);
+        if (ensureString(entry.genre)) {
+          setValue('ジャンル(送信時)', ensureString(entry.genre));
+        }
+        setValue('質問文字数', questionLength);
+
+        rowsToAppend.push(newRow);
+        updates[submissionPath] = null;
+        processed += 1;
+      } catch (err) {
+        console.warn('Failed to process queued submission', token, entryId, err);
+        updates[submissionPath] = null;
+        const errorPath = `questionIntake/submissionErrors/${token}/${entryId}`;
+        updates[errorPath] = {
+          error: String(err && err.message || err),
+          failedAt: nowIso(),
+          payload: entry
+        };
+        discarded += 1;
+      }
+    });
+  });
+
+  if (rowsToAppend.length) {
+    const startRow = sheet.getLastRow() + 1;
+    sheet.getRange(startRow, 1, rowsToAppend.length, headers.length).setValues(rowsToAppend);
+  }
+
+  if (Object.keys(updates).length) {
+    patchRtdb_(updates, accessToken);
+  }
+
+  if (rowsToAppend.length) {
+    try {
+      notifyUpdate('answer');
+    } catch (e) {
+      console.warn('notifyUpdate failed after processQuestionSubmissionQueue_', e);
+    }
+  }
+
+  return { processed, discarded };
 }
 
 const NAME_MAP_SHEET_NAME = 'name_mappings';
@@ -1343,10 +1523,63 @@ function logAction_(principal, actionType, details) {
 }
 
 function parseBody_(e) {
-  if (!e || !e.postData) throw new Error('No body');
-  const text = e.postData.contents || '';
-  try { return JSON.parse(text); }
-  catch (e2) { throw new Error('Invalid JSON'); }
+  if (!e) throw new Error('No body');
+
+  const postData = e.postData;
+  const parameter = e && typeof e.parameter === 'object' ? e.parameter : null;
+  const parameters = e && typeof e.parameters === 'object' ? e.parameters : null;
+
+  if (postData) {
+    const type = String(postData.type || '').toLowerCase();
+    const contents = postData.contents || '';
+
+    if (type.indexOf('application/json') !== -1) {
+      try {
+        return contents ? JSON.parse(contents) : {};
+      } catch (error) {
+        throw new Error('Invalid JSON');
+      }
+    }
+
+    if (type.indexOf('application/x-www-form-urlencoded') !== -1 || type.indexOf('multipart/form-data') !== -1) {
+      return parseParameterObject_(parameter, parameters);
+    }
+
+    if (contents) {
+      try {
+        return JSON.parse(contents);
+      } catch (error) {
+        if (!parameter || !Object.keys(parameter).length) {
+          throw new Error('Invalid JSON');
+        }
+      }
+    }
+  }
+
+  if (parameter && Object.keys(parameter).length) {
+    return parseParameterObject_(parameter, parameters);
+  }
+
+  throw new Error('No body');
+}
+
+function parseParameterObject_(parameter, parameters) {
+  const single = parameter && typeof parameter === 'object' ? parameter : {};
+  const multi = parameters && typeof parameters === 'object' ? parameters : {};
+  const result = {};
+
+  Object.keys(single).forEach(key => {
+    result[key] = single[key];
+  });
+
+  Object.keys(multi).forEach(key => {
+    const values = multi[key];
+    if (Array.isArray(values) && values.length > 1) {
+      result[key] = values.slice();
+    }
+  });
+
+  return result;
 }
 
 function requireAuth_(idToken, options){
@@ -1442,20 +1675,98 @@ function assertOperator_(principal){
   if (!ok) throw new Error('Forbidden: not in users sheet');
 }
 
-function jsonOk(payload){
+function jsonOk(payload, requestOrigin){
   const body = Object.assign({ success: true }, payload || {});
-  return ContentService.createTextOutput(JSON.stringify(body))
-    .setMimeType(ContentService.MimeType.JSON);
+  return withCors_(
+    ContentService.createTextOutput(JSON.stringify(body))
+      .setMimeType(ContentService.MimeType.JSON),
+    requestOrigin
+  );
 }
 
-function jsonErr_(err){
+function jsonErr_(err, requestOrigin){
   const id = Utilities.getUuid().slice(0, 8);
   console.error('[' + id + ']', err && err.stack || err);
-  return ContentService.createTextOutput(JSON.stringify({
-    success: false,
-    error: String(err && err.message || err),
-    errorId: id
-  })).setMimeType(ContentService.MimeType.JSON);
+  return withCors_(
+    ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: String(err && err.message || err),
+      errorId: id
+    })).setMimeType(ContentService.MimeType.JSON),
+    requestOrigin
+  );
+}
+
+function withCors_(output, requestOrigin) {
+  if (!output || typeof output.setHeader !== 'function') {
+    return output;
+  }
+  const origin = normalizeAllowedOrigin_(requestOrigin);
+  return output
+    .setHeader('Access-Control-Allow-Origin', origin)
+    .setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    .setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With, Origin')
+    .setHeader('Access-Control-Max-Age', '600')
+    .setHeader('Vary', 'Origin');
+}
+
+function normalizeAllowedOrigin_(requestOrigin) {
+  const origin = String(requestOrigin || '').trim();
+  if (origin && ALLOWED_ORIGINS.indexOf(origin) !== -1) {
+    return origin;
+  }
+  if (ALLOWED_ORIGINS.indexOf('*') !== -1) {
+    return '*';
+  }
+  return ALLOWED_ORIGINS[0] || '*';
+}
+
+function getRequestOrigin_(event, body) {
+  const fallback = extractOriginFromBody_(body) || extractOriginFromParams_(event);
+  if (fallback) {
+    return fallback;
+  }
+  return '';
+}
+
+function extractOriginFromBody_(body) {
+  if (!body || typeof body !== 'object') {
+    return '';
+  }
+  return sanitizeOrigin_(body.origin || body.requestOrigin || '');
+}
+
+function extractOriginFromParams_(event) {
+  if (!event) return '';
+  const single = event.parameter && event.parameter.origin;
+  if (single) {
+    const value = Array.isArray(single) ? single[0] : single;
+    const normalized = sanitizeOrigin_(value);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  const multi = event.parameters && event.parameters.origin;
+  if (Array.isArray(multi) && multi.length) {
+    for (let i = 0; i < multi.length; i++) {
+      const normalized = sanitizeOrigin_(multi[i]);
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+  return '';
+}
+
+function sanitizeOrigin_(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    return url.origin;
+  } catch (error) {
+    return '';
+  }
 }
 
 function requireSessionId_(raw) {
