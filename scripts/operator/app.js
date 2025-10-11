@@ -366,9 +366,12 @@ export class OperatorApp {
         "質問・お悩み": item.question,
         ジャンル: resolveGenreLabel(item.genre),
         日程: String(item.schedule ?? "").trim(),
+        開始日時: String(item.scheduleStart ?? "").trim(),
+        終了日時: String(item.scheduleEnd ?? "").trim(),
         参加者ID: item.participantId ?? "",
         回答済: !!item.answered,
         選択中: !!item.selecting,
+        ピックアップ: !!item.pickup,
         __ts: Number(item.ts || 0)
       }));
       this.updateScheduleOptions();
@@ -493,9 +496,12 @@ export class OperatorApp {
         "質問・お悩み": item.question,
         ジャンル: resolveGenreLabel(item.genre),
         日程: String(item.schedule ?? "").trim(),
+        開始日時: String(item.scheduleStart ?? "").trim(),
+        終了日時: String(item.scheduleEnd ?? "").trim(),
         参加者ID: item.participantId ?? "",
         回答済: !!item.answered,
         選択中: !!item.selecting,
+        ピックアップ: !!item.pickup,
         __ts: Number(item.ts || 0)
       }));
       this.updateScheduleOptions();

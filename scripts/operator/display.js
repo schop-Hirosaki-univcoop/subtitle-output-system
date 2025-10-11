@@ -5,16 +5,18 @@ export function handleRenderUpdate(app, snapshot) {
   setLamp(app, value.phase);
   const isHidden = value.phase === "hidden";
   const now = isHidden ? null : value.nowShowing || null;
+  const pickupFlag = !!(now && now.pickup === true);
   if (!now) {
     if (app.dom.render.title) app.dom.render.title.textContent = "（送出なし）";
     if (app.dom.render.question) app.dom.render.question.textContent = "";
   } else {
     const name = (now.name || "").trim();
+    const isPickup = pickupFlag || name === "Pick Up Question";
     if (app.dom.render.title) {
       const formattedName = formatOperatorName(name);
       if (!name) {
         app.dom.render.title.textContent = "—";
-      } else if (name === "Pick Up Question") {
+      } else if (isPickup) {
         app.dom.render.title.textContent = formattedName || "—";
       } else {
         app.dom.render.title.textContent = `ラジオネーム：${formattedName || name}`;
@@ -65,6 +67,9 @@ function normalizeNowShowing(now) {
   if (Object.prototype.hasOwnProperty.call(now, "participantId")) {
     normalized.participantId = String(now.participantId || "");
   }
+  if (Object.prototype.hasOwnProperty.call(now, "pickup")) {
+    normalized.pickup = Boolean(now.pickup);
+  }
   return normalized;
 }
 
@@ -75,7 +80,8 @@ function areNowShowingEqual(a, b) {
     (a.uid || "") === (b.uid || "") &&
     (a.participantId || "") === (b.participantId || "") &&
     (a.question || "") === (b.question || "") &&
-    (a.name || "") === (b.name || "")
+    (a.name || "") === (b.name || "") &&
+    Boolean(a.pickup) === Boolean(b.pickup)
   );
 }
 
