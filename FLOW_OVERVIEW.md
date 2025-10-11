@@ -17,4 +17,9 @@
 
 ## スプレッドシート更新フロー
 - `applyParticipantGroupsToQuestionSheet_()` が班番号セルを更新したあと、必要に応じて `mirrorQuestionsFromRtdbToSheet_()` が質問データをシートへ取り込み、`mirrorSheetToRtdb_()` がシート内容を RTDB `questions` に書き戻す。【F:code.gs†L1688-L1753】【F:code.gs†L200-320】【F:code.gs†L2238-L2289】
+- `mirrorQuestionIntake_()` はスプレッドシートの参加者一覧を読み取り、現在存在しないイベント・日程・参加者・トークンを RTDB から確実に削除するようになった。これにより、過去の班番号情報が残存して新しい参加者へ引き継がれることを防ぐ。【F:code.gs†L1415-L1708】
 - これらの処理によって、HTML フォームで入力されたデータや管理画面で付与された班番号がスプレッドシートに集約され、さらに RTDB の `questions` ブランチへ整合的に反映される。【F:code.gs†L1569-L1753】【F:code.gs†L2238-L2289】
+
+## 双方向同期のトリガーと制限
+- スプレッドシートから RTDB への反映は、管理画面から `syncQuestionIntakeToSheet` や `mirrorQuestionIntake` を呼び出したときに Apps Script が `mirrorQuestionIntake_()` と `mirrorSheetToRtdb_()` を実行することで行われる。任意のセル編集をフックして自動同期する仕組みは用意されていない。【F:scripts/question-admin/app.js†L229-L239】【F:code.gs†L1415-L1753】【F:code.gs†L2238-L2289】
+- 逆方向（RTDB → スプレッドシート）は `syncQuestionIntakeToSheet_()` が明示的に呼ばれたときに実行され、`questions`・`questionIntake` ブランチを読み取ってシートを更新する。RTDB での変更が即時にシートへ伝播する常時監視の仕組みはなく、必要に応じて同期アクションを実行する運用になっている。【F:code.gs†L1569-L1753】

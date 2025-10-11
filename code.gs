@@ -1580,14 +1580,80 @@ function mirrorQuestionIntake_() {
     eventMap[eventId].updatedAt = candidate;
   });
 
-  const updates = {
-    'questionIntake/events': eventMap,
-    'questionIntake/schedules': scheduleTree,
-    'questionIntake/participants': participantsTree,
-    'questionIntake/tokens': tokensMap
-  };
+  const updates = {};
 
-  patchRtdb_(updates, accessToken);
+  Object.keys(eventMap).forEach(eventId => {
+    updates[`questionIntake/events/${eventId}`] = eventMap[eventId];
+  });
+  Object.keys(existingEvents).forEach(eventId => {
+    if (!eventMap[eventId]) {
+      updates[`questionIntake/events/${eventId}`] = null;
+    }
+  });
+
+  Object.keys(scheduleTree).forEach(eventId => {
+    const schedulesForEvent = scheduleTree[eventId] || {};
+    Object.keys(schedulesForEvent).forEach(scheduleId => {
+      updates[`questionIntake/schedules/${eventId}/${scheduleId}`] = schedulesForEvent[scheduleId];
+    });
+  });
+  Object.keys(existingSchedules).forEach(eventId => {
+    const existingSchedulesForEvent = existingSchedules[eventId] || {};
+    const nextSchedulesForEvent = scheduleTree[eventId];
+    if (!nextSchedulesForEvent) {
+      updates[`questionIntake/schedules/${eventId}`] = null;
+      return;
+    }
+    Object.keys(existingSchedulesForEvent).forEach(scheduleId => {
+      if (!nextSchedulesForEvent[scheduleId]) {
+        updates[`questionIntake/schedules/${eventId}/${scheduleId}`] = null;
+      }
+    });
+  });
+
+  Object.keys(participantsTree).forEach(eventId => {
+    const participantsForEvent = participantsTree[eventId] || {};
+    Object.keys(participantsForEvent).forEach(scheduleId => {
+      const participantEntries = participantsForEvent[scheduleId] || {};
+      Object.keys(participantEntries).forEach(participantId => {
+        updates[`questionIntake/participants/${eventId}/${scheduleId}/${participantId}`] = participantEntries[participantId];
+      });
+    });
+  });
+  Object.keys(existingParticipants).forEach(eventId => {
+    const existingSchedulesForEvent = existingParticipants[eventId] || {};
+    const nextSchedulesForEvent = participantsTree[eventId];
+    if (!nextSchedulesForEvent) {
+      updates[`questionIntake/participants/${eventId}`] = null;
+      return;
+    }
+    Object.keys(existingSchedulesForEvent).forEach(scheduleId => {
+      const existingParticipantsForSchedule = existingSchedulesForEvent[scheduleId] || {};
+      const nextParticipantsForSchedule = nextSchedulesForEvent[scheduleId];
+      if (!nextParticipantsForSchedule) {
+        updates[`questionIntake/participants/${eventId}/${scheduleId}`] = null;
+        return;
+      }
+      Object.keys(existingParticipantsForSchedule).forEach(participantId => {
+        if (!nextParticipantsForSchedule[participantId]) {
+          updates[`questionIntake/participants/${eventId}/${scheduleId}/${participantId}`] = null;
+        }
+      });
+    });
+  });
+
+  Object.keys(tokensMap).forEach(token => {
+    updates[`questionIntake/tokens/${token}`] = tokensMap[token];
+  });
+  Object.keys(existingTokens).forEach(token => {
+    if (!tokensMap[token]) {
+      updates[`questionIntake/tokens/${token}`] = null;
+    }
+  });
+
+  if (Object.keys(updates).length) {
+    patchRtdb_(updates, accessToken);
+  }
 
   return {
     eventCount: Object.keys(eventMap).length,
