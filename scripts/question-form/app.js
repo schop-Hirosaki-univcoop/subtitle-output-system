@@ -338,13 +338,17 @@ export class QuestionFormApp {
     this.view.setFeedback("送信中です…");
 
     try {
-      await this.submitQuestion(controller, {
+      const result = await this.submitQuestion(controller, {
         radioName: sanitizedName,
         question: normalizedQuestion,
         questionLength,
         genre
       });
-      this.view.setFeedback("送信しました。ありがとうございました！", "success");
+      if (result?.queueProcessed) {
+        this.view.setFeedback("送信しました。ありがとうございました！", "success");
+      } else {
+        this.view.setFeedback("送信しました。反映まで数秒かかる場合があります。", "success");
+      }
       this.view.setQuestionValue("");
       this.updateQuestionCounter();
       this.view.focusQuestion();
@@ -381,6 +385,7 @@ export class QuestionFormApp {
       questionLength,
       genre,
       groupNumber: this.view.getGroupNumber(),
+      teamNumber: this.view.getGroupNumber(),
       scheduleLabel: this.view.getScheduleLabel(),
       scheduleDate: this.view.getScheduleDate(),
       scheduleStart: String(this.state.context?.scheduleStart || ""),
@@ -420,6 +425,8 @@ export class QuestionFormApp {
 
     const submissionsRef = ref(this.database, `${QUESTION_SUBMISSIONS_PATH}/${token}`);
     const entryRef = push(submissionsRef);
+    const questionUid = generateQuestionUid(entryRef);
+    submission.uid = questionUid;
 
     try {
       await set(entryRef, submission);
@@ -428,5 +435,79 @@ export class QuestionFormApp {
       error.cause = networkError;
       throw error;
     }
+
+    let queueProcessed = false;
+    const timestamp = Date.now();
+    const questionRecord = buildQuestionRecord({
+      uid: questionUid,
+      token,
+      submission,
+      context: this.state.context,
+      timestamp
+    });
+
+    try {
+      await set(ref(this.database, `questions/${questionUid}`), questionRecord);
+      queueProcessed = true;
+    } catch (error) {
+      console.warn("Failed to write question record", error);
+    }
+
+    return { queueProcessed };
   }
+}
+
+function generateQuestionUid(entryRef) {
+  const key = entryRef?.key;
+  if (typeof key === "string" && key.trim()) {
+    return key.trim();
+  }
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `q_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function buildQuestionRecord({
+  uid,
+  token,
+  submission,
+  context,
+  timestamp
+}) {
+  const ensureString = (value) => (typeof value === "string" ? value.trim() : String(value ?? "").trim());
+  const coalescedGroup = ensureString(submission.groupNumber) || ensureString(context?.groupNumber);
+  const scheduleLabel = ensureString(submission.scheduleLabel) || ensureString(context?.scheduleLabel);
+  const scheduleStart = ensureString(submission.scheduleStart) || ensureString(context?.scheduleStart);
+  const scheduleEnd = ensureString(submission.scheduleEnd) || ensureString(context?.scheduleEnd);
+  const participantId = ensureString(submission.participantId) || ensureString(context?.participantId);
+  const eventId = ensureString(submission.eventId) || ensureString(context?.eventId);
+  const scheduleId = ensureString(submission.scheduleId) || ensureString(context?.scheduleId);
+  const questionLength = Number(submission.questionLength);
+
+  const record = {
+    uid,
+    token: ensureString(token),
+    name: ensureString(submission.radioName),
+    question: ensureString(submission.question),
+    group: coalescedGroup,
+    genre: ensureString(submission.genre) || "その他",
+    schedule: scheduleLabel,
+    scheduleStart,
+    scheduleEnd,
+    participantId,
+    eventId,
+    scheduleId,
+    ts: timestamp,
+    answered: false,
+    selecting: false,
+    updatedAt: timestamp,
+    type: "normal"
+  };
+
+  if (Number.isFinite(questionLength) && questionLength > 0) {
+    record.questionLength = questionLength;
+  }
+
+  return record;
 }
