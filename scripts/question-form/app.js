@@ -8,7 +8,7 @@ import {
   MAX_QUESTION_LENGTH,
   MAX_RADIO_NAME_LENGTH
 } from "./constants.js";
-import { ref, push, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { ref, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   countGraphemes,
   normalizeMultiline,
@@ -425,9 +425,8 @@ export class QuestionFormApp {
       throw error;
     }
 
-    const questionsRef = ref(this.database, "questions");
-    const entryRef = push(questionsRef);
-    const questionUid = generateQuestionUid(entryRef);
+    const questionUid = generateQuestionUid();
+    const entryRef = ref(this.database, `questions/${questionUid}`);
     submission.uid = questionUid;
 
     let queueProcessed = false;
@@ -457,11 +456,7 @@ export class QuestionFormApp {
   }
 }
 
-function generateQuestionUid(entryRef) {
-  const key = entryRef?.key;
-  if (typeof key === "string" && key.trim()) {
-    return key.trim();
-  }
+function generateQuestionUid() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
