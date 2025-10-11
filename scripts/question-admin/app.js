@@ -1721,6 +1721,11 @@ async function handleSave(options = {}) {
       updates[`questionIntake/tokens/${token}`] = record;
     });
 
+    tokensToRemove.forEach(token => {
+      if (!token) return;
+      updates[`questionIntake/tokens/${token}`] = null;
+    });
+
     await update(rootDbRef(), updates);
 
     state.participantTokenMap = nextTokenMap;
