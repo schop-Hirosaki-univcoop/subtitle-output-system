@@ -166,6 +166,11 @@ function toBooleanCell_(value) {
   return false;
 }
 
+function formatQuestionTimestamp_(value) {
+  const date = parseDateCell_(value) || new Date();
+  return Utilities.formatDate(date, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss');
+}
+
 function findQuestionRowByUid_(uid) {
   const targetUid = String(uid || '').trim();
   if (!targetUid) {
@@ -357,6 +362,12 @@ function doPost(e) {
   }
 }
 
+function doOptions(e) {
+  const origin = getRequestOrigin_(e);
+  const empty = ContentService.createTextOutput('');
+  return withCors_(empty, origin);
+}
+
 function submitQuestion_(payload) {
   const radioName = String(payload.radioName || payload.name || '').trim();
   const questionText = String(payload.question || payload.text || '').trim();
@@ -372,6 +383,7 @@ function submitQuestion_(payload) {
   const payloadParticipantId = String(payload.participantId || '').trim();
   const payloadScheduleDate = String(payload.scheduleDate || '').trim();
   const rawToken = String(payload.token || '').trim();
+  const payloadQuestionLength = Number(payload.questionLength || 0);
 
   if (!radioName) throw new Error('ラジオネームを入力してください。');
   if (!questionText) throw new Error('質問・お悩みを入力してください。');
@@ -459,12 +471,16 @@ function submitQuestion_(payload) {
   };
 
   const timestamp = new Date();
+  const timestampLabel = formatQuestionTimestamp_(timestamp);
   const uid = Utilities.getUuid();
 
-  setValue('タイムスタンプ', timestamp);
-  setValue('Timestamp', timestamp);
+  setValue('タイムスタンプ', timestampLabel);
+  setValue('Timestamp', timestampLabel);
   setValue('ラジオネーム', radioName);
   setValue('質問・お悩み', questionText);
+  if (Number.isFinite(payloadQuestionLength) && payloadQuestionLength > 0) {
+    setValue('質問文字数', payloadQuestionLength);
+  }
   if (groupNumber) {
     setValue('班番号', groupNumber);
   }
@@ -525,8 +541,8 @@ function submitQuestion_(payload) {
   return { uid, timestamp: toIsoJst_(timestamp) };
 }
 
-function processQuestionSubmissionQueue_() {
-  const accessToken = getFirebaseAccessToken_();
+function processQuestionSubmissionQueue_(providedAccessToken) {
+  const accessToken = providedAccessToken || getFirebaseAccessToken_();
   const queueBranch = fetchRtdb_('questionIntake/submissions', accessToken) || {};
   const queueTokens = Object.keys(queueBranch);
   if (!queueTokens.length) {
@@ -609,6 +625,7 @@ function processQuestionSubmissionQueue_() {
 
         const timestampMs = Number(entry.submittedAt || entry.clientTimestamp || Date.now());
         const timestamp = Number.isFinite(timestampMs) && timestampMs > 0 ? new Date(timestampMs) : new Date();
+        const timestampLabel = formatQuestionTimestamp_(timestamp);
         const uid = Utilities.getUuid();
 
         const newRow = Array.from({ length: headers.length }, () => '');
@@ -618,8 +635,8 @@ function processQuestionSubmissionQueue_() {
           newRow[idx] = value;
         };
 
-        setValue('タイムスタンプ', timestamp);
-        setValue('Timestamp', timestamp);
+        setValue('タイムスタンプ', timestampLabel);
+        setValue('Timestamp', timestampLabel);
         setValue('ラジオネーム', radioName);
         setValue('質問・お悩み', questionText);
         if (groupNumber) setValue('班番号', groupNumber);
@@ -699,6 +716,145 @@ function processQuestionSubmissionQueue_() {
   }
 
   return { processed, discarded };
+}
+
+function cleanupUnusedQuestionTokens_(participantsBranch, tokensBranch, accessToken) {
+  const participantKeys = new Set();
+  const activeTokens = new Set();
+
+  Object.keys(participantsBranch || {}).forEach(eventId => {
+    const schedules = participantsBranch[eventId] || {};
+    Object.keys(schedules).forEach(scheduleId => {
+      const entries = schedules[scheduleId] || {};
+      Object.keys(entries).forEach(participantId => {
+        const entry = entries[participantId] || {};
+        const token = String(entry.token || '').trim();
+        if (token) {
+          activeTokens.add(token);
+        }
+        const key = `${eventId || ''}::${scheduleId || ''}::${participantId || ''}`;
+        participantKeys.add(key);
+      });
+    });
+  });
+
+  Object.keys(tokensBranch || {}).forEach(token => {
+    const trimmed = String(token || '').trim();
+    if (!trimmed) {
+      return;
+    }
+    const record = tokensBranch[token] || {};
+    const key = `${record.eventId || ''}::${record.scheduleId || ''}::${record.participantId || ''}`;
+    if (participantKeys.has(key)) {
+      activeTokens.add(trimmed);
+    }
+  });
+
+  const updates = {};
+  let removed = 0;
+  Object.keys(tokensBranch || {}).forEach(token => {
+    const trimmed = String(token || '').trim();
+    if (!trimmed) {
+      return;
+    }
+    if (activeTokens.has(trimmed)) {
+      return;
+    }
+    updates[`questionIntake/tokens/${trimmed}`] = null;
+    removed += 1;
+  });
+
+  if (removed > 0 && accessToken) {
+    try {
+      patchRtdb_(updates, accessToken);
+    } catch (error) {
+      console.warn('cleanupUnusedQuestionTokens_ failed to patch RTDB', error);
+      throw error;
+    }
+  }
+
+  return { removed };
+}
+
+function applyParticipantGroupsToQuestionSheet_(participantsBranch) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(QUESTION_SHEET_NAME);
+  if (!sheet) {
+    return { updated: 0 };
+  }
+
+  const info = readSheetWithHeaders_(sheet);
+  if (!info.sheet || !info.headers || !info.headers.length || !info.rows) {
+    return { updated: 0 };
+  }
+
+  const groupIdx = getHeaderIndex_(info.headerMap, ['班番号']);
+  if (groupIdx == null) {
+    return { updated: 0 };
+  }
+
+  const participantIdx = getHeaderIndex_(info.headerMap, ['参加者ID', 'participantid', 'participant_id']);
+  const tokenIdx = getHeaderIndex_(info.headerMap, ['リンクトークン', 'token']);
+  if (participantIdx == null && tokenIdx == null) {
+    return { updated: 0 };
+  }
+
+  const groupByParticipant = new Map();
+  const groupByToken = new Map();
+  Object.keys(participantsBranch || {}).forEach(eventId => {
+    const schedules = participantsBranch[eventId] || {};
+    Object.keys(schedules).forEach(scheduleId => {
+      const entries = schedules[scheduleId] || {};
+      Object.keys(entries).forEach(participantId => {
+        const entry = entries[participantId] || {};
+        const groupNumber = String(entry.teamNumber || entry.groupNumber || '').trim();
+        const participantKey = String(participantId || '').trim();
+        const token = String(entry.token || '').trim();
+        if (participantKey) {
+          groupByParticipant.set(participantKey, groupNumber);
+        }
+        if (token) {
+          groupByToken.set(token, groupNumber);
+        }
+      });
+    });
+  });
+
+  if (!groupByParticipant.size && !groupByToken.size) {
+    return { updated: 0 };
+  }
+
+  const updates = [];
+  info.rows.forEach((row, index) => {
+    let desired = null;
+    if (participantIdx != null) {
+      const participantId = String(row[participantIdx] || '').trim();
+      if (participantId && groupByParticipant.has(participantId)) {
+        desired = groupByParticipant.get(participantId) || '';
+      }
+    }
+    if (desired === null && tokenIdx != null) {
+      const token = String(row[tokenIdx] || '').trim();
+      if (token && groupByToken.has(token)) {
+        desired = groupByToken.get(token) || '';
+      }
+    }
+    if (desired === null) {
+      return;
+    }
+    const current = String(row[groupIdx] || '').trim();
+    const normalizedDesired = String(desired || '').trim();
+    if (current === normalizedDesired) {
+      return;
+    }
+    updates.push({ rowNumber: index + 2, value: normalizedDesired });
+  });
+
+  updates.forEach(update => {
+    sheet.getRange(update.rowNumber, groupIdx + 1).setValue(update.value || '');
+  });
+
+  return { updated: updates.length };
 }
 
 const NAME_MAP_SHEET_NAME = 'name_mappings';
@@ -1081,9 +1237,30 @@ function mirrorQuestionIntake_() {
 
 function syncQuestionIntakeToSheet_() {
   const accessToken = getFirebaseAccessToken_();
+  let queueResult = null;
+  try {
+    queueResult = processQuestionSubmissionQueue_(accessToken);
+  } catch (error) {
+    console.warn('processQuestionSubmissionQueue_ failed during syncQuestionIntakeToSheet_', error);
+  }
+
   const eventsBranch = fetchRtdb_('questionIntake/events', accessToken) || {};
   const schedulesBranch = fetchRtdb_('questionIntake/schedules', accessToken) || {};
   const participantsBranch = fetchRtdb_('questionIntake/participants', accessToken) || {};
+  let tokensBranch = {};
+  try {
+    tokensBranch = fetchRtdb_('questionIntake/tokens', accessToken) || {};
+  } catch (error) {
+    console.warn('Failed to fetch questionIntake/tokens during sync', error);
+    tokensBranch = {};
+  }
+  let cleanupResult = { removed: 0 };
+  try {
+    cleanupResult = cleanupUnusedQuestionTokens_(participantsBranch, tokensBranch, accessToken);
+  } catch (error) {
+    console.warn('cleanupUnusedQuestionTokens_ failed during syncQuestionIntakeToSheet_', error);
+    cleanupResult = { removed: 0 };
+  }
 
   const toSheetDate = (value) => {
     const ms = parseDateToMillis_(value, 0);
@@ -1207,10 +1384,34 @@ function syncQuestionIntakeToSheet_() {
   ]);
   replaceSheetRows_(ensureQuestionParticipantSheet_(), participantSheetRows, 11);
 
+  let groupUpdateResult = { updated: 0 };
+  try {
+    groupUpdateResult = applyParticipantGroupsToQuestionSheet_(participantsBranch);
+  } catch (error) {
+    console.warn('applyParticipantGroupsToQuestionSheet_ failed during syncQuestionIntakeToSheet_', error);
+    groupUpdateResult = { updated: 0 };
+  }
+
+  let mirrorResult = null;
+  const shouldMirrorQuestions = (groupUpdateResult && groupUpdateResult.updated > 0);
+  if (shouldMirrorQuestions) {
+    try {
+      mirrorResult = mirrorSheetToRtdb_();
+    } catch (error) {
+      console.warn('mirrorSheetToRtdb_ failed during syncQuestionIntakeToSheet_', error);
+      mirrorResult = null;
+    }
+  }
+
   return {
     events: eventRows.length,
     schedules: scheduleRows.length,
-    participants: participantRows.length
+    participants: participantRows.length,
+    queueProcessed: queueResult ? queueResult.processed || 0 : 0,
+    queueDiscarded: queueResult ? queueResult.discarded || 0 : 0,
+    tokensRemoved: cleanupResult ? cleanupResult.removed || 0 : 0,
+    questionGroupUpdates: groupUpdateResult ? groupUpdateResult.updated || 0 : 0,
+    questionsMirrored: mirrorResult ? mirrorResult.count || 0 : 0
   };
 }
 
