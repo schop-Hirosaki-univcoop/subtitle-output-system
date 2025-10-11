@@ -1382,6 +1382,17 @@ function syncQuestionIntakeToSheet_() {
     groupUpdateResult = { updated: 0 };
   }
 
+  let mirrorResult = null;
+  const shouldMirrorQuestions = (groupUpdateResult && groupUpdateResult.updated > 0);
+  if (shouldMirrorQuestions) {
+    try {
+      mirrorResult = mirrorSheetToRtdb_();
+    } catch (error) {
+      console.warn('mirrorSheetToRtdb_ failed during syncQuestionIntakeToSheet_', error);
+      mirrorResult = null;
+    }
+  }
+
   return {
     events: eventRows.length,
     schedules: scheduleRows.length,
@@ -1389,7 +1400,8 @@ function syncQuestionIntakeToSheet_() {
     queueProcessed: queueResult ? queueResult.processed || 0 : 0,
     queueDiscarded: queueResult ? queueResult.discarded || 0 : 0,
     tokensRemoved: cleanupResult ? cleanupResult.removed || 0 : 0,
-    questionGroupUpdates: groupUpdateResult ? groupUpdateResult.updated || 0 : 0
+    questionGroupUpdates: groupUpdateResult ? groupUpdateResult.updated || 0 : 0,
+    questionsMirrored: mirrorResult ? mirrorResult.count || 0 : 0
   };
 }
 
