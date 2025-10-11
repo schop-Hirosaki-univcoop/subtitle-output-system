@@ -362,6 +362,12 @@ function doPost(e) {
   }
 }
 
+function doOptions(e) {
+  const origin = getRequestOrigin_(e);
+  const empty = ContentService.createTextOutput('');
+  return withCors_(empty, origin);
+}
+
 function submitQuestion_(payload) {
   const radioName = String(payload.radioName || payload.name || '').trim();
   const questionText = String(payload.question || payload.text || '').trim();
