@@ -688,6 +688,7 @@
           const showingPayload = { name: next?.name || '', question: next?.question || '' };
           if (next?.uid) showingPayload.uid = String(next.uid);
           if (next?.participantId) showingPayload.participantId = String(next.participantId);
+          if (next?.pickup) showingPayload.pickup = true;
           reportRender('showing', { nowShowing: showingPayload });
           try{
             if (__currentToken !== token) return;
@@ -696,6 +697,7 @@
             const visiblePayload = { name: next?.name || '', question: next?.question || '' };
             if (next?.uid) visiblePayload.uid = String(next.uid);
             if (next?.participantId) visiblePayload.participantId = String(next.participantId);
+            if (next?.pickup) visiblePayload.pickup = true;
             await reportRender('visible', { nowShowing: visiblePayload });
           } catch(e){
             console.error(e);
@@ -974,6 +976,7 @@
           const question   = telopData?.question ?? '';
           const uid        = telopData?.uid ? String(telopData.uid) : '';
           const participantId = telopData?.participantId ? String(telopData.participantId) : '';
+          const pickup     = telopData?.pickup === true;
           const hasQuestion = !!(question && question.trim().length);
     
           if (!hasQuestion){
@@ -984,8 +987,8 @@
           }
     
           // ラベル制御（Pick Up Question はラベル非表示）※ ここでは切り替え“しない”
-          const isPickup = (n) => String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
-          const willNoLabel = isPickup(name);
+          const isPickup = (n, flag) => flag === true || String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
+          const willNoLabel = isPickup(name, pickup);
           // ★ currentTelop 更新時に前回値との差分を把握して、必要なDOMだけを入れ替える
           const nameChanged = name.trim() !== prevName.trim();
           const qChanged    = question.trim() !== prevQuestion.trim();
@@ -996,7 +999,7 @@
           // 座布団自体は出す（入場アニメは showTelop が担当）
           if (telopCanvas.classList.contains('hidden')) {
             // 初回は next を渡して入場（座布団サイズは telopIn アニメで表示）
-            const next = { name, question, noLabel: willNoLabel, uid, participantId };
+            const next = { name, question, noLabel: willNoLabel, uid, participantId, pickup };
             // 初回でも本文は先に適用してOK（入場はクラスで実施）
             radioNameEl.textContent = name;
             questionEl.innerHTML    = applyRuby(question);
@@ -1010,12 +1013,13 @@
             if (outs.length){
               Promise.all(outs).then(async ()=>{
                 if (myToken !== updateToken) return; // レース対策
-                const next = { name, question, noLabel: willNoLabel, uid, participantId };
+                const next = { name, question, noLabel: willNoLabel, uid, participantId, pickup };
 
                 // ★ 変更開始＝showing（phase と updatedAt を更新）
                 const showingPayload = { name, question };
                 if (uid) showingPayload.uid = uid;
                 if (participantId) showingPayload.participantId = participantId;
+                if (pickup) showingPayload.pickup = true;
                 reportRender('showing', { nowShowing: showingPayload });
 
                 await fontsReady();
@@ -1031,6 +1035,7 @@
                 const visiblePayload = { name, question };
                 if (uid) visiblePayload.uid = uid;
                 if (participantId) visiblePayload.participantId = participantId;
+                if (pickup) visiblePayload.pickup = true;
                 reportRender('visible', { nowShowing: visiblePayload });
               });
             } else {

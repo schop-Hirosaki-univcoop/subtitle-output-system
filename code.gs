@@ -35,6 +35,217 @@ const ALLOWED_ORIGINS = [
   'https://schop-hirosaki-univcoop.github.io/'
 ];
 
+const QUESTION_SHEET_NAME = 'question';
+const PICKUP_QUESTION_SHEET_NAME = 'pick_up_question';
+const QUESTION_SHEET_NAMES = [QUESTION_SHEET_NAME, PICKUP_QUESTION_SHEET_NAME];
+
+function normalizeHeaderKey_(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, '')
+    .toLowerCase();
+}
+
+function getHeaderIndex_(headerMap, keys) {
+  if (!headerMap) return null;
+  const list = Array.isArray(keys) ? keys : [keys];
+  for (let i = 0; i < list.length; i++) {
+    const key = normalizeHeaderKey_(list[i]);
+    if (headerMap.has(key)) {
+      return headerMap.get(key);
+    }
+  }
+  return null;
+}
+
+function readSheetWithHeaders_(sheet) {
+  if (!sheet) {
+    return { sheet: null, headers: [], headerMap: new Map(), rows: [] };
+  }
+  const lastRow = sheet.getLastRow();
+  const lastColumn = sheet.getLastColumn();
+  if (lastRow < 1 || lastColumn < 1) {
+    return { sheet, headers: [], headerMap: new Map(), rows: [] };
+  }
+  const values = sheet.getRange(1, 1, lastRow, lastColumn).getValues();
+  const headers = (values.shift() || []).map(value => value);
+  const headerMap = new Map();
+  headers.forEach((header, index) => {
+    const key = normalizeHeaderKey_(header);
+    if (!key) return;
+    if (!headerMap.has(key)) {
+      headerMap.set(key, index);
+    }
+  });
+  return { sheet, headers, headerMap, rows: values };
+}
+
+function parseSpreadsheetTimestamp_(value) {
+  if (value instanceof Date && !isNaN(value)) {
+    return value.getTime();
+  }
+  if (typeof value === 'number' && !isNaN(value)) {
+    if (value > 1e12) return value;
+    if (value > 1e10) return value * 1000;
+    if (value > 20000 && value < 70000) {
+      return Math.round((value - 25569) * 86400 * 1000);
+    }
+    if (value > 1e6) return value * 1000;
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed) {
+      const parsed = new Date(trimmed.replace(' ', 'T'));
+      if (!isNaN(parsed)) {
+        return parsed.getTime();
+      }
+    }
+  }
+  return 0;
+}
+
+function parseDateCell_(value) {
+  if (!value && value !== 0) return null;
+  if (value instanceof Date && !isNaN(value)) return value;
+  if (typeof value === 'number' && !isNaN(value)) {
+    if (value > 1e12) return new Date(value);
+    if (value > 1e10) return new Date(value * 1000);
+    if (value > 20000 && value < 70000) {
+      return new Date(Math.round((value - 25569) * 86400 * 1000));
+    }
+    if (value > 1e6) return new Date(value * 1000);
+    if (value > 0) return new Date(value);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = new Date(trimmed.replace(' ', 'T'));
+    if (!isNaN(parsed)) return parsed;
+  }
+  return null;
+}
+
+function formatDateLabel_(value) {
+  const date = parseDateCell_(value);
+  if (date) {
+    return Utilities.formatDate(date, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm');
+  }
+  return String(value || '').trim();
+}
+
+function toIsoStringOrValue_(value) {
+  const date = parseDateCell_(value);
+  if (date) {
+    return toIsoJst_(date);
+  }
+  return String(value || '').trim();
+}
+
+function formatScheduleLabel_(startValue, endValue) {
+  const startLabel = formatDateLabel_(startValue);
+  const endLabel = formatDateLabel_(endValue);
+  if (startLabel && endLabel) {
+    if (startLabel === endLabel) {
+      return startLabel;
+    }
+    return `${startLabel}〜${endLabel}`;
+  }
+  return startLabel || endLabel || '';
+}
+
+function toBooleanCell_(value) {
+  if (value === true) return true;
+  if (value === false || value == null) return false;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y';
+  }
+  return false;
+}
+
+function findQuestionRowByUid_(uid) {
+  const targetUid = String(uid || '').trim();
+  if (!targetUid) {
+    return null;
+  }
+  ensureQuestionUids_();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  for (let i = 0; i < QUESTION_SHEET_NAMES.length; i++) {
+    const sheetName = QUESTION_SHEET_NAMES[i];
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) continue;
+    const info = readSheetWithHeaders_(sheet);
+    const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
+    if (uidIdx == null) continue;
+    for (let rowIndex = 0; rowIndex < info.rows.length; rowIndex++) {
+      const row = info.rows[rowIndex];
+      if (String(row[uidIdx] || '').trim() === targetUid) {
+        return {
+          sheet,
+          rowNumber: rowIndex + 2,
+          headerMap: info.headerMap,
+          headers: info.headers
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function ensureQuestionSheetUids_(sheet) {
+  if (!sheet) {
+    return 0;
+  }
+  const info = readSheetWithHeaders_(sheet);
+  if (!info.sheet || !info.rows.length) {
+    return 0;
+  }
+  const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
+  if (uidIdx == null) {
+    return 0;
+  }
+
+  const seen = new Set();
+  const updates = [];
+  info.rows.forEach((row, rowIndex) => {
+    const current = String(row[uidIdx] || '').trim();
+    if (current && !seen.has(current)) {
+      seen.add(current);
+      return;
+    }
+    let nextUid = '';
+    do {
+      nextUid = Utilities.getUuid();
+    } while (seen.has(nextUid));
+    seen.add(nextUid);
+    updates.push({ rowIndex, value: nextUid });
+  });
+
+  if (!updates.length) {
+    return 0;
+  }
+
+  updates.forEach(update => {
+    sheet.getRange(update.rowIndex + 2, uidIdx + 1).setValue(update.value);
+  });
+
+  return updates.length;
+}
+
+function ensureQuestionUids_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let updated = 0;
+  QUESTION_SHEET_NAMES.forEach(name => {
+    const sheet = ss.getSheetByName(name);
+    if (!sheet) return;
+    updated += ensureQuestionSheetUids_(sheet);
+  });
+  return updated;
+}
+
 // WebAppにPOSTリクエストが送られたときに実行される関数
 function doPost(e) {
   let requestOrigin = getRequestOrigin_(e);
@@ -153,6 +364,8 @@ function submitQuestion_(payload) {
   const payloadTeamNumber = String(payload.teamNumber || payload.team || '').trim();
   const rawGenre = String(payload.genre || '').trim();
   const payloadScheduleLabel = String(payload.schedule || payload.date || '').trim();
+  const payloadScheduleStart = String(payload.scheduleStart || '').trim();
+  const payloadScheduleEnd = String(payload.scheduleEnd || '').trim();
   const payloadEventId = String(payload.eventId || '').trim();
   const payloadEventName = String(payload.eventName || '').trim();
   const payloadScheduleId = String(payload.scheduleId || '').trim();
@@ -211,15 +424,17 @@ function submitQuestion_(payload) {
   const eventName = String(tokenRecord.eventName || payloadEventName || '').trim();
   const scheduleLabel = String(tokenRecord.scheduleLabel || payloadScheduleLabel || '').trim();
   const scheduleDate = String(tokenRecord.scheduleDate || payloadScheduleDate || '').trim();
+  const scheduleStartRaw = String(tokenRecord.scheduleStart || payloadScheduleStart || '').trim();
+  const scheduleEndRaw = String(tokenRecord.scheduleEnd || payloadScheduleEnd || '').trim();
   const participantName = String(tokenRecord.displayName || '').trim();
   const guidance = String(tokenRecord.guidance || payload.guidance || '').trim();
   const groupNumber = String(tokenRecord.teamNumber || tokenRecord.groupNumber || payloadTeamNumber || payloadGroupNumber || '').trim();
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('answer');
-  if (!sheet) throw new Error('Sheet "answer" not found.');
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(QUESTION_SHEET_NAME);
+  if (!sheet) throw new Error(`Sheet "${QUESTION_SHEET_NAME}" not found.`);
 
   const lastColumn = sheet.getLastColumn();
-  if (lastColumn < 1) throw new Error('answer sheet has no headers.');
+  if (lastColumn < 1) throw new Error('question sheet has no headers.');
 
   const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
   const norm = s => String(s || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
@@ -232,7 +447,7 @@ function submitQuestion_(payload) {
   const requiredHeaders = ['ラジオネーム', '質問・お悩み', 'uid'];
   requiredHeaders.forEach(key => {
     if (!headerMap.has(norm(key))) {
-      throw new Error(`Column "${key}" not found in answer sheet.`);
+      throw new Error(`Column "${key}" not found in question sheet.`);
     }
   });
 
@@ -262,6 +477,18 @@ function submitQuestion_(payload) {
   if (scheduleDate) {
     setValue('日程日付', scheduleDate);
   }
+  const scheduleStartMs = parseDateToMillis_(scheduleStartRaw, 0);
+  const scheduleEndMs = parseDateToMillis_(scheduleEndRaw, 0);
+  const scheduleStartValue = scheduleStartMs ? new Date(scheduleStartMs) : (scheduleStartRaw || '');
+  const scheduleEndValue = scheduleEndMs ? new Date(scheduleEndMs) : (scheduleEndRaw || '');
+  if (scheduleStartValue) {
+    setValue('開始日時', scheduleStartValue);
+    setValue('日程開始', scheduleStartValue);
+  }
+  if (scheduleEndValue) {
+    setValue('終了日時', scheduleEndValue);
+    setValue('日程終了', scheduleEndValue);
+  }
   setValue('イベントID', eventId);
   if (eventName) {
     setValue('イベント名', eventName);
@@ -290,7 +517,7 @@ function submitQuestion_(payload) {
 
   sheet.appendRow(newRow);
   try {
-    notifyUpdate('answer');
+    notifyUpdate('question');
   } catch (e) {
     console.warn('notifyUpdate failed after submitQuestion_', e);
   }
@@ -308,11 +535,11 @@ function processQuestionSubmissionQueue_() {
 
   const tokenRecords = fetchRtdb_('questionIntake/tokens', accessToken) || {};
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName('answer');
-  if (!sheet) throw new Error('Sheet "answer" not found.');
+  const sheet = ss.getSheetByName(QUESTION_SHEET_NAME);
+  if (!sheet) throw new Error(`Sheet "${QUESTION_SHEET_NAME}" not found.`);
 
   const lastColumn = sheet.getLastColumn();
-  if (lastColumn < 1) throw new Error('answer sheet has no headers.');
+  if (lastColumn < 1) throw new Error('question sheet has no headers.');
 
   const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
   const norm = s => String(s || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
@@ -402,8 +629,18 @@ function processQuestionSubmissionQueue_() {
           setValue('日程表示', scheduleLabel);
         }
         if (scheduleDate) setValue('日程日付', scheduleDate);
-        if (scheduleStart) setValue('日程開始', scheduleStart);
-        if (scheduleEnd) setValue('日程終了', scheduleEnd);
+        const scheduleStartMs = parseDateToMillis_(scheduleStart, 0);
+        const scheduleEndMs = parseDateToMillis_(scheduleEnd, 0);
+        const scheduleStartValue = scheduleStartMs ? new Date(scheduleStartMs) : (scheduleStart || '');
+        const scheduleEndValue = scheduleEndMs ? new Date(scheduleEndMs) : (scheduleEnd || '');
+        if (scheduleStartValue) {
+          setValue('日程開始', scheduleStartValue);
+          setValue('開始日時', scheduleStartValue);
+        }
+        if (scheduleEndValue) {
+          setValue('日程終了', scheduleEndValue);
+          setValue('終了日時', scheduleEndValue);
+        }
         setValue('イベントID', eventId);
         if (eventName) setValue('イベント名', eventName);
         setValue('日程ID', scheduleId);
@@ -455,7 +692,7 @@ function processQuestionSubmissionQueue_() {
 
   if (rowsToAppend.length) {
     try {
-      notifyUpdate('answer');
+      notifyUpdate('question');
     } catch (e) {
       console.warn('notifyUpdate failed after processQuestionSubmissionQueue_', e);
     }
@@ -1442,62 +1679,88 @@ function rtdbUrl_(path){
 }
 
 function mirrorSheetToRtdb_(){
-  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('answer');
-  if (!sh) throw new Error('Sheet "answer" not found.');
-  const values = sh.getDataRange().getValues();
-  if (values.length < 2) return {count:0};
-  const headers = values[0].map(h => String(h||'').trim());
-  const norm = s => String(s||'').normalize('NFKC').replace(/\s+/g,'');
-  const idxOf = key => headers.findIndex(h => norm(h) === norm(key));
-  const tsIdx  = idxOf('タイムスタンプ');
-  const nameIdx= idxOf('ラジオネーム');
-  const qIdx   = idxOf('質問・お悩み');
-  const grpIdx = idxOf('班番号');
-  const genreIdx = idxOf('ジャンル');
-  const dateIdx = idxOf('日程');
-  const participantIdx = idxOf('参加者ID');
-  const selIdx = idxOf('選択中');
-  const ansIdx = idxOf('回答済');
-  const uidIdx = idxOf('UID');
-  if (uidIdx<0 || nameIdx<0 || qIdx<0) {
-    throw new Error('必要な列(UID/ラジオネーム/質問・お悩み)が見つかりません');
-  }
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureQuestionUids_();
+  const questionSheet = ss.getSheetByName(QUESTION_SHEET_NAME);
+  if (!questionSheet) throw new Error(`Sheet "${QUESTION_SHEET_NAME}" not found.`);
+  const pickupSheet = ss.getSheetByName(PICKUP_QUESTION_SHEET_NAME);
 
-  const map = {};
-  for (let r=1; r<values.length; r++){
-    const row = values[r];
-    const uid = String(row[uidIdx]).trim();
-    if (!uid) continue;
-    let tsMs = 0;
-    const v = tsIdx>=0 ? row[tsIdx] : null;
-    if (v instanceof Date) tsMs = v.getTime();
-    else if (typeof v === 'number') {
-      if (v > 20000 && v < 70000) tsMs = Math.round((v - 25569) * 86400 * 1000);
-      else if (v > 1e10) tsMs = v;
-      else if (v > 1e6) tsMs = v * 1000;
-    } else if (typeof v === 'string' && v.trim()) {
-      const s = v.replace(' ', 'T');
-      const d = new Date(s);
-      if (!isNaN(d)) tsMs = d.getTime();
-    }
-    const groupVal = grpIdx>=0 ? row[grpIdx] : '';
-    const genreVal = genreIdx>=0 ? row[genreIdx] : '';
-    const dateVal = dateIdx>=0 ? row[dateIdx] : '';
-    const participantId = participantIdx >= 0 ? String(row[participantIdx] ?? '').trim() : '';
-    map[uid] = {
-      uid,
-      name: String(row[nameIdx] ?? ''),
-      question: String(row[qIdx] ?? ''),
-      group: String(groupVal ?? ''),
-      genre: String(genreVal ?? ''),
-      schedule: String(dateVal ?? ''),
-      participantId,
-      ts: tsMs || 0,
-      answered: Boolean(row[ansIdx] === true),
-      selecting: Boolean(row[selIdx] === true),
-      updatedAt: new Date().getTime()
-    };
+  const sources = [
+    { info: readSheetWithHeaders_(questionSheet), type: 'normal' }
+  ];
+  if (pickupSheet) {
+    sources.push({ info: readSheetWithHeaders_(pickupSheet), type: 'pickup' });
   }
+  const now = Date.now();
+  const map = {};
+
+  sources.forEach(source => {
+    const info = source.info;
+    if (!info || !info.sheet || !info.rows.length) {
+      return;
+    }
+
+    const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
+    const questionIdx = getHeaderIndex_(info.headerMap, '質問・お悩み');
+    if (uidIdx == null || questionIdx == null) {
+      throw new Error(`Sheet "${info.sheet.getName()}" is missing required columns (UID/質問・お悩み)`);
+    }
+
+    const answeredIdx = getHeaderIndex_(info.headerMap, '回答済');
+    const selectingIdx = getHeaderIndex_(info.headerMap, '選択中');
+    const genreIdx = getHeaderIndex_(info.headerMap, 'ジャンル');
+    const groupIdx = getHeaderIndex_(info.headerMap, '班番号');
+    const participantIdx = getHeaderIndex_(info.headerMap, '参加者ID');
+    const tsIdx = getHeaderIndex_(info.headerMap, ['タイムスタンプ', 'timestamp']);
+    const startIdx = getHeaderIndex_(info.headerMap, ['開始日時', '日程開始']);
+    const endIdx = getHeaderIndex_(info.headerMap, ['終了日時', '日程終了']);
+    const nameIdx = getHeaderIndex_(info.headerMap, 'ラジオネーム');
+
+    info.rows.forEach(row => {
+      const uid = String(row[uidIdx] || '').trim();
+      if (!uid) {
+        return;
+      }
+
+      const tsValue = tsIdx != null ? row[tsIdx] : null;
+      const tsMs = parseSpreadsheetTimestamp_(tsValue);
+
+      const rawName = nameIdx != null ? String(row[nameIdx] || '') : '';
+      const name = rawName || (source.type === 'pickup' ? 'Pick Up Question' : '');
+
+      const startValue = startIdx != null ? row[startIdx] : '';
+      const endValue = endIdx != null ? row[endIdx] : '';
+      const scheduleStart = startIdx != null ? toIsoStringOrValue_(startValue) : '';
+      const scheduleEnd = endIdx != null ? toIsoStringOrValue_(endValue) : '';
+      const scheduleLabel = formatScheduleLabel_(startValue, endValue);
+
+      const participantId = participantIdx != null ? String(row[participantIdx] || '').trim() : '';
+      const groupValue = groupIdx != null ? String(row[groupIdx] || '').trim() : '';
+      const genreValue = genreIdx != null ? String(row[genreIdx] || '').trim() : '';
+
+      map[uid] = {
+        uid,
+        name,
+        question: String(row[questionIdx] || ''),
+        group: groupValue,
+        genre: genreValue,
+        schedule: scheduleLabel,
+        scheduleStart,
+        scheduleEnd,
+        participantId,
+        ts: tsMs || 0,
+        answered: answeredIdx != null ? toBooleanCell_(row[answeredIdx]) : false,
+        selecting: selectingIdx != null ? toBooleanCell_(row[selectingIdx]) : false,
+        updatedAt: now,
+        type: source.type
+      };
+
+      if (source.type === 'pickup') {
+        map[uid].pickup = true;
+      }
+    });
+  });
+
   const token = getFirebaseAccessToken_();
   const res = UrlFetchApp.fetch(rtdbUrl_('questions'), {
     method: 'put',
@@ -1943,77 +2206,88 @@ function endDisplaySession_(principal, rawSessionId, reason) {
 }
 
 function updateSelectingStatus(uid) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('answer');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const uidColIndex = headers.indexOf('UID');
-  const selectingColIndex = headers.indexOf('選択中');
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureQuestionUids_();
+  const infos = QUESTION_SHEET_NAMES.map(name => {
+    const sheet = ss.getSheetByName(name);
+    if (!sheet) return null;
+    return readSheetWithHeaders_(sheet);
+  }).filter(info => info && info.sheet);
 
-  if (uidColIndex === -1 || selectingColIndex === -1) {
-    throw new Error('Column "UID" or "選択中" not found.');
+  if (!infos.length) {
+    throw new Error('Question sheets are not available.');
   }
 
-  const numRows = data.length - 1;
-  if (numRows > 0) {
-    const selectingRange = sheet.getRange(2, selectingColIndex + 1, numRows, 1);
-    const cleared = Array.from({ length: numRows }, () => [false]);
-    selectingRange.setValues(cleared);
+  const targetUid = String(uid || '').trim();
+  if (!targetUid) {
+    throw new Error('UID is required.');
   }
 
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][uidColIndex] == uid) {
-      sheet.getRange(i + 1, selectingColIndex + 1).setValue(true);
-      return { success: true, message: `UID: ${uid} is now selecting.` };
+  let target = null;
+  infos.forEach(info => {
+    if (target) return;
+    const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
+    if (uidIdx == null) return;
+    for (let i = 0; i < info.rows.length; i++) {
+      if (String(info.rows[i][uidIdx] || '').trim() === targetUid) {
+        target = {
+          sheet: info.sheet,
+          rowNumber: i + 2,
+          selectingIdx: getHeaderIndex_(info.headerMap, '選択中')
+        };
+        break;
+      }
     }
+  });
+
+  if (!target) {
+    throw new Error(`UID: ${uid} not found.`);
+  }
+  if (target.selectingIdx == null) {
+    throw new Error('Column "選択中" not found.');
   }
 
-  throw new Error(`UID: ${uid} not found.`);
+  infos.forEach(info => {
+    const selectingIdx = getHeaderIndex_(info.headerMap, '選択中');
+    if (selectingIdx == null) return;
+    if (!info.rows.length) return;
+    const range = info.sheet.getRange(2, selectingIdx + 1, info.rows.length, 1);
+    const cleared = info.rows.map(() => [false]);
+    range.setValues(cleared);
+  });
+
+  target.sheet.getRange(target.rowNumber, target.selectingIdx + 1).setValue(true);
+  return { success: true, message: `UID: ${uid} is now selecting.` };
 }
 
 function editQuestionText(uid, newText) {
   if (!uid || typeof newText === 'undefined') {
     throw new Error('UID and new text are required.');
   }
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('answer');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const uidColIndex = headers.indexOf('UID');
-  const questionColIndex = headers.indexOf('質問・お悩み');
-
-  if (uidColIndex === -1 || questionColIndex === -1) {
-    throw new Error('Column "UID" or "質問・お悩み" not found.');
+  const match = findQuestionRowByUid_(uid);
+  if (!match) {
+    throw new Error(`UID: ${uid} not found.`);
   }
-
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][uidColIndex] == uid) {
-      sheet.getRange(i + 1, questionColIndex + 1).setValue(newText);
-      return { success: true, message: `UID: ${uid} question updated.` };
-    }
+  const questionIdx = getHeaderIndex_(match.headerMap, '質問・お悩み');
+  if (questionIdx == null) {
+    throw new Error('Column "質問・お悩み" not found.');
   }
-
-  throw new Error(`UID: ${uid} not found.`);
+  match.sheet.getRange(match.rowNumber, questionIdx + 1).setValue(newText);
+  return { success: true, message: `UID: ${uid} question updated.` };
 }
 
 function updateAnswerStatus(uid, status) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('answer');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const uidColIndex = headers.indexOf('UID');
-  const answeredColIndex = headers.indexOf('回答済');
-
-  if (uidColIndex === -1 || answeredColIndex === -1) {
-    throw new Error('Column "UID" or "回答済" not found.');
+  const match = findQuestionRowByUid_(uid);
+  if (!match) {
+    throw new Error(`UID: ${uid} not found.`);
   }
-
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][uidColIndex] == uid) {
-      const isAnswered = status === true || status === 'true' || status === 1;
-      sheet.getRange(i + 1, answeredColIndex + 1).setValue(isAnswered);
-      return { success: true, message: `UID: ${uid} updated.` };
-    }
+  const answeredIdx = getHeaderIndex_(match.headerMap, '回答済');
+  if (answeredIdx == null) {
+    throw new Error('Column "回答済" not found.');
   }
-
-  throw new Error(`UID: ${uid} not found.`);
+  const isAnswered = status === true || status === 'true' || status === 1;
+  match.sheet.getRange(match.rowNumber, answeredIdx + 1).setValue(isAnswered);
+  return { success: true, message: `UID: ${uid} updated.` };
 }
 
 function addDictionaryTerm(term, ruby) {
@@ -2184,25 +2458,45 @@ function batchUpdateStatus(uids, status) {
     throw new Error('UIDs array is required.');
   }
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('answer');
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const uidColIndex = headers.indexOf('UID');
-    const answeredColIndex = headers.indexOf('回答済');
-
-    if (uidColIndex === -1 || answeredColIndex === -1) {
-      throw new Error('Column "UID" or "回答済" not found.');
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    ensureQuestionUids_();
+    const uidSet = new Set((uids || []).map(value => String(value || '').trim()).filter(Boolean));
+    if (!uidSet.size) {
+      return { success: true, message: '0 items updated.' };
     }
 
-    const uidSet = new Set((uids || []).map(String));
     const isAnswered = status === true || status === 'true' || status === 1;
-    for (let i = 1; i < data.length; i++) {
-      if (uidSet.has(String(data[i][uidColIndex]))) {
-        sheet.getRange(i + 1, answeredColIndex + 1).setValue(isAnswered);
-      }
-    }
+    let updatedCount = 0;
 
-    return { success: true, message: `${uids.length} items updated.` };
+    QUESTION_SHEET_NAMES.forEach(name => {
+      const sheet = ss.getSheetByName(name);
+      if (!sheet) return;
+      const info = readSheetWithHeaders_(sheet);
+      if (!info.rows.length) return;
+      const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
+      const answeredIdx = getHeaderIndex_(info.headerMap, '回答済');
+      if (uidIdx == null || answeredIdx == null) return;
+
+      const range = sheet.getRange(2, answeredIdx + 1, info.rows.length, 1);
+      const values = range.getValues();
+      let changed = false;
+
+      for (let i = 0; i < info.rows.length; i++) {
+        const rowUid = String(info.rows[i][uidIdx] || '').trim();
+        if (!uidSet.has(rowUid)) continue;
+        updatedCount += 1;
+        if (values[i][0] !== isAnswered) {
+          values[i][0] = isAnswered;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        range.setValues(values);
+      }
+    });
+
+    return { success: true, message: `${updatedCount} items updated.` };
 
   } catch (error) {
     return { success: false, error: error.message };
@@ -2212,25 +2506,29 @@ function batchUpdateStatus(uids, status) {
 
 function clearSelectingStatus() {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('answer');
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const selectingColIndex = headers.indexOf('選択中');
-    if (selectingColIndex === -1) throw new Error('Column "選択中" not found.');
-
-    const numRows = data.length - 1;
-    if (numRows <= 0) {
-      return { success: true };
-    }
-    const range = sheet.getRange(2, selectingColIndex + 1, numRows, 1);
-    const values = range.getValues();
-    let changed = false;
-    for (let i = 0; i < values.length; i++) {
-      if (values[i][0] === true) { values[i][0] = false; changed = true; }
-    }
-    if (changed) range.setValues(values);
-
-    return { success: true };
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let changedAny = false;
+    QUESTION_SHEET_NAMES.forEach(name => {
+      const sheet = ss.getSheetByName(name);
+      if (!sheet) return;
+      const info = readSheetWithHeaders_(sheet);
+      const selectingIdx = getHeaderIndex_(info.headerMap, '選択中');
+      if (selectingIdx == null || !info.rows.length) return;
+      const range = sheet.getRange(2, selectingIdx + 1, info.rows.length, 1);
+      const values = range.getValues();
+      let changed = false;
+      for (let i = 0; i < values.length; i++) {
+        if (values[i][0] === true) {
+          values[i][0] = false;
+          changed = true;
+        }
+      }
+      if (changed) {
+        range.setValues(values);
+        changedAny = true;
+      }
+    });
+    return { success: true, changed: changedAny };
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -2242,16 +2540,21 @@ function getSheetData_(sheetKey) {
   if (!sheetKey) throw new Error('Missing sheet');
 
   const ALLOW = {
-    answer:     'answer',
-    dictionary: 'dictionary',
-    users:      'users',
-    logs:       'logs',
+    question:          QUESTION_SHEET_NAME,
+    pick_up_question:  PICKUP_QUESTION_SHEET_NAME,
+    dictionary:        'dictionary',
+    users:             'users',
+    logs:              'logs',
   };
   const sheetName = ALLOW[String(sheetKey)];
   if (!sheetName) throw new Error('Invalid sheet: ' + sheetKey);
 
   const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
   if (!sh) throw new Error('Sheet not found: ' + sheetName);
+
+  if (sheetKey === 'question' || sheetKey === 'pick_up_question') {
+    ensureQuestionUids_();
+  }
 
   const range = sh.getDataRange();
   const values = range.getValues();
