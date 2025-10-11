@@ -1077,25 +1077,11 @@ function cleanupUnusedQuestionTokens_(participantsBranch, tokensBranch, accessTo
 
 function applyParticipantGroupsToQuestionSheet_(participantsBranch) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(QUESTION_SHEET_NAME);
-  if (!sheet) {
-    return { updated: 0, questionUpdates: 0 };
-  }
+  const sheets = QUESTION_SHEET_NAMES
+    .map(name => ss.getSheetByName(name))
+    .filter(Boolean);
 
-  const info = readSheetWithHeaders_(sheet);
-  if (!info.sheet || !info.headers || !info.headers.length || !info.rows) {
-    return { updated: 0, questionUpdates: 0 };
-  }
-
-  const groupIdx = getHeaderIndex_(info.headerMap, ['班番号']);
-  if (groupIdx == null) {
-    return { updated: 0, questionUpdates: 0 };
-  }
-
-  const participantIdx = getHeaderIndex_(info.headerMap, ['参加者ID', 'participantid', 'participant_id']);
-  const tokenIdx = getHeaderIndex_(info.headerMap, ['リンクトークン', 'token']);
-  const uidIdx = getHeaderIndex_(info.headerMap, ['uid', 'UID']);
-  if ((participantIdx == null && tokenIdx == null) || uidIdx == null) {
+  if (!sheets.length) {
     return { updated: 0, questionUpdates: 0 };
   }
 
@@ -1124,56 +1110,82 @@ function applyParticipantGroupsToQuestionSheet_(participantsBranch) {
     return { updated: 0, questionUpdates: 0 };
   }
 
-  const updates = [];
-  info.rows.forEach((row, index) => {
-    let desired = null;
-    if (participantIdx != null) {
-      const participantId = String(row[participantIdx] || '').trim();
-      if (participantId && groupByParticipant.has(participantId)) {
-        desired = groupByParticipant.get(participantId) || '';
+  const sheetUpdates = [];
+  const uidUpdateMap = new Map();
+
+  sheets.forEach(sheet => {
+    const info = readSheetWithHeaders_(sheet);
+    if (!info.sheet || !info.headers || !info.headers.length || !info.rows) {
+      return;
+    }
+
+    const groupIdx = getHeaderIndex_(info.headerMap, ['班番号']);
+    if (groupIdx == null) {
+      return;
+    }
+
+    const participantIdx = getHeaderIndex_(info.headerMap, ['参加者ID', 'participantid', 'participant_id']);
+    const tokenIdx = getHeaderIndex_(info.headerMap, ['リンクトークン', 'token']);
+    const uidIdx = getHeaderIndex_(info.headerMap, ['uid', 'UID']);
+    if ((participantIdx == null && tokenIdx == null) || uidIdx == null) {
+      return;
+    }
+
+    info.rows.forEach((row, index) => {
+      let desired = null;
+      if (participantIdx != null) {
+        const participantId = String(row[participantIdx] || '').trim();
+        if (participantId && groupByParticipant.has(participantId)) {
+          desired = groupByParticipant.get(participantId) || '';
+        }
       }
-    }
-    if (desired === null && tokenIdx != null) {
-      const token = String(row[tokenIdx] || '').trim();
-      if (token && groupByToken.has(token)) {
-        desired = groupByToken.get(token) || '';
+      if (desired === null && tokenIdx != null) {
+        const token = String(row[tokenIdx] || '').trim();
+        if (token && groupByToken.has(token)) {
+          desired = groupByToken.get(token) || '';
+        }
       }
-    }
-    if (desired === null) {
-      return;
-    }
-    const current = String(row[groupIdx] || '').trim();
-    const normalizedDesired = String(desired || '').trim();
-    if (current === normalizedDesired) {
-      return;
-    }
-    const uid = String(row[uidIdx] || '').trim();
-    if (!uid) {
-      return;
-    }
-    updates.push({ rowNumber: index + 2, value: normalizedDesired, uid });
+      if (desired === null) {
+        return;
+      }
+
+      const current = String(row[groupIdx] || '').trim();
+      const normalizedDesired = String(desired || '').trim();
+      if (current === normalizedDesired) {
+        return;
+      }
+
+      const uid = String(row[uidIdx] || '').trim();
+      if (!uid) {
+        return;
+      }
+
+      sheetUpdates.push({ sheet, rowNumber: index + 2, column: groupIdx + 1, value: normalizedDesired, uid });
+      uidUpdateMap.set(uid, normalizedDesired);
+    });
   });
 
   let patchedCount = 0;
-  if (updates.length) {
+  if (uidUpdateMap.size) {
     const now = Date.now();
     const questionUpdates = {};
-    updates.forEach(update => {
-      questionUpdates[`questions/${update.uid}/group`] = update.value || '';
-      questionUpdates[`questions/${update.uid}/updatedAt`] = now;
+    uidUpdateMap.forEach((value, uid) => {
+      questionUpdates[`questions/${uid}/group`] = value || '';
+      questionUpdates[`questions/${uid}/updatedAt`] = now;
     });
     try {
       patchRtdb_(questionUpdates, getFirebaseAccessToken_());
-      patchedCount = updates.length;
+      patchedCount = uidUpdateMap.size;
     } catch (error) {
       console.warn('applyParticipantGroupsToQuestionSheet_ failed to update RTDB questions', error);
     }
-    updates.forEach(update => {
-      sheet.getRange(update.rowNumber, groupIdx + 1).setValue(update.value || '');
-    });
   }
 
-  return { updated: updates.length, questionUpdates: patchedCount };
+  sheetUpdates.forEach(update => {
+    update.sheet.getRange(update.rowNumber, update.column).setValue(update.value || '');
+  });
+
+  return { updated: sheetUpdates.length, questionUpdates: patchedCount };
 }
 
 const NAME_MAP_SHEET_NAME = 'name_mappings';
