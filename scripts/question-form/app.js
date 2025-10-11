@@ -2,6 +2,7 @@ import { getDatabaseInstance } from "./firebase.js";
 import { fetchContextFromToken, extractToken } from "./context-service.js";
 import { FormView } from "./view.js";
 import {
+  GAS_API_URL,
   GENRE_OPTIONS,
   FORM_VERSION,
   firebaseConfig,
@@ -420,6 +421,34 @@ export class QuestionFormApp {
       acc[key] = String(value);
       return acc;
     }, {});
+
+    const directPayload = {
+      action: "submitQuestion",
+      ...submission
+    };
+
+    let deliveredDirect = false;
+    try {
+      await this.submitQuestionViaGas(directPayload, controller?.signal);
+      deliveredDirect = true;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw error;
+      }
+      if (error?.shouldFallback === false) {
+        throw error;
+      }
+      console.warn("Primary submitQuestion request failed; falling back to RTDB queue", error);
+    }
+
+    if (deliveredDirect) {
+      return;
+    }
+
+    if (controller?.signal?.aborted) {
+      const error = new DOMException("Aborted", "AbortError");
+      throw error;
+    }
 
     submission.submittedAt = serverTimestamp();
 
