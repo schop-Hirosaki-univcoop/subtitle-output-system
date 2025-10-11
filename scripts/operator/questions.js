@@ -84,18 +84,13 @@ export function renderQuestions(app) {
     const rawName = item["ラジオネーム"];
     const displayName = formatOperatorName(rawName) || "—";
     const groupLabel = String(item["班番号"] ?? "").trim();
-    const participantBadge = participantId
-      ? `<span class="q-participant" role="text" aria-label="参加者ID ${escapeHtml(participantId)}">${escapeHtml(participantId)}</span>`
+    const groupBadge = groupLabel
+      ? `<span class="q-group" role="text" aria-label="班番号 ${escapeHtml(groupLabel)}">${escapeHtml(groupLabel)}</span>`
       : "";
     card.innerHTML = `
       <span class="status-text visually-hidden">${statusText}</span>
       <div class="q-corner">
-        ${participantBadge}
-        ${
-          groupLabel
-            ? `<span class="q-group" role="text" aria-label="班番号 ${escapeHtml(groupLabel)}">${escapeHtml(groupLabel)}</span>`
-            : ""
-        }
+        ${groupBadge}
         <label class="q-check" aria-label="${statusText}の質問をバッチ選択">
           <input type="checkbox" class="row-checkbox" data-uid="${escapeHtml(uid)}">
           <span class="visually-hidden">選択</span>
