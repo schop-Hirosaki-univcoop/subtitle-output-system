@@ -657,7 +657,8 @@ function processQuestionSubmissionQueue_(providedAccessToken, options) {
         const timestampMs = Number(entry.submittedAt || entry.clientTimestamp || Date.now());
         const timestamp = Number.isFinite(timestampMs) && timestampMs > 0 ? new Date(timestampMs) : new Date();
         const timestampLabel = formatQuestionTimestamp_(timestamp);
-        const uid = Utilities.getUuid();
+        const providedUid = ensureString(entry.uid) || ensureString(entryId);
+        const uid = providedUid || Utilities.getUuid();
 
         const newRow = Array.from({ length: headers.length }, () => '');
         const setValue = (headerKey, value) => {
@@ -717,6 +718,7 @@ function processQuestionSubmissionQueue_(providedAccessToken, options) {
         rowsToAppend.push(newRow);
         const questionPayload = {
           uid,
+          token,
           name: radioName,
           question: questionText,
           group: groupNumber,
@@ -725,12 +727,17 @@ function processQuestionSubmissionQueue_(providedAccessToken, options) {
           scheduleStart: scheduleStartIso,
           scheduleEnd: scheduleEndIso,
           participantId,
+          eventId,
+          scheduleId,
           ts: timestamp.getTime(),
           answered: false,
           selecting: false,
           updatedAt: processedAt,
           type: 'normal'
         };
+        if (Number.isFinite(questionLength) && questionLength > 0) {
+          questionPayload.questionLength = questionLength;
+        }
         questionUpdates[`questions/${uid}`] = questionPayload;
         updates[submissionPath] = null;
         processed += 1;

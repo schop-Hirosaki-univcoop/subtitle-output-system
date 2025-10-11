@@ -454,6 +454,8 @@ export class QuestionFormApp {
 
     const submissionsRef = ref(this.database, `${QUESTION_SUBMISSIONS_PATH}/${token}`);
     const entryRef = push(submissionsRef);
+    const questionUid = generateQuestionUid(entryRef);
+    submission.uid = questionUid;
 
     try {
       await set(entryRef, submission);
@@ -464,88 +466,77 @@ export class QuestionFormApp {
     }
 
     let queueProcessed = false;
+    const timestamp = Date.now();
+    const questionRecord = buildQuestionRecord({
+      uid: questionUid,
+      token,
+      submission,
+      context: this.state.context,
+      timestamp
+    });
+
     try {
-      const response = await this.triggerQueueProcessing(token);
-      queueProcessed = Number(response?.processed || 0) > 0;
+      await set(ref(this.database, `questions/${questionUid}`), questionRecord);
+      queueProcessed = true;
     } catch (error) {
-      console.warn("Failed to trigger queue processing", error);
+      console.warn("Failed to write question record", error);
     }
 
     return { queueProcessed };
   }
+}
 
-  async triggerQueueProcessing(token) {
-    if (!token) {
-      throw new Error("アクセス情報を確認できませんでした。運営までお問い合わせください。");
-    }
+function generateQuestionUid(entryRef) {
+  const key = entryRef?.key;
+  if (typeof key === "string" && key.trim()) {
+    return key.trim();
+  }
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `q_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
 
-    const response = await fetch(GAS_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "processQuestionQueueForToken", token })
-    });
+function buildQuestionRecord({
+  uid,
+  token,
+  submission,
+  context,
+  timestamp
+}) {
+  const ensureString = (value) => (typeof value === "string" ? value.trim() : String(value ?? "").trim());
+  const coalescedGroup = ensureString(submission.groupNumber) || ensureString(context?.groupNumber);
+  const scheduleLabel = ensureString(submission.scheduleLabel) || ensureString(context?.scheduleLabel);
+  const scheduleStart = ensureString(submission.scheduleStart) || ensureString(context?.scheduleStart);
+  const scheduleEnd = ensureString(submission.scheduleEnd) || ensureString(context?.scheduleEnd);
+  const participantId = ensureString(submission.participantId) || ensureString(context?.participantId);
+  const eventId = ensureString(submission.eventId) || ensureString(context?.eventId);
+  const scheduleId = ensureString(submission.scheduleId) || ensureString(context?.scheduleId);
+  const questionLength = Number(submission.questionLength);
 
-    let json;
-    try {
-      json = await response.json();
-    } catch (error) {
-      const err = new Error("送信内容の反映処理に失敗しました。時間をおいて再度お試しください。");
-      err.cause = error;
-      throw err;
-    }
+  const record = {
+    uid,
+    token: ensureString(token),
+    name: ensureString(submission.radioName),
+    question: ensureString(submission.question),
+    group: coalescedGroup,
+    genre: ensureString(submission.genre) || "その他",
+    schedule: scheduleLabel,
+    scheduleStart,
+    scheduleEnd,
+    participantId,
+    eventId,
+    scheduleId,
+    ts: timestamp,
+    answered: false,
+    selecting: false,
+    updatedAt: timestamp,
+    type: "normal"
+  };
 
-    if (!json?.success) {
-      const message = typeof json?.error === "string" && json.error.trim()
-        ? json.error.trim()
-        : "送信内容の反映処理に失敗しました。時間をおいて再度お試しください。";
-      const error = new Error(message);
-      error.code = "QUEUE_PROCESSING_FAILED";
-      throw error;
-    }
-
-    return json;
+  if (Number.isFinite(questionLength) && questionLength > 0) {
+    record.questionLength = questionLength;
   }
 
-  async submitQuestionViaGas(payload, signal) {
-    if (!payload || typeof payload !== "object") {
-      const error = new Error("送信内容が正しくありません。再度お試しください。");
-      error.shouldFallback = false;
-      throw error;
-    }
-
-    let response;
-    try {
-      response = await fetch(GAS_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json"
-        },
-        body: JSON.stringify(payload),
-        signal
-      });
-    } catch (networkError) {
-      if (networkError?.name === "AbortError") {
-        throw networkError;
-      }
-      networkError.shouldFallback = true;
-      throw networkError;
-    }
-
-    let body = null;
-    try {
-      body = await response.json();
-    } catch (parseError) {
-      parseError.shouldFallback = true;
-      throw parseError;
-    }
-
-    if (!body || body.success !== true) {
-      const error = new Error(body?.error || "フォームを送信できませんでした。入力内容を確認して再度お試しください。");
-      error.shouldFallback = false;
-      throw error;
-    }
-
-    return body;
-  }
+  return record;
 }
