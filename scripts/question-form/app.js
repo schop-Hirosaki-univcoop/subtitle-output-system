@@ -2,15 +2,13 @@ import { getDatabaseInstance } from "./firebase.js";
 import { fetchContextFromToken, extractToken } from "./context-service.js";
 import { FormView } from "./view.js";
 import {
-  GAS_API_URL,
   GENRE_OPTIONS,
   FORM_VERSION,
   firebaseConfig,
   MAX_QUESTION_LENGTH,
-  MAX_RADIO_NAME_LENGTH,
-  QUESTION_SUBMISSIONS_PATH
+  MAX_RADIO_NAME_LENGTH
 } from "./constants.js";
-import { ref, push, set, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { ref, push, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   countGraphemes,
   normalizeMultiline,
@@ -422,48 +420,15 @@ export class QuestionFormApp {
       return acc;
     }, {});
 
-    const directPayload = {
-      action: "submitQuestion",
-      ...submission
-    };
-
-    let deliveredDirect = false;
-    try {
-      await this.submitQuestionViaGas(directPayload, controller?.signal);
-      deliveredDirect = true;
-    } catch (error) {
-      if (error?.name === "AbortError") {
-        throw error;
-      }
-      if (error?.shouldFallback === false) {
-        throw error;
-      }
-      console.warn("Primary submitQuestion request failed; falling back to RTDB queue", error);
-    }
-
-    if (deliveredDirect) {
-      return;
-    }
-
     if (controller?.signal?.aborted) {
       const error = new DOMException("Aborted", "AbortError");
       throw error;
     }
 
-    submission.submittedAt = serverTimestamp();
-
-    const submissionsRef = ref(this.database, `${QUESTION_SUBMISSIONS_PATH}/${token}`);
-    const entryRef = push(submissionsRef);
+    const questionsRef = ref(this.database, "questions");
+    const entryRef = push(questionsRef);
     const questionUid = generateQuestionUid(entryRef);
     submission.uid = questionUid;
-
-    try {
-      await set(entryRef, submission);
-    } catch (networkError) {
-      const error = new Error("フォームを送信できませんでした。通信状況を確認して再度お試しください。");
-      error.cause = networkError;
-      throw error;
-    }
 
     let queueProcessed = false;
     const timestamp = Date.now();
@@ -476,64 +441,19 @@ export class QuestionFormApp {
     });
 
     try {
-      await set(ref(this.database, `questions/${questionUid}`), questionRecord);
+      await set(entryRef, questionRecord);
       queueProcessed = true;
     } catch (error) {
-      console.warn("Failed to write question record", error);
+      const isPermissionError = error?.code === "PERMISSION_DENIED";
+      const message = isPermissionError
+        ? "フォームを送信できませんでした。リンクの有効期限が切れていないかご確認ください。"
+        : "フォームを送信できませんでした。通信状況を確認して再度お試しください。";
+      const clientError = new Error(message);
+      clientError.cause = error;
+      throw clientError;
     }
 
     return { queueProcessed };
-  }
-
-  async submitQuestionViaGas(payload, signal) {
-    const body = JSON.stringify({
-      ...payload,
-      requestOrigin:
-        (typeof window !== "undefined" && window.location && window.location.origin) || ""
-    });
-
-    let response;
-    try {
-      response = await fetch(GAS_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
-        body,
-        signal
-      });
-    } catch (error) {
-      if (error?.name === "AbortError") {
-        throw error;
-      }
-      const fallbackError = error instanceof Error ? error : new Error("Network error");
-      fallbackError.shouldFallback = true;
-      throw fallbackError;
-    }
-
-    if (!response.ok) {
-      const statusError = new Error("フォームの送信に失敗しました。時間をおいて再試行してください。");
-      statusError.shouldFallback = response.status >= 500;
-      throw statusError;
-    }
-
-    let json;
-    try {
-      json = await response.json();
-    } catch (error) {
-      const parseError = new Error("サーバーの応答が正しくありませんでした。");
-      parseError.shouldFallback = true;
-      throw parseError;
-    }
-
-    if (!json?.success) {
-      const message = typeof json?.error === "string" && json.error.trim()
-        ? json.error.trim()
-        : "質問の送信に失敗しました。";
-      const apiError = new Error(message);
-      apiError.shouldFallback = false;
-      throw apiError;
-    }
-
-    return json;
   }
 }
 
