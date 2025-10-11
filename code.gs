@@ -377,6 +377,7 @@ function submitQuestion_(payload) {
   const payloadParticipantId = String(payload.participantId || '').trim();
   const payloadScheduleDate = String(payload.scheduleDate || '').trim();
   const rawToken = String(payload.token || '').trim();
+  const payloadQuestionLength = Number(payload.questionLength || 0);
 
   if (!radioName) throw new Error('ラジオネームを入力してください。');
   if (!questionText) throw new Error('質問・お悩みを入力してください。');
@@ -471,6 +472,9 @@ function submitQuestion_(payload) {
   setValue('Timestamp', timestampLabel);
   setValue('ラジオネーム', radioName);
   setValue('質問・お悩み', questionText);
+  if (Number.isFinite(payloadQuestionLength) && payloadQuestionLength > 0) {
+    setValue('質問文字数', payloadQuestionLength);
+  }
   if (groupNumber) {
     setValue('班番号', groupNumber);
   }
