@@ -1,6 +1,24 @@
 import { state } from "./state.js";
 import { normalizeKey } from "./utils.js";
 
+let rowKeyCounter = 0;
+
+function generateRowKey(prefix = "row") {
+  rowKeyCounter = (rowKeyCounter + 1) % Number.MAX_SAFE_INTEGER;
+  const random = Math.random().toString(36).slice(2, 8);
+  return `${prefix}-${Date.now().toString(36)}-${random}-${rowKeyCounter}`;
+}
+
+function ensureRowKey(entry, prefix = "row") {
+  if (!entry || typeof entry !== "object") {
+    return entry;
+  }
+  if (!entry.rowKey) {
+    entry.rowKey = generateRowKey(prefix);
+  }
+  return entry;
+}
+
 function sanitizePrefixComponent(value) {
   return normalizeKey(value)
     .replace(/[^A-Za-z0-9]+/g, "-")
@@ -13,6 +31,25 @@ function createParticipantIdPrefix(eventId, scheduleId) {
   const schedulePart = sanitizePrefixComponent(scheduleId);
   const prefix = [eventPart, schedulePart].filter(Boolean).join("-");
   return prefix || "participant";
+}
+
+function formatParticipantIdDisplay(participantId) {
+  const raw = String(participantId || "").trim();
+  if (!raw) {
+    return "";
+  }
+  const trailingDigits = raw.match(/(\d+)\s*$/);
+  if (trailingDigits && trailingDigits[1]) {
+    return trailingDigits[1];
+  }
+  const segments = raw.split(/[-_]/);
+  if (segments.length > 1) {
+    const tail = segments[segments.length - 1];
+    if (/^\d+$/.test(tail)) {
+      return tail;
+    }
+  }
+  return raw;
 }
 
 function participantIdentityKey(entry) {
@@ -64,15 +101,16 @@ function normalizeEventParticipantCache(eventBranch) {
       cache[String(scheduleId)] = [];
       return;
     }
-    const normalized = Object.values(scheduleBranch).map(entry => ({
+    const normalized = Object.values(scheduleBranch).map(entry => ensureRowKey({
       key: String(entry?.participantId || entry?.id || ""),
       participantId: String(entry?.participantId || entry?.id || ""),
       name: String(entry?.name || ""),
       department: String(entry?.department || entry?.groupNumber || ""),
       groupNumber: String(entry?.groupNumber || entry?.teamNumber || ""),
       teamNumber: String(entry?.teamNumber || entry?.groupNumber || ""),
-      scheduleId: String(scheduleId)
-    }));
+      scheduleId: String(scheduleId),
+      rowKey: String(entry?.rowKey || "")
+    }, "cache"));
     cache[String(scheduleId)] = normalized;
   });
   return cache;
@@ -81,7 +119,10 @@ function normalizeEventParticipantCache(eventBranch) {
 function describeDuplicateMatch(match, eventId, currentScheduleId) {
   if (!match) return "";
   const name = String(match.name || "").trim();
-  const idLabel = match.participantId ? `ID:${match.participantId}` : "ID未登録";
+  const displayId = formatParticipantIdDisplay(match.participantId);
+  const idLabel = match.participantId
+    ? `ID:${displayId || match.participantId}`
+    : "ID未登録";
   const scheduleId = String(match.scheduleId || "").trim();
   if (scheduleId === String(currentScheduleId || "")) {
     const label = name || "同日程";
@@ -126,14 +167,15 @@ function updateDuplicateMatches() {
 
   Object.entries(scheduleCache).forEach(([cacheScheduleId, entries]) => {
     const list = Array.isArray(entries) ? entries : [];
-    list.forEach(entry => {
+    list.forEach((entry, entryIndex) => {
       const record = {
         key: String(entry?.key || entry?.participantId || ""),
         participantId: String(entry?.participantId || ""),
         name: String(entry?.name || ""),
         department: String(entry?.department || ""),
         scheduleId: String(entry?.scheduleId || cacheScheduleId),
-        isCurrent: Boolean(entry?.isCurrent)
+        isCurrent: Boolean(entry?.isCurrent),
+        rowKey: String(entry?.rowKey || entry?.key || `${cacheScheduleId}#${entryIndex}`)
       };
       const isCurrentSchedule = record.scheduleId === String(scheduleId);
       if (isCurrentSchedule && record.isCurrent) {
@@ -151,7 +193,8 @@ function updateDuplicateMatches() {
       name: String(entry?.name || ""),
       department: String(entry?.department || entry?.groupNumber || ""),
       scheduleId: String(scheduleId),
-      isCurrent: true
+      isCurrent: true,
+      rowKey: String(entry?.rowKey || `current-${index}-${entry?.participantId || ""}`)
     };
     const key = duplicateKeyFromValues(record.name, record.department);
     addRecord(key, record);
@@ -172,13 +215,14 @@ function updateDuplicateMatches() {
     current.forEach(record => {
       const others = records.filter(candidate => {
         if (!candidate) return false;
-        if (candidate.isCurrent && candidate.key && record.key && candidate.key === record.key) {
+        if (candidate.isCurrent && candidate.rowKey && record.rowKey && candidate.rowKey === record.rowKey) {
           return false;
         }
         return candidate !== record;
       });
       if (!others.length) return;
-      duplicates.set(record.key, {
+      const recordKey = record.rowKey || record.key || `${record.participantId || "__row"}`;
+      duplicates.set(String(recordKey), {
         groupKey,
         totalCount: records.length,
         others: others.map(candidate => ({
@@ -186,7 +230,8 @@ function updateDuplicateMatches() {
           name: candidate.name,
           department: candidate.department,
           scheduleId: candidate.scheduleId,
-          isCurrent: candidate.isCurrent
+          isCurrent: candidate.isCurrent,
+          rowKey: candidate.rowKey || candidate.key || `${candidate.participantId || "__row"}`
         }))
       });
     });
@@ -204,7 +249,7 @@ function syncCurrentScheduleCache() {
     state.eventParticipantCache = new Map();
   }
   const cache = state.eventParticipantCache.get(eventId) || {};
-  cache[scheduleId] = state.participants.map(entry => ({
+  cache[scheduleId] = state.participants.map(entry => ensureRowKey({
     key: String(entry?.participantId || ""),
     participantId: String(entry?.participantId || ""),
     name: String(entry?.name || ""),
@@ -212,8 +257,9 @@ function syncCurrentScheduleCache() {
     groupNumber: String(entry?.teamNumber || entry?.groupNumber || ""),
     teamNumber: String(entry?.teamNumber || entry?.groupNumber || ""),
     scheduleId: String(scheduleId),
-    isCurrent: true
-  }));
+    isCurrent: true,
+    rowKey: String(entry?.rowKey || "")
+  }, "current-cache"));
   state.eventParticipantCache.set(eventId, cache);
 }
 
@@ -258,8 +304,6 @@ function parseParticipantRows(rows) {
   };
 
   const entries = [];
-  const seenIds = new Set();
-  const seenKeys = new Set();
 
   dataRows.forEach(cols => {
     const participantId = normalizeColumn(cols, indexMap.id);
@@ -279,22 +323,7 @@ function parseParticipantRows(rows) {
       throw new Error("氏名のない行があります。CSVを確認してください。");
     }
 
-    if (participantId) {
-      if (seenIds.has(participantId)) {
-        return;
-      }
-      seenIds.add(participantId);
-    } else {
-      const key = participantIdentityKey({ name, phonetic, department });
-      if (key) {
-        if (seenKeys.has(key)) {
-          return;
-        }
-        seenKeys.add(key);
-      }
-    }
-
-    entries.push({
+    entries.push(ensureRowKey({
       participantId,
       name,
       phonetic,
@@ -305,7 +334,7 @@ function parseParticipantRows(rows) {
       groupNumber: teamNumber,
       phone,
       email
-    });
+    }, "import"));
   });
 
   if (!entries.length) {
@@ -434,7 +463,8 @@ function applyAssignmentsToEventCache(eventId, assignmentMap) {
       return {
         ...record,
         groupNumber: teamNumber,
-        teamNumber
+        teamNumber,
+        rowKey: String(record?.rowKey || "")
       };
     });
   });
@@ -454,7 +484,7 @@ function normalizeParticipantRecord(entry) {
   const email = String(entry?.email || "");
   const token = String(entry?.token || "");
   const guidance = String(entry?.guidance || "");
-  return {
+  return ensureRowKey({
     participantId,
     name,
     phonetic,
@@ -466,8 +496,9 @@ function normalizeParticipantRecord(entry) {
     phone,
     email,
     token,
-    guidance
-  };
+    guidance,
+    rowKey: String(entry?.rowKey || "")
+  }, "record");
 }
 
 function assignParticipantIds(entries, existingParticipants = [], options = {}) {
@@ -570,6 +601,7 @@ export {
   applyAssignmentsToEventCache,
   normalizeParticipantRecord,
   assignParticipantIds,
-  signatureForEntries
+  signatureForEntries,
+  formatParticipantIdDisplay
 };
 

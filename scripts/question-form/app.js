@@ -2,13 +2,14 @@ import { getDatabaseInstance } from "./firebase.js";
 import { fetchContextFromToken, extractToken } from "./context-service.js";
 import { FormView } from "./view.js";
 import {
-  GAS_API_URL,
   GENRE_OPTIONS,
   FORM_VERSION,
   firebaseConfig,
   MAX_QUESTION_LENGTH,
-  MAX_RADIO_NAME_LENGTH
+  MAX_RADIO_NAME_LENGTH,
+  QUESTION_SUBMISSIONS_PATH
 } from "./constants.js";
+import { ref, push, set, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   countGraphemes,
   normalizeMultiline,
@@ -363,51 +364,69 @@ export class QuestionFormApp {
   }
 
   async submitQuestion(controller, { radioName, question, questionLength, genre }) {
-    const payload = {
-      action: "submitQuestion",
-      token: this.state.token,
+    if (controller?.signal?.aborted) {
+      const error = new DOMException("Aborted", "AbortError");
+      throw error;
+    }
+
+    const token = this.state.token;
+    if (!token) {
+      throw new Error("アクセス情報が無効です。配布されたリンクからアクセスし直してください。");
+    }
+
+    const submissionBase = {
+      token,
       radioName,
       question,
       questionLength,
-      groupNumber: this.view.getGroupNumber(),
       genre,
-      schedule: this.view.getScheduleLabel(),
+      groupNumber: this.view.getGroupNumber(),
+      scheduleLabel: this.view.getScheduleLabel(),
       scheduleDate: this.view.getScheduleDate(),
+      scheduleStart: String(this.state.context?.scheduleStart || ""),
+      scheduleEnd: String(this.state.context?.scheduleEnd || ""),
       eventId: this.view.getEventId(),
       eventName: this.view.getEventName(),
       scheduleId: this.view.getScheduleId(),
       participantId: this.view.getParticipantId(),
+      participantName: this.state.context?.participantName || "",
       clientTimestamp: Date.now(),
       language: navigator.language || "",
       userAgent: navigator.userAgent || "",
       referrer: document.referrer || "",
       formVersion: FORM_VERSION,
-      guidance: this.state.context?.guidance || ""
+      guidance: this.state.context?.guidance || "",
+      origin: typeof window !== "undefined" && window.location ? window.location.origin : "",
+      status: "pending"
     };
 
-    const response = await fetch(GAS_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-      mode: "cors",
-      credentials: "omit",
-      cache: "no-store"
-    });
-
-    const resultText = await response.text();
-    let result = {};
-    if (resultText) {
-      try {
-        result = JSON.parse(resultText);
-      } catch (error) {
-        throw new Error("サーバーからの応答を読み取れませんでした。");
+    const submission = Object.entries(submissionBase).reduce((acc, [key, value]) => {
+      if (value === undefined || value === null) {
+        return acc;
       }
-    }
+      if (typeof value === "string") {
+        acc[key] = value.trim();
+        return acc;
+      }
+      if (typeof value === "number") {
+        acc[key] = value;
+        return acc;
+      }
+      acc[key] = String(value);
+      return acc;
+    }, {});
 
-    if (!response.ok || !result.success) {
-      const message = result && result.error ? result.error : "送信に失敗しました。";
-      throw new Error(message);
+    submission.submittedAt = serverTimestamp();
+
+    const submissionsRef = ref(this.database, `${QUESTION_SUBMISSIONS_PATH}/${token}`);
+    const entryRef = push(submissionsRef);
+
+    try {
+      await set(entryRef, submission);
+    } catch (networkError) {
+      const error = new Error("フォームを送信できませんでした。通信状況を確認して再度お試しください。");
+      error.cause = networkError;
+      throw error;
     }
   }
 }

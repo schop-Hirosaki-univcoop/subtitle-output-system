@@ -133,6 +133,19 @@
           "revoked": { ".validate": "newData.isBoolean() || !newData.exists()" },
           "$other": { ".validate": false }
         }
+      },
+      "submissions": {
+        "$token": {
+          ".read": false,
+          ".write": "(!auth.exists() || auth == null) && root.child('questionIntake/tokens').child($token).exists() && root.child('questionIntake/tokens').child($token).child('revoked').val() != true && (!root.child('questionIntake/tokens').child($token).child('expiresAt').exists() || root.child('questionIntake/tokens').child($token).child('expiresAt').val() >= now)",
+          "$submissionId": {
+            ".validate": "!data.exists() && newData.hasChildren(['radioName','question','questionLength','genre','eventId','scheduleId','participantId','formVersion','submittedAt']) && newData.child('radioName').isString() && newData.child('radioName').val().length > 0 && newData.child('question').isString() && newData.child('question').val().length > 0 && newData.child('questionLength').isNumber() && newData.child('questionLength').val() > 0 && newData.child('genre').isString() && newData.child('eventId').isString() && newData.child('eventId').val() == root.child('questionIntake/tokens').child($token).child('eventId').val() && newData.child('scheduleId').isString() && newData.child('scheduleId').val() == root.child('questionIntake/tokens').child($token).child('scheduleId').val() && newData.child('participantId').isString() && newData.child('participantId').val() == root.child('questionIntake/tokens').child($token).child('participantId').val() && newData.child('formVersion').isString() && (newData.child('submittedAt').isNumber() || newData.child('submittedAt').val() == now) && (!newData.child('groupNumber').exists() || newData.child('groupNumber').isString()) && (!newData.child('scheduleLabel').exists() || newData.child('scheduleLabel').isString()) && (!newData.child('scheduleDate').exists() || newData.child('scheduleDate').isString()) && (!newData.child('scheduleStart').exists() || newData.child('scheduleStart').isString()) && (!newData.child('scheduleEnd').exists() || newData.child('scheduleEnd').isString()) && (!newData.child('eventName').exists() || newData.child('eventName').isString()) && (!newData.child('participantName').exists() || newData.child('participantName').isString()) && (!newData.child('guidance').exists() || newData.child('guidance').isString()) && (!newData.child('language').exists() || newData.child('language').isString()) && (!newData.child('userAgent').exists() || newData.child('userAgent').isString()) && (!newData.child('referrer').exists() || newData.child('referrer').isString()) && (!newData.child('origin').exists() || newData.child('origin').isString()) && (!newData.child('clientTimestamp').exists() || newData.child('clientTimestamp').isNumber()) && (!newData.child('status').exists() || (newData.child('status').isString() && newData.child('status').val() == 'pending')) && (!newData.child('token').exists() || newData.child('token').val() == $token)"
+          }
+        }
+      },
+      "submissionErrors": {
+        ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+        ".write": "auth != null && root.child('admins').child(auth.uid).val() == true"
       }
     },
 
