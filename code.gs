@@ -166,6 +166,11 @@ function toBooleanCell_(value) {
   return false;
 }
 
+function formatQuestionTimestamp_(value) {
+  const date = parseDateCell_(value) || new Date();
+  return Utilities.formatDate(date, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss');
+}
+
 function findQuestionRowByUid_(uid) {
   const targetUid = String(uid || '').trim();
   if (!targetUid) {
@@ -459,10 +464,11 @@ function submitQuestion_(payload) {
   };
 
   const timestamp = new Date();
+  const timestampLabel = formatQuestionTimestamp_(timestamp);
   const uid = Utilities.getUuid();
 
-  setValue('タイムスタンプ', timestamp);
-  setValue('Timestamp', timestamp);
+  setValue('タイムスタンプ', timestampLabel);
+  setValue('Timestamp', timestampLabel);
   setValue('ラジオネーム', radioName);
   setValue('質問・お悩み', questionText);
   if (groupNumber) {
@@ -609,6 +615,7 @@ function processQuestionSubmissionQueue_(providedAccessToken) {
 
         const timestampMs = Number(entry.submittedAt || entry.clientTimestamp || Date.now());
         const timestamp = Number.isFinite(timestampMs) && timestampMs > 0 ? new Date(timestampMs) : new Date();
+        const timestampLabel = formatQuestionTimestamp_(timestamp);
         const uid = Utilities.getUuid();
 
         const newRow = Array.from({ length: headers.length }, () => '');
@@ -618,8 +625,8 @@ function processQuestionSubmissionQueue_(providedAccessToken) {
           newRow[idx] = value;
         };
 
-        setValue('タイムスタンプ', timestamp);
-        setValue('Timestamp', timestamp);
+        setValue('タイムスタンプ', timestampLabel);
+        setValue('Timestamp', timestampLabel);
         setValue('ラジオネーム', radioName);
         setValue('質問・お悩み', questionText);
         if (groupNumber) setValue('班番号', groupNumber);
