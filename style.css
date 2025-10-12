@@ -546,6 +546,11 @@ input[type="checkbox"]{
   opacity:.4;
   cursor:not-allowed;
 }
+.schedule-filter .schedule-range{
+  color:var(--muted);
+  font-size:.85rem;
+  white-space:nowrap;
+}
 .schedule-label{
   font-weight:600;
   letter-spacing:.05em;

@@ -269,11 +269,8 @@ function parseParticipantRows(rows) {
   }
 
   const headerCandidate = rows[0].map(cell => normalizeKey(cell).toLowerCase());
-  const hasHeader =
-    headerCandidate.some(cell => /id|参加|member/.test(cell)) &&
-    headerCandidate.some(cell => /name|氏名|名前|ラジオ|radio/.test(cell));
-
-  if (!hasHeader) {
+  const hasNameHeader = headerCandidate.some(cell => /name|氏名|名前|ラジオ|radio/.test(cell));
+  if (!hasNameHeader) {
     throw new Error("ヘッダー行が見つかりません。テンプレートを利用してヘッダーを追加してください。");
   }
 

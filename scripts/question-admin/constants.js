@@ -8,7 +8,6 @@ export const STEP_LABELS = [
   "準備完了"
 ];
 export const PARTICIPANT_TEMPLATE_HEADERS = [
-  "参加者ID",
   "名前",
   "フリガナ",
   "性別",

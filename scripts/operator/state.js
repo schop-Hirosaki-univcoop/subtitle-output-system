@@ -2,6 +2,7 @@ import { GENRE_OPTIONS } from "./constants.js";
 
 export function createInitialState(autoScroll = true) {
   return {
+    rawQuestions: [],
     allQuestions: [],
     allLogs: [],
     currentSubTab: "normal",
@@ -9,6 +10,9 @@ export function createInitialState(autoScroll = true) {
     currentSchedule: "",
     lastNormalSchedule: "",
     availableSchedules: [],
+    scheduleDetails: new Map(),
+    scheduleMetadata: new Map(),
+    eventsById: new Map(),
     selectedRowData: null,
     lastDisplayedUid: null,
     autoScrollLogs: autoScroll,

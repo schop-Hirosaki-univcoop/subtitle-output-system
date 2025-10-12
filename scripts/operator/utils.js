@@ -1,5 +1,13 @@
 import { GENRE_OPTIONS } from "./constants.js";
 
+const HAS_INTL = typeof Intl !== "undefined" && typeof Intl.DateTimeFormat === "function";
+const SCHEDULE_DATE_FORMATTER = HAS_INTL
+  ? new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit" })
+  : null;
+const SCHEDULE_TIME_FORMATTER = HAS_INTL
+  ? new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false })
+  : null;
+
 export function escapeHtml(value) {
   const s = value == null ? "" : String(value);
   return s
@@ -49,6 +57,90 @@ export function resolveGenreLabel(value) {
   if (!raw) return "その他";
   const mapped = GENRE_LOOKUP.get(normKey(raw));
   return mapped || raw;
+}
+
+function parseDateTimeValue(value) {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(trimmed)) {
+    const delimiter = trimmed.includes("/") ? "/" : "-";
+    const [year, month, day] = trimmed.split(delimiter).map(Number);
+    if ([year, month, day].some(Number.isNaN)) return null;
+    return new Date(year, month - 1, day);
+  }
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}[ T]\d{1,2}:\d{2}(?::\d{2})?$/.test(trimmed)) {
+    const normalized = trimmed.replace(" ", "T");
+    const [datePart, timePart] = normalized.split("T");
+    const dateSegments = datePart.split(/[/-]/).map(Number);
+    const timeSegments = timePart.split(":").map(Number);
+    if ([...dateSegments, ...timeSegments].some(Number.isNaN)) return null;
+    const [year, month, day] = dateSegments;
+    const [hour, minute, second = 0] = timeSegments;
+    return new Date(year, month - 1, day, hour, minute, second);
+  }
+  const normalized = trimmed.includes(" ") ? trimmed.replace(" ", "T") : trimmed;
+  const fallback = normalized.includes("/") ? normalized.replace(/\//g, "-") : normalized;
+  const parsed = new Date(fallback);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function formatDateDisplay(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  if (SCHEDULE_DATE_FORMATTER) return SCHEDULE_DATE_FORMATTER.format(date);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}/${m}/${d}`;
+}
+
+function formatTimeDisplay(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  if (SCHEDULE_TIME_FORMATTER) return SCHEDULE_TIME_FORMATTER.format(date);
+  const h = String(date.getHours()).padStart(2, "0");
+  const m = String(date.getMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+export function formatScheduleRange(startValue, endValue) {
+  const start = parseDateTimeValue(startValue);
+  const end = parseDateTimeValue(endValue);
+  if (!start && !end) return "";
+  if (start && end) {
+    const startDateText = formatDateDisplay(start);
+    const startTimeText = formatTimeDisplay(start);
+    const endTimeText = formatTimeDisplay(end);
+    if (startDateText && startTimeText && endTimeText) {
+      const sameDay = start.toDateString() === end.toDateString();
+      const endDateText = sameDay ? "" : formatDateDisplay(end);
+      const endPart = endDateText ? `${endDateText} ${endTimeText}` : endTimeText;
+      return `${startDateText} ${startTimeText}〜${endPart}`;
+    }
+    if (startDateText && startTimeText) {
+      return `${startDateText} ${startTimeText}〜`;
+    }
+    if (startDateText) {
+      return startDateText;
+    }
+  }
+  if (start) {
+    const startDateText = formatDateDisplay(start);
+    const startTimeText = formatTimeDisplay(start);
+    if (startDateText && startTimeText) {
+      return `${startDateText} ${startTimeText}〜`;
+    }
+    return startDateText;
+  }
+  if (end) {
+    const endDateText = formatDateDisplay(end);
+    const endTimeText = formatTimeDisplay(end);
+    if (endDateText && endTimeText) {
+      return `${endDateText} 〜${endTimeText}`;
+    }
+    return endDateText;
+  }
+  return "";
 }
 
 export function parseLogTimestamp(ts) {
