@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>404 | 迷子の字幕が発生しました</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2712%27%20fill%3D%27%2305111f%27%2F%3E%3Ctext%20x%3D%2732%27%20y%3D%2742%27%20text-anchor%3D%27middle%27%20font-family%3D%27Arial%2C%20sans-serif%27%20font-size%3D%2736%27%20fill%3D%27%2300eaff%27%3ET%3C%2Ftext%3E%3C%2Fsvg%3E" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #040914;
+      --bg-secondary: #071226;
+      --accent: #1ec8ff;
+      --accent-2: #ff4fd8;
+      --text: #e6eef7;
+      --muted: #8fa0b8;
+      --panel: rgba(9, 16, 28, 0.82);
+      --glow: 0 0 45px rgba(30, 200, 255, 0.45);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Noto Sans JP", "Hiragino Sans", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 15% 20%, rgba(30, 200, 255, 0.18), transparent 60%),
+                  radial-gradient(circle at 85% 10%, rgba(255, 79, 216, 0.14), transparent 58%),
+                  radial-gradient(circle at 50% 95%, rgba(30, 200, 255, 0.12), transparent 60%),
+                  linear-gradient(180deg, var(--bg), #03050b);
+      color: var(--text);
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: clamp(1.2rem, 4vw, 3rem) clamp(1.2rem, 4vw, 3rem) calc(clamp(1.2rem, 4vw, 3rem) + 2rem);
+      overflow: hidden;
+    }
+
+    main {
+      max-width: min(720px, 100%);
+      width: min(90vw, 720px);
+      display: grid;
+      gap: clamp(1.2rem, 3vw, 2.2rem);
+      text-align: center;
+      position: relative;
+      padding: clamp(2rem, 6vw, 3.5rem) clamp(1.5rem, 5vw, 3rem);
+      border-radius: 28px;
+      background: var(--panel);
+      border: 1px solid rgba(56, 80, 114, 0.45);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35), var(--glow);
+      backdrop-filter: blur(18px);
+    }
+
+    main::before {
+      content: "";
+      position: absolute;
+      inset: -45% -55% auto;
+      height: 120%;
+      background: conic-gradient(from 180deg at 50% 50%, rgba(30, 200, 255, 0.35), rgba(255, 79, 216, 0.18), transparent 72%, rgba(30, 200, 255, 0.25));
+      filter: blur(48px);
+      z-index: -2;
+      opacity: 0.85;
+      animation: pulse 12s ease-in-out infinite;
+    }
+
+    main::after {
+      content: "";
+      position: absolute;
+      inset: -3px;
+      border-radius: inherit;
+      border: 1px solid rgba(30, 200, 255, 0.2);
+      mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+      mask-composite: exclude;
+      -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+      -webkit-mask-composite: xor;
+      padding: 1.5px;
+      background: linear-gradient(120deg, rgba(30, 200, 255, 0.6), rgba(255, 79, 216, 0.55));
+      opacity: 0.75;
+      z-index: -1;
+    }
+
+    header {
+      display: grid;
+      gap: clamp(0.8rem, 2vw, 1.2rem);
+    }
+
+    .error-code {
+      font-size: clamp(3.5rem, 12vw, 6.8rem);
+      font-weight: 700;
+      letter-spacing: 0.24em;
+      color: var(--text);
+      text-transform: uppercase;
+      text-shadow:
+        0 0 15px rgba(30, 200, 255, 0.55),
+        0 0 45px rgba(30, 200, 255, 0.35),
+        0 0 85px rgba(255, 79, 216, 0.28);
+    }
+
+    .headline {
+      font-size: clamp(1.4rem, 4.5vw, 2.1rem);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+
+    .copy {
+      font-size: clamp(1rem, 2.4vw, 1.15rem);
+      color: var(--muted);
+      line-height: 1.9;
+    }
+
+    .copy strong {
+      color: var(--accent);
+    }
+
+    .footnote {
+      font-size: 0.88rem;
+      color: rgba(230, 238, 247, 0.65);
+      letter-spacing: 0.03em;
+    }
+
+    .illustration {
+      position: relative;
+      width: clamp(12rem, 55vw, 16rem);
+      aspect-ratio: 4 / 3;
+      margin: 0 auto;
+      filter: drop-shadow(0 18px 30px rgba(6, 13, 26, 0.4));
+    }
+
+    .illustration svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: rotate(0deg) scale(1); opacity: 0.7; }
+      45% { transform: rotate(8deg) scale(1.08); opacity: 0.95; }
+    }
+
+    .starfield {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -5;
+      background-image:
+        radial-gradient(2px 2px at 20% 30%, rgba(255, 255, 255, 0.55) 50%, transparent 55%),
+        radial-gradient(1.6px 1.6px at 70% 40%, rgba(255, 255, 255, 0.35) 50%, transparent 52%),
+        radial-gradient(1.4px 1.4px at 40% 80%, rgba(255, 255, 255, 0.4) 50%, transparent 53%),
+        radial-gradient(1px 1px at 90% 70%, rgba(255, 255, 255, 0.35) 50%, transparent 55%),
+        radial-gradient(1.2px 1.2px at 15% 80%, rgba(255, 255, 255, 0.28) 50%, transparent 55%);
+      animation: twinkle 12s linear infinite;
+      opacity: 0.85;
+    }
+
+    @keyframes twinkle {
+      0%, 100% { transform: scale(1) translateY(0); opacity: 0.8; }
+      50% { transform: scale(1.02) translateY(-0.6%); opacity: 1; }
+    }
+
+    @media (max-width: 600px) {
+      main {
+        padding: clamp(1.8rem, 8vw, 2.8rem) clamp(1.2rem, 6vw, 2.2rem);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="starfield" aria-hidden="true"></div>
+  <main>
+    <div class="illustration" role="img" aria-label="迷子になったテロップのイラスト">
+      <svg viewBox="0 0 320 240" aria-hidden="true" focusable="false">
+        <defs>
+          <radialGradient id="glow" cx="50%" cy="45%" r="70%">
+            <stop offset="0%" stop-color="#1ec8ff" stop-opacity="0.4" />
+            <stop offset="45%" stop-color="#1ec8ff" stop-opacity="0.18" />
+            <stop offset="100%" stop-color="#03060f" stop-opacity="0" />
+          </radialGradient>
+          <linearGradient id="card" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#14223b" />
+            <stop offset="100%" stop-color="#0a1325" />
+          </linearGradient>
+          <linearGradient id="signal" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#1ec8ff" />
+            <stop offset="100%" stop-color="#ff4fd8" />
+          </linearGradient>
+        </defs>
+        <circle cx="160" cy="118" r="110" fill="url(#glow)" />
+        <g transform="rotate(-6 160 118)">
+          <rect x="80" y="70" width="160" height="110" rx="18" fill="url(#card)" stroke="#1ec8ff" stroke-width="3" stroke-opacity="0.3" />
+          <rect x="96" y="106" width="128" height="22" rx="11" fill="rgba(255, 255, 255, 0.08)" />
+          <rect x="96" y="138" width="96" height="18" rx="9" fill="rgba(30, 200, 255, 0.24)" />
+          <path d="M112 92h96" stroke="url(#signal)" stroke-width="6" stroke-linecap="round" opacity="0.8" />
+        </g>
+        <g opacity="0.9">
+          <path d="M74 154c-12 4-20 16-19 29 2 21 25 34 45 25 9-4 15-12 17-21" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="6" stroke-linecap="round" />
+          <circle cx="121" cy="178" r="8" fill="#ff4fd8" />
+          <circle cx="71" cy="182" r="6" fill="#1ec8ff" />
+        </g>
+        <g opacity="0.85">
+          <path d="M246 74c16-12 40-5 46 13 6 18-7 36-26 38" fill="none" stroke="#ffffff" stroke-opacity="0.25" stroke-width="6" stroke-linecap="round" />
+          <circle cx="260" cy="60" r="7" fill="#1ec8ff" />
+          <circle cx="286" cy="110" r="9" fill="#ffb84f" />
+        </g>
+        <circle cx="204" cy="54" r="7" fill="#ff4fd8" opacity="0.8" />
+        <circle cx="110" cy="48" r="5" fill="#1ec8ff" opacity="0.7" />
+        <circle cx="234" cy="192" r="5" fill="#1ec8ff" opacity="0.6" />
+        <circle cx="182" cy="206" r="7" fill="#ff4fd8" opacity="0.7" />
+      </svg>
+    </div>
+    <header>
+      <div class="error-code" aria-label="エラーコード 404">404</div>
+      <p class="headline">あれ、テロップはどこへ…？</p>
+    </header>
+    <p class="copy">
+      どうやらこのアドレスには字幕が存在しないようです。<br />
+      お手数ですが、別のページから改めてアクセスしてみてください。
+    </p>
+    <p class="footnote">それでも見つからない場合は、URLを再確認のうえスタッフまでお知らせください。</p>
+  </main>
+</body>
+</html>
