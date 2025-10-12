@@ -193,6 +193,7 @@ export class QuestionFormApp {
     });
 
     this.view.setRadioNameValue("");
+    this.view.resetGenreSelection();
 
     const targetName = displayName || "ゲスト";
     const scheduleSummary = formatScheduleSummary({
@@ -238,6 +239,7 @@ export class QuestionFormApp {
   handleReset() {
     window.setTimeout(() => {
       this.state.dirty = false;
+      this.view.resetGenreSelection();
       this.updateQuestionCounter();
       this.view.clearFeedback();
     }, 0);
@@ -322,6 +324,11 @@ export class QuestionFormApp {
     }
 
     const genre = this.view.getSelectedGenre();
+    if (!genre) {
+      this.view.setFeedback("ジャンルを選択してください。", "error");
+      this.view.focusGenre();
+      return;
+    }
     if (!GENRE_OPTIONS.includes(genre)) {
       this.view.setFeedback("ジャンルの選択が正しくありません。", "error");
       return;
@@ -349,6 +356,7 @@ export class QuestionFormApp {
         this.view.setFeedback("送信しました。反映まで数秒かかる場合があります。", "success");
       }
       this.view.setQuestionValue("");
+      this.view.resetGenreSelection();
       this.updateQuestionCounter();
       this.view.focusQuestion();
       this.state.dirty = false;
