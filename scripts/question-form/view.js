@@ -216,6 +216,28 @@ export class FormView {
     return this.genreSelect ? this.genreSelect.value : "";
   }
 
+  focusGenre() {
+    this.genreSelect?.focus();
+  }
+
+  resetGenreSelection() {
+    if (!this.genreSelect) return;
+    const placeholderOption = this.genreSelect.querySelector("option[data-placeholder=\"true\"]");
+    if (placeholderOption) {
+      const wasDisabled = placeholderOption.disabled;
+      if (wasDisabled) {
+        placeholderOption.disabled = false;
+      }
+      placeholderOption.selected = true;
+      this.genreSelect.value = placeholderOption.value;
+      if (wasDisabled) {
+        placeholderOption.disabled = true;
+      }
+    } else {
+      this.genreSelect.value = "";
+    }
+  }
+
   getGroupNumber() {
     return this.groupInput ? this.groupInput.value.trim() : "";
   }
