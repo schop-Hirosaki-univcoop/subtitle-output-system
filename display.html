@@ -252,7 +252,6 @@
     .telop-box__inner {
       display: grid;
       grid-template-columns: auto 1fr;
-      column-gap: calc(var(--pad-x) * 0.7);
       align-items: start;
     }
     .genre-panel {
@@ -260,11 +259,12 @@
       flex-direction: column;
       justify-content: center;
       gap: .35vw;
-      padding-right: calc(var(--pad-x) * 0.6);
+      padding-right: 0.7vw;
       border-right: 0.18vw solid rgba(255,255,255,.16);
       font-family: "GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
       text-shadow: none;
       min-width: 10vw;
+      margin-block: auto;
     }
     .genre-panel__label {
       font-size: calc(90vw / 44);
@@ -289,6 +289,7 @@
     /* ─ ここが“1行23文字”の肝 ─*/
     #question {
       position: relative;
+      padding-inline:0.7vw;
       z-index: 1;
       width: fit-content;
       max-width: 100%;
@@ -310,7 +311,7 @@
         0 0 1.5vw rgba(255,42,109,.16);
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
-      margin: 0;
+      margin: auto;
     }
 
     /* プロポーショナル関連の機能を“明示的にON”にする */
