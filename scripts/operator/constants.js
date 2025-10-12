@@ -29,3 +29,4 @@ export const GENRE_OPTIONS = ["学び", "活動", "暮らし", "食・スポッ�
 
 export const DICTIONARY_STATE_KEY = "telop-ops-dictionary-open";
 export const LOGS_STATE_KEY = "telop-ops-logs-open";
+export const QUESTIONS_SUBTAB_KEY = "telop-ops-questions-subtab";
