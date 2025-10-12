@@ -365,7 +365,8 @@ export class OperatorApp {
         ラジオネーム: item.name,
         "質問・お悩み": item.question,
         ジャンル: resolveGenreLabel(item.genre),
-        日程: String(item.schedule ?? "").trim(),
+        日程: String(item.scheduleId ?? item.schedule ?? "").trim(),
+        日程表示: String(item.scheduleLabel ?? item.schedule ?? "").trim(),
         開始日時: String(item.scheduleStart ?? "").trim(),
         終了日時: String(item.scheduleEnd ?? "").trim(),
         参加者ID: item.participantId ?? "",
@@ -479,6 +480,10 @@ export class OperatorApp {
       const wrapper = this.dom.scheduleFilter.closest(".schedule-filter");
       if (wrapper) wrapper.classList.add("is-disabled");
     }
+    if (this.dom.scheduleTimeRange) {
+      this.dom.scheduleTimeRange.textContent = "";
+      this.dom.scheduleTimeRange.hidden = true;
+    }
     this.updateActionAvailability();
     this.updateBatchButtonVisibility();
     if (this.dom.cardsContainer) this.dom.cardsContainer.innerHTML = "";
@@ -495,7 +500,8 @@ export class OperatorApp {
         ラジオネーム: item.name,
         "質問・お悩み": item.question,
         ジャンル: resolveGenreLabel(item.genre),
-        日程: String(item.schedule ?? "").trim(),
+        日程: String(item.scheduleId ?? item.schedule ?? "").trim(),
+        日程表示: String(item.scheduleLabel ?? item.schedule ?? "").trim(),
         開始日時: String(item.scheduleStart ?? "").trim(),
         終了日時: String(item.scheduleEnd ?? "").trim(),
         参加者ID: item.participantId ?? "",

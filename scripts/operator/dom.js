@@ -12,6 +12,7 @@ export function queryDom() {
     cardsContainer: document.getElementById("questions-cards"),
     genreTabContainer: document.getElementById("genre-tab-buttons"),
     scheduleFilter: document.getElementById("schedule-filter"),
+    scheduleTimeRange: document.getElementById("schedule-time-range"),
     dictionaryTableBody: document.querySelector("#dictionary-table tbody"),
     addTermForm: document.getElementById("add-term-form"),
     newTermInput: document.getElementById("new-term"),

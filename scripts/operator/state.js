@@ -9,6 +9,7 @@ export function createInitialState(autoScroll = true) {
     currentSchedule: "",
     lastNormalSchedule: "",
     availableSchedules: [],
+    scheduleDetails: new Map(),
     selectedRowData: null,
     lastDisplayedUid: null,
     autoScrollLogs: autoScroll,

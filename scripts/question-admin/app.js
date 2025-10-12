@@ -1654,8 +1654,20 @@ async function handleCsvChange(event) {
 
     const text = await readFileAsText(file);
     const rows = parseCsv(text);
+    const parsedEntries = parseParticipantRows(rows);
+    const sortedEntries = parsedEntries.slice().sort((a, b) => {
+      const deptA = String(a.department || "");
+      const deptB = String(b.department || "");
+      const deptCompare = deptA.localeCompare(deptB, "ja", { sensitivity: "base", numeric: true });
+      if (deptCompare !== 0) return deptCompare;
+      const phoneticA = String(a.phonetic || a.furigana || a.name || "");
+      const phoneticB = String(b.phonetic || b.furigana || b.name || "");
+      const phoneticCompare = phoneticA.localeCompare(phoneticB, "ja", { sensitivity: "base", numeric: true });
+      if (phoneticCompare !== 0) return phoneticCompare;
+      return String(a.name || "").localeCompare(String(b.name || ""), "ja", { sensitivity: "base", numeric: true });
+    });
     const entries = assignParticipantIds(
-      parseParticipantRows(rows),
+      sortedEntries,
       state.participants,
       { eventId: state.selectedEventId, scheduleId: state.selectedScheduleId }
     );

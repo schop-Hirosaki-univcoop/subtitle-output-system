@@ -1,6 +1,6 @@
 import { GENRE_OPTIONS } from "./constants.js";
 import { database, ref, update, set, remove, get, telopRef } from "./firebase.js";
-import { escapeHtml, formatOperatorName, resolveGenreLabel } from "./utils.js";
+import { escapeHtml, formatOperatorName, resolveGenreLabel, formatScheduleRange } from "./utils.js";
 
 export function renderQuestions(app) {
   if (!app.dom.cardsContainer) return;
@@ -135,42 +135,60 @@ export function renderQuestions(app) {
 export function updateScheduleOptions(app) {
   const select = app.dom.scheduleFilter;
   if (!select) return;
+  const rangeEl = app.dom.scheduleTimeRange;
   const isNormalTab = app.state.currentSubTab === "normal";
   const selectedGenre = app.state.currentGenre || GENRE_OPTIONS[0];
-  const scheduleSet = new Set();
+  const scheduleMap = new Map();
   if (isNormalTab) {
     for (const item of app.state.allQuestions) {
       const isPuq = item["ピックアップ"] === true || item["ラジオネーム"] === "Pick Up Question";
       if (isPuq) continue;
       const itemGenre = String(item["ジャンル"] ?? "").trim() || "その他";
       if (selectedGenre && itemGenre !== selectedGenre) continue;
-      const scheduleLabel = String(item["日程"] ?? "").trim();
-      if (!scheduleLabel) continue;
-      scheduleSet.add(scheduleLabel);
+      const rawKey = String(item["日程"] ?? "").trim();
+      const displayLabel = String(item["日程表示"] ?? item["日程"] ?? "").trim();
+      const startValue = String(item["開始日時"] ?? "").trim();
+      const endValue = String(item["終了日時"] ?? "").trim();
+      if (!rawKey && !displayLabel) continue;
+      const key = rawKey || displayLabel;
+      const existing = scheduleMap.get(key);
+      if (existing) {
+        if (!existing.label && displayLabel) existing.label = displayLabel;
+        if (!existing.start && startValue) existing.start = startValue;
+        if (!existing.end && endValue) existing.end = endValue;
+      } else {
+        scheduleMap.set(key, {
+          label: displayLabel || rawKey,
+          start: startValue,
+          end: endValue
+        });
+      }
     }
   }
-  const nextList = Array.from(scheduleSet).sort((a, b) => a.localeCompare(b, "ja", { numeric: true, sensitivity: "base" }));
-  const prevList = app.state.availableSchedules || [];
-  const changed = nextList.length !== prevList.length || nextList.some((value, index) => value !== prevList[index]);
-  if (changed) {
-    select.innerHTML = "";
-    nextList.forEach((value) => {
-      const opt = document.createElement("option");
-      opt.value = value;
-      opt.textContent = value;
-      select.appendChild(opt);
-    });
-  }
-  app.state.availableSchedules = nextList;
+  const scheduleEntries = Array.from(scheduleMap.entries()).sort((a, b) => {
+    const labelA = String(a[1]?.label || a[0] || "");
+    const labelB = String(b[1]?.label || b[0] || "");
+    return labelA.localeCompare(labelB, "ja", { numeric: true, sensitivity: "base" });
+  });
+  const scheduleDetails = new Map(scheduleEntries);
+  select.innerHTML = "";
+  scheduleEntries.forEach(([value, details]) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = details?.label || value;
+    select.appendChild(opt);
+  });
+  app.state.availableSchedules = scheduleEntries.map(([value]) => value);
+  app.state.scheduleDetails = scheduleDetails;
   let nextValue = "";
-  if (isNormalTab && nextList.length > 0) {
+  if (isNormalTab && scheduleEntries.length > 0) {
     const { currentSchedule, lastNormalSchedule } = app.state;
-    if (currentSchedule && nextList.includes(currentSchedule)) {
+    if (currentSchedule && scheduleDetails.has(currentSchedule)) {
       nextValue = currentSchedule;
-    } else if (lastNormalSchedule && nextList.includes(lastNormalSchedule)) {
+    } else if (lastNormalSchedule && scheduleDetails.has(lastNormalSchedule)) {
       nextValue = lastNormalSchedule;
     } else {
-      nextValue = nextList[0];
+      nextValue = scheduleEntries[0][0];
     }
   }
   select.value = nextValue;
@@ -178,11 +196,37 @@ export function updateScheduleOptions(app) {
   if (isNormalTab) {
     app.state.lastNormalSchedule = nextValue;
   }
-  const shouldDisable = !isNormalTab || nextList.length === 0;
+  const shouldDisable = !isNormalTab || scheduleEntries.length === 0;
   select.disabled = shouldDisable;
   const wrapper = select.closest(".schedule-filter");
   if (wrapper) {
     wrapper.classList.toggle("is-disabled", shouldDisable);
+  }
+  if (rangeEl) {
+    if (shouldDisable) {
+      rangeEl.textContent = "";
+      rangeEl.hidden = true;
+    } else {
+      updateScheduleRangeDisplay(app);
+    }
+  }
+}
+
+function updateScheduleRangeDisplay(app) {
+  const select = app.dom.scheduleFilter;
+  const rangeEl = app.dom.scheduleTimeRange;
+  if (!select || !rangeEl) return;
+  const isNormalTab = app.state.currentSubTab === "normal";
+  const detailsMap = app.state.scheduleDetails instanceof Map ? app.state.scheduleDetails : null;
+  const value = select.value || "";
+  const details = isNormalTab && detailsMap ? detailsMap.get(value) : null;
+  const rangeText = details ? formatScheduleRange(details.start, details.end) : "";
+  if (rangeText) {
+    rangeEl.textContent = rangeText;
+    rangeEl.hidden = false;
+  } else {
+    rangeEl.textContent = "";
+    rangeEl.hidden = true;
   }
 }
 
@@ -240,6 +284,7 @@ export function handleScheduleChange(app, event) {
   if (app.state.currentSubTab === "normal") {
     app.state.lastNormalSchedule = value;
   }
+  updateScheduleRangeDisplay(app);
   renderQuestions(app);
 }
 
