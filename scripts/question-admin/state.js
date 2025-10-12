@@ -3,6 +3,7 @@ const state = {
   selectedEventId: null,
   selectedScheduleId: null,
   participants: [],
+  savedParticipants: [],
   lastSavedSignature: "",
   user: null,
   saving: false,
