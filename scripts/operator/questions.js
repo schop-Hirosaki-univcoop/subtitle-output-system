@@ -1,6 +1,104 @@
-import { GENRE_OPTIONS } from "./constants.js";
+import { GENRE_OPTIONS, QUESTIONS_SUBTAB_KEY } from "./constants.js";
 import { database, ref, update, set, remove, get, telopRef } from "./firebase.js";
 import { escapeHtml, formatOperatorName, resolveGenreLabel, formatScheduleRange } from "./utils.js";
+
+const SUB_TAB_OPTIONS = new Set(["all", "normal", "puq"]);
+
+function normalizeSubTab(value) {
+  const candidate = String(value || "").trim();
+  return SUB_TAB_OPTIONS.has(candidate) ? candidate : "all";
+}
+
+export function loadPreferredSubTab() {
+  let stored = "";
+  try {
+    stored = localStorage.getItem(QUESTIONS_SUBTAB_KEY) || "";
+  } catch (error) {
+    stored = "";
+  }
+  return normalizeSubTab(stored);
+}
+
+function persistSubTabPreference(tabName) {
+  const normalized = normalizeSubTab(tabName);
+  try {
+    localStorage.setItem(QUESTIONS_SUBTAB_KEY, normalized);
+  } catch (error) {
+    console.debug("sub-tab preference not persisted", error);
+  }
+}
+
+function parseScheduleTimestamp(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return Number.NaN;
+  const direct = Date.parse(raw);
+  if (!Number.isNaN(direct)) return direct;
+  const sanitized = raw
+    .replace(/年|\//g, "-")
+    .replace(/月/g, "-")
+    .replace(/日/g, "")
+    .replace(/時/g, ":")
+    .replace(/分/g, "")
+    .replace(/秒/g, "")
+    .replace(/[^0-9:\-\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const normalized = sanitized.replace(/\s/, "T");
+  const normalizedParse = Date.parse(normalized);
+  if (!Number.isNaN(normalizedParse)) return normalizedParse;
+  const match = sanitized.match(
+    /^(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2})(?::(\d{1,2})(?::(\d{1,2}))?)?)?$/
+  );
+  if (!match) return Number.NaN;
+  const [, year, month, day, hour = "0", minute = "0", second = "0"] = match;
+  const parsedDate = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second)
+  );
+  return parsedDate.getTime();
+}
+
+function findNearestFutureSchedule(scheduleEntries, metadataMap) {
+  if (!Array.isArray(scheduleEntries) || scheduleEntries.length === 0) {
+    return "";
+  }
+  const now = Date.now();
+  let futureCandidate = null;
+  let pastCandidate = null;
+  const fallbackValue = scheduleEntries[0][0];
+  scheduleEntries.forEach(([value, details]) => {
+    const meta = metadataMap && metadataMap instanceof Map ? metadataMap.get(value) : null;
+    const candidates = [
+      details?.start,
+      meta?.startAt,
+      meta?.date,
+      details?.end,
+      meta?.endAt,
+      details?.label,
+      meta?.label
+    ];
+    let ts = Number.NaN;
+    for (const candidate of candidates) {
+      ts = parseScheduleTimestamp(candidate);
+      if (!Number.isNaN(ts)) break;
+    }
+    if (Number.isNaN(ts)) return;
+    if (ts >= now) {
+      if (!futureCandidate || ts < futureCandidate.ts) {
+        futureCandidate = { value, ts };
+      }
+    } else if (!pastCandidate || ts > pastCandidate.ts) {
+      pastCandidate = { value, ts };
+    }
+  });
+  if (futureCandidate) return futureCandidate.value;
+  if (pastCandidate) return pastCandidate.value;
+  return fallbackValue;
+}
 
 export function renderQuestions(app) {
   if (!app.dom.cardsContainer) return;
@@ -203,7 +301,7 @@ export function updateScheduleOptions(app) {
     } else if (lastNormalSchedule && scheduleDetails.has(lastNormalSchedule)) {
       nextValue = lastNormalSchedule;
     } else {
-      nextValue = scheduleEntries[0][0];
+      nextValue = findNearestFutureSchedule(scheduleEntries, metadataMap);
     }
   }
   select.value = nextValue;
@@ -267,6 +365,7 @@ export function switchSubTab(app, tabName) {
   }
   updateScheduleOptions(app);
   renderQuestions(app);
+  persistSubTabPreference(tabName);
 }
 
 export function switchGenre(app, genreKey) {

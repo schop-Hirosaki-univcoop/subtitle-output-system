@@ -104,6 +104,7 @@ export class OperatorApp {
 
   init() {
     this.setupEventListeners();
+    this.applyPreferredSubTab();
     this.updateActionAvailability();
     this.attachRenderMonitor();
     this.applyInitialDictionaryState();
@@ -166,6 +167,15 @@ export class OperatorApp {
       });
     }
     this.setupConfirmDialog();
+  }
+
+  applyPreferredSubTab() {
+    const preferredSubTab = Questions.loadPreferredSubTab();
+    if (preferredSubTab && preferredSubTab !== this.state.currentSubTab) {
+      this.switchSubTab(preferredSubTab);
+    } else {
+      this.updateScheduleOptions();
+    }
   }
 
   setupConfirmDialog() {
@@ -422,6 +432,7 @@ export class OperatorApp {
       logoutButton.addEventListener("click", () => this.logout());
       this.dom.userInfo.append(label, logoutButton);
     }
+    this.applyPreferredSubTab();
   }
 
   showLoggedOutState() {
@@ -475,6 +486,11 @@ export class OperatorApp {
     }
     document.querySelectorAll(".genre-tab-button").forEach((button, index) => {
       const isDefault = index === 0;
+      button.classList.toggle("active", isDefault);
+      button.setAttribute("aria-selected", String(isDefault));
+    });
+    document.querySelectorAll(".sub-tab-button").forEach((button) => {
+      const isDefault = button.dataset.subTab === "all";
       button.classList.toggle("active", isDefault);
       button.setAttribute("aria-selected", String(isDefault));
     });
