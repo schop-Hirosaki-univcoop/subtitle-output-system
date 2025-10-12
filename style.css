@@ -261,7 +261,6 @@ body.logs-open #logs-panel{ display:flex; }
   margin:0;
   font-size:clamp(.7rem, 1vw, .85rem);
   color:var(--muted);
-  max-width:32ch;
   line-height:1.4;
 }
 .module-actions{
@@ -1025,7 +1024,6 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  gap:.35rem;
   padding:0;
   background:none;
   border:none;
