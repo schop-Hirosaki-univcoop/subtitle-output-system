@@ -5,7 +5,7 @@ export function createInitialState(autoScroll = true) {
     rawQuestions: [],
     allQuestions: [],
     allLogs: [],
-    currentSubTab: "normal",
+    currentSubTab: "all",
     currentGenre: GENRE_OPTIONS[0],
     currentSchedule: "",
     lastNormalSchedule: "",
