@@ -283,6 +283,19 @@ function mirrorQuestionsFromRtdbToSheet_(providedAccessToken) {
       sheetDataMap.set(type, null);
       return null;
     }
+
+    const ensureDateTimeFormat = columnIdx => {
+      if (columnIdx == null) return;
+      const columnNumber = columnIdx + 1;
+      const formatRows = Math.max(sheet.getMaxRows() - 1, 1);
+      sheet
+        .getRange(2, columnNumber, formatRows, 1)
+        .setNumberFormat('yyyy/MM/dd HH:mm:ss');
+    };
+
+    ensureDateTimeFormat(getHeaderIndex_(info.headerMap, ['開始日時', '日程開始']));
+    ensureDateTimeFormat(getHeaderIndex_(info.headerMap, ['終了日時', '日程終了']));
+
     const existingByUid = new Map();
     info.rows.forEach((row, index) => {
       const uid = String(row[uidIdx] || '').trim();
