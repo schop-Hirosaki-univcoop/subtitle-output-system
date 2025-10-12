@@ -89,6 +89,12 @@ function ensureQuestionSheetInfoWithEventColumns_(sheet) {
   if (!info.sheet) {
     return info;
   }
+
+  const sheetName = typeof sheet.getName === 'function' ? sheet.getName() : '';
+  if (sheetName === PICKUP_QUESTION_SHEET_NAME) {
+    return info;
+  }
+
   const headers = Array.isArray(info.headers) ? info.headers.slice() : [];
   const required = ['イベントID', '日程ID'];
   const missing = required.filter(header => !headers.includes(header));
