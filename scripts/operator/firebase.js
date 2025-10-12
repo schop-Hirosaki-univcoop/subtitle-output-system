@@ -32,6 +32,8 @@ provider.setCustomParameters({ prompt: "select_account" });
 export const renderRef = ref(database, "render_state");
 export const displaySessionRef = ref(database, "render_control/session");
 export const questionsRef = ref(database, "questions");
+export const questionIntakeEventsRef = ref(database, "questionIntake/events");
+export const questionIntakeSchedulesRef = ref(database, "questionIntake/schedules");
 export const telopRef = ref(database, "currentTelop");
 export const updateTriggerRef = ref(database, "update_trigger");
 export const dictionaryRef = ref(database, "dictionary");

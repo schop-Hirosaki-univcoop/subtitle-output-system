@@ -19,7 +19,7 @@ export function renderQuestions(app) {
     }
     const itemGenre = String(item["ジャンル"] ?? "").trim() || "その他";
     if (selectedGenre && itemGenre !== selectedGenre) return false;
-    const itemSchedule = String(item["日程"] ?? "").trim();
+    const itemSchedule = String(item.__scheduleKey ?? item["日程"] ?? "").trim();
     if (viewingNormalTab && selectedSchedule && itemSchedule !== selectedSchedule) return false;
     return true;
   });
@@ -139,28 +139,43 @@ export function updateScheduleOptions(app) {
   const isNormalTab = app.state.currentSubTab === "normal";
   const selectedGenre = app.state.currentGenre || GENRE_OPTIONS[0];
   const scheduleMap = new Map();
+  const metadataMap = app.state.scheduleMetadata instanceof Map ? app.state.scheduleMetadata : null;
+  const ensureString = (value) => String(value ?? "").trim();
   if (isNormalTab) {
     for (const item of app.state.allQuestions) {
       const isPuq = item["ピックアップ"] === true || item["ラジオネーム"] === "Pick Up Question";
       if (isPuq) continue;
-      const itemGenre = String(item["ジャンル"] ?? "").trim() || "その他";
+      const itemGenre = ensureString(item["ジャンル"]) || "その他";
       if (selectedGenre && itemGenre !== selectedGenre) continue;
-      const rawKey = String(item["日程"] ?? "").trim();
-      const displayLabel = String(item["日程表示"] ?? item["日程"] ?? "").trim();
-      const startValue = String(item["開始日時"] ?? "").trim();
-      const endValue = String(item["終了日時"] ?? "").trim();
-      if (!rawKey && !displayLabel) continue;
-      const key = rawKey || displayLabel;
+      const key = ensureString(item.__scheduleKey ?? item["日程"]);
+      if (!key) continue;
+      const meta = metadataMap ? metadataMap.get(key) : null;
+      const fallbackLabel = ensureString(item["日程表示"] ?? item["日程"]);
+      const label = ensureString(meta?.label) || fallbackLabel || ensureString(item["日程ID"]) || key;
+      const fallbackStart = ensureString(item.__scheduleStart ?? item["開始日時"]);
+      const fallbackEnd = ensureString(item.__scheduleEnd ?? item["終了日時"]);
+      const startValue = ensureString(meta?.startAt) || fallbackStart;
+      const endValue = ensureString(meta?.endAt) || fallbackEnd;
+      const eventId = ensureString(item["イベントID"]) || ensureString(meta?.eventId);
+      const scheduleId = ensureString(item["日程ID"]) || ensureString(meta?.scheduleId);
+      const eventName = ensureString(meta?.eventName) || ensureString(item["イベント名"]);
+      if (!label && !startValue && !endValue) continue;
       const existing = scheduleMap.get(key);
       if (existing) {
-        if (!existing.label && displayLabel) existing.label = displayLabel;
+        if (!existing.label && label) existing.label = label;
         if (!existing.start && startValue) existing.start = startValue;
         if (!existing.end && endValue) existing.end = endValue;
+        if (!existing.eventId && eventId) existing.eventId = eventId;
+        if (!existing.scheduleId && scheduleId) existing.scheduleId = scheduleId;
+        if (!existing.eventName && eventName) existing.eventName = eventName;
       } else {
         scheduleMap.set(key, {
-          label: displayLabel || rawKey,
+          label,
           start: startValue,
-          end: endValue
+          end: endValue,
+          eventId,
+          scheduleId,
+          eventName
         });
       }
     }

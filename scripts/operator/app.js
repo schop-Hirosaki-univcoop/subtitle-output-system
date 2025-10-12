@@ -7,6 +7,8 @@ import {
   onValue,
   get,
   questionsRef,
+  questionIntakeEventsRef,
+  questionIntakeSchedulesRef,
   displaySessionRef,
   renderRef
 } from "./firebase.js";
@@ -36,6 +38,10 @@ export class OperatorApp {
     this.updateTriggerUnsubscribe = null;
     this.renderUnsubscribe = null;
     this.logsUpdateTimer = null;
+    this.eventsUnsubscribe = null;
+    this.schedulesUnsubscribe = null;
+    this.eventsBranch = {};
+    this.schedulesBranch = {};
     this.authFlow = "idle";
     this.pendingAuthUser = null;
     this.isAuthorized = false;
@@ -357,27 +363,18 @@ export class OperatorApp {
 
       this.setLoaderStep(4, "購読開始…");
       this.updateLoader("データ同期中…");
-      const firstSnapshot = await get(questionsRef);
-      const firstValue = firstSnapshot.val() || {};
-      this.state.allQuestions = Object.values(firstValue).map((item) => ({
-        UID: item.uid,
-        班番号: item.group ?? "",
-        ラジオネーム: item.name,
-        "質問・お悩み": item.question,
-        ジャンル: resolveGenreLabel(item.genre),
-        日程: String(item.scheduleId ?? item.schedule ?? "").trim(),
-        日程表示: String(item.scheduleLabel ?? item.schedule ?? "").trim(),
-        開始日時: String(item.scheduleStart ?? "").trim(),
-        終了日時: String(item.scheduleEnd ?? "").trim(),
-        参加者ID: item.participantId ?? "",
-        回答済: !!item.answered,
-        選択中: !!item.selecting,
-        ピックアップ: !!item.pickup,
-        __ts: Number(item.ts || 0)
-      }));
-      this.updateScheduleOptions();
-      this.renderQuestions();
+      const [questionsSnapshot, eventsSnapshot, schedulesSnapshot] = await Promise.all([
+        get(questionsRef),
+        get(questionIntakeEventsRef),
+        get(questionIntakeSchedulesRef)
+      ]);
+      this.eventsBranch = eventsSnapshot.val() || {};
+      this.schedulesBranch = schedulesSnapshot.val() || {};
+      const questionsValue = questionsSnapshot.val() || {};
+      this.state.rawQuestions = Object.values(questionsValue).filter((item) => item && typeof item === "object");
+      this.rebuildScheduleMetadata();
       this.startQuestionsStream();
+      this.startScheduleMetadataStreams();
       this.startDisplaySessionMonitor();
       this.setLoaderStep(5, "辞書取得…");
       await this.fetchDictionary();
@@ -454,6 +451,14 @@ export class OperatorApp {
       this.updateTriggerUnsubscribe();
       this.updateTriggerUnsubscribe = null;
     }
+    if (this.eventsUnsubscribe) {
+      this.eventsUnsubscribe();
+      this.eventsUnsubscribe = null;
+    }
+    if (this.schedulesUnsubscribe) {
+      this.schedulesUnsubscribe();
+      this.schedulesUnsubscribe = null;
+    }
     if (this.renderTicker) {
       clearInterval(this.renderTicker);
       this.renderTicker = null;
@@ -488,30 +493,130 @@ export class OperatorApp {
     this.updateBatchButtonVisibility();
     if (this.dom.cardsContainer) this.dom.cardsContainer.innerHTML = "";
     if (this.dom.logStream) this.dom.logStream.innerHTML = "";
+    this.eventsBranch = {};
+    this.schedulesBranch = {};
   }
 
   startQuestionsStream() {
     if (this.questionsUnsubscribe) this.questionsUnsubscribe();
     this.questionsUnsubscribe = onValue(questionsRef, (snapshot) => {
       const value = snapshot.val() || {};
-      this.state.allQuestions = Object.values(value).map((item) => ({
-        UID: item.uid,
-        班番号: item.group ?? "",
-        ラジオネーム: item.name,
-        "質問・お悩み": item.question,
-        ジャンル: resolveGenreLabel(item.genre),
-        日程: String(item.scheduleId ?? item.schedule ?? "").trim(),
-        日程表示: String(item.scheduleLabel ?? item.schedule ?? "").trim(),
-        開始日時: String(item.scheduleStart ?? "").trim(),
-        終了日時: String(item.scheduleEnd ?? "").trim(),
-        参加者ID: item.participantId ?? "",
-        回答済: !!item.answered,
-        選択中: !!item.selecting,
-        ピックアップ: !!item.pickup,
-        __ts: Number(item.ts || 0)
-      }));
-      this.updateScheduleOptions();
-      this.renderQuestions();
+      this.state.rawQuestions = Object.values(value).filter((item) => item && typeof item === "object");
+      this.rebuildQuestions();
+    });
+  }
+
+  normalizeQuestionRecord(item) {
+    const record = item && typeof item === "object" ? item : {};
+    const eventId = String(record.eventId ?? "").trim();
+    const scheduleId = String(record.scheduleId ?? "").trim();
+    const fallbackLabel = String(record.scheduleLabel ?? record.schedule ?? "").trim();
+    let scheduleKey = "";
+    if (eventId && scheduleId) {
+      scheduleKey = `${eventId}::${scheduleId}`;
+    } else if (scheduleId) {
+      scheduleKey = scheduleId;
+    } else if (fallbackLabel) {
+      scheduleKey = fallbackLabel;
+    }
+    const scheduleMap = this.state.scheduleMetadata instanceof Map ? this.state.scheduleMetadata : null;
+    const scheduleMeta = scheduleKey && scheduleMap ? scheduleMap.get(scheduleKey) : null;
+    const eventsMap = this.state.eventsById instanceof Map ? this.state.eventsById : null;
+    const eventNameFromMap = eventId && eventsMap ? String(eventsMap.get(eventId)?.name || "").trim() : "";
+    const metaLabel = scheduleMeta ? String(scheduleMeta.label || "").trim() : "";
+    const metaEventName = scheduleMeta ? String(scheduleMeta.eventName || "").trim() : "";
+    const metaStart = scheduleMeta ? String(scheduleMeta.startAt || "").trim() : "";
+    const metaEnd = scheduleMeta ? String(scheduleMeta.endAt || "").trim() : "";
+    const rawStart = String(record.scheduleStart ?? "").trim();
+    const rawEnd = String(record.scheduleEnd ?? "").trim();
+    const label = metaLabel || fallbackLabel || scheduleId || "";
+    const eventName = metaEventName || eventNameFromMap || String(record.eventName ?? "").trim();
+    const startAt = metaStart || rawStart;
+    const endAt = metaEnd || rawEnd;
+
+    return {
+      UID: record.uid,
+      班番号: record.group ?? "",
+      ラジオネーム: record.name,
+      "質問・お悩み": record.question,
+      ジャンル: resolveGenreLabel(record.genre),
+      イベントID: eventId,
+      イベント名: eventName,
+      日程ID: scheduleId,
+      日程: scheduleKey || label,
+      日程表示: label,
+      開始日時: startAt,
+      終了日時: endAt,
+      参加者ID: record.participantId ?? "",
+      回答済: !!record.answered,
+      選択中: !!record.selecting,
+      ピックアップ: !!record.pickup,
+      __ts: Number(record.ts || 0),
+      __scheduleKey: scheduleKey || "",
+      __scheduleLabel: label,
+      __scheduleStart: startAt,
+      __scheduleEnd: endAt
+    };
+  }
+
+  rebuildQuestions() {
+    const list = Array.isArray(this.state.rawQuestions) ? this.state.rawQuestions : [];
+    this.state.allQuestions = list.map((item) => this.normalizeQuestionRecord(item));
+    this.updateScheduleOptions();
+    this.renderQuestions();
+  }
+
+  rebuildScheduleMetadata() {
+    const eventsValue = this.eventsBranch && typeof this.eventsBranch === "object" ? this.eventsBranch : {};
+    const schedulesValue = this.schedulesBranch && typeof this.schedulesBranch === "object" ? this.schedulesBranch : {};
+    const eventsMap = new Map();
+    Object.entries(eventsValue).forEach(([eventId, eventValue]) => {
+      const id = String(eventId);
+      eventsMap.set(id, {
+        id,
+        name: String(eventValue?.name || "").trim(),
+        raw: eventValue
+      });
+    });
+    const scheduleMap = new Map();
+    Object.entries(schedulesValue).forEach(([eventId, scheduleBranch]) => {
+      if (!scheduleBranch || typeof scheduleBranch !== "object") return;
+      const eventKey = String(eventId);
+      const eventName = String(eventsMap.get(eventKey)?.name || "").trim();
+      Object.entries(scheduleBranch).forEach(([scheduleId, scheduleValue]) => {
+        const scheduleKey = `${eventKey}::${String(scheduleId)}`;
+        const labelValue = String(scheduleValue?.label || "").trim();
+        const dateValue = String(scheduleValue?.date || "").trim();
+        const startValue = String(scheduleValue?.startAt || "").trim();
+        const endValue = String(scheduleValue?.endAt || "").trim();
+        scheduleMap.set(scheduleKey, {
+          key: scheduleKey,
+          eventId: eventKey,
+          scheduleId: String(scheduleId),
+          eventName,
+          label: labelValue || dateValue || String(scheduleId),
+          date: dateValue,
+          startAt: startValue,
+          endAt: endValue,
+          raw: scheduleValue
+        });
+      });
+    });
+    this.state.eventsById = eventsMap;
+    this.state.scheduleMetadata = scheduleMap;
+    this.rebuildQuestions();
+  }
+
+  startScheduleMetadataStreams() {
+    if (this.eventsUnsubscribe) this.eventsUnsubscribe();
+    this.eventsUnsubscribe = onValue(questionIntakeEventsRef, (snapshot) => {
+      this.eventsBranch = snapshot.val() || {};
+      this.rebuildScheduleMetadata();
+    });
+    if (this.schedulesUnsubscribe) this.schedulesUnsubscribe();
+    this.schedulesUnsubscribe = onValue(questionIntakeSchedulesRef, (snapshot) => {
+      this.schedulesBranch = snapshot.val() || {};
+      this.rebuildScheduleMetadata();
     });
   }
 

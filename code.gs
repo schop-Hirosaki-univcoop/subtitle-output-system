@@ -81,6 +81,31 @@ function readSheetWithHeaders_(sheet) {
   return { sheet, headers, headerMap, rows: values };
 }
 
+function ensureQuestionSheetInfoWithEventColumns_(sheet) {
+  if (!sheet) {
+    return { sheet: null, headers: [], headerMap: new Map(), rows: [] };
+  }
+  let info = readSheetWithHeaders_(sheet);
+  if (!info.sheet) {
+    return info;
+  }
+  const headers = Array.isArray(info.headers) ? info.headers.slice() : [];
+  const required = ['イベントID', '日程ID'];
+  const missing = required.filter(header => !headers.includes(header));
+  if (!missing.length) {
+    return info;
+  }
+  const nextHeaders = headers.concat(missing);
+  const newColumnCount = nextHeaders.length;
+  const maxColumns = sheet.getMaxColumns();
+  if (maxColumns < newColumnCount) {
+    sheet.insertColumnsAfter(maxColumns, newColumnCount - maxColumns);
+  }
+  sheet.getRange(1, 1, 1, newColumnCount).setValues([nextHeaders]);
+  info = readSheetWithHeaders_(sheet);
+  return info;
+}
+
 function parseSpreadsheetTimestamp_(value) {
   if (value instanceof Date && !isNaN(value)) {
     return value.getTime();
@@ -182,7 +207,7 @@ function findQuestionRowByUid_(uid) {
     const sheetName = QUESTION_SHEET_NAMES[i];
     const sheet = ss.getSheetByName(sheetName);
     if (!sheet) continue;
-    const info = readSheetWithHeaders_(sheet);
+    const info = ensureQuestionSheetInfoWithEventColumns_(sheet);
     const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
     if (uidIdx == null) continue;
     for (let rowIndex = 0; rowIndex < info.rows.length; rowIndex++) {
@@ -2361,10 +2386,10 @@ function mirrorSheetToRtdb_(){
   const pickupSheet = ss.getSheetByName(PICKUP_QUESTION_SHEET_NAME);
 
   const sources = [
-    { info: readSheetWithHeaders_(questionSheet), type: 'normal' }
+    { info: ensureQuestionSheetInfoWithEventColumns_(questionSheet), type: 'normal' }
   ];
   if (pickupSheet) {
-    sources.push({ info: readSheetWithHeaders_(pickupSheet), type: 'pickup' });
+    sources.push({ info: ensureQuestionSheetInfoWithEventColumns_(pickupSheet), type: 'pickup' });
   }
   const now = Date.now();
   const map = {};
@@ -2386,6 +2411,8 @@ function mirrorSheetToRtdb_(){
     const genreIdx = getHeaderIndex_(info.headerMap, 'ジャンル');
     const groupIdx = getHeaderIndex_(info.headerMap, '班番号');
     const participantIdx = getHeaderIndex_(info.headerMap, '参加者ID');
+    const eventIdIdx = getHeaderIndex_(info.headerMap, 'イベントID');
+    const scheduleIdIdx = getHeaderIndex_(info.headerMap, '日程ID');
     const tsIdx = getHeaderIndex_(info.headerMap, ['タイムスタンプ', 'timestamp']);
     const startIdx = getHeaderIndex_(info.headerMap, ['開始日時', '日程開始']);
     const endIdx = getHeaderIndex_(info.headerMap, ['終了日時', '日程終了']);
@@ -2410,6 +2437,8 @@ function mirrorSheetToRtdb_(){
       const scheduleLabel = formatScheduleLabel_(startValue, endValue);
 
       const participantId = participantIdx != null ? String(row[participantIdx] || '').trim() : '';
+      const eventId = eventIdIdx != null ? String(row[eventIdIdx] || '').trim() : '';
+      const scheduleId = scheduleIdIdx != null ? String(row[scheduleIdIdx] || '').trim() : '';
       const groupValue = groupIdx != null ? String(row[groupIdx] || '').trim() : '';
       const genreValue = genreIdx != null ? String(row[genreIdx] || '').trim() : '';
 
@@ -2423,6 +2452,8 @@ function mirrorSheetToRtdb_(){
         scheduleStart,
         scheduleEnd,
         participantId,
+        eventId,
+        scheduleId,
         ts: tsMs || 0,
         answered: answeredIdx != null ? toBooleanCell_(row[answeredIdx]) : false,
         selecting: selectingIdx != null ? toBooleanCell_(row[selectingIdx]) : false,
