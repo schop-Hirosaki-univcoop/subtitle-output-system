@@ -72,27 +72,40 @@ function findNearestFutureSchedule(scheduleEntries, metadataMap) {
   const fallbackValue = scheduleEntries[0][0];
   scheduleEntries.forEach(([value, details]) => {
     const meta = metadataMap && metadataMap instanceof Map ? metadataMap.get(value) : null;
-    const candidates = [
-      details?.start,
-      meta?.startAt,
-      meta?.date,
-      details?.end,
-      meta?.endAt,
-      details?.label,
-      meta?.label
-    ];
-    let ts = Number.NaN;
-    for (const candidate of candidates) {
-      ts = parseScheduleTimestamp(candidate);
-      if (!Number.isNaN(ts)) break;
-    }
-    if (Number.isNaN(ts)) return;
-    if (ts >= now) {
-      if (!futureCandidate || ts < futureCandidate.ts) {
-        futureCandidate = { value, ts };
+    const startCandidates = [details?.start, meta?.startAt, meta?.date, details?.label, meta?.label];
+    const endCandidates = [details?.end, meta?.endAt, details?.label, meta?.label];
+    const startTs = startCandidates.reduce((result, candidate) => {
+      if (!Number.isNaN(result)) return result;
+      const ts = parseScheduleTimestamp(candidate);
+      return Number.isNaN(ts) ? result : ts;
+    }, Number.NaN);
+    const endTs = endCandidates.reduce((result, candidate) => {
+      if (!Number.isNaN(result)) return result;
+      const ts = parseScheduleTimestamp(candidate);
+      return Number.isNaN(ts) ? result : ts;
+    }, Number.NaN);
+    const hasStart = !Number.isNaN(startTs);
+    const hasEnd = !Number.isNaN(endTs);
+    if (!hasStart && !hasEnd) return;
+    const effectiveFutureTs = (() => {
+      if (hasStart && startTs >= now) return startTs;
+      if (hasStart && hasEnd && startTs <= now && now <= endTs) return now;
+      if (!hasStart && hasEnd && endTs >= now) return endTs;
+      return Number.NaN;
+    })();
+    if (!Number.isNaN(effectiveFutureTs)) {
+      if (!futureCandidate || effectiveFutureTs < futureCandidate.ts) {
+        futureCandidate = { value, ts: effectiveFutureTs };
       }
-    } else if (!pastCandidate || ts > pastCandidate.ts) {
-      pastCandidate = { value, ts };
+      return;
+    }
+    const pastTs = (() => {
+      if (hasEnd && endTs < now) return endTs;
+      if (hasStart && startTs < now) return startTs;
+      return Number.NaN;
+    })();
+    if (!Number.isNaN(pastTs) && (!pastCandidate || pastTs > pastCandidate.ts)) {
+      pastCandidate = { value, ts: pastTs };
     }
   });
   if (futureCandidate) return futureCandidate.value;
