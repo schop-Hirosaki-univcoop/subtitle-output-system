@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>404 | 迷子の字幕が発生しました</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2712%27%20fill%3D%27%2305111f%27%2F%3E%3Ctext%20x%3D%2732%27%20y%3D%2742%27%20text-anchor%3D%27middle%27%20font-family%3D%27Arial%2C%20sans-serif%27%20font-size%3D%2736%27%20fill%3D%27%2300eaff%27%3ET%3C%2Ftext%3E%3C%2Fsvg%3E" />
+  <title>404 | あれ、テロップはどこへ…？</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2712%27%20fill%3D%2705111f%27%2F%3E%3Ctext%20x%3D%2732%27%20y%3D%2742%27%20text-anchor%3D%27middle%27%20font-family%3D%27Arial%2C%20sans-serif%27%20font-size%3D%2736%27%20fill%3D%2700eaff%27%3ET%3C%2Ftext%3E%3C%2Fsvg%3E" />
+  <link rel="stylesheet" href="style.css" />
   <style>
     :root {
       color-scheme: dark;
@@ -25,19 +26,43 @@
     body {
       margin: 0;
       font-family: "Noto Sans JP", "Hiragino Sans", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body.not-found-page {
+      --page-pad-inline: clamp(1.2rem, 4vw, 3rem);
+      --page-gap: clamp(1.5rem, 3vw, 2.4rem);
+      color: var(--text);
+      min-height: 100dvh;
+      padding-inline: var(--page-pad-inline);
+      padding-block-start: clamp(1rem, 3.5vw, 2.6rem);
+      padding-block-end: clamp(2rem, 5vw, 3.4rem);
+      position: relative;
+      overflow-x: hidden;
+      background-color: transparent;
+    }
+
+    body.not-found-page::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -3;
+      pointer-events: none;
       background: radial-gradient(circle at 15% 20%, rgba(30, 200, 255, 0.18), transparent 60%),
                   radial-gradient(circle at 85% 10%, rgba(255, 79, 216, 0.14), transparent 58%),
                   radial-gradient(circle at 50% 95%, rgba(30, 200, 255, 0.12), transparent 60%),
                   linear-gradient(180deg, var(--bg), #03050b);
-      color: var(--text);
-      min-height: 100dvh;
-      display: grid;
-      place-items: center;
-      padding: clamp(1.2rem, 4vw, 3rem) clamp(1.2rem, 4vw, 3rem) calc(clamp(1.2rem, 4vw, 3rem) + 2rem);
-      overflow: hidden;
     }
 
-    main {
+    .not-found-main {
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      padding-block: clamp(2.4rem, 10vw, 6rem);
+    }
+
+    .not-found-card {
       max-width: min(720px, 100%);
       width: min(90vw, 720px);
       display: grid;
@@ -52,7 +77,7 @@
       backdrop-filter: blur(18px);
     }
 
-    main::before {
+    .not-found-card::before {
       content: "";
       position: absolute;
       inset: -45% -55% auto;
@@ -64,7 +89,7 @@
       animation: pulse 12s ease-in-out infinite;
     }
 
-    main::after {
+    .not-found-card::after {
       content: "";
       position: absolute;
       inset: -3px;
@@ -80,7 +105,7 @@
       z-index: -1;
     }
 
-    header {
+    .card-header {
       display: grid;
       gap: clamp(0.8rem, 2vw, 1.2rem);
     }
@@ -142,7 +167,7 @@
       position: fixed;
       inset: 0;
       pointer-events: none;
-      z-index: -5;
+      z-index: -2;
       background-image:
         radial-gradient(2px 2px at 20% 30%, rgba(255, 255, 255, 0.55) 50%, transparent 55%),
         radial-gradient(1.6px 1.6px at 70% 40%, rgba(255, 255, 255, 0.35) 50%, transparent 52%),
@@ -159,64 +184,70 @@
     }
 
     @media (max-width: 600px) {
-      main {
+      .not-found-card {
         padding: clamp(1.8rem, 8vw, 2.8rem) clamp(1.2rem, 6vw, 2.2rem);
       }
     }
   </style>
 </head>
-<body>
+<body class="op-theme not-found-page">
   <div class="starfield" aria-hidden="true"></div>
-  <main>
-    <div class="illustration" role="img" aria-label="迷子になったテロップのイラスト">
-      <svg viewBox="0 0 320 240" aria-hidden="true" focusable="false">
-        <defs>
-          <radialGradient id="glow" cx="50%" cy="45%" r="70%">
-            <stop offset="0%" stop-color="#1ec8ff" stop-opacity="0.4" />
-            <stop offset="45%" stop-color="#1ec8ff" stop-opacity="0.18" />
-            <stop offset="100%" stop-color="#03060f" stop-opacity="0" />
-          </radialGradient>
-          <linearGradient id="card" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#14223b" />
-            <stop offset="100%" stop-color="#0a1325" />
-          </linearGradient>
-          <linearGradient id="signal" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="#1ec8ff" />
-            <stop offset="100%" stop-color="#ff4fd8" />
-          </linearGradient>
-        </defs>
-        <circle cx="160" cy="118" r="110" fill="url(#glow)" />
-        <g transform="rotate(-6 160 118)">
-          <rect x="80" y="70" width="160" height="110" rx="18" fill="url(#card)" stroke="#1ec8ff" stroke-width="3" stroke-opacity="0.3" />
-          <rect x="96" y="106" width="128" height="22" rx="11" fill="rgba(255, 255, 255, 0.08)" />
-          <rect x="96" y="138" width="96" height="18" rx="9" fill="rgba(30, 200, 255, 0.24)" />
-          <path d="M112 92h96" stroke="url(#signal)" stroke-width="6" stroke-linecap="round" opacity="0.8" />
-        </g>
-        <g opacity="0.9">
-          <path d="M74 154c-12 4-20 16-19 29 2 21 25 34 45 25 9-4 15-12 17-21" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="6" stroke-linecap="round" />
-          <circle cx="121" cy="178" r="8" fill="#ff4fd8" />
-          <circle cx="71" cy="182" r="6" fill="#1ec8ff" />
-        </g>
-        <g opacity="0.85">
-          <path d="M246 74c16-12 40-5 46 13 6 18-7 36-26 38" fill="none" stroke="#ffffff" stroke-opacity="0.25" stroke-width="6" stroke-linecap="round" />
-          <circle cx="260" cy="60" r="7" fill="#1ec8ff" />
-          <circle cx="286" cy="110" r="9" fill="#ffb84f" />
-        </g>
-        <circle cx="204" cy="54" r="7" fill="#ff4fd8" opacity="0.8" />
-        <circle cx="110" cy="48" r="5" fill="#1ec8ff" opacity="0.7" />
-        <circle cx="234" cy="192" r="5" fill="#1ec8ff" opacity="0.6" />
-        <circle cx="182" cy="206" r="7" fill="#ff4fd8" opacity="0.7" />
-      </svg>
-    </div>
-    <header>
-      <div class="error-code" aria-label="エラーコード 404">404</div>
-      <p class="headline">あれ、テロップはどこへ…？</p>
-    </header>
-    <p class="copy">
-      どうやらこのアドレスには字幕が存在しないようです。<br />
-      お手数ですが、別のページから改めてアクセスしてみてください。
-    </p>
-    <p class="footnote">それでも見つからない場合は、URLを再確認のうえスタッフまでお知らせください。</p>
+  <telop-header tagline="Subtitle Ops" context-label="404 Not Found"></telop-header>
+  <main class="not-found-main">
+    <section class="not-found-card" aria-labelledby="not-found-title">
+      <div class="illustration" role="img" aria-label="迷子になったテロップのイラスト">
+        <svg viewBox="0 0 320 240" aria-hidden="true" focusable="false">
+          <defs>
+            <radialGradient id="glow" cx="50%" cy="45%" r="70%">
+              <stop offset="0%" stop-color="#1ec8ff" stop-opacity="0.4" />
+              <stop offset="45%" stop-color="#1ec8ff" stop-opacity="0.18" />
+              <stop offset="100%" stop-color="#03060f" stop-opacity="0" />
+            </radialGradient>
+            <linearGradient id="card" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#14223b" />
+              <stop offset="100%" stop-color="#0a1325" />
+            </linearGradient>
+            <linearGradient id="signal" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#1ec8ff" />
+              <stop offset="100%" stop-color="#ff4fd8" />
+            </linearGradient>
+          </defs>
+          <circle cx="160" cy="118" r="110" fill="url(#glow)" />
+          <g transform="rotate(-6 160 118)">
+            <rect x="80" y="70" width="160" height="110" rx="18" fill="url(#card)" stroke="#1ec8ff" stroke-width="3" stroke-opacity="0.3" />
+            <rect x="96" y="106" width="128" height="22" rx="11" fill="rgba(255, 255, 255, 0.08)" />
+            <rect x="96" y="138" width="96" height="18" rx="9" fill="rgba(30, 200, 255, 0.24)" />
+            <path d="M112 92h96" stroke="url(#signal)" stroke-width="6" stroke-linecap="round" opacity="0.8" />
+          </g>
+          <g opacity="0.9">
+            <path d="M74 154c-12 4-20 16-19 29 2 21 25 34 45 25 9-4 15-12 17-21" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="6" stroke-linecap="round" />
+            <circle cx="121" cy="178" r="8" fill="#ff4fd8" />
+            <circle cx="71" cy="182" r="6" fill="#1ec8ff" />
+          </g>
+          <g opacity="0.85">
+            <path d="M246 74c16-12 40-5 46 13 6 18-7 36-26 38" fill="none" stroke="#ffffff" stroke-opacity="0.25" stroke-width="6" stroke-linecap="round" />
+            <circle cx="260" cy="60" r="7" fill="#1ec8ff" />
+            <circle cx="286" cy="110" r="9" fill="#ffb84f" />
+          </g>
+          <circle cx="204" cy="54" r="7" fill="#ff4fd8" opacity="0.8" />
+          <circle cx="110" cy="48" r="5" fill="#1ec8ff" opacity="0.7" />
+          <circle cx="234" cy="192" r="5" fill="#1ec8ff" opacity="0.6" />
+          <circle cx="182" cy="206" r="7" fill="#ff4fd8" opacity="0.7" />
+        </svg>
+      </div>
+      <div class="card-header">
+        <div class="error-code" aria-label="エラーコード 404">404</div>
+        <h1 class="headline" id="not-found-title">あれ、テロップはどこへ…？</h1>
+      </div>
+      <p class="copy">
+        どうやらこのアドレスにはテロップが存在しないようです。<br />
+        お手数ですが、別のページから改めてアクセスしてみてください。
+      </p>
+      <p class="footnote">それでも見つからない場合は、URLを再確認のうえスタッフまでお知らせください。</p>
+    </section>
   </main>
+  <telop-footer year="2025"></telop-footer>
+
+  <script type="module" src="./scripts/shared/layout.js"></script>
 </body>
 </html>
