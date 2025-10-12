@@ -224,6 +224,7 @@
     #radio-name {
       color: #ffffff;
       width: fit-content;
+      max-width: 100%;
       /* ラジオネーム本文＝Bold */
       font-family: "GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
       font-weight: 700;
@@ -248,11 +249,49 @@
     }
     #radio-name.no-label::before{ content:none; }
 
+    .telop-box__inner {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      column-gap: calc(var(--pad-x) * 0.7);
+      align-items: start;
+    }
+    .genre-panel {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: .35vw;
+      padding-right: calc(var(--pad-x) * 0.6);
+      border-right: 0.18vw solid rgba(255,255,255,.16);
+      font-family: "GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
+      text-shadow: none;
+      min-width: 10vw;
+    }
+    .genre-panel__label {
+      font-size: calc(90vw / 44);
+      font-weight: 500;
+      letter-spacing: .08em;
+      color: rgba(255,255,255,.72);
+    }
+    .genre-panel__value {
+      font-size: calc(90vw / 32);
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.1;
+      letter-spacing: .02em;
+      white-space: normal;
+      line-break: strict;
+      overflow-wrap: anywhere;
+    }
+    .genre-panel.is-empty {
+      display: none;
+    }
+
     /* ─ ここが“1行23文字”の肝 ─*/
     #question {
       position: relative;
       z-index: 1;
       width: fit-content;
+      max-width: 100%;
       font-family: "GenEiGothicP-HKL","GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
       font-weight: 800;
       font-size: calc(90vw / 23.5);              /* 56–72pxあたりで微調整OK */
@@ -271,7 +310,7 @@
         0 0 1.5vw rgba(255,42,109,.16);
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
-      margin: auto;
+      margin: 0;
     }
 
     /* プロポーショナル関連の機能を“明示的にON”にする */
@@ -338,7 +377,13 @@
       </div>
       <!-- 本文の座布団（弟） -->
       <div class="telop-box">
-        <div id="question" role="status" aria-live="polite"></div>
+        <div class="telop-box__inner">
+          <div id="genre-panel" class="genre-panel is-empty" aria-live="polite">
+            <span class="genre-panel__label" aria-hidden="true">ジャンル</span>
+            <span id="genre-label" class="genre-panel__value"></span>
+          </div>
+          <div id="question" role="status" aria-live="polite"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -668,6 +713,8 @@
     
         const radioNameEl = document.getElementById('radio-name');
         const questionEl = document.getElementById('question');
+        const genrePanelEl = document.getElementById('genre-panel');
+        const genreValueEl = document.getElementById('genre-label');
         const telopCanvas = document.getElementById('telop-canvas');
 
         const telopWrap = document.querySelector('#telop-canvas .telop-wrap');
@@ -686,6 +733,7 @@
           const token = (++__updateToken || 1);
           __currentToken = token;
           const showingPayload = { name: next?.name || '', question: next?.question || '' };
+          if (next?.genre) showingPayload.genre = next.genre;
           if (next?.uid) showingPayload.uid = String(next.uid);
           if (next?.participantId) showingPayload.participantId = String(next.participantId);
           if (next?.pickup) showingPayload.pickup = true;
@@ -695,6 +743,7 @@
             await flipResize(next);
             if (__currentToken !== token) return;
             const visiblePayload = { name: next?.name || '', question: next?.question || '' };
+            if (next?.genre) visiblePayload.genre = next.genre;
             if (next?.uid) visiblePayload.uid = String(next.uid);
             if (next?.participantId) visiblePayload.participantId = String(next.participantId);
             if (next?.pickup) visiblePayload.pickup = true;
@@ -750,9 +799,11 @@
             telopCanvas.classList.remove('hide');
             if (pendingClear){
               radioNameEl.textContent = '';
+              genreValueEl.textContent = '';
+              genrePanelEl.classList.add('is-empty');
               questionEl.innerHTML = '';
               radioNameEl.classList.remove('no-label');
-              prevName = ''; prevQuestion = '';
+              prevName = ''; prevQuestion = ''; prevGenre = '';
               pendingClear = false;
             }
           }
@@ -778,7 +829,7 @@
     
         // 念のため：強制的に可視へ戻すユーティリティ
         function ensureTextVisible(){
-          [radioNameEl, questionEl].forEach(el=>{
+          [radioNameEl, genrePanelEl, questionEl].forEach(el=>{
             el.classList.remove('text-swap-out','text-swap-in');
             el.style.opacity = ''; // カスタムで触っていればリセット
           });
@@ -817,6 +868,9 @@
           // ラベル制御 → テキストの順で（疑似要素の有無が高さに効くため）
           radioNameEl.classList.toggle('no-label', next.noLabel);
           radioNameEl.textContent = next.name || '';
+          const genreText = (next.genre || '').trim();
+          genreValueEl.textContent = genreText;
+          genrePanelEl.classList.toggle('is-empty', !genreText);
           questionEl.innerHTML    = applyRuby(next.question || '');
         }
         async function fontsReady(){
@@ -882,7 +936,7 @@
           });
         }
   
-        let prevName = '', prevQuestion = '';
+        let prevName = '', prevQuestion = '', prevGenre = '';
         // 連続更新の競合防止用トークン
         let updateToken = 0;
     
@@ -974,6 +1028,7 @@
           const telopData  = snapshot.val() || null;
           const name       = telopData?.name ?? '';
           const question   = telopData?.question ?? '';
+          const genre      = telopData?.genre != null ? String(telopData.genre) : '';
           const uid        = telopData?.uid ? String(telopData.uid) : '';
           const participantId = telopData?.participantId ? String(telopData.participantId) : '';
           const pickup     = telopData?.pickup === true;
@@ -990,18 +1045,26 @@
           const isPickup = (n, flag) => flag === true || String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
           const willNoLabel = isPickup(name, pickup);
           // ★ currentTelop 更新時に前回値との差分を把握して、必要なDOMだけを入れ替える
-          const nameChanged = name.trim() !== prevName.trim();
-          const qChanged    = question.trim() !== prevQuestion.trim();
+          const nameChanged  = name.trim() !== prevName.trim();
+          const qChanged     = question.trim() !== prevQuestion.trim();
+          const prevGenreTrim = prevGenre.trim();
+          const genreTrim   = genre.trim();
+          const genreChanged = genreTrim !== prevGenreTrim;
           const labelChanged = (radioNameEl.classList.contains('no-label') !== willNoLabel);
           const nameOrLabelChanged = nameChanged || labelChanged;
+          const hadGenre = prevGenreTrim.length > 0;
+          const hasGenre = genreTrim.length > 0;
           const myToken     = ++updateToken;  // 後着優先
-    
+
           // 座布団自体は出す（入場アニメは showTelop が担当）
           if (telopCanvas.classList.contains('hidden')) {
             // 初回は next を渡して入場（座布団サイズは telopIn アニメで表示）
-            const next = { name, question, noLabel: willNoLabel, uid, participantId, pickup };
+            const next = { name, question, genre, noLabel: willNoLabel, uid, participantId, pickup };
             // 初回でも本文は先に適用してOK（入場はクラスで実施）
             radioNameEl.textContent = name;
+            const genreText = genre.trim();
+            genreValueEl.textContent = genreText;
+            genrePanelEl.classList.toggle('is-empty', !genreText);
             questionEl.innerHTML    = applyRuby(question);
             radioNameEl.classList.toggle('no-label', willNoLabel);
             showTelop(next);
@@ -1009,17 +1072,19 @@
             // 表示中：変化した要素を同時にフェードアウト
             const outs = [];
             if (nameOrLabelChanged) outs.push(fadeOut(radioNameEl));
+            if (genreChanged && hadGenre) outs.push(fadeOut(genrePanelEl));
             if (qChanged)           outs.push(fadeOut(questionEl));
             if (outs.length){
               Promise.all(outs).then(async ()=>{
                 if (myToken !== updateToken) return; // レース対策
-                const next = { name, question, noLabel: willNoLabel, uid, participantId, pickup };
+                const next = { name, question, genre, noLabel: willNoLabel, uid, participantId, pickup };
 
                 // ★ 変更開始＝showing（phase と updatedAt を更新）
                 const showingPayload = { name, question };
                 if (uid) showingPayload.uid = uid;
                 if (participantId) showingPayload.participantId = participantId;
                 if (pickup) showingPayload.pickup = true;
+                if (genre) showingPayload.genre = genre;
                 reportRender('showing', { nowShowing: showingPayload });
 
                 await fontsReady();
@@ -1028,6 +1093,7 @@
 
                 // テキストはクロスフェードで復帰
                 if (nameOrLabelChanged) fadeIn(radioNameEl);
+                if (genreChanged && hasGenre) fadeIn(genrePanelEl);
                 if (qChanged)           fadeIn(questionEl);
                 ensureTextVisible();
 
@@ -1036,6 +1102,7 @@
                 if (uid) visiblePayload.uid = uid;
                 if (participantId) visiblePayload.participantId = participantId;
                 if (pickup) visiblePayload.pickup = true;
+                if (genre) visiblePayload.genre = genre;
                 reportRender('visible', { nowShowing: visiblePayload });
               });
             } else {
@@ -1045,7 +1112,7 @@
               // reportRender('visible', { nowShowing: { name, question } });
             }
           }
-          prevName = name; prevQuestion = question;
+          prevName = name; prevQuestion = question; prevGenre = genre;
         });
   </script>
 </body>
