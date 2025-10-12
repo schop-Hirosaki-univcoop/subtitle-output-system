@@ -142,7 +142,7 @@
       backdrop-filter: blur(1vw) saturate(150%);
       -webkit-backdrop-filter: blur(1vw) saturate(150%);
       overflow: hidden;
-      padding: calc(1.5vw * (1080 / 1920)) var(--pad-x);
+      padding: 1.3vw;
     }
     /* ネオンの発光する枠線（細い管 + ぼんやりグロー） */
     #telop-canvas .telop-box::before,
@@ -260,7 +260,7 @@
       flex-direction: column;
       justify-content: center;
       gap: .35vw;
-      padding-right: 0.7vw;
+      padding-right: 1vw;
       font-family: "GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
       border-right: 0.18vw solid rgba(255,255,255,.16);
       text-shadow: none;
@@ -274,7 +274,7 @@
       color: rgba(255,255,255,.72);
     }
     .genre-panel__value {
-      font-size: calc(90vw / 32);
+      font-size: calc(90vw / 34);
       font-weight: 700;
       color: #ffffff;
       line-height: 1.1;
@@ -290,13 +290,13 @@
     /* ─ ここが“1行23文字”の肝 ─*/
     #question {
       position: relative;
-      padding-left:1.8vw;
+      padding-left:1vw;
       z-index: 1;
       width: fit-content;
       max-width: 100%;
       font-family: "GenEiGothicP-HKL","GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
       font-weight: 800;
-      font-size: calc(90vw / 23.5);              /* 56–72pxあたりで微調整OK */
+      font-size: calc(90vw / 23.7);              /* 56–72pxあたりで微調整OK */
       line-height: 1.25;
       letter-spacing: .01em;
       white-space: normal;
