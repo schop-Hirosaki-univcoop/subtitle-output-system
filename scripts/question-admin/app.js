@@ -52,7 +52,9 @@ import {
   applyAssignmentsToEventCache,
   normalizeParticipantRecord,
   assignParticipantIds,
-  signatureForEntries
+  signatureForEntries,
+  snapshotParticipantList,
+  diffParticipantLists
 } from "./participants.js";
 import {
   openDialog,
@@ -497,8 +499,28 @@ function renderParticipants() {
   const duplicateMap = state.duplicateMatches instanceof Map ? state.duplicateMatches : new Map();
   const participants = sortParticipants(state.participants);
 
+  const diff = diffParticipantLists(state.participants, state.savedParticipants || []);
+  const changeInfoByKey = new Map();
+  diff.added.forEach(entry => {
+    const key = participantChangeKey(entry);
+    if (!key || changeInfoByKey.has(key)) return;
+    changeInfoByKey.set(key, { type: "added", current: entry });
+  });
+  diff.updated.forEach(item => {
+    const key = participantChangeKey(item.current);
+    if (!key || changeInfoByKey.has(key)) return;
+    changeInfoByKey.set(key, {
+      type: "updated",
+      current: item.current,
+      previous: item.previous,
+      changes: item.changes
+    });
+  });
+
   participants.forEach((entry, index) => {
     const tr = document.createElement("tr");
+    const changeKey = participantChangeKey(entry, index);
+    const changeInfo = changeInfoByKey.get(changeKey);
     const idTd = document.createElement("td");
     applyParticipantIdText(idTd, entry.participantId);
     const nameTd = document.createElement("td");
@@ -604,6 +626,24 @@ function renderParticipants() {
       departmentTd.appendChild(warning);
     }
 
+    if (changeInfo?.type === "added") {
+      tr.classList.add("is-added");
+    } else if (changeInfo?.type === "updated") {
+      tr.classList.add("is-updated");
+    }
+
+    if (changeInfo) {
+      const chip = document.createElement("span");
+      chip.className = `change-chip change-chip--${changeInfo.type}`;
+      chip.textContent = changeInfo.type === "added" ? "新規" : "更新";
+      if (changeInfo.type === "updated" && Array.isArray(changeInfo.changes) && changeInfo.changes.length) {
+        chip.title = changeInfo.changes
+          .map(change => `${change.label}: ${formatChangeValue(change.previous)} → ${formatChangeValue(change.current)}`)
+          .join("\n");
+      }
+      nameTd.append(" ", chip);
+    }
+
     tr.append(idTd, nameTd, phoneticTd, genderTd, departmentTd, teamTd, linkTd);
     tbody.appendChild(tr);
   });
@@ -641,9 +681,168 @@ function renderParticipants() {
     dom.adminSummary.textContent = summaryText;
   }
 
+  renderParticipantChangePreview(diff, changeInfoByKey, participants);
   syncSaveButtonState();
   syncClearButtonState();
   syncTemplateButtons();
+}
+
+function participantChangeKey(entry, fallbackIndex = 0) {
+  if (!entry) {
+    return `__row${fallbackIndex}`;
+  }
+  const id = entry.participantId ? String(entry.participantId) : "";
+  if (id) return id;
+  const rowKey = entry.rowKey ? String(entry.rowKey) : "";
+  if (rowKey) return rowKey;
+  return `__row${fallbackIndex}`;
+}
+
+function formatChangeValue(value) {
+  const text = String(value ?? "").trim();
+  return text ? text : "（空欄）";
+}
+
+const CHANGE_ICON_SVG = {
+  added: "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M8 1.5a.5.5 0 0 1 .5.5v5.5H14a.5.5 0 0 1 0 1H8.5V14a.5.5 0 0 1-1 0V8.5H2a.5.5 0 0 1 0-1h5.5V2a.5.5 0 0 1 .5-.5Z\"/></svg>",
+  updated: "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z\" fill=\"currentColor\"/></svg>",
+  removed: "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z\"/></svg>"
+};
+
+function changeTypeLabel(type) {
+  switch (type) {
+    case "added":
+      return "新規追加";
+    case "updated":
+      return "更新";
+    case "removed":
+      return "削除予定";
+    default:
+      return "変更";
+  }
+}
+
+function describeParticipantForChange(entry) {
+  if (!entry) return "参加者";
+  const name = String(entry.name || "").trim();
+  const displayId = getDisplayParticipantId(entry.participantId);
+  if (name && displayId) {
+    return `参加者「${name}」（ID: ${displayId}）`;
+  }
+  if (name) {
+    return `参加者「${name}」`;
+  }
+  if (displayId) {
+    return `ID: ${displayId}`;
+  }
+  return "参加者";
+}
+
+function buildChangeMeta(entry) {
+  if (!entry) return "";
+  const metaParts = [];
+  const displayId = getDisplayParticipantId(entry.participantId);
+  metaParts.push(displayId ? `ID: ${displayId}` : "ID: 未設定");
+  const team = String(entry.teamNumber || "").trim();
+  if (team) {
+    metaParts.push(`班番号: ${team}`);
+  }
+  const department = String(entry.department || "").trim();
+  if (department) {
+    metaParts.push(department);
+  }
+  return metaParts.join(" / ");
+}
+
+function createChangePreviewItem(type, entry, info = {}) {
+  const item = document.createElement("li");
+  item.className = `change-preview__item change-preview__item--${type}`;
+
+  const icon = document.createElement("span");
+  icon.className = "change-preview__icon";
+  icon.innerHTML = CHANGE_ICON_SVG[type] || "";
+  icon.setAttribute("aria-hidden", "true");
+  item.appendChild(icon);
+
+  const body = document.createElement("div");
+  body.className = "change-preview__body";
+
+  const heading = document.createElement("p");
+  heading.className = "change-preview__line";
+  heading.textContent = `${changeTypeLabel(type)}: ${describeParticipantForChange(entry)}`;
+  body.appendChild(heading);
+
+  const metaText = buildChangeMeta(entry);
+  if (metaText) {
+    const meta = document.createElement("p");
+    meta.className = "change-preview__line change-preview__line--meta";
+    meta.textContent = metaText;
+    body.appendChild(meta);
+  }
+
+  if (type === "updated" && Array.isArray(info.changes) && info.changes.length) {
+    const changeList = document.createElement("ul");
+    changeList.className = "change-preview__changes";
+    info.changes.forEach(change => {
+      const changeItem = document.createElement("li");
+      changeItem.className = "change-preview__change";
+      changeItem.textContent = `${change.label}: ${formatChangeValue(change.previous)} → ${formatChangeValue(change.current)}`;
+      changeList.appendChild(changeItem);
+    });
+    body.appendChild(changeList);
+  }
+
+  item.appendChild(body);
+  return item;
+}
+
+function renderParticipantChangePreview(diff, changeInfoByKey, participants = []) {
+  if (!dom.changePreview || !dom.changePreviewList) {
+    return;
+  }
+
+  const totalChanges = (diff.added?.length || 0) + (diff.updated?.length || 0) + (diff.removed?.length || 0);
+  if (!hasUnsavedChanges() || totalChanges === 0) {
+    dom.changePreview.hidden = true;
+    dom.changePreviewList.innerHTML = "";
+    if (dom.changePreviewCount) dom.changePreviewCount.textContent = "";
+    return;
+  }
+
+  dom.changePreview.hidden = false;
+
+  const summaryParts = [];
+  if (diff.updated?.length) summaryParts.push(`更新 ${diff.updated.length}件`);
+  if (diff.added?.length) summaryParts.push(`新規 ${diff.added.length}件`);
+  if (diff.removed?.length) summaryParts.push(`削除 ${diff.removed.length}件`);
+  if (dom.changePreviewCount) {
+    dom.changePreviewCount.textContent = summaryParts.join(" / ");
+  }
+
+  const fragment = document.createDocumentFragment();
+  const seenKeys = new Set();
+
+  (participants || []).forEach((entry, index) => {
+    const key = participantChangeKey(entry, index);
+    const info = changeInfoByKey.get(key);
+    if (!info) return;
+    seenKeys.add(key);
+    const snapshot = info.current || entry;
+    fragment.appendChild(createChangePreviewItem(info.type, snapshot, info));
+  });
+
+  (diff.removed || []).forEach(entry => {
+    const key = participantChangeKey(entry);
+    if (seenKeys.has(key)) return;
+    fragment.appendChild(createChangePreviewItem("removed", entry));
+  });
+
+  dom.changePreviewList.innerHTML = "";
+  dom.changePreviewList.appendChild(fragment);
+
+  if (dom.changePreviewNote) {
+    dom.changePreviewNote.textContent = "「参加者リストを保存」で変更を確定し、「変更を取り消す」で破棄できます。";
+  }
 }
 function renderEvents() {
   const list = dom.eventList;
@@ -951,6 +1150,7 @@ async function loadParticipants(options = {}) {
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) {
     state.participants = [];
+    state.savedParticipants = snapshotParticipantList([]);
     state.participantTokenMap = new Map();
     state.duplicateMatches = new Map();
     state.duplicateGroups = new Map();
@@ -986,6 +1186,7 @@ async function loadParticipants(options = {}) {
 
     state.participants = participants;
     state.lastSavedSignature = savedSignature;
+    state.savedParticipants = snapshotParticipantList(participants);
     state.participantTokenMap = new Map(
       state.participants.map(entry => [entry.participantId, entry.token])
     );
@@ -1008,6 +1209,7 @@ async function loadParticipants(options = {}) {
   } catch (error) {
     console.error(error);
     state.participants = [];
+    state.savedParticipants = snapshotParticipantList([]);
     state.participantTokenMap = new Map();
     state.duplicateMatches = new Map();
     state.duplicateGroups = new Map();
@@ -1027,6 +1229,7 @@ function selectEvent(eventId) {
   state.participants = [];
   state.participantTokenMap = new Map();
   state.lastSavedSignature = "";
+  state.savedParticipants = [];
   state.duplicateMatches = new Map();
   state.duplicateGroups = new Map();
   if (state.eventParticipantCache instanceof Map && previousEventId) {
@@ -1051,6 +1254,7 @@ function selectSchedule(scheduleId) {
   }
   renderSchedules();
   updateParticipantContext();
+  state.savedParticipants = [];
   loadParticipants().catch(err => console.error(err));
 }
 
@@ -1730,6 +1934,7 @@ async function handleSave(options = {}) {
 
     state.participantTokenMap = nextTokenMap;
     state.lastSavedSignature = signatureForEntries(state.participants);
+    state.savedParticipants = snapshotParticipantList(state.participants);
     setUploadStatus(successMessage || "参加者リストを更新しました。", "success");
     await loadEvents({ preserveSelection: true });
     await loadParticipants();
@@ -1811,6 +2016,7 @@ async function handleClearParticipants() {
   state.participants = [];
   state.participantTokenMap = new Map();
   state.lastSavedSignature = signatureForEntries(state.participants);
+  state.savedParticipants = snapshotParticipantList(state.participants);
   state.duplicateMatches = new Map();
   state.duplicateGroups = new Map();
   renderParticipants();
@@ -1874,6 +2080,7 @@ function setAuthUi(signedIn) {
 function resetState() {
   state.events = [];
   state.participants = [];
+  state.savedParticipants = [];
   state.selectedEventId = null;
   state.selectedScheduleId = null;
   state.lastSavedSignature = "";
@@ -1954,8 +2161,8 @@ async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
   const displayId = getDisplayParticipantId(entry.participantId);
   const idLabel = entry.participantId ? `ID: ${displayId}` : "ID未設定";
   const description = nameLabel
-    ? `参加者${nameLabel}（${idLabel}）を削除します。この操作は直ちに保存されます。よろしいですか？`
-    : `参加者（${idLabel}）を削除します。この操作は直ちに保存されます。よろしいですか？`;
+    ? `参加者${nameLabel}（${idLabel}）を削除します。保存するまで確定されません。よろしいですか？`
+    : `参加者（${idLabel}）を削除します。保存するまで確定されません。よろしいですか？`;
 
   const confirmed = await confirmAction({
     title: "参加者の削除",
@@ -1982,13 +2189,12 @@ async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
       ? `参加者ID: ${removedDisplayId}`
       : "参加者ID未設定";
 
-  const saveSuccess = await handleSave({ allowEmpty: true, successMessage: `${identifier}を削除しました。` });
-  if (!saveSuccess) {
-    try {
-      await loadParticipants({ suppressStatus: true });
-    } catch (reloadError) {
-      console.error(reloadError);
-    }
+  updateDuplicateMatches();
+  renderParticipants();
+  if (hasUnsavedChanges()) {
+    setUploadStatus(`${identifier}を削除予定です。「参加者リストを保存」で確定します。`);
+  } else {
+    setUploadStatus("変更は保存済みの状態に戻りました。");
   }
 }
 
@@ -2094,6 +2300,11 @@ function saveParticipantEdits() {
   updateDuplicateMatches();
   renderParticipants();
   syncSaveButtonState();
+  if (hasUnsavedChanges()) {
+    setUploadStatus("編集内容は未保存です。「参加者リストを保存」で確定します。");
+  } else {
+    setUploadStatus("保存済みの内容と同じため変更はありません。");
+  }
 
   state.editingParticipantId = null;
   state.editingRowKey = null;

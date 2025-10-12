@@ -572,6 +572,111 @@ function assignParticipantIds(entries, existingParticipants = [], options = {}) 
   return resolved;
 }
 
+const PARTICIPANT_DIFF_FIELDS = [
+  { key: "name", label: "氏名" },
+  { key: "phonetic", label: "フリガナ" },
+  { key: "gender", label: "性別" },
+  { key: "department", label: "学部学科" },
+  { key: "teamNumber", label: "班番号" },
+  { key: "phone", label: "携帯電話" },
+  { key: "email", label: "メールアドレス" }
+];
+
+function snapshotParticipant(entry) {
+  if (!entry || typeof entry !== "object") {
+    return {
+      participantId: "",
+      name: "",
+      phonetic: "",
+      gender: "",
+      department: "",
+      teamNumber: "",
+      phone: "",
+      email: "",
+      rowKey: ""
+    };
+  }
+  return {
+    participantId: String(entry.participantId || entry.id || ""),
+    name: String(entry.name || ""),
+    phonetic: String(entry.phonetic || entry.furigana || ""),
+    gender: String(entry.gender || ""),
+    department: String(entry.department || entry.groupNumber || ""),
+    teamNumber: String(entry.teamNumber || entry.groupNumber || ""),
+    phone: String(entry.phone || ""),
+    email: String(entry.email || ""),
+    rowKey: String(entry.rowKey || "")
+  };
+}
+
+function snapshotParticipantList(entries = []) {
+  return entries.map(snapshotParticipant);
+}
+
+function diffParticipantFields(previous, current) {
+  const changes = [];
+  PARTICIPANT_DIFF_FIELDS.forEach(field => {
+    const previousValue = String(previous?.[field.key] || "");
+    const currentValue = String(current?.[field.key] || "");
+    if (previousValue !== currentValue) {
+      changes.push({
+        field: field.key,
+        label: field.label,
+        previous: previousValue,
+        current: currentValue
+      });
+    }
+  });
+  return changes;
+}
+
+function diffParticipantLists(currentEntries = [], baselineEntries = []) {
+  const currentSnapshots = snapshotParticipantList(currentEntries);
+  const baselineSnapshots = snapshotParticipantList(baselineEntries);
+
+  const baselineMap = new Map();
+  baselineSnapshots.forEach(entry => {
+    const key = entry.participantId || entry.rowKey;
+    if (!key) return;
+    if (!baselineMap.has(key)) {
+      baselineMap.set(key, entry);
+    }
+  });
+
+  const matchedKeys = new Set();
+  const added = [];
+  const updated = [];
+
+  currentSnapshots.forEach(entry => {
+    const key = entry.participantId || entry.rowKey;
+    if (!key) {
+      added.push(entry);
+      return;
+    }
+    const baselineEntry = baselineMap.get(key);
+    if (!baselineEntry) {
+      added.push(entry);
+      return;
+    }
+    matchedKeys.add(key);
+    const changes = diffParticipantFields(baselineEntry, entry);
+    if (changes.length) {
+      updated.push({ previous: baselineEntry, current: entry, changes });
+    }
+  });
+
+  const removed = [];
+  baselineSnapshots.forEach(entry => {
+    const key = entry.participantId || entry.rowKey;
+    if (!key) return;
+    if (!matchedKeys.has(key)) {
+      removed.push(entry);
+    }
+  });
+
+  return { added, updated, removed };
+}
+
 function signatureForEntries(entries) {
   return JSON.stringify(entries.map(entry => [
     entry.participantId,
@@ -602,6 +707,9 @@ export {
   normalizeParticipantRecord,
   assignParticipantIds,
   signatureForEntries,
-  formatParticipantIdDisplay
+  formatParticipantIdDisplay,
+  snapshotParticipantList,
+  diffParticipantLists,
+  diffParticipantFields
 };
 

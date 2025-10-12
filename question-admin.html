@@ -92,6 +92,14 @@
           <button id="save-button" class="btn btn-primary" type="button" disabled>参加者リストを保存</button>
           <span id="upload-status" class="status-pill">日程を選択してください。</span>
         </div>
+        <div id="change-preview" class="change-preview" hidden aria-live="polite">
+          <div class="change-preview__header">
+            <span class="change-preview__title">未保存の変更があります</span>
+            <span id="change-preview-count" class="change-preview__count"></span>
+          </div>
+          <ul id="change-preview-list" class="change-preview__list" aria-label="未保存の変更一覧"></ul>
+          <p id="change-preview-note" class="change-preview__note">「参加者リストを保存」で変更を確定し、「変更を取り消す」で破棄できます。</p>
+        </div>
         <p class="admin-summary" id="admin-summary"></p>
         <div class="table-scroller">
           <table class="mapping-table" aria-describedby="participant-description">
