@@ -165,6 +165,8 @@ export function renderQuestions(app) {
     const uid = String(item.UID);
     card.dataset.uid = uid;
     const participantId = String(item["参加者ID"] ?? "").trim();
+    const rawGenre = String(item["ジャンル"] ?? "").trim();
+    const normalizedGenre = rawGenre || "その他";
     const isLiveMatch = liveUid
       ? liveUid === uid
       : (liveParticipantId && participantId && liveParticipantId === participantId && liveQuestion === item["質問・お悩み"]) ||
@@ -189,6 +191,7 @@ export function renderQuestions(app) {
         question: item["質問・お悩み"],
         isAnswered,
         participantId,
+        genre: normalizedGenre,
         isPickup: isPuq
       };
     }
@@ -225,6 +228,7 @@ export function renderQuestions(app) {
         question: item["質問・お悩み"],
         isAnswered,
         participantId,
+        genre: normalizedGenre,
         isPickup: isPuq
       };
       updateActionAvailability(app);
@@ -441,11 +445,13 @@ export async function handleDisplay(app) {
     updates[`questions/${app.state.selectedRowData.uid}/selecting`] = true;
     updates[`questions/${app.state.selectedRowData.uid}/answered`] = false;
     await update(ref(database), updates);
+    const genre = String(app.state.selectedRowData.genre ?? "").trim();
     await set(telopRef, {
       uid: app.state.selectedRowData.uid,
       participantId: app.state.selectedRowData.participantId || "",
       name: app.state.selectedRowData.name,
       question: app.state.selectedRowData.question,
+      genre,
       pickup: app.state.selectedRowData.isPickup === true
     });
     app.api.fireAndForgetApi({ action: "updateSelectingStatus", uid: app.state.selectedRowData.uid });
