@@ -6,6 +6,7 @@ const dom = {
   loginButton: document.getElementById("login-button"),
   adminMain: document.getElementById("admin-main"),
   headerLogout: document.getElementById("header-logout"),
+  eventHubLink: document.getElementById("header-open-event-hub"),
   userInfo: document.getElementById("user-info"),
   logoutButton: document.getElementById("logout-button"),
   refreshButton: document.getElementById("refresh-button"),

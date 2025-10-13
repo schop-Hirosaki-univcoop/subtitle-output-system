@@ -1000,6 +1000,37 @@ function showScheduleHubLink(event, schedule) {
   dom.scheduleHubLink.setAttribute("aria-label", labelText);
 }
 
+function updateEventHubShortcut(event) {
+  if (!dom.eventHubLink) return;
+
+  let href = "events.html";
+  let buttonLabel = "イベント一覧";
+  let descriptiveLabel = "イベント一覧を開く";
+
+  if (typeof window !== "undefined") {
+    const basePath = event ? "event-hub.html" : "events.html";
+    const url = new URL(basePath, window.location.href);
+    if (event?.id) {
+      url.searchParams.set("eventId", event.id);
+    }
+    if (event?.name) {
+      url.searchParams.set("eventName", event.name);
+    }
+    href = url.toString();
+  }
+
+  if (event?.id) {
+    const name = event.name || event.id;
+    buttonLabel = "イベントハブを開く";
+    descriptiveLabel = `イベント「${name}」のハブを開く`;
+  }
+
+  dom.eventHubLink.href = href;
+  dom.eventHubLink.textContent = buttonLabel;
+  dom.eventHubLink.setAttribute("aria-label", descriptiveLabel);
+  dom.eventHubLink.setAttribute("title", descriptiveLabel);
+}
+
 function renderSchedules() {
   const list = dom.scheduleList;
   if (!list) return;
@@ -1135,6 +1166,7 @@ function updateParticipantContext(options = {}) {
   const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
   const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === state.selectedScheduleId);
 
+  updateEventHubShortcut(selectedEvent || null);
   hideScheduleHubLink();
 
   if (!selectedEvent || !selectedSchedule) {

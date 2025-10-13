@@ -452,6 +452,10 @@ export class ScheduleHubApp {
       }
     }
     this.dom.backLink.href = url.toString();
+    const label = hasEvent ? "イベントハブに戻る" : "管理画面に戻る";
+    this.dom.backLink.textContent = label;
+    this.dom.backLink.setAttribute("aria-label", label);
+    this.dom.backLink.setAttribute("title", label);
   }
 
   updateActionLinks() {
