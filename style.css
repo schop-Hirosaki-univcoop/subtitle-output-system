@@ -1512,3 +1512,316 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   from{ box-shadow:0 0 0 0 rgba(30,200,255,.45); }
   to{ box-shadow:0 0 0 24px rgba(30,200,255,0); }
 }
+
+/* --- Event control flow layout --- */
+.flow-main{
+  display:flex;
+  flex-direction:column;
+  gap:1.5rem;
+  padding-bottom:2rem;
+}
+
+.flow-progress{
+  display:flex;
+  gap:1rem;
+  align-items:center;
+  justify-content:flex-start;
+  flex-wrap:wrap;
+}
+
+.flow-progress__item{
+  display:flex;
+  align-items:center;
+  gap:.6rem;
+  padding:.45rem .9rem;
+  border-radius:999px;
+  background:rgba(15,26,43,.6);
+  color:var(--muted);
+  border:1px solid rgba(72,107,146,.4);
+  transition:background .25s ease, color .25s ease, border-color .25s ease, transform .25s ease;
+}
+
+.flow-progress__item.is-active{
+  background:rgba(0,116,199,.22);
+  color:#e8f4ff;
+  border-color:rgba(0,155,255,.7);
+  transform:translateY(-2px);
+}
+
+.flow-progress__item.is-complete{
+  background:rgba(22,166,114,.2);
+  color:#ddffef;
+  border-color:rgba(54,198,149,.6);
+}
+
+.flow-progress__step{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:1.8rem;
+  height:1.8rem;
+  border-radius:50%;
+  background:rgba(255,255,255,.08);
+  font-weight:600;
+  font-size:.95rem;
+}
+
+.flow-progress__label{
+  font-weight:500;
+  font-size:.95rem;
+}
+
+.flow-stage__title{
+  margin:0;
+  font-size:clamp(1.4rem, 2.6vw, 1.9rem);
+  font-weight:700;
+}
+
+.flow-stage__description{
+  margin:.25rem 0 0;
+  color:var(--muted);
+  max-width:48ch;
+}
+
+.flow-grid{
+  display:grid;
+  gap:1.5rem;
+  grid-auto-rows:minmax(0, auto);
+  transition:grid-template-columns .4s ease, grid-template-rows .4s ease, grid-template-areas .4s ease;
+}
+
+.flow-card{
+  position:relative;
+  transition:transform .4s ease, opacity .35s ease;
+}
+
+.flow-card.is-inert{
+  pointer-events:none;
+}
+
+.flow-card--events{ grid-area:events; }
+.flow-card--schedules{ grid-area:schedules; }
+.flow-card--tabs{ grid-area:tabs; }
+
+#events-main[data-stage="events"] .flow-grid{
+  grid-template-columns:minmax(0,1fr);
+  grid-template-areas:
+    "events";
+}
+
+#events-main[data-stage="schedules"] .flow-grid{
+  grid-template-columns:minmax(280px, 320px) minmax(0,1fr);
+  grid-template-areas:
+    "events schedules";
+}
+
+#events-main[data-stage="tabs"] .flow-grid{
+  grid-template-columns:minmax(280px, 320px) minmax(0,1fr);
+  grid-template-rows:auto auto;
+  grid-template-areas:
+    "events tabs"
+    "schedules tabs";
+}
+
+#events-main[data-stage="events"] .flow-card--schedules,
+#events-main[data-stage="events"] .flow-card--tabs{
+  opacity:0;
+  transform:translateX(48px);
+  pointer-events:none;
+}
+
+#events-main[data-stage="schedules"] .flow-card--tabs{
+  opacity:0;
+  transform:translateX(40px);
+  pointer-events:none;
+}
+
+#events-main[data-stage="tabs"] .flow-card--tabs{
+  opacity:1;
+  transform:none;
+  pointer-events:auto;
+}
+
+#events-main[data-stage="tabs"] .flow-card--schedules{
+  opacity:1;
+  transform:none;
+}
+
+.flow-selection-note{
+  margin:.75rem 0 1rem;
+  padding:.65rem .85rem;
+  border-radius:.6rem;
+  background:rgba(0,142,255,.1);
+  border:1px solid rgba(0,142,255,.35);
+  color:#e0f4ff;
+}
+
+.flow-selection-summary{
+  margin:0 0 1rem;
+  padding:1rem 1.25rem;
+  border-radius:.85rem;
+  background:rgba(18,30,46,.8);
+  border:1px solid rgba(60,96,143,.5);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+.flow-selection-summary__title{
+  margin:0 0 .6rem;
+  font-size:1.05rem;
+  font-weight:600;
+}
+
+.flow-selection-summary__item{
+  margin:.35rem 0;
+  display:flex;
+  gap:.75rem;
+}
+
+.flow-selection-summary__label{
+  width:4.5rem;
+  flex-shrink:0;
+  color:var(--muted);
+}
+
+.flow-forward-actions{
+  margin-top:1.5rem;
+  display:flex;
+  gap:.8rem;
+  flex-wrap:wrap;
+}
+
+.entity-item{
+  cursor:pointer;
+}
+
+.entity-item.is-selected{
+  border-color:rgba(0,155,255,.75);
+  background:linear-gradient(180deg, rgba(8,42,70,.85), rgba(6,20,36,.92));
+  box-shadow:0 18px 38px rgba(0,78,140,.35);
+}
+
+.entity-item.is-selected .entity-name{
+  color:#e6f6ff;
+}
+
+.entity-item.is-selected .entity-meta{
+  color:rgba(190,232,255,.75);
+}
+
+.entity-item:focus-visible{
+  outline:2px solid rgba(0,155,255,.7);
+  outline-offset:2px;
+}
+
+.flow-tablist{
+  display:flex;
+  gap:.75rem;
+  margin-bottom:1.2rem;
+  flex-wrap:wrap;
+}
+
+.flow-tab{
+  border:none;
+  background:rgba(17,30,48,.8);
+  color:var(--muted);
+  padding:.55rem 1rem;
+  border-radius:.7rem;
+  font-weight:600;
+  font-size:.95rem;
+  cursor:pointer;
+  border:1px solid transparent;
+  transition:background .25s ease, color .25s ease, border-color .25s ease, transform .25s ease;
+}
+
+.flow-tab:hover{
+  transform:translateY(-1px);
+  border-color:rgba(0,142,255,.4);
+}
+
+.flow-tab.is-active{
+  background:rgba(0,142,255,.18);
+  color:#e6f6ff;
+  border-color:rgba(0,142,255,.65);
+}
+
+.flow-tabpanel{
+  border-radius:1rem;
+  background:rgba(10,22,38,.75);
+  border:1px solid rgba(60,96,143,.45);
+  padding:1.2rem;
+  outline:none;
+}
+
+.flow-tabpanel[hidden]{
+  display:none;
+}
+
+.flow-iframe-shell{
+  min-height:420px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(5,12,22,.6);
+  border-radius:.8rem;
+  border:1px dashed rgba(84,124,170,.5);
+  position:relative;
+  overflow:hidden;
+}
+
+.flow-iframe-placeholder{
+  margin:0;
+  color:var(--muted);
+  text-align:center;
+  padding:2rem;
+}
+
+.flow-iframe-shell iframe{
+  border:none;
+  width:100%;
+  height:70vh;
+  min-height:460px;
+  background:#fff;
+}
+
+@media (max-width: 960px){
+  #events-main[data-stage="schedules"] .flow-grid,
+  #events-main[data-stage="tabs"] .flow-grid{
+    grid-template-columns:minmax(0,1fr);
+    grid-template-areas:
+      "events"
+      "schedules"
+      "tabs";
+  }
+
+  #events-main[data-stage="schedules"] .flow-card--events,
+  #events-main[data-stage="tabs"] .flow-card--events{
+    order:-1;
+  }
+
+  .flow-iframe-shell iframe{
+    height:60vh;
+    min-height:380px;
+  }
+}
+
+@media (max-width: 640px){
+  .flow-progress{
+    gap:.6rem;
+  }
+
+  .flow-progress__item{
+    padding:.35rem .65rem;
+  }
+
+  .flow-stage__title{
+    font-size:1.45rem;
+  }
+
+  .flow-iframe-shell{
+    min-height:320px;
+  }
+
+  .flow-iframe-shell iframe{
+    min-height:320px;
+  }
+}
