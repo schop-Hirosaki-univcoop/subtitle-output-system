@@ -3,6 +3,8 @@ import {
   database,
   ref,
   get,
+  set,
+  update,
   auth,
   provider,
   signInWithPopup,
@@ -10,17 +12,9 @@ import {
   onAuthStateChanged
 } from "../operator/firebase.js";
 import { createApiClient } from "../operator/api-client.js";
+import { generateShortId, normalizeKey, toMillis } from "../question-admin/utils.js";
 
 const ensureString = (value) => String(value ?? "").trim();
-
-const toMillis = (value) => {
-  if (value == null || value === "") {
-    return 0;
-  }
-  const date = new Date(value);
-  const time = date.getTime();
-  return Number.isFinite(time) ? time : 0;
-};
 
 function formatParticipantCount(value) {
   if (value == null || value === "") {
@@ -33,7 +27,25 @@ function formatParticipantCount(value) {
   return `${value}`;
 }
 
-export class EventIndexApp {
+function collectParticipantTokens(branch) {
+  const tokens = new Set();
+  if (!branch || typeof branch !== "object") {
+    return tokens;
+  }
+
+  Object.values(branch).forEach((scheduleBranch) => {
+    if (!scheduleBranch || typeof scheduleBranch !== "object") return;
+    Object.values(scheduleBranch).forEach((participant) => {
+      const token = participant?.token;
+      if (token) {
+        tokens.add(String(token));
+      }
+    });
+  });
+  return tokens;
+}
+
+export class EventAdminApp {
   constructor() {
     this.dom = queryDom();
     this.api = createApiClient(auth, onAuthStateChanged);
@@ -41,6 +53,10 @@ export class EventIndexApp {
     this.currentUser = null;
     this.pendingLoginError = "";
     this.events = [];
+    this.activeDialog = null;
+    this.lastFocused = null;
+    this.confirmResolver = null;
+    this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
   }
 
   init() {
@@ -53,6 +69,48 @@ export class EventIndexApp {
     if (this.dom.loginButton) {
       this.dom.loginButton.addEventListener("click", () => this.login());
     }
+
+    if (this.dom.addEventButton) {
+      this.dom.addEventButton.addEventListener("click", () => this.openEventDialog({ mode: "create" }));
+    }
+
+    if (this.dom.refreshButton) {
+      this.dom.refreshButton.addEventListener("click", () => {
+        this.loadEvents().catch((error) => {
+          console.error("Failed to refresh events:", error);
+          this.showAlert(error.message || "イベントの再読み込みに失敗しました。");
+        });
+      });
+    }
+
+    if (this.dom.logoutButton) {
+      this.dom.logoutButton.addEventListener("click", () => signOut(auth));
+    }
+
+    if (this.dom.eventForm) {
+      this.dom.eventForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        this.handleEventFormSubmit().catch((error) => {
+          console.error("Event form submit failed:", error);
+          this.setFormError(this.dom.eventError, error.message || "イベントの保存に失敗しました。");
+        });
+      });
+    }
+
+    this.bindDialogDismiss(this.dom.eventDialog);
+    this.bindDialogDismiss(this.dom.confirmDialog);
+
+    if (this.dom.confirmAcceptButton) {
+      this.dom.confirmAcceptButton.addEventListener("click", () => {
+        this.resolveConfirm(true);
+      });
+    }
+
+    if (this.dom.confirmCancelButton) {
+      this.dom.confirmCancelButton.addEventListener("click", () => {
+        this.resolveConfirm(false);
+      });
+    }
   }
 
   observeAuthState() {
@@ -62,7 +120,8 @@ export class EventIndexApp {
     }
     this.authUnsubscribe = onAuthStateChanged(auth, (user) => {
       this.handleAuthState(user).catch((error) => {
-        console.error("Failed to handle event index auth state:", error);
+        console.error("Failed to handle event admin auth state:", error);
+        this.showAlert(error.message || "初期化に失敗しました。時間をおいて再度お試しください。");
       });
     });
   }
@@ -79,7 +138,7 @@ export class EventIndexApp {
       this.setLoginError("");
       await signInWithPopup(auth, provider);
     } catch (error) {
-      console.error("Event index login failed:", error);
+      console.error("Event admin login failed:", error);
       this.setLoginError("ログインに失敗しました。もう一度お試しください。");
     } finally {
       button.disabled = false;
@@ -97,6 +156,7 @@ export class EventIndexApp {
       this.dom.main.hidden = true;
     }
     this.toggleLoading(false);
+    this.updateControlsForAuth(false);
   }
 
   showLoggedInState() {
@@ -107,6 +167,16 @@ export class EventIndexApp {
     if (this.dom.main) {
       this.dom.main.hidden = false;
     }
+    this.updateControlsForAuth(true);
+  }
+
+  updateControlsForAuth(signedIn) {
+    if (this.dom.addEventButton) {
+      this.dom.addEventButton.disabled = !signedIn;
+    }
+    if (this.dom.logoutButton) {
+      this.dom.logoutButton.hidden = !signedIn;
+    }
   }
 
   setLoadingMessage(message) {
@@ -115,13 +185,23 @@ export class EventIndexApp {
     }
   }
 
-  clearError() {
+  toggleLoading(isLoading) {
+    if (this.dom.loading) {
+      this.dom.loading.hidden = !isLoading;
+    }
+  }
+
+  clearAlert() {
     if (this.dom.alert) {
       this.dom.alert.hidden = true;
       this.dom.alert.textContent = "";
     }
-    if (!this.currentUser) {
-      this.setLoginError(this.pendingLoginError);
+  }
+
+  showAlert(message) {
+    if (this.dom.alert) {
+      this.dom.alert.hidden = false;
+      this.dom.alert.textContent = message;
     }
   }
 
@@ -145,13 +225,13 @@ export class EventIndexApp {
     if (!user) {
       this.events = [];
       this.renderEvents();
-      this.clearError();
+      this.clearAlert();
       this.showLoggedOutState();
       return;
     }
 
     this.showLoggedInState();
-    this.clearError();
+    this.clearAlert();
 
     try {
       this.setLoadingMessage("権限を確認しています…");
@@ -160,19 +240,19 @@ export class EventIndexApp {
       this.setLoadingMessage("イベント情報を読み込んでいます…");
       await this.loadEvents();
     } catch (error) {
-      console.error("Event index initialization failed:", error);
+      console.error("Event admin initialization failed:", error);
       if (this.isPermissionError(error)) {
         const message =
           (error instanceof Error && error.message) ||
           "アクセス権限がありません。管理者に確認してください。";
-        this.showError(message);
+        this.showAlert(message);
         this.setLoginError(message);
         await this.safeSignOut();
         return;
       }
       const fallback = "イベント情報の読み込みに失敗しました。時間をおいて再度お試しください。";
       const message = error instanceof Error && error.message ? error.message : fallback;
-      this.showError(message || fallback);
+      this.showAlert(message || fallback);
     } finally {
       this.toggleLoading(false);
     }
@@ -214,12 +294,6 @@ export class EventIndexApp {
     return /permission/i.test(message) || message.includes("権限");
   }
 
-  toggleLoading(isLoading) {
-    if (this.dom.loading) {
-      this.dom.loading.hidden = !isLoading;
-    }
-  }
-
   async loadEvents() {
     const [eventsSnapshot, schedulesSnapshot] = await Promise.all([
       get(ref(database, "questionIntake/events")),
@@ -256,7 +330,8 @@ export class EventIndexApp {
         schedules,
         totalParticipants,
         scheduleCount: schedules.length,
-        createdAt: eventValue?.createdAt || 0
+        createdAt: eventValue?.createdAt || 0,
+        updatedAt: eventValue?.updatedAt || 0
       };
     });
 
@@ -273,88 +348,84 @@ export class EventIndexApp {
   }
 
   renderEvents() {
-    const list = this.dom.list;
+    const list = this.dom.eventList;
     if (!list) return;
 
     list.innerHTML = "";
     if (!this.events.length) {
       list.hidden = true;
-      if (this.dom.empty) this.dom.empty.hidden = false;
+      if (this.dom.eventEmpty) this.dom.eventEmpty.hidden = false;
       return;
     }
 
-    if (this.dom.empty) this.dom.empty.hidden = true;
     list.hidden = false;
+    if (this.dom.eventEmpty) this.dom.eventEmpty.hidden = true;
 
+    const fragment = document.createDocumentFragment();
     this.events.forEach((event) => {
       const item = document.createElement("li");
-      item.className = "event-card";
+      item.className = "entity-item";
 
-      const heading = document.createElement("h2");
-      heading.className = "event-card__title";
-      heading.textContent = event.name || event.id;
-      item.appendChild(heading);
+      const label = document.createElement("div");
+      label.className = "entity-label";
 
-      const meta = document.createElement("p");
-      meta.className = "event-card__meta";
-      meta.textContent = `日程 ${event.scheduleCount} 件 / 参加者 ${formatParticipantCount(event.totalParticipants)}`;
-      item.appendChild(meta);
+      const nameEl = document.createElement("span");
+      nameEl.className = "entity-name";
+      nameEl.textContent = event.name || event.id;
 
-      if (event.schedules.length) {
-        const nextSchedule = event.schedules[0];
-        if (nextSchedule?.startAt) {
-          const preview = document.createElement("p");
-          preview.className = "event-card__preview";
-          preview.textContent = `最初の日程: ${nextSchedule.label || nextSchedule.id}`;
-          item.appendChild(preview);
-        }
-      }
+      const metaEl = document.createElement("span");
+      metaEl.className = "entity-meta";
+      metaEl.textContent = `日程 ${event.scheduleCount} 件 / 参加者 ${formatParticipantCount(event.totalParticipants)}`;
+
+      label.append(nameEl, metaEl);
 
       const actions = document.createElement("div");
-      actions.className = "event-card__actions";
+      actions.className = "entity-actions";
 
-      const openHubLink = document.createElement("a");
-      openHubLink.className = "btn btn-primary btn-sm";
-      openHubLink.href = this.buildEventHubUrl(event);
-      openHubLink.textContent = "日程一覧を開く";
-      actions.appendChild(openHubLink);
+      const hubLink = document.createElement("a");
+      hubLink.className = "btn btn-primary btn-sm";
+      hubLink.href = this.buildEventHubUrl(event);
+      hubLink.textContent = "日程ハブ";
+      actions.appendChild(hubLink);
 
-      const manageLink = document.createElement("a");
-      manageLink.className = "btn btn-ghost btn-sm";
-      manageLink.href = this.buildAdminUrl(event);
-      manageLink.target = "_blank";
-      manageLink.rel = "noreferrer noopener";
-      manageLink.textContent = "管理画面で開く";
-      actions.appendChild(manageLink);
+      const participantsLink = document.createElement("a");
+      participantsLink.className = "btn btn-ghost btn-sm";
+      participantsLink.href = this.buildParticipantAdminUrl(event);
+      participantsLink.target = "_blank";
+      participantsLink.rel = "noreferrer noopener";
+      participantsLink.textContent = "参加者管理";
+      actions.appendChild(participantsLink);
 
-      item.appendChild(actions);
-      list.appendChild(item);
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "btn-icon";
+      editBtn.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z\" fill=\"currentColor\"/></svg>";
+      editBtn.title = "イベントを編集";
+      editBtn.addEventListener("click", (evt) => {
+        evt.stopPropagation();
+        this.openEventDialog({ mode: "edit", event });
+      });
+      actions.appendChild(editBtn);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn-icon";
+      deleteBtn.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z\"/></svg>";
+      deleteBtn.title = "イベントを削除";
+      deleteBtn.addEventListener("click", (evt) => {
+        evt.stopPropagation();
+        this.deleteEvent(event).catch((error) => {
+          console.error("Failed to delete event:", error);
+          this.showAlert(error.message || "イベントの削除に失敗しました。");
+        });
+      });
+      actions.appendChild(deleteBtn);
+
+      item.append(label, actions);
+      fragment.appendChild(item);
     });
-  }
 
-  buildEventHubUrl(event) {
-    if (typeof window === "undefined") return "#";
-    const url = new URL("event-hub.html", window.location.href);
-    if (event?.id) {
-      url.searchParams.set("eventId", event.id);
-    }
-    if (event?.name) {
-      url.searchParams.set("eventName", event.name);
-    }
-    return url.toString();
-  }
-
-  buildAdminUrl(event) {
-    if (typeof window === "undefined") return "question-admin.html";
-    const url = new URL("question-admin.html", window.location.href);
-    if (event?.id) {
-      url.searchParams.set("eventId", event.id);
-      url.searchParams.set("focus", "events");
-    }
-    if (event?.name) {
-      url.searchParams.set("eventName", event.name);
-    }
-    return url.toString();
+    list.appendChild(fragment);
   }
 
   updateMetaNote() {
@@ -381,16 +452,291 @@ export class EventIndexApp {
     }
   }
 
-  showError(message) {
-    if (this.dom.alert) {
-      this.dom.alert.hidden = false;
-      this.dom.alert.textContent = message;
+  buildEventHubUrl(event) {
+    if (typeof window === "undefined") return "event-hub.html";
+    const url = new URL("event-hub.html", window.location.href);
+    if (event?.id) {
+      url.searchParams.set("eventId", event.id);
     }
-    if (this.dom.list) {
-      this.dom.list.hidden = true;
+    if (event?.name) {
+      url.searchParams.set("eventName", event.name);
     }
-    if (this.dom.empty) {
-      this.dom.empty.hidden = true;
+    return url.toString();
+  }
+
+  buildParticipantAdminUrl(event) {
+    if (typeof window === "undefined") return "question-admin.html";
+    const url = new URL("question-admin.html", window.location.href);
+    if (event?.id) {
+      url.searchParams.set("eventId", event.id);
+      url.searchParams.set("focus", "participants");
+    }
+    if (event?.name) {
+      url.searchParams.set("eventName", event.name);
+    }
+    return url.toString();
+  }
+
+  openEventDialog({ mode = "create", event = null } = {}) {
+    if (!this.dom.eventDialog || !this.dom.eventForm) return;
+    this.dom.eventForm.reset();
+    this.dom.eventForm.dataset.mode = mode;
+    this.dom.eventForm.dataset.eventId = event?.id || "";
+    this.setFormError(this.dom.eventError, "");
+    if (this.dom.eventDialogTitle) {
+      this.dom.eventDialogTitle.textContent = mode === "edit" ? "イベントを編集" : "イベントを追加";
+    }
+    if (this.dom.eventNameInput) {
+      this.dom.eventNameInput.value = mode === "edit" ? String(event?.name || "") : "";
+    }
+    const submitButton = this.dom.eventForm.querySelector("button[type='submit']");
+    if (submitButton) {
+      submitButton.textContent = mode === "edit" ? "保存" : "追加";
+    }
+    this.openDialog(this.dom.eventDialog);
+  }
+
+  closeEventDialog() {
+    if (this.dom.eventDialog) {
+      this.closeDialog(this.dom.eventDialog);
+    }
+  }
+
+  async handleEventFormSubmit() {
+    if (!this.dom.eventForm || !this.dom.eventNameInput) return;
+    const submitButton = this.dom.eventForm.querySelector("button[type='submit']");
+    if (submitButton) submitButton.disabled = true;
+    this.setFormError(this.dom.eventError, "");
+
+    try {
+      const mode = this.dom.eventForm.dataset.mode || "create";
+      const eventId = this.dom.eventForm.dataset.eventId || "";
+      const name = this.dom.eventNameInput.value;
+      if (mode === "edit") {
+        await this.updateEvent(eventId, name);
+        this.showAlert(`イベント「${name}」を更新しました。`);
+      } else {
+        await this.createEvent(name);
+        this.showAlert(`イベント「${name}」を追加しました。`);
+      }
+      this.dom.eventForm.reset();
+      this.closeEventDialog();
+    } catch (error) {
+      throw error;
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
+  }
+
+  async createEvent(name) {
+    const trimmed = normalizeKey(name || "");
+    if (!trimmed) {
+      throw new Error("イベント名を入力してください。");
+    }
+
+    const existingIds = new Set(this.events.map((event) => event.id));
+    let eventId = generateShortId("evt_");
+    while (existingIds.has(eventId)) {
+      eventId = generateShortId("evt_");
+    }
+
+    const now = Date.now();
+    await set(ref(database, `questionIntake/events/${eventId}`), {
+      name: trimmed,
+      createdAt: now,
+      updatedAt: now
+    });
+    await this.loadEvents();
+    await this.requestSheetSync();
+  }
+
+  async updateEvent(eventId, name) {
+    const trimmed = normalizeKey(name || "");
+    if (!trimmed) {
+      throw new Error("イベント名を入力してください。");
+    }
+    if (!eventId) {
+      throw new Error("イベントIDが不明です。");
+    }
+
+    const now = Date.now();
+    await update(ref(database), {
+      [`questionIntake/events/${eventId}/name`]: trimmed,
+      [`questionIntake/events/${eventId}/updatedAt`]: now
+    });
+    await this.loadEvents();
+    await this.requestSheetSync();
+  }
+
+  async deleteEvent(event) {
+    const eventId = event?.id;
+    if (!eventId) {
+      throw new Error("イベントIDが不明です。");
+    }
+    const label = event?.name || eventId;
+    const confirmed = await this.confirm({
+      title: "イベントの削除",
+      description: `イベント「${label}」と、その日程・参加者・発行済みリンクをすべて削除します。よろしいですか？`,
+      confirmLabel: "削除する",
+      cancelLabel: "キャンセル",
+      tone: "danger"
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const participantSnapshot = await get(ref(database, `questionIntake/participants/${eventId}`));
+      const participantBranch = participantSnapshot.exists() ? participantSnapshot.val() : {};
+      const tokensToRemove = collectParticipantTokens(participantBranch);
+
+      const updates = {
+        [`questionIntake/events/${eventId}`]: null,
+        [`questionIntake/schedules/${eventId}`]: null,
+        [`questionIntake/participants/${eventId}`]: null
+      };
+      tokensToRemove.forEach((token) => {
+        updates[`questionIntake/tokens/${token}`] = null;
+      });
+
+      await update(ref(database), updates);
+      await this.loadEvents();
+      await this.requestSheetSync();
+      this.showAlert(`イベント「${label}」を削除しました。`);
+    } catch (error) {
+      throw new Error(error?.message || "イベントの削除に失敗しました。");
+    }
+  }
+
+  async requestSheetSync() {
+    if (!this.api) {
+      return;
+    }
+    try {
+      await this.api.apiPost({ action: "syncQuestionIntakeToSheet" });
+    } catch (error) {
+      console.warn("Failed to request sheet sync:", error);
+    }
+  }
+
+  bindDialogDismiss(element) {
+    if (!element) return;
+    element.addEventListener("click", (event) => {
+      if (event.target instanceof HTMLElement && event.target.dataset.dialogDismiss) {
+        event.preventDefault();
+        if (element === this.dom.confirmDialog) {
+          this.resolveConfirm(false);
+        } else {
+          this.closeDialog(element);
+        }
+      }
+    });
+  }
+
+  openDialog(element) {
+    if (!element) return;
+    if (this.activeDialog && this.activeDialog !== element) {
+      this.closeDialog(this.activeDialog);
+    }
+    this.activeDialog = element;
+    this.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    element.removeAttribute("hidden");
+    document.body.classList.add("modal-open");
+    document.addEventListener("keydown", this.handleGlobalKeydown, true);
+    const focusTarget = element.querySelector("[data-autofocus]") || element.querySelector("input, button, select, textarea");
+    if (focusTarget instanceof HTMLElement) {
+      requestAnimationFrame(() => focusTarget.focus());
+    }
+  }
+
+  closeDialog(element) {
+    if (!element) return;
+    if (!element.hasAttribute("hidden")) {
+      element.setAttribute("hidden", "");
+    }
+    if (this.activeDialog === element) {
+      document.body.classList.remove("modal-open");
+      document.removeEventListener("keydown", this.handleGlobalKeydown, true);
+      const toFocus = this.lastFocused;
+      this.activeDialog = null;
+      this.lastFocused = null;
+      if (toFocus && typeof toFocus.focus === "function") {
+        toFocus.focus();
+      }
+    }
+    if (element === this.dom.eventDialog && this.dom.eventForm) {
+      this.dom.eventForm.reset();
+      this.setFormError(this.dom.eventError, "");
+    }
+  }
+
+  handleGlobalKeydown(event) {
+    if (event.key === "Escape" && this.activeDialog) {
+      event.preventDefault();
+      if (this.activeDialog === this.dom.confirmDialog) {
+        this.resolveConfirm(false);
+      } else {
+        this.closeDialog(this.activeDialog);
+      }
+    }
+  }
+
+  async confirm({
+    title = "確認",
+    description = "",
+    confirmLabel = "実行する",
+    cancelLabel = "キャンセル",
+    tone = "danger"
+  } = {}) {
+    if (!this.dom.confirmDialog) {
+      return window.confirm(description || title);
+    }
+
+    if (this.confirmResolver) {
+      this.finalizeConfirm(false);
+    }
+
+    if (this.dom.confirmDialogTitle) {
+      this.dom.confirmDialogTitle.textContent = title || "確認";
+    }
+    if (this.dom.confirmDialogMessage) {
+      this.dom.confirmDialogMessage.textContent = description || "";
+    }
+    if (this.dom.confirmAcceptButton) {
+      this.dom.confirmAcceptButton.textContent = confirmLabel || "実行する";
+      this.dom.confirmAcceptButton.classList.remove("btn-danger", "btn-primary");
+      this.dom.confirmAcceptButton.classList.add(tone === "danger" ? "btn-danger" : "btn-primary");
+    }
+    if (this.dom.confirmCancelButton) {
+      this.dom.confirmCancelButton.textContent = cancelLabel || "キャンセル";
+    }
+
+    this.openDialog(this.dom.confirmDialog);
+
+    return await new Promise((resolve) => {
+      this.confirmResolver = resolve;
+    });
+  }
+
+  resolveConfirm(result) {
+    const resolver = this.confirmResolver;
+    this.confirmResolver = null;
+    if (this.dom.confirmDialog) {
+      this.closeDialog(this.dom.confirmDialog);
+    }
+    if (typeof resolver === "function") {
+      resolver(result);
+    }
+  }
+
+  setFormError(element, message = "") {
+    if (!element) return;
+    if (message) {
+      element.hidden = false;
+      element.textContent = message;
+    } else {
+      element.hidden = true;
+      element.textContent = "";
     }
   }
 }

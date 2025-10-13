@@ -16,7 +16,7 @@
 
   <div id="event-hub-login-card" class="auth-card" role="dialog" aria-labelledby="event-hub-login-title">
     <h2 id="event-hub-login-title">イベントハブ</h2>
-    <p class="auth-lead">日程や参加者ツールへアクセスするには、管理用の Google アカウントでサインインしてください。</p>
+    <p class="auth-lead">日程の追加・編集や参加者ツールへアクセスするには、管理用の Google アカウントでサインインしてください。</p>
     <p id="event-hub-login-error" class="auth-error" role="alert" hidden></p>
     <button id="event-hub-login-button" class="btn btn-primary" type="button">Googleアカウントでログイン</button>
   </div>
@@ -55,7 +55,76 @@
         <p id="event-hub-empty" class="entity-empty" hidden>このイベントにはまだ日程が登録されていません。管理画面から追加してください。</p>
       </div>
     </section>
+
+    <section class="module module--primary admin-module" aria-labelledby="schedule-admin-title">
+      <div class="module-header">
+        <div class="module-heading">
+          <h2 id="schedule-admin-title">日程の管理</h2>
+          <p class="module-description">このイベントに紐づく日程を追加・編集・削除できます。</p>
+        </div>
+        <div class="module-actions">
+          <button id="add-schedule-button" class="btn btn-primary btn-sm" type="button" disabled>日程を追加</button>
+          <button id="schedule-refresh-button" class="btn btn-ghost btn-sm" type="button">再読み込み</button>
+        </div>
+      </div>
+      <div class="module-body">
+        <p id="schedule-context" class="admin-context">日程の各行からコントロールハブや参加者管理を開けます。</p>
+        <ul id="schedule-list" class="entity-list" aria-live="polite"></ul>
+        <p id="schedule-empty" class="entity-empty" hidden>このイベントにはまだ日程が登録されていません。まずは日程を追加してください。</p>
+      </div>
+    </section>
   </main>
+
+  <div id="schedule-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="schedule-dialog-title" hidden>
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <form id="schedule-form">
+        <div class="modal-header">
+          <h2 id="schedule-dialog-title">日程を追加</h2>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label for="schedule-label-input">日程の表示名</label>
+            <input id="schedule-label-input" name="schedule-label" class="input" type="text" autocomplete="off" required data-autofocus>
+          </div>
+          <div class="modal-field">
+            <label for="schedule-date-input">日付</label>
+            <input id="schedule-date-input" name="schedule-date" class="input" type="date" required>
+          </div>
+          <div class="modal-field">
+            <label for="schedule-start-input">開始時刻</label>
+            <input id="schedule-start-input" name="schedule-start" class="input" type="time" required>
+          </div>
+          <div class="modal-field">
+            <label for="schedule-end-input">終了時刻</label>
+            <input id="schedule-end-input" name="schedule-end" class="input" type="time" required>
+          </div>
+          <p class="modal-helper">開始から終了の時刻は参加者の案内に使用されます。</p>
+          <p id="schedule-error" class="form-error" role="alert" hidden></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-dialog-dismiss="true">キャンセル</button>
+          <button type="submit" class="btn btn-primary">追加</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="confirm-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" hidden>
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="confirm-dialog-title">確認</h2>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-dialog-message"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" id="confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
+        <button type="button" class="btn btn-danger" id="confirm-accept-button">実行する</button>
+      </div>
+    </div>
+  </div>
 
   <telop-footer year="2025"></telop-footer>
 
