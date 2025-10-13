@@ -1,4 +1,4 @@
-import { EventIndexApp } from "./app.js";
+import { EventAdminApp } from "./app.js";
 
-const app = new EventIndexApp();
+const app = new EventAdminApp();
 app.init();

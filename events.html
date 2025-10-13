@@ -8,37 +8,82 @@
   <script type="module" src="./scripts/shared/layout.js"></script>
 </head>
 <body class="op-theme events-page">
-  <telop-header tagline="Schedule Navigator" context-label="イベントの選択と概要">
+  <telop-header tagline="Event Control" context-label="イベントの管理">
     <div slot="meta" id="events-meta" class="hub-meta-note" hidden></div>
-    <a slot="actions" id="events-admin-link" class="btn btn-ghost btn-sm" href="question-admin.html" target="_blank" rel="noreferrer noopener">管理画面を開く</a>
+    <a slot="actions" id="events-admin-link" class="btn btn-ghost btn-sm" href="question-admin.html" target="_blank" rel="noreferrer noopener">参加者管理を開く</a>
   </telop-header>
 
   <div id="events-login-card" class="auth-card" role="dialog" aria-labelledby="events-login-title">
     <h2 id="events-login-title">イベントコントロールセンター</h2>
-    <p class="auth-lead">イベントに紐づく日程や運用ツールへアクセスするには、管理用の Google アカウントでサインインしてください。</p>
+    <p class="auth-lead">イベントの追加や編集を行うには、管理用の Google アカウントでサインインしてください。</p>
     <p id="events-login-error" class="auth-error" role="alert" hidden></p>
     <button id="events-login-button" class="btn btn-primary" type="button">Googleアカウントでログイン</button>
   </div>
 
   <main id="events-main" class="single-main" hidden>
-    <section class="module module--primary hub-module" aria-labelledby="events-title">
+    <section class="module module--primary admin-module" aria-labelledby="events-title">
       <div class="module-header">
         <div class="module-heading">
-          <h1 id="events-title">イベント一覧</h1>
-          <p class="module-description">運用したいイベントを選択すると、日程ごとのコントロールハブへ移動できます。</p>
+          <h1 id="events-title">イベントの管理</h1>
+          <p class="module-description">質問フォームで使用するイベントを追加・編集・削除し、各イベントのハブにアクセスできます。</p>
+        </div>
+        <div class="module-actions">
+          <button id="add-event-button" class="btn btn-primary btn-sm" type="button" disabled>イベントを追加</button>
+          <button id="events-refresh-button" class="btn btn-ghost btn-sm" type="button">再読み込み</button>
+          <button id="events-logout-button" class="btn btn-ghost btn-sm" type="button" hidden>ログアウト</button>
         </div>
       </div>
-      <div class="module-body hub-body">
+      <div class="module-body">
+        <p id="events-context" class="admin-context">イベントの各行から日程ハブや参加者管理を開けます。</p>
         <div id="events-loading" class="hub-loading" role="status" aria-live="polite" hidden>
           <span class="spinner" aria-hidden="true"></span>
           <span id="events-loading-text">イベント情報を読み込んでいます…</span>
         </div>
         <div id="events-alert" class="hub-alert" role="alert" hidden></div>
-        <ul id="events-list" class="event-card-list" hidden></ul>
-        <p id="events-empty" class="entity-empty" hidden>管理対象のイベントがまだ登録されていません。管理画面から追加してください。</p>
+        <ul id="event-list" class="entity-list" aria-live="polite"></ul>
+        <p id="event-empty" class="entity-empty" hidden>まだイベントが登録されていません。まずはイベントを追加してください。</p>
       </div>
     </section>
   </main>
+
+  <div id="event-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="event-dialog-title" hidden>
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <form id="event-form">
+        <div class="modal-header">
+          <h2 id="event-dialog-title">イベントを追加</h2>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label for="event-name-input">イベント名</label>
+            <input id="event-name-input" name="event-name" class="input" type="text" autocomplete="off" required data-autofocus>
+          </div>
+          <p class="modal-helper">質問フォーム上で表示されるイベント名を入力してください。</p>
+          <p id="event-error" class="form-error" role="alert" hidden></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-dialog-dismiss="true">キャンセル</button>
+          <button type="submit" class="btn btn-primary">追加</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="confirm-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" hidden>
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="confirm-dialog-title">確認</h2>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-dialog-message"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" id="confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
+        <button type="button" class="btn btn-danger" id="confirm-accept-button">実行する</button>
+      </div>
+    </div>
+  </div>
 
   <telop-footer year="2025"></telop-footer>
 
