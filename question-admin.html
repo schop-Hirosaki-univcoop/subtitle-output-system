@@ -8,6 +8,24 @@
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="question-form.css">
   <script type="module" src="./scripts/shared/layout.js"></script>
+  <script>
+    (function () {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("embed") === "1") {
+          document.documentElement.classList.add("embedded-view");
+          const apply = () => document.body && document.body.classList.add("embedded-view");
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", apply, { once: true });
+          } else {
+            apply();
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to apply embedded view mode", error);
+      }
+    })();
+  </script>
 </head>
 <body class="op-theme question-admin-page">
   <div id="loading-overlay" aria-live="polite" hidden>

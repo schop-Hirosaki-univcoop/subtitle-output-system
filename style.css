@@ -64,6 +64,21 @@ body.modal-open{ overflow:hidden; }
 
 body.question-admin-page.modal-open{ overflow:hidden; }
 
+html.embedded-view body.op-theme{
+  --page-gap:clamp(1rem, 1.6vw, 1.35rem);
+  padding-inline:clamp(.75rem, 1.8vw, 1.25rem);
+  padding-block-start:clamp(.4rem, 1vh, .65rem);
+  padding-block-end:1.5rem;
+  min-height:100%;
+  gap:clamp(.9rem, 1.5vw, 1.25rem);
+}
+
+html.embedded-view body.op-theme::before{ display:none; }
+
+html.embedded-view telop-header,
+html.embedded-view telop-footer,
+html.embedded-view .site-footer{ display:none !important; }
+
 .visually-hidden{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
 
 /* ===== Header ===== */
@@ -1537,7 +1552,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 .flow-progress{
   display:flex;
-  gap:1rem;
+  gap:.65rem;
   align-items:center;
   justify-content:flex-start;
   flex-wrap:wrap;
@@ -1546,8 +1561,8 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 .flow-progress__item{
   display:flex;
   align-items:center;
-  gap:.6rem;
-  padding:.45rem .9rem;
+  gap:.5rem;
+  padding:.32rem .72rem;
   border-radius:999px;
   background:rgba(15,26,43,.6);
   color:var(--muted);
@@ -1572,17 +1587,17 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  width:1.8rem;
-  height:1.8rem;
+  width:1.55rem;
+  height:1.55rem;
   border-radius:50%;
   background:rgba(255,255,255,.08);
   font-weight:600;
-  font-size:.95rem;
+  font-size:.85rem;
 }
 
 .flow-progress__label{
   font-weight:500;
-  font-size:.95rem;
+  font-size:.9rem;
 }
 
 .flow-stage__title{
@@ -1606,6 +1621,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 .flow-pane{
   display:none;
+  min-width:0;
 }
 
 .flow-pane--summary{
@@ -1621,6 +1637,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 .flow-card{
   position:relative;
   transition:transform .4s ease, opacity .35s ease;
+  min-width:0;
 }
 
 .flow-card.is-inert{
@@ -1643,7 +1660,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 #events-main[data-stage="events"] .flow-card--schedules .flow-pane--summary{ display:none; }
 
 #events-main[data-stage="schedules"] .flow-grid{
-  grid-template-columns:minmax(280px, 320px) minmax(0,1fr);
+  grid-template-columns:minmax(260px, 320px) minmax(0,1fr);
   grid-template-areas:
     "events schedules";
 }
@@ -1670,7 +1687,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 
 #events-main[data-stage="tabs"] .flow-grid{
-  grid-template-columns:minmax(280px, 320px) minmax(0,1fr);
+  grid-template-columns:minmax(260px, 320px) minmax(0,1fr);
   grid-template-rows:auto auto;
   grid-template-areas:
     "events tabs"
@@ -1747,6 +1764,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   display:flex;
   gap:.8rem;
   flex-wrap:wrap;
+  justify-content:flex-end;
 }
 
 .entity-list{
@@ -1953,108 +1971,105 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   border-color:rgba(0,142,255,.65);
 }
 
+.flow-card--tabs .module-body{
+  display:flex;
+  flex-direction:column;
+  gap:1.2rem;
+}
+
+.flow-tabpanels{
+  flex:1 1 auto;
+  min-height:0;
+  display:flex;
+  gap:1rem;
+}
+
 .flow-tabpanel{
+  flex:1 1 auto;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
   border-radius:1rem;
   background:rgba(10,22,38,.75);
   border:1px solid rgba(60,96,143,.45);
-  padding:1.2rem;
+  padding:1.1rem;
   outline:none;
+  gap:1rem;
 }
 
 .flow-tabpanel[hidden]{
   display:none;
 }
 
-.tool-card{
+.tool-embed{
+  flex:1 1 auto;
+  min-height:0;
   display:flex;
   flex-direction:column;
   gap:1rem;
-  border-radius:1rem;
-  padding:1.5rem 1.7rem;
-  background:linear-gradient(180deg, rgba(10,24,40,.85), rgba(6,16,28,.92));
-  border:1px solid rgba(60,98,150,.45);
-  box-shadow:0 20px 36px rgba(0,40,80,.35);
 }
 
-.tool-card__title{
-  margin:0;
-  font-size:1.35rem;
-  font-weight:700;
-  color:#fdfcff;
-}
-
-.tool-card__description{
-  margin:0;
-  color:var(--muted);
-  line-height:1.6;
-}
-
-.flow-iframe-shell{
-  min-height:420px;
+.tool-embed__loader{
   display:flex;
   align-items:center;
   justify-content:center;
-  background:rgba(5,12,22,.6);
-  border-radius:.8rem;
-  border:1px dashed rgba(84,124,170,.5);
-  position:relative;
-  overflow:hidden;
-}
-
-.flow-iframe-placeholder{
-  margin:0;
+  gap:.75rem;
+  flex:1 1 auto;
   color:var(--muted);
+  padding:1.2rem;
   text-align:center;
-  padding:2rem;
+  border-radius:.85rem;
+  background:rgba(8,18,32,.6);
+  border:1px dashed rgba(60,96,143,.35);
 }
 
-.flow-iframe-shell iframe{
-  border:none;
+.tool-embed__message{
+  display:block;
+}
+
+.tool-embed__frame{
+  flex:1 1 auto;
+  min-height:520px;
   width:100%;
-  height:70vh;
-  min-height:460px;
-  background:#fff;
+  border:none;
+  border-radius:.85rem;
+  overflow:hidden;
+  background:linear-gradient(180deg, rgba(8,18,32,.9), rgba(6,14,26,.95));
+  box-shadow:inset 0 0 0 1px rgba(60,96,143,.35);
 }
 
-@media (max-width: 960px){
-  #events-main[data-stage="schedules"] .flow-grid,
+@media (max-width: 1080px){
+  #events-main[data-stage="schedules"] .flow-grid{
+    grid-template-columns:minmax(0,1fr);
+    grid-template-areas:
+      "events"
+      "schedules";
+  }
+
   #events-main[data-stage="tabs"] .flow-grid{
     grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto auto auto;
     grid-template-areas:
       "events"
       "schedules"
       "tabs";
   }
-
-  #events-main[data-stage="schedules"] .flow-card--events,
-  #events-main[data-stage="tabs"] .flow-card--events{
-    order:-1;
-  }
-
-  .flow-iframe-shell iframe{
-    height:60vh;
-    min-height:380px;
-  }
 }
 
 @media (max-width: 640px){
   .flow-progress{
-    gap:.6rem;
+    gap:.5rem;
   }
 
   .flow-progress__item{
-    padding:.35rem .65rem;
+    padding:.3rem .6rem;
   }
 
   .flow-stage__title{
     font-size:1.45rem;
   }
 
-  .flow-iframe-shell{
-    min-height:320px;
-  }
-
-  .flow-iframe-shell iframe{
-    min-height:320px;
+  .tool-embed__frame{
+    min-height:420px;
   }
 }
