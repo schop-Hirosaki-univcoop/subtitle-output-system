@@ -21,6 +21,7 @@
   </div>
   <telop-header tagline="Question Form Admin" context-label="管理ページ情報">
     <div slot="meta" id="user-info" class="user-info" hidden aria-hidden="true"></div>
+    <a slot="actions" id="header-open-event-hub" class="btn btn-ghost btn-sm" href="events.html">イベント一覧</a>
     <button slot="actions" id="header-logout" class="btn btn-ghost btn-sm" type="button" hidden>ログアウト</button>
   </telop-header>
 
@@ -72,6 +73,9 @@
         <div class="module-heading">
           <h2 id="participant-title">参加者リストの管理</h2>
           <p class="module-description" id="participant-description">日程を選択し、参加者情報（CSVの列順はテンプレートをご利用ください。参加者ID列は不要で、読み込み時に自動採番されます）をアップロードしてください。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。</p>
+        </div>
+        <div class="module-actions">
+          <a id="open-schedule-hub" class="btn btn-ghost btn-sm" href="#" hidden target="_blank" rel="noreferrer noopener">日程コントロールハブ</a>
         </div>
       </div>
       <div class="module-body">

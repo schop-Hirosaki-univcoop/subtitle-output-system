@@ -84,6 +84,43 @@ import {
   finishLoaderSteps
 } from "./loader.js";
 
+const FOCUS_TARGETS = new Set(["participants", "schedules", "events"]);
+
+function parseInitialSelectionFromUrl() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+    const ensure = (value) => String(value ?? "").trim();
+
+    const eventId = ensure(params.get("eventId") ?? params.get("event"));
+    const scheduleId = ensure(params.get("scheduleId") ?? params.get("schedule"));
+    const scheduleLabel = ensure(params.get("scheduleLabel") ?? params.get("scheduleName"));
+    const eventLabel = ensure(params.get("eventName") ?? params.get("eventLabel"));
+    const focusParam = ensure(params.get("focus") ?? params.get("view"));
+
+    if (eventId) {
+      state.initialSelection = {
+        eventId,
+        scheduleId: scheduleId || null,
+        scheduleLabel: scheduleLabel || null,
+        eventLabel: eventLabel || null
+      };
+    }
+
+    if (focusParam) {
+      const normalizedFocus = focusParam.toLowerCase();
+      if (FOCUS_TARGETS.has(normalizedFocus)) {
+        state.initialFocusTarget = normalizedFocus;
+      }
+    }
+  } catch (error) {
+    console.debug("failed to parse initial selection", error);
+  }
+}
+
 function generateQuestionToken(existingTokens = state.knownTokens) {
   const used = existingTokens instanceof Set ? existingTokens : new Set();
   const cryptoObj = ensureCrypto();
@@ -903,6 +940,97 @@ function renderEvents() {
   });
 }
 
+function buildScheduleHubUrl(event, schedule) {
+  if (!event || !schedule || typeof window === "undefined") {
+    return "#";
+  }
+
+  const url = new URL("schedule-hub.html", window.location.href);
+  const eventId = String(event.id || "");
+  const scheduleId = String(schedule.id || "");
+  url.searchParams.set("eventId", eventId);
+  url.searchParams.set("scheduleId", scheduleId);
+  url.searchParams.set("scheduleKey", `${eventId}::${scheduleId}`);
+
+  if (event.name) {
+    url.searchParams.set("eventName", String(event.name));
+  }
+  if (schedule.label) {
+    url.searchParams.set("scheduleLabel", String(schedule.label));
+  }
+  if (schedule.startAt) {
+    url.searchParams.set("startAt", String(schedule.startAt));
+  }
+  if (schedule.endAt) {
+    url.searchParams.set("endAt", String(schedule.endAt));
+  }
+  if (typeof schedule.participantCount === "number" && Number.isFinite(schedule.participantCount)) {
+    url.searchParams.set("participantCount", String(schedule.participantCount));
+  }
+
+  return url.toString();
+}
+
+function hideScheduleHubLink() {
+  if (!dom.scheduleHubLink) return;
+  dom.scheduleHubLink.hidden = true;
+  dom.scheduleHubLink.href = "#";
+  dom.scheduleHubLink.setAttribute("aria-disabled", "true");
+  dom.scheduleHubLink.removeAttribute("title");
+  dom.scheduleHubLink.removeAttribute("aria-label");
+}
+
+function showScheduleHubLink(event, schedule) {
+  if (!dom.scheduleHubLink) return;
+  const hubUrl = buildScheduleHubUrl(event, schedule);
+  if (!hubUrl || hubUrl === "#") {
+    hideScheduleHubLink();
+    return;
+  }
+
+  const scheduleName = schedule?.label || schedule?.id || "";
+  const labelText = scheduleName
+    ? `日程「${scheduleName}」のコントロールハブを開く`
+    : "日程コントロールハブを開く";
+
+  dom.scheduleHubLink.hidden = false;
+  dom.scheduleHubLink.href = hubUrl;
+  dom.scheduleHubLink.removeAttribute("aria-disabled");
+  dom.scheduleHubLink.setAttribute("title", labelText);
+  dom.scheduleHubLink.setAttribute("aria-label", labelText);
+}
+
+function updateEventHubShortcut(event) {
+  if (!dom.eventHubLink) return;
+
+  let href = "events.html";
+  let buttonLabel = "イベント一覧";
+  let descriptiveLabel = "イベント一覧を開く";
+
+  if (typeof window !== "undefined") {
+    const basePath = event ? "event-hub.html" : "events.html";
+    const url = new URL(basePath, window.location.href);
+    if (event?.id) {
+      url.searchParams.set("eventId", event.id);
+    }
+    if (event?.name) {
+      url.searchParams.set("eventName", event.name);
+    }
+    href = url.toString();
+  }
+
+  if (event?.id) {
+    const name = event.name || event.id;
+    buttonLabel = "イベントハブを開く";
+    descriptiveLabel = `イベント「${name}」のハブを開く`;
+  }
+
+  dom.eventHubLink.href = href;
+  dom.eventHubLink.textContent = buttonLabel;
+  dom.eventHubLink.setAttribute("aria-label", descriptiveLabel);
+  dom.eventHubLink.setAttribute("title", descriptiveLabel);
+}
+
 function renderSchedules() {
   const list = dom.scheduleList;
   if (!list) return;
@@ -950,6 +1078,14 @@ function renderSchedules() {
 
     const actions = document.createElement("div");
     actions.className = "entity-actions";
+    const hubLink = document.createElement("a");
+    hubLink.className = "btn-icon";
+    hubLink.href = buildScheduleHubUrl(selectedEvent, schedule);
+    hubLink.title = "日程ハブを開く";
+    hubLink.setAttribute("aria-label", `日程「${schedule.label || schedule.id}」のコントロールハブを開く`);
+    hubLink.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M3.25 2A1.25 1.25 0 0 0 2 3.25v9.5A1.25 1.25 0 0 0 3.25 14h9.5A1.25 1.25 0 0 0 14 12.75v-4a.75.75 0 0 0-1.5 0v4a.25.25 0 0 1-.25.25h-9.5a.25.25 0 0 1-.25-.25v-9.5a.25.25 0 0 1 .25-.25h4a.75.75 0 0 0 0-1.5h-4Z\"/><path fill=\"currentColor\" d=\"M8.75 2a.75.75 0 0 0 0 1.5h2.69L6.72 8.22a.75.75 0 0 0 1.06 1.06l4.72-4.72v2.69a.75.75 0 0 0 1.5 0v-5a.75.75 0 0 0-.75-.75h-5Z\"/></svg>";
+    hubLink.addEventListener("click", event => event.stopPropagation());
+    actions.appendChild(hubLink);
     const editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.className = "btn-icon";
@@ -1030,6 +1166,9 @@ function updateParticipantContext(options = {}) {
   const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
   const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === state.selectedScheduleId);
 
+  updateEventHubShortcut(selectedEvent || null);
+  hideScheduleHubLink();
+
   if (!selectedEvent || !selectedSchedule) {
     if (dom.participantContext) {
       dom.participantContext.textContent = "日程を選択すると、現在登録されている参加者が表示されます。";
@@ -1056,13 +1195,15 @@ function updateParticipantContext(options = {}) {
     return;
   }
 
+  showScheduleHubLink(selectedEvent, selectedSchedule);
+
   if (dom.csvInput) dom.csvInput.disabled = false;
   if (dom.teamCsvInput) dom.teamCsvInput.disabled = false;
   if (dom.participantContext) {
     const scheduleName = selectedSchedule.label || selectedSchedule.id;
     const scheduleRange = describeScheduleRange(selectedSchedule);
     const rangeSuffix = scheduleRange ? `（${scheduleRange}）` : "";
-    dom.participantContext.textContent = `イベント「${selectedEvent.name}」/ 日程「${scheduleName}」${rangeSuffix}の参加者を管理しています。専用リンクは各行のボタンまたはURLから取得できます。`;
+    dom.participantContext.textContent = `イベント「${selectedEvent.name}」/ 日程「${scheduleName}」${rangeSuffix}の参加者を管理しています。必要に応じて上部の「日程コントロールハブ」から運用ツールに移動できます。専用リンクは各行のボタンまたはURLから取得できます。`;
   }
   if (!preserveStatus) {
     setUploadStatus("ファイルを選択して参加者リストを更新してください。");
@@ -1124,7 +1265,33 @@ async function loadEvents({ preserveSelection = true } = {}) {
 
   state.events = normalized;
 
-  if (previousEventId && state.events.some(evt => evt.id === previousEventId)) {
+  let selectionNotice = null;
+  if (!state.initialSelectionApplied && state.initialSelection?.eventId) {
+    const { eventId, scheduleId, scheduleLabel, eventLabel } = state.initialSelection;
+    const targetEvent = state.events.find(evt => evt.id === eventId) || null;
+    if (targetEvent) {
+      state.selectedEventId = eventId;
+      if (scheduleId) {
+        const targetSchedule = targetEvent.schedules?.find(s => s.id === scheduleId) || null;
+        if (targetSchedule) {
+          state.selectedScheduleId = scheduleId;
+        } else {
+          state.selectedScheduleId = null;
+          const label = scheduleLabel || scheduleId;
+          selectionNotice = `指定された日程「${label}」が見つかりません。`;
+        }
+      } else {
+        state.selectedScheduleId = null;
+      }
+    } else {
+      state.selectedEventId = null;
+      state.selectedScheduleId = null;
+      const label = eventLabel || eventId;
+      selectionNotice = `指定されたイベント「${label}」が見つかりません。`;
+    }
+    state.initialSelectionApplied = true;
+    state.initialSelection = null;
+  } else if (previousEventId && state.events.some(evt => evt.id === previousEventId)) {
     state.selectedEventId = previousEventId;
     const schedules = state.events.find(evt => evt.id === previousEventId)?.schedules || [];
     if (previousScheduleId && schedules.some(s => s.id === previousScheduleId)) {
@@ -1136,6 +1303,8 @@ async function loadEvents({ preserveSelection = true } = {}) {
     state.selectedEventId = null;
     state.selectedScheduleId = null;
   }
+
+  state.initialSelectionNotice = selectionNotice;
 
   renderEvents();
   renderSchedules();
@@ -2086,7 +2255,55 @@ function setAuthUi(signedIn) {
     if (dom.addScheduleButton) dom.addScheduleButton.disabled = true;
     if (dom.csvInput) dom.csvInput.disabled = true;
     if (dom.saveButton) dom.saveButton.disabled = true;
+    hideScheduleHubLink();
   }
+}
+
+function resolveFocusTargetElement(target) {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  switch (target) {
+    case "participants":
+      return document.getElementById("participant-title") || dom.participantContext || null;
+    case "schedules":
+      return document.getElementById("schedule-title") || dom.scheduleDescription || null;
+    case "events":
+      return document.getElementById("event-title") || dom.eventList || null;
+    default:
+      return null;
+  }
+}
+
+function maybeFocusInitialSection() {
+  const target = state.initialFocusTarget;
+  if (!target) return;
+
+  state.initialFocusTarget = "";
+  const element = resolveFocusTargetElement(target);
+  if (!(element instanceof HTMLElement)) {
+    return;
+  }
+
+  const needsTabIndex = !element.hasAttribute("tabindex");
+  if (needsTabIndex) {
+    element.setAttribute("tabindex", "-1");
+    element.dataset.tempFocusTarget = "true";
+  }
+
+  requestAnimationFrame(() => {
+    element.scrollIntoView({ behavior: "smooth", block: "start" });
+    element.focus({ preventScroll: true });
+    element.classList.add("section-focus-highlight");
+    window.setTimeout(() => {
+      element.classList.remove("section-focus-highlight");
+      if (element.dataset.tempFocusTarget) {
+        element.removeAttribute("tabindex");
+        delete element.dataset.tempFocusTarget;
+      }
+    }, 2000);
+  });
 }
 
 function resetState() {
@@ -2103,6 +2320,10 @@ function resetState() {
   state.teamAssignments = new Map();
   state.editingParticipantId = null;
   state.editingRowKey = null;
+  state.initialSelection = null;
+  state.initialSelectionApplied = false;
+  state.initialSelectionNotice = null;
+  state.initialFocusTarget = "";
   resetTokenState();
   renderEvents();
   renderSchedules();
@@ -2711,11 +2932,18 @@ function initAuthWatcher() {
       await ensureTokenSnapshot(true);
       await loadEvents({ preserveSelection: false });
       await loadParticipants();
+      if (state.initialSelectionNotice) {
+        setUploadStatus(state.initialSelectionNotice, "error");
+        state.initialSelectionNotice = null;
+      }
       await drainQuestionQueue();
       setLoaderStep(3, "初期データの取得が完了しました。仕上げ中…");
       setAuthUi(true);
       finishLoaderSteps("準備完了");
       requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
+      if (state.initialFocusTarget) {
+        window.setTimeout(() => maybeFocusInitialSection(), 400);
+      }
     } catch (error) {
       console.error(error);
       setLoginError(error.message || "権限の確認に失敗しました。");
@@ -2731,6 +2959,7 @@ function init() {
   attachEventHandlers();
   initLoaderSteps(STEP_LABELS);
   resetState();
+  parseInitialSelectionFromUrl();
   initAuthWatcher();
 }
 

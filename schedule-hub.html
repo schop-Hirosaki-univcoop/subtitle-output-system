@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>日程コントロールハブ</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2712%27%20fill%3D%2705111f%27%2F%3E%3Ctext%20x%3D%2732%27%20y%3D%2742%27%20text-anchor%3D%27middle%27%20font-family%3D%27Arial%2C%20sans-serif%27%20font-size%3D%2736%27%20fill%3D%2700eaff%27%3EH%3C%2Ftext%3E%3C%2Fsvg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="./scripts/shared/layout.js"></script>
+</head>
+<body class="op-theme schedule-hub-page">
+  <telop-header tagline="Schedule Control Hub" context-label="ナビゲーション">
+    <div slot="meta" id="hub-meta" class="hub-meta-note" hidden></div>
+    <a slot="actions" id="hub-back-link" class="btn btn-ghost btn-sm" href="question-admin.html">前のページに戻る</a>
+  </telop-header>
+
+  <div id="hub-login-card" class="auth-card" role="dialog" aria-labelledby="hub-login-title">
+    <h2 id="hub-login-title">日程コントロールハブ</h2>
+    <p class="auth-lead">イベント日程に紐づくツールへアクセスするには、管理用の Google アカウントでサインインしてください。</p>
+    <p id="hub-login-error" class="auth-error" role="alert" hidden></p>
+    <button id="hub-login-button" class="btn btn-primary" type="button">Googleアカウントでログイン</button>
+  </div>
+
+  <main class="single-main" id="hub-main" hidden>
+    <section class="module module--primary hub-module" aria-labelledby="hub-title">
+      <div class="module-header">
+        <div class="module-heading">
+          <h1 id="hub-title">日程コントロールハブ</h1>
+          <p class="module-description">選択したイベント日程に紐づく主要ツールへすばやく移動できます。</p>
+        </div>
+      </div>
+      <div class="module-body hub-body">
+        <div id="hub-loading" class="hub-loading" role="status" aria-live="polite" hidden>
+          <span class="spinner" aria-hidden="true"></span>
+          <span id="hub-loading-text">日程情報を読み込んでいます…</span>
+        </div>
+        <div id="hub-alert" class="hub-alert" role="alert" hidden></div>
+        <div id="hub-summary" class="hub-summary" hidden>
+          <div class="hub-meta-grid">
+            <div class="hub-meta-row">
+              <span class="hub-meta-label">イベント</span>
+              <span id="hub-event-name" class="hub-meta-value">—</span>
+            </div>
+            <div class="hub-meta-row">
+              <span class="hub-meta-label">日程</span>
+              <div class="hub-meta-stack">
+                <span id="hub-schedule-label" class="hub-meta-value">—</span>
+                <span id="hub-schedule-range" class="hub-meta-sub" hidden>—</span>
+              </div>
+            </div>
+            <div class="hub-meta-row">
+              <span class="hub-meta-label">参加者</span>
+              <span id="hub-participant-count" class="hub-meta-value">—</span>
+            </div>
+          </div>
+        </div>
+        <div id="hub-actions" class="hub-actions" hidden>
+          <a id="open-operator" class="hub-card" href="#">
+            <h2 class="hub-card__title">テロップ操作パネル</h2>
+            <p class="hub-card__desc">質問の選択・送出を行う運用画面です。選択したイベントと日程が自動的に反映されます。</p>
+            <span class="hub-card__cta">パネルを開く<span aria-hidden="true">→</span></span>
+          </a>
+          <a id="open-participants" class="hub-card" href="#">
+            <h2 class="hub-card__title">参加者リスト管理</h2>
+            <p class="hub-card__desc">参加者情報の登録・更新、専用リンクの発行、班番号の割り当てを行います。</p>
+            <span class="hub-card__cta">管理画面を開く<span aria-hidden="true">→</span></span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <telop-footer year="2025"></telop-footer>
+
+  <script type="module" src="./scripts/schedule-hub/index.js"></script>
+</body>
+</html>
