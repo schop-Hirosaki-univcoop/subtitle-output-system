@@ -82,17 +82,21 @@
                     </div>
                     <div class="cards-toolbar">
                         <div class="toolbar-left">
-                            <label class="schedule-filter" for="schedule-filter">
-                                <span class="schedule-label">日程</span>
-                                <select id="schedule-filter" name="schedule-filter" aria-label="日程フィルター">
-                                </select>
-                                <span id="schedule-time-range" class="schedule-range" aria-live="polite" hidden></span>
+                            <div class="schedule-context" aria-live="polite">
+                                <div id="schedule-event-name" class="schedule-event" role="text">—</div>
+                                <div class="schedule-meta">
+                                    <span id="schedule-label" class="schedule-label">—</span>
+                                    <span id="schedule-time-range" class="schedule-range" hidden></span>
+                                </div>
+                            </div>
+                            <a id="operator-open-schedule-hub" class="btn btn-ghost btn-sm" href="#" hidden target="_blank" rel="noreferrer noopener">日程コントロールハブ</a>
+                        </div>
+                        <div class="toolbar-right">
+                            <label class="chk">
+                                <input id="select-all-checkbox" type="checkbox" />
+                                全選択
                             </label>
                         </div>
-                        <label class="chk">
-                            <input id="select-all-checkbox" type="checkbox" />
-                            全選択
-                        </label>
                     </div>
                 </div>
                 <div class="cards-scroll">
