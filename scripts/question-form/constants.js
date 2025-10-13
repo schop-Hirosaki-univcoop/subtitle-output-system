@@ -10,6 +10,6 @@ export const firebaseConfig = {
   databaseURL: "https://subtitle-output-system-9bc14-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "subtitle-output-system-9bc14",
   storageBucket: "subtitle-output-system-9bc14.firebasestorage.app",
-  messagingSenderId: "154494683809",
-  appId: "1:154494683809:web:2a309509672f2e86314e61"
+  messagingSenderId: "378400426909",
+  appId: "1:378400426909:web:f1549aad61e3f7aacebd74"
 };
