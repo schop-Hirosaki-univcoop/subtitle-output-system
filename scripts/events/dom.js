@@ -35,8 +35,7 @@ export function queryDom() {
     scheduleSummaryRangeRow: document.getElementById("schedule-summary-range-row"),
     scheduleList: document.getElementById("schedule-list"),
     scheduleEmpty: document.getElementById("schedule-empty"),
-    openParticipantsButton: document.getElementById("open-participants-button"),
-    openOperatorButton: document.getElementById("open-operator-button"),
+    scheduleNextButton: document.getElementById("schedule-next-button"),
     scheduleBackButton: document.getElementById("schedule-back-button"),
     scheduleChangeButton: document.getElementById("schedule-change-button"),
     eventDialog: document.getElementById("event-dialog"),
@@ -68,7 +67,9 @@ export function queryDom() {
     toolSummarySchedule: document.getElementById("tool-summary-schedule"),
     toolSummaryTime: document.getElementById("tool-summary-time"),
     toolSummaryTimeRow: document.getElementById("tool-summary-time-row"),
-    launchParticipantsButton: document.getElementById("launch-participants-button"),
-    launchOperatorButton: document.getElementById("launch-operator-button")
+    participantsLoader: document.getElementById("participants-embed-loader"),
+    operatorLoader: document.getElementById("operator-embed-loader"),
+    participantsFrame: document.getElementById("participants-embed-frame"),
+    operatorFrame: document.getElementById("operator-embed-frame")
   };
 }

@@ -93,8 +93,7 @@
             <ul id="schedule-list" class="entity-list" aria-live="polite"></ul>
             <p id="schedule-empty" class="entity-empty" hidden>このイベントにはまだ日程が登録されていません。まずは日程を追加してください。</p>
             <div id="schedule-forward-actions" class="flow-forward-actions">
-              <button id="open-participants-button" class="btn btn-ghost btn-sm" type="button" disabled>参加者リストを準備</button>
-              <button id="open-operator-button" class="btn btn-primary btn-sm" type="button" disabled>テロップ操作パネルへ</button>
+              <button id="schedule-next-button" class="btn btn-primary btn-sm" type="button" disabled>参加者・テロップ管理へ</button>
             </div>
           </div>
           <div class="flow-pane flow-pane--summary" id="schedule-summary-pane">
@@ -112,22 +111,10 @@
       <section id="flow-tabs" class="module module--primary flow-card flow-card--tabs" aria-labelledby="flow-tabs-title">
         <div class="module-header">
           <div class="module-heading">
-            <h2 id="flow-tabs-title">テロップ操作パネル</h2>
-            <p class="module-description">選択したイベントと日程の概要を確認し、参加者リスト管理とテロップ操作ツールへ進みます。</p>
+            <h2 id="flow-tabs-title">参加者 / テロップ管理</h2>
+            <p class="module-description">選択したイベントと日程の概要を確認し、参加者リスト管理とテロップ操作ツールをタブで切り替えて操作します。</p>
           </div>
           <div class="module-actions">
-            <a id="logs-shortcut" class="btn btn-ghost btn-icon" href="operator.html#logs" target="_blank" rel="noreferrer noopener" aria-label="操作ログを開く">
-              <span class="icon icon-menu" aria-hidden="true">
-                <svg viewBox="0 0 24 24" role="img" focusable="false"><path d="M4 6.75A.75.75 0 0 1 4.75 6h14.5a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 6.75Zm0 5.25a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 12Zm.75 4.5a.75.75 0 0 0 0 1.5h14.5a.75.75 0 0 0 0-1.5H4.75Z"/></svg>
-              </span>
-              <span class="btn-label">ログ</span>
-            </a>
-            <a id="dictionary-shortcut" class="btn btn-ghost btn-icon" href="operator.html#dictionary" target="_blank" rel="noreferrer noopener" aria-label="ルビ辞書管理を開く">
-              <span class="icon icon-book" aria-hidden="true">
-                <svg viewBox="0 0 24 24" role="img" focusable="false"><path d="M6.25 4C5.01 4 4 5.01 4 6.25v11.5C4 19.99 5.01 21 6.25 21H18a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H6.25Zm.25 2h11v12H6.25a.25.25 0 0 1-.25-.25V6.25c0-.138.112-.25.25-.25ZM8 8.25A.75.75 0 0 1 8.75 7.5h6.5a.75.75 0 0 1 0 1.5h-6.5A.75.75 0 0 1 8 8.25ZM8.75 11a.75.75 0 0 0 0 1.5h3.5a.75.75 0 0 0 0-1.5h-3.5Z"/></svg>
-              </span>
-              <span class="btn-label">辞書</span>
-            </a>
             <button id="flow-tabs-back-button" class="btn btn-ghost btn-sm" type="button">日程の管理に戻る</button>
           </div>
         </div>
@@ -146,17 +133,21 @@
           </div>
           <div class="flow-tabpanels">
             <section id="flow-panel-participants" class="flow-tabpanel is-active" role="tabpanel" tabindex="0" aria-labelledby="flow-tab-participants">
-              <div class="tool-card">
-                <h3 class="tool-card__title">参加者リスト管理</h3>
-                <p class="tool-card__description">参加者の登録状況を確認し、出欠の管理や案内メールの送信を行います。新しいウィンドウで開きます。</p>
-                <button id="launch-participants-button" class="btn btn-primary" type="button">参加者リストを開く</button>
+              <div class="tool-embed" data-tool="participants">
+                <div id="participants-embed-loader" class="tool-embed__loader" role="status" aria-live="polite" hidden>
+                  <span class="spinner" aria-hidden="true"></span>
+                  <span class="tool-embed__message">参加者リスト管理を読み込んでいます…</span>
+                </div>
+                <iframe id="participants-embed-frame" class="tool-embed__frame" title="参加者リスト管理" hidden loading="lazy" allow="clipboard-read; clipboard-write"></iframe>
               </div>
             </section>
             <section id="flow-panel-operator" class="flow-tabpanel" role="tabpanel" tabindex="0" aria-labelledby="flow-tab-operator" hidden>
-              <div class="tool-card">
-                <h3 class="tool-card__title">テロップ操作パネル</h3>
-                <p class="tool-card__description">質問カードの送出やログ監視、辞書更新を同じ画面で操作できます。選択中の日程を引き継いで開きます。</p>
-                <button id="launch-operator-button" class="btn btn-primary" type="button">テロップ操作パネルを開く</button>
+              <div class="tool-embed" data-tool="operator">
+                <div id="operator-embed-loader" class="tool-embed__loader" role="status" aria-live="polite" hidden>
+                  <span class="spinner" aria-hidden="true"></span>
+                  <span class="tool-embed__message">テロップ操作パネルを読み込んでいます…</span>
+                </div>
+                <iframe id="operator-embed-frame" class="tool-embed__frame" title="テロップ操作パネル" hidden loading="lazy" allow="clipboard-read; clipboard-write"></iframe>
               </div>
             </section>
           </div>

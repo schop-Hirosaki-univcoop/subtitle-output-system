@@ -96,6 +96,10 @@ export class EventAdminApp {
     this.lastFocused = null;
     this.confirmResolver = null;
     this.redirectingToIndex = false;
+    this.toolFrames = {
+      participants: { currentUrl: "", isLoaded: false },
+      operator: { currentUrl: "", isLoaded: false }
+    };
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
   }
 
@@ -125,6 +129,7 @@ export class EventAdminApp {
     this.updateScheduleSummary();
     this.updateEventSummary();
     this.updateToolSummary();
+    this.resetToolFrames(true);
     this.updateStageUi();
     this.updateFlowButtons();
     this.updateSelectionNotes();
@@ -168,33 +173,15 @@ export class EventAdminApp {
       });
     }
 
-    if (this.dom.flowTabsBackButton) {
-      this.dom.flowTabsBackButton.addEventListener("click", () => {
-        this.setStage("schedules");
-      });
-    }
-
-    if (this.dom.openParticipantsButton) {
-      this.dom.openParticipantsButton.addEventListener("click", () => {
+    if (this.dom.scheduleNextButton) {
+      this.dom.scheduleNextButton.addEventListener("click", () => {
         this.enterTabsStage("participants");
       });
     }
 
-    if (this.dom.openOperatorButton) {
-      this.dom.openOperatorButton.addEventListener("click", () => {
-        this.enterTabsStage("operator");
-      });
-    }
-
-    if (this.dom.launchParticipantsButton) {
-      this.dom.launchParticipantsButton.addEventListener("click", () => {
-        this.launchParticipantsTool();
-      });
-    }
-
-    if (this.dom.launchOperatorButton) {
-      this.dom.launchOperatorButton.addEventListener("click", () => {
-        this.launchOperatorTool();
+    if (this.dom.flowTabsBackButton) {
+      this.dom.flowTabsBackButton.addEventListener("click", () => {
+        this.setStage("schedules");
       });
     }
 
@@ -210,45 +197,15 @@ export class EventAdminApp {
       });
     }
 
-    if (this.dom.nextButton) {
-      this.dom.nextButton.addEventListener("click", () => {
-        this.goToStage("schedules");
+    if (this.dom.participantsFrame) {
+      this.dom.participantsFrame.addEventListener("load", () => {
+        this.handleToolFrameLoad("participants");
       });
     }
 
-    if (this.dom.scheduleBackButton) {
-      this.dom.scheduleBackButton.addEventListener("click", () => {
-        this.setStage("events");
-      });
-    }
-
-    if (this.dom.flowTabsBackButton) {
-      this.dom.flowTabsBackButton.addEventListener("click", () => {
-        this.setStage("schedules");
-      });
-    }
-
-    if (this.dom.openParticipantsButton) {
-      this.dom.openParticipantsButton.addEventListener("click", () => {
-        this.enterTabsStage("participants");
-      });
-    }
-
-    if (this.dom.openOperatorButton) {
-      this.dom.openOperatorButton.addEventListener("click", () => {
-        this.enterTabsStage("operator");
-      });
-    }
-
-    if (this.dom.participantsTab) {
-      this.dom.participantsTab.addEventListener("click", () => {
-        this.switchTab("participants");
-      });
-    }
-
-    if (this.dom.operatorTab) {
-      this.dom.operatorTab.addEventListener("click", () => {
-        this.switchTab("operator");
+    if (this.dom.operatorFrame) {
+      this.dom.operatorFrame.addEventListener("load", () => {
+        this.handleToolFrameLoad("operator");
       });
     }
 
@@ -678,6 +635,13 @@ export class EventAdminApp {
     this.updateToolSummary();
     this.updateFlowButtons();
     this.updateSelectionNotes();
+    if (this.stageHistory.has("tabs")) {
+      if (this.selectedScheduleId) {
+        this.prepareToolFrames();
+      } else {
+        this.resetToolFrames();
+      }
+    }
     if (this.stage === "tabs" && this.selectedScheduleId) {
       this.switchTab(this.activeTab);
     } else if (!normalized && this.stage === "tabs") {
@@ -694,6 +658,9 @@ export class EventAdminApp {
     this.updateToolSummary();
     this.updateFlowButtons();
     this.updateSelectionNotes();
+    if (!this.selectedScheduleId) {
+      this.resetToolFrames(true);
+    }
     if (!event && (this.stage === "schedules" || this.stage === "tabs")) {
       this.setStage("events");
     }
@@ -894,6 +861,87 @@ export class EventAdminApp {
     }
   }
 
+  prepareToolFrames() {
+    const schedule = this.getSelectedSchedule();
+    if (!schedule) {
+      this.resetToolFrames();
+      return;
+    }
+    this.updateToolFrame("participants", this.buildParticipantAdminUrlForSchedule(schedule));
+    this.updateToolFrame("operator", this.buildOperatorPanelUrl(schedule));
+  }
+
+  updateToolFrame(tool, baseUrl) {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!baseUrl) {
+      return;
+    }
+    const frame = tool === "participants" ? this.dom.participantsFrame : this.dom.operatorFrame;
+    const loader = tool === "participants" ? this.dom.participantsLoader : this.dom.operatorLoader;
+    const state = this.toolFrames[tool];
+    if (!frame || !state) {
+      return;
+    }
+    const url = new URL(baseUrl, window.location.href);
+    url.searchParams.set("embed", "1");
+    const urlString = url.toString();
+    if (state.currentUrl === urlString) {
+      return;
+    }
+    state.currentUrl = urlString;
+    state.isLoaded = false;
+    frame.hidden = true;
+    if (loader) {
+      loader.hidden = false;
+    }
+    frame.src = urlString;
+  }
+
+  handleToolFrameLoad(tool) {
+    const frame = tool === "participants" ? this.dom.participantsFrame : this.dom.operatorFrame;
+    const loader = tool === "participants" ? this.dom.participantsLoader : this.dom.operatorLoader;
+    const state = this.toolFrames[tool];
+    if (!frame || !state) {
+      return;
+    }
+    state.isLoaded = true;
+    if (loader) {
+      loader.hidden = true;
+    }
+    if (state.currentUrl) {
+      frame.hidden = false;
+    }
+  }
+
+  resetToolFrames(clearUrl = false) {
+    this.resetToolFrame("participants", clearUrl);
+    this.resetToolFrame("operator", clearUrl);
+  }
+
+  resetToolFrame(tool, clearUrl) {
+    const frame = tool === "participants" ? this.dom.participantsFrame : this.dom.operatorFrame;
+    const loader = tool === "participants" ? this.dom.participantsLoader : this.dom.operatorLoader;
+    const state = this.toolFrames[tool];
+    if (!state) {
+      return;
+    }
+    state.isLoaded = false;
+    if (clearUrl) {
+      state.currentUrl = "";
+    }
+    if (frame) {
+      frame.hidden = true;
+      if (clearUrl) {
+        frame.removeAttribute("src");
+      }
+    }
+    if (loader) {
+      loader.hidden = true;
+    }
+  }
+
   updateStageUi() {
     if (this.dom.main) {
       this.dom.main.dataset.stage = this.stage;
@@ -990,23 +1038,14 @@ export class EventAdminApp {
     if (this.dom.scheduleRefreshButton) {
       this.dom.scheduleRefreshButton.disabled = !signedIn || !hasEvent;
     }
-    if (this.dom.openParticipantsButton) {
-      this.dom.openParticipantsButton.disabled = !signedIn || !hasSchedule;
-    }
-    if (this.dom.openOperatorButton) {
-      this.dom.openOperatorButton.disabled = !signedIn || !hasSchedule;
+    if (this.dom.scheduleNextButton) {
+      this.dom.scheduleNextButton.disabled = !signedIn || !hasSchedule;
     }
     if (this.dom.participantsTab) {
       this.dom.participantsTab.disabled = !signedIn || !hasSchedule;
     }
     if (this.dom.operatorTab) {
       this.dom.operatorTab.disabled = !signedIn || !hasSchedule;
-    }
-    if (this.dom.launchParticipantsButton) {
-      this.dom.launchParticipantsButton.disabled = !signedIn || !hasSchedule;
-    }
-    if (this.dom.launchOperatorButton) {
-      this.dom.launchOperatorButton.disabled = !signedIn || !hasSchedule;
     }
   }
 
@@ -1050,6 +1089,7 @@ export class EventAdminApp {
     this.setStage(stage);
     if (stage === "tabs") {
       this.updateToolSummary();
+      this.prepareToolFrames();
       this.switchTab(this.activeTab);
     }
   }
@@ -1440,28 +1480,6 @@ export class EventAdminApp {
     if (scheduleKey) url.searchParams.set("scheduleKey", scheduleKey);
     url.searchParams.set("source", "events");
     return url.toString();
-  }
-
-  launchParticipantsTool() {
-    if (typeof window === "undefined") return;
-    const schedule = this.getSelectedSchedule();
-    if (!schedule) {
-      this.revealScheduleSelectionCue();
-      return;
-    }
-    const url = this.buildParticipantAdminUrlForSchedule(schedule);
-    window.open(url, "_blank", "noreferrer noopener");
-  }
-
-  launchOperatorTool() {
-    if (typeof window === "undefined") return;
-    const schedule = this.getSelectedSchedule();
-    if (!schedule) {
-      this.revealScheduleSelectionCue();
-      return;
-    }
-    const url = this.buildOperatorPanelUrl(schedule);
-    window.open(url, "_blank", "noreferrer noopener");
   }
 
   openEventDialog({ mode = "create", event = null } = {}) {
