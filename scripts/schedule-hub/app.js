@@ -441,9 +441,15 @@ export class ScheduleHubApp {
 
   updateBackLink() {
     if (!this.dom.backLink || typeof window === "undefined") return;
-    const url = new URL("question-admin.html", window.location.href);
-    if (this.context.eventId) {
+    const hasEvent = Boolean(this.context.eventId);
+    const basePath = hasEvent ? "event-hub.html" : "question-admin.html";
+    const url = new URL(basePath, window.location.href);
+    if (hasEvent) {
       url.searchParams.set("eventId", this.context.eventId);
+      const eventName = ensureString(this.context.eventName || this.eventData?.name);
+      if (eventName) {
+        url.searchParams.set("eventName", eventName);
+      }
     }
     this.dom.backLink.href = url.toString();
   }
