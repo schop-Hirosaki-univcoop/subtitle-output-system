@@ -14,6 +14,7 @@ export function queryDom() {
     scheduleEventName: document.getElementById("schedule-event-name"),
     scheduleLabel: document.getElementById("schedule-label"),
     scheduleTimeRange: document.getElementById("schedule-time-range"),
+    scheduleHubLink: document.getElementById("operator-open-schedule-hub"),
     dictionaryTableBody: document.querySelector("#dictionary-table tbody"),
     addTermForm: document.getElementById("add-term-form"),
     newTermInput: document.getElementById("new-term"),
