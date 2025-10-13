@@ -16,7 +16,11 @@ const state = {
   teamAssignments: new Map(),
   tokenSnapshotFetchedAt: 0,
   editingParticipantId: null,
-  editingRowKey: null
+  editingRowKey: null,
+  initialSelection: null,
+  initialSelectionApplied: false,
+  initialSelectionNotice: null,
+  initialFocusTarget: ""
 };
 
 const calendarState = {
