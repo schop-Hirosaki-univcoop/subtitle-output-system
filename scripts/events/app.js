@@ -96,10 +96,11 @@ export class EventAdminApp {
     this.lastFocused = null;
     this.confirmResolver = null;
     this.redirectingToIndex = false;
-    this.toolFrames = {
-      participants: { currentUrl: "", isLoaded: false },
-      operator: { currentUrl: "", isLoaded: false }
+    this.embeddedTools = {
+      participants: { promise: null, ready: false },
+      operator: { promise: null, ready: false }
     };
+    this.lastToolContextSignature = "";
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
   }
 
@@ -121,6 +122,7 @@ export class EventAdminApp {
     this.stage = "events";
     this.stageHistory = new Set(["events"]);
     this.activeTab = "participants";
+    this.lastToolContextSignature = "";
     if (this.dom.scheduleLoading) {
       this.dom.scheduleLoading.hidden = true;
     }
@@ -194,18 +196,6 @@ export class EventAdminApp {
     if (this.dom.operatorTab) {
       this.dom.operatorTab.addEventListener("click", () => {
         this.switchTab("operator");
-      });
-    }
-
-    if (this.dom.participantsFrame) {
-      this.dom.participantsFrame.addEventListener("load", () => {
-        this.handleToolFrameLoad("participants");
-      });
-    }
-
-    if (this.dom.operatorFrame) {
-      this.dom.operatorFrame.addEventListener("load", () => {
-        this.handleToolFrameLoad("operator");
       });
     }
 
@@ -448,6 +438,7 @@ export class EventAdminApp {
     const previousScheduleId = this.selectedScheduleId;
 
     this.events = normalized;
+    this.lastToolContextSignature = "";
     this.updateMetaNote();
     this.updateDocumentTitle();
     this.ensureSelectedEvent(previousEventId);
@@ -589,12 +580,16 @@ export class EventAdminApp {
   }
 
   selectEvent(eventId) {
+    const previous = this.selectedEventId;
     const normalized = ensureString(eventId);
     if (normalized && !this.events.some((event) => event.id === normalized)) {
       return;
     }
 
     this.selectedEventId = normalized;
+    if (previous !== normalized) {
+      this.lastToolContextSignature = "";
+    }
     this.renderEvents();
     this.updateScheduleStateFromSelection();
     this.updateEventSummary();
@@ -624,23 +619,23 @@ export class EventAdminApp {
   }
 
   selectSchedule(scheduleId) {
+    const previous = this.selectedScheduleId;
     const normalized = ensureString(scheduleId);
     if (normalized && !this.schedules.some((schedule) => schedule.id === normalized)) {
       return;
     }
 
     this.selectedScheduleId = normalized;
+    if (previous !== normalized) {
+      this.lastToolContextSignature = "";
+    }
     this.renderScheduleList();
     this.updateScheduleSummary();
     this.updateToolSummary();
     this.updateFlowButtons();
     this.updateSelectionNotes();
-    if (this.stageHistory.has("tabs")) {
-      if (this.selectedScheduleId) {
-        this.prepareToolFrames();
-      } else {
-        this.resetToolFrames();
-      }
+    if (this.stageHistory.has("tabs") && this.selectedScheduleId) {
+      this.syncEmbeddedTools().catch((error) => console.error("Failed to sync tools", error));
     }
     if (this.stage === "tabs" && this.selectedScheduleId) {
       this.switchTab(this.activeTab);
@@ -658,8 +653,8 @@ export class EventAdminApp {
     this.updateToolSummary();
     this.updateFlowButtons();
     this.updateSelectionNotes();
-    if (!this.selectedScheduleId) {
-      this.resetToolFrames(true);
+    if (this.stage === "tabs" && this.selectedScheduleId) {
+      this.syncEmbeddedTools().catch((error) => console.error("Failed to sync tools", error));
     }
     if (!event && (this.stage === "schedules" || this.stage === "tabs")) {
       this.setStage("events");
@@ -861,84 +856,87 @@ export class EventAdminApp {
     }
   }
 
-  prepareToolFrames() {
+  async loadEmbeddedTool(tool) {
+    const entry = this.embeddedTools[tool];
+    if (!entry) {
+      return;
+    }
+    if (entry.ready) {
+      return;
+    }
+    if (!entry.promise) {
+      entry.promise = (async () => {
+        if (typeof document !== "undefined") {
+          if (tool === "participants") {
+            document.documentElement.dataset.qaEmbedPrefix = "qa-";
+          } else if (tool === "operator") {
+            document.documentElement.dataset.operatorEmbedPrefix = "op-";
+          }
+        }
+        if (tool === "participants") {
+          await import("../question-admin/index.js");
+        } else {
+          await import("../operator/index.js");
+        }
+        entry.ready = true;
+      })().catch((error) => {
+        console.error(`Failed to load ${tool} tool`, error);
+        entry.ready = false;
+        entry.promise = null;
+        throw error;
+      });
+    }
+    await entry.promise;
+  }
+
+  async syncEmbeddedTools() {
     const schedule = this.getSelectedSchedule();
-    if (!schedule) {
-      this.resetToolFrames();
+    const event = this.getSelectedEvent();
+    if (!schedule || !event) {
+      this.lastToolContextSignature = "";
       return;
     }
-    this.updateToolFrame("participants", this.buildParticipantAdminUrlForSchedule(schedule));
-    this.updateToolFrame("operator", this.buildOperatorPanelUrl(schedule));
-  }
-
-  updateToolFrame(tool, baseUrl) {
-    if (typeof window === "undefined") {
+    const contextKey = [
+      event.id,
+      schedule.id,
+      event.name || "",
+      schedule.label || "",
+      schedule.startAt || "",
+      schedule.endAt || ""
+    ].join("::");
+    if (this.lastToolContextSignature === contextKey) {
       return;
     }
-    if (!baseUrl) {
-      return;
-    }
-    const frame = tool === "participants" ? this.dom.participantsFrame : this.dom.operatorFrame;
-    const loader = tool === "participants" ? this.dom.participantsLoader : this.dom.operatorLoader;
-    const state = this.toolFrames[tool];
-    if (!frame || !state) {
-      return;
-    }
-    const url = new URL(baseUrl, window.location.href);
-    url.searchParams.set("embed", "1");
-    const urlString = url.toString();
-    if (state.currentUrl === urlString) {
-      return;
-    }
-    state.currentUrl = urlString;
-    state.isLoaded = false;
-    frame.hidden = true;
-    if (loader) {
-      loader.hidden = false;
-    }
-    frame.src = urlString;
-  }
-
-  handleToolFrameLoad(tool) {
-    const frame = tool === "participants" ? this.dom.participantsFrame : this.dom.operatorFrame;
-    const loader = tool === "participants" ? this.dom.participantsLoader : this.dom.operatorLoader;
-    const state = this.toolFrames[tool];
-    if (!frame || !state) {
-      return;
-    }
-    state.isLoaded = true;
-    if (loader) {
-      loader.hidden = true;
-    }
-    if (state.currentUrl) {
-      frame.hidden = false;
-    }
-  }
-
-  resetToolFrames(clearUrl = false) {
-    this.resetToolFrame("participants", clearUrl);
-    this.resetToolFrame("operator", clearUrl);
-  }
-
-  resetToolFrame(tool, clearUrl) {
-    const frame = tool === "participants" ? this.dom.participantsFrame : this.dom.operatorFrame;
-    const loader = tool === "participants" ? this.dom.participantsLoader : this.dom.operatorLoader;
-    const state = this.toolFrames[tool];
-    if (!state) {
-      return;
-    }
-    state.isLoaded = false;
-    if (clearUrl) {
-      state.currentUrl = "";
-    }
-    if (frame) {
-      frame.hidden = true;
-      if (clearUrl) {
-        frame.removeAttribute("src");
+    this.lastToolContextSignature = contextKey;
+    const context = {
+      eventId: event.id,
+      eventName: event.name || event.id,
+      scheduleId: schedule.id,
+      scheduleLabel: schedule.label || schedule.id,
+      startAt: schedule.startAt || "",
+      endAt: schedule.endAt || ""
+    };
+    try {
+      await this.loadEmbeddedTool("participants");
+      if (window.questionAdminEmbed?.waitUntilReady) {
+        await window.questionAdminEmbed.waitUntilReady();
       }
+      if (window.questionAdminEmbed?.setSelection) {
+        await window.questionAdminEmbed.setSelection(context);
+      }
+    } catch (error) {
+      console.error("Failed to sync participant tool", error);
     }
-    if (loader) {
-      loader.hidden = true;
+    try {
+      await this.loadEmbeddedTool("operator");
+      if (window.operatorEmbed?.waitUntilReady) {
+        await window.operatorEmbed.waitUntilReady();
+      }
+      if (window.operatorEmbed?.setContext) {
+        window.operatorEmbed.setContext(context);
+      }
+    } catch (error) {
+      console.error("Failed to sync operator tool", error);
     }
   }
 
@@ -1091,6 +1089,7 @@ export class EventAdminApp {
       this.updateToolSummary();
       this.prepareToolFrames();
       this.switchTab(this.activeTab);
+      this.syncEmbeddedTools().catch((error) => console.error("Failed to sync tools", error));
     }
   }
 

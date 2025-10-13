@@ -33,7 +33,7 @@
       <p id="flow-stage-description" class="flow-stage__description">イベントを追加・編集し、次のステップで日程を選択できるようにします。</p>
     </section>
 
-    <div id="events-flow" class="flow-grid">
+    <div id="flow-stage-grid" class="flow-grid">
       <section class="module module--primary admin-module flow-card flow-card--events" aria-labelledby="events-title">
         <div class="module-header">
           <div class="module-heading">
@@ -41,31 +41,31 @@
             <p class="module-description">質問フォームで使用するイベントを追加・編集・削除し、選択したイベントを次のステップへ引き継ぎます。</p>
           </div>
           <div class="module-actions">
-            <button id="add-event-button" class="btn btn-primary btn-sm" type="button" disabled>イベントを追加</button>
-            <button id="events-refresh-button" class="btn btn-ghost btn-sm" type="button">再読み込み</button>
-            <button id="events-next-button" class="btn btn-primary btn-sm" type="button" disabled>次へ</button>
+            <button id="flow-add-event-button" class="btn btn-primary btn-sm" type="button" disabled>イベントを追加</button>
+            <button id="flow-events-refresh-button" class="btn btn-ghost btn-sm" type="button">再読み込み</button>
+            <button id="flow-events-next-button" class="btn btn-primary btn-sm" type="button" disabled>次へ</button>
           </div>
         </div>
         <div class="module-body">
           <div class="flow-pane flow-pane--primary">
-            <p id="events-context" class="admin-context">イベントのカードを選択すると、日程の管理ステップに進めます。</p>
-            <div id="events-loading" class="hub-loading" role="status" aria-live="polite" hidden>
+            <p id="flow-events-context" class="admin-context">イベントのカードを選択すると、日程の管理ステップに進めます。</p>
+            <div id="flow-events-loading" class="hub-loading" role="status" aria-live="polite" hidden>
               <span class="spinner" aria-hidden="true"></span>
-              <span id="events-loading-text">イベント情報を読み込んでいます…</span>
+              <span id="flow-events-loading-text">イベント情報を読み込んでいます…</span>
             </div>
-            <div id="events-alert" class="hub-alert" role="alert" hidden></div>
-            <p id="event-selection-note" class="flow-selection-note" hidden>進めるイベントをカードから選択してください。</p>
-            <ul id="event-list" class="entity-list" aria-live="polite"></ul>
-            <p id="event-empty" class="entity-empty" hidden>まだイベントが登録されていません。まずはイベントを追加してください。</p>
+            <div id="flow-events-alert" class="hub-alert" role="alert" hidden></div>
+            <p id="flow-event-selection-note" class="flow-selection-note" hidden>進めるイベントをカードから選択してください。</p>
+            <ul id="flow-event-list" class="entity-list" aria-live="polite"></ul>
+            <p id="flow-event-empty" class="entity-empty" hidden>まだイベントが登録されていません。まずはイベントを追加してください。</p>
           </div>
-          <div class="flow-pane flow-pane--summary" id="event-summary-pane">
+          <div class="flow-pane flow-pane--summary" id="flow-event-summary-pane">
             <h3 class="flow-summary-title">選択中のイベント</h3>
-            <p id="event-summary-name" class="flow-summary-name">—</p>
+            <p id="flow-event-summary-name" class="flow-summary-name">—</p>
             <dl class="flow-summary-stats">
-              <div class="flow-summary-row"><dt>日程数</dt><dd id="event-summary-schedules">—</dd></div>
-              <div class="flow-summary-row"><dt>参加者</dt><dd id="event-summary-participants">—</dd></div>
+              <div class="flow-summary-row"><dt>日程数</dt><dd id="flow-event-summary-schedules">—</dd></div>
+              <div class="flow-summary-row"><dt>参加者</dt><dd id="flow-event-summary-participants">—</dd></div>
             </dl>
-            <button id="event-change-button" class="btn btn-ghost btn-sm" type="button">イベントを選び直す</button>
+            <button id="flow-event-change-button" class="btn btn-ghost btn-sm" type="button">イベントを選び直す</button>
           </div>
         </div>
       </section>
@@ -77,33 +77,33 @@
             <p class="module-description">選択したイベントに紐づく日程を整理し、次のツールに引き継ぐ日程を決めます。</p>
           </div>
           <div class="module-actions">
-            <button id="schedule-back-button" class="btn btn-ghost btn-sm" type="button">イベントに戻る</button>
-            <button id="add-schedule-button" class="btn btn-primary btn-sm" type="button" disabled>日程を追加</button>
-            <button id="schedule-refresh-button" class="btn btn-ghost btn-sm" type="button" disabled>再読み込み</button>
+            <button id="flow-schedule-back-button" class="btn btn-ghost btn-sm" type="button">イベントに戻る</button>
+            <button id="flow-add-schedule-button" class="btn btn-primary btn-sm" type="button" disabled>日程を追加</button>
+            <button id="flow-schedule-refresh-button" class="btn btn-ghost btn-sm" type="button" disabled>再読み込み</button>
           </div>
         </div>
         <div class="module-body">
           <div class="flow-pane flow-pane--primary">
-            <div id="schedule-loading" class="hub-loading" role="status" aria-live="polite" hidden>
+            <div id="flow-schedule-loading" class="hub-loading" role="status" aria-live="polite" hidden>
               <span class="spinner" aria-hidden="true"></span>
-              <span id="schedule-loading-text">日程情報を読み込んでいます…</span>
+              <span id="flow-schedule-loading-text">日程情報を読み込んでいます…</span>
             </div>
-            <p id="schedule-context" class="admin-context">イベントを選択すると、紐づく日程一覧が表示されます。</p>
-            <p id="schedule-selection-note" class="flow-selection-note" hidden>次のステップに進む日程をカードから選択してください。</p>
-            <ul id="schedule-list" class="entity-list" aria-live="polite"></ul>
-            <p id="schedule-empty" class="entity-empty" hidden>このイベントにはまだ日程が登録されていません。まずは日程を追加してください。</p>
-            <div id="schedule-forward-actions" class="flow-forward-actions">
-              <button id="schedule-next-button" class="btn btn-primary btn-sm" type="button" disabled>参加者・テロップ管理へ</button>
+            <p id="flow-schedule-context" class="admin-context">イベントを選択すると、紐づく日程一覧が表示されます。</p>
+            <p id="flow-schedule-selection-note" class="flow-selection-note" hidden>次のステップに進む日程をカードから選択してください。</p>
+            <ul id="flow-schedule-list" class="entity-list" aria-live="polite"></ul>
+            <p id="flow-schedule-empty" class="entity-empty" hidden>このイベントにはまだ日程が登録されていません。まずは日程を追加してください。</p>
+            <div id="flow-schedule-forward-actions" class="flow-forward-actions">
+              <button id="flow-schedule-next-button" class="btn btn-primary btn-sm" type="button" disabled>参加者・テロップ管理へ</button>
             </div>
           </div>
-          <div class="flow-pane flow-pane--summary" id="schedule-summary-pane">
-            <div id="schedule-summary" class="flow-selection-summary" hidden>
-              <h3 class="flow-selection-summary__title" id="schedule-summary-title">選択中の日程</h3>
-              <p class="flow-selection-summary__item"><span class="flow-selection-summary__label">イベント</span><span id="schedule-summary-event">—</span></p>
-              <p class="flow-selection-summary__item"><span class="flow-selection-summary__label">日程</span><span id="schedule-summary-label">—</span></p>
-              <p class="flow-selection-summary__item" id="schedule-summary-range-row" hidden><span class="flow-selection-summary__label">時間</span><span id="schedule-summary-range">—</span></p>
+          <div class="flow-pane flow-pane--summary" id="flow-schedule-summary-pane">
+            <div id="flow-schedule-summary" class="flow-selection-summary" hidden>
+              <h3 class="flow-selection-summary__title" id="flow-schedule-summary-title">選択中の日程</h3>
+              <p class="flow-selection-summary__item"><span class="flow-selection-summary__label">イベント</span><span id="flow-schedule-summary-event">—</span></p>
+              <p class="flow-selection-summary__item"><span class="flow-selection-summary__label">日程</span><span id="flow-schedule-summary-label">—</span></p>
+              <p class="flow-selection-summary__item" id="flow-schedule-summary-range-row" hidden><span class="flow-selection-summary__label">時間</span><span id="flow-schedule-summary-range">—</span></p>
             </div>
-            <button id="schedule-change-button" class="btn btn-ghost btn-sm" type="button">日程を選び直す</button>
+            <button id="flow-schedule-change-button" class="btn btn-ghost btn-sm" type="button">日程を選び直す</button>
           </div>
         </div>
       </section>
@@ -122,9 +122,9 @@
           <div class="flow-summary-group">
             <h3 class="flow-summary-title">選択内容の確認</h3>
             <dl class="flow-summary-stats">
-              <div class="flow-summary-row"><dt>イベント</dt><dd id="tool-summary-event">—</dd></div>
-              <div class="flow-summary-row"><dt>日程</dt><dd id="tool-summary-schedule">—</dd></div>
-              <div class="flow-summary-row" id="tool-summary-time-row"><dt>時間</dt><dd id="tool-summary-time">—</dd></div>
+              <div class="flow-summary-row"><dt>イベント</dt><dd id="flow-tool-summary-event">—</dd></div>
+              <div class="flow-summary-row"><dt>日程</dt><dd id="flow-tool-summary-schedule">—</dd></div>
+              <div class="flow-summary-row" id="flow-tool-summary-time-row"><dt>時間</dt><dd id="flow-tool-summary-time">—</dd></div>
             </dl>
           </div>
           <div id="flow-tablist" class="flow-tablist" role="tablist" aria-label="参加者・テロップツール">
@@ -133,21 +133,359 @@
           </div>
           <div class="flow-tabpanels">
             <section id="flow-panel-participants" class="flow-tabpanel is-active" role="tabpanel" tabindex="0" aria-labelledby="flow-tab-participants">
-              <div class="tool-embed" data-tool="participants">
-                <div id="participants-embed-loader" class="tool-embed__loader" role="status" aria-live="polite" hidden>
-                  <span class="spinner" aria-hidden="true"></span>
-                  <span class="tool-embed__message">参加者リスト管理を読み込んでいます…</span>
+              <div id="participants-tool" class="embedded-tool" data-tool="participants">
+                <div class="embedded-tool__surface qa-embedded" data-qa-embed>
+                  <div id="qa-loading-overlay" class="loading-overlay" aria-live="polite" hidden>
+                    <div class="loading-backdrop"></div>
+                    <div class="loading-panel" role="status" aria-label="読み込み中">
+                      <div class="spinner" aria-hidden="true"></div>
+                      <div class="loading-text"><span id="qa-loading-text">初期化中…</span></div>
+                      <div class="loading-sub">数秒かかる場合があります</div>
+                      <ol id="qa-loader-steps" class="loader-steps" aria-label="初期化ステップ"></ol>
+                    </div>
+                  </div>
+
+                  <div id="qa-login-card" class="auth-card" hidden>
+                    <div class="auth-card__body">
+                      <h3 class="auth-card__title">参加者ツールへのサインイン</h3>
+                      <p id="qa-login-error" class="form-error" hidden></p>
+                      <button id="qa-login-button" class="btn btn-primary" type="button">Googleでログイン</button>
+                    </div>
+                  </div>
+
+                  <div id="qa-user-info" class="user-info" hidden></div>
+
+                  <main id="qa-admin-main" class="admin-main" hidden>
+                    <section class="module module--primary admin-module" aria-labelledby="qa-participant-title">
+                      <div class="module-header">
+                        <div class="module-heading">
+                          <h2 id="qa-participant-title">参加者リストの管理</h2>
+                          <p class="module-description" id="qa-participant-description">イベントハブから日程を選択してこのページを開くと、参加者情報（CSVの列順はテンプレートをご利用ください。参加者ID列は不要で、読み込み時に自動採番されます）をアップロードして管理できます。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。</p>
+                        </div>
+                        <div class="module-actions">
+                          <a id="qa-open-schedule-hub" class="btn btn-ghost btn-sm" href="#" hidden target="_blank" rel="noreferrer noopener">日程コントロールハブ</a>
+                        </div>
+                      </div>
+                      <div class="module-body">
+                        <p id="qa-participant-context" class="admin-context">イベントハブから指定された日程の参加者が表示されます。URL の <code>eventId</code> と <code>scheduleId</code> パラメーターを確認してください。</p>
+                        <div class="admin-controls">
+                          <button id="qa-download-participant-template" class="btn btn-ghost btn-sm" type="button">参加者CSVテンプレート</button>
+                          <label class="btn btn-ghost file-input" for="qa-csv-input">
+                            <span id="qa-file-label">CSVファイルを選択</span>
+                            <input id="qa-csv-input" type="file" accept=".csv,text/csv">
+                          </label>
+                          <button id="qa-download-team-template" class="btn btn-ghost btn-sm" type="button" disabled>班番号テンプレート</button>
+                          <label class="btn btn-ghost file-input" for="qa-team-csv-input">
+                            <span id="qa-team-file-label">班番号CSVを選択</span>
+                            <input id="qa-team-csv-input" type="file" accept=".csv,text/csv">
+                          </label>
+                          <button id="qa-clear-participants-button" class="btn btn-danger btn-sm" type="button" disabled>参加者リストを全削除</button>
+                          <button id="qa-discard-button" class="btn btn-ghost btn-sm" type="button" disabled>変更を取り消す</button>
+                          <button id="qa-save-button" class="btn btn-primary" type="button" disabled>参加者リストを保存</button>
+                          <span id="qa-upload-status" class="status-pill">イベントハブから対象の日程を開いてください。</span>
+                        </div>
+                        <div id="qa-change-preview" class="change-preview" hidden aria-live="polite">
+                          <div class="change-preview__header">
+                            <span class="change-preview__title">未保存の変更があります</span>
+                            <span id="qa-change-preview-count" class="change-preview__count"></span>
+                          </div>
+                          <ul id="qa-change-preview-list" class="change-preview__list" aria-label="未保存の変更一覧"></ul>
+                          <p id="qa-change-preview-note" class="change-preview__note">「参加者リストを保存」で変更を確定し、「変更を取り消す」で破棄できます。</p>
+                        </div>
+                        <p class="admin-summary" id="qa-admin-summary"></p>
+                        <div class="table-scroller">
+                          <table class="mapping-table" aria-describedby="qa-participant-description">
+                            <thead>
+                              <tr>
+                                <th scope="col">参加者ID</th>
+                                <th scope="col">氏名 / ラジオネーム</th>
+                                <th scope="col">フリガナ</th>
+                                <th scope="col">性別</th>
+                                <th scope="col">学部学科</th>
+                                <th scope="col">班番号</th>
+                                <th scope="col">専用リンク</th>
+                              </tr>
+                            </thead>
+                            <tbody id="qa-mapping-tbody"></tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section class="module module--secondary admin-module" aria-labelledby="qa-format-title">
+                      <div class="module-header">
+                        <div class="module-heading">
+                          <h2 id="qa-format-title">CSVの形式について</h2>
+                          <p class="module-description">1列目から順に「名前」「フリガナ」「性別」「学部学科」「携帯電話」「メールアドレス」を配置してください。アップロード時には必ずヘッダー行が必要です。テンプレートボタンからダウンロードできます。ファイル名は「イベントID_日程ID_participants.csv」を使用してください。電話番号とメールアドレスは内部で保存され、編集ダイアログでのみ確認できます。</p>
+                        </div>
+                      </div>
+                      <div class="module-body">
+                        <ul>
+                          <li>ヘッダー行（例: <code>名前,フリガナ,性別,学部学科,携帯電話,メールアドレス</code>）が必須です。</li>
+                          <li>同じ参加者IDや同じ氏名・学部学科の行が複数あっても全て読み込み、一覧上で重複候補として確認できます。</li>
+                          <li>CSVに参加者ID列は不要です。読み込み時に学部学科→フリガナの順で並べ替え、必要な参加者IDを自動発番します。</li>
+                          <li>同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補（件数付き）として一覧に表示されます。</li>
+                          <li>各列は空欄でもアップロードできますが、氏名は必須です。</li>
+                          <li>保存後はフォームに即座に反映されます。</li>
+                          <li>班番号は別途、<code>参加者ID,班番号</code>形式のCSV（ヘッダー必須）をアップロードすると一括で紐付けられます（キャンセルの場合は班番号に「キャンセル」と入力してください）。テンプレートには現在の参加者IDがあらかじめ記載されます。ファイル名は「イベントID_日程ID_teams.csv」としてください。</li>
+                        </ul>
+                      </div>
+                    </section>
+                  </main>
+
+                  <div id="qa-participant-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="qa-participant-dialog-title" hidden>
+                    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+                    <div class="modal-panel">
+                      <form id="qa-participant-form">
+                        <div class="modal-header">
+                          <h2 id="qa-participant-dialog-title">参加者情報を編集</h2>
+                        </div>
+                        <div class="modal-body">
+                          <div class="modal-field">
+                            <label for="qa-participant-id-input">参加者ID</label>
+                            <input id="qa-participant-id-input" name="participant-id" class="input" type="text" readonly>
+                          </div>
+                          <div class="modal-field">
+                            <label for="qa-participant-name-input">氏名 / ラジオネーム</label>
+                            <input id="qa-participant-name-input" name="participant-name" class="input" type="text" autocomplete="off" required>
+                          </div>
+                          <div class="modal-field">
+                            <label for="qa-participant-phonetic-input">フリガナ</label>
+                            <input id="qa-participant-phonetic-input" name="participant-phonetic" class="input" type="text" autocomplete="off">
+                          </div>
+                          <div class="modal-field">
+                            <label for="qa-participant-gender-input">性別</label>
+                            <input id="qa-participant-gender-input" name="participant-gender" class="input" type="text" autocomplete="off">
+                          </div>
+                          <div class="modal-field">
+                            <label for="qa-participant-department-input">学部学科</label>
+                            <input id="qa-participant-department-input" name="participant-department" class="input" type="text" autocomplete="off">
+                          </div>
+                          <div class="modal-field">
+                            <label for="qa-participant-team-input">班番号</label>
+                            <input id="qa-participant-team-input" name="participant-team" class="input" type="text" autocomplete="off" placeholder="例: A-1 / キャンセルなど">
+                          </div>
+                          <div class="modal-field">
+                            <label for="qa-participant-phone-input">携帯電話</label>
+                            <input id="qa-participant-phone-input" name="participant-phone" class="input" type="tel" autocomplete="tel">
+                          </div>
+                          <div class="modal-field">
+                            <label for="qa-participant-email-input">メールアドレス</label>
+                            <input id="qa-participant-email-input" name="participant-email" class="input" type="email" autocomplete="email">
+                          </div>
+                          <p id="qa-participant-error" class="form-error" role="alert" hidden></p>
+                        </div>
+                        <div class="modal-footer">
+                          <button type="button" class="btn btn-ghost" data-dialog-dismiss="true">キャンセル</button>
+                          <button type="submit" class="btn btn-primary">保存</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+
+                  <div id="qa-confirm-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="qa-confirm-dialog-title" hidden>
+                    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+                    <div class="modal-panel">
+                      <div class="modal-header">
+                        <h2 id="qa-confirm-dialog-title">確認</h2>
+                      </div>
+                      <div class="modal-body">
+                        <p id="qa-confirm-dialog-message"></p>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-ghost" id="qa-confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
+                        <button type="button" class="btn btn-danger" id="qa-confirm-accept-button">実行する</button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <iframe id="participants-embed-frame" class="tool-embed__frame" title="参加者リスト管理" hidden loading="lazy" allow="clipboard-read; clipboard-write"></iframe>
               </div>
             </section>
             <section id="flow-panel-operator" class="flow-tabpanel" role="tabpanel" tabindex="0" aria-labelledby="flow-tab-operator" hidden>
-              <div class="tool-embed" data-tool="operator">
-                <div id="operator-embed-loader" class="tool-embed__loader" role="status" aria-live="polite" hidden>
-                  <span class="spinner" aria-hidden="true"></span>
-                  <span class="tool-embed__message">テロップ操作パネルを読み込んでいます…</span>
+              <div id="operator-tool" class="embedded-tool" data-tool="operator">
+                <div class="embedded-tool__surface operator-embedded" data-operator-embed>
+                  <div id="op-loading-overlay" class="loading-overlay" aria-live="polite" hidden>
+                    <div class="loading-backdrop"></div>
+                    <div class="loading-panel" role="status" aria-label="読み込み中">
+                      <div class="spinner" aria-hidden="true"></div>
+                      <div class="loading-text"><span id="op-loading-text">サインイン中…</span></div>
+                      <div class="loading-sub">数秒かかる場合があります</div>
+                      <ol id="op-loader-steps" class="loader-steps" aria-label="初期化ステップ"></ol>
+                    </div>
+                  </div>
+
+                  <div id="op-login-container" class="auth-card">
+                    <div class="auth-card__body">
+                      <h3 class="auth-card__title">テロップ操作パネルにサインイン</h3>
+                      <p id="op-login-error" class="form-error" hidden></p>
+                      <button id="op-login-button" class="btn btn-primary" type="button">Googleでログイン</button>
+                    </div>
+                  </div>
+
+                  <div class="operator-embedded__actions">
+                    <div id="op-user-info" class="user-info" hidden></div>
+                    <div class="operator-embedded__buttons">
+                      <button id="op-logs-toggle" class="btn btn-ghost btn-sm" type="button">操作ログ</button>
+                      <button id="op-dictionary-toggle" class="btn btn-ghost btn-sm" type="button">辞書</button>
+                    </div>
+                  </div>
+
+                  <main id="op-main-container" class="layout-grid" hidden>
+                    <section class="module module--primary" id="op-questions-panel" aria-labelledby="op-questions-title">
+                      <div class="module-header">
+                        <div class="module-heading">
+                          <h1 id="op-questions-title">テロップ操作パネル</h1>
+                          <p class="module-description">質問の選択・送出とログ監視を一つの画面で行えます。</p>
+                        </div>
+                        <div class="status-bar" role="group" aria-label="送出状況">
+                          <div class="render-indicator" title="OnAir 状態">
+                            <span id="op-render-lamp" class="lamp" aria-hidden="true"></span>
+                            <span id="op-render-phase" class="lamp-label">-</span>
+                          </div>
+                          <div class="render-summary" id="op-render-summary">
+                            <div class="render-line">
+                              <span class="label">オンエア:</span>
+                              <span id="op-render-title" class="text-strong">—</span>
+                            </div>
+                            <div id="op-render-question" class="text-soft">—</div>
+                            <div id="op-render-updated" class="text-meta">—</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="module-body" id="op-questions-content">
+                        <div class="cards-sticky">
+                          <div id="op-genre-tab-buttons" class="genre-tabs" role="tablist" aria-label="ジャンル">
+                            <button class="genre-tab-button active" data-genre="学び" role="tab" aria-selected="true">学び</button>
+                            <button class="genre-tab-button" data-genre="活動" role="tab" aria-selected="false">活動</button>
+                            <button class="genre-tab-button" data-genre="暮らし" role="tab" aria-selected="false">暮らし</button>
+                            <button class="genre-tab-button" data-genre="食・スポット" role="tab" aria-selected="false">食・スポット</button>
+                            <button class="genre-tab-button" data-genre="移動・季節" role="tab" aria-selected="false">移動・季節</button>
+                            <button class="genre-tab-button" data-genre="その他" role="tab" aria-selected="false">その他</button>
+                          </div>
+                          <div id="op-sub-tab-buttons" class="sub-tabs" role="tablist" aria-label="質問種別">
+                            <button class="sub-tab-button active" data-sub-tab="all" role="tab" aria-selected="true">すべて</button>
+                            <button class="sub-tab-button" data-sub-tab="normal" role="tab" aria-selected="false">通常質問</button>
+                            <button class="sub-tab-button" data-sub-tab="puq" role="tab" aria-selected="false">Pick Up Question</button>
+                          </div>
+                          <div class="cards-toolbar">
+                            <div class="toolbar-left">
+                              <div class="schedule-context" aria-live="polite">
+                                <div id="op-schedule-event-name" class="schedule-event" role="text">—</div>
+                                <div class="schedule-meta">
+                                  <span id="op-schedule-label" class="schedule-label">—</span>
+                                  <span id="op-schedule-time-range" class="schedule-range" hidden></span>
+                                </div>
+                              </div>
+                              <a id="op-open-schedule-hub" class="btn btn-ghost btn-sm" href="#" hidden target="_blank" rel="noreferrer noopener">日程コントロールハブ</a>
+                            </div>
+                            <div class="toolbar-right">
+                              <label class="chk">
+                                <input id="op-select-all-checkbox" type="checkbox">
+                                全選択
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="cards-scroll">
+                          <div id="op-questions-cards" class="cards-list" aria-live="polite"></div>
+                        </div>
+                      </div>
+                    </section>
+                    <aside class="module module--secondary" id="op-dictionary-panel" aria-labelledby="op-dictionary-title" hidden>
+                      <div class="module-header">
+                        <div class="module-heading">
+                          <h2 id="op-dictionary-title">ルビ辞書管理</h2>
+                          <p class="module-description">登録語句の追加や更新が即座にディスプレイへ反映されます。</p>
+                        </div>
+                        <div class="module-actions">
+                          <button id="op-fetch-dictionary-button" class="btn btn-ghost" type="button">辞書を更新</button>
+                        </div>
+                      </div>
+                      <div class="module-body dictionary-body">
+                        <form id="op-add-term-form" class="dictionary-form">
+                          <input type="text" id="op-new-term" class="input" placeholder="単語" required>
+                          <input type="text" id="op-new-ruby" class="input" placeholder="ルビ" required>
+                          <button type="submit" class="btn btn-primary">追加</button>
+                        </form>
+                        <div class="table-scroller">
+                          <table id="op-dictionary-table">
+                            <thead>
+                              <tr><th>単語</th><th>ルビ</th><th>状態</th><th>操作</th></tr>
+                            </thead>
+                            <tbody></tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </aside>
+                    <aside class="module module--secondary" id="op-logs-panel" aria-labelledby="op-logs-title" hidden>
+                      <div class="module-header">
+                        <div class="module-heading">
+                          <h2 id="op-logs-title">操作ログ</h2>
+                          <p class="module-description">直近の操作履歴を確認し、異常を素早く検知できます。</p>
+                        </div>
+                        <div class="module-actions">
+                          <button id="op-logs-refresh-button" class="btn btn-ghost" type="button">ログを更新</button>
+                        </div>
+                      </div>
+                      <div class="module-body logs-body">
+                        <div id="op-logs-toolbar" class="logs-toolbar">
+                          <input id="op-log-search" class="input" placeholder="検索 (user/action/details)">
+                          <label class="chk"><input type="checkbox" id="op-log-autoscroll" checked> 自動スクロール</label>
+                        </div>
+                        <div id="op-logs-stream-view">
+                          <div id="op-log-stream" class="log-stream"></div>
+                        </div>
+                      </div>
+                    </aside>
+                  </main>
+
+                  <div id="op-action-panel" class="action-panel" hidden>
+                    <button id="op-btn-display" class="btn btn-primary" disabled>送出</button>
+                    <button id="op-btn-unanswer" class="btn" disabled>未回答へ戻す</button>
+                    <button id="op-btn-edit" class="btn" disabled>原稿修正</button>
+                    <button id="op-btn-clear" class="btn btn-danger">送出クリア</button>
+                    <span id="op-selected-info">行を選択してください</span>
+                    <div class="action-panel-right">
+                      <button id="op-btn-batch-unanswer" class="btn btn-ghost" hidden>選択項目を未回答へ戻す</button>
+                    </div>
+                  </div>
+
+                  <div id="op-edit-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="op-edit-dialog-title" hidden>
+                    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+                    <div class="modal-panel">
+                      <div class="modal-header">
+                        <h2 id="op-edit-dialog-title">質問原稿の編集</h2>
+                      </div>
+                      <div class="modal-body">
+                        <div class="modal-field">
+                          <label for="op-edit-textarea">質問内容</label>
+                          <textarea id="op-edit-textarea" class="input" rows="8" data-autofocus></textarea>
+                        </div>
+                        <p class="modal-helper">送出前に内容を整えてください。更新するとディスプレイにも即座に反映されます。</p>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-ghost" id="op-edit-cancel-button">キャンセル</button>
+                        <button type="button" class="btn btn-primary" id="op-edit-save-button">更新</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div id="op-confirm-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="op-confirm-dialog-title" hidden>
+                    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+                    <div class="modal-panel">
+                      <div class="modal-header">
+                        <h2 id="op-confirm-dialog-title">確認</h2>
+                      </div>
+                      <div class="modal-body">
+                        <p id="op-confirm-dialog-message"></p>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-ghost" id="op-confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
+                        <button type="button" class="btn btn-primary" id="op-confirm-accept-button">実行する</button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <iframe id="operator-embed-frame" class="tool-embed__frame" title="テロップ操作パネル" hidden loading="lazy" allow="clipboard-read; clipboard-write"></iframe>
               </div>
             </section>
           </div>
@@ -156,20 +494,20 @@
     </div>
   </main>
 
-  <div id="event-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="event-dialog-title" hidden>
+  <div id="flow-event-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="flow-event-dialog-title" hidden>
     <div class="modal-backdrop" data-dialog-dismiss="true"></div>
     <div class="modal-panel">
-      <form id="event-form">
+      <form id="flow-event-form">
         <div class="modal-header">
-          <h2 id="event-dialog-title">イベントを追加</h2>
+          <h2 id="flow-event-dialog-title">イベントを追加</h2>
         </div>
         <div class="modal-body">
           <div class="modal-field">
-            <label for="event-name-input">イベント名</label>
-            <input id="event-name-input" name="event-name" class="input" type="text" autocomplete="off" required data-autofocus>
+            <label for="flow-event-name-input">イベント名</label>
+            <input id="flow-event-name-input" name="event-name" class="input" type="text" autocomplete="off" required data-autofocus>
           </div>
           <p class="modal-helper">質問フォーム上で表示されるイベント名を入力してください。</p>
-          <p id="event-error" class="form-error" role="alert" hidden></p>
+          <p id="flow-event-error" class="form-error" role="alert" hidden></p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost" data-dialog-dismiss="true">キャンセル</button>
@@ -179,32 +517,32 @@
     </div>
   </div>
 
-  <div id="schedule-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="schedule-dialog-title" hidden>
+  <div id="flow-schedule-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="flow-schedule-dialog-title" hidden>
     <div class="modal-backdrop" data-dialog-dismiss="true"></div>
     <div class="modal-panel">
-      <form id="schedule-form">
+      <form id="flow-schedule-form">
         <div class="modal-header">
-          <h2 id="schedule-dialog-title">日程を追加</h2>
+          <h2 id="flow-schedule-dialog-title">日程を追加</h2>
         </div>
         <div class="modal-body">
           <div class="modal-field">
-            <label for="schedule-label-input">日程の表示名</label>
-            <input id="schedule-label-input" name="schedule-label" class="input" type="text" autocomplete="off" required data-autofocus>
+            <label for="flow-schedule-label-input">日程の表示名</label>
+            <input id="flow-schedule-label-input" name="schedule-label" class="input" type="text" autocomplete="off" required data-autofocus>
           </div>
           <div class="modal-field">
-            <label for="schedule-date-input">日付</label>
-            <input id="schedule-date-input" name="schedule-date" class="input" type="date" required>
+            <label for="flow-schedule-date-input">日付</label>
+            <input id="flow-schedule-date-input" name="schedule-date" class="input" type="date" required>
           </div>
           <div class="modal-field">
-            <label for="schedule-start-input">開始時刻</label>
-            <input id="schedule-start-input" name="schedule-start" class="input" type="time" required>
+            <label for="flow-schedule-start-input">開始時刻</label>
+            <input id="flow-schedule-start-input" name="schedule-start" class="input" type="time" required>
           </div>
           <div class="modal-field">
-            <label for="schedule-end-input">終了時刻</label>
-            <input id="schedule-end-input" name="schedule-end" class="input" type="time" required>
+            <label for="flow-schedule-end-input">終了時刻</label>
+            <input id="flow-schedule-end-input" name="schedule-end" class="input" type="time" required>
           </div>
           <p class="modal-helper">開始から終了の時刻は参加者の案内に使用されます。</p>
-          <p id="schedule-error" class="form-error" role="alert" hidden></p>
+          <p id="flow-schedule-error" class="form-error" role="alert" hidden></p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost" data-dialog-dismiss="true">キャンセル</button>
@@ -214,18 +552,18 @@
     </div>
   </div>
 
-  <div id="confirm-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" hidden>
+  <div id="flow-confirm-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="flow-confirm-dialog-title" hidden>
     <div class="modal-backdrop" data-dialog-dismiss="true"></div>
     <div class="modal-panel">
       <div class="modal-header">
-        <h2 id="confirm-dialog-title">確認</h2>
+        <h2 id="flow-confirm-dialog-title">確認</h2>
       </div>
       <div class="modal-body">
-        <p id="confirm-dialog-message"></p>
+        <p id="flow-confirm-dialog-message"></p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-ghost" id="confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
-        <button type="button" class="btn btn-danger" id="confirm-accept-button">実行する</button>
+        <button type="button" class="btn btn-ghost" id="flow-confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
+        <button type="button" class="btn btn-danger" id="flow-confirm-accept-button">実行する</button>
       </div>
     </div>
   </div>
