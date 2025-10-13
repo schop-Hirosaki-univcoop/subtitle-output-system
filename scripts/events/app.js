@@ -6,8 +6,6 @@ import {
   set,
   update,
   auth,
-  provider,
-  signInWithPopup,
   signOut,
   onAuthStateChanged
 } from "../operator/firebase.js";
@@ -31,15 +29,15 @@ const STAGE_SEQUENCE = ["events", "schedules", "tabs"];
 const STAGE_INFO = {
   events: {
     title: "イベントの管理",
-    description: "イベントを追加・編集し、次のステップで日程を選択できるようにします。"
+    description: "イベントカードを追加・編集し、進めたいイベントを選択してください。"
   },
   schedules: {
     title: "日程の管理",
-    description: "イベントに紐づく日程を整理し、参加者ツールやテロップ操作に進む日程を決めます。"
+    description: "選択したイベントの日程カードから、次に進める日程を決めてください。"
   },
   tabs: {
     title: "参加者とテロップのツール",
-    description: "参加者リスト管理とテロップ操作パネルをタブで切り替えて利用できます。"
+    description: "まとめた情報を確認して、参加者リスト管理とテロップ操作パネルを切り替えて利用できます。"
   }
 };
 
@@ -87,7 +85,6 @@ export class EventAdminApp {
     this.api = createApiClient(auth, onAuthStateChanged);
     this.authUnsubscribe = null;
     this.currentUser = null;
-    this.pendingLoginError = "";
     this.events = [];
     this.selectedEventId = "";
     this.schedules = [];
@@ -95,19 +92,21 @@ export class EventAdminApp {
     this.stage = "events";
     this.stageHistory = new Set(["events"]);
     this.activeTab = "participants";
-    this.participantsFrameLoaded = false;
-    this.operatorFrameLoaded = false;
     this.activeDialog = null;
     this.lastFocused = null;
     this.confirmResolver = null;
+    this.redirectingToIndex = false;
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
   }
 
   init() {
     this.bindEvents();
-    this.showLoggedOutState();
     this.updateStageUi();
     this.updateFlowButtons();
+    this.updateEventSummary();
+    this.updateScheduleSummary();
+    this.updateToolSummary();
+    this.updateSelectionNotes();
     this.observeAuthState();
   }
 
@@ -118,38 +117,20 @@ export class EventAdminApp {
     this.stage = "events";
     this.stageHistory = new Set(["events"]);
     this.activeTab = "participants";
-    this.participantsFrameLoaded = false;
-    this.operatorFrameLoaded = false;
-    if (this.dom.participantsFrame) {
-      this.dom.participantsFrame.setAttribute("hidden", "");
-      this.dom.participantsFrame.src = "";
-    }
-    if (this.dom.operatorFrame) {
-      this.dom.operatorFrame.setAttribute("hidden", "");
-      this.dom.operatorFrame.src = "";
-    }
-    if (this.dom.participantsPlaceholder) {
-      this.dom.participantsPlaceholder.hidden = false;
-    }
-    if (this.dom.operatorPlaceholder) {
-      this.dom.operatorPlaceholder.hidden = false;
-    }
     if (this.dom.scheduleLoading) {
       this.dom.scheduleLoading.hidden = true;
     }
     this.renderEvents();
     this.renderScheduleList();
     this.updateScheduleSummary();
+    this.updateEventSummary();
+    this.updateToolSummary();
     this.updateStageUi();
     this.updateFlowButtons();
     this.updateSelectionNotes();
   }
 
   bindEvents() {
-    if (this.dom.loginButton) {
-      this.dom.loginButton.addEventListener("click", () => this.login());
-    }
-
     if (this.dom.addEventButton) {
       this.dom.addEventButton.addEventListener("click", () => this.openEventDialog({ mode: "create" }));
     }
@@ -163,8 +144,70 @@ export class EventAdminApp {
       });
     }
 
-    if (this.dom.logoutButton) {
-      this.dom.logoutButton.addEventListener("click", () => signOut(auth));
+    if (this.dom.nextButton) {
+      this.dom.nextButton.addEventListener("click", () => {
+        this.goToStage("schedules");
+      });
+    }
+
+    if (this.dom.eventChangeButton) {
+      this.dom.eventChangeButton.addEventListener("click", () => {
+        this.setStage("events");
+      });
+    }
+
+    if (this.dom.scheduleBackButton) {
+      this.dom.scheduleBackButton.addEventListener("click", () => {
+        this.setStage("events");
+      });
+    }
+
+    if (this.dom.scheduleChangeButton) {
+      this.dom.scheduleChangeButton.addEventListener("click", () => {
+        this.setStage("schedules");
+      });
+    }
+
+    if (this.dom.flowTabsBackButton) {
+      this.dom.flowTabsBackButton.addEventListener("click", () => {
+        this.setStage("schedules");
+      });
+    }
+
+    if (this.dom.openParticipantsButton) {
+      this.dom.openParticipantsButton.addEventListener("click", () => {
+        this.enterTabsStage("participants");
+      });
+    }
+
+    if (this.dom.openOperatorButton) {
+      this.dom.openOperatorButton.addEventListener("click", () => {
+        this.enterTabsStage("operator");
+      });
+    }
+
+    if (this.dom.launchParticipantsButton) {
+      this.dom.launchParticipantsButton.addEventListener("click", () => {
+        this.launchParticipantsTool();
+      });
+    }
+
+    if (this.dom.launchOperatorButton) {
+      this.dom.launchOperatorButton.addEventListener("click", () => {
+        this.launchOperatorTool();
+      });
+    }
+
+    if (this.dom.participantsTab) {
+      this.dom.participantsTab.addEventListener("click", () => {
+        this.switchTab("participants");
+      });
+    }
+
+    if (this.dom.operatorTab) {
+      this.dom.operatorTab.addEventListener("click", () => {
+        this.switchTab("operator");
+      });
     }
 
     if (this.dom.nextButton) {
@@ -272,80 +315,25 @@ export class EventAdminApp {
     });
   }
 
-  async login() {
-    const button = this.dom.loginButton;
-    if (!button) return;
-
-    const originalLabel = button.textContent;
-    try {
-      button.disabled = true;
-      button.classList.add("is-busy");
-      button.textContent = "サインイン中…";
-      this.setLoginError("");
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Event admin login failed:", error);
-      this.setLoginError("ログインに失敗しました。もう一度お試しください。");
-    } finally {
-      button.disabled = false;
-      button.classList.remove("is-busy");
-      button.textContent = originalLabel;
-    }
-  }
-
   showLoggedOutState() {
-    this.setLoginError(this.pendingLoginError);
+    if (this.redirectingToIndex) {
+      return;
+    }
     this.resetFlowState();
-    if (this.dom.loginCard) {
-      this.dom.loginCard.hidden = false;
-    }
-    if (this.dom.main) {
-      this.dom.main.hidden = true;
-    }
     this.toggleLoading(false);
-    this.updateControlsForAuth(false);
+    if (typeof window !== "undefined") {
+      this.redirectingToIndex = true;
+      window.location.replace("index.html");
+    }
   }
 
   showLoggedInState() {
-    this.setLoginError("");
-    if (this.dom.loginCard) {
-      this.dom.loginCard.hidden = true;
-    }
     if (this.dom.main) {
       this.dom.main.hidden = false;
     }
-    this.updateControlsForAuth(true);
     this.updateStageUi();
     this.updateFlowButtons();
     this.updateSelectionNotes();
-  }
-
-  updateControlsForAuth(signedIn) {
-    if (this.dom.addEventButton) {
-      this.dom.addEventButton.disabled = !signedIn;
-    }
-    if (this.dom.logoutButton) {
-      this.dom.logoutButton.hidden = !signedIn;
-    }
-    if (this.dom.addScheduleButton) {
-      this.dom.addScheduleButton.disabled = !signedIn || !this.selectedEventId;
-    }
-    if (this.dom.scheduleRefreshButton) {
-      this.dom.scheduleRefreshButton.disabled = !signedIn || !this.selectedEventId;
-    }
-    if (this.dom.openParticipantsButton) {
-      this.dom.openParticipantsButton.disabled = !signedIn || !this.selectedScheduleId;
-    }
-    if (this.dom.openOperatorButton) {
-      this.dom.openOperatorButton.disabled = !signedIn || !this.selectedScheduleId;
-    }
-    if (this.dom.participantsTab) {
-      this.dom.participantsTab.disabled = !signedIn || !this.selectedScheduleId;
-    }
-    if (this.dom.operatorTab) {
-      this.dom.operatorTab.disabled = !signedIn || !this.selectedScheduleId;
-    }
-    this.updateFlowButtons();
   }
 
   setLoadingMessage(message) {
@@ -374,21 +362,6 @@ export class EventAdminApp {
     }
   }
 
-  setLoginError(message = "") {
-    const normalized = ensureString(message);
-    this.pendingLoginError = normalized;
-    if (!this.dom.loginError) {
-      return;
-    }
-    if (normalized) {
-      this.dom.loginError.hidden = false;
-      this.dom.loginError.textContent = normalized;
-    } else {
-      this.dom.loginError.hidden = true;
-      this.dom.loginError.textContent = "";
-    }
-  }
-
   async handleAuthState(user) {
     this.currentUser = user;
     if (!user) {
@@ -408,6 +381,10 @@ export class EventAdminApp {
       await this.ensureAdminAccess();
       this.setLoadingMessage("イベント情報を読み込んでいます…");
       await this.loadEvents();
+      this.updateEventSummary();
+      this.updateScheduleSummary();
+      this.updateToolSummary();
+      this.updateSelectionNotes();
     } catch (error) {
       console.error("Event admin initialization failed:", error);
       if (this.isPermissionError(error)) {
@@ -415,7 +392,6 @@ export class EventAdminApp {
           (error instanceof Error && error.message) ||
           "アクセス権限がありません。管理者に確認してください。";
         this.showAlert(message);
-        this.setLoginError(message);
         await this.safeSignOut();
         return;
       }
@@ -532,19 +508,24 @@ export class EventAdminApp {
     if (!this.events.length) {
       list.hidden = true;
       if (this.dom.eventEmpty) this.dom.eventEmpty.hidden = false;
+      list.removeAttribute("role");
+      list.removeAttribute("aria-label");
+      list.removeAttribute("aria-orientation");
       return;
     }
 
     list.hidden = false;
     if (this.dom.eventEmpty) this.dom.eventEmpty.hidden = true;
 
-    list.setAttribute("role", "list");
+    list.setAttribute("role", "listbox");
+    list.setAttribute("aria-label", "イベント一覧");
+    list.setAttribute("aria-orientation", "vertical");
     const fragment = document.createDocumentFragment();
     this.events.forEach((event) => {
       const item = document.createElement("li");
       item.className = "entity-item";
       item.dataset.eventId = event.id;
-      item.tabIndex = 0;
+      item.setAttribute("role", "option");
 
       const isSelected = event.id === this.selectedEventId && this.selectedEventId;
       if (isSelected) {
@@ -553,6 +534,14 @@ export class EventAdminApp {
       } else {
         item.setAttribute("aria-selected", "false");
       }
+      item.tabIndex = 0;
+
+      const indicator = document.createElement("span");
+      indicator.className = "entity-indicator";
+      indicator.setAttribute("aria-hidden", "true");
+      const indicatorDot = document.createElement("span");
+      indicatorDot.className = "entity-indicator__dot";
+      indicator.appendChild(indicatorDot);
 
       const label = document.createElement("div");
       label.className = "entity-label";
@@ -609,7 +598,7 @@ export class EventAdminApp {
       });
       actions.appendChild(deleteBtn);
 
-      item.append(label, actions);
+      item.append(indicator, label, actions);
 
       item.addEventListener("click", () => {
         this.selectEvent(event.id);
@@ -649,24 +638,10 @@ export class EventAdminApp {
     }
 
     this.selectedEventId = normalized;
-    this.participantsFrameLoaded = false;
-    this.operatorFrameLoaded = false;
-    if (this.dom.participantsFrame) {
-      this.dom.participantsFrame.setAttribute("hidden", "");
-      this.dom.participantsFrame.src = "";
-    }
-    if (this.dom.operatorFrame) {
-      this.dom.operatorFrame.setAttribute("hidden", "");
-      this.dom.operatorFrame.src = "";
-    }
-    if (this.dom.participantsPlaceholder) {
-      this.dom.participantsPlaceholder.hidden = false;
-    }
-    if (this.dom.operatorPlaceholder) {
-      this.dom.operatorPlaceholder.hidden = false;
-    }
     this.renderEvents();
     this.updateScheduleStateFromSelection();
+    this.updateEventSummary();
+    this.updateToolSummary();
     this.updateFlowButtons();
     this.updateSelectionNotes();
     if (this.stage === "tabs") {
@@ -698,28 +673,15 @@ export class EventAdminApp {
     }
 
     this.selectedScheduleId = normalized;
-    this.participantsFrameLoaded = false;
-    this.operatorFrameLoaded = false;
-    if (this.dom.participantsFrame) {
-      this.dom.participantsFrame.setAttribute("hidden", "");
-      this.dom.participantsFrame.src = "";
-    }
-    if (this.dom.operatorFrame) {
-      this.dom.operatorFrame.setAttribute("hidden", "");
-      this.dom.operatorFrame.src = "";
-    }
-    if (this.dom.participantsPlaceholder) {
-      this.dom.participantsPlaceholder.hidden = false;
-    }
-    if (this.dom.operatorPlaceholder) {
-      this.dom.operatorPlaceholder.hidden = false;
-    }
     this.renderScheduleList();
     this.updateScheduleSummary();
+    this.updateToolSummary();
     this.updateFlowButtons();
     this.updateSelectionNotes();
     if (this.stage === "tabs" && this.selectedScheduleId) {
       this.switchTab(this.activeTab);
+    } else if (!normalized && this.stage === "tabs") {
+      this.setStage("schedules");
     }
   }
 
@@ -729,6 +691,7 @@ export class EventAdminApp {
     this.ensureSelectedSchedule(preferredScheduleId);
     this.renderScheduleList();
     this.updateScheduleSummary();
+    this.updateToolSummary();
     this.updateFlowButtons();
     this.updateSelectionNotes();
     if (!event && (this.stage === "schedules" || this.stage === "tabs")) {
@@ -744,18 +707,24 @@ export class EventAdminApp {
     if (!this.schedules.length) {
       list.hidden = true;
       if (this.dom.scheduleEmpty) this.dom.scheduleEmpty.hidden = false;
+      list.removeAttribute("role");
+      list.removeAttribute("aria-label");
+      list.removeAttribute("aria-orientation");
       return;
     }
 
     list.hidden = false;
     if (this.dom.scheduleEmpty) this.dom.scheduleEmpty.hidden = true;
 
+    list.setAttribute("role", "listbox");
+    list.setAttribute("aria-label", "日程一覧");
+    list.setAttribute("aria-orientation", "vertical");
     const fragment = document.createDocumentFragment();
     this.schedules.forEach((schedule) => {
       const item = document.createElement("li");
       item.className = "entity-item";
       item.dataset.scheduleId = schedule.id;
-      item.tabIndex = 0;
+      item.setAttribute("role", "option");
 
       const isSelected = schedule.id === this.selectedScheduleId && this.selectedScheduleId;
       if (isSelected) {
@@ -764,6 +733,14 @@ export class EventAdminApp {
       } else {
         item.setAttribute("aria-selected", "false");
       }
+      item.tabIndex = 0;
+
+      const indicator = document.createElement("span");
+      indicator.className = "entity-indicator";
+      indicator.setAttribute("aria-hidden", "true");
+      const indicatorDot = document.createElement("span");
+      indicatorDot.className = "entity-indicator__dot";
+      indicator.appendChild(indicatorDot);
 
       const label = document.createElement("div");
       label.className = "entity-label";
@@ -824,7 +801,7 @@ export class EventAdminApp {
       });
       actions.appendChild(deleteBtn);
 
-      item.append(label, actions);
+      item.append(indicator, label, actions);
 
       item.addEventListener("click", () => {
         this.selectSchedule(schedule.id);
@@ -840,6 +817,29 @@ export class EventAdminApp {
     });
 
     list.appendChild(fragment);
+  }
+
+  updateEventSummary() {
+    const event = this.getSelectedEvent();
+    if (this.dom.eventSummaryName) {
+      this.dom.eventSummaryName.textContent = event ? event.name || event.id : "—";
+    }
+    if (this.dom.eventSummarySchedules) {
+      if (event) {
+        const count = typeof event.scheduleCount === "number" ? event.scheduleCount : (event.schedules?.length || 0);
+        this.dom.eventSummarySchedules.textContent = `${count}件`;
+      } else {
+        this.dom.eventSummarySchedules.textContent = "—";
+      }
+    }
+    if (this.dom.eventSummaryParticipants) {
+      this.dom.eventSummaryParticipants.textContent = event
+        ? formatParticipantCount(event.totalParticipants)
+        : "—";
+    }
+    if (this.dom.eventChangeButton) {
+      this.dom.eventChangeButton.disabled = !event;
+    }
   }
 
   updateScheduleSummary() {
@@ -867,6 +867,30 @@ export class EventAdminApp {
       }
     } else {
       this.dom.scheduleSummary.hidden = true;
+    }
+    if (this.dom.scheduleChangeButton) {
+      this.dom.scheduleChangeButton.disabled = !schedule;
+    }
+  }
+
+  updateToolSummary() {
+    const event = this.getSelectedEvent();
+    const schedule = this.getSelectedSchedule();
+    if (this.dom.toolSummaryEvent) {
+      this.dom.toolSummaryEvent.textContent = event ? event.name || event.id : "—";
+    }
+    if (this.dom.toolSummarySchedule) {
+      this.dom.toolSummarySchedule.textContent = schedule ? schedule.label || schedule.id : "—";
+    }
+    if (this.dom.toolSummaryTime && this.dom.toolSummaryTimeRow) {
+      const rangeText = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
+      if (rangeText) {
+        this.dom.toolSummaryTimeRow.hidden = false;
+        this.dom.toolSummaryTime.textContent = rangeText;
+      } else {
+        this.dom.toolSummaryTimeRow.hidden = true;
+        this.dom.toolSummaryTime.textContent = "";
+      }
     }
   }
 
@@ -954,6 +978,9 @@ export class EventAdminApp {
     const hasEvent = Boolean(this.selectedEventId);
     const hasSchedule = Boolean(this.selectedScheduleId);
 
+    if (this.dom.addEventButton) {
+      this.dom.addEventButton.disabled = !signedIn;
+    }
     if (this.dom.nextButton) {
       this.dom.nextButton.disabled = !signedIn || !hasEvent;
     }
@@ -974,6 +1001,12 @@ export class EventAdminApp {
     }
     if (this.dom.operatorTab) {
       this.dom.operatorTab.disabled = !signedIn || !hasSchedule;
+    }
+    if (this.dom.launchParticipantsButton) {
+      this.dom.launchParticipantsButton.disabled = !signedIn || !hasSchedule;
+    }
+    if (this.dom.launchOperatorButton) {
+      this.dom.launchOperatorButton.disabled = !signedIn || !hasSchedule;
     }
   }
 
@@ -1016,8 +1049,8 @@ export class EventAdminApp {
     }
     this.setStage(stage);
     if (stage === "tabs") {
+      this.updateToolSummary();
       this.switchTab(this.activeTab);
-      this.ensureTabFrame(this.activeTab);
     }
   }
 
@@ -1044,32 +1077,6 @@ export class EventAdminApp {
     if (this.dom.operatorPanel) {
       this.dom.operatorPanel.classList.toggle("is-active", normalized === "operator");
       this.dom.operatorPanel.hidden = normalized !== "operator";
-    }
-    this.ensureTabFrame(normalized);
-  }
-
-  ensureTabFrame(tab) {
-    const schedule = this.getSelectedSchedule();
-    if (!schedule) {
-      return;
-    }
-    if (tab === "participants" && this.dom.participantsFrame && !this.participantsFrameLoaded) {
-      const url = this.buildParticipantAdminUrlForSchedule(schedule);
-      this.dom.participantsFrame.src = url;
-      this.dom.participantsFrame.removeAttribute("hidden");
-      if (this.dom.participantsPlaceholder) {
-        this.dom.participantsPlaceholder.hidden = true;
-      }
-      this.participantsFrameLoaded = true;
-    }
-    if (tab === "operator" && this.dom.operatorFrame && !this.operatorFrameLoaded) {
-      const url = this.buildOperatorPanelUrl(schedule);
-      this.dom.operatorFrame.src = url;
-      this.dom.operatorFrame.removeAttribute("hidden");
-      if (this.dom.operatorPlaceholder) {
-        this.dom.operatorPlaceholder.hidden = true;
-      }
-      this.operatorFrameLoaded = true;
     }
   }
 
@@ -1433,6 +1440,28 @@ export class EventAdminApp {
     if (scheduleKey) url.searchParams.set("scheduleKey", scheduleKey);
     url.searchParams.set("source", "events");
     return url.toString();
+  }
+
+  launchParticipantsTool() {
+    if (typeof window === "undefined") return;
+    const schedule = this.getSelectedSchedule();
+    if (!schedule) {
+      this.revealScheduleSelectionCue();
+      return;
+    }
+    const url = this.buildParticipantAdminUrlForSchedule(schedule);
+    window.open(url, "_blank", "noreferrer noopener");
+  }
+
+  launchOperatorTool() {
+    if (typeof window === "undefined") return;
+    const schedule = this.getSelectedSchedule();
+    if (!schedule) {
+      this.revealScheduleSelectionCue();
+      return;
+    }
+    const url = this.buildOperatorPanelUrl(schedule);
+    window.open(url, "_blank", "noreferrer noopener");
   }
 
   openEventDialog({ mode = "create", event = null } = {}) {

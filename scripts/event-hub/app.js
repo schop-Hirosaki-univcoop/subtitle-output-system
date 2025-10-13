@@ -59,6 +59,7 @@ export class EventHubApp {
     this.activeDialog = null;
     this.lastFocused = null;
     this.confirmResolver = null;
+    this.redirectingToIndex = false;
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
   }
 
@@ -85,7 +86,6 @@ export class EventHubApp {
 
   init() {
     this.bindEvents();
-    this.showLoggedOutState();
     this.renderSummaryFromContext();
     this.updateBackLink();
     this.updateManageLink();
@@ -177,25 +177,20 @@ export class EventHubApp {
   }
 
   showLoggedOutState() {
-    this.setLoginError(this.pendingLoginError);
-    if (this.dom.loginCard) {
-      this.dom.loginCard.hidden = false;
-    }
-    if (this.dom.main) {
-      this.dom.main.hidden = true;
-    }
-    if (this.dom.summary) {
-      this.dom.summary.hidden = true;
+    if (this.redirectingToIndex) {
+      return;
     }
     this.toggleLoading(false);
     this.updateControlsForAuth(false);
+    if (typeof window !== "undefined") {
+      this.redirectingToIndex = true;
+      window.location.replace("index.html");
+    }
   }
 
   showLoggedInState() {
+    this.redirectingToIndex = false;
     this.setLoginError("");
-    if (this.dom.loginCard) {
-      this.dom.loginCard.hidden = true;
-    }
     if (this.dom.main) {
       this.dom.main.hidden = false;
     }

@@ -38,6 +38,8 @@ import {
   parseCsv,
   parseDateTimeLocal
 } from "./utils.js";
+
+let redirectingToIndex = false;
 import {
   normalizeEventParticipantCache,
   describeDuplicateMatch,
@@ -2918,9 +2920,14 @@ function initAuthWatcher() {
         dom.loginButton.classList.remove("is-busy");
       }
       resetState();
+      if (!redirectingToIndex && typeof window !== "undefined") {
+        redirectingToIndex = true;
+        window.location.replace("index.html");
+      }
       return;
     }
 
+    redirectingToIndex = false;
     showLoader("権限を確認しています…");
     initLoaderSteps(STEP_LABELS);
 

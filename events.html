@@ -8,19 +8,11 @@
   <script type="module" src="./scripts/shared/layout.js"></script>
 </head>
 <body class="op-theme events-page flow-page">
-  <telop-header tagline="Event Control" context-label="管理フロー">
+  <telop-header tagline="Broadcast Subtitle Console" context-label="管理フロー">
     <div slot="meta" id="events-meta" class="hub-meta-note" hidden></div>
-    <a slot="actions" id="events-admin-link" class="btn btn-ghost btn-sm" href="question-admin.html" target="_blank" rel="noreferrer noopener">参加者管理を開く</a>
   </telop-header>
 
-  <div id="events-login-card" class="auth-card" role="dialog" aria-labelledby="events-login-title">
-    <h2 id="events-login-title">イベントコントロールセンター</h2>
-    <p class="auth-lead">イベントや日程、参加者ツールの管理を始めるには、管理用の Google アカウントでサインインしてください。</p>
-    <p id="events-login-error" class="auth-error" role="alert" hidden></p>
-    <button id="events-login-button" class="btn btn-primary" type="button">Googleアカウントでログイン</button>
-  </div>
-
-  <main id="events-main" class="flow-main" hidden data-stage="events">
+  <main id="events-main" class="flow-main" data-stage="events">
     <div class="flow-progress" role="list" aria-label="進行ステップ">
       <div class="flow-progress__item is-active" data-stage-indicator="events">
         <span class="flow-progress__step">1</span>
@@ -51,20 +43,30 @@
           <div class="module-actions">
             <button id="add-event-button" class="btn btn-primary btn-sm" type="button" disabled>イベントを追加</button>
             <button id="events-refresh-button" class="btn btn-ghost btn-sm" type="button">再読み込み</button>
-            <button id="events-logout-button" class="btn btn-ghost btn-sm" type="button" hidden>ログアウト</button>
             <button id="events-next-button" class="btn btn-primary btn-sm" type="button" disabled>次へ</button>
           </div>
         </div>
         <div class="module-body">
-          <p id="events-context" class="admin-context">イベントの各行を選択すると、日程の管理ステップに進めます。</p>
-          <div id="events-loading" class="hub-loading" role="status" aria-live="polite" hidden>
-            <span class="spinner" aria-hidden="true"></span>
-            <span id="events-loading-text">イベント情報を読み込んでいます…</span>
+          <div class="flow-pane flow-pane--primary">
+            <p id="events-context" class="admin-context">イベントのカードを選択すると、日程の管理ステップに進めます。</p>
+            <div id="events-loading" class="hub-loading" role="status" aria-live="polite" hidden>
+              <span class="spinner" aria-hidden="true"></span>
+              <span id="events-loading-text">イベント情報を読み込んでいます…</span>
+            </div>
+            <div id="events-alert" class="hub-alert" role="alert" hidden></div>
+            <p id="event-selection-note" class="flow-selection-note" hidden>進めるイベントをカードから選択してください。</p>
+            <ul id="event-list" class="entity-list" aria-live="polite"></ul>
+            <p id="event-empty" class="entity-empty" hidden>まだイベントが登録されていません。まずはイベントを追加してください。</p>
           </div>
-          <div id="events-alert" class="hub-alert" role="alert" hidden></div>
-          <p id="event-selection-note" class="flow-selection-note" hidden>進めるイベントを一覧から選択してください。</p>
-          <ul id="event-list" class="entity-list" aria-live="polite"></ul>
-          <p id="event-empty" class="entity-empty" hidden>まだイベントが登録されていません。まずはイベントを追加してください。</p>
+          <div class="flow-pane flow-pane--summary" id="event-summary-pane">
+            <h3 class="flow-summary-title">選択中のイベント</h3>
+            <p id="event-summary-name" class="flow-summary-name">—</p>
+            <dl class="flow-summary-stats">
+              <div class="flow-summary-row"><dt>日程数</dt><dd id="event-summary-schedules">—</dd></div>
+              <div class="flow-summary-row"><dt>参加者</dt><dd id="event-summary-participants">—</dd></div>
+            </dl>
+            <button id="event-change-button" class="btn btn-ghost btn-sm" type="button">イベントを選び直す</button>
+          </div>
         </div>
       </section>
 
@@ -72,7 +74,7 @@
         <div class="module-header">
           <div class="module-heading">
             <h2 id="schedule-admin-title">日程の管理</h2>
-            <p class="module-description">選択したイベントに紐づく日程を追加・編集・削除し、参加者・テロップツールへ進めます。</p>
+            <p class="module-description">選択したイベントに紐づく日程を整理し、次のツールに引き継ぐ日程を決めます。</p>
           </div>
           <div class="module-actions">
             <button id="schedule-back-button" class="btn btn-ghost btn-sm" type="button">イベントに戻る</button>
@@ -81,23 +83,28 @@
           </div>
         </div>
         <div class="module-body">
-          <div id="schedule-loading" class="hub-loading" role="status" aria-live="polite" hidden>
-            <span class="spinner" aria-hidden="true"></span>
-            <span id="schedule-loading-text">日程情報を読み込んでいます…</span>
+          <div class="flow-pane flow-pane--primary">
+            <div id="schedule-loading" class="hub-loading" role="status" aria-live="polite" hidden>
+              <span class="spinner" aria-hidden="true"></span>
+              <span id="schedule-loading-text">日程情報を読み込んでいます…</span>
+            </div>
+            <p id="schedule-context" class="admin-context">イベントを選択すると、紐づく日程一覧が表示されます。</p>
+            <p id="schedule-selection-note" class="flow-selection-note" hidden>次のステップに進む日程をカードから選択してください。</p>
+            <ul id="schedule-list" class="entity-list" aria-live="polite"></ul>
+            <p id="schedule-empty" class="entity-empty" hidden>このイベントにはまだ日程が登録されていません。まずは日程を追加してください。</p>
+            <div id="schedule-forward-actions" class="flow-forward-actions">
+              <button id="open-participants-button" class="btn btn-ghost btn-sm" type="button" disabled>参加者リストを準備</button>
+              <button id="open-operator-button" class="btn btn-primary btn-sm" type="button" disabled>テロップ操作パネルへ</button>
+            </div>
           </div>
-          <p id="schedule-context" class="admin-context">イベントを選択すると、紐づく日程一覧が表示されます。</p>
-          <p id="schedule-selection-note" class="flow-selection-note" hidden>次のステップに進む日程を一覧から選択してください。</p>
-          <div id="schedule-summary" class="flow-selection-summary" hidden>
-            <h3 class="flow-selection-summary__title" id="schedule-summary-title">選択中の日程</h3>
-            <p class="flow-selection-summary__item"><span class="flow-selection-summary__label">イベント</span><span id="schedule-summary-event">—</span></p>
-            <p class="flow-selection-summary__item"><span class="flow-selection-summary__label">日程</span><span id="schedule-summary-label">—</span></p>
-            <p class="flow-selection-summary__item" id="schedule-summary-range-row" hidden><span class="flow-selection-summary__label">時間</span><span id="schedule-summary-range">—</span></p>
-          </div>
-          <ul id="schedule-list" class="entity-list" aria-live="polite"></ul>
-          <p id="schedule-empty" class="entity-empty" hidden>このイベントにはまだ日程が登録されていません。まずは日程を追加してください。</p>
-          <div id="schedule-forward-actions" class="flow-forward-actions">
-            <button id="open-participants-button" class="btn btn-ghost btn-sm" type="button" disabled>参加者リストを表示</button>
-            <button id="open-operator-button" class="btn btn-primary btn-sm" type="button" disabled>テロップ操作パネルへ</button>
+          <div class="flow-pane flow-pane--summary" id="schedule-summary-pane">
+            <div id="schedule-summary" class="flow-selection-summary" hidden>
+              <h3 class="flow-selection-summary__title" id="schedule-summary-title">選択中の日程</h3>
+              <p class="flow-selection-summary__item"><span class="flow-selection-summary__label">イベント</span><span id="schedule-summary-event">—</span></p>
+              <p class="flow-selection-summary__item"><span class="flow-selection-summary__label">日程</span><span id="schedule-summary-label">—</span></p>
+              <p class="flow-selection-summary__item" id="schedule-summary-range-row" hidden><span class="flow-selection-summary__label">時間</span><span id="schedule-summary-range">—</span></p>
+            </div>
+            <button id="schedule-change-button" class="btn btn-ghost btn-sm" type="button">日程を選び直す</button>
           </div>
         </div>
       </section>
@@ -105,29 +112,51 @@
       <section id="flow-tabs" class="module module--primary flow-card flow-card--tabs" aria-labelledby="flow-tabs-title">
         <div class="module-header">
           <div class="module-heading">
-            <h2 id="flow-tabs-title">参加者とテロップのツール</h2>
-            <p class="module-description">選択したイベントと日程の情報を引き継いでツールを表示します。タブで切り替えてご利用ください。</p>
+            <h2 id="flow-tabs-title">テロップ操作パネル</h2>
+            <p class="module-description">選択したイベントと日程の概要を確認し、参加者リスト管理とテロップ操作ツールへ進みます。</p>
           </div>
           <div class="module-actions">
+            <a id="logs-shortcut" class="btn btn-ghost btn-icon" href="operator.html#logs" target="_blank" rel="noreferrer noopener" aria-label="操作ログを開く">
+              <span class="icon icon-menu" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="img" focusable="false"><path d="M4 6.75A.75.75 0 0 1 4.75 6h14.5a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 6.75Zm0 5.25a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 12Zm.75 4.5a.75.75 0 0 0 0 1.5h14.5a.75.75 0 0 0 0-1.5H4.75Z"/></svg>
+              </span>
+              <span class="btn-label">ログ</span>
+            </a>
+            <a id="dictionary-shortcut" class="btn btn-ghost btn-icon" href="operator.html#dictionary" target="_blank" rel="noreferrer noopener" aria-label="ルビ辞書管理を開く">
+              <span class="icon icon-book" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="img" focusable="false"><path d="M6.25 4C5.01 4 4 5.01 4 6.25v11.5C4 19.99 5.01 21 6.25 21H18a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H6.25Zm.25 2h11v12H6.25a.25.25 0 0 1-.25-.25V6.25c0-.138.112-.25.25-.25ZM8 8.25A.75.75 0 0 1 8.75 7.5h6.5a.75.75 0 0 1 0 1.5h-6.5A.75.75 0 0 1 8 8.25ZM8.75 11a.75.75 0 0 0 0 1.5h3.5a.75.75 0 0 0 0-1.5h-3.5Z"/></svg>
+              </span>
+              <span class="btn-label">辞書</span>
+            </a>
             <button id="flow-tabs-back-button" class="btn btn-ghost btn-sm" type="button">日程の管理に戻る</button>
           </div>
         </div>
         <div class="module-body">
+          <div class="flow-summary-group">
+            <h3 class="flow-summary-title">選択内容の確認</h3>
+            <dl class="flow-summary-stats">
+              <div class="flow-summary-row"><dt>イベント</dt><dd id="tool-summary-event">—</dd></div>
+              <div class="flow-summary-row"><dt>日程</dt><dd id="tool-summary-schedule">—</dd></div>
+              <div class="flow-summary-row" id="tool-summary-time-row"><dt>時間</dt><dd id="tool-summary-time">—</dd></div>
+            </dl>
+          </div>
           <div id="flow-tablist" class="flow-tablist" role="tablist" aria-label="参加者・テロップツール">
             <button id="flow-tab-participants" class="flow-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="flow-panel-participants">参加者リスト管理</button>
             <button id="flow-tab-operator" class="flow-tab" type="button" role="tab" aria-selected="false" aria-controls="flow-panel-operator">テロップ操作パネル</button>
           </div>
           <div class="flow-tabpanels">
             <section id="flow-panel-participants" class="flow-tabpanel is-active" role="tabpanel" tabindex="0" aria-labelledby="flow-tab-participants">
-              <div class="flow-iframe-shell">
-                <p id="participants-frame-placeholder" class="flow-iframe-placeholder">参加者リスト管理ツールを読み込んでいます…</p>
-                <iframe id="participants-frame" title="参加者リスト管理" loading="lazy" hidden></iframe>
+              <div class="tool-card">
+                <h3 class="tool-card__title">参加者リスト管理</h3>
+                <p class="tool-card__description">参加者の登録状況を確認し、出欠の管理や案内メールの送信を行います。新しいウィンドウで開きます。</p>
+                <button id="launch-participants-button" class="btn btn-primary" type="button">参加者リストを開く</button>
               </div>
             </section>
             <section id="flow-panel-operator" class="flow-tabpanel" role="tabpanel" tabindex="0" aria-labelledby="flow-tab-operator" hidden>
-              <div class="flow-iframe-shell">
-                <p id="operator-frame-placeholder" class="flow-iframe-placeholder">テロップ操作パネルを読み込んでいます…</p>
-                <iframe id="operator-frame" title="テロップ操作パネル" loading="lazy" hidden></iframe>
+              <div class="tool-card">
+                <h3 class="tool-card__title">テロップ操作パネル</h3>
+                <p class="tool-card__description">質問カードの送出やログ監視、辞書更新を同じ画面で操作できます。選択中の日程を引き継いで開きます。</p>
+                <button id="launch-operator-button" class="btn btn-primary" type="button">テロップ操作パネルを開く</button>
               </div>
             </section>
           </div>

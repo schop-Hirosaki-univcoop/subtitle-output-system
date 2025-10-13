@@ -1,8 +1,5 @@
 export function queryDom() {
   return {
-    loginCard: document.getElementById("events-login-card"),
-    loginButton: document.getElementById("events-login-button"),
-    loginError: document.getElementById("events-login-error"),
     main: document.getElementById("events-main"),
     eventsModule: document.querySelector(".flow-card--events"),
     schedulesModule: document.querySelector(".flow-card--schedules"),
@@ -20,10 +17,13 @@ export function queryDom() {
     eventSelectionNote: document.getElementById("event-selection-note"),
     addEventButton: document.getElementById("add-event-button"),
     refreshButton: document.getElementById("events-refresh-button"),
-    logoutButton: document.getElementById("events-logout-button"),
     nextButton: document.getElementById("events-next-button"),
-    adminLink: document.getElementById("events-admin-link"),
     metaNote: document.getElementById("events-meta"),
+    eventSummaryPane: document.getElementById("event-summary-pane"),
+    eventSummaryName: document.getElementById("event-summary-name"),
+    eventSummarySchedules: document.getElementById("event-summary-schedules"),
+    eventSummaryParticipants: document.getElementById("event-summary-participants"),
+    eventChangeButton: document.getElementById("event-change-button"),
     scheduleLoading: document.getElementById("schedule-loading"),
     scheduleLoadingText: document.getElementById("schedule-loading-text"),
     scheduleContext: document.getElementById("schedule-context"),
@@ -38,6 +38,7 @@ export function queryDom() {
     openParticipantsButton: document.getElementById("open-participants-button"),
     openOperatorButton: document.getElementById("open-operator-button"),
     scheduleBackButton: document.getElementById("schedule-back-button"),
+    scheduleChangeButton: document.getElementById("schedule-change-button"),
     eventDialog: document.getElementById("event-dialog"),
     eventForm: document.getElementById("event-form"),
     eventDialogTitle: document.getElementById("event-dialog-title"),
@@ -63,9 +64,11 @@ export function queryDom() {
     operatorTab: document.getElementById("flow-tab-operator"),
     participantsPanel: document.getElementById("flow-panel-participants"),
     operatorPanel: document.getElementById("flow-panel-operator"),
-    participantsFrame: document.getElementById("participants-frame"),
-    operatorFrame: document.getElementById("operator-frame"),
-    participantsPlaceholder: document.getElementById("participants-frame-placeholder"),
-    operatorPlaceholder: document.getElementById("operator-frame-placeholder")
+    toolSummaryEvent: document.getElementById("tool-summary-event"),
+    toolSummarySchedule: document.getElementById("tool-summary-schedule"),
+    toolSummaryTime: document.getElementById("tool-summary-time"),
+    toolSummaryTimeRow: document.getElementById("tool-summary-time-row"),
+    launchParticipantsButton: document.getElementById("launch-participants-button"),
+    launchOperatorButton: document.getElementById("launch-operator-button")
   };
 }
