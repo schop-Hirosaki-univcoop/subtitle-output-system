@@ -400,6 +400,7 @@ export class EventHubApp {
     if (schedule?.id) url.searchParams.set("scheduleId", schedule.id);
     const scheduleKey = eventId && schedule?.id ? `${eventId}::${schedule.id}` : "";
     if (scheduleKey) url.searchParams.set("scheduleKey", scheduleKey);
+    url.searchParams.set("source", "event-hub");
     const eventName = ensureString(this.context.eventName || this.eventData?.name);
     if (eventName) url.searchParams.set("eventName", eventName);
     if (schedule?.label) url.searchParams.set("scheduleLabel", schedule.label);

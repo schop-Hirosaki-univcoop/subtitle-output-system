@@ -951,6 +951,7 @@ function buildScheduleHubUrl(event, schedule) {
   url.searchParams.set("eventId", eventId);
   url.searchParams.set("scheduleId", scheduleId);
   url.searchParams.set("scheduleKey", `${eventId}::${scheduleId}`);
+  url.searchParams.set("source", "question-admin");
 
   if (event.name) {
     url.searchParams.set("eventName", String(event.name));

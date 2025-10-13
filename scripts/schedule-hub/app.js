@@ -46,7 +46,8 @@ export class ScheduleHubApp {
       startAt: "",
       endAt: "",
       participantCount: "",
-      scheduleKey: ""
+      scheduleKey: "",
+      source: ""
     };
 
     if (typeof window === "undefined") {
@@ -63,6 +64,7 @@ export class ScheduleHubApp {
       base.endAt = ensureString(params.get("endAt") ?? params.get("scheduleEnd"));
       base.participantCount = ensureString(params.get("participantCount") ?? params.get("participants"));
       base.scheduleKey = ensureString(params.get("scheduleKey"));
+      base.source = ensureString(params.get("source")).toLowerCase();
     } catch (error) {
       console.debug("failed to parse schedule hub context", error);
     }
@@ -442,17 +444,59 @@ export class ScheduleHubApp {
   updateBackLink() {
     if (!this.dom.backLink || typeof window === "undefined") return;
     const hasEvent = Boolean(this.context.eventId);
-    const basePath = hasEvent ? "event-hub.html" : "question-admin.html";
+    const source = this.context.source || "";
+
+    let basePath = "events.html";
+    let label = "イベント一覧に戻る";
+
+    if (source === "question-admin") {
+      basePath = "question-admin.html";
+      label = "参加者管理に戻る";
+    } else if (source === "event-hub") {
+      if (hasEvent) {
+        basePath = "event-hub.html";
+        label = "イベントハブに戻る";
+      }
+    } else if (hasEvent) {
+      basePath = "event-hub.html";
+      label = "イベントハブに戻る";
+    }
+
     const url = new URL(basePath, window.location.href);
-    if (hasEvent) {
+
+    if (basePath === "event-hub.html" && hasEvent) {
       url.searchParams.set("eventId", this.context.eventId);
       const eventName = ensureString(this.context.eventName || this.eventData?.name);
       if (eventName) {
         url.searchParams.set("eventName", eventName);
       }
+    } else if (basePath === "question-admin.html") {
+      if (this.context.eventId) {
+        url.searchParams.set("eventId", this.context.eventId);
+      }
+      if (this.context.eventName || this.eventData?.name) {
+        url.searchParams.set(
+          "eventName",
+          ensureString(this.context.eventName || this.eventData?.name)
+        );
+      }
+      if (this.context.scheduleId) {
+        url.searchParams.set("scheduleId", this.context.scheduleId);
+      }
+      if (this.context.scheduleLabel || this.scheduleData?.label) {
+        url.searchParams.set(
+          "scheduleLabel",
+          ensureString(this.context.scheduleLabel || this.scheduleData?.label)
+        );
+      }
+      const scheduleKey = this.resolveScheduleKey();
+      if (scheduleKey) {
+        url.searchParams.set("scheduleKey", scheduleKey);
+      }
+      url.searchParams.set("focus", "participants");
     }
+
     this.dom.backLink.href = url.toString();
-    const label = hasEvent ? "イベントハブに戻る" : "管理画面に戻る";
     this.dom.backLink.textContent = label;
     this.dom.backLink.setAttribute("aria-label", label);
     this.dom.backLink.setAttribute("title", label);
