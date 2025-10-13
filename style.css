@@ -516,44 +516,38 @@ input[type="checkbox"]{
   gap:clamp(.45rem, 1vw, .7rem);
   flex-wrap:wrap;
 }
-.schedule-filter{
-  display:inline-flex;
-  align-items:center;
-  gap:clamp(.35rem, .9vw, .55rem);
-  font-size:.9rem;
-  color:var(--muted);
-  padding:.3rem .55rem;
+.schedule-context{
+  display:flex;
+  flex-direction:column;
+  gap:.25rem;
+  padding:.45rem .7rem;
   border-radius:clamp(.65rem, 1.1vw, .85rem);
   background:rgba(15,23,36,.55);
   border:1px solid rgba(70,94,128,.4);
+  min-width:clamp(12rem, 24vw, 20rem);
 }
-.schedule-filter.is-disabled{
-  opacity:.5;
+.schedule-event{
+  font-weight:600;
+  font-size:1rem;
+  color:var(--base);
+  letter-spacing:.02em;
 }
-.schedule-filter select{
-  appearance:none;
-  border:none;
-  background:transparent;
-  color:inherit;
-  font:inherit;
-  padding:.1rem .25rem;
-  min-width:7.5rem;
-}
-.schedule-filter select:focus{
-  outline:none;
-}
-.schedule-filter select:disabled{
-  opacity:.4;
-  cursor:not-allowed;
-}
-.schedule-filter .schedule-range{
+.schedule-meta{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:clamp(.35rem, .8vw, .55rem);
+  font-size:.9rem;
   color:var(--muted);
-  font-size:.85rem;
-  white-space:nowrap;
 }
 .schedule-label{
   font-weight:600;
   letter-spacing:.05em;
+}
+.schedule-range{
+  color:var(--muted);
+  font-size:.85rem;
+  white-space:nowrap;
 }
 .chk{
   display:flex;
