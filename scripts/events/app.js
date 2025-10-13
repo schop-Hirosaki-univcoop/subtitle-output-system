@@ -210,6 +210,48 @@ export class EventAdminApp {
       });
     }
 
+    if (this.dom.nextButton) {
+      this.dom.nextButton.addEventListener("click", () => {
+        this.goToStage("schedules");
+      });
+    }
+
+    if (this.dom.scheduleBackButton) {
+      this.dom.scheduleBackButton.addEventListener("click", () => {
+        this.setStage("events");
+      });
+    }
+
+    if (this.dom.flowTabsBackButton) {
+      this.dom.flowTabsBackButton.addEventListener("click", () => {
+        this.setStage("schedules");
+      });
+    }
+
+    if (this.dom.openParticipantsButton) {
+      this.dom.openParticipantsButton.addEventListener("click", () => {
+        this.enterTabsStage("participants");
+      });
+    }
+
+    if (this.dom.openOperatorButton) {
+      this.dom.openOperatorButton.addEventListener("click", () => {
+        this.enterTabsStage("operator");
+      });
+    }
+
+    if (this.dom.participantsTab) {
+      this.dom.participantsTab.addEventListener("click", () => {
+        this.switchTab("participants");
+      });
+    }
+
+    if (this.dom.operatorTab) {
+      this.dom.operatorTab.addEventListener("click", () => {
+        this.switchTab("operator");
+      });
+    }
+
     if (this.dom.eventForm) {
       this.dom.eventForm.addEventListener("submit", (event) => {
         event.preventDefault();
