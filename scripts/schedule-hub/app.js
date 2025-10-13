@@ -1,5 +1,15 @@
 import { queryDom } from "./dom.js";
-import { database, ref, get } from "../operator/firebase.js";
+import {
+  database,
+  ref,
+  get,
+  auth,
+  provider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged
+} from "../operator/firebase.js";
+import { createApiClient } from "../operator/api-client.js";
 import { formatScheduleRange } from "../operator/utils.js";
 
 const ensureString = (value) => String(value ?? "").trim();
@@ -21,6 +31,10 @@ export class ScheduleHubApp {
     this.context = this.parseContext();
     this.eventData = null;
     this.scheduleData = null;
+    this.api = createApiClient(auth, onAuthStateChanged);
+    this.authUnsubscribe = null;
+    this.currentUser = null;
+    this.pendingLoginError = "";
   }
 
   parseContext() {
@@ -57,18 +71,186 @@ export class ScheduleHubApp {
   }
 
   init() {
+    this.bindEvents();
+    this.showLoggedOutState();
     this.updateBackLink();
     this.renderSummaryFromContext();
     this.updateActionLinks();
+    this.observeAuthState();
 
     if (!this.context.eventId || !this.context.scheduleId) {
       this.showError("イベントIDまたは日程IDが指定されていません。URL を確認してください。");
-      this.toggleLoading(false);
+      this.setLoginError("イベントIDまたは日程IDが指定されていません。URL を確認してください。");
+    }
+  }
+
+  bindEvents() {
+    if (this.dom.loginButton) {
+      this.dom.loginButton.addEventListener("click", () => this.login());
+    }
+  }
+
+  observeAuthState() {
+    if (this.authUnsubscribe) {
+      this.authUnsubscribe();
+      this.authUnsubscribe = null;
+    }
+    this.authUnsubscribe = onAuthStateChanged(auth, (user) => {
+      this.handleAuthState(user).catch((error) => {
+        console.error("Failed to handle auth state:", error);
+      });
+    });
+  }
+
+  async login() {
+    const button = this.dom.loginButton;
+    if (!button) return;
+
+    const originalLabel = button.textContent;
+    try {
+      button.disabled = true;
+      button.classList.add("is-busy");
+      button.textContent = "サインイン中…";
+      this.setLoginError("");
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Hub login failed:", error);
+      this.setLoginError("ログインに失敗しました。もう一度お試しください。");
+    } finally {
+      button.disabled = false;
+      button.classList.remove("is-busy");
+      button.textContent = originalLabel;
+    }
+  }
+
+  showLoggedOutState() {
+    this.setLoginError(this.pendingLoginError);
+    if (this.dom.loginCard) {
+      this.dom.loginCard.hidden = false;
+    }
+    if (this.dom.main) {
+      this.dom.main.hidden = true;
+    }
+    if (this.dom.summary) {
+      this.dom.summary.hidden = true;
+    }
+    if (this.dom.actions) {
+      this.dom.actions.hidden = true;
+    }
+    this.toggleLoading(false);
+  }
+
+  showLoggedInState() {
+    this.setLoginError("");
+    if (this.dom.loginCard) {
+      this.dom.loginCard.hidden = true;
+    }
+    if (this.dom.main) {
+      this.dom.main.hidden = false;
+    }
+  }
+
+  setLoadingMessage(message) {
+    if (this.dom.loadingText) {
+      this.dom.loadingText.textContent = message || "";
+    }
+  }
+
+  clearError() {
+    if (this.dom.alert) {
+      this.dom.alert.hidden = true;
+      this.dom.alert.textContent = "";
+    }
+    if (!this.currentUser) {
+      this.setLoginError(this.pendingLoginError);
+    }
+  }
+
+  setLoginError(message = "") {
+    const normalized = ensureString(message);
+    this.pendingLoginError = normalized;
+    if (!this.dom.loginError) {
+      return;
+    }
+    if (normalized) {
+      this.dom.loginError.hidden = false;
+      this.dom.loginError.textContent = normalized;
+    } else {
+      this.dom.loginError.hidden = true;
+      this.dom.loginError.textContent = "";
+    }
+  }
+
+  async handleAuthState(user) {
+    this.currentUser = user;
+    if (!user) {
+      this.clearError();
+      this.showLoggedOutState();
       return;
     }
 
-    this.toggleLoading(true);
-    this.loadData();
+    this.showLoggedInState();
+    this.clearError();
+
+    try {
+      this.setLoadingMessage("権限を確認しています…");
+      this.toggleLoading(true);
+      await this.ensureAdminAccess();
+      this.setLoadingMessage("日程情報を読み込んでいます…");
+      await this.loadData();
+    } catch (error) {
+      console.error("Schedule hub initialization failed:", error);
+      if (this.isPermissionError(error)) {
+        const message =
+          (error instanceof Error && error.message) ||
+          "アクセス権限がありません。管理者に確認してください。";
+        this.showError(message);
+        this.setLoginError(message);
+        await this.safeSignOut();
+        return;
+      }
+      const fallback = "日程情報の読み込みに失敗しました。時間をおいて再度お試しください。";
+      const message = error instanceof Error && error.message ? error.message : fallback;
+      this.showError(message || fallback);
+    } finally {
+      this.toggleLoading(false);
+    }
+  }
+
+  async ensureAdminAccess() {
+    if (!this.api) {
+      return;
+    }
+    try {
+      await this.api.apiPost({ action: "ensureAdmin" });
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : String(error || "");
+      let message = "権限の確認に失敗しました。時間をおいて再度お試しください。";
+      if (/not in users sheet/i.test(rawMessage)) {
+        message = "あなたのアカウントにはこのページへのアクセス権限がありません。管理者に確認してください。";
+      }
+      const err = new Error(message);
+      err.code = "HUB_ACCESS_DENIED";
+      err.cause = error;
+      throw err;
+    }
+  }
+
+  async safeSignOut() {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.warn("Failed to sign out after permission error:", error);
+    }
+  }
+
+  isPermissionError(error) {
+    if (!error) return false;
+    if (error.code === "HUB_ACCESS_DENIED") return true;
+    const code = typeof error.code === "string" ? error.code : "";
+    if (code.includes("PERMISSION")) return true;
+    const message = error instanceof Error ? error.message : String(error || "");
+    return /permission/i.test(message) || message.includes("権限");
   }
 
   toggleLoading(isLoading) {
@@ -149,37 +331,34 @@ export class ScheduleHubApp {
   async loadData() {
     const { eventId, scheduleId } = this.context;
 
-    try {
-      const [eventSnapshot, scheduleSnapshot] = await Promise.all([
-        get(ref(database, `questionIntake/events/${eventId}`)),
-        get(ref(database, `questionIntake/schedules/${eventId}/${scheduleId}`))
-      ]);
-
-      if (!eventSnapshot.exists()) {
-        throw new Error(`イベント「${eventId}」が見つかりません。`);
-      }
-
-      if (!scheduleSnapshot.exists()) {
-        throw new Error(`日程「${scheduleId}」が見つかりません。`);
-      }
-
-      this.eventData = eventSnapshot.val();
-      this.scheduleData = scheduleSnapshot.val();
-
-      this.applyFetchedData();
-      this.updateActionLinks();
-      this.toggleLoading(false);
-    } catch (error) {
-      console.error(error);
-      let message = "日程情報の読み込みに失敗しました。";
-      if (error && typeof error.code === "string" && error.code.includes("PERMISSION")) {
-        message = "データベースの読み取り権限がありません。管理者に確認してください。";
-      } else if (error instanceof Error && error.message) {
-        message = error.message;
-      }
-      this.toggleLoading(false);
-      this.showError(message);
+    if (!eventId || !scheduleId) {
+      const error = new Error("イベントIDまたは日程IDが指定されていません。URL を確認してください。");
+      error.code = "HUB_CONTEXT_MISSING";
+      throw error;
     }
+
+    const [eventSnapshot, scheduleSnapshot] = await Promise.all([
+      get(ref(database, `questionIntake/events/${eventId}`)),
+      get(ref(database, `questionIntake/schedules/${eventId}/${scheduleId}`))
+    ]);
+
+    if (!eventSnapshot.exists()) {
+      const error = new Error(`イベント「${eventId}」が見つかりません。`);
+      error.code = "HUB_EVENT_NOT_FOUND";
+      throw error;
+    }
+
+    if (!scheduleSnapshot.exists()) {
+      const error = new Error(`日程「${scheduleId}」が見つかりません。`);
+      error.code = "HUB_SCHEDULE_NOT_FOUND";
+      throw error;
+    }
+
+    this.eventData = eventSnapshot.val();
+    this.scheduleData = scheduleSnapshot.val();
+
+    this.applyFetchedData();
+    this.updateActionLinks();
   }
 
   applyFetchedData() {
@@ -239,6 +418,10 @@ export class ScheduleHubApp {
     if (this.dom.alert) {
       this.dom.alert.textContent = message;
       this.dom.alert.hidden = false;
+    }
+
+    if (this.dom.summary) {
+      this.dom.summary.hidden = true;
     }
 
     if (this.dom.actions) {

@@ -13,7 +13,14 @@
     <a slot="actions" id="hub-back-link" class="btn btn-ghost btn-sm" href="question-admin.html">イベント一覧に戻る</a>
   </telop-header>
 
-  <main class="single-main" id="hub-main">
+  <div id="hub-login-card" class="auth-card" role="dialog" aria-labelledby="hub-login-title">
+    <h2 id="hub-login-title">日程コントロールハブ</h2>
+    <p class="auth-lead">イベント日程に紐づくツールへアクセスするには、管理用の Google アカウントでサインインしてください。</p>
+    <p id="hub-login-error" class="auth-error" role="alert" hidden></p>
+    <button id="hub-login-button" class="btn btn-primary" type="button">Googleアカウントでログイン</button>
+  </div>
+
+  <main class="single-main" id="hub-main" hidden>
     <section class="module module--primary hub-module" aria-labelledby="hub-title">
       <div class="module-header">
         <div class="module-heading">
@@ -22,7 +29,7 @@
         </div>
       </div>
       <div class="module-body hub-body">
-        <div id="hub-loading" class="hub-loading" role="status" aria-live="polite">
+        <div id="hub-loading" class="hub-loading" role="status" aria-live="polite" hidden>
           <span class="spinner" aria-hidden="true"></span>
           <span id="hub-loading-text">日程情報を読み込んでいます…</span>
         </div>
