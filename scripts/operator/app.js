@@ -29,6 +29,8 @@ export class OperatorApp {
     this.dom = queryDom();
     const autoScroll = this.dom.logAutoscroll ? this.dom.logAutoscroll.checked : true;
     this.state = createInitialState(autoScroll);
+    this.pageContext = this.extractPageContext();
+    this.applyContextToState();
     this.api = createApiClient(auth, onAuthStateChanged);
 
     this.lastUpdatedAt = 0;
@@ -71,10 +73,9 @@ export class OperatorApp {
     this.startLogsUpdateMonitor = () => Logs.startLogsUpdateMonitor(this);
 
     this.renderQuestions = () => Questions.renderQuestions(this);
-    this.updateScheduleOptions = () => Questions.updateScheduleOptions(this);
+    this.updateScheduleContext = () => Questions.updateScheduleContext(this);
     this.switchSubTab = (tabName) => Questions.switchSubTab(this, tabName);
     this.switchGenre = (genre) => Questions.switchGenre(this, genre);
-    this.handleScheduleChange = (event) => Questions.handleScheduleChange(this, event);
     this.handleDisplay = () => Questions.handleDisplay(this);
     this.handleUnanswer = () => Questions.handleUnanswer(this);
     this.handleSelectAll = (event) => Questions.handleSelectAll(this, event);
@@ -100,6 +101,51 @@ export class OperatorApp {
     this.initLoaderSteps = () => Loader.initLoaderSteps(this);
     this.setLoaderStep = (step, message) => Loader.setLoaderStep(this, step, message);
     this.finishLoaderSteps = (message) => Loader.finishLoaderSteps(this, message);
+  }
+
+  extractPageContext() {
+    const context = {
+      eventId: "",
+      scheduleId: "",
+      eventName: "",
+      scheduleLabel: "",
+      startAt: "",
+      endAt: "",
+      scheduleKey: ""
+    };
+    if (typeof window === "undefined") {
+      return context;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      context.eventId = String(params.get("eventId") ?? params.get("event") ?? "").trim();
+      context.scheduleId = String(params.get("scheduleId") ?? params.get("schedule") ?? "").trim();
+      context.eventName = String(params.get("eventName") ?? "").trim();
+      context.scheduleLabel = String(params.get("scheduleLabel") ?? params.get("scheduleName") ?? "").trim();
+      context.startAt = String(params.get("startAt") ?? params.get("scheduleStart") ?? params.get("start") ?? "").trim();
+      context.endAt = String(params.get("endAt") ?? params.get("scheduleEnd") ?? params.get("end") ?? "").trim();
+      context.scheduleKey = String(params.get("scheduleKey") ?? "").trim();
+      if (!context.scheduleKey && context.eventId && context.scheduleId) {
+        context.scheduleKey = `${context.eventId}::${context.scheduleId}`;
+      }
+    } catch (error) {
+      console.debug("failed to parse page context", error);
+    }
+    return context;
+  }
+
+  applyContextToState() {
+    if (!this.state) return;
+    const context = this.pageContext || {};
+    const scheduleKey = context.scheduleKey || (context.eventId && context.scheduleId ? `${context.eventId}::${context.scheduleId}` : "");
+    this.state.activeEventId = context.eventId || "";
+    this.state.activeScheduleId = context.scheduleId || "";
+    this.state.activeEventName = context.eventName || "";
+    this.state.activeScheduleLabel = context.scheduleLabel || "";
+    if (scheduleKey) {
+      this.state.currentSchedule = scheduleKey;
+      this.state.lastNormalSchedule = scheduleKey;
+    }
   }
 
   init() {
@@ -148,10 +194,6 @@ export class OperatorApp {
     }
     this.dom.editCancelButton?.addEventListener("click", () => this.closeEditDialog());
     this.dom.editSaveButton?.addEventListener("click", () => this.handleEditSubmit());
-    if (this.dom.scheduleFilter) {
-      this.dom.scheduleFilter.value = this.state.currentSchedule;
-      this.dom.scheduleFilter.addEventListener("change", (event) => this.handleScheduleChange(event));
-    }
     this.dom.cardsContainer?.addEventListener("change", (event) => {
       if (event.target instanceof HTMLInputElement && event.target.classList.contains("row-checkbox")) {
         this.syncSelectAllState();
@@ -174,7 +216,8 @@ export class OperatorApp {
     if (preferredSubTab && preferredSubTab !== this.state.currentSubTab) {
       this.switchSubTab(preferredSubTab);
     } else {
-      this.updateScheduleOptions();
+      this.updateScheduleContext();
+      this.renderQuestions();
     }
   }
 
@@ -480,6 +523,7 @@ export class OperatorApp {
     }
     const autoScroll = this.dom.logAutoscroll ? this.dom.logAutoscroll.checked : true;
     this.state = createInitialState(autoScroll);
+    this.applyContextToState();
     if (this.dom.selectAllCheckbox) {
       this.dom.selectAllCheckbox.checked = false;
       this.dom.selectAllCheckbox.indeterminate = false;
@@ -494,13 +538,6 @@ export class OperatorApp {
       button.classList.toggle("active", isDefault);
       button.setAttribute("aria-selected", String(isDefault));
     });
-    if (this.dom.scheduleFilter) {
-      this.dom.scheduleFilter.innerHTML = "";
-      this.dom.scheduleFilter.value = "";
-      this.dom.scheduleFilter.disabled = true;
-      const wrapper = this.dom.scheduleFilter.closest(".schedule-filter");
-      if (wrapper) wrapper.classList.add("is-disabled");
-    }
     if (this.dom.scheduleTimeRange) {
       this.dom.scheduleTimeRange.textContent = "";
       this.dom.scheduleTimeRange.hidden = true;
@@ -511,6 +548,7 @@ export class OperatorApp {
     if (this.dom.logStream) this.dom.logStream.innerHTML = "";
     this.eventsBranch = {};
     this.schedulesBranch = {};
+    this.updateScheduleContext();
   }
 
   startQuestionsStream() {
@@ -578,7 +616,7 @@ export class OperatorApp {
   rebuildQuestions() {
     const list = Array.isArray(this.state.rawQuestions) ? this.state.rawQuestions : [];
     this.state.allQuestions = list.map((item) => this.normalizeQuestionRecord(item));
-    this.updateScheduleOptions();
+    this.updateScheduleContext();
     this.renderQuestions();
   }
 

@@ -28,91 +28,6 @@ function persistSubTabPreference(tabName) {
   }
 }
 
-function parseScheduleTimestamp(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return Number.NaN;
-  const direct = Date.parse(raw);
-  if (!Number.isNaN(direct)) return direct;
-  const sanitized = raw
-    .replace(/年|\//g, "-")
-    .replace(/月/g, "-")
-    .replace(/日/g, "")
-    .replace(/時/g, ":")
-    .replace(/分/g, "")
-    .replace(/秒/g, "")
-    .replace(/[^0-9:\-\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const normalized = sanitized.replace(/\s/, "T");
-  const normalizedParse = Date.parse(normalized);
-  if (!Number.isNaN(normalizedParse)) return normalizedParse;
-  const match = sanitized.match(
-    /^(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2})(?::(\d{1,2})(?::(\d{1,2}))?)?)?$/
-  );
-  if (!match) return Number.NaN;
-  const [, year, month, day, hour = "0", minute = "0", second = "0"] = match;
-  const parsedDate = new Date(
-    Number(year),
-    Number(month) - 1,
-    Number(day),
-    Number(hour),
-    Number(minute),
-    Number(second)
-  );
-  return parsedDate.getTime();
-}
-
-function findNearestFutureSchedule(scheduleEntries, metadataMap) {
-  if (!Array.isArray(scheduleEntries) || scheduleEntries.length === 0) {
-    return "";
-  }
-  const now = Date.now();
-  let futureCandidate = null;
-  let pastCandidate = null;
-  const fallbackValue = scheduleEntries[0][0];
-  scheduleEntries.forEach(([value, details]) => {
-    const meta = metadataMap && metadataMap instanceof Map ? metadataMap.get(value) : null;
-    const startCandidates = [details?.start, meta?.startAt, meta?.date, details?.label, meta?.label];
-    const endCandidates = [details?.end, meta?.endAt, details?.label, meta?.label];
-    const startTs = startCandidates.reduce((result, candidate) => {
-      if (!Number.isNaN(result)) return result;
-      const ts = parseScheduleTimestamp(candidate);
-      return Number.isNaN(ts) ? result : ts;
-    }, Number.NaN);
-    const endTs = endCandidates.reduce((result, candidate) => {
-      if (!Number.isNaN(result)) return result;
-      const ts = parseScheduleTimestamp(candidate);
-      return Number.isNaN(ts) ? result : ts;
-    }, Number.NaN);
-    const hasStart = !Number.isNaN(startTs);
-    const hasEnd = !Number.isNaN(endTs);
-    if (!hasStart && !hasEnd) return;
-    const effectiveFutureTs = (() => {
-      if (hasStart && startTs >= now) return startTs;
-      if (hasStart && hasEnd && startTs <= now && now <= endTs) return now;
-      if (!hasStart && hasEnd && endTs >= now) return endTs;
-      return Number.NaN;
-    })();
-    if (!Number.isNaN(effectiveFutureTs)) {
-      if (!futureCandidate || effectiveFutureTs < futureCandidate.ts) {
-        futureCandidate = { value, ts: effectiveFutureTs };
-      }
-      return;
-    }
-    const pastTs = (() => {
-      if (hasEnd && endTs < now) return endTs;
-      if (hasStart && startTs < now) return startTs;
-      return Number.NaN;
-    })();
-    if (!Number.isNaN(pastTs) && (!pastCandidate || pastTs > pastCandidate.ts)) {
-      pastCandidate = { value, ts: pastTs };
-    }
-  });
-  if (futureCandidate) return futureCandidate.value;
-  if (pastCandidate) return pastCandidate.value;
-  return fallbackValue;
-}
-
 export function renderQuestions(app) {
   if (!app.dom.cardsContainer) return;
   const currentTab = app.state.currentSubTab;
@@ -247,117 +162,96 @@ export function renderQuestions(app) {
   updateBatchButtonVisibility(app);
 }
 
-export function updateScheduleOptions(app) {
-  const select = app.dom.scheduleFilter;
-  if (!select) return;
+export function updateScheduleContext(app) {
   const rangeEl = app.dom.scheduleTimeRange;
-  const isNormalTab = app.state.currentSubTab === "normal";
-  const selectedGenre = app.state.currentGenre || GENRE_OPTIONS[0];
-  const scheduleMap = new Map();
+  const eventLabelEl = app.dom.scheduleEventName;
+  const scheduleLabelEl = app.dom.scheduleLabel;
   const metadataMap = app.state.scheduleMetadata instanceof Map ? app.state.scheduleMetadata : null;
-  const ensureString = (value) => String(value ?? "").trim();
-  if (isNormalTab) {
-    for (const item of app.state.allQuestions) {
-      const isPuq = item["ピックアップ"] === true || item["ラジオネーム"] === "Pick Up Question";
-      if (isPuq) continue;
-      const itemGenre = ensureString(item["ジャンル"]) || "その他";
-      if (selectedGenre && itemGenre !== selectedGenre) continue;
-      const key = ensureString(item.__scheduleKey ?? item["日程"]);
-      if (!key) continue;
-      const meta = metadataMap ? metadataMap.get(key) : null;
-      const fallbackLabel = ensureString(item["日程表示"] ?? item["日程"]);
-      const label = ensureString(meta?.label) || fallbackLabel || ensureString(item["日程ID"]) || key;
-      const fallbackStart = ensureString(item.__scheduleStart ?? item["開始日時"]);
-      const fallbackEnd = ensureString(item.__scheduleEnd ?? item["終了日時"]);
-      const startValue = ensureString(meta?.startAt) || fallbackStart;
-      const endValue = ensureString(meta?.endAt) || fallbackEnd;
-      const eventId = ensureString(item["イベントID"]) || ensureString(meta?.eventId);
-      const scheduleId = ensureString(item["日程ID"]) || ensureString(meta?.scheduleId);
-      const eventName = ensureString(meta?.eventName) || ensureString(item["イベント名"]);
-      if (!label && !startValue && !endValue) continue;
-      const existing = scheduleMap.get(key);
-      if (existing) {
-        if (!existing.label && label) existing.label = label;
-        if (!existing.start && startValue) existing.start = startValue;
-        if (!existing.end && endValue) existing.end = endValue;
-        if (!existing.eventId && eventId) existing.eventId = eventId;
-        if (!existing.scheduleId && scheduleId) existing.scheduleId = scheduleId;
-        if (!existing.eventName && eventName) existing.eventName = eventName;
-      } else {
-        scheduleMap.set(key, {
-          label,
-          start: startValue,
-          end: endValue,
-          eventId,
-          scheduleId,
-          eventName
-        });
-      }
-    }
+  const eventsMap = app.state.eventsById instanceof Map ? app.state.eventsById : null;
+  const context = app.pageContext || {};
+
+  const ensure = (value) => String(value ?? "").trim();
+  let eventId = ensure(context.eventId);
+  let scheduleId = ensure(context.scheduleId);
+  let scheduleKey = ensure(app.state.currentSchedule);
+
+  if (!scheduleKey && eventId && scheduleId) {
+    scheduleKey = `${eventId}::${scheduleId}`;
   }
-  const scheduleEntries = Array.from(scheduleMap.entries()).sort((a, b) => {
-    const labelA = String(a[1]?.label || a[0] || "");
-    const labelB = String(b[1]?.label || b[0] || "");
-    return labelA.localeCompare(labelB, "ja", { numeric: true, sensitivity: "base" });
-  });
-  const scheduleDetails = new Map(scheduleEntries);
-  select.innerHTML = "";
-  scheduleEntries.forEach(([value, details]) => {
-    const opt = document.createElement("option");
-    opt.value = value;
-    opt.textContent = details?.label || value;
-    select.appendChild(opt);
-  });
-  app.state.availableSchedules = scheduleEntries.map(([value]) => value);
-  app.state.scheduleDetails = scheduleDetails;
-  let nextValue = "";
-  if (isNormalTab && scheduleEntries.length > 0) {
-    const { currentSchedule, lastNormalSchedule } = app.state;
-    if (currentSchedule && scheduleDetails.has(currentSchedule)) {
-      nextValue = currentSchedule;
-    } else if (lastNormalSchedule && scheduleDetails.has(lastNormalSchedule)) {
-      nextValue = lastNormalSchedule;
-    } else {
-      nextValue = findNearestFutureSchedule(scheduleEntries, metadataMap);
-    }
+
+  let meta = null;
+  if (scheduleKey && metadataMap) {
+    meta = metadataMap.get(scheduleKey) || null;
   }
-  select.value = nextValue;
-  app.state.currentSchedule = nextValue;
-  if (isNormalTab) {
-    app.state.lastNormalSchedule = nextValue;
+  if (!meta && metadataMap && eventId && scheduleId) {
+    meta = metadataMap.get(`${eventId}::${scheduleId}`) || null;
   }
-  const shouldDisable = !isNormalTab || scheduleEntries.length === 0;
-  select.disabled = shouldDisable;
-  const wrapper = select.closest(".schedule-filter");
-  if (wrapper) {
-    wrapper.classList.toggle("is-disabled", shouldDisable);
+
+  if (meta) {
+    eventId = ensure(meta.eventId) || eventId;
+    scheduleId = ensure(meta.scheduleId) || scheduleId;
+  }
+
+  if (scheduleKey && (!eventId || !scheduleId)) {
+    const [eventPart, schedulePart] = scheduleKey.split("::");
+    if (!eventId && eventPart) eventId = ensure(eventPart);
+    if (!scheduleId && schedulePart) scheduleId = ensure(schedulePart);
+  }
+
+  let eventName = ensure(context.eventName);
+  if (meta?.eventName) {
+    eventName = ensure(meta.eventName);
+  } else if (!eventName && eventId && eventsMap) {
+    eventName = ensure(eventsMap.get(eventId)?.name);
+  }
+
+  let scheduleLabel = ensure(context.scheduleLabel);
+  if (meta?.label) {
+    scheduleLabel = ensure(meta.label);
+  }
+
+  const startValue = meta?.startAt || context.startAt || context.scheduleStart || "";
+  const endValue = meta?.endAt || context.endAt || context.scheduleEnd || "";
+  const startText = ensure(startValue);
+  const endText = ensure(endValue);
+
+  if (scheduleKey) {
+    app.state.currentSchedule = scheduleKey;
+    app.state.lastNormalSchedule = scheduleKey;
+  }
+
+  app.state.activeEventId = eventId;
+  app.state.activeScheduleId = scheduleId;
+  app.state.activeEventName = eventName;
+  app.state.activeScheduleLabel = scheduleLabel;
+
+  if (eventLabelEl) {
+    eventLabelEl.textContent = eventName || "イベント未選択";
+  }
+  if (scheduleLabelEl) {
+    scheduleLabelEl.textContent = scheduleLabel || "—";
   }
   if (rangeEl) {
-    if (shouldDisable) {
+    const rangeText = formatScheduleRange(startText, endText);
+    if (rangeText) {
+      rangeEl.textContent = rangeText;
+      rangeEl.hidden = false;
+    } else {
       rangeEl.textContent = "";
       rangeEl.hidden = true;
-    } else {
-      updateScheduleRangeDisplay(app);
     }
   }
-}
 
-function updateScheduleRangeDisplay(app) {
-  const select = app.dom.scheduleFilter;
-  const rangeEl = app.dom.scheduleTimeRange;
-  if (!select || !rangeEl) return;
-  const isNormalTab = app.state.currentSubTab === "normal";
-  const detailsMap = app.state.scheduleDetails instanceof Map ? app.state.scheduleDetails : null;
-  const value = select.value || "";
-  const details = isNormalTab && detailsMap ? detailsMap.get(value) : null;
-  const rangeText = details ? formatScheduleRange(details.start, details.end) : "";
-  if (rangeText) {
-    rangeEl.textContent = rangeText;
-    rangeEl.hidden = false;
-  } else {
-    rangeEl.textContent = "";
-    rangeEl.hidden = true;
-  }
+  app.pageContext = {
+    ...context,
+    eventId,
+    scheduleId,
+    eventName,
+    scheduleLabel,
+    startAt: startText,
+    endAt: endText,
+    scheduleKey: scheduleKey || ""
+  };
 }
 
 export function switchSubTab(app, tabName) {
@@ -380,7 +274,7 @@ export function switchSubTab(app, tabName) {
   } else {
     app.state.currentSchedule = "";
   }
-  updateScheduleOptions(app);
+  updateScheduleContext(app);
   renderQuestions(app);
   persistSubTabPreference(tabName);
 }
@@ -396,26 +290,10 @@ export function switchGenre(app, genreKey) {
     button.classList.toggle("active", isActive);
     button.setAttribute("aria-selected", String(isActive));
   });
-  if (app.state.currentSubTab === "normal") {
-    app.state.lastNormalSchedule = "";
-    app.state.currentSchedule = "";
-    if (app.dom.scheduleFilter) {
-      app.dom.scheduleFilter.value = "";
-    }
+  if (app.state.currentSubTab === "normal" && app.state.lastNormalSchedule) {
+    app.state.currentSchedule = app.state.lastNormalSchedule;
   }
-  updateScheduleOptions(app);
-  renderQuestions(app);
-}
-
-export function handleScheduleChange(app, event) {
-  const select = event?.target;
-  if (!(select instanceof HTMLSelectElement)) return;
-  const value = select.value || "";
-  app.state.currentSchedule = value;
-  if (app.state.currentSubTab === "normal") {
-    app.state.lastNormalSchedule = value;
-  }
-  updateScheduleRangeDisplay(app);
+  updateScheduleContext(app);
   renderQuestions(app);
 }
 
