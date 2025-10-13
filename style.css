@@ -1663,7 +1663,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 #events-main[data-stage="events"] .flow-card--schedules .flow-pane--summary{ display:none; }
 
 #events-main[data-stage="schedules"] .flow-grid{
-  grid-template-columns:var(--flow-sidebar-width) minmax(0,1fr);
+  grid-template-columns:clamp(24vw, 28vw, 32vw) minmax(0,1fr);
   grid-template-areas:
     "events schedules";
 }
@@ -1690,19 +1690,16 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 
 #events-main[data-stage="tabs"] .flow-grid{
-  grid-template-columns:var(--flow-sidebar-width) minmax(0,1fr);
+  grid-template-columns:clamp(24vw, 28vw, 32vw) minmax(0,1fr);
   grid-template-rows:auto auto;
   grid-template-areas:
     "events tabs"
     "schedules tabs";
 }
 
-#events-main[data-stage="schedules"] .flow-card--schedules{
-  min-width:clamp(36rem, 62vw, 84rem);
-}
-
+#events-main[data-stage="schedules"] .flow-card--schedules,
 #events-main[data-stage="tabs"] .flow-card--tabs{
-  min-width:clamp(36rem, 64vw, 88rem);
+  width:100%;
 }
 
 #events-main[data-stage="tabs"] .flow-card--events .flow-pane--primary{ display:none; }
