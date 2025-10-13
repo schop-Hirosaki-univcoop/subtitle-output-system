@@ -101,6 +101,7 @@ export class OperatorApp {
     this.initLoaderSteps = () => Loader.initLoaderSteps(this);
     this.setLoaderStep = (step, message) => Loader.setLoaderStep(this, step, message);
     this.finishLoaderSteps = (message) => Loader.finishLoaderSteps(this, message);
+    this.redirectingToIndex = false;
   }
 
   extractPageContext() {
@@ -456,6 +457,7 @@ export class OperatorApp {
   }
 
   renderLoggedInUi(user) {
+    this.redirectingToIndex = false;
     if (this.dom.loginContainer) this.dom.loginContainer.style.display = "none";
     if (this.dom.mainContainer) this.dom.mainContainer.style.display = "";
     if (this.dom.actionPanel) this.dom.actionPanel.style.display = "flex";
@@ -479,10 +481,9 @@ export class OperatorApp {
   }
 
   showLoggedOutState() {
-    if (this.dom.loginContainer) this.dom.loginContainer.style.display = "block";
-    if (this.dom.mainContainer) this.dom.mainContainer.style.display = "none";
-    if (this.dom.actionPanel) this.dom.actionPanel.style.display = "none";
-    if (this.dom.userInfo) this.dom.userInfo.innerHTML = "";
+    if (this.redirectingToIndex) {
+      return;
+    }
     this.isAuthorized = false;
     this.dictionaryLoaded = false;
     this.toggleDictionaryDrawer(false, false);
@@ -490,6 +491,10 @@ export class OperatorApp {
     this.cleanupRealtime();
     this.hideLoader();
     this.closeEditDialog();
+    if (typeof window !== "undefined") {
+      this.redirectingToIndex = true;
+      window.location.replace("index.html");
+    }
   }
 
   cleanupRealtime() {

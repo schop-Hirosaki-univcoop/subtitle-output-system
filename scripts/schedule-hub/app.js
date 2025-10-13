@@ -35,6 +35,7 @@ export class ScheduleHubApp {
     this.authUnsubscribe = null;
     this.currentUser = null;
     this.pendingLoginError = "";
+    this.redirectingToIndex = false;
   }
 
   parseContext() {
@@ -74,7 +75,6 @@ export class ScheduleHubApp {
 
   init() {
     this.bindEvents();
-    this.showLoggedOutState();
     this.updateBackLink();
     this.renderSummaryFromContext();
     this.updateActionLinks();
@@ -126,27 +126,19 @@ export class ScheduleHubApp {
   }
 
   showLoggedOutState() {
-    this.setLoginError(this.pendingLoginError);
-    if (this.dom.loginCard) {
-      this.dom.loginCard.hidden = false;
-    }
-    if (this.dom.main) {
-      this.dom.main.hidden = true;
-    }
-    if (this.dom.summary) {
-      this.dom.summary.hidden = true;
-    }
-    if (this.dom.actions) {
-      this.dom.actions.hidden = true;
+    if (this.redirectingToIndex) {
+      return;
     }
     this.toggleLoading(false);
+    if (typeof window !== "undefined") {
+      this.redirectingToIndex = true;
+      window.location.replace("index.html");
+    }
   }
 
   showLoggedInState() {
+    this.redirectingToIndex = false;
     this.setLoginError("");
-    if (this.dom.loginCard) {
-      this.dom.loginCard.hidden = true;
-    }
     if (this.dom.main) {
       this.dom.main.hidden = false;
     }
