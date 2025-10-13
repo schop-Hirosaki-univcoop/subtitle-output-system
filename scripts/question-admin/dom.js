@@ -34,6 +34,7 @@ const dom = {
   scheduleDescription: document.getElementById("schedule-description"),
   participantContext: document.getElementById("participant-context"),
   participantDescription: document.getElementById("participant-description"),
+  scheduleHubLink: document.getElementById("open-schedule-hub"),
   downloadParticipantTemplateButton: document.getElementById("download-participant-template"),
   csvInput: document.getElementById("csv-input"),
   downloadTeamTemplateButton: document.getElementById("download-team-template"),
