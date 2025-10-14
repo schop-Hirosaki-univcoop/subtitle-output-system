@@ -29,6 +29,8 @@ export function queryDom() {
     scheduleLoadingText: document.getElementById("flow-schedule-loading-text"),
     scheduleContext: document.getElementById("flow-schedule-context"),
     scheduleSelectionNote: document.getElementById("flow-schedule-selection-note"),
+    addScheduleButton: document.getElementById("flow-add-schedule-button"),
+    scheduleRefreshButton: document.getElementById("flow-schedule-refresh-button"),
     scheduleSummary: document.getElementById("flow-schedule-summary"),
     scheduleSummaryEvent: document.getElementById("flow-schedule-summary-event"),
     scheduleSummaryLabel: document.getElementById("flow-schedule-summary-label"),
