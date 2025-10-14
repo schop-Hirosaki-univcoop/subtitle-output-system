@@ -125,6 +125,7 @@ export class EventAdminApp {
     this.sidebarOverlayActive = false;
     this.sidebarPlaceholders = new Map();
     this.sidebarAutoState = null;
+    this.sidebarResizeObserver = null;
     const supportsMatchMedia = typeof window !== "undefined" && typeof window.matchMedia === "function";
     this.compactMedia = supportsMatchMedia ? window.matchMedia(COMPACT_SIDEBAR_QUERY) : null;
     this.stackedMedia = supportsMatchMedia ? window.matchMedia(STACKED_LAYOUT_QUERY) : null;
@@ -136,6 +137,7 @@ export class EventAdminApp {
     this.handleCompactMediaChange = this.handleCompactMediaChange.bind(this);
     this.handleStackedMediaChange = this.handleStackedMediaChange.bind(this);
     this.handleOverlayKeydown = this.handleOverlayKeydown.bind(this);
+    this.handleSidebarResize = this.handleSidebarResize.bind(this);
   }
 
   init() {
@@ -198,6 +200,12 @@ export class EventAdminApp {
       } else if (typeof media.addListener === "function") {
         media.addListener(this.handleStackedMediaChange);
       }
+      this.handleStackedMediaChange(media);
+    }
+
+    if (typeof ResizeObserver === "function" && this.dom.flowGrid) {
+      this.sidebarResizeObserver = new ResizeObserver(this.handleSidebarResize);
+      this.sidebarResizeObserver.observe(this.dom.flowGrid);
     }
 
     if (this.dom.sidebarCollapseButton) {
@@ -1695,6 +1703,11 @@ export class EventAdminApp {
       event.preventDefault();
       this.setSidebarState("collapsed");
     }
+  }
+
+  handleSidebarResize() {
+    this.reconcileSidebarLayout();
+    this.applySidebarState();
   }
 
   setStage(stage) {
