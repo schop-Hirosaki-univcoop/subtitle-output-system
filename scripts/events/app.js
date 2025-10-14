@@ -47,6 +47,7 @@ const SIDEBAR_MAIN_MIN_WIDTH = 520;
 const SIDEBAR_RESIZER_WIDTH = 12;
 const SIDEBAR_KEYBOARD_STEP = 24;
 const COMPACT_SIDEBAR_QUERY = "(max-width: 1180px)";
+const STACKED_LAYOUT_QUERY = "(max-width: 1080px)";
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -124,17 +125,19 @@ export class EventAdminApp {
     this.sidebarOverlayActive = false;
     this.sidebarPlaceholders = new Map();
     this.sidebarAutoState = null;
-    this.compactMedia =
-      typeof window !== "undefined" && typeof window.matchMedia === "function"
-        ? window.matchMedia(COMPACT_SIDEBAR_QUERY)
-        : null;
+    this.sidebarResizeObserver = null;
+    const supportsMatchMedia = typeof window !== "undefined" && typeof window.matchMedia === "function";
+    this.compactMedia = supportsMatchMedia ? window.matchMedia(COMPACT_SIDEBAR_QUERY) : null;
+    this.stackedMedia = supportsMatchMedia ? window.matchMedia(STACKED_LAYOUT_QUERY) : null;
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
     this.handleTablistKeydown = this.handleTablistKeydown.bind(this);
     this.handleSidebarResizeMove = this.handleSidebarResizeMove.bind(this);
     this.handleSidebarResizeEnd = this.handleSidebarResizeEnd.bind(this);
     this.handleSidebarHandleKeydown = this.handleSidebarHandleKeydown.bind(this);
     this.handleCompactMediaChange = this.handleCompactMediaChange.bind(this);
+    this.handleStackedMediaChange = this.handleStackedMediaChange.bind(this);
     this.handleOverlayKeydown = this.handleOverlayKeydown.bind(this);
+    this.handleSidebarResize = this.handleSidebarResize.bind(this);
   }
 
   init() {
@@ -188,6 +191,21 @@ export class EventAdminApp {
         media.addListener(this.handleCompactMediaChange);
       }
       this.handleCompactMediaChange(media);
+    }
+
+    if (this.stackedMedia) {
+      const media = this.stackedMedia;
+      if (typeof media.addEventListener === "function") {
+        media.addEventListener("change", this.handleStackedMediaChange);
+      } else if (typeof media.addListener === "function") {
+        media.addListener(this.handleStackedMediaChange);
+      }
+      this.handleStackedMediaChange(media);
+    }
+
+    if (typeof ResizeObserver === "function" && this.dom.flowGrid) {
+      this.sidebarResizeObserver = new ResizeObserver(this.handleSidebarResize);
+      this.sidebarResizeObserver.observe(this.dom.flowGrid);
     }
 
     if (this.dom.sidebarCollapseButton) {
@@ -809,6 +827,7 @@ export class EventAdminApp {
       list.removeAttribute("role");
       list.removeAttribute("aria-label");
       list.removeAttribute("aria-orientation");
+      this.reconcileSidebarLayout();
       return;
     }
 
@@ -902,6 +921,7 @@ export class EventAdminApp {
     });
 
     list.appendChild(fragment);
+    this.reconcileSidebarLayout();
   }
 
   updateEventSummary() {
@@ -1429,6 +1449,8 @@ export class EventAdminApp {
       : SIDEBAR_RESIZER_WIDTH;
     const requiredWidth = SIDEBAR_MIN_WIDTH + SIDEBAR_MAIN_MIN_WIDTH + handleWidth;
     const preferOverlay = Boolean(this.compactMedia?.matches);
+    const prefersStackedLayout = Boolean(this.stackedMedia?.matches);
+    const widthThreshold = prefersStackedLayout ? SIDEBAR_MIN_WIDTH : requiredWidth;
     let mainModuleWidth = 0;
     const mainModule = this.getMainContentModule();
     if (mainModule) {
@@ -1438,21 +1460,23 @@ export class EventAdminApp {
       }
     }
     const mainTooSmall =
+      !prefersStackedLayout &&
       this.sidebarState === "open" &&
       mainModuleWidth > 0 &&
       mainModuleWidth < SIDEBAR_MAIN_MIN_WIDTH;
-    if (this.sidebarState === "open" && (width < requiredWidth || mainTooSmall)) {
+    const widthTooSmall = this.sidebarState === "open" && width < widthThreshold;
+    if (widthTooSmall || mainTooSmall) {
       const fallback = preferOverlay ? "overlay" : "collapsed";
       this.setSidebarState(fallback, { focus: false, auto: true });
       return;
     }
-    if (
-      !preferOverlay &&
+    const canReopenWidth = width >= widthThreshold;
+    const shouldReopen =
       this.sidebarAutoState &&
       this.sidebarState !== "open" &&
-      width >= requiredWidth &&
-      (mainModuleWidth === 0 || mainModuleWidth >= SIDEBAR_MAIN_MIN_WIDTH)
-    ) {
+      canReopenWidth &&
+      (!preferOverlay || prefersStackedLayout);
+    if (shouldReopen) {
       this.setSidebarState("open", { focus: false, auto: true });
     }
   }
@@ -1666,11 +1690,24 @@ export class EventAdminApp {
     this.applySidebarState();
   }
 
+  handleStackedMediaChange() {
+    if (!this.isSidebarAvailable()) {
+      return;
+    }
+    this.reconcileSidebarLayout();
+    this.applySidebarState();
+  }
+
   handleOverlayKeydown(event) {
     if (event.key === "Escape" && this.sidebarState === "overlay" && !this.activeDialog) {
       event.preventDefault();
       this.setSidebarState("collapsed");
     }
+  }
+
+  handleSidebarResize() {
+    this.reconcileSidebarLayout();
+    this.applySidebarState();
   }
 
   setStage(stage) {
