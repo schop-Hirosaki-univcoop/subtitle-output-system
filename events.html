@@ -14,20 +14,20 @@
   </telop-header>
 
   <main id="events-main" class="flow-main" data-stage="events">
-    <div class="flow-progress" role="list" aria-label="進行ステップ">
-      <div class="flow-progress__item is-active" data-stage-indicator="events">
+    <ol class="flow-progress" aria-label="進行ステップ">
+      <li class="flow-progress__item is-active" data-stage-indicator="events" aria-current="step">
         <span class="flow-progress__step">1</span>
         <span class="flow-progress__label">イベント</span>
-      </div>
-      <div class="flow-progress__item" data-stage-indicator="schedules">
+      </li>
+      <li class="flow-progress__item" data-stage-indicator="schedules">
         <span class="flow-progress__step">2</span>
         <span class="flow-progress__label">日程</span>
-      </div>
-      <div class="flow-progress__item" data-stage-indicator="tabs">
+      </li>
+      <li class="flow-progress__item" data-stage-indicator="tabs">
         <span class="flow-progress__step">3</span>
         <span class="flow-progress__label">参加者 / テロップ</span>
-      </div>
-    </div>
+      </li>
+    </ol>
 
     <section class="flow-stage" aria-live="polite">
       <h1 id="flow-stage-title" class="flow-stage__title">イベントの管理</h1>
@@ -129,8 +129,8 @@
             </dl>
           </div>
           <div id="flow-tablist" class="flow-tablist" role="tablist" aria-label="参加者・テロップツール">
-            <button id="flow-tab-participants" class="flow-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="flow-panel-participants">参加者リスト管理</button>
-            <button id="flow-tab-operator" class="flow-tab" type="button" role="tab" aria-selected="false" aria-controls="flow-panel-operator">テロップ操作パネル</button>
+            <button id="flow-tab-participants" class="flow-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="flow-panel-participants" data-tab="participants" tabindex="0">参加者リスト管理</button>
+            <button id="flow-tab-operator" class="flow-tab" type="button" role="tab" aria-selected="false" aria-controls="flow-panel-operator" data-tab="operator" tabindex="-1">テロップ操作パネル</button>
           </div>
           <div class="flow-tabpanels">
             <section id="flow-panel-participants" class="flow-tabpanel is-active" role="tabpanel" tabindex="0" aria-labelledby="flow-tab-participants">

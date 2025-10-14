@@ -50,6 +50,14 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])"
 ].join(", ");
 
+const logError = (context, error) => {
+  const detail =
+    error && typeof error === "object" && "message" in error && error.message
+      ? error.message
+      : String(error ?? "不明なエラー");
+  console.error(`${context}: ${detail}`);
+};
+
 function formatParticipantCount(value) {
   if (value == null || value === "") {
     return "—";
@@ -102,6 +110,7 @@ export class EventAdminApp {
     };
     this.lastToolContextSignature = "";
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
+    this.handleTablistKeydown = this.handleTablistKeydown.bind(this);
   }
 
   init() {
@@ -132,7 +141,6 @@ export class EventAdminApp {
     this.updateScheduleSummary();
     this.updateEventSummary();
     this.updateToolSummary();
-    this.resetToolFrames(true);
     this.updateStageUi();
     this.updateFlowButtons();
     this.updateSelectionNotes();
@@ -146,7 +154,7 @@ export class EventAdminApp {
     if (this.dom.refreshButton) {
       this.dom.refreshButton.addEventListener("click", () => {
         this.loadEvents().catch((error) => {
-          console.error("Failed to refresh events:", error);
+          logError("Failed to refresh events", error);
           this.showAlert(error.message || "イベントの再読み込みに失敗しました。");
         });
       });
@@ -155,7 +163,7 @@ export class EventAdminApp {
     if (this.dom.logoutButton) {
       this.dom.logoutButton.addEventListener("click", () => {
         this.handleLogoutClick().catch((error) => {
-          console.error("Failed to handle logout:", error);
+          logError("Failed to handle logout", error);
         });
       });
     }
@@ -196,23 +204,22 @@ export class EventAdminApp {
       });
     }
 
-    if (this.dom.participantsTab) {
-      this.dom.participantsTab.addEventListener("click", () => {
-        this.switchTab("participants");
+    this.getTabButtons().forEach((button) => {
+      button.addEventListener("click", () => {
+        const targetTab = button.dataset.tab;
+        this.switchTab(targetTab);
       });
-    }
+    });
 
-    if (this.dom.operatorTab) {
-      this.dom.operatorTab.addEventListener("click", () => {
-        this.switchTab("operator");
-      });
+    if (this.dom.flowTablist) {
+      this.dom.flowTablist.addEventListener("keydown", this.handleTablistKeydown);
     }
 
     if (this.dom.eventForm) {
       this.dom.eventForm.addEventListener("submit", (event) => {
         event.preventDefault();
         this.handleEventFormSubmit().catch((error) => {
-          console.error("Event form submit failed:", error);
+          logError("Event form submit failed", error);
           this.setFormError(this.dom.eventError, error.message || "イベントの保存に失敗しました。");
         });
       });
@@ -222,7 +229,7 @@ export class EventAdminApp {
       this.dom.scheduleForm.addEventListener("submit", (event) => {
         event.preventDefault();
         this.handleScheduleFormSubmit().catch((error) => {
-          console.error("Schedule form submit failed:", error);
+          logError("Schedule form submit failed", error);
           this.setFormError(this.dom.scheduleError, error.message || "日程の保存に失敗しました。");
         });
       });
@@ -251,11 +258,57 @@ export class EventAdminApp {
     if (this.dom.scheduleRefreshButton) {
       this.dom.scheduleRefreshButton.addEventListener("click", () => {
         this.reloadSchedules().catch((error) => {
-          console.error("Failed to refresh schedules:", error);
+          logError("Failed to refresh schedules", error);
           this.showAlert(error.message || "日程の再読み込みに失敗しました。");
         });
       });
     }
+  }
+
+  getTabButtons() {
+    return [this.dom.participantsTab, this.dom.operatorTab].filter(Boolean);
+  }
+
+  handleTablistKeydown(event) {
+    const tabs = this.getTabButtons();
+    if (!tabs.length) {
+      return;
+    }
+
+    const { key } = event;
+    const targetTab = event.target?.closest?.("[role='tab']");
+    const currentIndex = tabs.indexOf(targetTab);
+    if (currentIndex === -1) {
+      return;
+    }
+
+    if (key === "ArrowRight" || key === "ArrowDown") {
+      event.preventDefault();
+      this.activateTabAt((currentIndex + 1) % tabs.length);
+    } else if (key === "ArrowLeft" || key === "ArrowUp") {
+      event.preventDefault();
+      this.activateTabAt((currentIndex - 1 + tabs.length) % tabs.length);
+    } else if (key === "Home") {
+      event.preventDefault();
+      this.activateTabAt(0);
+    } else if (key === "End") {
+      event.preventDefault();
+      this.activateTabAt(tabs.length - 1);
+    }
+  }
+
+  activateTabAt(index) {
+    const tabs = this.getTabButtons();
+    if (!tabs.length) {
+      return;
+    }
+    const target = tabs[index];
+    if (!target) {
+      return;
+    }
+    target.focus();
+    const tabId = target.dataset?.tab || (target.id?.includes("operator") ? "operator" : "participants");
+    this.switchTab(tabId);
   }
 
   async handleLogoutClick() {
@@ -265,7 +318,7 @@ export class EventAdminApp {
     try {
       await signOut(auth);
     } catch (error) {
-      console.error("Sign-out failed:", error);
+      logError("Sign-out failed", error);
       this.showAlert("ログアウトに失敗しました。時間をおいて再度お試しください。");
       if (this.dom.logoutButton) {
         this.dom.logoutButton.disabled = false;
@@ -280,7 +333,7 @@ export class EventAdminApp {
     }
     this.authUnsubscribe = onAuthStateChanged(auth, (user) => {
       this.handleAuthState(user).catch((error) => {
-        console.error("Failed to handle event admin auth state:", error);
+        logError("Failed to handle event admin auth state", error);
         this.showAlert(error.message || "初期化に失敗しました。時間をおいて再度お試しください。");
       });
     });
@@ -357,7 +410,7 @@ export class EventAdminApp {
       this.updateToolSummary();
       this.updateSelectionNotes();
     } catch (error) {
-      console.error("Event admin initialization failed:", error);
+      logError("Event admin initialization failed", error);
       if (this.isPermissionError(error)) {
         const message =
           (error instanceof Error && error.message) ||
@@ -550,7 +603,7 @@ export class EventAdminApp {
       deleteBtn.addEventListener("click", (evt) => {
         evt.stopPropagation();
         this.deleteEvent(event).catch((error) => {
-          console.error("Failed to delete event:", error);
+          logError("Failed to delete event", error);
           this.showAlert(error.message || "イベントの削除に失敗しました。");
         });
       });
@@ -645,7 +698,7 @@ export class EventAdminApp {
     this.updateFlowButtons();
     this.updateSelectionNotes();
     if (this.selectedScheduleId) {
-      this.syncEmbeddedTools().catch((error) => console.error("Failed to sync tools", error));
+      this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
     }
     if (this.stage === "tabs" && this.selectedScheduleId) {
       this.switchTab(this.activeTab);
@@ -664,7 +717,7 @@ export class EventAdminApp {
     this.updateFlowButtons();
     this.updateSelectionNotes();
     if (this.stage === "tabs" && this.selectedScheduleId) {
-      this.syncEmbeddedTools().catch((error) => console.error("Failed to sync tools", error));
+      this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
     }
     if (!event && (this.stage === "schedules" || this.stage === "tabs")) {
       this.setStage("events");
@@ -753,7 +806,7 @@ export class EventAdminApp {
       deleteBtn.addEventListener("click", (evt) => {
         evt.stopPropagation();
         this.deleteSchedule(schedule).catch((error) => {
-          console.error("Failed to delete schedule:", error);
+          logError("Failed to delete schedule", error);
           this.showAlert(error.message || "日程の削除に失敗しました。");
         });
       });
@@ -876,7 +929,7 @@ export class EventAdminApp {
         }
         entry.ready = true;
       })().catch((error) => {
-        console.error(`Failed to load ${tool} tool`, error);
+        logError(`Failed to load ${tool} tool`, error);
         entry.ready = false;
         entry.promise = null;
         throw error;
@@ -974,7 +1027,7 @@ export class EventAdminApp {
         await window.questionAdminEmbed.setSelection(context);
       }
     } catch (error) {
-      console.error("Failed to sync participant tool", error);
+      logError("Failed to sync participant tool", error);
     }
     try {
       await this.loadEmbeddedTool("operator");
@@ -985,7 +1038,7 @@ export class EventAdminApp {
         window.operatorEmbed.setContext(context);
       }
     } catch (error) {
-      console.error("Failed to sync operator tool", error);
+      logError("Failed to sync operator tool", error);
     }
   }
 
@@ -1013,6 +1066,11 @@ export class EventAdminApp {
       if (stageIndex === -1) return;
       indicator.classList.toggle("is-active", stageIndex === currentIndex);
       indicator.classList.toggle("is-complete", stageIndex < currentIndex);
+      if (stageIndex === currentIndex) {
+        indicator.setAttribute("aria-current", "step");
+      } else {
+        indicator.removeAttribute("aria-current");
+      }
     });
   }
 
@@ -1138,7 +1196,7 @@ export class EventAdminApp {
       this.updateToolSummary();
       this.prepareToolFrames();
       this.switchTab(this.activeTab);
-      this.syncEmbeddedTools().catch((error) => console.error("Failed to sync tools", error));
+      this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
     }
   }
 
@@ -1150,14 +1208,13 @@ export class EventAdminApp {
   switchTab(tab) {
     const normalized = tab === "operator" ? "operator" : "participants";
     this.activeTab = normalized;
-    if (this.dom.participantsTab) {
-      this.dom.participantsTab.classList.toggle("is-active", normalized === "participants");
-      this.dom.participantsTab.setAttribute("aria-selected", normalized === "participants" ? "true" : "false");
-    }
-    if (this.dom.operatorTab) {
-      this.dom.operatorTab.classList.toggle("is-active", normalized === "operator");
-      this.dom.operatorTab.setAttribute("aria-selected", normalized === "operator" ? "true" : "false");
-    }
+    this.getTabButtons().forEach((button) => {
+      const targetTab = String(button.dataset.tab || "").toLowerCase();
+      const isActive = targetTab === normalized;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+      button.setAttribute("tabindex", isActive ? "0" : "-1");
+    });
     if (this.dom.participantsPanel) {
       this.dom.participantsPanel.classList.toggle("is-active", normalized === "participants");
       this.dom.participantsPanel.hidden = normalized !== "participants";
