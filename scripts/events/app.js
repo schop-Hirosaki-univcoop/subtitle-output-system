@@ -809,6 +809,7 @@ export class EventAdminApp {
       list.removeAttribute("role");
       list.removeAttribute("aria-label");
       list.removeAttribute("aria-orientation");
+      this.reconcileSidebarLayout();
       return;
     }
 
@@ -902,6 +903,7 @@ export class EventAdminApp {
     });
 
     list.appendChild(fragment);
+    this.reconcileSidebarLayout();
   }
 
   updateEventSummary() {
@@ -1450,8 +1452,7 @@ export class EventAdminApp {
       !preferOverlay &&
       this.sidebarAutoState &&
       this.sidebarState !== "open" &&
-      width >= requiredWidth &&
-      (mainModuleWidth === 0 || mainModuleWidth >= SIDEBAR_MAIN_MIN_WIDTH)
+      width >= requiredWidth
     ) {
       this.setSidebarState("open", { focus: false, auto: true });
     }
