@@ -11,6 +11,15 @@ if (typeof window !== "undefined") {
     },
     waitUntilReady() {
       return app.waitUntilReady();
+    },
+    reset() {
+      try {
+        app.redirectingToIndex = false;
+        app.embedReadyDeferred = null;
+        app.showLoggedOutState();
+      } catch (error) {
+        console.error("operatorEmbed.reset failed", error);
+      }
     }
   };
 }

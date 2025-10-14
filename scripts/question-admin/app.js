@@ -3074,6 +3074,25 @@ if (typeof window !== "undefined") {
     },
     waitUntilReady() {
       return waitForEmbedReady();
+    },
+    reset() {
+      try {
+        redirectingToIndex = false;
+        state.user = null;
+        hideLoader();
+        setAuthUi(false);
+        resetState();
+        if (dom.loginButton) {
+          dom.loginButton.disabled = false;
+          dom.loginButton.classList.remove("is-busy");
+        }
+        if (embedReadyDeferred?.resolve) {
+          embedReadyDeferred.resolve();
+        }
+        embedReadyDeferred = null;
+      } catch (error) {
+        console.error("questionAdminEmbed.reset failed", error);
+      }
     }
   };
 }

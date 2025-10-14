@@ -123,6 +123,7 @@ export class EventAdminApp {
     this.stageHistory = new Set(["events"]);
     this.activeTab = "participants";
     this.lastToolContextSignature = "";
+    this.resetToolFrames();
     if (this.dom.scheduleLoading) {
       this.dom.scheduleLoading.hidden = true;
     }
@@ -887,6 +888,26 @@ export class EventAdminApp {
       });
     }
     await entry.promise;
+  }
+
+  resetToolFrames() {
+    this.embeddedTools = {
+      participants: { promise: null, ready: false },
+      operator: { promise: null, ready: false }
+    };
+    this.lastToolContextSignature = "";
+    if (typeof window !== "undefined") {
+      try {
+        window.questionAdminEmbed?.reset?.();
+      } catch (error) {
+        console.warn("Failed to reset participant tool state", error);
+      }
+      try {
+        window.operatorEmbed?.reset?.();
+      } catch (error) {
+        console.warn("Failed to reset operator tool state", error);
+      }
+    }
   }
 
   async syncEmbeddedTools() {
