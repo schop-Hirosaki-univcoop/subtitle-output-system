@@ -644,7 +644,7 @@ export class EventAdminApp {
     this.updateToolSummary();
     this.updateFlowButtons();
     this.updateSelectionNotes();
-    if (this.stageHistory.has("tabs") && this.selectedScheduleId) {
+    if (this.selectedScheduleId) {
       this.syncEmbeddedTools().catch((error) => console.error("Failed to sync tools", error));
     }
     if (this.stage === "tabs" && this.selectedScheduleId) {
@@ -885,6 +885,38 @@ export class EventAdminApp {
     await entry.promise;
   }
 
+  prepareToolFrames() {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const html = document.documentElement;
+    if (html) {
+      if (!html.dataset.qaEmbedPrefix) {
+        html.dataset.qaEmbedPrefix = "qa-";
+      }
+      if (!html.dataset.operatorEmbedPrefix) {
+        html.dataset.operatorEmbedPrefix = "op-";
+      }
+    }
+
+    const ensurePrepared = (element, loginSelector) => {
+      if (!element || element.dataset.prepared === "true") {
+        return;
+      }
+      element.dataset.prepared = "true";
+      if (loginSelector) {
+        const loginElement = element.querySelector(loginSelector);
+        if (loginElement) {
+          loginElement.remove();
+        }
+      }
+    };
+
+    ensurePrepared(this.dom.participantsTool, "#qa-login-card");
+    ensurePrepared(this.dom.operatorTool, "#op-login-container");
+  }
+
   resetToolFrames() {
     this.embeddedTools = {
       participants: { promise: null, ready: false },
@@ -906,6 +938,7 @@ export class EventAdminApp {
   }
 
   async syncEmbeddedTools() {
+    this.prepareToolFrames();
     const schedule = this.getSelectedSchedule();
     const event = this.getSelectedEvent();
     if (!schedule || !event) {
