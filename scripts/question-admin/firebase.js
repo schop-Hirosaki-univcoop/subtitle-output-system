@@ -15,10 +15,14 @@ import { firebaseConfig } from "./constants.js";
 const apps = getApps();
 const app = apps.length ? getApp() : initializeApp(firebaseConfig);
 const database = getDatabase(app);
-const auth = initializeAuth(app, {
-  persistence: browserSessionPersistence,
-  popupRedirectResolver: browserPopupRedirectResolver
-});
+
+const authProvider = app._getProvider("auth");
+const auth = authProvider.isInitialized()
+  ? authProvider.getImmediate()
+  : initializeAuth(app, {
+      persistence: browserSessionPersistence,
+      popupRedirectResolver: browserPopupRedirectResolver
+    });
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
