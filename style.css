@@ -1612,6 +1612,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 
 .flow-grid{
+  --flow-sidebar-width:clamp(22rem, 28vw, 32rem);
   display:grid;
   gap:1.5rem;
   grid-auto-rows:minmax(0, auto);
@@ -2126,6 +2127,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   border:1px dashed rgba(70,110,150,.5);
   background:rgba(8,18,30,.7);
   color:var(--muted);
+  padding:1.2rem;
   text-align:center;
 }
 
