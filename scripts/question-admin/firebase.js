@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   initializeAuth,
+  getAuth,
   browserSessionPersistence,
   browserPopupRedirectResolver,
   GoogleAuthProvider,
@@ -15,10 +16,13 @@ import { firebaseConfig } from "./constants.js";
 const apps = getApps();
 const app = apps.length ? getApp() : initializeApp(firebaseConfig);
 const database = getDatabase(app);
-const auth = initializeAuth(app, {
-  persistence: browserSessionPersistence,
-  popupRedirectResolver: browserPopupRedirectResolver
-});
+
+const auth = apps.length
+  ? getAuth(app)
+  : initializeAuth(app, {
+      persistence: browserSessionPersistence,
+      popupRedirectResolver: browserPopupRedirectResolver
+    });
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
