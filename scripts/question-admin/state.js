@@ -13,6 +13,7 @@ const state = {
   eventParticipantCache: new Map(),
   duplicateMatches: new Map(),
   duplicateGroups: new Map(),
+  scheduleContextOverrides: new Map(),
   teamAssignments: new Map(),
   tokenSnapshotFetchedAt: 0,
   editingParticipantId: null,
