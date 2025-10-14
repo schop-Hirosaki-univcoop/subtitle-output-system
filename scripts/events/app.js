@@ -44,6 +44,7 @@ const STAGE_INFO = {
 const SIDEBAR_MIN_WIDTH = 260;
 const SIDEBAR_MAX_WIDTH = 520;
 const SIDEBAR_MAIN_MIN_WIDTH = 520;
+const SIDEBAR_RESIZER_WIDTH = 12;
 const SIDEBAR_KEYBOARD_STEP = 24;
 const COMPACT_SIDEBAR_QUERY = "(max-width: 1180px)";
 
@@ -122,6 +123,7 @@ export class EventAdminApp {
     this.sidebarDragPointerId = null;
     this.sidebarOverlayActive = false;
     this.sidebarPlaceholders = new Map();
+    this.sidebarAutoState = null;
     this.compactMedia =
       typeof window !== "undefined" && typeof window.matchMedia === "function"
         ? window.matchMedia(COMPACT_SIDEBAR_QUERY)
@@ -158,6 +160,7 @@ export class EventAdminApp {
     this.resetToolFrames();
     this.sidebarState = "open";
     this.sidebarWidth = null;
+    this.sidebarAutoState = null;
     this.exitSidebarOverlay();
     if (this.dom.main) {
       this.dom.main.style.removeProperty("--flow-sidebar-width");
@@ -1264,10 +1267,11 @@ export class EventAdminApp {
     return modules;
   }
 
-  setSidebarState(state, { focus = true } = {}) {
+  setSidebarState(state, { focus = true, auto = false } = {}) {
     if (!this.isSidebarAvailable()) {
       this.sidebarState = "open";
       this.sidebarWidth = null;
+      this.sidebarAutoState = null;
       this.applySidebarState();
       return;
     }
@@ -1277,11 +1281,23 @@ export class EventAdminApp {
       nextState = "open";
     }
     if (nextState === this.sidebarState) {
+      if (auto) {
+        this.sidebarAutoState = nextState === "open" ? null : nextState;
+      } else {
+        this.sidebarAutoState = null;
+      }
       this.applySidebarState();
+      if (!auto) {
+        this.reconcileSidebarLayout();
+      }
       return;
     }
     this.sidebarState = nextState;
+    this.sidebarAutoState = auto ? (nextState === "open" ? null : nextState) : null;
     this.applySidebarState();
+    if (!auto) {
+      this.reconcileSidebarLayout();
+    }
     if (!focus) {
       return;
     }
@@ -1371,13 +1387,51 @@ export class EventAdminApp {
     if (!this.isSidebarAvailable()) {
       this.sidebarState = "open";
       this.sidebarWidth = null;
+      this.sidebarAutoState = null;
       this.applySidebarState();
       return;
     }
     if (this.sidebarState === "overlay" && this.compactMedia && !this.compactMedia.matches) {
       this.sidebarState = "open";
+      this.sidebarAutoState = null;
     }
+    this.reconcileSidebarLayout();
     this.applySidebarState();
+  }
+
+  reconcileSidebarLayout() {
+    if (!this.isSidebarAvailable()) {
+      this.sidebarAutoState = null;
+      return;
+    }
+    const grid = this.dom.flowGrid;
+    if (!grid) {
+      return;
+    }
+    const rect = grid.getBoundingClientRect();
+    const width = rect?.width;
+    if (!Number.isFinite(width) || width <= 0) {
+      return;
+    }
+    const handleRect = this.dom.sidebarResizer?.getBoundingClientRect();
+    const handleWidth = handleRect && Number.isFinite(handleRect.width) && handleRect.width > 0
+      ? handleRect.width
+      : SIDEBAR_RESIZER_WIDTH;
+    const requiredWidth = SIDEBAR_MIN_WIDTH + SIDEBAR_MAIN_MIN_WIDTH + handleWidth;
+    const preferOverlay = Boolean(this.compactMedia?.matches);
+    if (this.sidebarState === "open" && width < requiredWidth) {
+      const fallback = preferOverlay ? "overlay" : "collapsed";
+      this.setSidebarState(fallback, { focus: false, auto: true });
+      return;
+    }
+    if (
+      !preferOverlay &&
+      this.sidebarAutoState &&
+      this.sidebarState !== "open" &&
+      width >= requiredWidth
+    ) {
+      this.setSidebarState("open", { focus: false, auto: true });
+    }
   }
 
   enterSidebarOverlay() {
@@ -1577,10 +1631,15 @@ export class EventAdminApp {
 
   handleCompactMediaChange(event) {
     const matches = Boolean(event?.matches);
-    if (!matches && this.sidebarState === "overlay") {
-      this.setSidebarState("open", { focus: false });
+    if (!this.isSidebarAvailable()) {
       return;
     }
+    if (!matches && this.sidebarState === "overlay") {
+      const wasAutoOverlay = this.sidebarAutoState === "overlay";
+      this.setSidebarState("open", { focus: false, auto: wasAutoOverlay });
+      return;
+    }
+    this.reconcileSidebarLayout();
     this.applySidebarState();
   }
 
