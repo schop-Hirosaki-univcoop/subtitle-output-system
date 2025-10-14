@@ -1267,6 +1267,16 @@ export class EventAdminApp {
     return modules;
   }
 
+  getMainContentModule() {
+    if (this.stage === "tabs") {
+      return this.dom.tabsModule || null;
+    }
+    if (this.stage === "schedules") {
+      return this.dom.schedulesModule || null;
+    }
+    return null;
+  }
+
   setSidebarState(state, { focus = true, auto = false } = {}) {
     if (!this.isSidebarAvailable()) {
       this.sidebarState = "open";
@@ -1419,7 +1429,19 @@ export class EventAdminApp {
       : SIDEBAR_RESIZER_WIDTH;
     const requiredWidth = SIDEBAR_MIN_WIDTH + SIDEBAR_MAIN_MIN_WIDTH + handleWidth;
     const preferOverlay = Boolean(this.compactMedia?.matches);
-    if (this.sidebarState === "open" && width < requiredWidth) {
+    let mainModuleWidth = 0;
+    const mainModule = this.getMainContentModule();
+    if (mainModule) {
+      const mainRect = mainModule.getBoundingClientRect();
+      if (mainRect && Number.isFinite(mainRect.width) && mainRect.width > 0) {
+        mainModuleWidth = mainRect.width;
+      }
+    }
+    const mainTooSmall =
+      this.sidebarState === "open" &&
+      mainModuleWidth > 0 &&
+      mainModuleWidth < SIDEBAR_MAIN_MIN_WIDTH;
+    if (this.sidebarState === "open" && (width < requiredWidth || mainTooSmall)) {
       const fallback = preferOverlay ? "overlay" : "collapsed";
       this.setSidebarState(fallback, { focus: false, auto: true });
       return;
@@ -1428,7 +1450,8 @@ export class EventAdminApp {
       !preferOverlay &&
       this.sidebarAutoState &&
       this.sidebarState !== "open" &&
-      width >= requiredWidth
+      width >= requiredWidth &&
+      (mainModuleWidth === 0 || mainModuleWidth >= SIDEBAR_MAIN_MIN_WIDTH)
     ) {
       this.setSidebarState("open", { focus: false, auto: true });
     }
