@@ -32,6 +32,10 @@ export class OperatorApp {
     this.pageContext = this.extractPageContext();
     this.applyContextToState();
     this.api = createApiClient(auth, onAuthStateChanged);
+    this.isEmbedded = Boolean(OperatorApp.embedPrefix);
+    if (this.isEmbedded && this.dom.loginContainer) {
+      this.dom.loginContainer.style.display = "none";
+    }
 
     this.lastUpdatedAt = 0;
     this.renderTicker = null;
@@ -102,6 +106,14 @@ export class OperatorApp {
     this.setLoaderStep = (step, message) => Loader.setLoaderStep(this, step, message);
     this.finishLoaderSteps = (message) => Loader.finishLoaderSteps(this, message);
     this.redirectingToIndex = false;
+    this.embedReadyDeferred = null;
+  }
+
+  static get embedPrefix() {
+    if (typeof document === "undefined") {
+      return "";
+    }
+    return document.documentElement?.dataset?.operatorEmbedPrefix || "";
   }
 
   extractPageContext() {
@@ -149,6 +161,84 @@ export class OperatorApp {
     }
   }
 
+  setExternalContext(context = {}) {
+    const ensure = (value) => String(value ?? "").trim();
+    const eventId = ensure(context.eventId);
+    const scheduleId = ensure(context.scheduleId);
+    const eventName = ensure(context.eventName);
+    const scheduleLabel = ensure(context.scheduleLabel);
+    const startAt = ensure(context.startAt);
+    const endAt = ensure(context.endAt);
+    const scheduleKey = eventId && scheduleId ? `${eventId}::${scheduleId}` : "";
+
+    this.pageContext = {
+      ...this.pageContext,
+      eventId,
+      scheduleId,
+      eventName,
+      scheduleLabel,
+      startAt,
+      endAt,
+      scheduleKey
+    };
+
+    this.applyContextToState();
+
+    if (!this.state.scheduleMetadata || !(this.state.scheduleMetadata instanceof Map)) {
+      this.state.scheduleMetadata = new Map();
+    }
+
+    if (scheduleKey) {
+      this.state.scheduleMetadata.set(scheduleKey, {
+        key: scheduleKey,
+        eventId,
+        scheduleId,
+        eventName,
+        label: scheduleLabel || scheduleId,
+        startAt,
+        endAt
+      });
+    }
+
+    if (this.isAuthorized) {
+      if (this.dom.mainContainer) {
+        this.dom.mainContainer.style.display = "";
+        this.dom.mainContainer.hidden = false;
+      }
+      if (this.dom.actionPanel) {
+        this.dom.actionPanel.style.display = "flex";
+        this.dom.actionPanel.hidden = false;
+      }
+    }
+
+    this.updateScheduleContext();
+    this.renderQuestions();
+    this.updateActionAvailability();
+    this.updateBatchButtonVisibility();
+  }
+
+  waitUntilReady() {
+    if (this.isAuthorized) {
+      return Promise.resolve();
+    }
+    if (this.embedReadyDeferred?.promise) {
+      return this.embedReadyDeferred.promise;
+    }
+    let resolve;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    this.embedReadyDeferred = { promise, resolve };
+    return promise;
+  }
+
+  resolveEmbedReady() {
+    if (this.embedReadyDeferred?.resolve) {
+      this.embedReadyDeferred.resolve();
+    }
+    this.embedReadyDeferred = null;
+  }
+
   init() {
     this.setupEventListeners();
     this.applyPreferredSubTab();
@@ -167,7 +257,9 @@ export class OperatorApp {
   }
 
   setupEventListeners() {
-    this.dom.loginButton?.addEventListener("click", () => this.login());
+    if (!this.isEmbedded) {
+      this.dom.loginButton?.addEventListener("click", () => this.login());
+    }
     document.querySelectorAll(".sub-tab-button").forEach((button) => {
       button.addEventListener("click", () => this.switchSubTab(button.dataset.subTab));
     });
@@ -427,6 +519,7 @@ export class OperatorApp {
       const questionsValue = questionsSnapshot.val() || {};
       this.state.rawQuestions = Object.values(questionsValue).filter((item) => item && typeof item === "object");
       this.rebuildScheduleMetadata();
+      this.applyContextToState();
       this.startQuestionsStream();
       this.startScheduleMetadataStreams();
       this.startDisplaySessionMonitor();
@@ -448,6 +541,7 @@ export class OperatorApp {
       this.hideLoader();
       this.toast(`ようこそ、${user.displayName || ""}さん`, "success");
       this.startLogsUpdateMonitor();
+      this.resolveEmbedReady();
     } catch (error) {
       console.error("Authorization check failed:", error);
       this.toast("ユーザー権限の確認中にエラーが発生しました。", "error");
@@ -459,8 +553,14 @@ export class OperatorApp {
   renderLoggedInUi(user) {
     this.redirectingToIndex = false;
     if (this.dom.loginContainer) this.dom.loginContainer.style.display = "none";
-    if (this.dom.mainContainer) this.dom.mainContainer.style.display = "";
-    if (this.dom.actionPanel) this.dom.actionPanel.style.display = "flex";
+    if (this.dom.mainContainer) {
+      this.dom.mainContainer.style.display = "";
+      this.dom.mainContainer.hidden = false;
+    }
+    if (this.dom.actionPanel) {
+      this.dom.actionPanel.style.display = "flex";
+      this.dom.actionPanel.hidden = false;
+    }
     this.isAuthorized = true;
     if (this.dom.userInfo) {
       this.dom.userInfo.innerHTML = "";
@@ -476,6 +576,7 @@ export class OperatorApp {
       logoutButton.className = "btn btn-ghost btn-sm";
       logoutButton.addEventListener("click", () => this.logout());
       this.dom.userInfo.append(label, logoutButton);
+      this.dom.userInfo.hidden = false;
     }
     this.applyPreferredSubTab();
   }
@@ -489,9 +590,30 @@ export class OperatorApp {
     this.toggleDictionaryDrawer(false, false);
     this.toggleLogsDrawer(false, false);
     this.cleanupRealtime();
-    this.hideLoader();
+    if (this.isEmbedded) {
+      this.showLoader("サインイン状態を確認しています…");
+    } else {
+      this.hideLoader();
+    }
     this.closeEditDialog();
-    if (typeof window !== "undefined") {
+    if (this.dom.loginContainer) {
+      this.dom.loginContainer.style.display = this.isEmbedded ? "none" : "";
+    }
+    if (!this.isEmbedded && this.dom.loginButton) {
+      this.dom.loginButton.disabled = false;
+    }
+    if (this.dom.mainContainer) {
+      this.dom.mainContainer.style.display = "none";
+    }
+    if (this.dom.actionPanel) {
+      this.dom.actionPanel.style.display = "none";
+      this.dom.actionPanel.hidden = true;
+    }
+    if (this.dom.userInfo) {
+      this.dom.userInfo.hidden = true;
+      this.dom.userInfo.innerHTML = "";
+    }
+    if (typeof window !== "undefined" && !this.isEmbedded) {
       this.redirectingToIndex = true;
       window.location.replace("index.html");
     }

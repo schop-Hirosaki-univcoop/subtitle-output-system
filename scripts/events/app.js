@@ -96,6 +96,11 @@ export class EventAdminApp {
     this.lastFocused = null;
     this.confirmResolver = null;
     this.redirectingToIndex = false;
+    this.embeddedTools = {
+      participants: { promise: null, ready: false },
+      operator: { promise: null, ready: false }
+    };
+    this.lastToolContextSignature = "";
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
   }
 
@@ -117,6 +122,8 @@ export class EventAdminApp {
     this.stage = "events";
     this.stageHistory = new Set(["events"]);
     this.activeTab = "participants";
+    this.lastToolContextSignature = "";
+    this.resetToolFrames();
     if (this.dom.scheduleLoading) {
       this.dom.scheduleLoading.hidden = true;
     }
@@ -140,6 +147,14 @@ export class EventAdminApp {
         this.loadEvents().catch((error) => {
           console.error("Failed to refresh events:", error);
           this.showAlert(error.message || "イベントの再読み込みに失敗しました。");
+        });
+      });
+    }
+
+    if (this.dom.logoutButton) {
+      this.dom.logoutButton.addEventListener("click", () => {
+        this.handleLogoutClick().catch((error) => {
+          console.error("Failed to handle logout:", error);
         });
       });
     }
@@ -168,75 +183,15 @@ export class EventAdminApp {
       });
     }
 
-    if (this.dom.flowTabsBackButton) {
-      this.dom.flowTabsBackButton.addEventListener("click", () => {
-        this.setStage("schedules");
-      });
-    }
-
-    if (this.dom.openParticipantsButton) {
-      this.dom.openParticipantsButton.addEventListener("click", () => {
+    if (this.dom.scheduleNextButton) {
+      this.dom.scheduleNextButton.addEventListener("click", () => {
         this.enterTabsStage("participants");
-      });
-    }
-
-    if (this.dom.openOperatorButton) {
-      this.dom.openOperatorButton.addEventListener("click", () => {
-        this.enterTabsStage("operator");
-      });
-    }
-
-    if (this.dom.launchParticipantsButton) {
-      this.dom.launchParticipantsButton.addEventListener("click", () => {
-        this.launchParticipantsTool();
-      });
-    }
-
-    if (this.dom.launchOperatorButton) {
-      this.dom.launchOperatorButton.addEventListener("click", () => {
-        this.launchOperatorTool();
-      });
-    }
-
-    if (this.dom.participantsTab) {
-      this.dom.participantsTab.addEventListener("click", () => {
-        this.switchTab("participants");
-      });
-    }
-
-    if (this.dom.operatorTab) {
-      this.dom.operatorTab.addEventListener("click", () => {
-        this.switchTab("operator");
-      });
-    }
-
-    if (this.dom.nextButton) {
-      this.dom.nextButton.addEventListener("click", () => {
-        this.goToStage("schedules");
-      });
-    }
-
-    if (this.dom.scheduleBackButton) {
-      this.dom.scheduleBackButton.addEventListener("click", () => {
-        this.setStage("events");
       });
     }
 
     if (this.dom.flowTabsBackButton) {
       this.dom.flowTabsBackButton.addEventListener("click", () => {
         this.setStage("schedules");
-      });
-    }
-
-    if (this.dom.openParticipantsButton) {
-      this.dom.openParticipantsButton.addEventListener("click", () => {
-        this.enterTabsStage("participants");
-      });
-    }
-
-    if (this.dom.openOperatorButton) {
-      this.dom.openOperatorButton.addEventListener("click", () => {
-        this.enterTabsStage("operator");
       });
     }
 
@@ -299,6 +254,21 @@ export class EventAdminApp {
           this.showAlert(error.message || "日程の再読み込みに失敗しました。");
         });
       });
+    }
+  }
+
+  async handleLogoutClick() {
+    if (this.dom.logoutButton) {
+      this.dom.logoutButton.disabled = true;
+    }
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Sign-out failed:", error);
+      this.showAlert("ログアウトに失敗しました。時間をおいて再度お試しください。");
+      if (this.dom.logoutButton) {
+        this.dom.logoutButton.disabled = false;
+      }
     }
   }
 
@@ -491,6 +461,7 @@ export class EventAdminApp {
     const previousScheduleId = this.selectedScheduleId;
 
     this.events = normalized;
+    this.lastToolContextSignature = "";
     this.updateMetaNote();
     this.updateDocumentTitle();
     this.ensureSelectedEvent(previousEventId);
@@ -559,20 +530,6 @@ export class EventAdminApp {
       const actions = document.createElement("div");
       actions.className = "entity-actions";
 
-      const hubLink = document.createElement("a");
-      hubLink.className = "btn btn-primary btn-sm";
-      hubLink.href = this.buildEventHubUrl(event);
-      hubLink.textContent = "日程ハブ";
-      actions.appendChild(hubLink);
-
-      const participantsLink = document.createElement("a");
-      participantsLink.className = "btn btn-ghost btn-sm";
-      participantsLink.href = this.buildParticipantAdminUrl(event);
-      participantsLink.target = "_blank";
-      participantsLink.rel = "noreferrer noopener";
-      participantsLink.textContent = "参加者管理";
-      actions.appendChild(participantsLink);
-
       const editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "btn-icon";
@@ -632,12 +589,16 @@ export class EventAdminApp {
   }
 
   selectEvent(eventId) {
+    const previous = this.selectedEventId;
     const normalized = ensureString(eventId);
     if (normalized && !this.events.some((event) => event.id === normalized)) {
       return;
     }
 
     this.selectedEventId = normalized;
+    if (previous !== normalized) {
+      this.lastToolContextSignature = "";
+    }
     this.renderEvents();
     this.updateScheduleStateFromSelection();
     this.updateEventSummary();
@@ -667,17 +628,24 @@ export class EventAdminApp {
   }
 
   selectSchedule(scheduleId) {
+    const previous = this.selectedScheduleId;
     const normalized = ensureString(scheduleId);
     if (normalized && !this.schedules.some((schedule) => schedule.id === normalized)) {
       return;
     }
 
     this.selectedScheduleId = normalized;
+    if (previous !== normalized) {
+      this.lastToolContextSignature = "";
+    }
     this.renderScheduleList();
     this.updateScheduleSummary();
     this.updateToolSummary();
     this.updateFlowButtons();
     this.updateSelectionNotes();
+    if (this.stageHistory.has("tabs") && this.selectedScheduleId) {
+      this.syncEmbeddedTools().catch((error) => console.error("Failed to sync tools", error));
+    }
     if (this.stage === "tabs" && this.selectedScheduleId) {
       this.switchTab(this.activeTab);
     } else if (!normalized && this.stage === "tabs") {
@@ -694,6 +662,9 @@ export class EventAdminApp {
     this.updateToolSummary();
     this.updateFlowButtons();
     this.updateSelectionNotes();
+    if (this.stage === "tabs" && this.selectedScheduleId) {
+      this.syncEmbeddedTools().catch((error) => console.error("Failed to sync tools", error));
+    }
     if (!event && (this.stage === "schedules" || this.stage === "tabs")) {
       this.setStage("events");
     }
@@ -761,20 +732,6 @@ export class EventAdminApp {
 
       const actions = document.createElement("div");
       actions.className = "entity-actions";
-
-      const hubLink = document.createElement("a");
-      hubLink.className = "btn btn-primary btn-sm";
-      hubLink.href = this.buildScheduleHubUrl(schedule);
-      hubLink.textContent = "日程ハブ";
-      actions.appendChild(hubLink);
-
-      const participantsLink = document.createElement("a");
-      participantsLink.className = "btn btn-ghost btn-sm";
-      participantsLink.href = this.buildParticipantAdminUrlForSchedule(schedule);
-      participantsLink.target = "_blank";
-      participantsLink.rel = "noreferrer noopener";
-      participantsLink.textContent = "参加者管理";
-      actions.appendChild(participantsLink);
 
       const editBtn = document.createElement("button");
       editBtn.type = "button";
@@ -894,6 +851,110 @@ export class EventAdminApp {
     }
   }
 
+  async loadEmbeddedTool(tool) {
+    const entry = this.embeddedTools[tool];
+    if (!entry) {
+      return;
+    }
+    if (entry.ready) {
+      return;
+    }
+    if (!entry.promise) {
+      entry.promise = (async () => {
+        if (typeof document !== "undefined") {
+          if (tool === "participants") {
+            document.documentElement.dataset.qaEmbedPrefix = "qa-";
+          } else if (tool === "operator") {
+            document.documentElement.dataset.operatorEmbedPrefix = "op-";
+          }
+        }
+        if (tool === "participants") {
+          await import("../question-admin/index.js");
+        } else {
+          await import("../operator/index.js");
+        }
+        entry.ready = true;
+      })().catch((error) => {
+        console.error(`Failed to load ${tool} tool`, error);
+        entry.ready = false;
+        entry.promise = null;
+        throw error;
+      });
+    }
+    await entry.promise;
+  }
+
+  resetToolFrames() {
+    this.embeddedTools = {
+      participants: { promise: null, ready: false },
+      operator: { promise: null, ready: false }
+    };
+    this.lastToolContextSignature = "";
+    if (typeof window !== "undefined") {
+      try {
+        window.questionAdminEmbed?.reset?.();
+      } catch (error) {
+        console.warn("Failed to reset participant tool state", error);
+      }
+      try {
+        window.operatorEmbed?.reset?.();
+      } catch (error) {
+        console.warn("Failed to reset operator tool state", error);
+      }
+    }
+  }
+
+  async syncEmbeddedTools() {
+    const schedule = this.getSelectedSchedule();
+    const event = this.getSelectedEvent();
+    if (!schedule || !event) {
+      this.lastToolContextSignature = "";
+      return;
+    }
+    const contextKey = [
+      event.id,
+      schedule.id,
+      event.name || "",
+      schedule.label || "",
+      schedule.startAt || "",
+      schedule.endAt || ""
+    ].join("::");
+    if (this.lastToolContextSignature === contextKey) {
+      return;
+    }
+    this.lastToolContextSignature = contextKey;
+    const context = {
+      eventId: event.id,
+      eventName: event.name || event.id,
+      scheduleId: schedule.id,
+      scheduleLabel: schedule.label || schedule.id,
+      startAt: schedule.startAt || "",
+      endAt: schedule.endAt || ""
+    };
+    try {
+      await this.loadEmbeddedTool("participants");
+      if (window.questionAdminEmbed?.waitUntilReady) {
+        await window.questionAdminEmbed.waitUntilReady();
+      }
+      if (window.questionAdminEmbed?.setSelection) {
+        await window.questionAdminEmbed.setSelection(context);
+      }
+    } catch (error) {
+      console.error("Failed to sync participant tool", error);
+    }
+    try {
+      await this.loadEmbeddedTool("operator");
+      if (window.operatorEmbed?.waitUntilReady) {
+        await window.operatorEmbed.waitUntilReady();
+      }
+      if (window.operatorEmbed?.setContext) {
+        window.operatorEmbed.setContext(context);
+      }
+    } catch (error) {
+      console.error("Failed to sync operator tool", error);
+    }
+  }
+
   updateStageUi() {
     if (this.dom.main) {
       this.dom.main.dataset.stage = this.stage;
@@ -990,23 +1051,14 @@ export class EventAdminApp {
     if (this.dom.scheduleRefreshButton) {
       this.dom.scheduleRefreshButton.disabled = !signedIn || !hasEvent;
     }
-    if (this.dom.openParticipantsButton) {
-      this.dom.openParticipantsButton.disabled = !signedIn || !hasSchedule;
-    }
-    if (this.dom.openOperatorButton) {
-      this.dom.openOperatorButton.disabled = !signedIn || !hasSchedule;
+    if (this.dom.scheduleNextButton) {
+      this.dom.scheduleNextButton.disabled = !signedIn || !hasSchedule;
     }
     if (this.dom.participantsTab) {
       this.dom.participantsTab.disabled = !signedIn || !hasSchedule;
     }
     if (this.dom.operatorTab) {
       this.dom.operatorTab.disabled = !signedIn || !hasSchedule;
-    }
-    if (this.dom.launchParticipantsButton) {
-      this.dom.launchParticipantsButton.disabled = !signedIn || !hasSchedule;
-    }
-    if (this.dom.launchOperatorButton) {
-      this.dom.launchOperatorButton.disabled = !signedIn || !hasSchedule;
     }
   }
 
@@ -1051,6 +1103,7 @@ export class EventAdminApp {
     if (stage === "tabs") {
       this.updateToolSummary();
       this.switchTab(this.activeTab);
+      this.syncEmbeddedTools().catch((error) => console.error("Failed to sync tools", error));
     }
   }
 
@@ -1359,109 +1412,6 @@ export class EventAdminApp {
     } else {
       document.title = "イベントコントロールセンター";
     }
-  }
-
-  buildEventHubUrl(event) {
-    if (typeof window === "undefined") return "event-hub.html";
-    const url = new URL("event-hub.html", window.location.href);
-    if (event?.id) {
-      url.searchParams.set("eventId", event.id);
-    }
-    if (event?.name) {
-      url.searchParams.set("eventName", event.name);
-    }
-    return url.toString();
-  }
-
-  buildParticipantAdminUrl(event) {
-    if (typeof window === "undefined") return "question-admin.html";
-    const url = new URL("question-admin.html", window.location.href);
-    if (event?.id) {
-      url.searchParams.set("eventId", event.id);
-      url.searchParams.set("focus", "participants");
-    }
-    if (event?.name) {
-      url.searchParams.set("eventName", event.name);
-    }
-    return url.toString();
-  }
-
-  buildScheduleHubUrl(schedule) {
-    if (typeof window === "undefined") return "schedule-hub.html";
-    const url = new URL("schedule-hub.html", window.location.href);
-    const event = this.getSelectedEvent();
-    const eventId = event?.id || this.selectedEventId;
-    if (eventId) url.searchParams.set("eventId", eventId);
-    if (schedule?.id) url.searchParams.set("scheduleId", schedule.id);
-    const scheduleKey = eventId && schedule?.id ? `${eventId}::${schedule.id}` : "";
-    if (scheduleKey) url.searchParams.set("scheduleKey", scheduleKey);
-    const eventName = event?.name || "";
-    if (eventName) url.searchParams.set("eventName", eventName);
-    if (schedule?.label) url.searchParams.set("scheduleLabel", schedule.label);
-    if (schedule?.startAt) url.searchParams.set("startAt", schedule.startAt);
-    if (schedule?.endAt) url.searchParams.set("endAt", schedule.endAt);
-    url.searchParams.set("source", "events");
-    return url.toString();
-  }
-
-  buildParticipantAdminUrlForSchedule(schedule) {
-    if (typeof window === "undefined") return "question-admin.html";
-    const event = this.getSelectedEvent();
-    const url = new URL("question-admin.html", window.location.href);
-    if (event?.id) {
-      url.searchParams.set("eventId", event.id);
-      url.searchParams.set("focus", "participants");
-    }
-    if (schedule?.id) {
-      url.searchParams.set("scheduleId", schedule.id);
-    }
-    if (event?.name) {
-      url.searchParams.set("eventName", event.name);
-    }
-    if (schedule?.label) {
-      url.searchParams.set("scheduleLabel", schedule.label);
-    }
-    if (schedule?.startAt) url.searchParams.set("startAt", schedule.startAt);
-    if (schedule?.endAt) url.searchParams.set("endAt", schedule.endAt);
-    return url.toString();
-  }
-
-  buildOperatorPanelUrl(schedule) {
-    if (typeof window === "undefined") return "operator.html";
-    const event = this.getSelectedEvent();
-    const url = new URL("operator.html", window.location.href);
-    if (event?.id) url.searchParams.set("eventId", event.id);
-    if (schedule?.id) url.searchParams.set("scheduleId", schedule.id);
-    if (event?.name) url.searchParams.set("eventName", event.name);
-    if (schedule?.label) url.searchParams.set("scheduleLabel", schedule.label);
-    if (schedule?.startAt) url.searchParams.set("startAt", schedule.startAt);
-    if (schedule?.endAt) url.searchParams.set("endAt", schedule.endAt);
-    const scheduleKey = event?.id && schedule?.id ? `${event.id}::${schedule.id}` : "";
-    if (scheduleKey) url.searchParams.set("scheduleKey", scheduleKey);
-    url.searchParams.set("source", "events");
-    return url.toString();
-  }
-
-  launchParticipantsTool() {
-    if (typeof window === "undefined") return;
-    const schedule = this.getSelectedSchedule();
-    if (!schedule) {
-      this.revealScheduleSelectionCue();
-      return;
-    }
-    const url = this.buildParticipantAdminUrlForSchedule(schedule);
-    window.open(url, "_blank", "noreferrer noopener");
-  }
-
-  launchOperatorTool() {
-    if (typeof window === "undefined") return;
-    const schedule = this.getSelectedSchedule();
-    if (!schedule) {
-      this.revealScheduleSelectionCue();
-      return;
-    }
-    const url = this.buildOperatorPanelUrl(schedule);
-    window.open(url, "_blank", "noreferrer noopener");
   }
 
   openEventDialog({ mode = "create", event = null } = {}) {

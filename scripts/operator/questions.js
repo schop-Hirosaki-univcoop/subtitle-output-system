@@ -242,46 +242,6 @@ export function updateScheduleContext(app) {
     }
   }
 
-  const hubLink = app.dom.scheduleHubLink;
-  if (hubLink) {
-    if (!eventId || !scheduleId || typeof window === "undefined") {
-      hubLink.hidden = true;
-      hubLink.href = "#";
-      hubLink.setAttribute("aria-disabled", "true");
-      hubLink.removeAttribute("title");
-      hubLink.removeAttribute("aria-label");
-    } else {
-      try {
-        const hubUrl = new URL("schedule-hub.html", window.location.href);
-        const scheduleKeyValue = scheduleKey || `${eventId}::${scheduleId}`;
-        hubUrl.searchParams.set("eventId", eventId);
-        hubUrl.searchParams.set("scheduleId", scheduleId);
-        hubUrl.searchParams.set("scheduleKey", scheduleKeyValue);
-        if (eventName) hubUrl.searchParams.set("eventName", eventName);
-        if (scheduleLabel) hubUrl.searchParams.set("scheduleLabel", scheduleLabel);
-        if (startText) hubUrl.searchParams.set("startAt", startText);
-        if (endText) hubUrl.searchParams.set("endAt", endText);
-
-        const labelText = scheduleLabel
-          ? `日程「${scheduleLabel}」のコントロールハブを開く`
-          : "日程コントロールハブを開く";
-
-        hubLink.hidden = false;
-        hubLink.href = hubUrl.toString();
-        hubLink.removeAttribute("aria-disabled");
-        hubLink.setAttribute("title", labelText);
-        hubLink.setAttribute("aria-label", labelText);
-      } catch (error) {
-        console.debug("failed to update schedule hub link", error);
-        hubLink.hidden = true;
-        hubLink.href = "#";
-        hubLink.setAttribute("aria-disabled", "true");
-        hubLink.removeAttribute("title");
-        hubLink.removeAttribute("aria-label");
-      }
-    }
-  }
-
   app.pageContext = {
     ...context,
     eventId,

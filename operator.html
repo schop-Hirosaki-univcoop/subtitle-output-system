@@ -8,6 +8,24 @@
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="module" src="./scripts/shared/layout.js"></script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script>
+      (function () {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get("embed") === "1") {
+            document.documentElement.classList.add("embedded-view");
+            const apply = () => document.body && document.body.classList.add("embedded-view");
+            if (document.readyState === "loading") {
+              document.addEventListener("DOMContentLoaded", apply, { once: true });
+            } else {
+              apply();
+            }
+          }
+        } catch (error) {
+          console.warn("Failed to apply embedded view mode", error);
+        }
+      })();
+    </script>
 </head>
 <body class="op-theme dictionary-collapsed logs-collapsed">
     <!-- ローディングオーバーレイ -->
@@ -83,7 +101,6 @@
                                     <span id="schedule-time-range" class="schedule-range" hidden></span>
                                 </div>
                             </div>
-                            <a id="operator-open-schedule-hub" class="btn btn-ghost btn-sm" href="#" hidden target="_blank" rel="noreferrer noopener">日程コントロールハブ</a>
                         </div>
                         <div class="toolbar-right">
                             <label class="chk">
