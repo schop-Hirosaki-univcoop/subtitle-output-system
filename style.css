@@ -1615,13 +1615,20 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 
 .flow-grid{
-  --flow-sidebar-width:clamp(22rem, 28vw, 32rem);
   display:grid;
   gap:1.5rem;
   grid-auto-rows:minmax(0, auto);
   transition:grid-template-columns .4s ease, grid-template-rows .4s ease, grid-template-areas .4s ease;
   width:min(100%, 96vw);
   margin-inline:auto;
+}
+
+#events-main{
+  position:relative;
+  --flow-sidebar-min:260px;
+  --flow-sidebar-max:520px;
+  --flow-sidebar-width:clamp(24rem, 28vw, 32rem);
+  --flow-resizer-width:12px;
 }
 
 .flow-pane{
@@ -1652,6 +1659,102 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 .flow-card--events{ grid-area:events; }
 .flow-card--schedules{ grid-area:schedules; }
 .flow-card--tabs{ grid-area:tabs; }
+#flow-stage-resizer{ grid-area:handle; }
+
+.flow-sidebar-controls{
+  display:flex;
+  justify-content:flex-end;
+  margin-bottom:.35rem;
+}
+
+.flow-sidebar-toggle{
+  display:inline-flex;
+  align-items:center;
+  gap:.35rem;
+  white-space:nowrap;
+}
+
+.flow-grid__handle{
+  display:none;
+  align-items:center;
+  justify-content:center;
+  cursor:col-resize;
+  padding:0 .15rem;
+  min-height:4rem;
+  border-radius:999px;
+  transition:background .2s ease;
+  touch-action:none;
+}
+
+.flow-grid__handle:focus-visible{
+  outline:3px solid rgba(0,176,255,.4);
+  outline-offset:2px;
+}
+
+.flow-grid__handle:hover{
+  background:rgba(2,40,80,.4);
+}
+
+.flow-grid__handle-grip{
+  width:4px;
+  height:44px;
+  border-radius:999px;
+  background:linear-gradient(180deg, rgba(128,186,255,.8), rgba(34,98,170,.8));
+  box-shadow:inset 0 0 0 1px rgba(8,20,34,.65);
+}
+
+#flow-sidebar-expand{
+  position:fixed;
+  top:calc(var(--header-height, 64px) + 1.25rem);
+  left:clamp(.75rem, 3vw, 2.75rem);
+  z-index:90;
+  box-shadow:0 10px 30px rgba(0,0,0,.4);
+}
+
+.flow-sidebar-overlay{
+  position:fixed;
+  inset:0;
+  display:none;
+  z-index:120;
+}
+
+.flow-sidebar-overlay:not([hidden]){
+  display:block;
+}
+
+.flow-sidebar-overlay__backdrop{
+  position:absolute;
+  inset:0;
+  background:rgba(4,12,24,.66);
+  backdrop-filter:blur(2px);
+}
+
+.flow-sidebar-overlay__panel{
+  position:relative;
+  margin:calc(var(--header-height, 64px) + 1.5rem) auto 1.5rem;
+  width:min(92vw, 420px);
+  max-height:calc(100vh - var(--header-height, 64px) - 3rem);
+  overflow:auto;
+  padding:1.6rem 1.4rem 1.4rem;
+  border-radius:1rem;
+  background:rgba(8,18,30,.94);
+  border:1px solid rgba(70,108,156,.55);
+  box-shadow:0 28px 70px rgba(0,0,0,.45);
+}
+
+.flow-sidebar-overlay__content{
+  display:flex;
+  flex-direction:column;
+  gap:1.25rem;
+}
+
+.flow-sidebar-overlay__content > .module{
+  margin:0;
+}
+
+body.sidebar-overlay-open{
+  overflow:hidden;
+}
 
 #events-main[data-stage="events"] .flow-grid{
   grid-template-columns:minmax(72vw,1fr);
@@ -1665,9 +1768,9 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 #events-main[data-stage="events"] .flow-card--schedules .flow-pane--summary{ display:none; }
 
 #events-main[data-stage="schedules"] .flow-grid{
-  grid-template-columns:clamp(24vw, 28vw, 32vw) minmax(48vw, 1fr);
+  grid-template-columns:minmax(var(--flow-sidebar-min), var(--flow-sidebar-width)) minmax(var(--flow-resizer-width), var(--flow-resizer-width)) minmax(0, 1fr);
   grid-template-areas:
-    "events schedules";
+    "events handle schedules";
 }
 
 #events-main[data-stage="schedules"] .flow-card--events .flow-pane--primary{ display:none; }
@@ -1691,12 +1794,50 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   border-bottom:1px solid rgba(40,70,108,.45);
 }
 
+#events-main[data-stage="schedules"] #flow-stage-resizer,
+#events-main[data-stage="tabs"] #flow-stage-resizer{
+  display:flex;
+}
+
+#events-main[data-stage="events"] #flow-stage-resizer,
+#events-main[data-sidebar="collapsed"] #flow-stage-resizer,
+#events-main[data-sidebar="overlay"] #flow-stage-resizer{
+  display:none;
+}
+
 #events-main[data-stage="tabs"] .flow-grid{
-  grid-template-columns:clamp(24vw, 28vw, 32vw) minmax(52vw, 1fr);
+  grid-template-columns:minmax(var(--flow-sidebar-min), var(--flow-sidebar-width)) minmax(var(--flow-resizer-width), var(--flow-resizer-width)) minmax(0, 1fr);
   grid-template-rows:auto auto;
   grid-template-areas:
-    "events tabs"
-    "schedules tabs";
+    "events handle tabs"
+    "schedules handle tabs";
+}
+
+#events-main[data-stage="schedules"][data-sidebar="collapsed"] .flow-grid,
+#events-main[data-stage="schedules"][data-sidebar="overlay"] .flow-grid{
+  grid-template-columns:minmax(0, 1fr);
+  grid-template-areas:
+    "schedules";
+}
+
+#events-main[data-stage="tabs"][data-sidebar="collapsed"] .flow-grid,
+#events-main[data-stage="tabs"][data-sidebar="overlay"] .flow-grid{
+  grid-template-columns:minmax(0, 1fr);
+  grid-template-rows:auto;
+  grid-template-areas:
+    "tabs";
+}
+
+#events-main[data-sidebar="collapsed"] .flow-card--events{
+  display:none;
+}
+
+#events-main[data-stage="tabs"][data-sidebar="collapsed"] .flow-card--schedules{
+  display:none;
+}
+
+#events-main[data-sidebar="overlay"] .flow-sidebar-overlay{
+  display:block;
 }
 
 #events-main[data-stage="schedules"] .flow-card--schedules,
@@ -2148,15 +2289,16 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 
 @media (max-width: 1080px){
-  #events-main[data-stage="schedules"] .flow-grid{
-    grid-template-columns:minmax(70vw,1fr);
+  #events-main[data-stage="schedules"][data-sidebar="open"] .flow-grid{
+    grid-template-columns:minmax(0, 1fr);
+    grid-template-rows:auto auto;
     grid-template-areas:
       "events"
       "schedules";
   }
 
-  #events-main[data-stage="tabs"] .flow-grid{
-    grid-template-columns:minmax(72vw,1fr);
+  #events-main[data-stage="tabs"][data-sidebar="open"] .flow-grid{
+    grid-template-columns:minmax(0, 1fr);
     grid-template-rows:auto auto auto;
     grid-template-areas:
       "events"
@@ -2164,8 +2306,13 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
       "tabs";
   }
 
-  #events-main[data-stage="schedules"] .flow-card--schedules,
-  #events-main[data-stage="tabs"] .flow-card--tabs{
+  #events-main[data-stage="schedules"][data-sidebar="open"] #flow-stage-resizer,
+  #events-main[data-stage="tabs"][data-sidebar="open"] #flow-stage-resizer{
+    display:none;
+  }
+
+  #events-main[data-stage="schedules"][data-sidebar="open"] .flow-card--schedules,
+  #events-main[data-stage="tabs"][data-sidebar="open"] .flow-card--tabs{
     min-width:0;
   }
 }

@@ -11,6 +11,7 @@
 </head>
 <body class="op-theme events-page flow-page">
   <telop-header tagline="Broadcast Subtitle Console" context-label="管理フロー">
+    <span slot="meta" id="flow-user-label" class="user-label" hidden></span>
     <div slot="meta" id="events-meta" class="hub-meta-note" hidden></div>
     <button slot="actions" id="flow-logout-button" class="btn btn-ghost btn-sm" type="button">ログアウト</button>
   </telop-header>
@@ -62,6 +63,9 @@
             <p id="flow-event-empty" class="entity-empty" hidden>まだイベントが登録されていません。まずはイベントを追加してください。</p>
           </div>
           <div class="flow-pane flow-pane--summary" id="flow-event-summary-pane">
+            <div class="flow-sidebar-controls">
+              <button id="flow-sidebar-collapse" class="btn btn-ghost btn-xs flow-sidebar-toggle" type="button">サマリーパネルを隠す</button>
+            </div>
             <h3 class="flow-summary-title">選択中のイベント</h3>
             <p id="flow-event-summary-name" class="flow-summary-name">—</p>
             <dl class="flow-summary-stats">
@@ -111,6 +115,10 @@
         </div>
       </section>
 
+      <div id="flow-stage-resizer" class="flow-grid__handle" role="separator" aria-orientation="vertical" aria-label="サイドパネルの幅を調整" tabindex="0" hidden>
+        <span class="flow-grid__handle-grip" aria-hidden="true"></span>
+      </div>
+
       <section id="flow-tabs" class="module module--primary flow-card flow-card--tabs" aria-labelledby="flow-tabs-title">
         <div class="module-header">
           <div class="module-heading">
@@ -122,14 +130,6 @@
           </div>
         </div>
         <div class="module-body">
-          <div class="flow-summary-group">
-            <h3 class="flow-summary-title">選択内容の確認</h3>
-            <dl class="flow-summary-stats">
-              <div class="flow-summary-row"><dt>イベント</dt><dd id="flow-tool-summary-event">—</dd></div>
-              <div class="flow-summary-row"><dt>日程</dt><dd id="flow-tool-summary-schedule">—</dd></div>
-              <div class="flow-summary-row" id="flow-tool-summary-time-row"><dt>時間</dt><dd id="flow-tool-summary-time">—</dd></div>
-            </dl>
-          </div>
           <div id="flow-tablist" class="flow-tablist" role="tablist" aria-label="参加者・テロップツール">
             <button id="flow-tab-participants" class="flow-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="flow-panel-participants" data-tab="participants" tabindex="0">参加者リスト管理</button>
             <button id="flow-tab-operator" class="flow-tab" type="button" role="tab" aria-selected="false" aria-controls="flow-panel-operator" data-tab="operator" tabindex="-1">テロップ操作パネル</button>
@@ -147,8 +147,6 @@
                       <ol id="qa-loader-steps" class="loader-steps" aria-label="初期化ステップ"></ol>
                     </div>
                   </div>
-
-                  <div id="qa-user-info" class="user-info" hidden></div>
 
                   <main id="qa-admin-main" class="admin-main" hidden>
                     <section class="module module--primary admin-module" aria-labelledby="qa-participant-title">
@@ -308,7 +306,6 @@
                   </div>
 
                   <div class="operator-embedded__actions">
-                    <div id="op-user-info" class="user-info" hidden></div>
                     <div class="operator-embedded__buttons">
                       <button id="op-logs-toggle" class="btn btn-ghost btn-sm" type="button">操作ログ</button>
                       <button id="op-dictionary-toggle" class="btn btn-ghost btn-sm" type="button">辞書</button>
@@ -475,6 +472,13 @@
           </div>
         </div>
       </section>
+    </div>
+    <button id="flow-sidebar-expand" class="btn btn-ghost btn-xs flow-sidebar-toggle" type="button" hidden>サマリーパネルを表示</button>
+    <div id="flow-sidebar-overlay" class="flow-sidebar-overlay" hidden aria-hidden="true">
+      <div class="flow-sidebar-overlay__backdrop" data-sidebar-overlay-dismiss></div>
+      <div class="flow-sidebar-overlay__panel" role="dialog" aria-modal="true" aria-label="サマリーパネル">
+        <div id="flow-sidebar-overlay-content" class="flow-sidebar-overlay__content"></div>
+      </div>
     </div>
   </main>
 
