@@ -1,56 +1,79 @@
+const prefix = document.documentElement?.dataset?.operatorEmbedPrefix || "";
+
+function resolve(id) {
+  if (prefix) {
+    const prefixed = document.getElementById(`${prefix}${id}`);
+    if (prefixed) {
+      return prefixed;
+    }
+  }
+  return document.getElementById(id);
+}
+
+function resolveQuery(selector) {
+  if (prefix) {
+    const prefixedSelector = selector.replace(/#([a-zA-Z0-9_-]+)/g, (_, id) => `#${prefix}${id}`);
+    const prefixedResult = document.querySelector(prefixedSelector);
+    if (prefixedResult) {
+      return prefixedResult;
+    }
+  }
+  return document.querySelector(selector);
+}
+
 export function queryDom() {
   return {
-    loginButton: document.getElementById("login-button"),
-    loginContainer: document.getElementById("login-container"),
-    mainContainer: document.getElementById("main-container"),
-    actionPanel: document.getElementById("action-panel"),
-    userInfo: document.getElementById("user-info"),
-    dictionaryToggle: document.getElementById("dictionary-toggle"),
-    dictionaryPanel: document.getElementById("dictionary-panel"),
-    logsToggle: document.getElementById("logs-toggle"),
-    logsPanel: document.getElementById("logs-panel"),
-    cardsContainer: document.getElementById("questions-cards"),
-    genreTabContainer: document.getElementById("genre-tab-buttons"),
-    scheduleEventName: document.getElementById("schedule-event-name"),
-    scheduleLabel: document.getElementById("schedule-label"),
-    scheduleTimeRange: document.getElementById("schedule-time-range"),
-    scheduleHubLink: document.getElementById("operator-open-schedule-hub"),
-    dictionaryTableBody: document.querySelector("#dictionary-table tbody"),
-    addTermForm: document.getElementById("add-term-form"),
-    newTermInput: document.getElementById("new-term"),
-    newRubyInput: document.getElementById("new-ruby"),
-    editDialog: document.getElementById("edit-dialog"),
-    editTextarea: document.getElementById("edit-textarea"),
-    editSaveButton: document.getElementById("edit-save-button"),
-    editCancelButton: document.getElementById("edit-cancel-button"),
-    actionButtons: ["btn-display", "btn-unanswer", "btn-edit"].map((id) => document.getElementById(id)),
-    selectedInfo: document.getElementById("selected-info"),
-    selectAllCheckbox: document.getElementById("select-all-checkbox"),
-    batchUnanswerBtn: document.getElementById("btn-batch-unanswer"),
-    clearButton: document.getElementById("btn-clear"),
-    logsRefreshButton: document.getElementById("logs-refresh-button"),
-    fetchDictionaryButton: document.getElementById("fetch-dictionary-button"),
-    logSearch: document.getElementById("log-search"),
-    logAutoscroll: document.getElementById("log-autoscroll"),
-    logStream: document.getElementById("log-stream"),
-    logsStreamView: document.getElementById("logs-stream-view"),
-    loadingOverlay: document.getElementById("loading-overlay"),
-    loadingText: document.getElementById("loading-text"),
-    loaderSteps: document.getElementById("loader-steps"),
-    copyrightYear: document.getElementById("copyright-year"),
-    confirmDialog: document.getElementById("confirm-dialog"),
-    confirmTitle: document.getElementById("confirm-dialog-title"),
-    confirmMessage: document.getElementById("confirm-dialog-message"),
-    confirmAcceptButton: document.getElementById("confirm-accept-button"),
-    confirmCancelButton: document.getElementById("confirm-cancel-button"),
+    loginButton: resolve("login-button"),
+    loginContainer: resolve("login-container"),
+    mainContainer: resolve("main-container"),
+    actionPanel: resolve("action-panel"),
+    userInfo: resolve("user-info"),
+    dictionaryToggle: resolve("dictionary-toggle"),
+    dictionaryPanel: resolve("dictionary-panel"),
+    logsToggle: resolve("logs-toggle"),
+    logsPanel: resolve("logs-panel"),
+    cardsContainer: resolve("questions-cards"),
+    genreTabContainer: resolve("genre-tab-buttons"),
+    scheduleEventName: resolve("schedule-event-name"),
+    scheduleLabel: resolve("schedule-label"),
+    scheduleTimeRange: resolve("schedule-time-range"),
+    scheduleHubLink: resolve("operator-open-schedule-hub"),
+    dictionaryTableBody: resolveQuery("#dictionary-table tbody"),
+    addTermForm: resolve("add-term-form"),
+    newTermInput: resolve("new-term"),
+    newRubyInput: resolve("new-ruby"),
+    editDialog: resolve("edit-dialog"),
+    editTextarea: resolve("edit-textarea"),
+    editSaveButton: resolve("edit-save-button"),
+    editCancelButton: resolve("edit-cancel-button"),
+    actionButtons: ["btn-display", "btn-unanswer", "btn-edit"].map((id) => resolve(id)),
+    selectedInfo: resolve("selected-info"),
+    selectAllCheckbox: resolve("select-all-checkbox"),
+    batchUnanswerBtn: resolve("btn-batch-unanswer"),
+    clearButton: resolve("btn-clear"),
+    logsRefreshButton: resolve("logs-refresh-button"),
+    fetchDictionaryButton: resolve("fetch-dictionary-button"),
+    logSearch: resolve("log-search"),
+    logAutoscroll: resolve("log-autoscroll"),
+    logStream: resolve("log-stream"),
+    logsStreamView: resolve("logs-stream-view"),
+    loadingOverlay: resolve("loading-overlay"),
+    loadingText: resolve("loading-text"),
+    loaderSteps: resolve("loader-steps"),
+    copyrightYear: resolve("copyright-year"),
+    confirmDialog: resolve("confirm-dialog"),
+    confirmTitle: resolve("confirm-dialog-title"),
+    confirmMessage: resolve("confirm-dialog-message"),
+    confirmAcceptButton: resolve("confirm-accept-button"),
+    confirmCancelButton: resolve("confirm-cancel-button"),
     render: {
-      indicator: document.querySelector(".render-indicator"),
-      lamp: document.getElementById("render-lamp"),
-      phase: document.getElementById("render-phase"),
-      summary: document.getElementById("render-summary"),
-      title: document.getElementById("render-title"),
-      question: document.getElementById("render-question"),
-      updated: document.getElementById("render-updated")
+      indicator: resolveQuery(".render-indicator"),
+      lamp: resolve("render-lamp"),
+      phase: resolve("render-phase"),
+      summary: resolve("render-summary"),
+      title: resolve("render-title"),
+      question: resolve("render-question"),
+      updated: resolve("render-updated")
     }
   };
 }

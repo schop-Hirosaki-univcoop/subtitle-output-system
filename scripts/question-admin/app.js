@@ -40,6 +40,45 @@ import {
 } from "./utils.js";
 
 let redirectingToIndex = false;
+
+const QA_EMBED_PREFIX =
+  typeof document !== "undefined" && document.documentElement?.dataset?.qaEmbedPrefix
+    ? document.documentElement.dataset.qaEmbedPrefix
+    : "";
+
+let embedReadyDeferred = null;
+
+function waitForEmbedReady() {
+  if (state.user) {
+    return Promise.resolve();
+  }
+  if (embedReadyDeferred?.promise) {
+    return embedReadyDeferred.promise;
+  }
+  let resolve;
+  const promise = new Promise((res) => {
+    resolve = res;
+  });
+  embedReadyDeferred = { promise, resolve };
+  return promise;
+}
+
+function resolveEmbedReady() {
+  if (embedReadyDeferred?.resolve) {
+    embedReadyDeferred.resolve();
+  }
+  embedReadyDeferred = null;
+}
+
+function getElementById(id) {
+  if (QA_EMBED_PREFIX) {
+    const prefixed = document.getElementById(`${QA_EMBED_PREFIX}${id}`);
+    if (prefixed) {
+      return prefixed;
+    }
+  }
+  return document.getElementById(id);
+}
 import {
   normalizeEventParticipantCache,
   describeDuplicateMatch,
@@ -2269,11 +2308,11 @@ function resolveFocusTargetElement(target) {
 
   switch (target) {
     case "participants":
-      return document.getElementById("participant-title") || dom.participantContext || null;
+      return getElementById("participant-title") || dom.participantContext || null;
     case "schedules":
-      return document.getElementById("schedule-title") || dom.scheduleDescription || null;
+      return getElementById("schedule-title") || dom.scheduleDescription || null;
     case "events":
-      return document.getElementById("event-title") || dom.eventList || null;
+      return getElementById("event-title") || dom.eventList || null;
     default:
       return null;
   }
@@ -2920,7 +2959,7 @@ function initAuthWatcher() {
         dom.loginButton.classList.remove("is-busy");
       }
       resetState();
-      if (!redirectingToIndex && typeof window !== "undefined") {
+      if (!redirectingToIndex && typeof window !== "undefined" && !QA_EMBED_PREFIX) {
         redirectingToIndex = true;
         window.location.replace("index.html");
       }
@@ -2949,6 +2988,7 @@ function initAuthWatcher() {
       setAuthUi(true);
       finishLoaderSteps("準備完了");
       requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
+      resolveEmbedReady();
       if (state.initialFocusTarget) {
         window.setTimeout(() => maybeFocusInitialSection(), 400);
       }
@@ -2972,3 +3012,87 @@ function init() {
 }
 
 init();
+
+if (typeof window !== "undefined") {
+  window.questionAdminEmbed = {
+    async setSelection(selection = {}) {
+      const { eventId = "", scheduleId = "", eventName = "", scheduleLabel = "", startAt = "", endAt = "" } = selection;
+      try {
+        const trimmedEventId = normalizeKey(eventId);
+        if (!trimmedEventId) {
+          return;
+        }
+        if (!state.user) {
+          state.initialSelection = {
+            eventId: trimmedEventId,
+            scheduleId: normalizeKey(scheduleId) || null,
+            scheduleLabel: scheduleLabel || null,
+            eventLabel: eventName || null
+          };
+          state.initialSelectionApplied = false;
+          return;
+        }
+        if (!Array.isArray(state.events) || !state.events.some((evt) => evt.id === trimmedEventId)) {
+          await loadEvents({ preserveSelection: true });
+        }
+        if (state.selectedEventId !== trimmedEventId) {
+          selectEvent(trimmedEventId);
+        }
+        const selectedEvent = state.events.find((evt) => evt.id === trimmedEventId) || null;
+        if (selectedEvent) {
+          if (eventName) {
+            selectedEvent.name = eventName;
+          }
+        }
+        const trimmedScheduleId = normalizeKey(scheduleId);
+        if (trimmedScheduleId) {
+          const schedule = selectedEvent?.schedules?.find((item) => item.id === trimmedScheduleId) || null;
+          if (schedule) {
+            if (scheduleLabel) schedule.label = scheduleLabel;
+            if (startAt) schedule.startAt = startAt;
+            if (endAt) schedule.endAt = endAt;
+          }
+          selectSchedule(trimmedScheduleId);
+        } else {
+          updateParticipantContext({ preserveStatus: true });
+        }
+      } catch (error) {
+        console.error("questionAdminEmbed.setSelection failed", error);
+      }
+    },
+    refreshParticipants(options) {
+      return loadParticipants(options);
+    },
+    refreshEvents(options) {
+      return loadEvents(options);
+    },
+    getState() {
+      return {
+        eventId: state.selectedEventId,
+        scheduleId: state.selectedScheduleId
+      };
+    },
+    waitUntilReady() {
+      return waitForEmbedReady();
+    },
+    reset() {
+      try {
+        redirectingToIndex = false;
+        state.user = null;
+        hideLoader();
+        setAuthUi(false);
+        resetState();
+        if (dom.loginButton) {
+          dom.loginButton.disabled = false;
+          dom.loginButton.classList.remove("is-busy");
+        }
+        if (embedReadyDeferred?.resolve) {
+          embedReadyDeferred.resolve();
+        }
+        embedReadyDeferred = null;
+      } catch (error) {
+        console.error("questionAdminEmbed.reset failed", error);
+      }
+    }
+  };
+}
