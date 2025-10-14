@@ -32,6 +32,10 @@ export class OperatorApp {
     this.pageContext = this.extractPageContext();
     this.applyContextToState();
     this.api = createApiClient(auth, onAuthStateChanged);
+    this.isEmbedded = Boolean(OperatorApp.embedPrefix);
+    if (this.isEmbedded && this.dom.loginContainer) {
+      this.dom.loginContainer.style.display = "none";
+    }
 
     this.lastUpdatedAt = 0;
     this.renderTicker = null;
@@ -253,7 +257,9 @@ export class OperatorApp {
   }
 
   setupEventListeners() {
-    this.dom.loginButton?.addEventListener("click", () => this.login());
+    if (!this.isEmbedded) {
+      this.dom.loginButton?.addEventListener("click", () => this.login());
+    }
     document.querySelectorAll(".sub-tab-button").forEach((button) => {
       button.addEventListener("click", () => this.switchSubTab(button.dataset.subTab));
     });
@@ -584,10 +590,17 @@ export class OperatorApp {
     this.toggleDictionaryDrawer(false, false);
     this.toggleLogsDrawer(false, false);
     this.cleanupRealtime();
-    this.hideLoader();
+    if (this.isEmbedded) {
+      this.showLoader("サインイン状態を確認しています…");
+    } else {
+      this.hideLoader();
+    }
     this.closeEditDialog();
     if (this.dom.loginContainer) {
-      this.dom.loginContainer.style.display = "";
+      this.dom.loginContainer.style.display = this.isEmbedded ? "none" : "";
+    }
+    if (!this.isEmbedded && this.dom.loginButton) {
+      this.dom.loginButton.disabled = false;
     }
     if (this.dom.mainContainer) {
       this.dom.mainContainer.style.display = "none";
@@ -600,7 +613,7 @@ export class OperatorApp {
       this.dom.userInfo.hidden = true;
       this.dom.userInfo.innerHTML = "";
     }
-    if (typeof window !== "undefined" && !OperatorApp.embedPrefix) {
+    if (typeof window !== "undefined" && !this.isEmbedded) {
       this.redirectingToIndex = true;
       window.location.replace("index.html");
     }

@@ -46,6 +46,8 @@ const QA_EMBED_PREFIX =
     ? document.documentElement.dataset.qaEmbedPrefix
     : "";
 
+const IS_EMBEDDED = Boolean(QA_EMBED_PREFIX);
+
 let embedReadyDeferred = null;
 
 function waitForEmbedReady() {
@@ -981,98 +983,6 @@ function renderEvents() {
   });
 }
 
-function buildScheduleHubUrl(event, schedule) {
-  if (!event || !schedule || typeof window === "undefined") {
-    return "#";
-  }
-
-  const url = new URL("schedule-hub.html", window.location.href);
-  const eventId = String(event.id || "");
-  const scheduleId = String(schedule.id || "");
-  url.searchParams.set("eventId", eventId);
-  url.searchParams.set("scheduleId", scheduleId);
-  url.searchParams.set("scheduleKey", `${eventId}::${scheduleId}`);
-  url.searchParams.set("source", "question-admin");
-
-  if (event.name) {
-    url.searchParams.set("eventName", String(event.name));
-  }
-  if (schedule.label) {
-    url.searchParams.set("scheduleLabel", String(schedule.label));
-  }
-  if (schedule.startAt) {
-    url.searchParams.set("startAt", String(schedule.startAt));
-  }
-  if (schedule.endAt) {
-    url.searchParams.set("endAt", String(schedule.endAt));
-  }
-  if (typeof schedule.participantCount === "number" && Number.isFinite(schedule.participantCount)) {
-    url.searchParams.set("participantCount", String(schedule.participantCount));
-  }
-
-  return url.toString();
-}
-
-function hideScheduleHubLink() {
-  if (!dom.scheduleHubLink) return;
-  dom.scheduleHubLink.hidden = true;
-  dom.scheduleHubLink.href = "#";
-  dom.scheduleHubLink.setAttribute("aria-disabled", "true");
-  dom.scheduleHubLink.removeAttribute("title");
-  dom.scheduleHubLink.removeAttribute("aria-label");
-}
-
-function showScheduleHubLink(event, schedule) {
-  if (!dom.scheduleHubLink) return;
-  const hubUrl = buildScheduleHubUrl(event, schedule);
-  if (!hubUrl || hubUrl === "#") {
-    hideScheduleHubLink();
-    return;
-  }
-
-  const scheduleName = schedule?.label || schedule?.id || "";
-  const labelText = scheduleName
-    ? `日程「${scheduleName}」のコントロールハブを開く`
-    : "日程コントロールハブを開く";
-
-  dom.scheduleHubLink.hidden = false;
-  dom.scheduleHubLink.href = hubUrl;
-  dom.scheduleHubLink.removeAttribute("aria-disabled");
-  dom.scheduleHubLink.setAttribute("title", labelText);
-  dom.scheduleHubLink.setAttribute("aria-label", labelText);
-}
-
-function updateEventHubShortcut(event) {
-  if (!dom.eventHubLink) return;
-
-  let href = "events.html";
-  let buttonLabel = "イベント一覧";
-  let descriptiveLabel = "イベント一覧を開く";
-
-  if (typeof window !== "undefined") {
-    const basePath = event ? "event-hub.html" : "events.html";
-    const url = new URL(basePath, window.location.href);
-    if (event?.id) {
-      url.searchParams.set("eventId", event.id);
-    }
-    if (event?.name) {
-      url.searchParams.set("eventName", event.name);
-    }
-    href = url.toString();
-  }
-
-  if (event?.id) {
-    const name = event.name || event.id;
-    buttonLabel = "イベントハブを開く";
-    descriptiveLabel = `イベント「${name}」のハブを開く`;
-  }
-
-  dom.eventHubLink.href = href;
-  dom.eventHubLink.textContent = buttonLabel;
-  dom.eventHubLink.setAttribute("aria-label", descriptiveLabel);
-  dom.eventHubLink.setAttribute("title", descriptiveLabel);
-}
-
 function renderSchedules() {
   const list = dom.scheduleList;
   if (!list) return;
@@ -1120,14 +1030,6 @@ function renderSchedules() {
 
     const actions = document.createElement("div");
     actions.className = "entity-actions";
-    const hubLink = document.createElement("a");
-    hubLink.className = "btn-icon";
-    hubLink.href = buildScheduleHubUrl(selectedEvent, schedule);
-    hubLink.title = "日程ハブを開く";
-    hubLink.setAttribute("aria-label", `日程「${schedule.label || schedule.id}」のコントロールハブを開く`);
-    hubLink.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M3.25 2A1.25 1.25 0 0 0 2 3.25v9.5A1.25 1.25 0 0 0 3.25 14h9.5A1.25 1.25 0 0 0 14 12.75v-4a.75.75 0 0 0-1.5 0v4a.25.25 0 0 1-.25.25h-9.5a.25.25 0 0 1-.25-.25v-9.5a.25.25 0 0 1 .25-.25h4a.75.75 0 0 0 0-1.5h-4Z\"/><path fill=\"currentColor\" d=\"M8.75 2a.75.75 0 0 0 0 1.5h2.69L6.72 8.22a.75.75 0 0 0 1.06 1.06l4.72-4.72v2.69a.75.75 0 0 0 1.5 0v-5a.75.75 0 0 0-.75-.75h-5Z\"/></svg>";
-    hubLink.addEventListener("click", event => event.stopPropagation());
-    actions.appendChild(hubLink);
     const editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.className = "btn-icon";
@@ -1208,9 +1110,6 @@ function updateParticipantContext(options = {}) {
   const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
   const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === state.selectedScheduleId);
 
-  updateEventHubShortcut(selectedEvent || null);
-  hideScheduleHubLink();
-
   if (!selectedEvent || !selectedSchedule) {
     if (dom.participantContext) {
       dom.participantContext.textContent = "日程を選択すると、現在登録されている参加者が表示されます。";
@@ -1237,15 +1136,13 @@ function updateParticipantContext(options = {}) {
     return;
   }
 
-  showScheduleHubLink(selectedEvent, selectedSchedule);
-
   if (dom.csvInput) dom.csvInput.disabled = false;
   if (dom.teamCsvInput) dom.teamCsvInput.disabled = false;
   if (dom.participantContext) {
     const scheduleName = selectedSchedule.label || selectedSchedule.id;
     const scheduleRange = describeScheduleRange(selectedSchedule);
     const rangeSuffix = scheduleRange ? `（${scheduleRange}）` : "";
-    dom.participantContext.textContent = `イベント「${selectedEvent.name}」/ 日程「${scheduleName}」${rangeSuffix}の参加者を管理しています。必要に応じて上部の「日程コントロールハブ」から運用ツールに移動できます。専用リンクは各行のボタンまたはURLから取得できます。`;
+    dom.participantContext.textContent = `イベント「${selectedEvent.name}」/ 日程「${scheduleName}」${rangeSuffix}の参加者を管理しています。上部のタブからテロップ操作パネルに切り替え可能です。専用リンクは各行のボタンまたはURLから取得できます。`;
   }
   if (!preserveStatus) {
     setUploadStatus("ファイルを選択して参加者リストを更新してください。");
@@ -2254,7 +2151,8 @@ async function handleClearParticipants() {
   }
 }
 function setAuthUi(signedIn) {
-  toggleSectionVisibility(dom.loginCard, !signedIn);
+  const shouldShowLogin = !signedIn && !IS_EMBEDDED;
+  toggleSectionVisibility(dom.loginCard, shouldShowLogin);
   toggleSectionVisibility(dom.adminMain, signedIn);
 
   if (signedIn) {
@@ -2297,7 +2195,6 @@ function setAuthUi(signedIn) {
     if (dom.addScheduleButton) dom.addScheduleButton.disabled = true;
     if (dom.csvInput) dom.csvInput.disabled = true;
     if (dom.saveButton) dom.saveButton.disabled = true;
-    hideScheduleHubLink();
   }
 }
 
@@ -2952,14 +2849,18 @@ function initAuthWatcher() {
   onAuthStateChanged(auth, async user => {
     state.user = user;
     if (!user) {
-      hideLoader();
-      setAuthUi(false);
-      if (dom.loginButton) {
-        dom.loginButton.disabled = false;
-        dom.loginButton.classList.remove("is-busy");
+      if (IS_EMBEDDED) {
+        showLoader("サインイン情報を確認しています…");
+      } else {
+        hideLoader();
+        if (dom.loginButton) {
+          dom.loginButton.disabled = false;
+          dom.loginButton.classList.remove("is-busy");
+        }
       }
+      setAuthUi(false);
       resetState();
-      if (!redirectingToIndex && typeof window !== "undefined" && !QA_EMBED_PREFIX) {
+      if (!redirectingToIndex && typeof window !== "undefined" && !IS_EMBEDDED) {
         redirectingToIndex = true;
         window.location.replace("index.html");
       }

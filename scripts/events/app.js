@@ -152,6 +152,14 @@ export class EventAdminApp {
       });
     }
 
+    if (this.dom.logoutButton) {
+      this.dom.logoutButton.addEventListener("click", () => {
+        this.handleLogoutClick().catch((error) => {
+          console.error("Failed to handle logout:", error);
+        });
+      });
+    }
+
     if (this.dom.nextButton) {
       this.dom.nextButton.addEventListener("click", () => {
         this.goToStage("schedules");
@@ -247,6 +255,21 @@ export class EventAdminApp {
           this.showAlert(error.message || "日程の再読み込みに失敗しました。");
         });
       });
+    }
+  }
+
+  async handleLogoutClick() {
+    if (this.dom.logoutButton) {
+      this.dom.logoutButton.disabled = true;
+    }
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Sign-out failed:", error);
+      this.showAlert("ログアウトに失敗しました。時間をおいて再度お試しください。");
+      if (this.dom.logoutButton) {
+        this.dom.logoutButton.disabled = false;
+      }
     }
   }
 
@@ -508,20 +531,6 @@ export class EventAdminApp {
       const actions = document.createElement("div");
       actions.className = "entity-actions";
 
-      const hubLink = document.createElement("a");
-      hubLink.className = "btn btn-primary btn-sm";
-      hubLink.href = this.buildEventHubUrl(event);
-      hubLink.textContent = "日程ハブ";
-      actions.appendChild(hubLink);
-
-      const participantsLink = document.createElement("a");
-      participantsLink.className = "btn btn-ghost btn-sm";
-      participantsLink.href = this.buildParticipantAdminUrl(event);
-      participantsLink.target = "_blank";
-      participantsLink.rel = "noreferrer noopener";
-      participantsLink.textContent = "参加者管理";
-      actions.appendChild(participantsLink);
-
       const editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "btn-icon";
@@ -724,20 +733,6 @@ export class EventAdminApp {
 
       const actions = document.createElement("div");
       actions.className = "entity-actions";
-
-      const hubLink = document.createElement("a");
-      hubLink.className = "btn btn-primary btn-sm";
-      hubLink.href = this.buildScheduleHubUrl(schedule);
-      hubLink.textContent = "日程ハブ";
-      actions.appendChild(hubLink);
-
-      const participantsLink = document.createElement("a");
-      participantsLink.className = "btn btn-ghost btn-sm";
-      participantsLink.href = this.buildParticipantAdminUrlForSchedule(schedule);
-      participantsLink.target = "_blank";
-      participantsLink.rel = "noreferrer noopener";
-      participantsLink.textContent = "参加者管理";
-      actions.appendChild(participantsLink);
 
       const editBtn = document.createElement("button");
       editBtn.type = "button";
@@ -1419,87 +1414,6 @@ export class EventAdminApp {
     } else {
       document.title = "イベントコントロールセンター";
     }
-  }
-
-  buildEventHubUrl(event) {
-    if (typeof window === "undefined") return "event-hub.html";
-    const url = new URL("event-hub.html", window.location.href);
-    if (event?.id) {
-      url.searchParams.set("eventId", event.id);
-    }
-    if (event?.name) {
-      url.searchParams.set("eventName", event.name);
-    }
-    return url.toString();
-  }
-
-  buildParticipantAdminUrl(event) {
-    if (typeof window === "undefined") return "question-admin.html";
-    const url = new URL("question-admin.html", window.location.href);
-    if (event?.id) {
-      url.searchParams.set("eventId", event.id);
-      url.searchParams.set("focus", "participants");
-    }
-    if (event?.name) {
-      url.searchParams.set("eventName", event.name);
-    }
-    return url.toString();
-  }
-
-  buildScheduleHubUrl(schedule) {
-    if (typeof window === "undefined") return "schedule-hub.html";
-    const url = new URL("schedule-hub.html", window.location.href);
-    const event = this.getSelectedEvent();
-    const eventId = event?.id || this.selectedEventId;
-    if (eventId) url.searchParams.set("eventId", eventId);
-    if (schedule?.id) url.searchParams.set("scheduleId", schedule.id);
-    const scheduleKey = eventId && schedule?.id ? `${eventId}::${schedule.id}` : "";
-    if (scheduleKey) url.searchParams.set("scheduleKey", scheduleKey);
-    const eventName = event?.name || "";
-    if (eventName) url.searchParams.set("eventName", eventName);
-    if (schedule?.label) url.searchParams.set("scheduleLabel", schedule.label);
-    if (schedule?.startAt) url.searchParams.set("startAt", schedule.startAt);
-    if (schedule?.endAt) url.searchParams.set("endAt", schedule.endAt);
-    url.searchParams.set("source", "events");
-    return url.toString();
-  }
-
-  buildParticipantAdminUrlForSchedule(schedule) {
-    if (typeof window === "undefined") return "question-admin.html";
-    const event = this.getSelectedEvent();
-    const url = new URL("question-admin.html", window.location.href);
-    if (event?.id) {
-      url.searchParams.set("eventId", event.id);
-      url.searchParams.set("focus", "participants");
-    }
-    if (schedule?.id) {
-      url.searchParams.set("scheduleId", schedule.id);
-    }
-    if (event?.name) {
-      url.searchParams.set("eventName", event.name);
-    }
-    if (schedule?.label) {
-      url.searchParams.set("scheduleLabel", schedule.label);
-    }
-    if (schedule?.startAt) url.searchParams.set("startAt", schedule.startAt);
-    if (schedule?.endAt) url.searchParams.set("endAt", schedule.endAt);
-    return url.toString();
-  }
-
-  buildOperatorPanelUrl(schedule) {
-    if (typeof window === "undefined") return "operator.html";
-    const event = this.getSelectedEvent();
-    const url = new URL("operator.html", window.location.href);
-    if (event?.id) url.searchParams.set("eventId", event.id);
-    if (schedule?.id) url.searchParams.set("scheduleId", schedule.id);
-    if (event?.name) url.searchParams.set("eventName", event.name);
-    if (schedule?.label) url.searchParams.set("scheduleLabel", schedule.label);
-    if (schedule?.startAt) url.searchParams.set("startAt", schedule.startAt);
-    if (schedule?.endAt) url.searchParams.set("endAt", schedule.endAt);
-    const scheduleKey = event?.id && schedule?.id ? `${event.id}::${schedule.id}` : "";
-    if (scheduleKey) url.searchParams.set("scheduleKey", scheduleKey);
-    url.searchParams.set("source", "events");
-    return url.toString();
   }
 
   openEventDialog({ mode = "create", event = null } = {}) {

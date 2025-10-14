@@ -37,7 +37,6 @@ export function queryDom() {
     scheduleEventName: resolve("schedule-event-name"),
     scheduleLabel: resolve("schedule-label"),
     scheduleTimeRange: resolve("schedule-time-range"),
-    scheduleHubLink: resolve("operator-open-schedule-hub"),
     dictionaryTableBody: resolveQuery("#dictionary-table tbody"),
     addTermForm: resolve("add-term-form"),
     newTermInput: resolve("new-term"),

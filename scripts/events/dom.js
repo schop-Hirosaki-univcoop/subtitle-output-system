@@ -19,6 +19,7 @@ export function queryDom() {
     refreshButton: document.getElementById("flow-events-refresh-button"),
     nextButton: document.getElementById("flow-events-next-button"),
     metaNote: document.getElementById("events-meta"),
+    logoutButton: document.getElementById("flow-logout-button"),
     eventSummaryPane: document.getElementById("flow-event-summary-pane"),
     eventSummaryName: document.getElementById("flow-event-summary-name"),
     eventSummarySchedules: document.getElementById("flow-event-summary-schedules"),

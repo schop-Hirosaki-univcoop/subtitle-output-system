@@ -1230,7 +1230,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 .dialog-calendar-weekdays{
   display:grid;
-  grid-template-columns:repeat(7, minmax(0, 1fr));
+  grid-template-columns:repeat(7, minmax(2.5rem, 1fr));
   gap:.35rem;
   font-size:.78rem;
   color:var(--muted);
@@ -1239,7 +1239,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 .dialog-calendar-grid{
   display:grid;
-  grid-template-columns:repeat(7, minmax(0, 1fr));
+  grid-template-columns:repeat(7, minmax(2.5rem, 1fr));
   gap:.35rem;
 }
 
@@ -1316,10 +1316,8 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   }
 }
 
-/* ===== Schedule Hub ===== */
-.schedule-hub-page .hub-body,
-.events-page .hub-body,
-.event-hub-page .hub-body{
+/* ===== Hub Styles ===== */
+.events-page .hub-body{
   display:flex;
   flex-direction:column;
   gap:clamp(1rem, 2.4vw, 1.5rem);
@@ -1552,7 +1550,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 .flow-progress{
   display:flex;
-  gap:.4rem;
+  gap:.3rem;
   align-items:center;
   justify-content:flex-start;
   flex-wrap:wrap;
@@ -1561,8 +1559,8 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 .flow-progress__item{
   display:flex;
   align-items:center;
-  gap:.4rem;
-  padding:.25rem .6rem;
+  gap:.35rem;
+  padding:.18rem .5rem;
   border-radius:999px;
   background:rgba(15,26,43,.6);
   color:var(--muted);
@@ -1583,21 +1581,22 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   border-color:rgba(54,198,149,.6);
 }
 
+
 .flow-progress__step{
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  width:1.55rem;
-  height:1.55rem;
+  width:1.35rem;
+  height:1.35rem;
   border-radius:50%;
   background:rgba(255,255,255,.08);
   font-weight:600;
-  font-size:.85rem;
+  font-size:.8rem;
 }
 
 .flow-progress__label{
   font-weight:500;
-  font-size:.9rem;
+  font-size:.85rem;
 }
 
 .flow-stage__title{
@@ -1652,7 +1651,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 .flow-card--tabs{ grid-area:tabs; }
 
 #events-main[data-stage="events"] .flow-grid{
-  grid-template-columns:minmax(0,1fr);
+  grid-template-columns:minmax(72vw,1fr);
   grid-template-areas:
     "events";
 }
@@ -1663,7 +1662,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 #events-main[data-stage="events"] .flow-card--schedules .flow-pane--summary{ display:none; }
 
 #events-main[data-stage="schedules"] .flow-grid{
-  grid-template-columns:clamp(24vw, 28vw, 32vw) minmax(0,1fr);
+  grid-template-columns:clamp(24vw, 28vw, 32vw) minmax(48vw, 1fr);
   grid-template-areas:
     "events schedules";
 }
@@ -1690,7 +1689,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 
 #events-main[data-stage="tabs"] .flow-grid{
-  grid-template-columns:clamp(24vw, 28vw, 32vw) minmax(0,1fr);
+  grid-template-columns:clamp(24vw, 28vw, 32vw) minmax(52vw, 1fr);
   grid-template-rows:auto auto;
   grid-template-areas:
     "events tabs"
@@ -2147,14 +2146,14 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 @media (max-width: 1080px){
   #events-main[data-stage="schedules"] .flow-grid{
-    grid-template-columns:minmax(0,1fr);
+    grid-template-columns:minmax(70vw,1fr);
     grid-template-areas:
       "events"
       "schedules";
   }
 
   #events-main[data-stage="tabs"] .flow-grid{
-    grid-template-columns:minmax(0,1fr);
+    grid-template-columns:minmax(72vw,1fr);
     grid-template-rows:auto auto auto;
     grid-template-areas:
       "events"
@@ -2170,11 +2169,11 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 @media (max-width: 640px){
   .flow-progress{
-    gap:.5rem;
+    gap:.25rem;
   }
 
   .flow-progress__item{
-    padding:.3rem .6rem;
+    padding:.16rem .45rem;
   }
 
   .flow-stage__title{
