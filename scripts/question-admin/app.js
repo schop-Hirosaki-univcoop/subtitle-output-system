@@ -1112,10 +1112,16 @@ function syncTemplateButtons() {
 
 function updateParticipantContext(options = {}) {
   const { preserveStatus = false } = options;
-  const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
-  const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === state.selectedScheduleId);
+  const eventId = state.selectedEventId;
+  const scheduleId = state.selectedScheduleId;
+  const selectedEvent = state.events.find(evt => evt.id === eventId);
+  const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === scheduleId);
+  const overrideKey = eventId && scheduleId ? `${eventId}::${scheduleId}` : "";
+  const override = overrideKey && state.scheduleContextOverrides instanceof Map
+    ? state.scheduleContextOverrides.get(overrideKey)
+    : null;
 
-  if (!selectedEvent || !selectedSchedule) {
+  if (!eventId || !scheduleId || (!selectedEvent && !override)) {
     if (dom.participantContext) {
       dom.participantContext.textContent = "日程を選択すると、現在登録されている参加者が表示されます。";
     }
@@ -1144,10 +1150,24 @@ function updateParticipantContext(options = {}) {
   if (dom.csvInput) dom.csvInput.disabled = false;
   if (dom.teamCsvInput) dom.teamCsvInput.disabled = false;
   if (dom.participantContext) {
-    const scheduleName = selectedSchedule.label || selectedSchedule.id;
-    const scheduleRange = describeScheduleRange(selectedSchedule);
+    const scheduleLabel = selectedSchedule?.label || override?.scheduleLabel || scheduleId || "";
+    const scheduleRange = selectedSchedule
+      ? describeScheduleRange(selectedSchedule)
+      : override
+        ? describeScheduleRange({
+          id: scheduleId,
+          label: scheduleLabel,
+          startAt: override.startAt || "",
+          endAt: override.endAt || "",
+          date: override.date || (override.startAt ? String(override.startAt).slice(0, 10) : "")
+        })
+        : "";
+    if (overrideKey && override && selectedSchedule) {
+      state.scheduleContextOverrides.delete(overrideKey);
+    }
     const rangeSuffix = scheduleRange ? `（${scheduleRange}）` : "";
-    dom.participantContext.textContent = `イベント「${selectedEvent.name}」/ 日程「${scheduleName}」${rangeSuffix}の参加者を管理しています。上部のタブからテロップ操作パネルに切り替え可能です。専用リンクは各行のボタンまたはURLから取得できます。`;
+    const eventName = selectedEvent?.name || override?.eventName || eventId;
+    dom.participantContext.textContent = `イベント「${eventName}」/ 日程「${scheduleLabel}」${rangeSuffix}の参加者を管理しています。上部のタブからテロップ操作パネルに切り替え可能です。専用リンクは各行のボタンまたはURLから取得できます。`;
   }
   if (!preserveStatus) {
     setUploadStatus("ファイルを選択して参加者リストを更新してください。");
@@ -2263,6 +2283,7 @@ function resetState() {
   state.duplicateGroups = new Map();
   state.eventParticipantCache = new Map();
   state.teamAssignments = new Map();
+  state.scheduleContextOverrides = new Map();
   state.editingParticipantId = null;
   state.editingRowKey = null;
   state.initialSelection = null;
@@ -2929,12 +2950,17 @@ if (typeof window !== "undefined") {
         if (!trimmedEventId) {
           return;
         }
+        if (!(state.scheduleContextOverrides instanceof Map)) {
+          state.scheduleContextOverrides = new Map();
+        }
         if (!state.user) {
           state.initialSelection = {
             eventId: trimmedEventId,
             scheduleId: normalizeKey(scheduleId) || null,
             scheduleLabel: scheduleLabel || null,
-            eventLabel: eventName || null
+            eventLabel: eventName || null,
+            startAt: startAt || null,
+            endAt: endAt || null
           };
           state.initialSelectionApplied = false;
           return;
@@ -2958,6 +2984,18 @@ if (typeof window !== "undefined") {
             if (scheduleLabel) schedule.label = scheduleLabel;
             if (startAt) schedule.startAt = startAt;
             if (endAt) schedule.endAt = endAt;
+            if (state.scheduleContextOverrides instanceof Map) {
+              state.scheduleContextOverrides.delete(`${trimmedEventId}::${trimmedScheduleId}`);
+            }
+          } else if (state.scheduleContextOverrides instanceof Map) {
+            state.scheduleContextOverrides.set(`${trimmedEventId}::${trimmedScheduleId}`, {
+              eventId: trimmedEventId,
+              eventName: eventName || selectedEvent?.name || trimmedEventId,
+              scheduleId: trimmedScheduleId,
+              scheduleLabel: scheduleLabel || trimmedScheduleId,
+              startAt: startAt || "",
+              endAt: endAt || ""
+            });
           }
           selectSchedule(trimmedScheduleId);
         } else {
