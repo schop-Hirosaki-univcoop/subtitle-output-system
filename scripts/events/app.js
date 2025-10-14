@@ -109,6 +109,7 @@ export class EventAdminApp {
       operator: { promise: null, ready: false }
     };
     this.lastToolContextSignature = "";
+    this.lastToolContextApplied = false;
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
     this.handleTablistKeydown = this.handleTablistKeydown.bind(this);
   }
@@ -132,6 +133,7 @@ export class EventAdminApp {
     this.stageHistory = new Set(["events"]);
     this.activeTab = "participants";
     this.lastToolContextSignature = "";
+    this.lastToolContextApplied = false;
     this.resetToolFrames();
     if (this.dom.scheduleLoading) {
       this.dom.scheduleLoading.hidden = true;
@@ -516,6 +518,7 @@ export class EventAdminApp {
 
     this.events = normalized;
     this.lastToolContextSignature = "";
+    this.lastToolContextApplied = false;
     this.updateMetaNote();
     this.updateDocumentTitle();
     this.ensureSelectedEvent(previousEventId);
@@ -652,6 +655,7 @@ export class EventAdminApp {
     this.selectedEventId = normalized;
     if (previous !== normalized) {
       this.lastToolContextSignature = "";
+      this.lastToolContextApplied = false;
     }
     this.renderEvents();
     this.updateScheduleStateFromSelection();
@@ -691,6 +695,7 @@ export class EventAdminApp {
     this.selectedScheduleId = normalized;
     if (previous !== normalized) {
       this.lastToolContextSignature = "";
+      this.lastToolContextApplied = false;
     }
     this.renderScheduleList();
     this.updateScheduleSummary();
@@ -976,6 +981,7 @@ export class EventAdminApp {
       operator: { promise: null, ready: false }
     };
     this.lastToolContextSignature = "";
+    this.lastToolContextApplied = false;
     if (typeof window !== "undefined") {
       try {
         window.questionAdminEmbed?.reset?.();
@@ -996,6 +1002,7 @@ export class EventAdminApp {
     const event = this.getSelectedEvent();
     if (!schedule || !event) {
       this.lastToolContextSignature = "";
+      this.lastToolContextApplied = false;
       return;
     }
     const contextKey = [
@@ -1006,10 +1013,10 @@ export class EventAdminApp {
       schedule.startAt || "",
       schedule.endAt || ""
     ].join("::");
-    if (this.lastToolContextSignature === contextKey) {
+    if (this.lastToolContextSignature === contextKey && this.lastToolContextApplied) {
       return;
     }
-    this.lastToolContextSignature = contextKey;
+    this.lastToolContextApplied = false;
     const context = {
       eventId: event.id,
       eventName: event.name || event.id,
@@ -1018,6 +1025,7 @@ export class EventAdminApp {
       startAt: schedule.startAt || "",
       endAt: schedule.endAt || ""
     };
+    let participantsSynced = false;
     try {
       await this.loadEmbeddedTool("participants");
       if (window.questionAdminEmbed?.waitUntilReady) {
@@ -1026,6 +1034,7 @@ export class EventAdminApp {
       if (window.questionAdminEmbed?.setSelection) {
         await window.questionAdminEmbed.setSelection(context);
       }
+      participantsSynced = true;
     } catch (error) {
       logError("Failed to sync participant tool", error);
     }
@@ -1039,6 +1048,10 @@ export class EventAdminApp {
       }
     } catch (error) {
       logError("Failed to sync operator tool", error);
+    }
+    if (participantsSynced) {
+      this.lastToolContextSignature = contextKey;
+      this.lastToolContextApplied = true;
     }
   }
 
