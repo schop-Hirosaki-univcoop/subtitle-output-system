@@ -132,6 +132,7 @@ export class EventAdminApp {
     this.updateScheduleSummary();
     this.updateEventSummary();
     this.updateToolSummary();
+    this.resetToolFrames(true);
     this.updateStageUi();
     this.updateFlowButtons();
     this.updateSelectionNotes();
@@ -1107,6 +1108,7 @@ export class EventAdminApp {
     this.setStage(stage);
     if (stage === "tabs") {
       this.updateToolSummary();
+      this.prepareToolFrames();
       this.switchTab(this.activeTab);
       this.syncEmbeddedTools().catch((error) => console.error("Failed to sync tools", error));
     }
