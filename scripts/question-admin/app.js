@@ -41,12 +41,16 @@ import {
 
 let redirectingToIndex = false;
 
-const QA_EMBED_PREFIX =
-  typeof document !== "undefined" && document.documentElement?.dataset?.qaEmbedPrefix
-    ? document.documentElement.dataset.qaEmbedPrefix
-    : "";
+function getEmbedPrefix() {
+  if (typeof document === "undefined") {
+    return "";
+  }
+  return document.documentElement?.dataset?.qaEmbedPrefix || "";
+}
 
-const IS_EMBEDDED = Boolean(QA_EMBED_PREFIX);
+function isEmbeddedMode() {
+  return Boolean(getEmbedPrefix());
+}
 
 let embedReadyDeferred = null;
 
@@ -73,8 +77,9 @@ function resolveEmbedReady() {
 }
 
 function getElementById(id) {
-  if (QA_EMBED_PREFIX) {
-    const prefixed = document.getElementById(`${QA_EMBED_PREFIX}${id}`);
+  const prefix = getEmbedPrefix();
+  if (prefix) {
+    const prefixed = document.getElementById(`${prefix}${id}`);
     if (prefixed) {
       return prefixed;
     }
@@ -2151,7 +2156,8 @@ async function handleClearParticipants() {
   }
 }
 function setAuthUi(signedIn) {
-  const shouldShowLogin = !signedIn && !IS_EMBEDDED;
+  const embedded = isEmbeddedMode();
+  const shouldShowLogin = !signedIn && !embedded;
   toggleSectionVisibility(dom.loginCard, shouldShowLogin);
   toggleSectionVisibility(dom.adminMain, signedIn);
 
@@ -2849,7 +2855,7 @@ function initAuthWatcher() {
   onAuthStateChanged(auth, async user => {
     state.user = user;
     if (!user) {
-      if (IS_EMBEDDED) {
+      if (isEmbeddedMode()) {
         showLoader("サインイン情報を確認しています…");
       } else {
         hideLoader();
@@ -2860,7 +2866,7 @@ function initAuthWatcher() {
       }
       setAuthUi(false);
       resetState();
-      if (!redirectingToIndex && typeof window !== "undefined" && !IS_EMBEDDED) {
+      if (!redirectingToIndex && typeof window !== "undefined" && !isEmbeddedMode()) {
         redirectingToIndex = true;
         window.location.replace("index.html");
       }

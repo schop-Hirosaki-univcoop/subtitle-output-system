@@ -1,6 +1,12 @@
-const prefix = document.documentElement?.dataset?.operatorEmbedPrefix || "";
+function getPrefix() {
+  if (typeof document === "undefined") {
+    return "";
+  }
+  return document.documentElement?.dataset?.operatorEmbedPrefix || "";
+}
 
 function resolve(id) {
+  const prefix = getPrefix();
   if (prefix) {
     const prefixed = document.getElementById(`${prefix}${id}`);
     if (prefixed) {
@@ -11,6 +17,7 @@ function resolve(id) {
 }
 
 function resolveQuery(selector) {
+  const prefix = getPrefix();
   if (prefix) {
     const prefixedSelector = selector.replace(/#([a-zA-Z0-9_-]+)/g, (_, id) => `#${prefix}${id}`);
     const prefixedResult = document.querySelector(prefixedSelector);

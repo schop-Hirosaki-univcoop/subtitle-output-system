@@ -1,6 +1,12 @@
-const prefix = document.documentElement?.dataset?.qaEmbedPrefix || "";
+function getPrefix() {
+  if (typeof document === "undefined") {
+    return "";
+  }
+  return document.documentElement?.dataset?.qaEmbedPrefix || "";
+}
 
 function resolve(id) {
+  const prefix = getPrefix();
   if (prefix) {
     const prefixed = document.getElementById(`${prefix}${id}`);
     if (prefixed) {
