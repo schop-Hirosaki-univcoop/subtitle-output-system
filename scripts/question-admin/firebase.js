@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   initializeAuth,
+  getAuth,
   browserSessionPersistence,
   browserPopupRedirectResolver,
   GoogleAuthProvider,
@@ -16,9 +17,8 @@ const apps = getApps();
 const app = apps.length ? getApp() : initializeApp(firebaseConfig);
 const database = getDatabase(app);
 
-const authProvider = app._getProvider("auth");
-const auth = authProvider.isInitialized()
-  ? authProvider.getImmediate()
+const auth = apps.length
+  ? getAuth(app)
   : initializeAuth(app, {
       persistence: browserSessionPersistence,
       popupRedirectResolver: browserPopupRedirectResolver

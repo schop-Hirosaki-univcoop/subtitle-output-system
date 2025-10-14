@@ -10,6 +10,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   initializeAuth,
+  getAuth,
   browserSessionPersistence,
   browserPopupRedirectResolver,
   GoogleAuthProvider,
@@ -24,9 +25,8 @@ const apps = getApps();
 export const app = apps.length ? getApp() : initializeApp(firebaseConfig);
 export const database = getDatabase(app);
 
-const authProvider = app._getProvider("auth");
-export const auth = authProvider.isInitialized()
-  ? authProvider.getImmediate()
+export const auth = apps.length
+  ? getAuth(app)
   : initializeAuth(app, {
       persistence: browserSessionPersistence,
       popupRedirectResolver: browserPopupRedirectResolver
