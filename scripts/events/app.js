@@ -132,6 +132,38 @@ function collectParticipantTokens(branch) {
   return tokens;
 }
 
+const PARTICIPANT_SYNC_TIMEOUT_MS = 6000;
+const PARTICIPANT_SYNC_POLL_INTERVAL_MS = 150;
+
+const wait = (ms = 0) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+async function waitForParticipantSelectionAck(expectedEventId, expectedScheduleId) {
+  if (
+    typeof window === "undefined" ||
+    !window.questionAdminEmbed ||
+    typeof window.questionAdminEmbed.getState !== "function"
+  ) {
+    return true;
+  }
+
+  const timeoutAt = Date.now() + PARTICIPANT_SYNC_TIMEOUT_MS;
+  while (Date.now() < timeoutAt) {
+    try {
+      const state = window.questionAdminEmbed.getState();
+      if (state && state.eventId === expectedEventId && state.scheduleId === expectedScheduleId) {
+        return true;
+      }
+    } catch (error) {
+      break;
+    }
+    await wait(PARTICIPANT_SYNC_POLL_INTERVAL_MS);
+  }
+  return false;
+}
+
 export class EventAdminApp {
   constructor() {
     this.dom = queryDom();
@@ -162,6 +194,10 @@ export class EventAdminApp {
     this.pendingToolSync = false;
     this.toolSyncPromise = null;
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
+    this.eventCountNote = "";
+    this.stageNote = "";
+    this.lastParticipantsErrorMessage = "";
+    this.applyMetaNote();
   }
 
   init() {
@@ -176,11 +212,11 @@ export class EventAdminApp {
     this.updateFlowButtons();
     this.updateEventSummary();
     this.updateScheduleSummary();
-    this.updateParticipantsContextCard();
     this.updateStageHeader();
     this.updatePanelVisibility();
     this.updatePanelNavigation();
     this.updateSelectionNotes();
+    this.applyMetaNote();
     this.observeAuthState();
   }
 
@@ -199,6 +235,10 @@ export class EventAdminApp {
     this.eventsLoadingMessage = "";
     this.scheduleLoadingDepth = 0;
     this.scheduleLoadingMessage = "";
+    this.eventCountNote = "";
+    this.stageNote = "";
+    this.lastParticipantsErrorMessage = "";
+    this.applyMetaNote();
     this.applyEventsLoadingState();
     this.applyScheduleLoadingState();
     this.resetToolFrames();
@@ -206,7 +246,6 @@ export class EventAdminApp {
     this.renderScheduleList();
     this.updateScheduleSummary();
     this.updateEventSummary();
-    this.updateParticipantsContextCard();
     this.updateStageHeader();
     this.updateStageUi();
     this.updateFlowButtons();
@@ -912,7 +951,7 @@ export class EventAdminApp {
         }
       }
     }
-    this.updateParticipantsContextCard();
+    this.updateStageHeader();
     if (!hasSchedule) {
       return;
     }
@@ -930,50 +969,6 @@ export class EventAdminApp {
       } else {
         this.dom.scheduleSummaryRangeRow.hidden = true;
         this.dom.scheduleSummaryRange.textContent = "";
-      }
-    }
-    this.updateStageHeader();
-  }
-
-  updateParticipantsContextCard() {
-    const card = this.dom.participantsContextCard;
-    if (!card) {
-      return;
-    }
-    const event = this.getSelectedEvent();
-    const schedule = this.getSelectedSchedule();
-    if (!event || !schedule) {
-      card.hidden = true;
-      if (this.dom.participantsContextEvent) {
-        this.dom.participantsContextEvent.textContent = "—";
-      }
-      if (this.dom.participantsContextSchedule) {
-        this.dom.participantsContextSchedule.textContent = "—";
-      }
-      if (this.dom.participantsContextRangeRow) {
-        this.dom.participantsContextRangeRow.hidden = true;
-      }
-      if (this.dom.participantsContextRange) {
-        this.dom.participantsContextRange.textContent = "";
-      }
-      return;
-    }
-
-    card.hidden = false;
-    if (this.dom.participantsContextEvent) {
-      this.dom.participantsContextEvent.textContent = event.name || event.id;
-    }
-    if (this.dom.participantsContextSchedule) {
-      this.dom.participantsContextSchedule.textContent = schedule.label || schedule.id;
-    }
-    if (this.dom.participantsContextRangeRow && this.dom.participantsContextRange) {
-      const range = formatScheduleRange(schedule.startAt, schedule.endAt);
-      if (range) {
-        this.dom.participantsContextRangeRow.hidden = false;
-        this.dom.participantsContextRange.textContent = range;
-      } else {
-        this.dom.participantsContextRangeRow.hidden = true;
-        this.dom.participantsContextRange.textContent = "";
       }
     }
   }
@@ -1130,6 +1125,7 @@ export class EventAdminApp {
         endAt: schedule.endAt || ""
       };
       let participantsSynced = false;
+      let participantsError = null;
       try {
         await this.loadEmbeddedTool("participants");
         if (window.questionAdminEmbed?.waitUntilReady) {
@@ -1137,9 +1133,14 @@ export class EventAdminApp {
         }
         if (window.questionAdminEmbed?.setSelection) {
           await window.questionAdminEmbed.setSelection(context);
+          const acknowledged = await waitForParticipantSelectionAck(context.eventId, context.scheduleId);
+          if (!acknowledged) {
+            throw new Error("参加者ツールに選択内容が反映されませんでした。");
+          }
         }
         participantsSynced = true;
       } catch (error) {
+        participantsError = error instanceof Error ? error : new Error(String(error ?? ""));
         logError("Failed to sync participant tool", error);
       }
       try {
@@ -1153,16 +1154,30 @@ export class EventAdminApp {
       } catch (error) {
         logError("Failed to sync operator tool", error);
       }
+      const overlay = typeof document !== "undefined" ? document.getElementById("qa-loading-overlay") : null;
+      if (overlay) {
+        overlay.hidden = true;
+      }
       if (participantsSynced) {
         this.lastToolContextSignature = contextKey;
         this.lastToolContextApplied = true;
         this.pendingToolSync = false;
-        const overlay = typeof document !== "undefined" ? document.getElementById("qa-loading-overlay") : null;
-        if (overlay) {
-          overlay.hidden = true;
+        if (this.lastParticipantsErrorMessage && this.dom.alert && !this.dom.alert.hidden) {
+          const currentText = String(this.dom.alert.textContent || "").trim();
+          if (currentText === this.lastParticipantsErrorMessage.trim()) {
+            this.clearAlert();
+          }
         }
+        this.lastParticipantsErrorMessage = "";
       } else {
         this.pendingToolSync = true;
+        if (participantsError && this.activePanel === "participants") {
+          const message = participantsError.message
+            ? `参加者リストの初期化に失敗しました: ${participantsError.message}`
+            : "参加者リストの初期化に失敗しました。時間をおいて再試行してください。";
+          this.lastParticipantsErrorMessage = message;
+          this.showAlert(message);
+        }
       }
     })();
 
@@ -1202,7 +1217,35 @@ export class EventAdminApp {
     });
   }
 
-  updateStageHeader() {}
+  updateStageHeader() {
+    const activePanel = PANEL_CONFIG[this.activePanel] ? this.activePanel : "events";
+    const panelConfig = PANEL_CONFIG[activePanel] || PANEL_CONFIG.events;
+    const stageInfo = PANEL_STAGE_INFO[activePanel] || STAGE_INFO[panelConfig.stage] || null;
+
+    const title = stageInfo?.title ? String(stageInfo.title).trim() : "";
+    const description = stageInfo?.description ? String(stageInfo.description).trim() : "";
+    let baseText = "";
+    if (title && description) {
+      baseText = `${title} — ${description}`;
+    } else if (description) {
+      baseText = description;
+    } else if (title) {
+      baseText = title;
+    }
+
+    const needsEvent = Boolean(panelConfig.requireEvent || panelConfig.requireSchedule);
+    const needsSchedule = Boolean(panelConfig.requireSchedule);
+    const event = needsEvent ? this.getSelectedEvent() : null;
+    const schedule = needsSchedule ? this.getSelectedSchedule() : null;
+
+    if (needsEvent || needsSchedule) {
+      const prefix = baseText || title || "選択対象";
+      baseText = buildContextDescription(prefix, event, needsSchedule ? schedule : null);
+    }
+
+    this.stageNote = (baseText || "").trim();
+    this.applyMetaNote();
+  }
 
   setModuleAccessibility(module, isActive) {
     if (!module) return;
@@ -1748,16 +1791,28 @@ export class EventAdminApp {
     }
   }
 
-  updateMetaNote() {
-    if (!this.dom.metaNote) return;
-    const count = this.events.length;
-    if (count > 0) {
-      this.dom.metaNote.hidden = false;
-      this.dom.metaNote.textContent = `登録イベント数: ${count} 件`;
-    } else {
+  applyMetaNote() {
+    if (!this.dom.metaNote) {
+      return;
+    }
+    const parts = [this.eventCountNote, this.stageNote].filter(Boolean);
+    if (!parts.length) {
       this.dom.metaNote.hidden = true;
       this.dom.metaNote.textContent = "";
+      return;
     }
+    this.dom.metaNote.hidden = false;
+    this.dom.metaNote.textContent = parts.join(" — ");
+  }
+
+  updateMetaNote() {
+    const count = this.events.length;
+    if (count > 0) {
+      this.eventCountNote = `登録イベント数: ${count}件`;
+    } else {
+      this.eventCountNote = "";
+    }
+    this.applyMetaNote();
   }
 
   updateUserLabel() {
