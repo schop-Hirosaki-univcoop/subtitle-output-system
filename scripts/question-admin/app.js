@@ -1269,7 +1269,14 @@ async function loadEvents({ preserveSelection = true } = {}) {
 
   let selectionNotice = null;
   if (!state.initialSelectionApplied && state.initialSelection?.eventId) {
-    const { eventId, scheduleId, scheduleLabel, eventLabel } = state.initialSelection;
+    const {
+      eventId,
+      scheduleId,
+      scheduleLabel,
+      eventLabel,
+      startAt: initialStartAt = null,
+      endAt: initialEndAt = null
+    } = state.initialSelection;
     const targetEvent = state.events.find(evt => evt.id === eventId) || null;
     if (targetEvent) {
       state.selectedEventId = eventId;
@@ -1277,10 +1284,28 @@ async function loadEvents({ preserveSelection = true } = {}) {
         const targetSchedule = targetEvent.schedules?.find(s => s.id === scheduleId) || null;
         if (targetSchedule) {
           state.selectedScheduleId = scheduleId;
+          if (state.scheduleContextOverrides instanceof Map) {
+            state.scheduleContextOverrides.delete(`${eventId}::${scheduleId}`);
+          }
         } else {
-          state.selectedScheduleId = null;
-          const label = scheduleLabel || scheduleId;
-          selectionNotice = `指定された日程「${label}」が見つかりません。`;
+          const overrideKey = `${eventId}::${scheduleId}`;
+          if (state.scheduleContextOverrides instanceof Map) {
+            const existingOverride = state.scheduleContextOverrides.get(overrideKey) || null;
+            const override = existingOverride || {
+              eventId,
+              eventName: eventLabel || targetEvent.name || eventId,
+              scheduleId,
+              scheduleLabel: scheduleLabel || scheduleId,
+              startAt: initialStartAt || "",
+              endAt: initialEndAt || ""
+            };
+            state.scheduleContextOverrides.set(overrideKey, override);
+            state.selectedScheduleId = scheduleId;
+          } else {
+            state.selectedScheduleId = null;
+            const label = scheduleLabel || scheduleId;
+            selectionNotice = `指定された日程「${label}」が見つかりません。`;
+          }
         }
       } else {
         state.selectedScheduleId = null;
@@ -1296,8 +1321,17 @@ async function loadEvents({ preserveSelection = true } = {}) {
   } else if (previousEventId && state.events.some(evt => evt.id === previousEventId)) {
     state.selectedEventId = previousEventId;
     const schedules = state.events.find(evt => evt.id === previousEventId)?.schedules || [];
-    if (previousScheduleId && schedules.some(s => s.id === previousScheduleId)) {
+    const overrideKey = previousScheduleId ? `${previousEventId}::${previousScheduleId}` : "";
+    const hasOverride = Boolean(
+      previousScheduleId &&
+      state.scheduleContextOverrides instanceof Map &&
+      state.scheduleContextOverrides.has(overrideKey)
+    );
+    if (previousScheduleId && (schedules.some(s => s.id === previousScheduleId) || hasOverride)) {
       state.selectedScheduleId = previousScheduleId;
+      if (hasOverride && schedules.some(s => s.id === previousScheduleId)) {
+        state.scheduleContextOverrides.delete(overrideKey);
+      }
     } else {
       state.selectedScheduleId = null;
     }
