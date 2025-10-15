@@ -18,12 +18,23 @@ export function hideLoader(app) {
 
 export function initLoaderSteps(app) {
   if (!app.dom.loaderSteps) return;
-  app.dom.loaderSteps.innerHTML = STEP_LABELS.map((label, index) => `<li data-step="${index}">${escapeHtml(label)}</li>`).join("");
+  const labels = Array.isArray(app.loaderStepLabels) ? app.loaderStepLabels : STEP_LABELS;
+  if (!labels.length) {
+    app.dom.loaderSteps.innerHTML = "";
+    return;
+  }
+  app.dom.loaderSteps.innerHTML = labels
+    .map((label, index) => `<li data-step="${index}">${escapeHtml(label)}</li>`)
+    .join("");
 }
 
 export function setLoaderStep(app, stepIndex, message) {
   updateLoader(app, message);
   if (!app.dom.loaderSteps) return;
+  const labels = Array.isArray(app.loaderStepLabels) ? app.loaderStepLabels : STEP_LABELS;
+  if (!labels.length) {
+    return;
+  }
   const items = app.dom.loaderSteps.querySelectorAll("li");
   items.forEach((item, index) => {
     item.classList.toggle("current", index === stepIndex);
@@ -32,5 +43,10 @@ export function setLoaderStep(app, stepIndex, message) {
 }
 
 export function finishLoaderSteps(app, message = "準備完了") {
-  setLoaderStep(app, STEP_LABELS.length - 1, message);
+  const labels = Array.isArray(app.loaderStepLabels) ? app.loaderStepLabels : STEP_LABELS;
+  if (!labels.length) {
+    updateLoader(app, message);
+    return;
+  }
+  setLoaderStep(app, labels.length - 1, message);
 }

@@ -2875,9 +2875,10 @@ function attachEventHandlers() {
 function initAuthWatcher() {
   onAuthStateChanged(auth, async user => {
     state.user = user;
+    const embedded = isEmbeddedMode();
     if (!user) {
-      if (isEmbeddedMode()) {
-        showLoader("サインイン情報を確認しています…");
+      if (embedded) {
+        showLoader("利用状態を確認しています…");
       } else {
         hideLoader();
         if (dom.loginButton) {
@@ -2887,7 +2888,7 @@ function initAuthWatcher() {
       }
       setAuthUi(false);
       resetState();
-      if (!redirectingToIndex && typeof window !== "undefined" && !isEmbeddedMode()) {
+      if (!redirectingToIndex && typeof window !== "undefined" && !embedded) {
         redirectingToIndex = true;
         window.location.replace("index.html");
       }
@@ -2895,15 +2896,16 @@ function initAuthWatcher() {
     }
 
     redirectingToIndex = false;
-    showLoader("権限を確認しています…");
-    initLoaderSteps(STEP_LABELS);
+    showLoader(embedded ? "利用準備を確認しています…" : "権限を確認しています…");
+    const loaderLabels = embedded ? [] : STEP_LABELS;
+    initLoaderSteps(loaderLabels);
 
     try {
-      setLoaderStep(0, "認証OK。ユーザー情報を確認中…");
+      setLoaderStep(0, embedded ? "利用状態を確認しています…" : "認証OK。ユーザー情報を確認中…");
       await verifyEnrollment(user);
-      setLoaderStep(1, "在籍チェック完了。管理者権限を確認しています…");
+      setLoaderStep(1, embedded ? "必要な設定を確認しています…" : "在籍チェック完了。管理者権限を確認しています…");
       await ensureAdminAccess();
-      setLoaderStep(2, "管理者権限を同期しました。データベースから読み込み中…");
+      setLoaderStep(2, embedded ? "参加者データを読み込んでいます…" : "管理者権限を同期しました。データベースから読み込み中…");
       await ensureTokenSnapshot(true);
       await loadEvents({ preserveSelection: false });
       await loadParticipants();
@@ -2912,7 +2914,7 @@ function initAuthWatcher() {
         state.initialSelectionNotice = null;
       }
       await drainQuestionQueue();
-      setLoaderStep(3, "初期データの取得が完了しました。仕上げ中…");
+      setLoaderStep(3, embedded ? "仕上げ処理を行っています…" : "初期データの取得が完了しました。仕上げ中…");
       setAuthUi(true);
       finishLoaderSteps("準備完了");
       requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
@@ -2933,7 +2935,7 @@ function initAuthWatcher() {
 
 function init() {
   attachEventHandlers();
-  initLoaderSteps(STEP_LABELS);
+  initLoaderSteps(isEmbeddedMode() ? [] : STEP_LABELS);
   resetState();
   parseInitialSelectionFromUrl();
   initAuthWatcher();

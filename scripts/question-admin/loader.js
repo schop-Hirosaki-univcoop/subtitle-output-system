@@ -29,7 +29,11 @@ function initLoaderSteps(labels = []) {
 }
 
 function setLoaderStep(index, message) {
-  if (!loaderState.items.length) return;
+  if (!loaderState.items.length) {
+    loaderState.currentIndex = index;
+    updateLoaderText(message);
+    return;
+  }
   loaderState.items.forEach((li, idx) => {
     li.classList.remove("current", "done");
     if (idx < index) {
@@ -47,7 +51,10 @@ function setLoaderStep(index, message) {
 }
 
 function finishLoaderSteps(message) {
-  if (!loaderState.items.length) return;
+  if (!loaderState.items.length) {
+    updateLoaderText(message || "準備完了");
+    return;
+  }
   const lastIndex = loaderState.items.length - 1;
   setLoaderStep(lastIndex, message || loaderState.items[lastIndex].textContent);
   loaderState.items.forEach(li => li.classList.add("done"));

@@ -58,12 +58,9 @@ export function queryDom() {
     operatorPanel: document.getElementById("flow-panel-operator"),
     dictionaryPanel: document.getElementById("op-dictionary-panel"),
     logsPanel: document.getElementById("op-logs-panel"),
-    toolSummaryEventFields: Array.from(document.querySelectorAll('[data-tool-summary="event"]')),
-    toolSummaryScheduleFields: Array.from(document.querySelectorAll('[data-tool-summary="schedule"]')),
-    toolSummaryTimeFields: Array.from(document.querySelectorAll('[data-tool-summary="time"]')),
-    toolSummaryTimeRows: Array.from(document.querySelectorAll('[data-tool-summary-row="time"]')),
     participantsTool: document.getElementById("participants-tool"),
     operatorTool: document.getElementById("operator-tool"),
-    panelButtons: Array.from(document.querySelectorAll("[data-panel-target]"))
+    panelButtons: Array.from(document.querySelectorAll("[data-panel-target]")),
+    navigationButtons: Array.from(document.querySelectorAll("[data-flow-nav-target]"))
   };
 }

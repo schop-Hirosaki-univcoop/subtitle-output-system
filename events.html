@@ -89,6 +89,10 @@
             <p id="flow-event-empty" class="entity-empty" hidden>まだイベントが登録されていません。まずはイベントを追加してください。</p>
           </div>
         </div>
+        <div class="flow-navigation">
+          <button class="btn btn-ghost btn-sm flow-nav-button flow-nav-button--prev" type="button" data-flow-nav-direction="prev" data-flow-nav-target="events">前へ</button>
+          <button class="btn btn-primary btn-sm flow-nav-button flow-nav-button--next" type="button" data-flow-nav-direction="next" data-flow-nav-target="schedules">次へ</button>
+        </div>
       </section>
 
       <section class="module module--primary admin-module flow-card flow-card--schedules" aria-labelledby="schedule-admin-title" data-panel="schedules">
@@ -114,17 +118,14 @@
             <p id="flow-schedule-empty" class="entity-empty" hidden>このイベントにはまだ日程が登録されていません。まずは日程を追加してください。</p>
           </div>
         </div>
+        <div class="flow-navigation">
+          <button class="btn btn-ghost btn-sm flow-nav-button flow-nav-button--prev" type="button" data-flow-nav-direction="prev" data-flow-nav-target="events">前へ</button>
+          <button class="btn btn-primary btn-sm flow-nav-button flow-nav-button--next" type="button" data-flow-nav-direction="next" data-flow-nav-target="participants">次へ</button>
+        </div>
       </section>
 
       <section id="flow-panel-participants" class="flow-tool-panel" data-panel="participants" aria-labelledby="flow-panel-participants-title" hidden>
-        <header class="flow-tool-summary" aria-live="polite">
-          <h2 id="flow-panel-participants-title" class="flow-tool-summary__title">参加者リスト</h2>
-          <dl class="tool-summary" aria-label="選択中のコンテキスト">
-            <div class="tool-summary__row"><dt>イベント</dt><dd><span data-tool-summary="event">—</span></dd></div>
-            <div class="tool-summary__row"><dt>日程</dt><dd><span data-tool-summary="schedule">—</span></dd></div>
-            <div class="tool-summary__row" data-tool-summary-row="time"><dt>時間</dt><dd><span data-tool-summary="time">—</span></dd></div>
-          </dl>
-        </header>
+        <h2 id="flow-panel-participants-title" class="visually-hidden">参加者リスト</h2>
         <div id="participants-tool" class="embedded-tool" data-tool="participants">
                 <div class="embedded-tool__surface qa-embedded" data-qa-embed>
                   <div id="qa-loading-overlay" class="loading-overlay" aria-live="polite" hidden>
@@ -280,16 +281,13 @@
                   </div>
                 </div>
               </div>
-            </section>
-            <section id="flow-panel-operator" class="flow-tool-panel" data-panel="operator" aria-labelledby="flow-panel-operator-title" hidden>
-              <header class="flow-tool-summary" aria-live="polite">
-                <h2 id="flow-panel-operator-title" class="flow-tool-summary__title">テロップ操作</h2>
-                <dl class="tool-summary" aria-label="選択中のコンテキスト">
-                  <div class="tool-summary__row"><dt>イベント</dt><dd><span data-tool-summary="event">—</span></dd></div>
-                  <div class="tool-summary__row"><dt>日程</dt><dd><span data-tool-summary="schedule">—</span></dd></div>
-                  <div class="tool-summary__row" data-tool-summary-row="time"><dt>時間</dt><dd><span data-tool-summary="time">—</span></dd></div>
-                </dl>
-              </header>
+        <div class="flow-navigation flow-navigation--panel">
+          <button class="btn btn-ghost btn-sm flow-nav-button flow-nav-button--prev" type="button" data-flow-nav-direction="prev" data-flow-nav-target="schedules">前へ</button>
+          <button class="btn btn-primary btn-sm flow-nav-button flow-nav-button--next" type="button" data-flow-nav-direction="next" data-flow-nav-target="operator">次へ</button>
+        </div>
+      </section>
+      <section id="flow-panel-operator" class="flow-tool-panel" data-panel="operator" aria-labelledby="flow-panel-operator-title" hidden>
+              <h2 id="flow-panel-operator-title" class="visually-hidden">テロップ操作</h2>
               <div id="operator-tool" class="embedded-tool" data-tool="operator">
                 <div class="embedded-tool__surface operator-embedded" data-operator-embed>
                   <div id="op-loading-overlay" class="loading-overlay" aria-live="polite" hidden>
@@ -419,17 +417,16 @@
                   </div>
                 </div>
               </div>
-            </section>
-            <section id="op-dictionary-panel" class="module module--secondary flow-tool-panel" data-panel="dictionary" aria-labelledby="op-dictionary-title" hidden>
+        <div class="flow-navigation flow-navigation--panel">
+          <button class="btn btn-ghost btn-sm flow-nav-button flow-nav-button--prev" type="button" data-flow-nav-direction="prev" data-flow-nav-target="participants">前へ</button>
+          <button class="btn btn-primary btn-sm flow-nav-button flow-nav-button--next" type="button" data-flow-nav-direction="next" data-flow-nav-target="dictionary">次へ</button>
+        </div>
+      </section>
+      <section id="op-dictionary-panel" class="module module--secondary flow-tool-panel" data-panel="dictionary" aria-labelledby="op-dictionary-title" hidden>
               <div class="module-header">
                 <div class="module-heading">
                   <h2 id="op-dictionary-title">ルビ辞書管理</h2>
                   <p class="module-description">登録語句の追加や更新が即座にディスプレイへ反映されます。</p>
-                  <dl class="tool-summary" aria-label="選択中のコンテキスト">
-                    <div class="tool-summary__row"><dt>イベント</dt><dd><span data-tool-summary="event">—</span></dd></div>
-                    <div class="tool-summary__row"><dt>日程</dt><dd><span data-tool-summary="schedule">—</span></dd></div>
-                    <div class="tool-summary__row" data-tool-summary-row="time"><dt>時間</dt><dd><span data-tool-summary="time">—</span></dd></div>
-                  </dl>
                 </div>
                 <div class="module-actions">
                   <button id="op-fetch-dictionary-button" class="btn btn-ghost" type="button">辞書を更新</button>
@@ -450,17 +447,16 @@
                   </table>
                 </div>
               </div>
-            </section>
-            <section id="op-logs-panel" class="module module--secondary flow-tool-panel" data-panel="logs" aria-labelledby="op-logs-title" hidden>
+        <div class="flow-navigation flow-navigation--panel">
+          <button class="btn btn-ghost btn-sm flow-nav-button flow-nav-button--prev" type="button" data-flow-nav-direction="prev" data-flow-nav-target="operator">前へ</button>
+          <button class="btn btn-primary btn-sm flow-nav-button flow-nav-button--next" type="button" data-flow-nav-direction="next" data-flow-nav-target="logs">次へ</button>
+        </div>
+      </section>
+      <section id="op-logs-panel" class="module module--secondary flow-tool-panel" data-panel="logs" aria-labelledby="op-logs-title" hidden>
               <div class="module-header">
                 <div class="module-heading">
                   <h2 id="op-logs-title">操作ログ</h2>
                   <p class="module-description">直近の操作履歴を確認し、異常を素早く検知できます。</p>
-                  <dl class="tool-summary" aria-label="選択中のコンテキスト">
-                    <div class="tool-summary__row"><dt>イベント</dt><dd><span data-tool-summary="event">—</span></dd></div>
-                    <div class="tool-summary__row"><dt>日程</dt><dd><span data-tool-summary="schedule">—</span></dd></div>
-                    <div class="tool-summary__row" data-tool-summary-row="time"><dt>時間</dt><dd><span data-tool-summary="time">—</span></dd></div>
-                  </dl>
                 </div>
                 <div class="module-actions">
                   <button id="op-logs-refresh-button" class="btn btn-ghost" type="button">ログを更新</button>
@@ -471,11 +467,15 @@
                   <input id="op-log-search" class="input" placeholder="検索 (user/action/details)">
                   <label class="chk"><input type="checkbox" id="op-log-autoscroll" checked> 自動スクロール</label>
                 </div>
-                <div id="op-logs-stream-view">
-                  <div id="op-log-stream" class="log-stream"></div>
-                </div>
-              </div>
-            </section>
+            <div id="op-logs-stream-view">
+              <div id="op-log-stream" class="log-stream"></div>
+            </div>
+          </div>
+          <div class="flow-navigation flow-navigation--panel">
+            <button class="btn btn-ghost btn-sm flow-nav-button flow-nav-button--prev" type="button" data-flow-nav-direction="prev" data-flow-nav-target="dictionary">前へ</button>
+            <button class="btn btn-primary btn-sm flow-nav-button flow-nav-button--next" type="button" data-flow-nav-direction="next" data-flow-nav-target="logs">次へ</button>
+          </div>
+        </section>
       </div>
     </div>
   </main>
