@@ -1489,7 +1489,10 @@ function selectEvent(eventId) {
 }
 
 function selectSchedule(scheduleId) {
-  if (state.selectedScheduleId === scheduleId) return;
+  if (state.selectedScheduleId === scheduleId) {
+    updateParticipantContext();
+    return;
+  }
   state.selectedScheduleId = scheduleId;
   const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
   const schedule = selectedEvent?.schedules?.find(s => s.id === scheduleId);
