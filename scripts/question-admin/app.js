@@ -1152,14 +1152,7 @@ function updateParticipantContext(options = {}) {
   const { preserveStatus = false } = options;
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
-  const selectedEvent = state.events.find(evt => evt.id === eventId);
-  const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === scheduleId);
-  const overrideKey = eventId && scheduleId ? `${eventId}::${scheduleId}` : "";
-  const override = overrideKey && state.scheduleContextOverrides instanceof Map
-    ? state.scheduleContextOverrides.get(overrideKey)
-    : null;
-
-  if (!eventId || !scheduleId || (!selectedEvent && !override)) {
+  if (!eventId || !scheduleId) {
     if (dom.participantContext) {
       dom.participantContext.textContent = "日程を選択すると、現在登録されている参加者が表示されます。";
     }
@@ -1185,6 +1178,13 @@ function updateParticipantContext(options = {}) {
     return;
   }
 
+  const overrideKey = `${eventId}::${scheduleId}`;
+  const selectedEvent = state.events.find(evt => evt.id === eventId);
+  const override = state.scheduleContextOverrides instanceof Map
+    ? state.scheduleContextOverrides.get(overrideKey) || null
+    : null;
+  const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === scheduleId);
+
   if (dom.csvInput) dom.csvInput.disabled = false;
   if (dom.teamCsvInput) dom.teamCsvInput.disabled = false;
   if (dom.participantContext) {
@@ -1200,7 +1200,7 @@ function updateParticipantContext(options = {}) {
           date: override.date || (override.startAt ? String(override.startAt).slice(0, 10) : "")
         })
         : "";
-    if (overrideKey && override && selectedSchedule) {
+    if (state.scheduleContextOverrides instanceof Map && override && selectedSchedule) {
       state.scheduleContextOverrides.delete(overrideKey);
     }
     const rangeSuffix = scheduleRange ? `（${scheduleRange}）` : "";
