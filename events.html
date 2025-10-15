@@ -17,28 +17,55 @@
   </telop-header>
 
   <main id="events-main" class="flow-main" data-stage="events">
-    <ol class="flow-progress" aria-label="進行ステップ">
-      <li class="flow-progress__item is-active" data-stage-indicator="events" aria-current="step">
-        <span class="flow-progress__step">1</span>
-        <span class="flow-progress__label">イベント</span>
-      </li>
-      <li class="flow-progress__item" data-stage-indicator="schedules">
-        <span class="flow-progress__step">2</span>
-        <span class="flow-progress__label">日程</span>
-      </li>
-      <li class="flow-progress__item" data-stage-indicator="tabs">
-        <span class="flow-progress__step">3</span>
-        <span class="flow-progress__label">参加者 / テロップ</span>
-      </li>
-    </ol>
-
     <section class="flow-stage" aria-live="polite">
-      <h1 id="flow-stage-title" class="flow-stage__title">イベントの管理</h1>
+      <div class="flow-stage__header">
+        <h1 id="flow-stage-title" class="flow-stage__title">イベントの管理</h1>
+        <ol class="flow-progress" aria-label="進行ステップ">
+          <li class="flow-progress__item is-active" data-stage-indicator="events" aria-current="step">
+            <span class="flow-progress__step">1</span>
+            <span class="flow-progress__label">イベント</span>
+          </li>
+          <li class="flow-progress__item" data-stage-indicator="schedules">
+            <span class="flow-progress__step">2</span>
+            <span class="flow-progress__label">日程</span>
+          </li>
+          <li class="flow-progress__item" data-stage-indicator="tabs">
+            <span class="flow-progress__step">3</span>
+            <span class="flow-progress__label">参加者 / テロップ</span>
+          </li>
+        </ol>
+      </div>
       <p id="flow-stage-description" class="flow-stage__description">イベントを追加・編集し、次のステップで日程を選択できるようにします。</p>
     </section>
 
-    <div id="flow-stage-grid" class="flow-grid">
-      <section class="module module--primary admin-module flow-card flow-card--events" aria-labelledby="events-title">
+    <div class="events-layout">
+      <aside class="events-sidebar">
+        <button id="flow-event-summary-pane" class="sidebar-card sidebar-card--action" type="button" data-panel-target="events">
+          <span class="sidebar-card__title">選択中のイベント</span>
+          <span id="flow-event-summary-name" class="sidebar-card__name">—</span>
+          <span class="sidebar-card__stats" role="presentation">
+            <span class="sidebar-card__stat"><span class="sidebar-card__stat-label">日程数</span><span id="flow-event-summary-schedules" class="sidebar-card__stat-value">—</span></span>
+            <span class="sidebar-card__stat"><span class="sidebar-card__stat-label">参加者</span><span id="flow-event-summary-participants" class="sidebar-card__stat-value">—</span></span>
+          </span>
+        </button>
+        <button id="flow-schedule-summary-pane" class="sidebar-card sidebar-card--action" type="button" data-panel-target="schedules">
+          <span class="sidebar-card__title">選択中の日程</span>
+          <span id="flow-schedule-summary" class="flow-selection-summary" hidden>
+            <span class="flow-selection-summary__item"><span class="flow-selection-summary__label">イベント</span><span id="flow-schedule-summary-event">—</span></span>
+            <span class="flow-selection-summary__item"><span class="flow-selection-summary__label">日程</span><span id="flow-schedule-summary-label">—</span></span>
+            <span class="flow-selection-summary__item" id="flow-schedule-summary-range-row" hidden><span class="flow-selection-summary__label">時間</span><span id="flow-schedule-summary-range">—</span></span>
+          </span>
+          <span id="flow-schedule-summary-empty" class="sidebar-card__placeholder">イベントと日程を選択してください。</span>
+        </button>
+        <nav class="sidebar-nav" aria-label="パネル選択">
+          <button id="flow-tab-participants" class="sidebar-nav__button" type="button" data-panel-target="participants">参加者リスト</button>
+          <button id="flow-tab-operator" class="sidebar-nav__button" type="button" data-panel-target="operator">テロップ操作</button>
+          <button id="flow-tab-dictionary" class="sidebar-nav__button" type="button" data-panel-target="dictionary">辞書</button>
+          <button id="flow-tab-logs" class="sidebar-nav__button" type="button" data-panel-target="logs">操作ログ</button>
+        </nav>
+      </aside>
+      <div id="flow-stage-panels" class="flow-panels">
+      <section class="module module--primary admin-module flow-card flow-card--events" aria-labelledby="events-title" data-panel="events">
         <div class="module-header">
           <div class="module-heading">
             <h2 id="events-title">イベントの管理</h2>
@@ -47,7 +74,6 @@
           <div class="module-actions">
             <button id="flow-add-event-button" class="btn btn-primary btn-sm" type="button" disabled>イベントを追加</button>
             <button id="flow-events-refresh-button" class="btn btn-ghost btn-sm" type="button">再読み込み</button>
-            <button id="flow-events-next-button" class="btn btn-primary btn-sm" type="button" disabled>次へ</button>
           </div>
         </div>
         <div class="module-body">
@@ -62,29 +88,16 @@
             <ul id="flow-event-list" class="entity-list" aria-live="polite"></ul>
             <p id="flow-event-empty" class="entity-empty" hidden>まだイベントが登録されていません。まずはイベントを追加してください。</p>
           </div>
-          <div class="flow-pane flow-pane--summary" id="flow-event-summary-pane">
-            <div class="flow-sidebar-controls">
-              <button id="flow-sidebar-collapse" class="btn btn-ghost btn-xs flow-sidebar-toggle" type="button">サマリーパネルを隠す</button>
-            </div>
-            <h3 class="flow-summary-title">選択中のイベント</h3>
-            <p id="flow-event-summary-name" class="flow-summary-name">—</p>
-            <dl class="flow-summary-stats">
-              <div class="flow-summary-row"><dt>日程数</dt><dd id="flow-event-summary-schedules">—</dd></div>
-              <div class="flow-summary-row"><dt>参加者</dt><dd id="flow-event-summary-participants">—</dd></div>
-            </dl>
-            <button id="flow-event-change-button" class="btn btn-ghost btn-sm" type="button">イベントを選び直す</button>
-          </div>
         </div>
       </section>
 
-      <section class="module module--primary admin-module flow-card flow-card--schedules" aria-labelledby="schedule-admin-title">
+      <section class="module module--primary admin-module flow-card flow-card--schedules" aria-labelledby="schedule-admin-title" data-panel="schedules">
         <div class="module-header">
           <div class="module-heading">
             <h2 id="schedule-admin-title">日程の管理</h2>
             <p class="module-description">選択したイベントに紐づく日程を整理し、次のツールに引き継ぐ日程を決めます。</p>
           </div>
           <div class="module-actions">
-            <button id="flow-schedule-back-button" class="btn btn-ghost btn-sm" type="button">イベントに戻る</button>
             <button id="flow-add-schedule-button" class="btn btn-primary btn-sm" type="button" disabled>日程を追加</button>
             <button id="flow-schedule-refresh-button" class="btn btn-ghost btn-sm" type="button" disabled>再読み込み</button>
           </div>
@@ -99,44 +112,20 @@
             <p id="flow-schedule-selection-note" class="flow-selection-note" hidden>次のステップに進む日程をカードから選択してください。</p>
             <ul id="flow-schedule-list" class="entity-list" aria-live="polite"></ul>
             <p id="flow-schedule-empty" class="entity-empty" hidden>このイベントにはまだ日程が登録されていません。まずは日程を追加してください。</p>
-            <div id="flow-schedule-forward-actions" class="flow-forward-actions">
-              <button id="flow-schedule-next-button" class="btn btn-primary btn-sm" type="button" disabled>参加者・テロップ管理へ</button>
-            </div>
-          </div>
-          <div class="flow-pane flow-pane--summary" id="flow-schedule-summary-pane">
-            <div id="flow-schedule-summary" class="flow-selection-summary" hidden>
-              <h3 class="flow-selection-summary__title" id="flow-schedule-summary-title">選択中の日程</h3>
-              <p class="flow-selection-summary__item"><span class="flow-selection-summary__label">イベント</span><span id="flow-schedule-summary-event">—</span></p>
-              <p class="flow-selection-summary__item"><span class="flow-selection-summary__label">日程</span><span id="flow-schedule-summary-label">—</span></p>
-              <p class="flow-selection-summary__item" id="flow-schedule-summary-range-row" hidden><span class="flow-selection-summary__label">時間</span><span id="flow-schedule-summary-range">—</span></p>
-            </div>
-            <button id="flow-schedule-change-button" class="btn btn-ghost btn-sm" type="button">日程を選び直す</button>
           </div>
         </div>
       </section>
 
-      <div id="flow-stage-resizer" class="flow-grid__handle" role="separator" aria-orientation="vertical" aria-label="サイドパネルの幅を調整" tabindex="0" hidden>
-        <span class="flow-grid__handle-grip" aria-hidden="true"></span>
-      </div>
-
-      <section id="flow-tabs" class="module module--primary flow-card flow-card--tabs" aria-labelledby="flow-tabs-title">
-        <div class="module-header">
-          <div class="module-heading">
-            <h2 id="flow-tabs-title">参加者 / テロップ管理</h2>
-            <p class="module-description">選択したイベントと日程の概要を確認し、参加者リスト管理とテロップ操作ツールをタブで切り替えて操作します。</p>
-          </div>
-          <div class="module-actions">
-            <button id="flow-tabs-back-button" class="btn btn-ghost btn-sm" type="button">日程の管理に戻る</button>
-          </div>
-        </div>
-        <div class="module-body">
-          <div id="flow-tablist" class="flow-tablist" role="tablist" aria-label="参加者・テロップツール">
-            <button id="flow-tab-participants" class="flow-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="flow-panel-participants" data-tab="participants" tabindex="0">参加者リスト管理</button>
-            <button id="flow-tab-operator" class="flow-tab" type="button" role="tab" aria-selected="false" aria-controls="flow-panel-operator" data-tab="operator" tabindex="-1">テロップ操作パネル</button>
-          </div>
-          <div class="flow-tabpanels">
-            <section id="flow-panel-participants" class="flow-tabpanel is-active" role="tabpanel" tabindex="0" aria-labelledby="flow-tab-participants">
-              <div id="participants-tool" class="embedded-tool" data-tool="participants">
+      <section id="flow-panel-participants" class="flow-tool-panel" data-panel="participants" aria-labelledby="flow-panel-participants-title" hidden>
+        <header class="flow-tool-summary" aria-live="polite">
+          <h2 id="flow-panel-participants-title" class="flow-tool-summary__title">参加者リスト</h2>
+          <dl class="tool-summary" aria-label="選択中のコンテキスト">
+            <div class="tool-summary__row"><dt>イベント</dt><dd><span data-tool-summary="event">—</span></dd></div>
+            <div class="tool-summary__row"><dt>日程</dt><dd><span data-tool-summary="schedule">—</span></dd></div>
+            <div class="tool-summary__row" data-tool-summary-row="time"><dt>時間</dt><dd><span data-tool-summary="time">—</span></dd></div>
+          </dl>
+        </header>
+        <div id="participants-tool" class="embedded-tool" data-tool="participants">
                 <div class="embedded-tool__surface qa-embedded" data-qa-embed>
                   <div id="qa-loading-overlay" class="loading-overlay" aria-live="polite" hidden>
                     <div class="loading-backdrop"></div>
@@ -292,7 +281,15 @@
                 </div>
               </div>
             </section>
-            <section id="flow-panel-operator" class="flow-tabpanel" role="tabpanel" tabindex="0" aria-labelledby="flow-tab-operator" hidden>
+            <section id="flow-panel-operator" class="flow-tool-panel" data-panel="operator" aria-labelledby="flow-panel-operator-title" hidden>
+              <header class="flow-tool-summary" aria-live="polite">
+                <h2 id="flow-panel-operator-title" class="flow-tool-summary__title">テロップ操作</h2>
+                <dl class="tool-summary" aria-label="選択中のコンテキスト">
+                  <div class="tool-summary__row"><dt>イベント</dt><dd><span data-tool-summary="event">—</span></dd></div>
+                  <div class="tool-summary__row"><dt>日程</dt><dd><span data-tool-summary="schedule">—</span></dd></div>
+                  <div class="tool-summary__row" data-tool-summary-row="time"><dt>時間</dt><dd><span data-tool-summary="time">—</span></dd></div>
+                </dl>
+              </header>
               <div id="operator-tool" class="embedded-tool" data-tool="operator">
                 <div class="embedded-tool__surface operator-embedded" data-operator-embed>
                   <div id="op-loading-overlay" class="loading-overlay" aria-live="polite" hidden>
@@ -372,52 +369,6 @@
                         </div>
                       </div>
                     </section>
-                    <aside class="module module--secondary" id="op-dictionary-panel" aria-labelledby="op-dictionary-title" hidden>
-                      <div class="module-header">
-                        <div class="module-heading">
-                          <h2 id="op-dictionary-title">ルビ辞書管理</h2>
-                          <p class="module-description">登録語句の追加や更新が即座にディスプレイへ反映されます。</p>
-                        </div>
-                        <div class="module-actions">
-                          <button id="op-fetch-dictionary-button" class="btn btn-ghost" type="button">辞書を更新</button>
-                        </div>
-                      </div>
-                      <div class="module-body dictionary-body">
-                        <form id="op-add-term-form" class="dictionary-form">
-                          <input type="text" id="op-new-term" class="input" placeholder="単語" required>
-                          <input type="text" id="op-new-ruby" class="input" placeholder="ルビ" required>
-                          <button type="submit" class="btn btn-primary">追加</button>
-                        </form>
-                        <div class="table-scroller">
-                          <table id="op-dictionary-table">
-                            <thead>
-                              <tr><th>単語</th><th>ルビ</th><th>状態</th><th>操作</th></tr>
-                            </thead>
-                            <tbody></tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </aside>
-                    <aside class="module module--secondary" id="op-logs-panel" aria-labelledby="op-logs-title" hidden>
-                      <div class="module-header">
-                        <div class="module-heading">
-                          <h2 id="op-logs-title">操作ログ</h2>
-                          <p class="module-description">直近の操作履歴を確認し、異常を素早く検知できます。</p>
-                        </div>
-                        <div class="module-actions">
-                          <button id="op-logs-refresh-button" class="btn btn-ghost" type="button">ログを更新</button>
-                        </div>
-                      </div>
-                      <div class="module-body logs-body">
-                        <div id="op-logs-toolbar" class="logs-toolbar">
-                          <input id="op-log-search" class="input" placeholder="検索 (user/action/details)">
-                          <label class="chk"><input type="checkbox" id="op-log-autoscroll" checked> 自動スクロール</label>
-                        </div>
-                        <div id="op-logs-stream-view">
-                          <div id="op-log-stream" class="log-stream"></div>
-                        </div>
-                      </div>
-                    </aside>
                   </main>
 
                   <div id="op-action-panel" class="action-panel" hidden>
@@ -469,15 +420,62 @@
                 </div>
               </div>
             </section>
-          </div>
-        </div>
-      </section>
-    </div>
-    <button id="flow-sidebar-expand" class="btn btn-ghost btn-xs flow-sidebar-toggle" type="button" hidden>サマリーパネルを表示</button>
-    <div id="flow-sidebar-overlay" class="flow-sidebar-overlay" hidden aria-hidden="true">
-      <div class="flow-sidebar-overlay__backdrop" data-sidebar-overlay-dismiss></div>
-      <div class="flow-sidebar-overlay__panel" role="dialog" aria-modal="true" aria-label="サマリーパネル">
-        <div id="flow-sidebar-overlay-content" class="flow-sidebar-overlay__content"></div>
+            <section id="op-dictionary-panel" class="module module--secondary flow-tool-panel" data-panel="dictionary" aria-labelledby="op-dictionary-title" hidden>
+              <div class="module-header">
+                <div class="module-heading">
+                  <h2 id="op-dictionary-title">ルビ辞書管理</h2>
+                  <p class="module-description">登録語句の追加や更新が即座にディスプレイへ反映されます。</p>
+                  <dl class="tool-summary" aria-label="選択中のコンテキスト">
+                    <div class="tool-summary__row"><dt>イベント</dt><dd><span data-tool-summary="event">—</span></dd></div>
+                    <div class="tool-summary__row"><dt>日程</dt><dd><span data-tool-summary="schedule">—</span></dd></div>
+                    <div class="tool-summary__row" data-tool-summary-row="time"><dt>時間</dt><dd><span data-tool-summary="time">—</span></dd></div>
+                  </dl>
+                </div>
+                <div class="module-actions">
+                  <button id="op-fetch-dictionary-button" class="btn btn-ghost" type="button">辞書を更新</button>
+                </div>
+              </div>
+              <div class="module-body dictionary-body">
+                <form id="op-add-term-form" class="dictionary-form">
+                  <input type="text" id="op-new-term" class="input" placeholder="単語" required>
+                  <input type="text" id="op-new-ruby" class="input" placeholder="ルビ" required>
+                  <button type="submit" class="btn btn-primary">追加</button>
+                </form>
+                <div class="table-scroller">
+                  <table id="op-dictionary-table">
+                    <thead>
+                      <tr><th>単語</th><th>ルビ</th><th>状態</th><th>操作</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+            <section id="op-logs-panel" class="module module--secondary flow-tool-panel" data-panel="logs" aria-labelledby="op-logs-title" hidden>
+              <div class="module-header">
+                <div class="module-heading">
+                  <h2 id="op-logs-title">操作ログ</h2>
+                  <p class="module-description">直近の操作履歴を確認し、異常を素早く検知できます。</p>
+                  <dl class="tool-summary" aria-label="選択中のコンテキスト">
+                    <div class="tool-summary__row"><dt>イベント</dt><dd><span data-tool-summary="event">—</span></dd></div>
+                    <div class="tool-summary__row"><dt>日程</dt><dd><span data-tool-summary="schedule">—</span></dd></div>
+                    <div class="tool-summary__row" data-tool-summary-row="time"><dt>時間</dt><dd><span data-tool-summary="time">—</span></dd></div>
+                  </dl>
+                </div>
+                <div class="module-actions">
+                  <button id="op-logs-refresh-button" class="btn btn-ghost" type="button">ログを更新</button>
+                </div>
+              </div>
+              <div class="module-body logs-body">
+                <div id="op-logs-toolbar" class="logs-toolbar">
+                  <input id="op-log-search" class="input" placeholder="検索 (user/action/details)">
+                  <label class="chk"><input type="checkbox" id="op-log-autoscroll" checked> 自動スクロール</label>
+                </div>
+                <div id="op-logs-stream-view">
+                  <div id="op-log-stream" class="log-stream"></div>
+                </div>
+              </div>
+            </section>
       </div>
     </div>
   </main>
