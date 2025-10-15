@@ -36,18 +36,19 @@ const STAGE_INFO = {
     description: "選択したイベントの日程カードから、次に進める日程を決めてください。"
   },
   tabs: {
-    title: "参加者とテロップのツール",
-    description: "まとめた情報を確認して、参加者リスト管理とテロップ操作パネルを切り替えて利用できます。"
+    title: "運用ツール",
+    description: "左のメニューから操作したいパネルを選択してください。"
   }
 };
 
-const SIDEBAR_MIN_WIDTH = 260;
-const SIDEBAR_MAX_WIDTH = 520;
-const SIDEBAR_MAIN_MIN_WIDTH = 520;
-const SIDEBAR_RESIZER_WIDTH = 12;
-const SIDEBAR_KEYBOARD_STEP = 24;
-const COMPACT_SIDEBAR_QUERY = "(max-width: 1180px)";
-const STACKED_LAYOUT_QUERY = "(max-width: 1080px)";
+const PANEL_CONFIG = {
+  events: { stage: "events", requireEvent: false, requireSchedule: false },
+  schedules: { stage: "schedules", requireEvent: true, requireSchedule: false },
+  participants: { stage: "tabs", requireEvent: true, requireSchedule: true },
+  operator: { stage: "tabs", requireEvent: true, requireSchedule: true },
+  dictionary: { stage: "tabs", requireEvent: false, requireSchedule: false, dictionary: true },
+  logs: { stage: "tabs", requireEvent: false, requireSchedule: false, logs: true }
+};
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -107,7 +108,7 @@ export class EventAdminApp {
     this.selectedScheduleId = "";
     this.stage = "events";
     this.stageHistory = new Set(["events"]);
-    this.activeTab = "participants";
+    this.activePanel = "events";
     this.activeDialog = null;
     this.lastFocused = null;
     this.confirmResolver = null;
@@ -118,26 +119,7 @@ export class EventAdminApp {
     };
     this.lastToolContextSignature = "";
     this.lastToolContextApplied = false;
-    this.sidebarState = "open";
-    this.sidebarWidth = null;
-    this.sidebarDragActive = false;
-    this.sidebarDragPointerId = null;
-    this.sidebarOverlayActive = false;
-    this.sidebarPlaceholders = new Map();
-    this.sidebarAutoState = null;
-    this.sidebarResizeObserver = null;
-    const supportsMatchMedia = typeof window !== "undefined" && typeof window.matchMedia === "function";
-    this.compactMedia = supportsMatchMedia ? window.matchMedia(COMPACT_SIDEBAR_QUERY) : null;
-    this.stackedMedia = supportsMatchMedia ? window.matchMedia(STACKED_LAYOUT_QUERY) : null;
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
-    this.handleTablistKeydown = this.handleTablistKeydown.bind(this);
-    this.handleSidebarResizeMove = this.handleSidebarResizeMove.bind(this);
-    this.handleSidebarResizeEnd = this.handleSidebarResizeEnd.bind(this);
-    this.handleSidebarHandleKeydown = this.handleSidebarHandleKeydown.bind(this);
-    this.handleCompactMediaChange = this.handleCompactMediaChange.bind(this);
-    this.handleStackedMediaChange = this.handleStackedMediaChange.bind(this);
-    this.handleOverlayKeydown = this.handleOverlayKeydown.bind(this);
-    this.handleSidebarResize = this.handleSidebarResize.bind(this);
   }
 
   init() {
@@ -147,6 +129,8 @@ export class EventAdminApp {
     this.updateEventSummary();
     this.updateScheduleSummary();
     this.updateToolSummary();
+    this.updatePanelVisibility();
+    this.updatePanelNavigation();
     this.updateSelectionNotes();
     this.observeAuthState();
   }
@@ -157,18 +141,10 @@ export class EventAdminApp {
     this.selectedScheduleId = "";
     this.stage = "events";
     this.stageHistory = new Set(["events"]);
-    this.activeTab = "participants";
+    this.activePanel = "events";
     this.lastToolContextSignature = "";
     this.lastToolContextApplied = false;
     this.resetToolFrames();
-    this.sidebarState = "open";
-    this.sidebarWidth = null;
-    this.sidebarAutoState = null;
-    this.exitSidebarOverlay();
-    if (this.dom.main) {
-      this.dom.main.style.removeProperty("--flow-sidebar-width");
-      delete this.dom.main.dataset.sidebar;
-    }
     if (this.dom.scheduleLoading) {
       this.dom.scheduleLoading.hidden = true;
     }
@@ -179,61 +155,12 @@ export class EventAdminApp {
     this.updateToolSummary();
     this.updateStageUi();
     this.updateFlowButtons();
+    this.updatePanelVisibility();
+    this.updatePanelNavigation();
     this.updateSelectionNotes();
   }
 
   bindEvents() {
-    if (this.compactMedia) {
-      const media = this.compactMedia;
-      if (typeof media.addEventListener === "function") {
-        media.addEventListener("change", this.handleCompactMediaChange);
-      } else if (typeof media.addListener === "function") {
-        media.addListener(this.handleCompactMediaChange);
-      }
-      this.handleCompactMediaChange(media);
-    }
-
-    if (this.stackedMedia) {
-      const media = this.stackedMedia;
-      if (typeof media.addEventListener === "function") {
-        media.addEventListener("change", this.handleStackedMediaChange);
-      } else if (typeof media.addListener === "function") {
-        media.addListener(this.handleStackedMediaChange);
-      }
-      this.handleStackedMediaChange(media);
-    }
-
-    if (typeof ResizeObserver === "function" && this.dom.flowGrid) {
-      this.sidebarResizeObserver = new ResizeObserver(this.handleSidebarResize);
-      this.sidebarResizeObserver.observe(this.dom.flowGrid);
-    }
-
-    if (this.dom.sidebarCollapseButton) {
-      this.dom.sidebarCollapseButton.addEventListener("click", () => {
-        this.setSidebarState("collapsed");
-      });
-    }
-
-    if (this.dom.sidebarExpandButton) {
-      this.dom.sidebarExpandButton.addEventListener("click", () => {
-        const preferOverlay = Boolean(this.compactMedia?.matches);
-        this.setSidebarState(preferOverlay ? "overlay" : "open");
-      });
-    }
-
-    if (this.dom.sidebarResizer) {
-      this.dom.sidebarResizer.addEventListener("pointerdown", (event) => {
-        this.startSidebarResize(event);
-      });
-      this.dom.sidebarResizer.addEventListener("keydown", this.handleSidebarHandleKeydown);
-    }
-
-    if (this.dom.sidebarOverlayBackdrop) {
-      this.dom.sidebarOverlayBackdrop.addEventListener("click", () => {
-        this.setSidebarState("collapsed");
-      });
-    }
-
     if (this.dom.addEventButton) {
       this.dom.addEventButton.addEventListener("click", () => this.openEventDialog({ mode: "create" }));
     }
@@ -255,52 +182,24 @@ export class EventAdminApp {
       });
     }
 
-    if (this.dom.nextButton) {
-      this.dom.nextButton.addEventListener("click", () => {
-        this.goToStage("schedules");
-      });
-    }
-
     if (this.dom.eventChangeButton) {
       this.dom.eventChangeButton.addEventListener("click", () => {
-        this.setStage("events");
-      });
-    }
-
-    if (this.dom.scheduleBackButton) {
-      this.dom.scheduleBackButton.addEventListener("click", () => {
-        this.setStage("events");
+        this.showPanel("events");
       });
     }
 
     if (this.dom.scheduleChangeButton) {
       this.dom.scheduleChangeButton.addEventListener("click", () => {
-        this.setStage("schedules");
+        this.showPanel("schedules");
       });
     }
 
-    if (this.dom.scheduleNextButton) {
-      this.dom.scheduleNextButton.addEventListener("click", () => {
-        this.enterTabsStage("participants");
-      });
-    }
-
-    if (this.dom.flowTabsBackButton) {
-      this.dom.flowTabsBackButton.addEventListener("click", () => {
-        this.setStage("schedules");
-      });
-    }
-
-    this.getTabButtons().forEach((button) => {
+    (this.dom.panelButtons || []).forEach((button) => {
       button.addEventListener("click", () => {
-        const targetTab = button.dataset.tab;
-        this.switchTab(targetTab);
+        const target = button.dataset.panelTarget || "";
+        this.showPanel(target);
       });
     });
-
-    if (this.dom.flowTablist) {
-      this.dom.flowTablist.addEventListener("keydown", this.handleTablistKeydown);
-    }
 
     if (this.dom.eventForm) {
       this.dom.eventForm.addEventListener("submit", (event) => {
@@ -350,52 +249,6 @@ export class EventAdminApp {
         });
       });
     }
-  }
-
-  getTabButtons() {
-    return [this.dom.participantsTab, this.dom.operatorTab].filter(Boolean);
-  }
-
-  handleTablistKeydown(event) {
-    const tabs = this.getTabButtons();
-    if (!tabs.length) {
-      return;
-    }
-
-    const { key } = event;
-    const targetTab = event.target?.closest?.("[role='tab']");
-    const currentIndex = tabs.indexOf(targetTab);
-    if (currentIndex === -1) {
-      return;
-    }
-
-    if (key === "ArrowRight" || key === "ArrowDown") {
-      event.preventDefault();
-      this.activateTabAt((currentIndex + 1) % tabs.length);
-    } else if (key === "ArrowLeft" || key === "ArrowUp") {
-      event.preventDefault();
-      this.activateTabAt((currentIndex - 1 + tabs.length) % tabs.length);
-    } else if (key === "Home") {
-      event.preventDefault();
-      this.activateTabAt(0);
-    } else if (key === "End") {
-      event.preventDefault();
-      this.activateTabAt(tabs.length - 1);
-    }
-  }
-
-  activateTabAt(index) {
-    const tabs = this.getTabButtons();
-    if (!tabs.length) {
-      return;
-    }
-    const target = tabs[index];
-    if (!target) {
-      return;
-    }
-    target.focus();
-    const tabId = target.dataset?.tab || (target.id?.includes("operator") ? "operator" : "participants");
-    this.switchTab(tabId);
   }
 
   async handleLogoutClick() {
@@ -750,11 +603,7 @@ export class EventAdminApp {
     this.updateToolSummary();
     this.updateFlowButtons();
     this.updateSelectionNotes();
-    if (this.stage === "tabs") {
-      this.setStage(this.selectedEventId ? "schedules" : "events");
-    } else if (!normalized && this.stage === "schedules") {
-      this.setStage("events");
-    }
+    this.showPanel(this.activePanel);
   }
 
   ensureSelectedSchedule(preferredId = "") {
@@ -789,14 +638,7 @@ export class EventAdminApp {
     this.updateToolSummary();
     this.updateFlowButtons();
     this.updateSelectionNotes();
-    if (this.selectedScheduleId) {
-      this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
-    }
-    if (this.stage === "tabs" && this.selectedScheduleId) {
-      this.switchTab(this.activeTab);
-    } else if (!normalized && this.stage === "tabs") {
-      this.setStage("schedules");
-    }
+    this.showPanel(this.activePanel);
   }
 
   updateScheduleStateFromSelection(preferredScheduleId = "") {
@@ -808,12 +650,7 @@ export class EventAdminApp {
     this.updateToolSummary();
     this.updateFlowButtons();
     this.updateSelectionNotes();
-    if (this.stage === "tabs" && this.selectedScheduleId) {
-      this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
-    }
-    if (!event && (this.stage === "schedules" || this.stage === "tabs")) {
-      this.setStage("events");
-    }
+    this.showPanel(this.activePanel);
   }
 
   renderScheduleList() {
@@ -827,7 +664,6 @@ export class EventAdminApp {
       list.removeAttribute("role");
       list.removeAttribute("aria-label");
       list.removeAttribute("aria-orientation");
-      this.reconcileSidebarLayout();
       return;
     }
 
@@ -921,7 +757,6 @@ export class EventAdminApp {
     });
 
     list.appendChild(fragment);
-    this.reconcileSidebarLayout();
   }
 
   updateEventSummary() {
@@ -1160,8 +995,8 @@ export class EventAdminApp {
       this.dom.stageDescription.textContent = info.description;
     }
     this.updateStageIndicator();
-    this.updateStageModulesAccessibility();
-    this.updateSidebarUi();
+    this.updatePanelVisibility();
+    this.updatePanelNavigation();
   }
 
   updateStageIndicator() {
@@ -1179,18 +1014,6 @@ export class EventAdminApp {
         indicator.removeAttribute("aria-current");
       }
     });
-  }
-
-  updateStageModulesAccessibility() {
-    const accessibleByStage = {
-      events: new Set(["events"]),
-      schedules: new Set(["events", "schedules"]),
-      tabs: new Set(["events", "schedules", "tabs"])
-    };
-    const active = accessibleByStage[this.stage] || accessibleByStage.events;
-    this.setModuleAccessibility(this.dom.eventsModule, active.has("events"));
-    this.setModuleAccessibility(this.dom.schedulesModule, active.has("schedules"));
-    this.setModuleAccessibility(this.dom.tabsModule, active.has("tabs"));
   }
 
   setModuleAccessibility(module, isActive) {
@@ -1253,12 +1076,6 @@ export class EventAdminApp {
     if (this.dom.scheduleNextButton) {
       this.dom.scheduleNextButton.disabled = !signedIn || !hasSchedule;
     }
-    if (this.dom.participantsTab) {
-      this.dom.participantsTab.disabled = !signedIn || !hasSchedule;
-    }
-    if (this.dom.operatorTab) {
-      this.dom.operatorTab.disabled = !signedIn || !hasSchedule;
-    }
   }
 
   updateSelectionNotes() {
@@ -1272,444 +1089,6 @@ export class EventAdminApp {
     }
   }
 
-  isSidebarAvailable() {
-    return this.stage !== "events";
-  }
-
-  getSidebarModules() {
-    const modules = [];
-    if (this.dom.eventsModule) {
-      modules.push(this.dom.eventsModule);
-    }
-    if (this.stage === "tabs" && this.dom.schedulesModule) {
-      modules.push(this.dom.schedulesModule);
-    }
-    return modules;
-  }
-
-  getMainContentModule() {
-    if (this.stage === "tabs") {
-      return this.dom.tabsModule || null;
-    }
-    if (this.stage === "schedules") {
-      return this.dom.schedulesModule || null;
-    }
-    return null;
-  }
-
-  setSidebarState(state, { focus = true, auto = false } = {}) {
-    if (!this.isSidebarAvailable()) {
-      this.sidebarState = "open";
-      this.sidebarWidth = null;
-      this.sidebarAutoState = null;
-      this.applySidebarState();
-      return;
-    }
-    const allowed = new Set(["open", "collapsed", "overlay"]);
-    let nextState = allowed.has(state) ? state : "open";
-    if (nextState === "overlay" && !(this.compactMedia?.matches)) {
-      nextState = "open";
-    }
-    if (nextState === this.sidebarState) {
-      if (auto) {
-        this.sidebarAutoState = nextState === "open" ? null : nextState;
-      } else {
-        this.sidebarAutoState = null;
-      }
-      this.applySidebarState();
-      if (!auto) {
-        this.reconcileSidebarLayout();
-      }
-      return;
-    }
-    this.sidebarState = nextState;
-    this.sidebarAutoState = auto ? (nextState === "open" ? null : nextState) : null;
-    this.applySidebarState();
-    if (!auto) {
-      this.reconcileSidebarLayout();
-    }
-    if (!focus) {
-      return;
-    }
-    if (nextState === "collapsed" && this.dom.sidebarExpandButton) {
-      this.dom.sidebarExpandButton.focus();
-    } else if ((nextState === "open" || nextState === "overlay") && this.dom.sidebarCollapseButton) {
-      this.dom.sidebarCollapseButton.focus();
-    }
-  }
-
-  applySidebarState() {
-    if (!this.dom.main) {
-      return;
-    }
-
-    if (!this.isSidebarAvailable()) {
-      this.exitSidebarOverlay();
-      delete this.dom.main.dataset.sidebar;
-      this.dom.main.style.removeProperty("--flow-sidebar-width");
-      if (this.dom.sidebarCollapseButton) {
-        this.dom.sidebarCollapseButton.hidden = true;
-      }
-      if (this.dom.sidebarExpandButton) {
-        this.dom.sidebarExpandButton.hidden = true;
-      }
-      if (this.dom.sidebarResizer) {
-        this.dom.sidebarResizer.hidden = true;
-      }
-      if (this.dom.sidebarOverlay) {
-        this.dom.sidebarOverlay.hidden = true;
-        this.dom.sidebarOverlay.setAttribute("aria-hidden", "true");
-      }
-      return;
-    }
-
-    this.dom.main.dataset.sidebar = this.sidebarState;
-
-    if (this.sidebarState === "open") {
-      this.exitSidebarOverlay();
-      if (this.dom.sidebarCollapseButton) {
-        this.dom.sidebarCollapseButton.hidden = false;
-      }
-      if (this.dom.sidebarExpandButton) {
-        this.dom.sidebarExpandButton.hidden = true;
-      }
-      if (this.dom.sidebarResizer) {
-        this.dom.sidebarResizer.hidden = false;
-      }
-      if (this.dom.sidebarOverlay) {
-        this.dom.sidebarOverlay.hidden = true;
-        this.dom.sidebarOverlay.setAttribute("aria-hidden", "true");
-      }
-      this.applySidebarWidth();
-    } else if (this.sidebarState === "collapsed") {
-      this.exitSidebarOverlay();
-      if (this.dom.sidebarCollapseButton) {
-        this.dom.sidebarCollapseButton.hidden = true;
-      }
-      if (this.dom.sidebarExpandButton) {
-        this.dom.sidebarExpandButton.hidden = false;
-      }
-      if (this.dom.sidebarResizer) {
-        this.dom.sidebarResizer.hidden = true;
-      }
-      if (this.dom.sidebarOverlay) {
-        this.dom.sidebarOverlay.hidden = true;
-        this.dom.sidebarOverlay.setAttribute("aria-hidden", "true");
-      }
-      this.dom.main.style.removeProperty("--flow-sidebar-width");
-    } else if (this.sidebarState === "overlay") {
-      this.dom.main.style.removeProperty("--flow-sidebar-width");
-      if (this.dom.sidebarCollapseButton) {
-        this.dom.sidebarCollapseButton.hidden = false;
-      }
-      if (this.dom.sidebarExpandButton) {
-        this.dom.sidebarExpandButton.hidden = true;
-      }
-      if (this.dom.sidebarResizer) {
-        this.dom.sidebarResizer.hidden = true;
-      }
-      this.exitSidebarOverlay();
-      this.enterSidebarOverlay();
-    }
-  }
-
-  updateSidebarUi() {
-    if (!this.isSidebarAvailable()) {
-      this.sidebarState = "open";
-      this.sidebarWidth = null;
-      this.sidebarAutoState = null;
-      this.applySidebarState();
-      return;
-    }
-    if (this.sidebarState === "overlay" && this.compactMedia && !this.compactMedia.matches) {
-      this.sidebarState = "open";
-      this.sidebarAutoState = null;
-    }
-    this.reconcileSidebarLayout();
-    this.applySidebarState();
-  }
-
-  reconcileSidebarLayout() {
-    if (!this.isSidebarAvailable()) {
-      this.sidebarAutoState = null;
-      return;
-    }
-    const grid = this.dom.flowGrid;
-    if (!grid) {
-      return;
-    }
-    const rect = grid.getBoundingClientRect();
-    const width = rect?.width;
-    if (!Number.isFinite(width) || width <= 0) {
-      return;
-    }
-    const handleRect = this.dom.sidebarResizer?.getBoundingClientRect();
-    const handleWidth = handleRect && Number.isFinite(handleRect.width) && handleRect.width > 0
-      ? handleRect.width
-      : SIDEBAR_RESIZER_WIDTH;
-    const requiredWidth = SIDEBAR_MIN_WIDTH + SIDEBAR_MAIN_MIN_WIDTH + handleWidth;
-    const preferOverlay = Boolean(this.compactMedia?.matches);
-    const prefersStackedLayout = Boolean(this.stackedMedia?.matches);
-    const widthThreshold = prefersStackedLayout ? SIDEBAR_MIN_WIDTH : requiredWidth;
-    let mainModuleWidth = 0;
-    const mainModule = this.getMainContentModule();
-    if (mainModule) {
-      const mainRect = mainModule.getBoundingClientRect();
-      if (mainRect && Number.isFinite(mainRect.width) && mainRect.width > 0) {
-        mainModuleWidth = mainRect.width;
-      }
-    }
-    const mainTooSmall =
-      !prefersStackedLayout &&
-      this.sidebarState === "open" &&
-      mainModuleWidth > 0 &&
-      mainModuleWidth < SIDEBAR_MAIN_MIN_WIDTH;
-    const widthTooSmall = this.sidebarState === "open" && width < widthThreshold;
-    if (widthTooSmall || mainTooSmall) {
-      const fallback = preferOverlay ? "overlay" : "collapsed";
-      this.setSidebarState(fallback, { focus: false, auto: true });
-      return;
-    }
-    const canReopenWidth = width >= widthThreshold;
-    const shouldReopen =
-      this.sidebarAutoState &&
-      this.sidebarState !== "open" &&
-      canReopenWidth &&
-      (!preferOverlay || prefersStackedLayout);
-    if (shouldReopen) {
-      this.setSidebarState("open", { focus: false, auto: true });
-    }
-  }
-
-  enterSidebarOverlay() {
-    if (!this.dom.sidebarOverlay || !this.dom.sidebarOverlayContent) {
-      return;
-    }
-    const modules = this.getSidebarModules();
-    if (!modules.length) {
-      this.exitSidebarOverlay();
-      return;
-    }
-    modules.forEach((module) => {
-      if (!module) return;
-      if (!this.sidebarPlaceholders.has(module)) {
-        const placeholder = document.createComment("sidebar-placeholder");
-        module.parentNode?.insertBefore(placeholder, module);
-        this.sidebarPlaceholders.set(module, placeholder);
-      }
-      this.dom.sidebarOverlayContent.appendChild(module);
-    });
-    this.dom.sidebarOverlay.hidden = false;
-    this.dom.sidebarOverlay.setAttribute("aria-hidden", "false");
-    document.body.classList.add("sidebar-overlay-open");
-    document.addEventListener("keydown", this.handleOverlayKeydown, true);
-    this.sidebarOverlayActive = true;
-    const focusTarget =
-      this.dom.sidebarCollapseButton ||
-      this.dom.sidebarOverlayContent.querySelector(FOCUSABLE_SELECTOR);
-    if (focusTarget instanceof HTMLElement) {
-      requestAnimationFrame(() => focusTarget.focus());
-    }
-  }
-
-  exitSidebarOverlay() {
-    if (!this.dom.sidebarOverlay || !this.dom.sidebarOverlayContent) {
-      return;
-    }
-    if (this.sidebarPlaceholders.size > 0) {
-      for (const [module, placeholder] of this.sidebarPlaceholders.entries()) {
-        if (placeholder?.parentNode) {
-          placeholder.parentNode.insertBefore(module, placeholder);
-          placeholder.remove();
-        } else if (!module.parentNode && this.dom.flowGrid) {
-          this.dom.flowGrid.appendChild(module);
-        }
-      }
-      this.sidebarPlaceholders.clear();
-    }
-    this.dom.sidebarOverlayContent.textContent = "";
-    this.dom.sidebarOverlay.hidden = true;
-    this.dom.sidebarOverlay.setAttribute("aria-hidden", "true");
-    document.body.classList.remove("sidebar-overlay-open");
-    document.removeEventListener("keydown", this.handleOverlayKeydown, true);
-    this.sidebarOverlayActive = false;
-  }
-
-  applySidebarWidth() {
-    if (!this.dom.main || !this.isSidebarAvailable() || this.sidebarState !== "open") {
-      if (this.dom?.main) {
-        this.dom.main.style.removeProperty("--flow-sidebar-width");
-      }
-      return;
-    }
-    if (typeof this.sidebarWidth === "number" && Number.isFinite(this.sidebarWidth)) {
-      const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, this.sidebarWidth));
-      this.dom.main.style.setProperty("--flow-sidebar-width", `${clamped}px`);
-    } else {
-      this.dom.main.style.removeProperty("--flow-sidebar-width");
-    }
-  }
-
-  prepareSidebarWidth() {
-    if (typeof this.sidebarWidth === "number" && Number.isFinite(this.sidebarWidth)) {
-      return this.sidebarWidth;
-    }
-    const [primaryModule] = this.getSidebarModules();
-    if (primaryModule) {
-      const rect = primaryModule.getBoundingClientRect();
-      if (rect.width > 0) {
-        this.sidebarWidth = rect.width;
-        return this.sidebarWidth;
-      }
-    }
-    return null;
-  }
-
-  setSidebarWidth(width) {
-    if (!Number.isFinite(width)) {
-      return;
-    }
-    const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
-    this.sidebarWidth = clamped;
-    this.applySidebarWidth();
-  }
-
-  startSidebarResize(event) {
-    if (!this.isSidebarAvailable() || this.sidebarState !== "open") {
-      return;
-    }
-    if (typeof event.button === "number" && event.button !== 0) {
-      return;
-    }
-    event.preventDefault();
-    this.prepareSidebarWidth();
-    this.sidebarDragActive = true;
-    this.sidebarDragPointerId = event.pointerId;
-    if (event.currentTarget && typeof event.currentTarget.setPointerCapture === "function") {
-      try {
-        event.currentTarget.setPointerCapture(event.pointerId);
-      } catch (error) {
-        // ignore capture errors
-      }
-    }
-    window.addEventListener("pointermove", this.handleSidebarResizeMove);
-    window.addEventListener("pointerup", this.handleSidebarResizeEnd);
-    window.addEventListener("pointercancel", this.handleSidebarResizeEnd);
-  }
-
-  handleSidebarResizeMove(event) {
-    if (!this.sidebarDragActive) {
-      return;
-    }
-    event.preventDefault();
-    this.updateSidebarWidthFromEvent(event);
-  }
-
-  handleSidebarResizeEnd(event) {
-    if (!this.sidebarDragActive) {
-      return;
-    }
-    this.sidebarDragActive = false;
-    this.sidebarDragPointerId = null;
-    if (this.dom.sidebarResizer && typeof this.dom.sidebarResizer.releasePointerCapture === "function") {
-      try {
-        this.dom.sidebarResizer.releasePointerCapture(event.pointerId);
-      } catch (error) {
-        // ignore release errors
-      }
-    }
-    window.removeEventListener("pointermove", this.handleSidebarResizeMove);
-    window.removeEventListener("pointerup", this.handleSidebarResizeEnd);
-    window.removeEventListener("pointercancel", this.handleSidebarResizeEnd);
-  }
-
-  updateSidebarWidthFromEvent(event) {
-    if (!this.isSidebarAvailable() || this.sidebarState !== "open") {
-      return;
-    }
-    const grid = this.dom.flowGrid;
-    const resizer = this.dom.sidebarResizer;
-    if (!grid || !resizer) {
-      return;
-    }
-    const gridRect = grid.getBoundingClientRect();
-    const handleRect = resizer.getBoundingClientRect();
-    const pointerX = event.clientX;
-    if (!Number.isFinite(pointerX)) {
-      return;
-    }
-    const pointerOffset = pointerX - gridRect.left;
-    const proposed = pointerOffset - handleRect.width * 0.5;
-    const effectiveMax = Math.min(
-      SIDEBAR_MAX_WIDTH,
-      Math.max(SIDEBAR_MIN_WIDTH, gridRect.width - handleRect.width - SIDEBAR_MAIN_MIN_WIDTH)
-    );
-    const clamped = Math.max(SIDEBAR_MIN_WIDTH, Math.min(proposed, effectiveMax));
-    this.setSidebarWidth(clamped);
-  }
-
-  adjustSidebarWidth(delta) {
-    if (!this.isSidebarAvailable() || this.sidebarState !== "open") {
-      return;
-    }
-    const current = this.prepareSidebarWidth() ?? SIDEBAR_MIN_WIDTH;
-    this.setSidebarWidth(current + delta);
-  }
-
-  handleSidebarHandleKeydown(event) {
-    if (!this.isSidebarAvailable() || this.sidebarState !== "open") {
-      return;
-    }
-    const step = event.shiftKey ? SIDEBAR_KEYBOARD_STEP * 3 : SIDEBAR_KEYBOARD_STEP;
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      this.adjustSidebarWidth(-step);
-    } else if (event.key === "ArrowRight") {
-      event.preventDefault();
-      this.adjustSidebarWidth(step);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      this.setSidebarWidth(SIDEBAR_MIN_WIDTH);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      this.setSidebarWidth(SIDEBAR_MAX_WIDTH);
-    }
-  }
-
-  handleCompactMediaChange(event) {
-    const matches = Boolean(event?.matches);
-    if (!this.isSidebarAvailable()) {
-      return;
-    }
-    if (!matches && this.sidebarState === "overlay") {
-      const wasAutoOverlay = this.sidebarAutoState === "overlay";
-      this.setSidebarState("open", { focus: false, auto: wasAutoOverlay });
-      return;
-    }
-    this.reconcileSidebarLayout();
-    this.applySidebarState();
-  }
-
-  handleStackedMediaChange() {
-    if (!this.isSidebarAvailable()) {
-      return;
-    }
-    this.reconcileSidebarLayout();
-    this.applySidebarState();
-  }
-
-  handleOverlayKeydown(event) {
-    if (event.key === "Escape" && this.sidebarState === "overlay" && !this.activeDialog) {
-      event.preventDefault();
-      this.setSidebarState("collapsed");
-    }
-  }
-
-  handleSidebarResize() {
-    this.reconcileSidebarLayout();
-    this.applySidebarState();
-  }
-
   setStage(stage) {
     if (!STAGE_SEQUENCE.includes(stage)) {
       return;
@@ -1721,52 +1100,150 @@ export class EventAdminApp {
     this.updateSelectionNotes();
   }
 
-  goToStage(stage) {
-    if (stage === "schedules" && !this.selectedEventId) {
+  canActivatePanel(panel, config = PANEL_CONFIG[panel]) {
+    const rules = config || PANEL_CONFIG.events;
+    if (rules.requireEvent && !this.selectedEventId) {
+      return false;
+    }
+    if (rules.requireSchedule && (!this.selectedScheduleId || !this.currentUser)) {
+      return false;
+    }
+    return true;
+  }
+
+  showPanel(panel) {
+    const normalized = PANEL_CONFIG[panel] ? panel : "events";
+    const config = PANEL_CONFIG[normalized] || PANEL_CONFIG.events;
+    if (config.requireEvent && !this.selectedEventId) {
       this.revealEventSelectionCue();
+      this.activePanel = "events";
+      this.setStage("events");
+      this.updatePanelVisibility();
+      this.updatePanelNavigation();
       return;
     }
-    if (stage === "tabs") {
-      if (!this.selectedEventId) {
-        this.revealEventSelectionCue();
-        return;
-      }
-      if (!this.selectedScheduleId) {
-        this.revealScheduleSelectionCue();
-        return;
-      }
+    if (config.requireSchedule && !this.selectedScheduleId) {
+      this.revealScheduleSelectionCue();
+      this.activePanel = this.selectedEventId ? "schedules" : "events";
+      this.setStage(this.activePanel);
+      this.updatePanelVisibility();
+      this.updatePanelNavigation();
+      return;
     }
-    this.setStage(stage);
-    if (stage === "tabs") {
-      this.updateToolSummary();
-      this.prepareToolFrames();
-      this.switchTab(this.activeTab);
-      this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
+    this.activePanel = normalized;
+    this.setStage(config.stage);
+    this.updatePanelVisibility();
+    this.updatePanelNavigation();
+    this.handlePanelSetup(normalized, config).catch((error) => logError("Failed to prepare panel", error));
+  }
+
+  async handlePanelSetup(panel, config) {
+    if (config.stage !== "tabs") {
+      await this.setDrawerState({ dictionary: false, logs: false });
+      return;
+    }
+    this.updateToolSummary();
+    this.prepareToolFrames();
+    if (config.requireSchedule) {
+      await this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
+      await this.setDrawerState({ dictionary: false, logs: false });
+      return;
+    }
+    if (panel === "dictionary") {
+      await this.setDrawerState({ dictionary: true, logs: false });
+    } else if (panel === "logs") {
+      await this.setDrawerState({ dictionary: false, logs: true });
+    } else {
+      await this.setDrawerState({ dictionary: false, logs: false });
     }
   }
 
-  enterTabsStage(tab) {
-    this.activeTab = tab === "operator" ? "operator" : "participants";
-    this.goToStage("tabs");
+  getToolPanels() {
+    return {
+      participants: this.dom.participantsPanel,
+      operator: this.dom.operatorPanel,
+      dictionary: this.dom.dictionaryPanel,
+      logs: this.dom.logsPanel
+    };
   }
 
-  switchTab(tab) {
-    const normalized = tab === "operator" ? "operator" : "participants";
-    this.activeTab = normalized;
-    this.getTabButtons().forEach((button) => {
-      const targetTab = String(button.dataset.tab || "").toLowerCase();
-      const isActive = targetTab === normalized;
-      button.classList.toggle("is-active", isActive);
-      button.setAttribute("aria-selected", isActive ? "true" : "false");
-      button.setAttribute("tabindex", isActive ? "0" : "-1");
+  setModuleVisibility(module, isVisible) {
+    if (!module) return;
+    module.hidden = !isVisible;
+    module.classList.toggle("is-active", isVisible);
+    this.setModuleAccessibility(module, isVisible);
+  }
+
+  updatePanelVisibility() {
+    const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
+    const stage = activeConfig.stage || "events";
+    this.setModuleVisibility(this.dom.eventsModule, stage === "events");
+    this.setModuleVisibility(this.dom.schedulesModule, stage === "schedules");
+    this.setModuleVisibility(this.dom.tabsModule, stage === "tabs");
+    const toolPanels = this.getToolPanels();
+    Object.entries(toolPanels).forEach(([name, element]) => {
+      if (!element) return;
+      const isActive = stage === "tabs" && this.activePanel === name;
+      element.hidden = !isActive;
+      element.classList.toggle("is-active", isActive);
     });
-    if (this.dom.participantsPanel) {
-      this.dom.participantsPanel.classList.toggle("is-active", normalized === "participants");
-      this.dom.participantsPanel.hidden = normalized !== "participants";
+  }
+
+  updatePanelNavigation() {
+    const buttons = this.dom.panelButtons || [];
+    buttons.forEach((button) => {
+      const target = button.dataset.panelTarget || "";
+      const config = PANEL_CONFIG[target] || PANEL_CONFIG.events;
+      const disabled = !this.canActivatePanel(target, config);
+      button.disabled = disabled;
+      const isActive = target === this.activePanel;
+      button.classList.toggle("is-active", isActive);
+      if (isActive) {
+        button.setAttribute("aria-current", "page");
+      } else {
+        button.removeAttribute("aria-current");
+      }
+    });
+  }
+
+  async ensureOperatorAppReady() {
+    await this.loadEmbeddedTool("operator");
+    if (window.operatorEmbed?.waitUntilReady) {
+      try {
+        await window.operatorEmbed.waitUntilReady();
+      } catch (error) {
+        logError("Failed to wait for operator tool", error);
+      }
     }
-    if (this.dom.operatorPanel) {
-      this.dom.operatorPanel.classList.toggle("is-active", normalized === "operator");
-      this.dom.operatorPanel.hidden = normalized !== "operator";
+    return window.operatorEmbed?.app || null;
+  }
+
+  async setDrawerState({ dictionary, logs }) {
+    const needsDictionary = typeof dictionary === "boolean";
+    const needsLogs = typeof logs === "boolean";
+    if (!needsDictionary && !needsLogs) {
+      return;
+    }
+    if (!window.operatorEmbed?.app && dictionary === false && logs === false) {
+      return;
+    }
+    const app = await this.ensureOperatorAppReady();
+    if (!app) {
+      return;
+    }
+    if (typeof dictionary === "boolean") {
+      try {
+        app.toggleDictionaryDrawer(dictionary, false);
+      } catch (error) {
+        logError("Failed to toggle dictionary drawer", error);
+      }
+    }
+    if (typeof logs === "boolean") {
+      try {
+        app.toggleLogsDrawer(logs, false);
+      } catch (error) {
+        logError("Failed to toggle logs drawer", error);
+      }
     }
   }
 
@@ -2019,7 +1496,7 @@ export class EventAdminApp {
       await this.loadEvents();
       this.ensureSelectedSchedule("");
       if (this.stage === "tabs") {
-        this.setStage("schedules");
+        this.showPanel("schedules");
       }
       await this.requestSheetSync();
     } catch (error) {
