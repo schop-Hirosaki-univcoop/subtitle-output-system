@@ -11,7 +11,7 @@ import {
 } from "../operator/firebase.js";
 import { createApiClient } from "../operator/api-client.js";
 import { generateShortId, normalizeKey, toMillis } from "../question-admin/utils.js";
-import { formatScheduleRange } from "../operator/utils.js";
+import { formatRelative, formatScheduleRange } from "../operator/utils.js";
 
 const ensureString = (value) => String(value ?? "").trim();
 
@@ -194,9 +194,12 @@ export class EventAdminApp {
     this.pendingToolSync = false;
     this.toolSyncPromise = null;
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
+    this.handleParticipantSyncEvent = this.handleParticipantSyncEvent.bind(this);
+    this.cleanup = this.cleanup.bind(this);
     this.eventCountNote = "";
     this.stageNote = "";
     this.lastParticipantsErrorMessage = "";
+    this.participantSyncInfo = null;
     this.applyMetaNote();
   }
 
@@ -218,6 +221,12 @@ export class EventAdminApp {
     this.updateSelectionNotes();
     this.applyMetaNote();
     this.observeAuthState();
+    if (typeof document !== "undefined") {
+      document.addEventListener("qa:participants-synced", this.handleParticipantSyncEvent);
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("beforeunload", this.cleanup, { once: true });
+    }
   }
 
   resetFlowState() {
@@ -978,6 +987,21 @@ export class EventAdminApp {
       this.pendingToolSync = false;
       this.lastToolContextSignature = "";
       this.lastToolContextApplied = false;
+      if (this.dom.participantsTool) {
+        delete this.dom.participantsTool.dataset.expectedEventId;
+        delete this.dom.participantsTool.dataset.expectedScheduleId;
+        delete this.dom.participantsTool.dataset.expectedEventName;
+        delete this.dom.participantsTool.dataset.expectedScheduleLabel;
+        delete this.dom.participantsTool.dataset.expectedStartAt;
+        delete this.dom.participantsTool.dataset.expectedEndAt;
+        delete this.dom.participantsTool.dataset.syncedEventId;
+        delete this.dom.participantsTool.dataset.syncedScheduleId;
+        delete this.dom.participantsTool.dataset.syncedAt;
+      }
+      const message = this.selectedEventId
+        ? "日程を選択すると参加者リストを読み込みます。"
+        : "イベントと日程を選択すると参加者リストを読み込みます。";
+      this.setParticipantStatus({ text: message, variant: "info" });
       return;
     }
     const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
@@ -987,6 +1011,144 @@ export class EventAdminApp {
     } else {
       this.pendingToolSync = true;
     }
+  }
+
+  setParticipantStatus({ text = "", meta = "", variant = "info" } = {}) {
+    const container = this.dom.participantsStatus;
+    if (!container) {
+      return;
+    }
+    const baseClass = "flow-sync-status";
+    const allowed = new Set(["info", "success", "error", "pending"]);
+    const normalizedVariant = allowed.has(variant) ? variant : "info";
+    const classes = [baseClass, `${baseClass}--${normalizedVariant}`];
+    if (text) {
+      classes.push("is-visible");
+      container.hidden = false;
+    } else {
+      container.hidden = true;
+    }
+    container.className = classes.join(" ");
+    const textEl = this.dom.participantsStatusText;
+    const metaEl = this.dom.participantsStatusMeta;
+    if (textEl) {
+      textEl.textContent = text || "";
+    } else if (text) {
+      container.textContent = text;
+    } else {
+      container.textContent = "";
+    }
+    if (metaEl) {
+      if (meta) {
+        metaEl.hidden = false;
+        metaEl.textContent = meta;
+      } else {
+        metaEl.hidden = true;
+        metaEl.textContent = "";
+      }
+    }
+  }
+
+  handleParticipantSyncEvent(event) {
+    if (!event || !event.detail) {
+      return;
+    }
+    const detail = event.detail;
+    const eventId = ensureString(detail.eventId);
+    const scheduleId = ensureString(detail.scheduleId);
+    if (eventId && this.selectedEventId && eventId !== this.selectedEventId) {
+      return;
+    }
+    if (scheduleId && this.selectedScheduleId && scheduleId !== this.selectedScheduleId) {
+      return;
+    }
+    const timestamp = Number(detail.timestamp) || Date.now();
+    if (!eventId || !scheduleId) {
+      if (!this.selectedEventId || !this.selectedScheduleId) {
+        const message = this.selectedEventId
+          ? "日程を選択すると参加者リストを読み込みます。"
+          : "イベントと日程を選択すると参加者リストを読み込みます。";
+        this.participantSyncInfo = null;
+        this.setParticipantStatus({ text: message, variant: "info" });
+        if (this.dom.participantsTool) {
+          delete this.dom.participantsTool.dataset.syncedEventId;
+          delete this.dom.participantsTool.dataset.syncedScheduleId;
+          delete this.dom.participantsTool.dataset.syncedAt;
+        }
+      }
+      return;
+    }
+
+    const success = detail.success !== false;
+    if (success) {
+      const participantCount = Number(detail.participantCount);
+      const countText = Number.isFinite(participantCount) && participantCount >= 0 ? `参加者 ${participantCount}名` : "";
+      let scheduleRange = ensureString(detail.scheduleRange);
+      if (!scheduleRange) {
+        const selectedSchedule = this.getSelectedSchedule();
+        if (selectedSchedule) {
+          scheduleRange = formatScheduleRange(selectedSchedule.startAt, selectedSchedule.endAt);
+        }
+      }
+      const metaParts = [];
+      if (countText) {
+        metaParts.push(countText);
+      }
+      if (scheduleRange) {
+        metaParts.push(`時間 ${scheduleRange}`);
+      }
+      const relative = timestamp ? formatRelative(timestamp) : "";
+      if (relative && relative !== "—") {
+        metaParts.push(`${relative}に更新`);
+      }
+      const selectedEvent = this.getSelectedEvent();
+      const selectedSchedule = this.getSelectedSchedule();
+      const eventLabel = ensureString(detail.eventName) || selectedEvent?.name || eventId;
+      const scheduleLabel = ensureString(detail.scheduleLabel) || selectedSchedule?.label || scheduleId;
+      this.participantSyncInfo = { ...detail, timestamp };
+      this.setParticipantStatus({
+        text: `参加者リストを同期しました: イベント「${eventLabel}」/ 日程「${scheduleLabel}」`,
+        meta: metaParts.filter(Boolean).join(" / "),
+        variant: "success"
+      });
+      if (this.dom.participantsTool) {
+        this.dom.participantsTool.dataset.syncedEventId = eventId;
+        this.dom.participantsTool.dataset.syncedScheduleId = scheduleId;
+        this.dom.participantsTool.dataset.syncedAt = String(timestamp);
+      }
+      return;
+    }
+
+    const reason = ensureString(detail.reason);
+    if (reason === "selection-missing") {
+      const message = this.selectedEventId
+        ? "日程を選択すると参加者リストを読み込みます。"
+        : "イベントと日程を選択すると参加者リストを読み込みます。";
+      this.participantSyncInfo = null;
+      this.setParticipantStatus({ text: message, variant: "info" });
+      if (this.dom.participantsTool) {
+        delete this.dom.participantsTool.dataset.syncedEventId;
+        delete this.dom.participantsTool.dataset.syncedScheduleId;
+        delete this.dom.participantsTool.dataset.syncedAt;
+      }
+      return;
+    }
+
+    const errorMessage = ensureString(detail.error);
+    const text = errorMessage
+      ? `参加者リストの読み込みに失敗しました: ${errorMessage}`
+      : "参加者リストの読み込みに失敗しました。";
+    const relative = timestamp ? formatRelative(timestamp) : "";
+    const metaParts = [];
+    if (relative && relative !== "—") {
+      metaParts.push(`${relative}に報告`);
+    }
+    this.participantSyncInfo = { ...detail, timestamp };
+    this.setParticipantStatus({
+      text,
+      meta: metaParts.join(" / "),
+      variant: "error"
+    });
   }
 
   clearLoadingIndicators() {
@@ -1103,6 +1265,17 @@ export class EventAdminApp {
         this.pendingToolSync = false;
         return;
       }
+      const eventLabel = event.name || event.id;
+      const scheduleLabel = schedule.label || schedule.id;
+      const rangeText = formatScheduleRange(schedule.startAt, schedule.endAt);
+      if (this.dom.participantsTool) {
+        this.dom.participantsTool.dataset.expectedEventId = event.id;
+        this.dom.participantsTool.dataset.expectedScheduleId = schedule.id;
+        this.dom.participantsTool.dataset.expectedEventName = eventLabel;
+        this.dom.participantsTool.dataset.expectedScheduleLabel = scheduleLabel;
+        this.dom.participantsTool.dataset.expectedStartAt = schedule.startAt || "";
+        this.dom.participantsTool.dataset.expectedEndAt = schedule.endAt || "";
+      }
       const contextKey = [
         event.id,
         schedule.id,
@@ -1124,6 +1297,16 @@ export class EventAdminApp {
         startAt: schedule.startAt || "",
         endAt: schedule.endAt || ""
       };
+      const pendingMeta = [];
+      if (rangeText) {
+        pendingMeta.push(`時間 ${rangeText}`);
+      }
+      pendingMeta.push("同期処理中…");
+      this.setParticipantStatus({
+        text: `参加者リストを同期しています: イベント「${eventLabel}」/ 日程「${scheduleLabel}」`,
+        meta: pendingMeta.join(" / "),
+        variant: "pending"
+      });
       let participantsSynced = false;
       let participantsError = null;
       try {
@@ -1162,6 +1345,16 @@ export class EventAdminApp {
         this.lastToolContextSignature = contextKey;
         this.lastToolContextApplied = true;
         this.pendingToolSync = false;
+        const successMeta = [];
+        if (rangeText) {
+          successMeta.push(`時間 ${rangeText}`);
+        }
+        successMeta.push("同期完了");
+        this.setParticipantStatus({
+          text: `参加者リストの同期を完了しました: イベント「${eventLabel}」/ 日程「${scheduleLabel}」`,
+          meta: successMeta.join(" / "),
+          variant: "success"
+        });
         if (this.lastParticipantsErrorMessage && this.dom.alert && !this.dom.alert.hidden) {
           const currentText = String(this.dom.alert.textContent || "").trim();
           if (currentText === this.lastParticipantsErrorMessage.trim()) {
@@ -1177,6 +1370,7 @@ export class EventAdminApp {
             : "参加者リストの初期化に失敗しました。時間をおいて再試行してください。";
           this.lastParticipantsErrorMessage = message;
           this.showAlert(message);
+          this.setParticipantStatus({ text: message, variant: "error" });
         }
       }
     })();
@@ -1494,6 +1688,15 @@ export class EventAdminApp {
       } catch (error) {
         logError("Failed to toggle logs drawer", error);
       }
+    }
+  }
+
+  cleanup() {
+    if (typeof document !== "undefined") {
+      document.removeEventListener("qa:participants-synced", this.handleParticipantSyncEvent);
+    }
+    if (typeof window !== "undefined") {
+      window.removeEventListener("beforeunload", this.cleanup);
     }
   }
 

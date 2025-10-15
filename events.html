@@ -7,8 +7,6 @@
   <title>イベントコントロールセンター</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2712%27%20fill%3D%2705111f%27%2F%3E%3Ctext%20x%3D%2732%27%20y%3D%2742%27%20text-anchor%3D%27middle%27%20font-family%3D%27Arial%2C%20sans-serif%27%20font-size%3D%2736%27%20fill%3D%2700eaff%27%3EE%3C%2Ftext%3E%3C%2Fsvg%3E">
   <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
   <script type="module" src="./scripts/shared/layout.js"></script>
 </head>
 <body class="op-theme events-page flow-page">
@@ -127,6 +125,10 @@
 
         <section id="flow-panel-participants" class="flow-tool-panel" data-panel="participants" aria-labelledby="flow-panel-participants-title" hidden>
         <h2 id="flow-panel-participants-title" class="visually-hidden">参加者リスト</h2>
+        <div id="flow-participants-status" class="flow-sync-status" role="status" aria-live="polite" hidden>
+          <span id="flow-participants-status-text"></span>
+          <span id="flow-participants-status-meta" class="flow-sync-status__meta" hidden></span>
+        </div>
         <div id="participants-tool" class="embedded-tool" data-tool="participants">
                 <div class="embedded-tool__surface qa-embedded" data-qa-embed>
                   <div id="qa-loading-overlay" class="loading-overlay" aria-live="polite" hidden>
@@ -149,6 +151,7 @@
                         <div class="module-actions"></div>
                       </div>
                       <div class="module-body">
+                        <p id="qa-participant-context" class="admin-context">イベントと日程を選択すると、該当する参加者リストがここに表示されます。</p>
                         <div class="admin-controls">
                           <button id="qa-download-participant-template" class="btn btn-ghost btn-sm" type="button">参加者CSVテンプレート</button>
                           <label class="btn btn-ghost file-input" for="qa-csv-input">

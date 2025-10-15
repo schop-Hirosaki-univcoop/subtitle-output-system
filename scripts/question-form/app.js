@@ -166,6 +166,7 @@ export class QuestionFormApp {
     this.view.lockForm();
     this.view.setContextGuard(message);
     this.view.setSubmitBusy(false, true);
+    this.view.focusContextGuard();
   }
 
   applyContext(context) {
@@ -464,11 +465,47 @@ export class QuestionFormApp {
   }
 }
 
-function generateQuestionUid() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
+function getCrypto() {
+  if (typeof globalThis !== "undefined" && globalThis.crypto) {
+    return globalThis.crypto;
   }
-  return `q_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  if (typeof window !== "undefined" && window.crypto) {
+    return window.crypto;
+  }
+  if (typeof self !== "undefined" && self.crypto) {
+    return self.crypto;
+  }
+  return undefined;
+}
+
+function formatUuidFromBytes(bytes) {
+  const toHex = (segment) => Array.from(segment, (b) => b.toString(16).padStart(2, "0")).join("");
+  return [
+    toHex(bytes.subarray(0, 4)),
+    toHex(bytes.subarray(4, 6)),
+    toHex(bytes.subarray(6, 8)),
+    toHex(bytes.subarray(8, 10)),
+    toHex(bytes.subarray(10))
+  ].join("-");
+}
+
+function generateQuestionUid() {
+  const cryptoObj = getCrypto();
+  if (cryptoObj) {
+    if (typeof cryptoObj.randomUUID === "function") {
+      return cryptoObj.randomUUID();
+    }
+    if (typeof cryptoObj.getRandomValues === "function") {
+      const bytes = new Uint8Array(16);
+      cryptoObj.getRandomValues(bytes);
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      return `q_${formatUuidFromBytes(bytes)}`;
+    }
+  }
+  const timestamp = Date.now().toString(36);
+  const randomPart = Array.from({ length: 3 }, () => Math.random().toString(36).slice(2, 10)).join("");
+  return `q_${timestamp}_${randomPart.slice(0, 18)}`;
 }
 
 function buildQuestionRecord({
