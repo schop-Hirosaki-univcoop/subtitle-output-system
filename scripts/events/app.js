@@ -182,18 +182,6 @@ export class EventAdminApp {
       });
     }
 
-    if (this.dom.eventChangeButton) {
-      this.dom.eventChangeButton.addEventListener("click", () => {
-        this.showPanel("events");
-      });
-    }
-
-    if (this.dom.scheduleChangeButton) {
-      this.dom.scheduleChangeButton.addEventListener("click", () => {
-        this.showPanel("schedules");
-      });
-    }
-
     (this.dom.panelButtons || []).forEach((button) => {
       button.addEventListener("click", () => {
         const target = button.dataset.panelTarget || "";
@@ -777,9 +765,6 @@ export class EventAdminApp {
         ? formatParticipantCount(event.totalParticipants)
         : "—";
     }
-    if (this.dom.eventChangeButton) {
-      this.dom.eventChangeButton.disabled = !event;
-    }
   }
 
   updateScheduleSummary() {
@@ -787,51 +772,62 @@ export class EventAdminApp {
 
     const event = this.getSelectedEvent();
     const schedule = this.getSelectedSchedule();
-    if (event && schedule) {
-      this.dom.scheduleSummary.hidden = false;
-      if (this.dom.scheduleSummaryEvent) {
-        this.dom.scheduleSummaryEvent.textContent = event.name || event.id;
-      }
-      if (this.dom.scheduleSummaryLabel) {
-        this.dom.scheduleSummaryLabel.textContent = schedule.label || schedule.id;
-      }
-      const rangeText = formatScheduleRange(schedule.startAt, schedule.endAt);
-      if (this.dom.scheduleSummaryRangeRow && this.dom.scheduleSummaryRange) {
-        if (rangeText) {
-          this.dom.scheduleSummaryRangeRow.hidden = false;
-          this.dom.scheduleSummaryRange.textContent = rangeText;
+    const hasSchedule = Boolean(event && schedule);
+    this.dom.scheduleSummary.hidden = !hasSchedule;
+    if (this.dom.scheduleSummaryEmpty) {
+      if (hasSchedule) {
+        this.dom.scheduleSummaryEmpty.hidden = true;
+      } else {
+        this.dom.scheduleSummaryEmpty.hidden = false;
+        if (!event) {
+          this.dom.scheduleSummaryEmpty.textContent = "イベントを選択してください。";
         } else {
-          this.dom.scheduleSummaryRangeRow.hidden = true;
-          this.dom.scheduleSummaryRange.textContent = "";
+          this.dom.scheduleSummaryEmpty.textContent = "日程を選択してください。";
         }
       }
-    } else {
-      this.dom.scheduleSummary.hidden = true;
     }
-    if (this.dom.scheduleChangeButton) {
-      this.dom.scheduleChangeButton.disabled = !schedule;
+    if (!hasSchedule) {
+      return;
+    }
+    if (this.dom.scheduleSummaryEvent) {
+      this.dom.scheduleSummaryEvent.textContent = event.name || event.id;
+    }
+    if (this.dom.scheduleSummaryLabel) {
+      this.dom.scheduleSummaryLabel.textContent = schedule.label || schedule.id;
+    }
+    const rangeText = formatScheduleRange(schedule.startAt, schedule.endAt);
+    if (this.dom.scheduleSummaryRangeRow && this.dom.scheduleSummaryRange) {
+      if (rangeText) {
+        this.dom.scheduleSummaryRangeRow.hidden = false;
+        this.dom.scheduleSummaryRange.textContent = rangeText;
+      } else {
+        this.dom.scheduleSummaryRangeRow.hidden = true;
+        this.dom.scheduleSummaryRange.textContent = "";
+      }
     }
   }
 
   updateToolSummary() {
     const event = this.getSelectedEvent();
     const schedule = this.getSelectedSchedule();
-    if (this.dom.toolSummaryEvent) {
-      this.dom.toolSummaryEvent.textContent = event ? event.name || event.id : "—";
-    }
-    if (this.dom.toolSummarySchedule) {
-      this.dom.toolSummarySchedule.textContent = schedule ? schedule.label || schedule.id : "—";
-    }
-    if (this.dom.toolSummaryTime && this.dom.toolSummaryTimeRow) {
-      const rangeText = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
-      if (rangeText) {
-        this.dom.toolSummaryTimeRow.hidden = false;
-        this.dom.toolSummaryTime.textContent = rangeText;
-      } else {
-        this.dom.toolSummaryTimeRow.hidden = true;
-        this.dom.toolSummaryTime.textContent = "";
-      }
-    }
+    (this.dom.toolSummaryEventFields || []).forEach((element) => {
+      if (!element) return;
+      element.textContent = event ? event.name || event.id : "—";
+    });
+    (this.dom.toolSummaryScheduleFields || []).forEach((element) => {
+      if (!element) return;
+      element.textContent = schedule ? schedule.label || schedule.id : "—";
+    });
+    const rangeText = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
+    const hasRange = Boolean(rangeText);
+    (this.dom.toolSummaryTimeRows || []).forEach((row) => {
+      if (!row) return;
+      row.hidden = !hasRange;
+    });
+    (this.dom.toolSummaryTimeFields || []).forEach((element) => {
+      if (!element) return;
+      element.textContent = hasRange ? rangeText : "";
+    });
   }
 
   async loadEmbeddedTool(tool) {
@@ -1158,8 +1154,10 @@ export class EventAdminApp {
     }
   }
 
-  getToolPanels() {
+  getPanelModules() {
     return {
+      events: this.dom.eventsModule,
+      schedules: this.dom.schedulesModule,
       participants: this.dom.participantsPanel,
       operator: this.dom.operatorPanel,
       dictionary: this.dom.dictionaryPanel,
@@ -1175,17 +1173,10 @@ export class EventAdminApp {
   }
 
   updatePanelVisibility() {
-    const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
-    const stage = activeConfig.stage || "events";
-    this.setModuleVisibility(this.dom.eventsModule, stage === "events");
-    this.setModuleVisibility(this.dom.schedulesModule, stage === "schedules");
-    this.setModuleVisibility(this.dom.tabsModule, stage === "tabs");
-    const toolPanels = this.getToolPanels();
-    Object.entries(toolPanels).forEach(([name, element]) => {
-      if (!element) return;
-      const isActive = stage === "tabs" && this.activePanel === name;
-      element.hidden = !isActive;
-      element.classList.toggle("is-active", isActive);
+    const activePanel = PANEL_CONFIG[this.activePanel] ? this.activePanel : "events";
+    const modules = this.getPanelModules();
+    Object.entries(modules).forEach(([name, element]) => {
+      this.setModuleVisibility(element, name === activePanel);
     });
   }
 
