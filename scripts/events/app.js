@@ -26,21 +26,6 @@ const formatDateTimeLocal = (date) => {
 
 const STAGE_SEQUENCE = ["events", "schedules", "tabs"];
 
-const STAGE_INFO = {
-  events: {
-    title: "イベントの管理",
-    description: "イベントカードを追加・編集し、進めたいイベントを選択してください。"
-  },
-  schedules: {
-    title: "日程の管理",
-    description: "選択したイベントの日程カードから、次に進める日程を決めてください。"
-  },
-  tabs: {
-    title: "運用ツール",
-    description: "左のメニューから操作したいパネルを選択してください。"
-  }
-};
-
 const PANEL_CONFIG = {
   events: { stage: "events", requireEvent: false, requireSchedule: false },
   schedules: { stage: "schedules", requireEvent: true, requireSchedule: false },
@@ -504,6 +489,8 @@ export class EventAdminApp {
     this.ensureSelectedEvent(previousEventId);
     this.renderEvents();
     this.updateScheduleStateFromSelection(previousScheduleId);
+    this.toggleLoading(false);
+    this.setScheduleLoading(false);
 
     return this.events;
   }
@@ -1037,39 +1024,7 @@ export class EventAdminApp {
     });
   }
 
-  updateStageHeader() {
-    const activePanel = PANEL_CONFIG[this.activePanel] ? this.activePanel : "events";
-    const panelConfig = PANEL_CONFIG[activePanel] || PANEL_CONFIG.events;
-    const info = PANEL_STAGE_INFO[activePanel] || STAGE_INFO[panelConfig.stage] || STAGE_INFO.events;
-    const event = this.getSelectedEvent();
-    const schedule = this.getSelectedSchedule();
-    let description = info.description;
-
-    if (panelConfig.requireSchedule) {
-      if (event && schedule) {
-        description = buildContextDescription(description, event, schedule);
-      } else if (event) {
-        description = `${description} 日程を選択してください。`;
-      } else {
-        description = `${description} まずイベントを選択してください。`;
-      }
-    } else if (panelConfig.requireEvent) {
-      if (event) {
-        description = buildContextDescription(description, event, schedule);
-      } else {
-        description = `${description} イベントを選択してください。`;
-      }
-    } else if (event || schedule) {
-      description = buildContextDescription(description, event, schedule);
-    }
-
-    if (this.dom.stageTitle) {
-      this.dom.stageTitle.textContent = info.title;
-    }
-    if (this.dom.stageDescription) {
-      this.dom.stageDescription.textContent = description;
-    }
-  }
+  updateStageHeader() {}
 
   setModuleAccessibility(module, isActive) {
     if (!module) return;
@@ -1190,6 +1145,12 @@ export class EventAdminApp {
     this.setStage(config.stage);
     this.updatePanelVisibility();
     this.updatePanelNavigation();
+    if (config.stage === "tabs") {
+      this.prepareToolFrames();
+      if (config.requireSchedule && this.selectedEventId && this.selectedScheduleId) {
+        this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
+      }
+    }
     this.handlePanelSetup(normalized, config).catch((error) => logError("Failed to prepare panel", error));
   }
 
@@ -1198,10 +1159,7 @@ export class EventAdminApp {
       await this.setDrawerState({ dictionary: false, logs: false });
       return;
     }
-    this.updateStageHeader();
-    this.prepareToolFrames();
     if (config.requireSchedule) {
-      await this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
       await this.setDrawerState({ dictionary: false, logs: false });
       return;
     }
