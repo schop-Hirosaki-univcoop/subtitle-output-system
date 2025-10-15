@@ -478,6 +478,29 @@ function toggleSectionVisibility(element, visible) {
   }
 }
 
+function emitParticipantSyncEvent(detail = {}) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const payload = { ...detail };
+  payload.source = "question-admin";
+  payload.eventId = detail.eventId != null ? String(detail.eventId) : state.selectedEventId || "";
+  payload.scheduleId = detail.scheduleId != null ? String(detail.scheduleId) : state.selectedScheduleId || "";
+  if (typeof detail.participantCount === "number" && Number.isFinite(detail.participantCount)) {
+    payload.participantCount = detail.participantCount;
+  } else {
+    payload.participantCount = Array.isArray(state.participants) ? state.participants.length : 0;
+  }
+  payload.timestamp = detail.timestamp ? Number(detail.timestamp) : Date.now();
+
+  try {
+    document.dispatchEvent(new CustomEvent("qa:participants-synced", { detail: payload }));
+  } catch (error) {
+    console.warn("Failed to dispatch participant sync event", error);
+  }
+}
+
 function sortParticipants(entries) {
   return entries.slice().sort((a, b) => {
     const idA = String(a.participantId || "");
@@ -1290,6 +1313,13 @@ async function loadParticipants(options = {}) {
     renderParticipants();
     updateParticipantContext();
     syncSaveButtonState();
+    emitParticipantSyncEvent({
+      success: false,
+      eventId,
+      scheduleId,
+      participantCount: 0,
+      reason: "selection-missing"
+    });
     return;
   }
 
@@ -1328,6 +1358,25 @@ async function loadParticipants(options = {}) {
         state.knownTokens.add(token);
       }
     });
+    const overrideKey = eventId && scheduleId ? `${eventId}::${scheduleId}` : "";
+    const override = overrideKey && state.scheduleContextOverrides instanceof Map
+      ? state.scheduleContextOverrides.get(overrideKey)
+      : null;
+    const selectedEvent = state.events.find(evt => evt.id === eventId) || null;
+    const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === scheduleId) || null;
+    const scheduleLabel = selectedSchedule?.label || override?.scheduleLabel || scheduleId;
+    const eventName = selectedEvent?.name || override?.eventName || eventId;
+    const scheduleRange = selectedSchedule
+      ? describeScheduleRange(selectedSchedule)
+      : override
+        ? describeScheduleRange({
+            id: scheduleId,
+            label: scheduleLabel,
+            startAt: override.startAt || "",
+            endAt: override.endAt || "",
+            date: override.date || (override.startAt ? String(override.startAt).slice(0, 10) : "")
+          })
+        : "";
     syncCurrentScheduleCache();
     if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
     if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
@@ -1339,6 +1388,15 @@ async function loadParticipants(options = {}) {
     renderParticipants();
     updateParticipantContext({ preserveStatus: true });
     syncSaveButtonState();
+    emitParticipantSyncEvent({
+      success: true,
+      eventId,
+      scheduleId,
+      participantCount: participants.length,
+      eventName,
+      scheduleLabel,
+      scheduleRange
+    });
   } catch (error) {
     console.error(error);
     state.participants = [];
@@ -1350,6 +1408,13 @@ async function loadParticipants(options = {}) {
     renderParticipants();
     updateParticipantContext();
     syncSaveButtonState();
+    emitParticipantSyncEvent({
+      success: false,
+      eventId,
+      scheduleId,
+      participantCount: 0,
+      error: error.message || "参加者リストの読み込みに失敗しました。"
+    });
   }
 }
 
