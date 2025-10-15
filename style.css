@@ -29,6 +29,16 @@ body{
   font-family:"Noto Sans JP", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   line-height:1.6;
 }
+.noscript-banner{
+  margin-block:1rem;
+  padding:0.875rem 1rem;
+  border-radius:0.75rem;
+  background:rgba(255,79,216,0.12);
+  border:1px solid rgba(255,79,216,0.35);
+  color:var(--txt);
+  font-size:0.95rem;
+  text-align:center;
+}
 html, body{ height:100%; }
 html{ overflow:auto; }
 .op-theme{ background:var(--bg); color:var(--text); }
