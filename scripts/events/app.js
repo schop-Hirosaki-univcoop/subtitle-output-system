@@ -26,21 +26,6 @@ const formatDateTimeLocal = (date) => {
 
 const STAGE_SEQUENCE = ["events", "schedules", "tabs"];
 
-const STAGE_INFO = {
-  events: {
-    title: "イベントの管理",
-    description: "イベントカードを追加・編集し、進めたいイベントを選択してください。"
-  },
-  schedules: {
-    title: "日程の管理",
-    description: "選択したイベントの日程カードから、次に進める日程を決めてください。"
-  },
-  tabs: {
-    title: "運用ツール",
-    description: "左のメニューから操作したいパネルを選択してください。"
-  }
-};
-
 const PANEL_CONFIG = {
   events: { stage: "events", requireEvent: false, requireSchedule: false },
   schedules: { stage: "schedules", requireEvent: true, requireSchedule: false },
@@ -128,7 +113,7 @@ export class EventAdminApp {
     this.updateFlowButtons();
     this.updateEventSummary();
     this.updateScheduleSummary();
-    this.updateToolSummary();
+    this.updateStageHeader();
     this.updatePanelVisibility();
     this.updatePanelNavigation();
     this.updateSelectionNotes();
@@ -152,7 +137,7 @@ export class EventAdminApp {
     this.renderScheduleList();
     this.updateScheduleSummary();
     this.updateEventSummary();
-    this.updateToolSummary();
+    this.updateStageHeader();
     this.updateStageUi();
     this.updateFlowButtons();
     this.updatePanelVisibility();
@@ -185,6 +170,19 @@ export class EventAdminApp {
     (this.dom.panelButtons || []).forEach((button) => {
       button.addEventListener("click", () => {
         const target = button.dataset.panelTarget || "";
+        this.showPanel(target);
+      });
+    });
+
+    (this.dom.navigationButtons || []).forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.disabled) {
+          return;
+        }
+        const target = button.dataset.flowNavTarget || "";
+        if (!target) {
+          return;
+        }
         this.showPanel(target);
       });
     });
@@ -337,7 +335,7 @@ export class EventAdminApp {
       await this.loadEvents();
       this.updateEventSummary();
       this.updateScheduleSummary();
-      this.updateToolSummary();
+      this.updateStageHeader();
       this.updateSelectionNotes();
     } catch (error) {
       logError("Event admin initialization failed", error);
@@ -452,6 +450,8 @@ export class EventAdminApp {
     this.ensureSelectedEvent(previousEventId);
     this.renderEvents();
     this.updateScheduleStateFromSelection(previousScheduleId);
+    this.toggleLoading(false);
+    this.setScheduleLoading(false);
 
     return this.events;
   }
@@ -588,7 +588,7 @@ export class EventAdminApp {
     this.renderEvents();
     this.updateScheduleStateFromSelection();
     this.updateEventSummary();
-    this.updateToolSummary();
+    this.updateStageHeader();
     this.updateFlowButtons();
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
@@ -623,7 +623,7 @@ export class EventAdminApp {
     }
     this.renderScheduleList();
     this.updateScheduleSummary();
-    this.updateToolSummary();
+    this.updateStageHeader();
     this.updateFlowButtons();
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
@@ -635,7 +635,7 @@ export class EventAdminApp {
     this.ensureSelectedSchedule(preferredScheduleId);
     this.renderScheduleList();
     this.updateScheduleSummary();
-    this.updateToolSummary();
+    this.updateStageHeader();
     this.updateFlowButtons();
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
@@ -765,6 +765,7 @@ export class EventAdminApp {
         ? formatParticipantCount(event.totalParticipants)
         : "—";
     }
+    this.updateStageHeader();
   }
 
   updateScheduleSummary() {
@@ -805,29 +806,7 @@ export class EventAdminApp {
         this.dom.scheduleSummaryRange.textContent = "";
       }
     }
-  }
-
-  updateToolSummary() {
-    const event = this.getSelectedEvent();
-    const schedule = this.getSelectedSchedule();
-    (this.dom.toolSummaryEventFields || []).forEach((element) => {
-      if (!element) return;
-      element.textContent = event ? event.name || event.id : "—";
-    });
-    (this.dom.toolSummaryScheduleFields || []).forEach((element) => {
-      if (!element) return;
-      element.textContent = schedule ? schedule.label || schedule.id : "—";
-    });
-    const rangeText = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
-    const hasRange = Boolean(rangeText);
-    (this.dom.toolSummaryTimeRows || []).forEach((row) => {
-      if (!row) return;
-      row.hidden = !hasRange;
-    });
-    (this.dom.toolSummaryTimeFields || []).forEach((element) => {
-      if (!element) return;
-      element.textContent = hasRange ? rangeText : "";
-    });
+    this.updateStageHeader();
   }
 
   async loadEmbeddedTool(tool) {
@@ -983,13 +962,7 @@ export class EventAdminApp {
     if (this.dom.main) {
       this.dom.main.dataset.stage = this.stage;
     }
-    const info = STAGE_INFO[this.stage] || STAGE_INFO.events;
-    if (this.dom.stageTitle) {
-      this.dom.stageTitle.textContent = info.title;
-    }
-    if (this.dom.stageDescription) {
-      this.dom.stageDescription.textContent = info.description;
-    }
+    this.updateStageHeader();
     this.updateStageIndicator();
     this.updatePanelVisibility();
     this.updatePanelNavigation();
@@ -1011,6 +984,8 @@ export class EventAdminApp {
       }
     });
   }
+
+  updateStageHeader() {}
 
   setModuleAccessibility(module, isActive) {
     if (!module) return;
@@ -1072,6 +1047,7 @@ export class EventAdminApp {
     if (this.dom.scheduleNextButton) {
       this.dom.scheduleNextButton.disabled = !signedIn || !hasSchedule;
     }
+    this.updateNavigationButtons();
   }
 
   updateSelectionNotes() {
@@ -1130,6 +1106,12 @@ export class EventAdminApp {
     this.setStage(config.stage);
     this.updatePanelVisibility();
     this.updatePanelNavigation();
+    if (config.stage === "tabs") {
+      this.prepareToolFrames();
+      if (config.requireSchedule && this.selectedEventId && this.selectedScheduleId) {
+        this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
+      }
+    }
     this.handlePanelSetup(normalized, config).catch((error) => logError("Failed to prepare panel", error));
   }
 
@@ -1138,10 +1120,7 @@ export class EventAdminApp {
       await this.setDrawerState({ dictionary: false, logs: false });
       return;
     }
-    this.updateToolSummary();
-    this.prepareToolFrames();
     if (config.requireSchedule) {
-      await this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
       await this.setDrawerState({ dictionary: false, logs: false });
       return;
     }
@@ -1194,6 +1173,18 @@ export class EventAdminApp {
       } else {
         button.removeAttribute("aria-current");
       }
+    });
+    this.updateNavigationButtons();
+  }
+
+  updateNavigationButtons() {
+    const buttons = this.dom.navigationButtons || [];
+    buttons.forEach((button) => {
+      if (!button) return;
+      const target = button.dataset.flowNavTarget || "";
+      const config = PANEL_CONFIG[target] || PANEL_CONFIG.events;
+      const disabled = !target || target === this.activePanel || !this.canActivatePanel(target, config);
+      button.disabled = disabled;
     });
   }
 

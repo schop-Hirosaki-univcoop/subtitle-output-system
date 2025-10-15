@@ -3,15 +3,12 @@ export function queryDom() {
     main: document.getElementById("events-main"),
     eventsModule: document.querySelector('[data-panel="events"]'),
     schedulesModule: document.querySelector('[data-panel="schedules"]'),
-    stageTitle: document.getElementById("flow-stage-title"),
-    stageDescription: document.getElementById("flow-stage-description"),
     stageIndicators: Array.from(document.querySelectorAll("[data-stage-indicator]")),
     loading: document.getElementById("flow-events-loading"),
     loadingText: document.getElementById("flow-events-loading-text"),
     alert: document.getElementById("flow-events-alert"),
     eventList: document.getElementById("flow-event-list"),
     eventEmpty: document.getElementById("flow-event-empty"),
-    context: document.getElementById("flow-events-context"),
     eventSelectionNote: document.getElementById("flow-event-selection-note"),
     addEventButton: document.getElementById("flow-add-event-button"),
     refreshButton: document.getElementById("flow-events-refresh-button"),
@@ -24,7 +21,6 @@ export function queryDom() {
     eventSummaryParticipants: document.getElementById("flow-event-summary-participants"),
     scheduleLoading: document.getElementById("flow-schedule-loading"),
     scheduleLoadingText: document.getElementById("flow-schedule-loading-text"),
-    scheduleContext: document.getElementById("flow-schedule-context"),
     scheduleSelectionNote: document.getElementById("flow-schedule-selection-note"),
     addScheduleButton: document.getElementById("flow-add-schedule-button"),
     scheduleRefreshButton: document.getElementById("flow-schedule-refresh-button"),
@@ -58,12 +54,9 @@ export function queryDom() {
     operatorPanel: document.getElementById("flow-panel-operator"),
     dictionaryPanel: document.getElementById("op-dictionary-panel"),
     logsPanel: document.getElementById("op-logs-panel"),
-    toolSummaryEventFields: Array.from(document.querySelectorAll('[data-tool-summary="event"]')),
-    toolSummaryScheduleFields: Array.from(document.querySelectorAll('[data-tool-summary="schedule"]')),
-    toolSummaryTimeFields: Array.from(document.querySelectorAll('[data-tool-summary="time"]')),
-    toolSummaryTimeRows: Array.from(document.querySelectorAll('[data-tool-summary-row="time"]')),
     participantsTool: document.getElementById("participants-tool"),
     operatorTool: document.getElementById("operator-tool"),
-    panelButtons: Array.from(document.querySelectorAll("[data-panel-target]"))
+    panelButtons: Array.from(document.querySelectorAll("[data-panel-target]")),
+    navigationButtons: Array.from(document.querySelectorAll("[data-flow-nav-target]"))
   };
 }
