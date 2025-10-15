@@ -35,6 +35,27 @@ const PANEL_CONFIG = {
   logs: { stage: "tabs", requireEvent: false, requireSchedule: false, logs: true }
 };
 
+const PANEL_STAGE_INFO = {
+  events: STAGE_INFO.events,
+  schedules: STAGE_INFO.schedules,
+  participants: {
+    title: "参加者リストの管理",
+    description: "選択した日程の参加者リストを整理・更新します。"
+  },
+  operator: {
+    title: "テロップ操作パネル",
+    description: "質問の送出とステータス監視を行います。"
+  },
+  dictionary: {
+    title: "ルビ辞書管理",
+    description: "登録語句を編集して即座に共有できます。"
+  },
+  logs: {
+    title: "操作ログ",
+    description: "テロップ操作の履歴を確認します。"
+  }
+};
+
 const FOCUSABLE_SELECTOR = [
   "a[href]",
   "button:not([disabled])",
@@ -43,6 +64,24 @@ const FOCUSABLE_SELECTOR = [
   "textarea:not([disabled])",
   "[tabindex]:not([tabindex='-1'])"
 ].join(", ");
+
+function buildContextDescription(baseDescription, event, schedule) {
+  const segments = [];
+  if (event) {
+    segments.push(`イベント: ${event.name || event.id}`);
+  }
+  if (schedule) {
+    segments.push(`日程: ${schedule.label || schedule.id}`);
+    const range = formatScheduleRange(schedule.startAt, schedule.endAt);
+    if (range) {
+      segments.push(`時間: ${range}`);
+    }
+  }
+  if (!segments.length) {
+    return baseDescription;
+  }
+  return `${baseDescription} 選択中 — ${segments.join(" / ")}`;
+}
 
 const logError = (context, error) => {
   const detail =
