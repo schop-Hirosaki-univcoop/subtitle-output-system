@@ -92,10 +92,27 @@ export class FormView {
       this.contextGuardEl.hidden = false;
       this.contextGuardEl.removeAttribute("aria-hidden");
       this.contextGuardEl.textContent = message;
+      if (!this.contextGuardEl.hasAttribute("tabindex")) {
+        this.contextGuardEl.setAttribute("tabindex", "-1");
+      }
     } else {
       this.contextGuardEl.hidden = true;
       this.contextGuardEl.setAttribute("aria-hidden", "true");
       this.contextGuardEl.textContent = "";
+      if (this.contextGuardEl.hasAttribute("tabindex")) {
+        this.contextGuardEl.removeAttribute("tabindex");
+      }
+    }
+  }
+
+  focusContextGuard() {
+    if (!this.contextGuardEl || this.contextGuardEl.hidden) {
+      return;
+    }
+    try {
+      this.contextGuardEl.focus();
+    } catch (error) {
+      // no-op: focusing may fail in older browsers
     }
   }
 
@@ -270,11 +287,15 @@ export class FormView {
     if (!this.submitButton) return;
     if (locked) {
       this.submitButton.disabled = true;
-      this.submitButton.setAttribute("aria-busy", "false");
+      this.submitButton.removeAttribute("aria-busy");
       return;
     }
     this.submitButton.disabled = Boolean(isBusy);
-    this.submitButton.setAttribute("aria-busy", String(Boolean(isBusy)));
+    if (isBusy) {
+      this.submitButton.setAttribute("aria-busy", "true");
+    } else {
+      this.submitButton.removeAttribute("aria-busy");
+    }
   }
 
   bindFormEvents({
