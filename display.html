@@ -97,21 +97,6 @@
       font-family: "Noto Sans JP","Hiragino Sans","Meiryo",system-ui,sans-serif;
     }
 
-    .noscript-banner {
-      position: fixed;
-      inset: 1.5rem auto auto 50%;
-      transform: translateX(-50%);
-      max-width: min(90vw, 480px);
-      padding: 0.75rem 1rem;
-      border-radius: 999px;
-      background: rgba(255, 79, 216, 0.14);
-      border: 1px solid rgba(255, 79, 216, 0.4);
-      color: #fff;
-      font-family: "Noto Sans JP","Hiragino Sans","Meiryo",system-ui,sans-serif;
-      text-align: center;
-      z-index: 5;
-    }
-
     /* ─ ラジオネーム“タブ座布団” ─ */
     #telop-canvas .name-tag{
       position: absolute;
@@ -384,12 +369,6 @@
   </style>
 </head>
 <body>
-  <noscript>
-    <div class="noscript-banner" role="alert">
-      テロップ表示には JavaScript が必要です。ブラウザの設定を確認してください。
-    </div>
-  </noscript>
-
   <!-- ★ あなたの条件：#telop-canvas を下部・全幅・16:9で固定 -->
   <div id="telop-canvas">
     <!-- ▼ タブ＋本文座布団をひとまとめにするラッパ（ここに FLIP を適用） -->
