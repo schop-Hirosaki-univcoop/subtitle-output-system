@@ -159,10 +159,16 @@ export class EventAdminApp {
     };
     this.lastToolContextSignature = "";
     this.lastToolContextApplied = false;
+    this.pendingToolSync = false;
+    this.toolSyncPromise = null;
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
   }
 
   init() {
+    if (auth && auth.currentUser) {
+      this.currentUser = auth.currentUser;
+      this.updateUserLabel();
+    }
     this.bindEvents();
     this.applyEventsLoadingState();
     this.applyScheduleLoadingState();
@@ -170,6 +176,7 @@ export class EventAdminApp {
     this.updateFlowButtons();
     this.updateEventSummary();
     this.updateScheduleSummary();
+    this.updateParticipantsContextCard();
     this.updateStageHeader();
     this.updatePanelVisibility();
     this.updatePanelNavigation();
@@ -186,6 +193,8 @@ export class EventAdminApp {
     this.activePanel = "events";
     this.lastToolContextSignature = "";
     this.lastToolContextApplied = false;
+    this.pendingToolSync = false;
+    this.toolSyncPromise = null;
     this.eventsLoadingDepth = 0;
     this.eventsLoadingMessage = "";
     this.scheduleLoadingDepth = 0;
@@ -197,6 +206,7 @@ export class EventAdminApp {
     this.renderScheduleList();
     this.updateScheduleSummary();
     this.updateEventSummary();
+    this.updateParticipantsContextCard();
     this.updateStageHeader();
     this.updateStageUi();
     this.updateFlowButtons();
@@ -453,6 +463,7 @@ export class EventAdminApp {
       this.showAlert(message || fallback);
     } finally {
       this.endEventsLoading();
+      this.clearLoadingIndicators();
     }
   }
 
@@ -690,6 +701,7 @@ export class EventAdminApp {
     if (previous !== normalized) {
       this.lastToolContextSignature = "";
       this.lastToolContextApplied = false;
+      this.pendingToolSync = false;
     }
     this.renderEvents();
     this.updateScheduleStateFromSelection();
@@ -698,6 +710,7 @@ export class EventAdminApp {
     this.updateFlowButtons();
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
+    this.handleToolContextAfterSelection();
   }
 
   ensureSelectedSchedule(preferredId = "") {
@@ -707,6 +720,9 @@ export class EventAdminApp {
       this.selectedScheduleId = desiredId;
     } else {
       this.selectedScheduleId = "";
+      this.pendingToolSync = false;
+      this.lastToolContextSignature = "";
+      this.lastToolContextApplied = false;
     }
   }
 
@@ -726,6 +742,7 @@ export class EventAdminApp {
     if (previous !== normalized) {
       this.lastToolContextSignature = "";
       this.lastToolContextApplied = false;
+      this.pendingToolSync = false;
     }
     this.renderScheduleList();
     this.updateScheduleSummary();
@@ -733,6 +750,7 @@ export class EventAdminApp {
     this.updateFlowButtons();
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
+    this.handleToolContextAfterSelection();
   }
 
   updateScheduleStateFromSelection(preferredScheduleId = "") {
@@ -745,6 +763,7 @@ export class EventAdminApp {
     this.updateFlowButtons();
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
+    this.handleToolContextAfterSelection();
   }
 
   renderScheduleList() {
@@ -893,6 +912,7 @@ export class EventAdminApp {
         }
       }
     }
+    this.updateParticipantsContextCard();
     if (!hasSchedule) {
       return;
     }
@@ -913,6 +933,74 @@ export class EventAdminApp {
       }
     }
     this.updateStageHeader();
+  }
+
+  updateParticipantsContextCard() {
+    const card = this.dom.participantsContextCard;
+    if (!card) {
+      return;
+    }
+    const event = this.getSelectedEvent();
+    const schedule = this.getSelectedSchedule();
+    if (!event || !schedule) {
+      card.hidden = true;
+      if (this.dom.participantsContextEvent) {
+        this.dom.participantsContextEvent.textContent = "—";
+      }
+      if (this.dom.participantsContextSchedule) {
+        this.dom.participantsContextSchedule.textContent = "—";
+      }
+      if (this.dom.participantsContextRangeRow) {
+        this.dom.participantsContextRangeRow.hidden = true;
+      }
+      if (this.dom.participantsContextRange) {
+        this.dom.participantsContextRange.textContent = "";
+      }
+      return;
+    }
+
+    card.hidden = false;
+    if (this.dom.participantsContextEvent) {
+      this.dom.participantsContextEvent.textContent = event.name || event.id;
+    }
+    if (this.dom.participantsContextSchedule) {
+      this.dom.participantsContextSchedule.textContent = schedule.label || schedule.id;
+    }
+    if (this.dom.participantsContextRangeRow && this.dom.participantsContextRange) {
+      const range = formatScheduleRange(schedule.startAt, schedule.endAt);
+      if (range) {
+        this.dom.participantsContextRangeRow.hidden = false;
+        this.dom.participantsContextRange.textContent = range;
+      } else {
+        this.dom.participantsContextRangeRow.hidden = true;
+        this.dom.participantsContextRange.textContent = "";
+      }
+    }
+  }
+
+  handleToolContextAfterSelection() {
+    if (!this.selectedEventId || !this.selectedScheduleId) {
+      this.pendingToolSync = false;
+      this.lastToolContextSignature = "";
+      this.lastToolContextApplied = false;
+      return;
+    }
+    const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
+    if (activeConfig.stage === "tabs" && activeConfig.requireSchedule) {
+      this.pendingToolSync = false;
+      this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
+    } else {
+      this.pendingToolSync = true;
+    }
+  }
+
+  clearLoadingIndicators() {
+    this.eventsLoadingDepth = 0;
+    this.eventsLoadingMessage = "";
+    this.scheduleLoadingDepth = 0;
+    this.scheduleLoadingMessage = "";
+    this.applyEventsLoadingState();
+    this.applyScheduleLoadingState();
   }
 
   async loadEmbeddedTool(tool) {
@@ -1006,62 +1094,85 @@ export class EventAdminApp {
   }
 
   async syncEmbeddedTools() {
-    this.prepareToolFrames();
-    const schedule = this.getSelectedSchedule();
-    const event = this.getSelectedEvent();
-    if (!schedule || !event) {
-      this.lastToolContextSignature = "";
+    if (this.toolSyncPromise) {
+      return this.toolSyncPromise;
+    }
+
+    const run = (async () => {
+      this.prepareToolFrames();
+      const schedule = this.getSelectedSchedule();
+      const event = this.getSelectedEvent();
+      if (!schedule || !event) {
+        this.lastToolContextSignature = "";
+        this.lastToolContextApplied = false;
+        this.pendingToolSync = false;
+        return;
+      }
+      const contextKey = [
+        event.id,
+        schedule.id,
+        event.name || "",
+        schedule.label || "",
+        schedule.startAt || "",
+        schedule.endAt || ""
+      ].join("::");
+      if (this.lastToolContextSignature === contextKey && this.lastToolContextApplied) {
+        this.pendingToolSync = false;
+        return;
+      }
       this.lastToolContextApplied = false;
-      return;
-    }
-    const contextKey = [
-      event.id,
-      schedule.id,
-      event.name || "",
-      schedule.label || "",
-      schedule.startAt || "",
-      schedule.endAt || ""
-    ].join("::");
-    if (this.lastToolContextSignature === contextKey && this.lastToolContextApplied) {
-      return;
-    }
-    this.lastToolContextApplied = false;
-    const context = {
-      eventId: event.id,
-      eventName: event.name || event.id,
-      scheduleId: schedule.id,
-      scheduleLabel: schedule.label || schedule.id,
-      startAt: schedule.startAt || "",
-      endAt: schedule.endAt || ""
-    };
-    let participantsSynced = false;
-    try {
-      await this.loadEmbeddedTool("participants");
-      if (window.questionAdminEmbed?.waitUntilReady) {
-        await window.questionAdminEmbed.waitUntilReady();
+      const context = {
+        eventId: event.id,
+        eventName: event.name || event.id,
+        scheduleId: schedule.id,
+        scheduleLabel: schedule.label || schedule.id,
+        startAt: schedule.startAt || "",
+        endAt: schedule.endAt || ""
+      };
+      let participantsSynced = false;
+      try {
+        await this.loadEmbeddedTool("participants");
+        if (window.questionAdminEmbed?.waitUntilReady) {
+          await window.questionAdminEmbed.waitUntilReady();
+        }
+        if (window.questionAdminEmbed?.setSelection) {
+          await window.questionAdminEmbed.setSelection(context);
+        }
+        participantsSynced = true;
+      } catch (error) {
+        logError("Failed to sync participant tool", error);
       }
-      if (window.questionAdminEmbed?.setSelection) {
-        await window.questionAdminEmbed.setSelection(context);
+      try {
+        await this.loadEmbeddedTool("operator");
+        if (window.operatorEmbed?.waitUntilReady) {
+          await window.operatorEmbed.waitUntilReady();
+        }
+        if (window.operatorEmbed?.setContext) {
+          window.operatorEmbed.setContext(context);
+        }
+      } catch (error) {
+        logError("Failed to sync operator tool", error);
       }
-      participantsSynced = true;
-    } catch (error) {
-      logError("Failed to sync participant tool", error);
-    }
-    try {
-      await this.loadEmbeddedTool("operator");
-      if (window.operatorEmbed?.waitUntilReady) {
-        await window.operatorEmbed.waitUntilReady();
+      if (participantsSynced) {
+        this.lastToolContextSignature = contextKey;
+        this.lastToolContextApplied = true;
+        this.pendingToolSync = false;
+        const overlay = typeof document !== "undefined" ? document.getElementById("qa-loading-overlay") : null;
+        if (overlay) {
+          overlay.hidden = true;
+        }
+      } else {
+        this.pendingToolSync = true;
       }
-      if (window.operatorEmbed?.setContext) {
-        window.operatorEmbed.setContext(context);
+    })();
+
+    this.toolSyncPromise = run.finally(() => {
+      if (this.toolSyncPromise === run) {
+        this.toolSyncPromise = null;
       }
-    } catch (error) {
-      logError("Failed to sync operator tool", error);
-    }
-    if (participantsSynced) {
-      this.lastToolContextSignature = contextKey;
-      this.lastToolContextApplied = true;
-    }
+    });
+
+    return this.toolSyncPromise;
   }
 
   updateStageUi() {
@@ -1217,7 +1328,12 @@ export class EventAdminApp {
     this.updatePanelNavigation();
     if (config.stage === "tabs") {
       this.prepareToolFrames();
-      if (config.requireSchedule && this.selectedEventId && this.selectedScheduleId) {
+      const hasSelection = this.selectedEventId && this.selectedScheduleId;
+      if (config.requireSchedule && hasSelection) {
+        this.pendingToolSync = false;
+        this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
+      } else if (this.pendingToolSync && hasSelection) {
+        this.pendingToolSync = false;
         this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
       }
     }
