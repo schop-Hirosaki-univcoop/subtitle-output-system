@@ -17,7 +17,21 @@ export function extractToken(search = window.location.search, tokenKeys = TOKEN_
 
 export async function fetchContextFromToken(database, token) {
   const tokenRef = ref(database, `questionIntake/tokens/${token}`);
-  const snapshot = await get(tokenRef);
+  let snapshot;
+  try {
+    snapshot = await get(tokenRef);
+  } catch (error) {
+    const code = error?.code || "";
+    let message = "アクセスに失敗しました。通信環境を確認して再度お試しください。";
+    if (code === "PERMISSION_DENIED") {
+      message = "アクセス権が確認できませんでした。リンクの有効期限や権限を運営までご確認ください。";
+    } else if (code === "NETWORK_ERROR") {
+      message = "通信エラーが発生しました。ネットワーク接続を確認してから再度アクセスしてください。";
+    }
+    const wrapped = new Error(message);
+    wrapped.cause = error;
+    throw wrapped;
+  }
   if (!snapshot.exists()) {
     throw new Error("リンクが無効です。配布された最新のURLからアクセスしてください。");
   }

@@ -55,6 +55,9 @@ export function queryDom() {
     dictionaryPanel: document.getElementById("op-dictionary-panel"),
     logsPanel: document.getElementById("op-logs-panel"),
     participantsTool: document.getElementById("participants-tool"),
+    participantsStatus: document.getElementById("flow-participants-status"),
+    participantsStatusText: document.getElementById("flow-participants-status-text"),
+    participantsStatusMeta: document.getElementById("flow-participants-status-meta"),
     operatorTool: document.getElementById("operator-tool"),
     panelButtons: Array.from(document.querySelectorAll("[data-panel-target]")),
     navigationButtons: Array.from(document.querySelectorAll("[data-flow-nav-target]"))
