@@ -50,6 +50,27 @@ const PANEL_CONFIG = {
   logs: { stage: "tabs", requireEvent: false, requireSchedule: false, logs: true }
 };
 
+const PANEL_STAGE_INFO = {
+  events: STAGE_INFO.events,
+  schedules: STAGE_INFO.schedules,
+  participants: {
+    title: "参加者リストの管理",
+    description: "選択した日程の参加者リストを整理・更新します。"
+  },
+  operator: {
+    title: "テロップ操作パネル",
+    description: "質問の送出とステータス監視を行います。"
+  },
+  dictionary: {
+    title: "ルビ辞書管理",
+    description: "登録語句を編集して即座に共有できます。"
+  },
+  logs: {
+    title: "操作ログ",
+    description: "テロップ操作の履歴を確認します。"
+  }
+};
+
 const FOCUSABLE_SELECTOR = [
   "a[href]",
   "button:not([disabled])",
@@ -58,6 +79,24 @@ const FOCUSABLE_SELECTOR = [
   "textarea:not([disabled])",
   "[tabindex]:not([tabindex='-1'])"
 ].join(", ");
+
+function buildContextDescription(baseDescription, event, schedule) {
+  const segments = [];
+  if (event) {
+    segments.push(`イベント: ${event.name || event.id}`);
+  }
+  if (schedule) {
+    segments.push(`日程: ${schedule.label || schedule.id}`);
+    const range = formatScheduleRange(schedule.startAt, schedule.endAt);
+    if (range) {
+      segments.push(`時間: ${range}`);
+    }
+  }
+  if (!segments.length) {
+    return baseDescription;
+  }
+  return `${baseDescription} 選択中 — ${segments.join(" / ")}`;
+}
 
 const logError = (context, error) => {
   const detail =
@@ -128,7 +167,7 @@ export class EventAdminApp {
     this.updateFlowButtons();
     this.updateEventSummary();
     this.updateScheduleSummary();
-    this.updateToolSummary();
+    this.updateStageHeader();
     this.updatePanelVisibility();
     this.updatePanelNavigation();
     this.updateSelectionNotes();
@@ -152,7 +191,7 @@ export class EventAdminApp {
     this.renderScheduleList();
     this.updateScheduleSummary();
     this.updateEventSummary();
-    this.updateToolSummary();
+    this.updateStageHeader();
     this.updateStageUi();
     this.updateFlowButtons();
     this.updatePanelVisibility();
@@ -185,6 +224,19 @@ export class EventAdminApp {
     (this.dom.panelButtons || []).forEach((button) => {
       button.addEventListener("click", () => {
         const target = button.dataset.panelTarget || "";
+        this.showPanel(target);
+      });
+    });
+
+    (this.dom.navigationButtons || []).forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.disabled) {
+          return;
+        }
+        const target = button.dataset.flowNavTarget || "";
+        if (!target) {
+          return;
+        }
         this.showPanel(target);
       });
     });
@@ -337,7 +389,7 @@ export class EventAdminApp {
       await this.loadEvents();
       this.updateEventSummary();
       this.updateScheduleSummary();
-      this.updateToolSummary();
+      this.updateStageHeader();
       this.updateSelectionNotes();
     } catch (error) {
       logError("Event admin initialization failed", error);
@@ -588,7 +640,7 @@ export class EventAdminApp {
     this.renderEvents();
     this.updateScheduleStateFromSelection();
     this.updateEventSummary();
-    this.updateToolSummary();
+    this.updateStageHeader();
     this.updateFlowButtons();
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
@@ -623,7 +675,7 @@ export class EventAdminApp {
     }
     this.renderScheduleList();
     this.updateScheduleSummary();
-    this.updateToolSummary();
+    this.updateStageHeader();
     this.updateFlowButtons();
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
@@ -635,7 +687,7 @@ export class EventAdminApp {
     this.ensureSelectedSchedule(preferredScheduleId);
     this.renderScheduleList();
     this.updateScheduleSummary();
-    this.updateToolSummary();
+    this.updateStageHeader();
     this.updateFlowButtons();
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
@@ -765,6 +817,7 @@ export class EventAdminApp {
         ? formatParticipantCount(event.totalParticipants)
         : "—";
     }
+    this.updateStageHeader();
   }
 
   updateScheduleSummary() {
@@ -805,29 +858,7 @@ export class EventAdminApp {
         this.dom.scheduleSummaryRange.textContent = "";
       }
     }
-  }
-
-  updateToolSummary() {
-    const event = this.getSelectedEvent();
-    const schedule = this.getSelectedSchedule();
-    (this.dom.toolSummaryEventFields || []).forEach((element) => {
-      if (!element) return;
-      element.textContent = event ? event.name || event.id : "—";
-    });
-    (this.dom.toolSummaryScheduleFields || []).forEach((element) => {
-      if (!element) return;
-      element.textContent = schedule ? schedule.label || schedule.id : "—";
-    });
-    const rangeText = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
-    const hasRange = Boolean(rangeText);
-    (this.dom.toolSummaryTimeRows || []).forEach((row) => {
-      if (!row) return;
-      row.hidden = !hasRange;
-    });
-    (this.dom.toolSummaryTimeFields || []).forEach((element) => {
-      if (!element) return;
-      element.textContent = hasRange ? rangeText : "";
-    });
+    this.updateStageHeader();
   }
 
   async loadEmbeddedTool(tool) {
@@ -983,13 +1014,7 @@ export class EventAdminApp {
     if (this.dom.main) {
       this.dom.main.dataset.stage = this.stage;
     }
-    const info = STAGE_INFO[this.stage] || STAGE_INFO.events;
-    if (this.dom.stageTitle) {
-      this.dom.stageTitle.textContent = info.title;
-    }
-    if (this.dom.stageDescription) {
-      this.dom.stageDescription.textContent = info.description;
-    }
+    this.updateStageHeader();
     this.updateStageIndicator();
     this.updatePanelVisibility();
     this.updatePanelNavigation();
@@ -1010,6 +1035,40 @@ export class EventAdminApp {
         indicator.removeAttribute("aria-current");
       }
     });
+  }
+
+  updateStageHeader() {
+    const activePanel = PANEL_CONFIG[this.activePanel] ? this.activePanel : "events";
+    const panelConfig = PANEL_CONFIG[activePanel] || PANEL_CONFIG.events;
+    const info = PANEL_STAGE_INFO[activePanel] || STAGE_INFO[panelConfig.stage] || STAGE_INFO.events;
+    const event = this.getSelectedEvent();
+    const schedule = this.getSelectedSchedule();
+    let description = info.description;
+
+    if (panelConfig.requireSchedule) {
+      if (event && schedule) {
+        description = buildContextDescription(description, event, schedule);
+      } else if (event) {
+        description = `${description} 日程を選択してください。`;
+      } else {
+        description = `${description} まずイベントを選択してください。`;
+      }
+    } else if (panelConfig.requireEvent) {
+      if (event) {
+        description = buildContextDescription(description, event, schedule);
+      } else {
+        description = `${description} イベントを選択してください。`;
+      }
+    } else if (event || schedule) {
+      description = buildContextDescription(description, event, schedule);
+    }
+
+    if (this.dom.stageTitle) {
+      this.dom.stageTitle.textContent = info.title;
+    }
+    if (this.dom.stageDescription) {
+      this.dom.stageDescription.textContent = description;
+    }
   }
 
   setModuleAccessibility(module, isActive) {
@@ -1072,6 +1131,7 @@ export class EventAdminApp {
     if (this.dom.scheduleNextButton) {
       this.dom.scheduleNextButton.disabled = !signedIn || !hasSchedule;
     }
+    this.updateNavigationButtons();
   }
 
   updateSelectionNotes() {
@@ -1138,7 +1198,7 @@ export class EventAdminApp {
       await this.setDrawerState({ dictionary: false, logs: false });
       return;
     }
-    this.updateToolSummary();
+    this.updateStageHeader();
     this.prepareToolFrames();
     if (config.requireSchedule) {
       await this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
@@ -1194,6 +1254,18 @@ export class EventAdminApp {
       } else {
         button.removeAttribute("aria-current");
       }
+    });
+    this.updateNavigationButtons();
+  }
+
+  updateNavigationButtons() {
+    const buttons = this.dom.navigationButtons || [];
+    buttons.forEach((button) => {
+      if (!button) return;
+      const target = button.dataset.flowNavTarget || "";
+      const config = PANEL_CONFIG[target] || PANEL_CONFIG.events;
+      const disabled = !target || target === this.activePanel || !this.canActivatePanel(target, config);
+      button.disabled = disabled;
     });
   }
 

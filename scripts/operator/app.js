@@ -36,6 +36,7 @@ export class OperatorApp {
     if (this.isEmbedded && this.dom.loginContainer) {
       this.dom.loginContainer.style.display = "none";
     }
+    this.loaderStepLabels = this.isEmbedded ? [] : null;
 
     this.lastUpdatedAt = 0;
     this.renderTicker = null;
@@ -469,11 +470,11 @@ export class OperatorApp {
       return;
     }
     try {
-      this.showLoader("権限を確認しています…");
+      this.showLoader(this.isEmbedded ? "利用準備を確認しています…" : "権限を確認しています…");
       this.initLoaderSteps();
-      this.setLoaderStep(0, "認証OK。ユーザー情報を確認中…");
+      this.setLoaderStep(0, this.isEmbedded ? "利用状態を確認しています…" : "認証OK。ユーザー情報を確認中…");
       const result = await this.api.apiPost({ action: "fetchSheet", sheet: "users" });
-      this.setLoaderStep(1, "在籍チェック中…");
+      this.setLoaderStep(1, this.isEmbedded ? "必要な設定を確認しています…" : "在籍チェック中…");
       if (!result.success || !result.data) {
         throw new Error("ユーザー権限の確認に失敗しました。");
       }
@@ -488,7 +489,7 @@ export class OperatorApp {
         return;
       }
 
-      this.setLoaderStep(2, "管理者権限の確認/付与…");
+      this.setLoaderStep(2, this.isEmbedded ? "必要な権限を同期しています…" : "管理者権限の確認/付与…");
       try {
         await this.api.apiPost({ action: "ensureAdmin" });
       } catch (error) {
@@ -496,7 +497,7 @@ export class OperatorApp {
       }
 
       this.renderLoggedInUi(user);
-      this.setLoaderStep(3, "初期ミラー実行中…");
+      this.setLoaderStep(3, this.isEmbedded ? "初期データを準備しています…" : "初期ミラー実行中…");
       this.updateLoader("初期データを準備しています…");
       try {
         const snapshot = await get(questionsRef);
@@ -507,7 +508,7 @@ export class OperatorApp {
         console.warn("mirrorSheet skipped", error);
       }
 
-      this.setLoaderStep(4, "購読開始…");
+      this.setLoaderStep(4, this.isEmbedded ? "リアルタイム購読を開始しています…" : "購読開始…");
       this.updateLoader("データ同期中…");
       const [questionsSnapshot, eventsSnapshot, schedulesSnapshot] = await Promise.all([
         get(questionsRef),
@@ -523,14 +524,14 @@ export class OperatorApp {
       this.startQuestionsStream();
       this.startScheduleMetadataStreams();
       this.startDisplaySessionMonitor();
-      this.setLoaderStep(5, "辞書取得…");
+      this.setLoaderStep(5, this.isEmbedded ? "辞書データを取得しています…" : "辞書取得…");
       await this.fetchDictionary();
       if (this.preferredDictionaryOpen) {
         this.toggleDictionaryDrawer(true, false);
       } else {
         this.toggleDictionaryDrawer(false, false);
       }
-      this.setLoaderStep(6, "ログ取得…");
+      this.setLoaderStep(6, this.isEmbedded ? "操作ログを取得しています…" : "ログ取得…");
       await this.fetchLogs();
       if (this.preferredLogsOpen) {
         this.toggleLogsDrawer(true, false);
