@@ -120,6 +120,23 @@
 
         <section id="flow-panel-participants" class="flow-tool-panel" data-panel="participants" aria-labelledby="flow-panel-participants-title" hidden>
         <h2 id="flow-panel-participants-title" class="visually-hidden">参加者リスト</h2>
+        <section id="participants-context-callout" class="flow-tool-context-card" aria-live="polite" hidden>
+          <h3 class="flow-tool-context-card__title">現在の対象</h3>
+          <dl class="flow-tool-context-card__list">
+            <div class="flow-tool-context-card__item">
+              <dt>イベント</dt>
+              <dd id="participants-context-event">—</dd>
+            </div>
+            <div class="flow-tool-context-card__item">
+              <dt>日程</dt>
+              <dd id="participants-context-schedule">—</dd>
+            </div>
+            <div class="flow-tool-context-card__item" id="participants-context-range-row" hidden>
+              <dt>時間</dt>
+              <dd id="participants-context-range">—</dd>
+            </div>
+          </dl>
+        </section>
         <div id="participants-tool" class="embedded-tool" data-tool="participants">
                 <div class="embedded-tool__surface qa-embedded" data-qa-embed>
                   <div id="qa-loading-overlay" class="loading-overlay" aria-live="polite" hidden>
