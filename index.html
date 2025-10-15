@@ -28,8 +28,17 @@
       <div class="module-body">
         <div class="login-panel">
           <p class="login-lead">ログインするとイベント管理や参加者リスト、テロップ操作ツールへ進むことができます。</p>
-          <button id="login-button" class="btn btn-primary" type="button">Googleアカウントでログイン</button>
-          <p id="login-error" class="form-error" role="alert" hidden></p>
+          <button
+            id="login-button"
+            class="btn btn-primary"
+            type="button"
+            aria-describedby="login-error"
+            data-label-default="Googleアカウントでログイン"
+            data-label-busy="サインイン中…"
+          >
+            Googleアカウントでログイン
+          </button>
+          <p id="login-error" class="form-error" role="alert" aria-live="assertive" aria-atomic="true" hidden></p>
         </div>
       </div>
     </section>
