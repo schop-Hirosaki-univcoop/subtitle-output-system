@@ -26,6 +26,18 @@ const formatDateTimeLocal = (date) => {
 
 const STAGE_SEQUENCE = ["events", "schedules", "tabs"];
 
+const STAGE_INFO = {
+  events: {
+    title: "イベントの管理",
+    description:
+      "質問フォームで使用するイベントを追加・編集・削除し、選択したイベントを次のステップへ引き継ぎます。"
+  },
+  schedules: {
+    title: "日程の管理",
+    description: "選択したイベントに紐づく日程を整理し、次のツールに引き継ぐ日程を決めます。"
+  }
+};
+
 const PANEL_CONFIG = {
   events: { stage: "events", requireEvent: false, requireSchedule: false },
   schedules: { stage: "schedules", requireEvent: true, requireSchedule: false },
