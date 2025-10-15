@@ -2,6 +2,8 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="same-origin">
   <title>Telop Display</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2064%2064%27%3E%0A%20%20%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2712%27%20fill%3D%27%2305111f%27%2F%3E%0A%20%20%3Ctext%20x%3D%2732%27%20y%3D%2742%27%20text-anchor%3D%27middle%27%20font-family%3D%27Arial%2C%20sans-serif%27%20font-size%3D%2736%27%20fill%3D%27%2300eaff%27%3ET%3C%2Ftext%3E%0A%3C%2Fsvg%3E">
   <!-- 主要フォントを先読み（同一オリジン想定） -->
@@ -93,6 +95,21 @@
       padding: var(--pad-y) var(--pad-x) var(--pad-y);
       color: #fff;
       font-family: "Noto Sans JP","Hiragino Sans","Meiryo",system-ui,sans-serif;
+    }
+
+    .noscript-banner {
+      position: fixed;
+      inset: 1.5rem auto auto 50%;
+      transform: translateX(-50%);
+      max-width: min(90vw, 480px);
+      padding: 0.75rem 1rem;
+      border-radius: 999px;
+      background: rgba(255, 79, 216, 0.14);
+      border: 1px solid rgba(255, 79, 216, 0.4);
+      color: #fff;
+      font-family: "Noto Sans JP","Hiragino Sans","Meiryo",system-ui,sans-serif;
+      text-align: center;
+      z-index: 5;
     }
 
     /* ─ ラジオネーム“タブ座布団” ─ */
@@ -367,6 +384,11 @@
   </style>
 </head>
 <body>
+  <noscript>
+    <div class="noscript-banner" role="alert">
+      テロップ表示には JavaScript が必要です。ブラウザの設定を確認してください。
+    </div>
+  </noscript>
 
   <!-- ★ あなたの条件：#telop-canvas を下部・全幅・16:9で固定 -->
   <div id="telop-canvas">

@@ -31,7 +31,20 @@ async function login() {
     await signInWithPopup(auth, provider);
   } catch (error) {
     console.error("Login failed:", error);
-    setError("ログインに失敗しました。もう一度お試しください。");
+    const code = error?.code || "";
+    let message = "ログインに失敗しました。もう一度お試しください。";
+    if (code === "auth/popup-closed-by-user") {
+      message = "ログインウィンドウが閉じられました。もう一度お試しください。";
+    } else if (code === "auth/cancelled-popup-request") {
+      message = "別のログイン処理が進行中です。完了してから再試行してください。";
+    } else if (code === "auth/popup-blocked") {
+      message = "ポップアップがブロックされました。ブラウザの設定を確認してから再試行してください。";
+    } else if (code === "auth/network-request-failed") {
+      message = navigator.onLine
+        ? "通信エラーが発生しました。ネットワークを確認して再試行してください。"
+        : "ネットワークに接続できません。接続状況を確認してから再試行してください。";
+    }
+    setError(message);
   } finally {
     setBusy(false);
   }

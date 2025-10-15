@@ -97,11 +97,20 @@ class TelopFooter extends HTMLElement {
 
     const createdLine = document.createElement("div");
     createdLine.className = "credit-line";
-    createdLine.innerHTML = `Created by <span class="credit-highlight">${highlight}</span>`;
+    createdLine.append(document.createTextNode("Created by "));
+    const highlightSpan = document.createElement("span");
+    highlightSpan.className = "credit-highlight";
+    highlightSpan.textContent = highlight;
+    createdLine.appendChild(highlightSpan);
 
     const copyrightLine = document.createElement("div");
     copyrightLine.className = "credit-line";
-    copyrightLine.innerHTML = `&copy; <span id="copyright-year">${year}</span> Hirosaki Univ. Co-op. SCHOP`;
+    const copyrightSymbol = document.createTextNode("© ");
+    const yearSpan = document.createElement("span");
+    yearSpan.id = "copyright-year";
+    yearSpan.textContent = String(year);
+    const suffix = document.createTextNode(" Hirosaki Univ. Co-op. SCHOP");
+    copyrightLine.append(copyrightSymbol, yearSpan, suffix);
 
     footer.appendChild(createdLine);
     footer.appendChild(copyrightLine);
