@@ -26,6 +26,18 @@ const formatDateTimeLocal = (date) => {
 
 const STAGE_SEQUENCE = ["events", "schedules", "tabs"];
 
+const STAGE_INFO = {
+  events: {
+    title: "イベントの管理",
+    description:
+      "質問フォームで使用するイベントを追加・編集・削除し、選択したイベントを次のステップへ引き継ぎます。"
+  },
+  schedules: {
+    title: "日程の管理",
+    description: "選択したイベントに紐づく日程を整理し、次のツールに引き継ぐ日程を決めます。"
+  }
+};
+
 const PANEL_CONFIG = {
   events: { stage: "events", requireEvent: false, requireSchedule: false },
   schedules: { stage: "schedules", requireEvent: true, requireSchedule: false },
@@ -137,6 +149,10 @@ export class EventAdminApp {
     this.lastFocused = null;
     this.confirmResolver = null;
     this.redirectingToIndex = false;
+    this.eventsLoadingDepth = 0;
+    this.eventsLoadingMessage = "";
+    this.scheduleLoadingDepth = 0;
+    this.scheduleLoadingMessage = "";
     this.embeddedTools = {
       participants: { promise: null, ready: false },
       operator: { promise: null, ready: false }
@@ -148,6 +164,8 @@ export class EventAdminApp {
 
   init() {
     this.bindEvents();
+    this.applyEventsLoadingState();
+    this.applyScheduleLoadingState();
     this.updateStageUi();
     this.updateFlowButtons();
     this.updateEventSummary();
@@ -168,10 +186,13 @@ export class EventAdminApp {
     this.activePanel = "events";
     this.lastToolContextSignature = "";
     this.lastToolContextApplied = false;
+    this.eventsLoadingDepth = 0;
+    this.eventsLoadingMessage = "";
+    this.scheduleLoadingDepth = 0;
+    this.scheduleLoadingMessage = "";
+    this.applyEventsLoadingState();
+    this.applyScheduleLoadingState();
     this.resetToolFrames();
-    if (this.dom.scheduleLoading) {
-      this.dom.scheduleLoading.hidden = true;
-    }
     this.renderEvents();
     this.renderScheduleList();
     this.updateScheduleSummary();
@@ -190,11 +211,21 @@ export class EventAdminApp {
     }
 
     if (this.dom.refreshButton) {
-      this.dom.refreshButton.addEventListener("click", () => {
-        this.loadEvents().catch((error) => {
+      this.dom.refreshButton.addEventListener("click", async () => {
+        if (this.dom.refreshButton.disabled) {
+          return;
+        }
+        this.dom.refreshButton.disabled = true;
+        try {
+          this.beginEventsLoading("イベント情報を再読み込みしています…");
+          await this.loadEvents();
+        } catch (error) {
           logError("Failed to refresh events", error);
           this.showAlert(error.message || "イベントの再読み込みに失敗しました。");
-        });
+        } finally {
+          this.endEventsLoading();
+          this.dom.refreshButton.disabled = false;
+        }
       });
     }
 
@@ -267,11 +298,19 @@ export class EventAdminApp {
     }
 
     if (this.dom.scheduleRefreshButton) {
-      this.dom.scheduleRefreshButton.addEventListener("click", () => {
-        this.reloadSchedules().catch((error) => {
+      this.dom.scheduleRefreshButton.addEventListener("click", async () => {
+        if (this.dom.scheduleRefreshButton.disabled) {
+          return;
+        }
+        this.dom.scheduleRefreshButton.disabled = true;
+        try {
+          await this.reloadSchedules();
+        } catch (error) {
           logError("Failed to refresh schedules", error);
           this.showAlert(error.message || "日程の再読み込みに失敗しました。");
-        });
+        } finally {
+          this.dom.scheduleRefreshButton.disabled = false;
+        }
       });
     }
   }
@@ -309,7 +348,7 @@ export class EventAdminApp {
       return;
     }
     this.resetFlowState();
-    this.toggleLoading(false);
+    this.endEventsLoading();
     this.updateUserLabel();
     if (typeof window !== "undefined") {
       this.redirectingToIndex = true;
@@ -326,15 +365,39 @@ export class EventAdminApp {
     this.updateSelectionNotes();
   }
 
-  setLoadingMessage(message) {
-    if (this.dom.loadingText) {
-      this.dom.loadingText.textContent = message || "";
+  beginEventsLoading(message = "") {
+    this.eventsLoadingDepth += 1;
+    if (message || !this.eventsLoadingMessage) {
+      this.eventsLoadingMessage = message;
     }
+    this.applyEventsLoadingState();
   }
 
-  toggleLoading(isLoading) {
+  endEventsLoading() {
+    this.eventsLoadingDepth = Math.max(0, this.eventsLoadingDepth - 1);
+    if (this.eventsLoadingDepth === 0) {
+      this.eventsLoadingMessage = "";
+    }
+    this.applyEventsLoadingState();
+  }
+
+  updateEventsLoadingMessage(message = "") {
+    if (this.eventsLoadingDepth === 0) {
+      this.eventsLoadingMessage = "";
+      this.applyEventsLoadingState();
+      return;
+    }
+    this.eventsLoadingMessage = message || this.eventsLoadingMessage;
+    this.applyEventsLoadingState();
+  }
+
+  applyEventsLoadingState() {
+    const active = this.eventsLoadingDepth > 0;
     if (this.dom.loading) {
-      this.dom.loading.hidden = !isLoading;
+      this.dom.loading.hidden = !active;
+    }
+    if (this.dom.loadingText) {
+      this.dom.loadingText.textContent = active ? this.eventsLoadingMessage || "" : "";
     }
   }
 
@@ -367,10 +430,9 @@ export class EventAdminApp {
     this.clearAlert();
 
     try {
-      this.setLoadingMessage("権限を確認しています…");
-      this.toggleLoading(true);
+      this.beginEventsLoading("権限を確認しています…");
       await this.ensureAdminAccess();
-      this.setLoadingMessage("イベント情報を読み込んでいます…");
+      this.updateEventsLoadingMessage("イベント情報を読み込んでいます…");
       await this.loadEvents();
       this.updateEventSummary();
       this.updateScheduleSummary();
@@ -390,7 +452,7 @@ export class EventAdminApp {
       const message = error instanceof Error && error.message ? error.message : fallback;
       this.showAlert(message || fallback);
     } finally {
-      this.toggleLoading(false);
+      this.endEventsLoading();
     }
   }
 
@@ -489,8 +551,13 @@ export class EventAdminApp {
     this.ensureSelectedEvent(previousEventId);
     this.renderEvents();
     this.updateScheduleStateFromSelection(previousScheduleId);
-    this.toggleLoading(false);
-    this.setScheduleLoading(false);
+
+    if (this.stage === "tabs") {
+      const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
+      if (activeConfig.requireSchedule && this.selectedEventId && this.selectedScheduleId) {
+        this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools after refresh", error));
+      }
+    }
 
     return this.events;
   }
@@ -1074,6 +1141,9 @@ export class EventAdminApp {
     if (this.dom.addEventButton) {
       this.dom.addEventButton.disabled = !signedIn;
     }
+    if (this.dom.refreshButton) {
+      this.dom.refreshButton.disabled = !signedIn;
+    }
     if (this.dom.nextButton) {
       this.dom.nextButton.disabled = !signedIn || !hasEvent;
     }
@@ -1290,12 +1360,39 @@ export class EventAdminApp {
     }
   }
 
-  setScheduleLoading(isLoading, message = "") {
+  beginScheduleLoading(message = "") {
+    this.scheduleLoadingDepth += 1;
+    if (message || !this.scheduleLoadingMessage) {
+      this.scheduleLoadingMessage = message;
+    }
+    this.applyScheduleLoadingState();
+  }
+
+  endScheduleLoading() {
+    this.scheduleLoadingDepth = Math.max(0, this.scheduleLoadingDepth - 1);
+    if (this.scheduleLoadingDepth === 0) {
+      this.scheduleLoadingMessage = "";
+    }
+    this.applyScheduleLoadingState();
+  }
+
+  updateScheduleLoadingMessage(message = "") {
+    if (this.scheduleLoadingDepth === 0) {
+      this.scheduleLoadingMessage = "";
+      this.applyScheduleLoadingState();
+      return;
+    }
+    this.scheduleLoadingMessage = message || this.scheduleLoadingMessage;
+    this.applyScheduleLoadingState();
+  }
+
+  applyScheduleLoadingState() {
+    const active = this.scheduleLoadingDepth > 0;
     if (this.dom.scheduleLoading) {
-      this.dom.scheduleLoading.hidden = !isLoading;
+      this.dom.scheduleLoading.hidden = !active;
     }
     if (this.dom.scheduleLoadingText) {
-      this.dom.scheduleLoadingText.textContent = message || "";
+      this.dom.scheduleLoadingText.textContent = active ? this.scheduleLoadingMessage || "" : "";
     }
   }
 
@@ -1304,11 +1401,11 @@ export class EventAdminApp {
       this.revealEventSelectionCue();
       return;
     }
-    this.setScheduleLoading(true, "日程情報を再読み込みしています…");
+    this.beginScheduleLoading("日程情報を再読み込みしています…");
     try {
       await this.loadEvents();
     } finally {
-      this.setScheduleLoading(false);
+      this.endScheduleLoading();
     }
   }
 
@@ -1425,23 +1522,28 @@ export class EventAdminApp {
     }
 
     const now = Date.now();
-    await set(ref(database, `questionIntake/schedules/${eventId}/${scheduleId}`), {
-      label,
-      date,
-      startAt: startValue,
-      endAt: endValue,
-      participantCount: 0,
-      createdAt: now,
-      updatedAt: now
-    });
+    this.beginScheduleLoading("日程を保存しています…");
+    try {
+      await set(ref(database, `questionIntake/schedules/${eventId}/${scheduleId}`), {
+        label,
+        date,
+        startAt: startValue,
+        endAt: endValue,
+        participantCount: 0,
+        createdAt: now,
+        updatedAt: now
+      });
 
-    await update(ref(database), {
-      [`questionIntake/events/${eventId}/updatedAt`]: now
-    });
+      await update(ref(database), {
+        [`questionIntake/events/${eventId}/updatedAt`]: now
+      });
 
-    await this.loadEvents();
-    this.selectedScheduleId = scheduleId;
-    await this.requestSheetSync();
+      await this.loadEvents();
+      this.selectSchedule(scheduleId);
+      await this.requestSheetSync();
+    } finally {
+      this.endScheduleLoading();
+    }
   }
 
   async updateSchedule(scheduleId, payload) {
@@ -1455,18 +1557,23 @@ export class EventAdminApp {
 
     const { label, date, startValue, endValue } = this.resolveScheduleFormValues(payload);
     const now = Date.now();
-    await update(ref(database), {
-      [`questionIntake/schedules/${eventId}/${scheduleId}/label`]: label,
-      [`questionIntake/schedules/${eventId}/${scheduleId}/date`]: date,
-      [`questionIntake/schedules/${eventId}/${scheduleId}/startAt`]: startValue,
-      [`questionIntake/schedules/${eventId}/${scheduleId}/endAt`]: endValue,
-      [`questionIntake/schedules/${eventId}/${scheduleId}/updatedAt`]: now,
-      [`questionIntake/events/${eventId}/updatedAt`]: now
-    });
+    this.beginScheduleLoading("日程を更新しています…");
+    try {
+      await update(ref(database), {
+        [`questionIntake/schedules/${eventId}/${scheduleId}/label`]: label,
+        [`questionIntake/schedules/${eventId}/${scheduleId}/date`]: date,
+        [`questionIntake/schedules/${eventId}/${scheduleId}/startAt`]: startValue,
+        [`questionIntake/schedules/${eventId}/${scheduleId}/endAt`]: endValue,
+        [`questionIntake/schedules/${eventId}/${scheduleId}/updatedAt`]: now,
+        [`questionIntake/events/${eventId}/updatedAt`]: now
+      });
 
-    await this.loadEvents();
-    this.selectedScheduleId = scheduleId;
-    await this.requestSheetSync();
+      await this.loadEvents();
+      this.selectSchedule(scheduleId);
+      await this.requestSheetSync();
+    } finally {
+      this.endScheduleLoading();
+    }
   }
 
   async deleteSchedule(schedule) {
@@ -1493,6 +1600,7 @@ export class EventAdminApp {
     }
 
     try {
+      this.beginScheduleLoading(`日程「${label}」を削除しています…`);
       const participantSnapshot = await get(ref(database, `questionIntake/participants/${eventId}/${scheduleId}`));
       const participantBranch = participantSnapshot.exists() ? participantSnapshot.val() : {};
       const tokens = new Set();
@@ -1515,13 +1623,12 @@ export class EventAdminApp {
 
       await update(ref(database), updates);
       await this.loadEvents();
-      this.ensureSelectedSchedule("");
-      if (this.stage === "tabs") {
-        this.showPanel("schedules");
-      }
+      this.selectSchedule("");
       await this.requestSheetSync();
     } catch (error) {
       throw new Error(error?.message || "日程の削除に失敗しました。");
+    } finally {
+      this.endScheduleLoading();
     }
   }
 
@@ -1639,13 +1746,19 @@ export class EventAdminApp {
     }
 
     const now = Date.now();
-    await set(ref(database, `questionIntake/events/${eventId}`), {
-      name: trimmed,
-      createdAt: now,
-      updatedAt: now
-    });
-    await this.loadEvents();
-    await this.requestSheetSync();
+    this.beginEventsLoading("イベントを追加しています…");
+    try {
+      await set(ref(database, `questionIntake/events/${eventId}`), {
+        name: trimmed,
+        createdAt: now,
+        updatedAt: now
+      });
+      await this.loadEvents();
+      this.selectEvent(eventId);
+      await this.requestSheetSync();
+    } finally {
+      this.endEventsLoading();
+    }
   }
 
   async updateEvent(eventId, name) {
@@ -1658,12 +1771,18 @@ export class EventAdminApp {
     }
 
     const now = Date.now();
-    await update(ref(database), {
-      [`questionIntake/events/${eventId}/name`]: trimmed,
-      [`questionIntake/events/${eventId}/updatedAt`]: now
-    });
-    await this.loadEvents();
-    await this.requestSheetSync();
+    this.beginEventsLoading("イベントを更新しています…");
+    try {
+      await update(ref(database), {
+        [`questionIntake/events/${eventId}/name`]: trimmed,
+        [`questionIntake/events/${eventId}/updatedAt`]: now
+      });
+      await this.loadEvents();
+      this.selectEvent(eventId);
+      await this.requestSheetSync();
+    } finally {
+      this.endEventsLoading();
+    }
   }
 
   async deleteEvent(event) {
@@ -1684,6 +1803,7 @@ export class EventAdminApp {
     }
 
     try {
+      this.beginEventsLoading(`イベント「${label}」を削除しています…`);
       const participantSnapshot = await get(ref(database, `questionIntake/participants/${eventId}`));
       const participantBranch = participantSnapshot.exists() ? participantSnapshot.val() : {};
       const tokensToRemove = collectParticipantTokens(participantBranch);
@@ -1703,6 +1823,8 @@ export class EventAdminApp {
       this.showAlert(`イベント「${label}」を削除しました。`);
     } catch (error) {
       throw new Error(error?.message || "イベントの削除に失敗しました。");
+    } finally {
+      this.endEventsLoading();
     }
   }
 
