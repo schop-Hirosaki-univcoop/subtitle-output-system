@@ -3,13 +3,26 @@ import { auth, provider, signInWithPopup, onAuthStateChanged } from "./operator/
 const loginButton = document.getElementById("login-button");
 const loginError = document.getElementById("login-error");
 
+const defaultLabel = loginButton?.dataset?.labelDefault || "Googleアカウントでログイン";
+const busyLabel = loginButton?.dataset?.labelBusy || "サインイン中…";
+
 let redirecting = false;
 
 function setBusy(isBusy) {
   if (!loginButton) return;
   loginButton.disabled = isBusy;
   loginButton.classList.toggle("is-busy", isBusy);
-  loginButton.textContent = isBusy ? "サインイン中…" : "Googleアカウントでログイン";
+  const label = isBusy ? busyLabel : defaultLabel;
+  if (loginButton.textContent !== label) {
+    loginButton.textContent = label;
+  }
+  if (isBusy) {
+    loginButton.setAttribute("aria-busy", "true");
+    loginButton.setAttribute("aria-disabled", "true");
+  } else {
+    loginButton.removeAttribute("aria-busy");
+    loginButton.removeAttribute("aria-disabled");
+  }
 }
 
 function setError(message = "") {
@@ -17,9 +30,11 @@ function setError(message = "") {
   const text = String(message || "").trim();
   if (text) {
     loginError.hidden = false;
+    loginError.removeAttribute("aria-hidden");
     loginError.textContent = text;
   } else {
     loginError.hidden = true;
+    loginError.setAttribute("aria-hidden", "true");
     loginError.textContent = "";
   }
 }

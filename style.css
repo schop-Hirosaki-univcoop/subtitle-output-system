@@ -977,35 +977,104 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 #logs-table td { font-size: .75rem; white-space: pre-wrap; word-break: break-all; }
 
 /* ▼▼▼ トースト通知のカスタムスタイル ▼▼▼ */
+.toast-stack {
+  position: fixed;
+  top: clamp(1rem, 2.2vw, 1.65rem);
+  right: clamp(1rem, 3vw, 2rem);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(.65rem, 1.4vw, .85rem);
+  width: min(24rem, calc(100vw - 2.5rem));
+  z-index: 2000;
+  pointer-events: none;
+}
+
 .toastify {
-    padding: clamp(.7rem, 1.6vw, .9rem) clamp(1.1rem, 2.6vw, 1.4rem);
-    color: #fff;
-    display: inline-block;
-    box-shadow: 0 3px 6px -1px rgba(0, 0, 0, 0.12), 0 10px 36px -4px rgba(77, 96, 232, 0.3);
-    background: -webkit-linear-gradient(315deg, #73a5ff, #5477f5);
-    background: linear-gradient(135deg, #73a5ff, #5477f5);
-    position: fixed;
-    opacity: 0;
-    transition: all 0.4s cubic-bezier(0.215, 0.61, 0.355, 1);
-    border-radius: .35rem;
-    cursor: pointer;
-    text-decoration: none;
-    max-width: calc(50% - 1rem);
-    z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: clamp(.7rem, 1.6vw, .9rem) clamp(1.1rem, 2.6vw, 1.4rem);
+  color: #fff;
+  background: linear-gradient(135deg, #73a5ff, #5477f5);
+  box-shadow: 0 3px 6px -1px rgba(0, 0, 0, 0.12), 0 10px 36px -4px rgba(77, 96, 232, 0.3);
+  border-radius: .6rem;
+  opacity: 0;
+  transform: translateY(-12px);
+  transition: opacity .28s ease, transform .32s ease;
+  pointer-events: auto;
 }
 
 .toastify.on {
-    opacity: 1;
+  opacity: 1;
+  transform: translateY(0);
 }
 
-/* 成功メッセージ用のカスタムカラー */
+.toastify:focus-visible {
+  outline: 2px solid color-mix(in srgb, rgba(0, 234, 255, 0.8) 60%, transparent);
+  outline-offset: 4px;
+}
+
+.toastify__message {
+  flex: 1 1 auto;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.toastify__close {
+  flex: 0 0 auto;
+  appearance: none;
+  border: none;
+  background: rgba(12, 22, 38, 0.25);
+  color: inherit;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color .2s ease, transform .2s ease;
+}
+
+.toastify__close:hover,
+.toastify__close:focus-visible {
+  background: rgba(12, 22, 38, 0.4);
+  transform: scale(1.05);
+}
+
 .toastify-success {
-    background: linear-gradient(135deg, #77dd77, #4CAF50);
+  background: linear-gradient(135deg, #77dd77, #4CAF50);
 }
 
-/* エラーメッセージ用のカスタムカラー */
 .toastify-error {
-    background: linear-gradient(135deg, #ff6b6b, #f06595);
+  background: linear-gradient(135deg, #ff6b6b, #f06595);
+}
+
+@media (max-width: 720px) {
+  .toast-stack {
+    top: auto;
+    bottom: clamp(1rem, 2.6vh, 1.6rem);
+    right: 50%;
+    transform: translateX(50%);
+    width: min(90vw, 26rem);
+    align-items: stretch;
+  }
+  .toastify {
+    transform: translateY(12px);
+  }
+  .toastify.on {
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toastify {
+    transition: none;
+    transform: none !important;
+  }
 }
 
 /* --- log stream --- */
