@@ -348,46 +348,58 @@ body.logs-open #logs-panel{ display:flex; }
 .log-stream::-webkit-scrollbar-thumb:hover{
   background:linear-gradient(180deg, rgba(46,141,255,.7), rgba(30,200,255,.5));
 }
-.dictionary-body{ display:flex; flex-direction:column; gap:clamp(.8rem, 1.6vw, 1.1rem); }
+.dictionary-body{ display:flex; flex-direction:column; gap:clamp(.9rem, 1.7vw, 1.3rem); }
 .dictionary-body .table-scroller{ flex:1; }
 .dictionary-body table{ min-width:100%; }
-.logs-body{ display:flex; flex-direction:column; gap:clamp(.8rem, 1.6vw, 1.1rem); overflow:hidden; }
+.logs-body{ display:flex; flex-direction:column; gap:clamp(.9rem, 1.7vw, 1.3rem); overflow:hidden; }
 .logs-body #logs-stream-view{ flex:1 1 auto; min-height:0; }
 .logs-body .log-stream{ flex:1 1 auto; }
 
 #op-dictionary-panel .dictionary-body,
 #op-logs-panel .logs-body{
-  padding:clamp(.95rem, 2.2vw, 1.35rem);
-  border-radius:clamp(1rem, 2vw, 1.4rem);
-  border:1px solid rgba(82,128,198,.38);
-  background:linear-gradient(180deg, rgba(14,28,52,.78), rgba(8,18,36,.72));
-  box-shadow:0 22px 44px rgba(4,12,28,.48), inset 0 1px 0 rgba(255,255,255,.04);
+  padding:clamp(1rem, 2.4vw, 1.6rem);
+  border-radius:clamp(1.05rem, 2.2vw, 1.45rem);
+  border:1px solid rgba(78,122,186,.36);
+  background:linear-gradient(160deg, rgba(18,28,46,.88), rgba(10,16,30,.94));
+  box-shadow:0 18px 42px rgba(4,12,28,.44);
+  backdrop-filter:blur(18px);
+  min-height:0;
 }
 
 #op-dictionary-panel .dictionary-form,
 #op-logs-panel .logs-toolbar{
-  padding:clamp(.65rem, 1.6vw, .95rem);
-  border-radius:clamp(.85rem, 1.8vw, 1.2rem);
-  border:1px solid rgba(86,134,204,.35);
-  background:linear-gradient(180deg, rgba(18,32,56,.72), rgba(12,24,44,.68));
-  box-shadow:0 16px 32px rgba(4,12,26,.4), inset 0 1px 0 rgba(255,255,255,.04);
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-end;
+  gap:clamp(.55rem, 1.2vw, .85rem);
+  padding:clamp(.6rem, 1.3vw, .85rem) clamp(.8rem, 1.8vw, 1.1rem);
+  border-radius:clamp(.95rem, 2vw, 1.3rem);
+  border:1px solid rgba(80,124,194,.34);
+  background:linear-gradient(145deg, rgba(16,26,44,.8), rgba(10,18,32,.85));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
 }
+
+.dictionary-form .input{ flex:1 1 14rem; min-width:10rem; }
+.dictionary-form .btn{ flex:0 0 auto; }
+
+.logs-toolbar{ display:flex; gap:clamp(.55rem, 1.2vw, .85rem); align-items:center; flex-wrap:wrap; }
+.logs-toolbar .input{ flex:1 1 14rem; min-width:0; max-width:20rem; }
 
 #op-dictionary-panel .table-scroller,
 #op-logs-panel #op-logs-stream-view{
-  padding:clamp(.45rem, 1vw, .65rem);
-  border-radius:clamp(1rem, 2vw, 1.4rem);
-  border:1px solid rgba(78,124,188,.4);
-  background:linear-gradient(180deg, rgba(10,20,36,.78), rgba(6,14,28,.72));
-  box-shadow:0 22px 44px rgba(4,12,28,.46), inset 0 1px 0 rgba(255,255,255,.04);
+  padding:clamp(.6rem, 1.4vw, .9rem);
+  border-radius:clamp(1rem, 2.4vw, 1.5rem);
+  border:1px solid rgba(74,116,184,.32);
+  background:linear-gradient(150deg, rgba(11,20,36,.82), rgba(6,12,24,.86));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
 }
 
 #op-logs-panel #op-log-stream{
-  border-radius:clamp(.85rem, 1.8vw, 1.2rem);
-  border:1px solid rgba(86,134,204,.32);
-  background:linear-gradient(180deg, rgba(12,24,44,.82), rgba(8,18,32,.78));
-  padding:clamp(.85rem, 1.8vw, 1.1rem);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+  border-radius:clamp(.9rem, 2vw, 1.3rem);
+  border:1px solid rgba(78,122,188,.28);
+  background:rgba(8,14,26,.74);
+  padding:clamp(.85rem, 1.8vw, 1.15rem);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);
 }
 
 @media (max-width: 1180px){
@@ -467,7 +479,7 @@ input[type="checkbox"]{
 
 .logs-toolbar{
   display:flex;
-  gap:clamp(.5rem, 1.2vw, .75rem);
+  gap:clamp(.55rem, 1.2vw, .85rem);
   align-items:center;
   flex-wrap:wrap;
 }
@@ -476,9 +488,9 @@ input[type="checkbox"]{
 .dictionary-form{
   display:flex;
   flex-wrap:wrap;
-  gap:clamp(.5rem, 1.2vw, .75rem);
+  gap:clamp(.55rem, 1.2vw, .85rem);
 }
-.dictionary-form .input{ flex:1 1 10rem; }
+.dictionary-form .input{ flex:1 1 14rem; min-width:10rem; }
 
 .table-scroller{
   overflow:auto;

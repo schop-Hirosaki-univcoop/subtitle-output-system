@@ -990,6 +990,10 @@ export class EventAdminApp {
       if (this.dom.participantsTool) {
         delete this.dom.participantsTool.dataset.expectedEventId;
         delete this.dom.participantsTool.dataset.expectedScheduleId;
+        delete this.dom.participantsTool.dataset.expectedEventName;
+        delete this.dom.participantsTool.dataset.expectedScheduleLabel;
+        delete this.dom.participantsTool.dataset.expectedStartAt;
+        delete this.dom.participantsTool.dataset.expectedEndAt;
         delete this.dom.participantsTool.dataset.syncedEventId;
         delete this.dom.participantsTool.dataset.syncedScheduleId;
         delete this.dom.participantsTool.dataset.syncedAt;
@@ -1267,6 +1271,10 @@ export class EventAdminApp {
       if (this.dom.participantsTool) {
         this.dom.participantsTool.dataset.expectedEventId = event.id;
         this.dom.participantsTool.dataset.expectedScheduleId = schedule.id;
+        this.dom.participantsTool.dataset.expectedEventName = eventLabel;
+        this.dom.participantsTool.dataset.expectedScheduleLabel = scheduleLabel;
+        this.dom.participantsTool.dataset.expectedStartAt = schedule.startAt || "";
+        this.dom.participantsTool.dataset.expectedEndAt = schedule.endAt || "";
       }
       const contextKey = [
         event.id,

@@ -54,6 +54,21 @@ function isEmbeddedMode() {
 
 let embedReadyDeferred = null;
 
+const HOST_SELECTION_ATTRIBUTE_KEYS = [
+  "data-expected-event-id",
+  "data-expected-event-name",
+  "data-expected-schedule-id",
+  "data-expected-schedule-label",
+  "data-expected-start-at",
+  "data-expected-end-at"
+];
+
+const hostSelectionBridge = {
+  observer: null,
+  lastSignature: "",
+  pendingSignature: ""
+};
+
 function waitForEmbedReady() {
   if (state.user) {
     return Promise.resolve();
@@ -2998,11 +3013,195 @@ function initAuthWatcher() {
   });
 }
 
+function hostSelectionSignature(selection = {}) {
+  const eventId = normalizeKey(selection.eventId || "");
+  const scheduleId = normalizeKey(selection.scheduleId || "");
+  const eventName = selection.eventName != null ? String(selection.eventName) : "";
+  const scheduleLabel = selection.scheduleLabel != null ? String(selection.scheduleLabel) : "";
+  const startAt = selection.startAt != null ? String(selection.startAt) : "";
+  const endAt = selection.endAt != null ? String(selection.endAt) : "";
+  return [eventId, scheduleId, eventName, scheduleLabel, startAt, endAt].join("::");
+}
+
+function getHostSelectionElement() {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  return document.querySelector("[data-tool='participants']");
+}
+
+function readHostSelectionDataset(target) {
+  if (!target) return null;
+  const dataset = target.dataset || {};
+  const eventId = normalizeKey(dataset.expectedEventId || "");
+  if (!eventId) {
+    return null;
+  }
+  return {
+    eventId,
+    scheduleId: normalizeKey(dataset.expectedScheduleId || ""),
+    eventName: dataset.expectedEventName ? String(dataset.expectedEventName) : "",
+    scheduleLabel: dataset.expectedScheduleLabel ? String(dataset.expectedScheduleLabel) : "",
+    startAt: dataset.expectedStartAt ? String(dataset.expectedStartAt) : "",
+    endAt: dataset.expectedEndAt ? String(dataset.expectedEndAt) : ""
+  };
+}
+
+function applyHostSelectionFromDataset() {
+  const selection = readHostSelectionDataset(getHostSelectionElement());
+  if (!selection) {
+    hostSelectionBridge.lastSignature = "";
+    hostSelectionBridge.pendingSignature = "";
+    return;
+  }
+  const signature = hostSelectionSignature(selection);
+  if (
+    signature &&
+    (signature === hostSelectionBridge.lastSignature || signature === hostSelectionBridge.pendingSignature)
+  ) {
+    return;
+  }
+  hostSelectionBridge.pendingSignature = signature;
+  applySelectionContext(selection)
+    .catch((error) => {
+      console.error("Failed to sync selection from host dataset", error);
+    })
+    .finally(() => {
+      if (hostSelectionBridge.pendingSignature === signature) {
+        hostSelectionBridge.pendingSignature = "";
+      }
+    });
+}
+
+function startHostSelectionBridge() {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const target = getHostSelectionElement();
+  if (!target) {
+    return;
+  }
+  if (typeof MutationObserver === "function" && !hostSelectionBridge.observer) {
+    const observer = new MutationObserver(() => applyHostSelectionFromDataset());
+    observer.observe(target, {
+      attributes: true,
+      attributeFilter: HOST_SELECTION_ATTRIBUTE_KEYS
+    });
+    hostSelectionBridge.observer = observer;
+  }
+  applyHostSelectionFromDataset();
+}
+
+async function applySelectionContext(selection = {}) {
+  const {
+    eventId = "",
+    scheduleId = "",
+    eventName = "",
+    scheduleLabel = "",
+    startAt = "",
+    endAt = ""
+  } = selection || {};
+  const trimmedEventId = normalizeKey(eventId);
+  const trimmedScheduleId = normalizeKey(scheduleId);
+  if (!trimmedEventId) {
+    hostSelectionBridge.lastSignature = "";
+    return;
+  }
+
+  try {
+    if (!(state.scheduleContextOverrides instanceof Map)) {
+      state.scheduleContextOverrides = new Map();
+    }
+    if (!state.user) {
+      state.initialSelection = {
+        eventId: trimmedEventId,
+        scheduleId: trimmedScheduleId || null,
+        scheduleLabel: scheduleLabel || null,
+        eventLabel: eventName || null,
+        startAt: startAt || null,
+        endAt: endAt || null
+      };
+      state.initialSelectionApplied = false;
+      hostSelectionBridge.lastSignature = hostSelectionSignature({
+        eventId: trimmedEventId,
+        scheduleId: trimmedScheduleId,
+        eventName,
+        scheduleLabel,
+        startAt,
+        endAt
+      });
+      return;
+    }
+
+    if (!Array.isArray(state.events) || !state.events.some(evt => evt.id === trimmedEventId)) {
+      await loadEvents({ preserveSelection: true });
+    }
+
+    if (state.selectedEventId !== trimmedEventId) {
+      selectEvent(trimmedEventId);
+    }
+
+    const selectedEvent = state.events.find(evt => evt.id === trimmedEventId) || null;
+    if (selectedEvent && eventName) {
+      selectedEvent.name = eventName;
+    }
+
+    const effectiveEventName = selectedEvent?.name || eventName || trimmedEventId;
+    let effectiveScheduleLabel = scheduleLabel || (trimmedScheduleId ? trimmedScheduleId : "");
+    let effectiveStartAt = startAt || "";
+    let effectiveEndAt = endAt || "";
+
+    if (trimmedScheduleId) {
+      const schedule = selectedEvent?.schedules?.find(item => item.id === trimmedScheduleId) || null;
+      if (schedule) {
+        if (scheduleLabel) schedule.label = scheduleLabel;
+        if (startAt) schedule.startAt = startAt;
+        if (endAt) schedule.endAt = endAt;
+        effectiveScheduleLabel = schedule.label || trimmedScheduleId;
+        effectiveStartAt = schedule.startAt || "";
+        effectiveEndAt = schedule.endAt || "";
+        if (state.scheduleContextOverrides instanceof Map) {
+          state.scheduleContextOverrides.delete(`${trimmedEventId}::${trimmedScheduleId}`);
+        }
+      } else if (state.scheduleContextOverrides instanceof Map) {
+        const override = {
+          eventId: trimmedEventId,
+          eventName: effectiveEventName,
+          scheduleId: trimmedScheduleId,
+          scheduleLabel: scheduleLabel || trimmedScheduleId,
+          startAt: startAt || "",
+          endAt: endAt || ""
+        };
+        state.scheduleContextOverrides.set(`${trimmedEventId}::${trimmedScheduleId}`, override);
+        effectiveScheduleLabel = override.scheduleLabel;
+        effectiveStartAt = override.startAt;
+        effectiveEndAt = override.endAt;
+      }
+      selectSchedule(trimmedScheduleId);
+    } else {
+      updateParticipantContext({ preserveStatus: true });
+    }
+
+    hostSelectionBridge.lastSignature = hostSelectionSignature({
+      eventId: trimmedEventId,
+      scheduleId: trimmedScheduleId,
+      eventName: effectiveEventName,
+      scheduleLabel: effectiveScheduleLabel,
+      startAt: effectiveStartAt,
+      endAt: effectiveEndAt
+    });
+  } catch (error) {
+    console.error("questionAdminEmbed.setSelection failed", error);
+    throw error;
+  }
+}
+
 function init() {
   attachEventHandlers();
   initLoaderSteps(isEmbeddedMode() ? [] : STEP_LABELS);
   resetState();
   parseInitialSelectionFromUrl();
+  startHostSelectionBridge();
   initAuthWatcher();
 }
 
@@ -3010,67 +3209,8 @@ init();
 
 if (typeof window !== "undefined") {
   window.questionAdminEmbed = {
-    async setSelection(selection = {}) {
-      const { eventId = "", scheduleId = "", eventName = "", scheduleLabel = "", startAt = "", endAt = "" } = selection;
-      try {
-        const trimmedEventId = normalizeKey(eventId);
-        if (!trimmedEventId) {
-          return;
-        }
-        if (!(state.scheduleContextOverrides instanceof Map)) {
-          state.scheduleContextOverrides = new Map();
-        }
-        if (!state.user) {
-          state.initialSelection = {
-            eventId: trimmedEventId,
-            scheduleId: normalizeKey(scheduleId) || null,
-            scheduleLabel: scheduleLabel || null,
-            eventLabel: eventName || null,
-            startAt: startAt || null,
-            endAt: endAt || null
-          };
-          state.initialSelectionApplied = false;
-          return;
-        }
-        if (!Array.isArray(state.events) || !state.events.some((evt) => evt.id === trimmedEventId)) {
-          await loadEvents({ preserveSelection: true });
-        }
-        if (state.selectedEventId !== trimmedEventId) {
-          selectEvent(trimmedEventId);
-        }
-        const selectedEvent = state.events.find((evt) => evt.id === trimmedEventId) || null;
-        if (selectedEvent) {
-          if (eventName) {
-            selectedEvent.name = eventName;
-          }
-        }
-        const trimmedScheduleId = normalizeKey(scheduleId);
-        if (trimmedScheduleId) {
-          const schedule = selectedEvent?.schedules?.find((item) => item.id === trimmedScheduleId) || null;
-          if (schedule) {
-            if (scheduleLabel) schedule.label = scheduleLabel;
-            if (startAt) schedule.startAt = startAt;
-            if (endAt) schedule.endAt = endAt;
-            if (state.scheduleContextOverrides instanceof Map) {
-              state.scheduleContextOverrides.delete(`${trimmedEventId}::${trimmedScheduleId}`);
-            }
-          } else if (state.scheduleContextOverrides instanceof Map) {
-            state.scheduleContextOverrides.set(`${trimmedEventId}::${trimmedScheduleId}`, {
-              eventId: trimmedEventId,
-              eventName: eventName || selectedEvent?.name || trimmedEventId,
-              scheduleId: trimmedScheduleId,
-              scheduleLabel: scheduleLabel || trimmedScheduleId,
-              startAt: startAt || "",
-              endAt: endAt || ""
-            });
-          }
-          selectSchedule(trimmedScheduleId);
-        } else {
-          updateParticipantContext({ preserveStatus: true });
-        }
-      } catch (error) {
-        console.error("questionAdminEmbed.setSelection failed", error);
-      }
+    setSelection(selection = {}) {
+      return applySelectionContext(selection);
     },
     refreshParticipants(options) {
       return loadParticipants(options);
@@ -3094,6 +3234,9 @@ if (typeof window !== "undefined") {
         hideLoader();
         setAuthUi(false);
         resetState();
+        hostSelectionBridge.lastSignature = "";
+        hostSelectionBridge.pendingSignature = "";
+        applyHostSelectionFromDataset();
         if (dom.loginButton) {
           dom.loginButton.disabled = false;
           dom.loginButton.classList.remove("is-busy");
