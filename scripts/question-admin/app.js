@@ -63,10 +63,18 @@ const HOST_SELECTION_ATTRIBUTE_KEYS = [
   "data-expected-end-at"
 ];
 
-const UPLOAD_STATUS_PLACEHOLDERS = new Set([
-  "日程を選択してください。",
-  "イベントコントロールセンターで対象の日程を選択してください。"
-]);
+const UPLOAD_STATUS_PLACEHOLDERS = new Set(
+  [
+    "日程を選択してください。",
+    "イベントコントロールセンターで対象の日程を選択してください。"
+  ].map(normalizeKey)
+);
+
+function getMissingSelectionStatusMessage() {
+  return isEmbeddedMode()
+    ? "イベントコントロールセンターで対象の日程を選択してください。"
+    : "日程を選択してください。";
+}
 
 const hostSelectionBridge = {
   observer: null,
@@ -583,6 +591,10 @@ async function requestSheetSync({ suppressError = true } = {}) {
 }
 
 function setUploadStatus(message, variant = "") {
+  const normalized = normalizeKey(message);
+  if (normalized && UPLOAD_STATUS_PLACEHOLDERS.has(normalized)) {
+    message = getMissingSelectionStatusMessage();
+  }
   state.lastUploadStatusMessage = message;
   state.lastUploadStatusVariant = variant || "";
   if (!dom.uploadStatus) return;
@@ -1414,7 +1426,7 @@ function updateParticipantContext(options = {}) {
       dom.teamCsvInput.disabled = true;
       dom.teamCsvInput.value = "";
     }
-    if (!shouldPreserveStatus) setUploadStatus("日程を選択してください。");
+    if (!shouldPreserveStatus) setUploadStatus(getMissingSelectionStatusMessage());
     if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
     if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
     if (dom.mappingTbody) dom.mappingTbody.innerHTML = "";
@@ -2744,7 +2756,7 @@ function resetState() {
   renderSchedules();
   renderParticipants();
   updateParticipantContext();
-  setUploadStatus("日程を選択してください。");
+  setUploadStatus(getMissingSelectionStatusMessage());
   if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
   if (dom.teamCsvInput) dom.teamCsvInput.value = "";
   if (dom.csvInput) dom.csvInput.value = "";
@@ -3308,7 +3320,7 @@ function attachEventHandlers() {
   if (dom.scheduleEmpty) dom.scheduleEmpty.hidden = true;
 
   if (dom.uploadStatus) {
-    setUploadStatus("日程を選択してください。");
+    setUploadStatus(getMissingSelectionStatusMessage());
   }
 
   if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
