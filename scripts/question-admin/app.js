@@ -68,6 +68,12 @@ const UPLOAD_STATUS_PLACEHOLDERS = new Set([
   "イベントコントロールセンターで対象の日程を選択してください。"
 ]);
 
+function getMissingSelectionStatusMessage() {
+  return isEmbeddedMode()
+    ? "イベントコントロールセンターで対象の日程を選択してください。"
+    : "日程を選択してください。";
+}
+
 const hostSelectionBridge = {
   observer: null,
   lastSignature: "",
@@ -1414,7 +1420,7 @@ function updateParticipantContext(options = {}) {
       dom.teamCsvInput.disabled = true;
       dom.teamCsvInput.value = "";
     }
-    if (!shouldPreserveStatus) setUploadStatus("日程を選択してください。");
+    if (!shouldPreserveStatus) setUploadStatus(getMissingSelectionStatusMessage());
     if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
     if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
     if (dom.mappingTbody) dom.mappingTbody.innerHTML = "";
@@ -2744,7 +2750,7 @@ function resetState() {
   renderSchedules();
   renderParticipants();
   updateParticipantContext();
-  setUploadStatus("日程を選択してください。");
+  setUploadStatus(getMissingSelectionStatusMessage());
   if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
   if (dom.teamCsvInput) dom.teamCsvInput.value = "";
   if (dom.csvInput) dom.csvInput.value = "";
@@ -3308,7 +3314,7 @@ function attachEventHandlers() {
   if (dom.scheduleEmpty) dom.scheduleEmpty.hidden = true;
 
   if (dom.uploadStatus) {
-    setUploadStatus("日程を選択してください。");
+    setUploadStatus(getMissingSelectionStatusMessage());
   }
 
   if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
