@@ -58,6 +58,6 @@ export function queryDom() {
     operatorTool: document.getElementById("operator-tool"),
     panelButtons: Array.from(document.querySelectorAll("[data-panel-target]")),
     navigationButtons: Array.from(document.querySelectorAll("[data-flow-nav-target]")),
-    panelNavigations: Array.from(document.querySelectorAll(".flow-navigation--panel"))
+    flowNavigations: Array.from(document.querySelectorAll(".flow-navigation"))
   };
 }

@@ -2069,7 +2069,7 @@ export class EventAdminApp {
         button.removeAttribute("aria-current");
       }
     });
-    const navigations = this.dom.panelNavigations || [];
+    const navigations = this.dom.flowNavigations || [];
     navigations.forEach((nav) => {
       if (!nav) return;
       if (hasActiveSidebar) {
