@@ -16,13 +16,72 @@ import { queryDom } from "./dom.js";
 import { createInitialState } from "./state.js";
 import { createApiClient } from "./api-client.js";
 import { showToast } from "./toast.js";
-import * as Dictionary from "./dictionary.js";
-import * as Logs from "./logs.js";
 import * as Questions from "./questions.js";
-import * as Display from "./display.js";
-import * as Dialog from "./dialog.js";
-import * as Loader from "./loader.js";
 import { resolveGenreLabel } from "./utils.js";
+import { bindModuleMethods } from "./module-registry.js";
+
+const DOM_EVENT_BINDINGS = [
+  { element: "loginButton", type: "click", handler: "login", guard: (app) => !app.isEmbedded },
+  { element: "dictionaryToggle", type: "click", handler: "toggleDictionaryDrawer" },
+  { element: "logsToggle", type: "click", handler: "toggleLogsDrawer" },
+  { element: "logsRefreshButton", type: "click", handler: "fetchLogs" },
+  { element: "clearButton", type: "click", handler: "clearTelop" },
+  { element: "fetchDictionaryButton", type: "click", handler: "fetchDictionary" },
+  { element: "addTermForm", type: "submit", handler: "addTerm" },
+  { element: "selectAllCheckbox", type: "change", handler: "handleSelectAll" },
+  { element: "batchUnanswerBtn", type: "click", handler: "handleBatchUnanswer" },
+  { element: "editCancelButton", type: "click", handler: "closeEditDialog" },
+  { element: "editSaveButton", type: "click", handler: "handleEditSubmit" },
+  { element: "logSearch", type: "input", handler: (app) => app.renderLogs() },
+  {
+    element: "logAutoscroll",
+    type: "change",
+    handler: (app, event) => {
+      if (event?.target instanceof HTMLInputElement) {
+        app.state.autoScrollLogs = event.target.checked;
+      }
+    }
+  }
+];
+
+const ACTION_BUTTON_BINDINGS = [
+  { index: 0, handler: "handleDisplay" },
+  { index: 1, handler: "handleUnanswer" },
+  { index: 2, handler: "handleEdit" }
+];
+
+function bindDomEvents(app) {
+  DOM_EVENT_BINDINGS.forEach(({ element, type, handler, guard }) => {
+    if (typeof guard === "function" && !guard(app)) {
+      return;
+    }
+    const target = app.dom[element];
+    if (!target || typeof target.addEventListener !== "function") {
+      return;
+    }
+    const listener = typeof handler === "string"
+      ? (event) => {
+          const method = app[handler];
+          if (typeof method === "function") {
+            method.call(app, event);
+          }
+        }
+      : (event) => handler(app, event);
+    target.addEventListener(type, listener);
+  });
+}
+
+function bindActionButtons(app) {
+  const buttons = app.dom.actionButtons || [];
+  ACTION_BUTTON_BINDINGS.forEach(({ index, handler }) => {
+    const target = buttons[index];
+    const method = app[handler];
+    if (!target || typeof target.addEventListener !== "function" || typeof method !== "function") {
+      return;
+    }
+    target.addEventListener("click", (event) => method.call(app, event));
+  });
+}
 
 export class OperatorApp {
   constructor() {
@@ -63,49 +122,7 @@ export class OperatorApp {
     this.confirmState = { resolver: null, keydownHandler: null, lastFocused: null, initialized: false };
 
     this.toast = showToast;
-
-    this.fetchDictionary = () => Dictionary.fetchDictionary(this);
-    this.applyInitialDictionaryState = () => Dictionary.applyInitialDictionaryState(this);
-    this.toggleDictionaryDrawer = (force, persist = true) => Dictionary.toggleDictionaryDrawer(this, force, persist);
-    this.addTerm = (event) => Dictionary.addTerm(this, event);
-
-    this.fetchLogs = () => Logs.fetchLogs(this);
-    this.renderLogs = () => Logs.renderLogs(this);
-    this.applyLogFilters = (logs) => Logs.applyLogFilters(this, logs);
-    this.renderLogsStream = (rows) => Logs.renderLogsStream(this, rows);
-    this.applyInitialLogsState = () => Logs.applyInitialLogsState(this);
-    this.toggleLogsDrawer = (force, persist = true) => Logs.toggleLogsDrawer(this, force, persist);
-    this.startLogsUpdateMonitor = () => Logs.startLogsUpdateMonitor(this);
-
-    this.renderQuestions = () => Questions.renderQuestions(this);
-    this.updateScheduleContext = () => Questions.updateScheduleContext(this);
-    this.switchSubTab = (tabName) => Questions.switchSubTab(this, tabName);
-    this.switchGenre = (genre) => Questions.switchGenre(this, genre);
-    this.handleDisplay = () => Questions.handleDisplay(this);
-    this.handleUnanswer = () => Questions.handleUnanswer(this);
-    this.handleSelectAll = (event) => Questions.handleSelectAll(this, event);
-    this.handleBatchUnanswer = () => Questions.handleBatchUnanswer(this);
-    this.clearTelop = () => Questions.clearTelop(this);
-    this.updateActionAvailability = () => Questions.updateActionAvailability(this);
-    this.updateBatchButtonVisibility = () => Questions.updateBatchButtonVisibility(this);
-    this.syncSelectAllState = () => Questions.syncSelectAllState(this);
-
-    this.handleRenderUpdate = (snapshot) => Display.handleRenderUpdate(this, snapshot);
-    this.redrawUpdatedAt = () => Display.redrawUpdatedAt(this);
-    this.refreshStaleness = () => Display.refreshStaleness(this);
-
-    this.openDialog = (element, focusTarget) => Dialog.openDialog(this, element, focusTarget);
-    this.closeEditDialog = () => Dialog.closeEditDialog(this);
-    this.handleDialogKeydown = (event) => Dialog.handleDialogKeydown(this, event);
-    this.handleEdit = () => Dialog.handleEdit(this);
-    this.handleEditSubmit = () => Dialog.handleEditSubmit(this);
-
-    this.showLoader = (message) => Loader.showLoader(this, message);
-    this.updateLoader = (message) => Loader.updateLoader(this, message);
-    this.hideLoader = () => Loader.hideLoader(this);
-    this.initLoaderSteps = () => Loader.initLoaderSteps(this);
-    this.setLoaderStep = (step, message) => Loader.setLoaderStep(this, step, message);
-    this.finishLoaderSteps = (message) => Loader.finishLoaderSteps(this, message);
+    bindModuleMethods(this);
     this.redirectingToIndex = false;
     this.embedReadyDeferred = null;
   }
@@ -258,26 +275,10 @@ export class OperatorApp {
   }
 
   setupEventListeners() {
-    if (!this.isEmbedded) {
-      this.dom.loginButton?.addEventListener("click", () => this.login());
-    }
-    document.querySelectorAll(".sub-tab-button").forEach((button) => {
-      button.addEventListener("click", () => this.switchSubTab(button.dataset.subTab));
-    });
-    document.querySelectorAll(".genre-tab-button").forEach((button) => {
-      button.addEventListener("click", () => this.switchGenre(button.dataset.genre));
-    });
-    this.dom.dictionaryToggle?.addEventListener("click", () => this.toggleDictionaryDrawer());
-    this.dom.logsToggle?.addEventListener("click", () => this.toggleLogsDrawer());
-    this.dom.logsRefreshButton?.addEventListener("click", () => this.fetchLogs());
-    this.dom.actionButtons[0]?.addEventListener("click", () => this.handleDisplay());
-    this.dom.actionButtons[1]?.addEventListener("click", () => this.handleUnanswer());
-    this.dom.actionButtons[2]?.addEventListener("click", () => this.handleEdit());
-    this.dom.clearButton?.addEventListener("click", () => this.clearTelop());
-    this.dom.fetchDictionaryButton?.addEventListener("click", () => this.fetchDictionary());
-    this.dom.addTermForm?.addEventListener("submit", (event) => this.addTerm(event));
-    this.dom.selectAllCheckbox?.addEventListener("change", (event) => this.handleSelectAll(event));
-    this.dom.batchUnanswerBtn?.addEventListener("click", () => this.handleBatchUnanswer());
+    bindDomEvents(this);
+    bindActionButtons(this);
+    this.bindDatasetButtons(".sub-tab-button", "subTab", (value) => this.switchSubTab(value));
+    this.bindDatasetButtons(".genre-tab-button", "genre", (value) => this.switchGenre(value));
     if (this.dom.editDialog) {
       this.dom.editDialog.addEventListener("click", (event) => {
         if (event.target instanceof HTMLElement && event.target.dataset.dialogDismiss) {
@@ -286,23 +287,25 @@ export class OperatorApp {
         }
       });
     }
-    this.dom.editCancelButton?.addEventListener("click", () => this.closeEditDialog());
-    this.dom.editSaveButton?.addEventListener("click", () => this.handleEditSubmit());
     this.dom.cardsContainer?.addEventListener("change", (event) => {
       if (event.target instanceof HTMLInputElement && event.target.classList.contains("row-checkbox")) {
         this.syncSelectAllState();
         this.updateBatchButtonVisibility();
       }
     });
-    if (this.dom.logSearch) {
-      this.dom.logSearch.addEventListener("input", () => this.renderLogs());
-    }
-    if (this.dom.logAutoscroll) {
-      this.dom.logAutoscroll.addEventListener("change", (event) => {
-        this.state.autoScrollLogs = event.target.checked;
-      });
-    }
     this.setupConfirmDialog();
+  }
+
+  bindDatasetButtons(selector, datasetKey, callback) {
+    document.querySelectorAll(selector).forEach((element) => {
+      if (!(element instanceof HTMLElement)) {
+        return;
+      }
+      element.addEventListener("click", () => {
+        const value = element.dataset?.[datasetKey];
+        callback(value, element);
+      });
+    });
   }
 
   applyPreferredSubTab() {
