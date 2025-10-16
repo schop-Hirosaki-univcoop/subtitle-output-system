@@ -2583,6 +2583,15 @@ body.sidebar-overlay-open{
   backdrop-filter:blur(18px);
 }
 
+#flow-panel-participants .embedded-tool__surface.qa-embedded{
+  padding:0;
+  border:none;
+  border-radius:0;
+  background:none;
+  box-shadow:none;
+  backdrop-filter:none;
+}
+
 #flow-panel-participants .module-title-row{
   display:flex;
   align-items:center;
