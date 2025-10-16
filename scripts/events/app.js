@@ -46,6 +46,7 @@ export class EventAdminApp {
     this.suppressSelectionNotifications = false;
     this.lastSelectionSignature = "";
     this.lastSelectionSource = "";
+    this.forceSelectionBroadcast = true;
     this.stage = "events";
     this.stageHistory = new Set(["events"]);
     this.activePanel = "events";
@@ -121,6 +122,8 @@ export class EventAdminApp {
     this.eventCountNote = "";
     this.stageNote = "";
     this.lastParticipantsErrorMessage = "";
+    this.forceSelectionBroadcast = true;
+    this.updateParticipantToolDataset(null);
     this.applyMetaNote();
     this.applyEventsLoadingState();
     this.applyScheduleLoadingState();
@@ -678,6 +681,7 @@ export class EventAdminApp {
       return () => {};
     }
     this.selectionListeners.add(listener);
+    this.forceSelectionBroadcast = true;
     return () => {
       this.selectionListeners.delete(listener);
     };
@@ -706,11 +710,16 @@ export class EventAdminApp {
       detail.startAt,
       detail.endAt
     ].join("::");
-    if (signature === this.lastSelectionSignature && source === this.lastSelectionSource) {
+    if (
+      !this.forceSelectionBroadcast &&
+      signature === this.lastSelectionSignature &&
+      source === this.lastSelectionSource
+    ) {
       return;
     }
     this.lastSelectionSignature = signature;
     this.lastSelectionSource = source;
+    this.forceSelectionBroadcast = false;
     this.selectionListeners.forEach((listener) => {
       try {
         listener(detail);
@@ -969,27 +978,19 @@ export class EventAdminApp {
   }
 
   handleToolContextAfterSelection() {
-    if (!this.selectedEventId || !this.selectedScheduleId) {
+    const context = this.getCurrentSelectionContext();
+    if (!context.eventId || !context.scheduleId) {
       this.pendingToolSync = false;
       this.lastToolContextSignature = "";
       this.lastToolContextApplied = false;
-      if (this.dom.participantsTool) {
-        delete this.dom.participantsTool.dataset.expectedEventId;
-        delete this.dom.participantsTool.dataset.expectedScheduleId;
-        delete this.dom.participantsTool.dataset.expectedEventName;
-        delete this.dom.participantsTool.dataset.expectedScheduleLabel;
-        delete this.dom.participantsTool.dataset.expectedStartAt;
-        delete this.dom.participantsTool.dataset.expectedEndAt;
-        delete this.dom.participantsTool.dataset.syncedEventId;
-        delete this.dom.participantsTool.dataset.syncedScheduleId;
-        delete this.dom.participantsTool.dataset.syncedAt;
-      }
+      this.updateParticipantToolDataset(null);
       const message = this.selectedEventId
         ? "日程を選択すると参加者リストを読み込みます。"
         : "イベントと日程を選択すると参加者リストを読み込みます。";
       this.setParticipantStatus({ text: message, variant: "info" });
       return;
     }
+    this.updateParticipantToolDataset(context);
     const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
     if (activeConfig.stage === "tabs" && activeConfig.requireSchedule) {
       this.pendingToolSync = false;
@@ -1326,6 +1327,34 @@ export class EventAdminApp {
     }
   }
 
+  updateParticipantToolDataset(context) {
+    const tool = this.dom.participantsTool;
+    if (!tool) {
+      return;
+    }
+    const clear = () => {
+      delete tool.dataset.expectedEventId;
+      delete tool.dataset.expectedEventName;
+      delete tool.dataset.expectedScheduleId;
+      delete tool.dataset.expectedScheduleLabel;
+      delete tool.dataset.expectedStartAt;
+      delete tool.dataset.expectedEndAt;
+      delete tool.dataset.syncedEventId;
+      delete tool.dataset.syncedScheduleId;
+      delete tool.dataset.syncedAt;
+    };
+    if (!context || !context.eventId || !context.scheduleId) {
+      clear();
+      return;
+    }
+    tool.dataset.expectedEventId = context.eventId;
+    tool.dataset.expectedEventName = context.eventName || context.eventId;
+    tool.dataset.expectedScheduleId = context.scheduleId;
+    tool.dataset.expectedScheduleLabel = context.scheduleLabel || context.scheduleId;
+    tool.dataset.expectedStartAt = context.startAt || "";
+    tool.dataset.expectedEndAt = context.endAt || "";
+  }
+
   async syncEmbeddedTools() {
     if (this.toolSyncPromise) {
       return this.toolSyncPromise;
@@ -1339,19 +1368,12 @@ export class EventAdminApp {
         this.lastToolContextSignature = "";
         this.lastToolContextApplied = false;
         this.pendingToolSync = false;
+        this.updateParticipantToolDataset(null);
         return;
       }
       const eventLabel = event.name || event.id;
       const scheduleLabel = schedule.label || schedule.id;
       const rangeText = formatScheduleRange(schedule.startAt, schedule.endAt);
-      if (this.dom.participantsTool) {
-        this.dom.participantsTool.dataset.expectedEventId = event.id;
-        this.dom.participantsTool.dataset.expectedScheduleId = schedule.id;
-        this.dom.participantsTool.dataset.expectedEventName = eventLabel;
-        this.dom.participantsTool.dataset.expectedScheduleLabel = scheduleLabel;
-        this.dom.participantsTool.dataset.expectedStartAt = schedule.startAt || "";
-        this.dom.participantsTool.dataset.expectedEndAt = schedule.endAt || "";
-      }
       const contextKey = [
         event.id,
         schedule.id,
@@ -1373,6 +1395,7 @@ export class EventAdminApp {
         startAt: schedule.startAt || "",
         endAt: schedule.endAt || ""
       };
+      this.updateParticipantToolDataset(context);
       const pendingMeta = [];
       if (rangeText) {
         pendingMeta.push(`時間 ${rangeText}`);
