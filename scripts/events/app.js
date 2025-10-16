@@ -46,6 +46,7 @@ export class EventAdminApp {
     this.suppressSelectionNotifications = false;
     this.lastSelectionSignature = "";
     this.lastSelectionSource = "";
+    this.forceSelectionBroadcast = true;
     this.stage = "events";
     this.stageHistory = new Set(["events"]);
     this.activePanel = "events";
@@ -121,6 +122,7 @@ export class EventAdminApp {
     this.eventCountNote = "";
     this.stageNote = "";
     this.lastParticipantsErrorMessage = "";
+    this.forceSelectionBroadcast = true;
     this.applyMetaNote();
     this.applyEventsLoadingState();
     this.applyScheduleLoadingState();
@@ -678,6 +680,7 @@ export class EventAdminApp {
       return () => {};
     }
     this.selectionListeners.add(listener);
+    this.forceSelectionBroadcast = true;
     return () => {
       this.selectionListeners.delete(listener);
     };
@@ -706,11 +709,16 @@ export class EventAdminApp {
       detail.startAt,
       detail.endAt
     ].join("::");
-    if (signature === this.lastSelectionSignature && source === this.lastSelectionSource) {
+    if (
+      !this.forceSelectionBroadcast &&
+      signature === this.lastSelectionSignature &&
+      source === this.lastSelectionSource
+    ) {
       return;
     }
     this.lastSelectionSignature = signature;
     this.lastSelectionSource = source;
+    this.forceSelectionBroadcast = false;
     this.selectionListeners.forEach((listener) => {
       try {
         listener(detail);
