@@ -151,6 +151,15 @@ function cloneHostEvent(event) {
 function applyHostEvents(events = [], { preserveSelection = true } = {}) {
   const previousEventId = preserveSelection ? state.selectedEventId : null;
   const previousScheduleId = preserveSelection ? state.selectedScheduleId : null;
+  const previousEventsSnapshot = preserveSelection && Array.isArray(state.events)
+    ? state.events.map((event) => ({
+        id: event.id,
+        name: event.name,
+        schedules: Array.isArray(event.schedules)
+          ? event.schedules.map((schedule) => ({ ...schedule }))
+          : []
+      }))
+    : [];
   const cloned = Array.isArray(events)
     ? events.map((event) => cloneHostEvent(event)).filter(Boolean)
     : [];
@@ -169,11 +178,26 @@ function applyHostEvents(events = [], { preserveSelection = true } = {}) {
       const selectedEvent = cloned.find((event) => event.id === state.selectedEventId) || null;
       const hasSchedule = selectedEvent?.schedules?.some((schedule) => schedule.id === previousScheduleId) || false;
       const overrideKey = `${previousEventId || ""}::${previousScheduleId}`;
-      const hasOverride = Boolean(
-        previousEventId &&
-        state.scheduleContextOverrides instanceof Map &&
-        state.scheduleContextOverrides.has(overrideKey)
-      );
+      if (!(state.scheduleContextOverrides instanceof Map)) {
+        state.scheduleContextOverrides = new Map();
+      }
+      let hasOverride = state.scheduleContextOverrides.has(overrideKey);
+      if (!hasSchedule && previousEventId && previousScheduleId && !hasOverride) {
+        const previousEvent = previousEventsSnapshot.find((event) => event.id === previousEventId) || null;
+        const previousSchedule = previousEvent?.schedules?.find((schedule) => schedule.id === previousScheduleId) || null;
+        if (previousSchedule) {
+          const fallbackOverride = {
+            eventId: previousEventId,
+            eventName: previousEvent?.name || previousEventId,
+            scheduleId: previousScheduleId,
+            scheduleLabel: previousSchedule.label || previousScheduleId,
+            startAt: previousSchedule.startAt || "",
+            endAt: previousSchedule.endAt || ""
+          };
+          state.scheduleContextOverrides.set(overrideKey, fallbackOverride);
+          hasOverride = true;
+        }
+      }
       state.selectedScheduleId = hasSchedule || hasOverride ? previousScheduleId : null;
     } else {
       state.selectedScheduleId = null;
