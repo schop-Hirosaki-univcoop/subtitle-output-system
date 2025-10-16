@@ -12,6 +12,12 @@
   --danger: #ff6b6b;
   --footer-clearance: clamp(3.5rem, 6vh, 5.25rem);
   --footer-gap: clamp(1.25rem, 2vh, 1.75rem);
+  --flow-stage-panel-width: min(96rem, 94vw);
+  --flow-stage-panel-padding: clamp(1rem, 2.4vw, 1.6rem);
+  --flow-stage-panel-radius: clamp(1.05rem, 2.2vw, 1.45rem);
+  --flow-stage-panel-border: rgba(78,122,186,.36);
+  --flow-stage-panel-background: linear-gradient(160deg, rgba(18,28,46,.88), rgba(10,16,30,.94));
+  --flow-stage-panel-shadow: 0 18px 42px rgba(4,12,28,.44);
   /* aliases for consistency */
   --bg: var(--ui-bg);
   --text: var(--txt);
@@ -357,11 +363,11 @@ body.logs-open #logs-panel{ display:flex; }
 
 #op-dictionary-panel .dictionary-body,
 #op-logs-panel .logs-body{
-  padding:clamp(1rem, 2.4vw, 1.6rem);
-  border-radius:clamp(1.05rem, 2.2vw, 1.45rem);
-  border:1px solid rgba(78,122,186,.36);
-  background:linear-gradient(160deg, rgba(18,28,46,.88), rgba(10,16,30,.94));
-  box-shadow:0 18px 42px rgba(4,12,28,.44);
+  padding:var(--flow-stage-panel-padding);
+  border-radius:var(--flow-stage-panel-radius);
+  border:1px solid var(--flow-stage-panel-border);
+  background:var(--flow-stage-panel-background);
+  box-shadow:var(--flow-stage-panel-shadow);
   backdrop-filter:blur(18px);
   min-height:0;
 }
@@ -1803,6 +1809,26 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   margin-top:1.25rem;
 }
 
+.flow-stage-panel{
+  width:min(100%, var(--flow-stage-panel-width));
+  max-width:var(--flow-stage-panel-width);
+  margin-inline:auto;
+  padding:var(--flow-stage-panel-padding);
+  border-radius:var(--flow-stage-panel-radius);
+  border:1px solid var(--flow-stage-panel-border);
+  background:var(--flow-stage-panel-background);
+  box-shadow:var(--flow-stage-panel-shadow);
+  backdrop-filter:blur(18px);
+  display:flex;
+  flex-direction:column;
+  gap:var(--flow-stage-panel-padding);
+  min-width:0;
+}
+
+.flow-stage-panel.flow-tool-panel{
+  display:flex;
+}
+
 .flow-nav-button--next{
   margin-left:auto;
 }
@@ -2585,11 +2611,11 @@ body.sidebar-overlay-open{
 }
 
 #flow-panel-participants .embedded-tool__surface{
-  padding:clamp(1.3rem, 2.4vw, 2rem);
-  border-radius:clamp(1rem, 2.1vw, 1.4rem);
-  background:radial-gradient(120% 140% at 50% 0, rgba(20,40,68,.92), rgba(8,16,30,.88));
-  border:1px solid rgba(78,122,188,.45);
-  box-shadow:0 32px 60px rgba(4,12,24,.55), inset 0 1px 0 rgba(255,255,255,.05);
+  padding:var(--flow-stage-panel-padding);
+  border-radius:var(--flow-stage-panel-radius);
+  background:var(--flow-stage-panel-background);
+  border:1px solid var(--flow-stage-panel-border);
+  box-shadow:var(--flow-stage-panel-shadow);
   backdrop-filter:blur(18px);
 }
 
