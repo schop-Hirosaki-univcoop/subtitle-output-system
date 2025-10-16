@@ -1148,14 +1148,31 @@ export class EventAdminApp {
     const normalizedParticipantCount = Number.isFinite(participantCountValue)
       ? participantCountValue
       : null;
+    const dataset = (this.dom.participantsTool && this.dom.participantsTool.dataset) || {};
+    const derivedEventId = ensureString(
+      eventId || dataset.expectedEventId || dataset.syncedEventId || this.participantSyncInfo?.eventId || this.selectedEventId
+    );
+    const derivedScheduleId = ensureString(
+      scheduleId || dataset.expectedScheduleId || dataset.syncedScheduleId || this.participantSyncInfo?.scheduleId || this.selectedScheduleId
+    );
+    const derivedEventName = ensureString(
+      detail.eventName || dataset.expectedEventName || this.participantSyncInfo?.eventName
+    );
+    const derivedScheduleLabel = ensureString(
+      detail.scheduleLabel || dataset.expectedScheduleLabel || this.participantSyncInfo?.scheduleLabel
+    );
+    const selectedEvent = this.getSelectedEvent();
+    const selectedSchedule = this.getSelectedSchedule();
+    const fallbackEventLabel = derivedEventName || selectedEvent?.name || derivedEventId;
+    const fallbackScheduleLabel = derivedScheduleLabel || selectedSchedule?.label || derivedScheduleId;
     const signaturePayload = {
-      eventId,
-      scheduleId,
+      eventId: derivedEventId,
+      scheduleId: derivedScheduleId,
       success: successFlag,
       participantCount: normalizedParticipantCount,
       reason: normalizedReason,
       error: normalizedError,
-      timestamp: normalizedTimestamp
+      timestamp: normalizedTimestamp > 0 ? Math.floor(normalizedTimestamp / 1000) : 0
     };
     const signature = JSON.stringify(signaturePayload);
     if (signature && signature === this.lastParticipantSyncSignature) {
@@ -1166,6 +1183,10 @@ export class EventAdminApp {
     this.logParticipantAction("参加者ツールから同期イベントを受信しました", {
       eventId,
       scheduleId,
+      derivedEventId,
+      derivedScheduleId,
+      derivedEventLabel: fallbackEventLabel,
+      derivedScheduleLabel: fallbackScheduleLabel,
       success: detail.success !== false,
       detail
     });
@@ -1184,7 +1205,17 @@ export class EventAdminApp {
       return;
     }
     const timestamp = normalizedTimestamp || Date.now();
-    if (!eventId || !scheduleId) {
+    if ((!eventId || !scheduleId) && derivedEventId && derivedScheduleId) {
+      this.logParticipantAction("同期イベントの選択情報が不足していたため最新の選択を補完して処理します", {
+        providedEventId: eventId,
+        providedScheduleId: scheduleId,
+        derivedEventId,
+        derivedScheduleId,
+        derivedEventLabel: fallbackEventLabel,
+        derivedScheduleLabel: fallbackScheduleLabel
+      });
+    }
+    if (!derivedEventId || !derivedScheduleId) {
       if (!this.selectedEventId || !this.selectedScheduleId) {
         const message = this.selectedEventId
           ? "日程を選択すると参加者リストを読み込みます。"
@@ -1197,17 +1228,32 @@ export class EventAdminApp {
           delete this.dom.participantsTool.dataset.syncedAt;
           this.logParticipantAction("同期イベントに選択情報が含まれていないため同期済みメタ情報をクリアしました", {
             eventId,
-            scheduleId
+            scheduleId,
+            derivedEventId,
+            derivedScheduleId,
+            derivedEventLabel: fallbackEventLabel,
+            derivedScheduleLabel: fallbackScheduleLabel
           });
         } else {
-          this.logParticipantAction("同期イベントに選択情報が含まれていないものの同期済みメタ情報を保持する要素が見つかりません", {
-            eventId,
-            scheduleId
-          });
+          this.logParticipantAction(
+            "同期イベントに選択情報が含まれていないものの同期済みメタ情報を保持する要素が見つかりません",
+            {
+              eventId,
+              scheduleId,
+              derivedEventId,
+              derivedScheduleId,
+              derivedEventLabel: fallbackEventLabel,
+              derivedScheduleLabel: fallbackScheduleLabel
+            }
+          );
         }
         this.logParticipantAction("同期イベントに選択情報が含まれていないため案内メッセージを表示しました", {
           eventId,
-          scheduleId
+          scheduleId,
+          derivedEventId,
+          derivedScheduleId,
+          derivedEventLabel: fallbackEventLabel,
+          derivedScheduleLabel: fallbackScheduleLabel
         });
       }
       this.lastParticipantSyncSignature = "";
@@ -1236,19 +1282,24 @@ export class EventAdminApp {
       if (relative && relative !== "—") {
         metaParts.push(`${relative}に更新`);
       }
-      const selectedEvent = this.getSelectedEvent();
-      const selectedSchedule = this.getSelectedSchedule();
-      const eventLabel = ensureString(detail.eventName) || selectedEvent?.name || eventId;
-      const scheduleLabel = ensureString(detail.scheduleLabel) || selectedSchedule?.label || scheduleId;
-      this.participantSyncInfo = { ...detail, timestamp };
+      const eventLabel = fallbackEventLabel;
+      const scheduleLabel = fallbackScheduleLabel;
+      this.participantSyncInfo = {
+        ...detail,
+        eventId: derivedEventId,
+        scheduleId: derivedScheduleId,
+        eventName: eventLabel,
+        scheduleLabel,
+        timestamp
+      };
       this.setParticipantStatus({
         text: `参加者リストを同期しました: イベント「${eventLabel}」/ 日程「${scheduleLabel}」`,
         meta: metaParts.filter(Boolean).join(" / "),
         variant: "success"
       });
       if (this.dom.participantsTool) {
-        this.dom.participantsTool.dataset.syncedEventId = eventId;
-        this.dom.participantsTool.dataset.syncedScheduleId = scheduleId;
+        this.dom.participantsTool.dataset.syncedEventId = derivedEventId;
+        this.dom.participantsTool.dataset.syncedScheduleId = derivedScheduleId;
         this.dom.participantsTool.dataset.syncedAt = String(timestamp);
         this.logParticipantAction("参加者ツールの同期済みメタ情報を更新しました", {
           syncedEventId: this.dom.participantsTool.dataset.syncedEventId,
@@ -1259,6 +1310,10 @@ export class EventAdminApp {
       this.logParticipantAction("参加者ツールの同期完了イベントを処理しました", {
         eventId,
         scheduleId,
+        derivedEventId,
+        derivedScheduleId,
+        derivedEventLabel: fallbackEventLabel,
+        derivedScheduleLabel: fallbackScheduleLabel,
         participantCount,
         meta: metaParts
       });
@@ -1279,7 +1334,11 @@ export class EventAdminApp {
       }
       this.logParticipantAction("選択不足のため参加者ツールの同期が見送られたイベントを処理しました", {
         eventId,
-        scheduleId
+        scheduleId,
+        derivedEventId,
+        derivedScheduleId,
+        derivedEventLabel: fallbackEventLabel,
+        derivedScheduleLabel: fallbackScheduleLabel
       });
       this.lastParticipantSyncSignature = "";
       return;
@@ -1294,7 +1353,14 @@ export class EventAdminApp {
     if (relative && relative !== "—") {
       metaParts.push(`${relative}に報告`);
     }
-    this.participantSyncInfo = { ...detail, timestamp };
+    this.participantSyncInfo = {
+      ...detail,
+      eventId: derivedEventId,
+      scheduleId: derivedScheduleId,
+      eventName: fallbackEventLabel || detail.eventName || "",
+      scheduleLabel: fallbackScheduleLabel || detail.scheduleLabel || "",
+      timestamp
+    };
     this.setParticipantStatus({
       text,
       meta: metaParts.join(" / "),
@@ -1303,6 +1369,10 @@ export class EventAdminApp {
     this.logParticipantAction("参加者ツールの同期エラーイベントを処理しました", {
       eventId,
       scheduleId,
+      derivedEventId,
+      derivedScheduleId,
+      derivedEventLabel: fallbackEventLabel,
+      derivedScheduleLabel: fallbackScheduleLabel,
       error: errorMessage || "",
       reason: reason || ""
     });
@@ -1312,7 +1382,11 @@ export class EventAdminApp {
       delete this.dom.participantsTool.dataset.syncedAt;
       this.logParticipantAction("エラーのため参加者ツールの同期済みメタ情報をクリアしました", {
         eventId,
-        scheduleId
+        scheduleId,
+        derivedEventId,
+        derivedScheduleId,
+        derivedEventLabel: fallbackEventLabel,
+        derivedScheduleLabel: fallbackScheduleLabel
       });
     }
     this.lastParticipantSyncSignature = "";
