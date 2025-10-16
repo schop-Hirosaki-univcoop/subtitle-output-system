@@ -1,41 +1,106 @@
-import { dictionaryRef, set } from "./firebase.js";
+import { dictionaryRef, onValue, set } from "./firebase.js";
 import { DICTIONARY_STATE_KEY } from "./constants.js";
 import { escapeHtml } from "./utils.js";
+
+function normalizeDictionaryEntries(data) {
+  const list = Array.isArray(data)
+    ? data
+    : data && typeof data === "object"
+      ? Object.values(data)
+      : [];
+  return list
+    .map((item) => {
+      const term = String(item?.term ?? "").trim();
+      const ruby = String(item?.ruby ?? "").trim();
+      const enabledValue = item?.enabled;
+      let enabled = true;
+      if (typeof enabledValue === "boolean") {
+        enabled = enabledValue;
+      } else if (typeof enabledValue === "string") {
+        enabled = enabledValue.trim().toLowerCase() !== "false";
+      } else if (typeof enabledValue === "number") {
+        enabled = enabledValue !== 0;
+      }
+      return { term, ruby, enabled };
+    })
+    .filter((entry) => entry.term && entry.ruby);
+}
+
+function applyDictionarySnapshot(app, rawEntries, { render = true } = {}) {
+  const normalized = normalizeDictionaryEntries(rawEntries);
+  app.dictionaryData = normalized;
+  app.dictionaryEntries = normalized.filter((entry) => entry.enabled);
+  if (render) {
+    renderDictionaryTable(app, normalized);
+  }
+  app.dictionaryLoaded = true;
+  if (typeof app.refreshRenderSummary === "function") {
+    app.refreshRenderSummary();
+  }
+  return normalized;
+}
+
+function renderDictionaryTable(app, entries) {
+  if (!app.dom.dictionaryTableBody) return;
+  app.dom.dictionaryTableBody.innerHTML = "";
+  entries.forEach((item) => {
+    const tr = document.createElement("tr");
+    const toggleBtn = document.createElement("button");
+    toggleBtn.textContent = item.enabled ? "無効にする" : "有効にする";
+    toggleBtn.type = "button";
+    toggleBtn.className = "btn btn-ghost btn-sm";
+    toggleBtn.addEventListener("click", () => toggleTerm(app, item.term, !item.enabled));
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "削除";
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn-danger btn-sm";
+    deleteBtn.addEventListener("click", () => deleteTerm(app, item.term));
+    tr.innerHTML = `
+      <td>${escapeHtml(item.term)}</td>
+      <td>${escapeHtml(item.ruby)}</td>
+      <td>${item.enabled ? "有効" : "無効"}</td>
+    `;
+    const actionTd = document.createElement("td");
+    actionTd.className = "table-actions";
+    actionTd.append(toggleBtn, deleteBtn);
+    tr.appendChild(actionTd);
+    if (!item.enabled) tr.classList.add("disabled");
+    app.dom.dictionaryTableBody.appendChild(tr);
+  });
+}
 
 export async function fetchDictionary(app) {
   try {
     const result = await app.api.apiPost({ action: "fetchSheet", sheet: "dictionary" });
     if (!result.success) return;
-    if (app.dom.dictionaryTableBody) app.dom.dictionaryTableBody.innerHTML = "";
-    (result.data || []).forEach((item) => {
-      const tr = document.createElement("tr");
-      const toggleBtn = document.createElement("button");
-      toggleBtn.textContent = item.enabled ? "無効にする" : "有効にする";
-      toggleBtn.type = "button";
-      toggleBtn.className = "btn btn-ghost btn-sm";
-      toggleBtn.addEventListener("click", () => toggleTerm(app, item.term, !item.enabled));
-      const deleteBtn = document.createElement("button");
-      deleteBtn.textContent = "削除";
-      deleteBtn.type = "button";
-      deleteBtn.className = "btn btn-danger btn-sm";
-      deleteBtn.addEventListener("click", () => deleteTerm(app, item.term));
-      tr.innerHTML = `
-        <td>${escapeHtml(item.term)}</td>
-        <td>${escapeHtml(item.ruby)}</td>
-        <td>${item.enabled ? "有効" : "無効"}</td>
-      `;
-      const actionTd = document.createElement("td");
-      actionTd.className = "table-actions";
-      actionTd.append(toggleBtn, deleteBtn);
-      tr.appendChild(actionTd);
-      if (!item.enabled) tr.classList.add("disabled");
-      app.dom.dictionaryTableBody?.appendChild(tr);
-    });
-    app.dictionaryLoaded = true;
-    const enabledOnly = (result.data || []).filter((item) => item.enabled === true);
-    await set(dictionaryRef, enabledOnly);
+    const normalized = applyDictionarySnapshot(app, result.data || []);
+    const payload = normalized.map(({ term, ruby, enabled }) => ({ term, ruby, enabled }));
+    await set(dictionaryRef, payload);
   } catch (error) {
     app.toast("辞書の取得に失敗: " + error.message, "error");
+  }
+}
+
+export function startDictionaryListener(app) {
+  if (app.dictionaryUnsubscribe) {
+    app.dictionaryUnsubscribe();
+    app.dictionaryUnsubscribe = null;
+  }
+  app.dictionaryUnsubscribe = onValue(
+    dictionaryRef,
+    (snapshot) => {
+      applyDictionarySnapshot(app, snapshot.val() || []);
+    },
+    (error) => {
+      console.error("辞書データの購読に失敗しました", error);
+    }
+  );
+}
+
+export function stopDictionaryListener(app) {
+  if (app.dictionaryUnsubscribe) {
+    app.dictionaryUnsubscribe();
+    app.dictionaryUnsubscribe = null;
   }
 }
 

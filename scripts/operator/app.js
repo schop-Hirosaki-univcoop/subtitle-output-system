@@ -61,7 +61,9 @@ const MODULE_METHOD_GROUPS = [
       "fetchDictionary",
       "applyInitialDictionaryState",
       "toggleDictionaryDrawer",
-      "addTerm"
+      "addTerm",
+      "startDictionaryListener",
+      "stopDictionaryListener"
     ]
   },
   {
@@ -95,7 +97,7 @@ const MODULE_METHOD_GROUPS = [
   },
   {
     module: Display,
-    methods: ["handleRenderUpdate", "redrawUpdatedAt", "refreshStaleness"]
+    methods: ["handleRenderUpdate", "redrawUpdatedAt", "refreshStaleness", "refreshRenderSummary"]
   },
   {
     module: Dialog,
@@ -193,6 +195,9 @@ export class OperatorApp {
     this.logsUpdateTimer = null;
     this.eventsUnsubscribe = null;
     this.schedulesUnsubscribe = null;
+    this.dictionaryUnsubscribe = null;
+    this.dictionaryData = [];
+    this.dictionaryEntries = [];
     this.eventsBranch = {};
     this.schedulesBranch = {};
     this.authFlow = "idle";
@@ -613,6 +618,7 @@ export class OperatorApp {
       this.applyContextToState();
       this.startQuestionsStream();
       this.startScheduleMetadataStreams();
+      this.startDictionaryListener();
       this.startDisplaySessionMonitor();
       this.setLoaderStep(5, this.isEmbedded ? "辞書データを取得しています…" : "辞書取得…");
       await this.fetchDictionary();
@@ -731,6 +737,9 @@ export class OperatorApp {
       this.schedulesUnsubscribe();
       this.schedulesUnsubscribe = null;
     }
+    if (typeof this.stopDictionaryListener === "function") {
+      this.stopDictionaryListener();
+    }
     if (this.renderTicker) {
       clearInterval(this.renderTicker);
       this.renderTicker = null;
@@ -764,8 +773,12 @@ export class OperatorApp {
     this.updateBatchButtonVisibility();
     if (this.dom.cardsContainer) this.dom.cardsContainer.innerHTML = "";
     if (this.dom.logStream) this.dom.logStream.innerHTML = "";
+    if (this.dom.dictionaryTableBody) this.dom.dictionaryTableBody.innerHTML = "";
     this.eventsBranch = {};
     this.schedulesBranch = {};
+    this.dictionaryData = [];
+    this.dictionaryEntries = [];
+    this.dictionaryLoaded = false;
     this.updateScheduleContext();
   }
 
