@@ -57,6 +57,7 @@ export function queryDom() {
     participantsTool: document.getElementById("participants-tool"),
     operatorTool: document.getElementById("operator-tool"),
     panelButtons: Array.from(document.querySelectorAll("[data-panel-target]")),
-    navigationButtons: Array.from(document.querySelectorAll("[data-flow-nav-target]"))
+    navigationButtons: Array.from(document.querySelectorAll("[data-flow-nav-target]")),
+    flowNavigations: Array.from(document.querySelectorAll(".flow-navigation"))
   };
 }

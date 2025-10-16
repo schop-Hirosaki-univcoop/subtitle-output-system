@@ -942,23 +942,41 @@
         // 連続更新の競合防止用トークン
         let updateToken = 0;
     
+        function normalizeDictionarySnapshot(value){
+          const list = Array.isArray(value)
+            ? value
+            : value && typeof value === 'object'
+              ? Object.values(value)
+              : [];
+          return list
+            .map(item => {
+              const term = String(item?.term ?? '').trim();
+              const ruby = String(item?.ruby ?? '').trim();
+              const enabledValue = item?.enabled;
+              let enabled = true;
+              if (typeof enabledValue === 'boolean') {
+                enabled = enabledValue;
+              } else if (typeof enabledValue === 'string') {
+                enabled = enabledValue.trim().toLowerCase() !== 'false';
+              } else if (typeof enabledValue === 'number') {
+                enabled = enabledValue !== 0;
+              }
+              return { term, ruby, enabled };
+            })
+            .filter(entry => entry.enabled && entry.term && entry.ruby)
+            .map(({ term, ruby }) => ({ term, ruby }));
+        }
+
         let dictionary = [];
         const dictRef = ref(database, 'dictionary');
-        onValue(dictRef, snap => { dictionary = snap.val() || []; });
+        onValue(dictRef, snap => { dictionary = normalizeDictionarySnapshot(snap.val()); });
         
         // テキストにルビを適用する関数
         function applyRuby(text) {
             if (!text) return '';
             const base = document.createElement('div');
             base.textContent = String(text);
-            const entries = Array.isArray(dictionary)
-              ? dictionary
-                  .map(item => ({
-                    term: String(item?.term ?? ''),
-                    ruby: String(item?.ruby ?? '')
-                  }))
-                  .filter(entry => entry.term && entry.ruby)
-              : [];
+            const entries = Array.isArray(dictionary) ? dictionary : [];
             if (!entries.length) {
               return base.innerHTML;
             }

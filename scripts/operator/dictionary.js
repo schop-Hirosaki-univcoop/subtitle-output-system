@@ -1,41 +1,211 @@
-import { dictionaryRef, set } from "./firebase.js";
+import { dictionaryRef, onValue, set } from "./firebase.js";
 import { DICTIONARY_STATE_KEY } from "./constants.js";
 import { escapeHtml } from "./utils.js";
+
+function ensureDictionaryConfirm(app) {
+  if (!app || app.dictionaryConfirmSetup) {
+    return;
+  }
+  const dialog = app.dom.dictionaryConfirmDialog;
+  if (!dialog) {
+    return;
+  }
+  const cancelTargets = new Set();
+  if (app.dom.dictionaryConfirmCancelButton) {
+    cancelTargets.add(app.dom.dictionaryConfirmCancelButton);
+  }
+  dialog.querySelectorAll("[data-dialog-dismiss]").forEach((element) => {
+    if (element instanceof HTMLElement) {
+      cancelTargets.add(element);
+    }
+  });
+  const handleCancel = (event) => {
+    event.preventDefault();
+    finishDictionaryConfirm(app, false);
+  };
+  cancelTargets.forEach((element) => {
+    element.addEventListener("click", handleCancel);
+  });
+  if (app.dom.dictionaryConfirmAcceptButton) {
+    app.dom.dictionaryConfirmAcceptButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      finishDictionaryConfirm(app, true);
+    });
+  }
+  dialog.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      finishDictionaryConfirm(app, false);
+    }
+  });
+  app.dictionaryConfirmSetup = true;
+}
+
+function openDictionaryConfirm(app) {
+  const dialog = app.dom.dictionaryConfirmDialog;
+  if (!dialog) {
+    return;
+  }
+  const state = app.dictionaryConfirmState || (app.dictionaryConfirmState = { resolver: null, lastFocused: null });
+  state.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  dialog.removeAttribute("hidden");
+  const focusTarget = app.dom.dictionaryConfirmAcceptButton || dialog.querySelector("button");
+  if (focusTarget instanceof HTMLElement) {
+    requestAnimationFrame(() => focusTarget.focus());
+  }
+}
+
+function finishDictionaryConfirm(app, result) {
+  const dialog = app.dom.dictionaryConfirmDialog;
+  if (!dialog) {
+    return;
+  }
+  if (!dialog.hasAttribute("hidden")) {
+    dialog.setAttribute("hidden", "");
+  }
+  const state = app.dictionaryConfirmState || (app.dictionaryConfirmState = { resolver: null, lastFocused: null });
+  const resolver = state.resolver;
+  state.resolver = null;
+  const toFocus = state.lastFocused;
+  state.lastFocused = null;
+  if (toFocus && typeof toFocus.focus === "function") {
+    requestAnimationFrame(() => toFocus.focus());
+  }
+  if (typeof resolver === "function") {
+    resolver(result);
+  }
+}
+
+async function confirmDictionaryAction(app, { title = "確認", description = "", confirmLabel = "削除する", cancelLabel = "キャンセル" } = {}) {
+  ensureDictionaryConfirm(app);
+  const dialog = app.dom.dictionaryConfirmDialog;
+  if (!dialog) {
+    if (typeof app.confirmAction === "function") {
+      return await app.confirmAction({ title, description, confirmLabel, cancelLabel, tone: "danger" });
+    }
+    return false;
+  }
+  const state = app.dictionaryConfirmState || (app.dictionaryConfirmState = { resolver: null, lastFocused: null });
+  if (state.resolver) {
+    finishDictionaryConfirm(app, false);
+  }
+  if (app.dom.dictionaryConfirmTitle) {
+    app.dom.dictionaryConfirmTitle.textContent = title || "確認";
+  }
+  if (app.dom.dictionaryConfirmMessage) {
+    app.dom.dictionaryConfirmMessage.textContent = description || "";
+  }
+  if (app.dom.dictionaryConfirmAcceptButton) {
+    app.dom.dictionaryConfirmAcceptButton.textContent = confirmLabel || "削除する";
+  }
+  if (app.dom.dictionaryConfirmCancelButton) {
+    app.dom.dictionaryConfirmCancelButton.textContent = cancelLabel || "キャンセル";
+  }
+  openDictionaryConfirm(app);
+  return await new Promise((resolve) => {
+    state.resolver = resolve;
+  });
+}
+
+function normalizeDictionaryEntries(data) {
+  const list = Array.isArray(data)
+    ? data
+    : data && typeof data === "object"
+      ? Object.values(data)
+      : [];
+  return list
+    .map((item) => {
+      const term = String(item?.term ?? "").trim();
+      const ruby = String(item?.ruby ?? "").trim();
+      const enabledValue = item?.enabled;
+      let enabled = true;
+      if (typeof enabledValue === "boolean") {
+        enabled = enabledValue;
+      } else if (typeof enabledValue === "string") {
+        enabled = enabledValue.trim().toLowerCase() !== "false";
+      } else if (typeof enabledValue === "number") {
+        enabled = enabledValue !== 0;
+      }
+      return { term, ruby, enabled };
+    })
+    .filter((entry) => entry.term && entry.ruby);
+}
+
+function applyDictionarySnapshot(app, rawEntries, { render = true } = {}) {
+  const normalized = normalizeDictionaryEntries(rawEntries);
+  app.dictionaryData = normalized;
+  app.dictionaryEntries = normalized.filter((entry) => entry.enabled);
+  if (render) {
+    renderDictionaryTable(app, normalized);
+  }
+  app.dictionaryLoaded = true;
+  if (typeof app.refreshRenderSummary === "function") {
+    app.refreshRenderSummary();
+  }
+  return normalized;
+}
+
+function renderDictionaryTable(app, entries) {
+  if (!app.dom.dictionaryTableBody) return;
+  app.dom.dictionaryTableBody.innerHTML = "";
+  entries.forEach((item) => {
+    const tr = document.createElement("tr");
+    const toggleBtn = document.createElement("button");
+    toggleBtn.textContent = item.enabled ? "無効にする" : "有効にする";
+    toggleBtn.type = "button";
+    toggleBtn.className = "btn btn-ghost btn-sm";
+    toggleBtn.addEventListener("click", () => toggleTerm(app, item.term, !item.enabled));
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "削除";
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn-danger btn-sm";
+    deleteBtn.addEventListener("click", () => deleteTerm(app, item.term));
+    tr.innerHTML = `
+      <td>${escapeHtml(item.term)}</td>
+      <td>${escapeHtml(item.ruby)}</td>
+      <td>${item.enabled ? "有効" : "無効"}</td>
+    `;
+    const actionTd = document.createElement("td");
+    actionTd.className = "table-actions";
+    actionTd.append(toggleBtn, deleteBtn);
+    tr.appendChild(actionTd);
+    if (!item.enabled) tr.classList.add("disabled");
+    app.dom.dictionaryTableBody.appendChild(tr);
+  });
+}
 
 export async function fetchDictionary(app) {
   try {
     const result = await app.api.apiPost({ action: "fetchSheet", sheet: "dictionary" });
     if (!result.success) return;
-    if (app.dom.dictionaryTableBody) app.dom.dictionaryTableBody.innerHTML = "";
-    (result.data || []).forEach((item) => {
-      const tr = document.createElement("tr");
-      const toggleBtn = document.createElement("button");
-      toggleBtn.textContent = item.enabled ? "無効にする" : "有効にする";
-      toggleBtn.type = "button";
-      toggleBtn.className = "btn btn-ghost btn-sm";
-      toggleBtn.addEventListener("click", () => toggleTerm(app, item.term, !item.enabled));
-      const deleteBtn = document.createElement("button");
-      deleteBtn.textContent = "削除";
-      deleteBtn.type = "button";
-      deleteBtn.className = "btn btn-danger btn-sm";
-      deleteBtn.addEventListener("click", () => deleteTerm(app, item.term));
-      tr.innerHTML = `
-        <td>${escapeHtml(item.term)}</td>
-        <td>${escapeHtml(item.ruby)}</td>
-        <td>${item.enabled ? "有効" : "無効"}</td>
-      `;
-      const actionTd = document.createElement("td");
-      actionTd.className = "table-actions";
-      actionTd.append(toggleBtn, deleteBtn);
-      tr.appendChild(actionTd);
-      if (!item.enabled) tr.classList.add("disabled");
-      app.dom.dictionaryTableBody?.appendChild(tr);
-    });
-    app.dictionaryLoaded = true;
-    const enabledOnly = (result.data || []).filter((item) => item.enabled === true);
-    await set(dictionaryRef, enabledOnly);
+    const normalized = applyDictionarySnapshot(app, result.data || []);
+    const payload = normalized.map(({ term, ruby, enabled }) => ({ term, ruby, enabled }));
+    await set(dictionaryRef, payload);
   } catch (error) {
     app.toast("辞書の取得に失敗: " + error.message, "error");
+  }
+}
+
+export function startDictionaryListener(app) {
+  if (app.dictionaryUnsubscribe) {
+    app.dictionaryUnsubscribe();
+    app.dictionaryUnsubscribe = null;
+  }
+  app.dictionaryUnsubscribe = onValue(
+    dictionaryRef,
+    (snapshot) => {
+      applyDictionarySnapshot(app, snapshot.val() || []);
+    },
+    (error) => {
+      console.error("辞書データの購読に失敗しました", error);
+    }
+  );
+}
+
+export function stopDictionaryListener(app) {
+  if (app.dictionaryUnsubscribe) {
+    app.dictionaryUnsubscribe();
+    app.dictionaryUnsubscribe = null;
   }
 }
 
@@ -105,12 +275,11 @@ export async function addTerm(app, event) {
 
 export async function deleteTerm(app, term) {
   if (!term) return;
-  const confirmed = await app.confirmAction({
+  const confirmed = await confirmDictionaryAction(app, {
     title: "辞書から削除",
     description: `「${term}」を辞書から削除します。よろしいですか？`,
     confirmLabel: "削除する",
-    cancelLabel: "キャンセル",
-    tone: "danger"
+    cancelLabel: "キャンセル"
   });
   if (!confirmed) return;
   try {
