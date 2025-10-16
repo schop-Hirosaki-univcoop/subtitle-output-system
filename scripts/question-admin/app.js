@@ -168,12 +168,19 @@ function applyHostEvents(events = [], { preserveSelection = true } = {}) {
     if (previousScheduleId) {
       const selectedEvent = cloned.find((event) => event.id === state.selectedEventId) || null;
       const hasSchedule = selectedEvent?.schedules?.some((schedule) => schedule.id === previousScheduleId) || false;
-      state.selectedScheduleId = hasSchedule ? previousScheduleId : null;
+      const overrideKey = `${previousEventId || ""}::${previousScheduleId}`;
+      const hasOverride = Boolean(
+        previousEventId &&
+        state.scheduleContextOverrides instanceof Map &&
+        state.scheduleContextOverrides.has(overrideKey)
+      );
+      state.selectedScheduleId = hasSchedule || hasOverride ? previousScheduleId : null;
     } else {
       state.selectedScheduleId = null;
     }
   }
   renderEvents();
+  renderSchedules();
   updateParticipantContext({ preserveStatus: true });
 }
 
