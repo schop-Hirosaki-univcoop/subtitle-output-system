@@ -1685,18 +1685,48 @@ async function loadParticipants(options = {}) {
   try {
     await ensureTokenSnapshot(false);
     const eventBranchRaw = await fetchDbValue(`questionIntake/participants/${eventId}`);
-    const eventBranch = eventBranchRaw && typeof eventBranchRaw === "object" ? eventBranchRaw : {};
+    let eventBranch = eventBranchRaw && typeof eventBranchRaw === "object" ? eventBranchRaw : {};
+    let scheduleBranch = eventBranch && typeof eventBranch[scheduleId] === "object"
+      ? eventBranch[scheduleId]
+      : {};
+    let normalized = Object.entries(scheduleBranch)
+      .map(([participantKey, participantValue]) =>
+        normalizeParticipantRecord(participantValue, participantKey)
+      )
+      .filter(entry => entry.participantId);
+    let hydratedFromSheet = false;
+
+    if (!normalized.length) {
+      try {
+        const response = await api.apiPost({
+          action: "fetchQuestionParticipants",
+          eventId,
+          scheduleId
+        });
+        const imported = Array.isArray(response?.participants) ? response.participants : [];
+        if (imported.length) {
+          hydratedFromSheet = true;
+          await ensureTokenSnapshot(true);
+          const refreshedBranchRaw = await fetchDbValue(`questionIntake/participants/${eventId}`);
+          eventBranch = refreshedBranchRaw && typeof refreshedBranchRaw === "object" ? refreshedBranchRaw : {};
+          scheduleBranch = eventBranch && typeof eventBranch[scheduleId] === "object"
+            ? eventBranch[scheduleId]
+            : {};
+          normalized = Object.entries(scheduleBranch)
+            .map(([participantKey, participantValue]) =>
+              normalizeParticipantRecord(participantValue, participantKey)
+            )
+            .filter(entry => entry.participantId);
+        }
+      } catch (error) {
+        console.warn("Failed to synchronize participants from sheet", error);
+      }
+    }
+
     if (!(state.eventParticipantCache instanceof Map)) {
       state.eventParticipantCache = new Map();
     }
     state.eventParticipantCache.set(eventId, normalizeEventParticipantCache(eventBranch));
-
-    const scheduleBranch = eventBranch && typeof eventBranch[scheduleId] === "object"
-      ? eventBranch[scheduleId]
-      : {};
-    const normalized = Object.values(scheduleBranch)
-      .map(normalizeParticipantRecord)
-      .filter(entry => entry.participantId);
 
     let participants = sortParticipants(normalized);
     const savedSignature = signatureForEntries(participants);
@@ -1736,12 +1766,18 @@ async function loadParticipants(options = {}) {
             date: override.date || (override.startAt ? String(override.startAt).slice(0, 10) : "")
           })
         : "";
+    if (selectedSchedule) {
+      selectedSchedule.participantCount = participants.length;
+    }
     syncCurrentScheduleCache();
     if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
     if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
     if (dom.csvInput) dom.csvInput.value = "";
     if (!suppressStatus) {
-      setUploadStatus(statusMessage || "現在の参加者リストを読み込みました。", statusVariant);
+      const defaultMessage = hydratedFromSheet
+        ? "スプレッドシートの参加者データを同期しました。"
+        : "現在の参加者リストを読み込みました。";
+      setUploadStatus(statusMessage || defaultMessage, statusVariant);
     }
     updateDuplicateMatches();
     renderParticipants();
