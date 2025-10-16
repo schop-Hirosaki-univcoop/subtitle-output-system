@@ -63,10 +63,28 @@ const HOST_SELECTION_ATTRIBUTE_KEYS = [
   "data-expected-end-at"
 ];
 
-const UPLOAD_STATUS_PLACEHOLDERS = new Set([
-  "日程を選択してください。",
-  "イベントコントロールセンターで対象の日程を選択してください。"
-]);
+const UPLOAD_STATUS_PLACEHOLDERS = new Set(
+  [
+    "日程を選択してください。",
+    "イベントコントロールセンターで対象の日程を選択してください。"
+  ].map(normalizeKey)
+);
+
+function getMissingSelectionStatusMessage() {
+  return isEmbeddedMode()
+    ? "イベントコントロールセンターで対象の日程を選択してください。"
+    : "日程を選択してください。";
+}
+
+function getSelectionRequiredMessage(prefix = "") {
+  const requirement = isEmbeddedMode()
+    ? "イベントコントロールセンターで対象の日程を選択してください。"
+    : "イベントと日程を選択してください。";
+  if (!prefix) {
+    return requirement;
+  }
+  return `${prefix}${requirement}`;
+}
 
 const hostSelectionBridge = {
   observer: null,
@@ -583,6 +601,10 @@ async function requestSheetSync({ suppressError = true } = {}) {
 }
 
 function setUploadStatus(message, variant = "") {
+  const normalized = normalizeKey(message);
+  if (normalized && UPLOAD_STATUS_PLACEHOLDERS.has(normalized)) {
+    message = getMissingSelectionStatusMessage();
+  }
   state.lastUploadStatusMessage = message;
   state.lastUploadStatusVariant = variant || "";
   if (!dom.uploadStatus) return;
@@ -1414,7 +1436,7 @@ function updateParticipantContext(options = {}) {
       dom.teamCsvInput.disabled = true;
       dom.teamCsvInput.value = "";
     }
-    if (!shouldPreserveStatus) setUploadStatus("日程を選択してください。");
+    if (!shouldPreserveStatus) setUploadStatus(getMissingSelectionStatusMessage());
     if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
     if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
     if (dom.mappingTbody) dom.mappingTbody.innerHTML = "";
@@ -2225,7 +2247,7 @@ async function handleCsvChange(event) {
 
   try {
     if (!eventId || !scheduleId) {
-      throw new Error("イベントと日程を選択してください。");
+      throw new Error(getSelectionRequiredMessage());
     }
 
     const expectedName = buildParticipantCsvFilename(eventId, scheduleId);
@@ -2308,7 +2330,7 @@ async function handleTeamCsvChange(event) {
 
   try {
     if (!eventId || !scheduleId) {
-      throw new Error("イベントと日程を選択してください。");
+      throw new Error(getSelectionRequiredMessage());
     }
 
     const expectedName = buildTeamCsvFilename(eventId, scheduleId);
@@ -2365,7 +2387,7 @@ async function handleTeamCsvChange(event) {
 function downloadParticipantTemplate() {
   const { eventId, scheduleId } = getSelectionIdentifiers();
   if (!eventId || !scheduleId) {
-    setUploadStatus("参加者CSVテンプレートを作成するにはイベントと日程を選択してください。", "error");
+    setUploadStatus(getSelectionRequiredMessage("参加者CSVテンプレートを作成するには"), "error");
     return;
   }
 
@@ -2377,7 +2399,7 @@ function downloadParticipantTemplate() {
 function downloadTeamTemplate() {
   const { eventId, scheduleId } = getSelectionIdentifiers();
   if (!eventId || !scheduleId) {
-    setUploadStatus("班番号テンプレートを作成するにはイベントと日程を選択してください。", "error");
+    setUploadStatus(getSelectionRequiredMessage("班番号テンプレートを作成するには"), "error");
     return;
   }
 
@@ -2577,7 +2599,7 @@ async function handleClearParticipants() {
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) {
-    setUploadStatus("イベントと日程を選択してください。", "error");
+    setUploadStatus(getSelectionRequiredMessage(), "error");
     return;
   }
 
@@ -2744,7 +2766,7 @@ function resetState() {
   renderSchedules();
   renderParticipants();
   updateParticipantContext();
-  setUploadStatus("日程を選択してください。");
+  setUploadStatus(getMissingSelectionStatusMessage());
   if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
   if (dom.teamCsvInput) dom.teamCsvInput.value = "";
   if (dom.csvInput) dom.csvInput.value = "";
@@ -3308,7 +3330,7 @@ function attachEventHandlers() {
   if (dom.scheduleEmpty) dom.scheduleEmpty.hidden = true;
 
   if (dom.uploadStatus) {
-    setUploadStatus("日程を選択してください。");
+    setUploadStatus(getMissingSelectionStatusMessage());
   }
 
   if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
