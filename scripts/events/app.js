@@ -12,157 +12,23 @@ import {
 import { createApiClient } from "../operator/api-client.js";
 import { generateShortId, normalizeKey, toMillis } from "../question-admin/utils.js";
 import { formatRelative, formatScheduleRange } from "../operator/utils.js";
-
-const ensureString = (value) => String(value ?? "").trim();
-
-const formatDateTimeLocal = (date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-};
-
-const STAGE_SEQUENCE = ["events", "schedules", "tabs"];
-
-const STAGE_INFO = {
-  events: {
-    title: "イベントの管理",
-    description:
-      "質問フォームで使用するイベントを追加・編集・削除し、選択したイベントを次のステップへ引き継ぎます。"
-  },
-  schedules: {
-    title: "日程の管理",
-    description: "選択したイベントに紐づく日程を整理し、次のツールに引き継ぐ日程を決めます。"
-  }
-};
-
-const PANEL_CONFIG = {
-  events: { stage: "events", requireEvent: false, requireSchedule: false },
-  schedules: { stage: "schedules", requireEvent: true, requireSchedule: false },
-  participants: { stage: "tabs", requireEvent: true, requireSchedule: true },
-  operator: { stage: "tabs", requireEvent: true, requireSchedule: true },
-  dictionary: { stage: "tabs", requireEvent: false, requireSchedule: false, dictionary: true },
-  logs: { stage: "tabs", requireEvent: false, requireSchedule: false, logs: true }
-};
-
-const PANEL_STAGE_INFO = {
-  events: STAGE_INFO.events,
-  schedules: STAGE_INFO.schedules,
-  participants: {
-    title: "参加者リストの管理",
-    description: "選択した日程の参加者リストを整理・更新します。"
-  },
-  operator: {
-    title: "テロップ操作パネル",
-    description: "質問の送出とステータス監視を行います。"
-  },
-  dictionary: {
-    title: "ルビ辞書管理",
-    description: "登録語句を編集して即座に共有できます。"
-  },
-  logs: {
-    title: "操作ログ",
-    description: "テロップ操作の履歴を確認します。"
-  }
-};
-
-const FOCUSABLE_SELECTOR = [
-  "a[href]",
-  "button:not([disabled])",
-  "input:not([disabled])",
-  "select:not([disabled])",
-  "textarea:not([disabled])",
-  "[tabindex]:not([tabindex='-1'])"
-].join(", ");
-
-function buildContextDescription(baseDescription, event, schedule) {
-  const segments = [];
-  if (event) {
-    segments.push(`イベント: ${event.name || event.id}`);
-  }
-  if (schedule) {
-    segments.push(`日程: ${schedule.label || schedule.id}`);
-    const range = formatScheduleRange(schedule.startAt, schedule.endAt);
-    if (range) {
-      segments.push(`時間: ${range}`);
-    }
-  }
-  if (!segments.length) {
-    return baseDescription;
-  }
-  return `${baseDescription} 選択中 — ${segments.join(" / ")}`;
-}
-
-const logError = (context, error) => {
-  const detail =
-    error && typeof error === "object" && "message" in error && error.message
-      ? error.message
-      : String(error ?? "不明なエラー");
-  console.error(`${context}: ${detail}`);
-};
-
-function formatParticipantCount(value) {
-  if (value == null || value === "") {
-    return "—";
-  }
-  const numberValue = Number(value);
-  if (!Number.isNaN(numberValue)) {
-    return `${numberValue}名`;
-  }
-  return `${value}`;
-}
-
-function collectParticipantTokens(branch) {
-  const tokens = new Set();
-  if (!branch || typeof branch !== "object") {
-    return tokens;
-  }
-
-  Object.values(branch).forEach((scheduleBranch) => {
-    if (!scheduleBranch || typeof scheduleBranch !== "object") return;
-    Object.values(scheduleBranch).forEach((participant) => {
-      const token = participant?.token;
-      if (token) {
-        tokens.add(String(token));
-      }
-    });
-  });
-  return tokens;
-}
-
-const PARTICIPANT_SYNC_TIMEOUT_MS = 6000;
-const PARTICIPANT_SYNC_POLL_INTERVAL_MS = 150;
-
-const wait = (ms = 0) =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-
-async function waitForParticipantSelectionAck(expectedEventId, expectedScheduleId) {
-  if (
-    typeof window === "undefined" ||
-    !window.questionAdminEmbed ||
-    typeof window.questionAdminEmbed.getState !== "function"
-  ) {
-    return true;
-  }
-
-  const timeoutAt = Date.now() + PARTICIPANT_SYNC_TIMEOUT_MS;
-  while (Date.now() < timeoutAt) {
-    try {
-      const state = window.questionAdminEmbed.getState();
-      if (state && state.eventId === expectedEventId && state.scheduleId === expectedScheduleId) {
-        return true;
-      }
-    } catch (error) {
-      break;
-    }
-    await wait(PARTICIPANT_SYNC_POLL_INTERVAL_MS);
-  }
-  return false;
-}
+import { LoadingTracker } from "./loading-tracker.js";
+import {
+  ensureString,
+  formatDateTimeLocal,
+  buildContextDescription,
+  logError,
+  formatParticipantCount,
+  collectParticipantTokens,
+  waitForParticipantSelectionAck
+} from "./helpers.js";
+import {
+  STAGE_SEQUENCE,
+  STAGE_INFO,
+  PANEL_CONFIG,
+  PANEL_STAGE_INFO,
+  FOCUSABLE_SELECTOR
+} from "./config.js";
 
 export class EventAdminApp {
   constructor() {
@@ -187,10 +53,12 @@ export class EventAdminApp {
     this.lastFocused = null;
     this.confirmResolver = null;
     this.redirectingToIndex = false;
-    this.eventsLoadingDepth = 0;
-    this.eventsLoadingMessage = "";
-    this.scheduleLoadingDepth = 0;
-    this.scheduleLoadingMessage = "";
+    this.eventsLoadingTracker = new LoadingTracker({
+      onChange: (state) => this.applyEventsLoadingState(state)
+    });
+    this.scheduleLoadingTracker = new LoadingTracker({
+      onChange: (state) => this.applyScheduleLoadingState(state)
+    });
     this.embeddedTools = {
       participants: { promise: null, ready: false },
       operator: { promise: null, ready: false }
@@ -248,10 +116,8 @@ export class EventAdminApp {
     this.lastToolContextApplied = false;
     this.pendingToolSync = false;
     this.toolSyncPromise = null;
-    this.eventsLoadingDepth = 0;
-    this.eventsLoadingMessage = "";
-    this.scheduleLoadingDepth = 0;
-    this.scheduleLoadingMessage = "";
+    this.eventsLoadingTracker.reset();
+    this.scheduleLoadingTracker.reset();
     this.eventCountNote = "";
     this.stageNote = "";
     this.lastParticipantsErrorMessage = "";
@@ -432,38 +298,24 @@ export class EventAdminApp {
   }
 
   beginEventsLoading(message = "") {
-    this.eventsLoadingDepth += 1;
-    if (message || !this.eventsLoadingMessage) {
-      this.eventsLoadingMessage = message;
-    }
-    this.applyEventsLoadingState();
+    this.eventsLoadingTracker.begin(message);
   }
 
   endEventsLoading() {
-    this.eventsLoadingDepth = Math.max(0, this.eventsLoadingDepth - 1);
-    if (this.eventsLoadingDepth === 0) {
-      this.eventsLoadingMessage = "";
-    }
-    this.applyEventsLoadingState();
+    this.eventsLoadingTracker.end();
   }
 
   updateEventsLoadingMessage(message = "") {
-    if (this.eventsLoadingDepth === 0) {
-      this.eventsLoadingMessage = "";
-      this.applyEventsLoadingState();
-      return;
-    }
-    this.eventsLoadingMessage = message || this.eventsLoadingMessage;
-    this.applyEventsLoadingState();
+    this.eventsLoadingTracker.updateMessage(message);
   }
 
-  applyEventsLoadingState() {
-    const active = this.eventsLoadingDepth > 0;
+  applyEventsLoadingState(state = this.eventsLoadingTracker.getState()) {
+    const { active, message } = state;
     if (this.dom.loading) {
       this.dom.loading.hidden = !active;
     }
     if (this.dom.loadingText) {
-      this.dom.loadingText.textContent = active ? this.eventsLoadingMessage || "" : "";
+      this.dom.loadingText.textContent = active ? message || "" : "";
     }
   }
 
@@ -1375,12 +1227,8 @@ export class EventAdminApp {
   }
 
   clearLoadingIndicators() {
-    this.eventsLoadingDepth = 0;
-    this.eventsLoadingMessage = "";
-    this.scheduleLoadingDepth = 0;
-    this.scheduleLoadingMessage = "";
-    this.applyEventsLoadingState();
-    this.applyScheduleLoadingState();
+    this.eventsLoadingTracker.reset();
+    this.scheduleLoadingTracker.reset();
   }
 
   async loadEmbeddedTool(tool) {
@@ -1954,38 +1802,24 @@ export class EventAdminApp {
   }
 
   beginScheduleLoading(message = "") {
-    this.scheduleLoadingDepth += 1;
-    if (message || !this.scheduleLoadingMessage) {
-      this.scheduleLoadingMessage = message;
-    }
-    this.applyScheduleLoadingState();
+    this.scheduleLoadingTracker.begin(message);
   }
 
   endScheduleLoading() {
-    this.scheduleLoadingDepth = Math.max(0, this.scheduleLoadingDepth - 1);
-    if (this.scheduleLoadingDepth === 0) {
-      this.scheduleLoadingMessage = "";
-    }
-    this.applyScheduleLoadingState();
+    this.scheduleLoadingTracker.end();
   }
 
   updateScheduleLoadingMessage(message = "") {
-    if (this.scheduleLoadingDepth === 0) {
-      this.scheduleLoadingMessage = "";
-      this.applyScheduleLoadingState();
-      return;
-    }
-    this.scheduleLoadingMessage = message || this.scheduleLoadingMessage;
-    this.applyScheduleLoadingState();
+    this.scheduleLoadingTracker.updateMessage(message);
   }
 
-  applyScheduleLoadingState() {
-    const active = this.scheduleLoadingDepth > 0;
+  applyScheduleLoadingState(state = this.scheduleLoadingTracker.getState()) {
+    const { active, message } = state;
     if (this.dom.scheduleLoading) {
       this.dom.scheduleLoading.hidden = !active;
     }
     if (this.dom.scheduleLoadingText) {
-      this.dom.scheduleLoadingText.textContent = active ? this.scheduleLoadingMessage || "" : "";
+      this.dom.scheduleLoadingText.textContent = active ? message || "" : "";
     }
   }
 
