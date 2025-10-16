@@ -15,6 +15,8 @@ const state = {
   duplicateGroups: new Map(),
   scheduleContextOverrides: new Map(),
   teamAssignments: new Map(),
+  lastUploadStatusMessage: "",
+  lastUploadStatusVariant: "",
   tokenSnapshotFetchedAt: 0,
   editingParticipantId: null,
   editingRowKey: null,
