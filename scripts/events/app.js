@@ -566,9 +566,11 @@ export class EventAdminApp {
 
       const editBtn = document.createElement("button");
       editBtn.type = "button";
-      editBtn.className = "btn-icon";
-      editBtn.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z\" fill=\"currentColor\"/></svg>";
+      editBtn.className = "entity-action entity-action--edit";
+      editBtn.setAttribute("aria-label", `${event.name || event.id} を編集`);
       editBtn.title = "イベントを編集";
+      editBtn.innerHTML =
+        '<span class="entity-action__icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z" fill="currentColor"/></svg></span><span class="entity-action__label">編集</span>';
       editBtn.addEventListener("click", (evt) => {
         evt.stopPropagation();
         this.openEventDialog({ mode: "edit", event });
@@ -577,9 +579,11 @@ export class EventAdminApp {
 
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
-      deleteBtn.className = "btn-icon";
-      deleteBtn.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z\"/></svg>";
+      deleteBtn.className = "entity-action entity-action--delete";
+      deleteBtn.setAttribute("aria-label", `${event.name || event.id} を削除`);
       deleteBtn.title = "イベントを削除";
+      deleteBtn.innerHTML =
+        '<span class="entity-action__icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z"/></svg></span><span class="entity-action__label">削除</span>';
       deleteBtn.addEventListener("click", (evt) => {
         evt.stopPropagation();
         this.deleteEvent(event).catch((error) => {
@@ -946,9 +950,11 @@ export class EventAdminApp {
 
       const editBtn = document.createElement("button");
       editBtn.type = "button";
-      editBtn.className = "btn-icon";
-      editBtn.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z\" fill=\"currentColor\"/></svg>";
+      editBtn.className = "entity-action entity-action--edit";
+      editBtn.setAttribute("aria-label", `${schedule.label || schedule.id} を編集`);
       editBtn.title = "日程を編集";
+      editBtn.innerHTML =
+        '<span class="entity-action__icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z" fill="currentColor"/></svg></span><span class="entity-action__label">編集</span>';
       editBtn.addEventListener("click", (evt) => {
         evt.stopPropagation();
         this.openScheduleDialog({ mode: "edit", schedule });
@@ -957,9 +963,11 @@ export class EventAdminApp {
 
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
-      deleteBtn.className = "btn-icon";
-      deleteBtn.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z\"/></svg>";
+      deleteBtn.className = "entity-action entity-action--delete";
+      deleteBtn.setAttribute("aria-label", `${schedule.label || schedule.id} を削除`);
       deleteBtn.title = "日程を削除";
+      deleteBtn.innerHTML =
+        '<span class="entity-action__icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z"/></svg></span><span class="entity-action__label">削除</span>';
       deleteBtn.addEventListener("click", (evt) => {
         evt.stopPropagation();
         this.deleteSchedule(schedule).catch((error) => {
@@ -1014,17 +1022,16 @@ export class EventAdminApp {
     const event = this.getSelectedEvent();
     const schedule = this.getSelectedSchedule();
     const hasSchedule = Boolean(event && schedule);
+    const hasSelection = Boolean(this.selectedScheduleId);
     this.dom.scheduleSummary.hidden = !hasSchedule;
     if (this.dom.scheduleSummaryEmpty) {
-      if (hasSchedule) {
+      if (hasSchedule || hasSelection) {
         this.dom.scheduleSummaryEmpty.hidden = true;
       } else {
         this.dom.scheduleSummaryEmpty.hidden = false;
-        if (!event) {
-          this.dom.scheduleSummaryEmpty.textContent = "イベントを選択してください。";
-        } else {
-          this.dom.scheduleSummaryEmpty.textContent = "日程を選択してください。";
-        }
+        this.dom.scheduleSummaryEmpty.textContent = event
+          ? "日程を選択してください。"
+          : "イベントを選択してください。";
       }
     }
     this.updateStageHeader();
@@ -1087,44 +1094,8 @@ export class EventAdminApp {
   }
 
   setParticipantStatus({ text = "", meta = "", variant = "info" } = {}) {
-    const container = this.dom.participantsStatus;
-    if (!container) {
-      this.logParticipantAction("参加者ステータスの表示領域が見つからないため更新できません", {
-        text,
-        meta,
-        variant
-      });
-      return;
-    }
-    const baseClass = "flow-sync-status";
     const allowed = new Set(["info", "success", "error", "pending"]);
     const normalizedVariant = allowed.has(variant) ? variant : "info";
-    const classes = [baseClass, `${baseClass}--${normalizedVariant}`];
-    if (text) {
-      classes.push("is-visible");
-      container.hidden = false;
-    } else {
-      container.hidden = true;
-    }
-    container.className = classes.join(" ");
-    const textEl = this.dom.participantsStatusText;
-    const metaEl = this.dom.participantsStatusMeta;
-    if (textEl) {
-      textEl.textContent = text || "";
-    } else if (text) {
-      container.textContent = text;
-    } else {
-      container.textContent = "";
-    }
-    if (metaEl) {
-      if (meta) {
-        metaEl.hidden = false;
-        metaEl.textContent = meta;
-      } else {
-        metaEl.hidden = true;
-        metaEl.textContent = "";
-      }
-    }
     this.logParticipantAction("参加者ステータスを更新しました", {
       text,
       meta,
