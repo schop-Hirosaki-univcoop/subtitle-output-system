@@ -191,19 +191,6 @@ export class EventAdminApp {
       });
     });
 
-    (this.dom.navigationButtons || []).forEach((button) => {
-      button.addEventListener("click", () => {
-        if (button.disabled) {
-          return;
-        }
-        const target = button.dataset.flowNavTarget || "";
-        if (!target) {
-          return;
-        }
-        this.showPanel(target);
-      });
-    });
-
     if (this.dom.eventForm) {
       this.dom.eventForm.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -1923,19 +1910,12 @@ export class EventAdminApp {
     if (this.dom.refreshButton) {
       this.dom.refreshButton.disabled = !signedIn;
     }
-    if (this.dom.nextButton) {
-      this.dom.nextButton.disabled = !signedIn || !hasEvent;
-    }
     if (this.dom.addScheduleButton) {
       this.dom.addScheduleButton.disabled = !signedIn || !hasEvent;
     }
     if (this.dom.scheduleRefreshButton) {
       this.dom.scheduleRefreshButton.disabled = !signedIn || !hasEvent;
     }
-    if (this.dom.scheduleNextButton) {
-      this.dom.scheduleNextButton.disabled = !signedIn || !hasSchedule;
-    }
-    this.updateNavigationButtons();
   }
 
   updateSelectionNotes() {
@@ -2066,30 +2046,6 @@ export class EventAdminApp {
       } else {
         button.removeAttribute("aria-current");
       }
-    });
-    const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
-    const shouldHidePanelNavigation = activeConfig.stage === "tabs";
-    const navigations = this.dom.flowNavigations || [];
-    navigations.forEach((nav) => {
-      if (!nav) return;
-      const isPanelNavigation = nav.classList.contains("flow-navigation--panel");
-      if (isPanelNavigation) {
-        nav.hidden = shouldHidePanelNavigation;
-      } else {
-        nav.hidden = false;
-      }
-    });
-    this.updateNavigationButtons();
-  }
-
-  updateNavigationButtons() {
-    const buttons = this.dom.navigationButtons || [];
-    buttons.forEach((button) => {
-      if (!button) return;
-      const target = button.dataset.flowNavTarget || "";
-      const config = PANEL_CONFIG[target] || PANEL_CONFIG.events;
-      const disabled = !target || target === this.activePanel || !this.canActivatePanel(target, config);
-      button.disabled = disabled;
     });
   }
 
