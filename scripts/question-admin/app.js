@@ -63,6 +63,11 @@ const HOST_SELECTION_ATTRIBUTE_KEYS = [
   "data-expected-end-at"
 ];
 
+const UPLOAD_STATUS_PLACEHOLDERS = new Set([
+  "日程を選択してください。",
+  "イベントコントロールセンターで対象の日程を選択してください。"
+]);
+
 const hostSelectionBridge = {
   observer: null,
   lastSignature: "",
@@ -362,6 +367,8 @@ async function requestSheetSync({ suppressError = true } = {}) {
 }
 
 function setUploadStatus(message, variant = "") {
+  state.lastUploadStatusMessage = message;
+  state.lastUploadStatusVariant = variant || "";
   if (!dom.uploadStatus) return;
   dom.uploadStatus.textContent = message;
   dom.uploadStatus.classList.remove("status-pill--success", "status-pill--error");
@@ -370,6 +377,14 @@ function setUploadStatus(message, variant = "") {
   } else if (variant === "error") {
     dom.uploadStatus.classList.add("status-pill--error");
   }
+}
+
+function isPlaceholderUploadStatus() {
+  const message = normalizeKey(state.lastUploadStatusMessage || "");
+  if (!message) {
+    return true;
+  }
+  return UPLOAD_STATUS_PLACEHOLDERS.has(message);
 }
 
 const confirmState = {
@@ -1166,6 +1181,7 @@ function updateParticipantContext(options = {}) {
   const { preserveStatus = false } = options;
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
+  const shouldPreserveStatus = preserveStatus && !isPlaceholderUploadStatus();
   if (!eventId || !scheduleId) {
     if (dom.participantContext) {
       dom.participantContext.textContent = "日程を選択すると、現在登録されている参加者が表示されます。";
@@ -1182,7 +1198,7 @@ function updateParticipantContext(options = {}) {
       dom.teamCsvInput.disabled = true;
       dom.teamCsvInput.value = "";
     }
-    if (!preserveStatus) setUploadStatus("日程を選択してください。");
+    if (!shouldPreserveStatus) setUploadStatus("日程を選択してください。");
     if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
     if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
     if (dom.mappingTbody) dom.mappingTbody.innerHTML = "";
@@ -1221,7 +1237,7 @@ function updateParticipantContext(options = {}) {
     const eventName = selectedEvent?.name || override?.eventName || eventId;
     dom.participantContext.textContent = `イベント「${eventName}」/ 日程「${scheduleLabel}」${rangeSuffix}の参加者を管理しています。上部のタブからテロップ操作パネルに切り替え可能です。専用リンクは各行のボタンまたはURLから取得できます。`;
   }
-  if (!preserveStatus) {
+  if (!shouldPreserveStatus) {
     setUploadStatus("ファイルを選択して参加者リストを更新してください。");
   }
 
@@ -1566,11 +1582,18 @@ function selectSchedule(scheduleId, options = {}) {
     syncSaveButtonState();
   } else if (shouldReload) {
     state.savedParticipants = [];
+    state.lastSavedSignature = "";
   }
 
   updateParticipantContext({ preserveStatus });
 
-  if (normalizedId && shouldReload && !suppressParticipantLoad) {
+  const needsParticipantLoad = Boolean(
+    normalizedId &&
+    !suppressParticipantLoad &&
+    (shouldReload || state.lastSavedSignature === "")
+  );
+
+  if (needsParticipantLoad) {
     loadParticipants().catch(err => console.error(err));
   }
 }
