@@ -1087,44 +1087,8 @@ export class EventAdminApp {
   }
 
   setParticipantStatus({ text = "", meta = "", variant = "info" } = {}) {
-    const container = this.dom.participantsStatus;
-    if (!container) {
-      this.logParticipantAction("参加者ステータスの表示領域が見つからないため更新できません", {
-        text,
-        meta,
-        variant
-      });
-      return;
-    }
-    const baseClass = "flow-sync-status";
     const allowed = new Set(["info", "success", "error", "pending"]);
     const normalizedVariant = allowed.has(variant) ? variant : "info";
-    const classes = [baseClass, `${baseClass}--${normalizedVariant}`];
-    if (text) {
-      classes.push("is-visible");
-      container.hidden = false;
-    } else {
-      container.hidden = true;
-    }
-    container.className = classes.join(" ");
-    const textEl = this.dom.participantsStatusText;
-    const metaEl = this.dom.participantsStatusMeta;
-    if (textEl) {
-      textEl.textContent = text || "";
-    } else if (text) {
-      container.textContent = text;
-    } else {
-      container.textContent = "";
-    }
-    if (metaEl) {
-      if (meta) {
-        metaEl.hidden = false;
-        metaEl.textContent = meta;
-      } else {
-        metaEl.hidden = true;
-        metaEl.textContent = "";
-      }
-    }
     this.logParticipantAction("参加者ステータスを更新しました", {
       text,
       meta,
