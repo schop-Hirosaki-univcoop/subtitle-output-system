@@ -2054,7 +2054,6 @@ export class EventAdminApp {
 
   updatePanelNavigation() {
     const buttons = this.dom.panelButtons || [];
-    let hasActiveSidebar = false;
     buttons.forEach((button) => {
       const target = button.dataset.panelTarget || "";
       const config = PANEL_CONFIG[target] || PANEL_CONFIG.events;
@@ -2064,18 +2063,20 @@ export class EventAdminApp {
       button.classList.toggle("is-active", isActive);
       if (isActive) {
         button.setAttribute("aria-current", "page");
-        hasActiveSidebar = true;
       } else {
         button.removeAttribute("aria-current");
       }
     });
+    const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
+    const shouldHidePanelNavigation = activeConfig.stage === "tabs";
     const navigations = this.dom.flowNavigations || [];
     navigations.forEach((nav) => {
       if (!nav) return;
-      if (hasActiveSidebar) {
-        nav.setAttribute("hidden", "");
+      const isPanelNavigation = nav.classList.contains("flow-navigation--panel");
+      if (isPanelNavigation) {
+        nav.hidden = shouldHidePanelNavigation;
       } else {
-        nav.removeAttribute("hidden");
+        nav.hidden = false;
       }
     });
     this.updateNavigationButtons();

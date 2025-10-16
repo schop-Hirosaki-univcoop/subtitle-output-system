@@ -66,7 +66,7 @@
         </nav>
       </aside>
       <div id="flow-stage-panels" class="flow-panels">
-        <section class="module module--primary admin-module flow-card flow-card--events is-active" aria-labelledby="events-title" data-panel="events">
+        <section class="module module--primary admin-module flow-card flow-card--events flow-stage-panel is-active" aria-labelledby="events-title" data-panel="events">
         <div class="module-header">
           <div class="module-heading">
             <h2 id="events-title">イベントの管理</h2>
@@ -95,7 +95,7 @@
         </div>
         </section>
 
-        <section class="module module--primary admin-module flow-card flow-card--schedules" aria-labelledby="schedule-admin-title" data-panel="schedules">
+        <section class="module module--primary admin-module flow-card flow-card--schedules flow-stage-panel" aria-labelledby="schedule-admin-title" data-panel="schedules">
         <div class="module-header">
           <div class="module-heading">
             <h2 id="schedule-admin-title">日程の管理</h2>
@@ -123,7 +123,7 @@
         </div>
         </section>
 
-        <section id="flow-panel-participants" class="flow-tool-panel" data-panel="participants" aria-labelledby="flow-panel-participants-title" hidden>
+        <section id="flow-panel-participants" class="flow-tool-panel flow-stage-panel" data-panel="participants" aria-labelledby="flow-panel-participants-title" hidden>
         <h2 id="flow-panel-participants-title" class="visually-hidden">参加者リスト</h2>
         <div id="participants-tool" class="embedded-tool" data-tool="participants">
                 <div class="embedded-tool__surface qa-embedded" data-qa-embed>
@@ -291,7 +291,7 @@
           <button class="btn btn-primary btn-sm flow-nav-button flow-nav-button--next" type="button" data-flow-nav-direction="next" data-flow-nav-target="operator">次へ</button>
         </div>
         </section>
-        <section id="flow-panel-operator" class="flow-tool-panel" data-panel="operator" aria-labelledby="flow-panel-operator-title" hidden>
+        <section id="flow-panel-operator" class="flow-tool-panel flow-stage-panel" data-panel="operator" aria-labelledby="flow-panel-operator-title" hidden>
               <h2 id="flow-panel-operator-title" class="visually-hidden">テロップ操作</h2>
               <div id="operator-tool" class="embedded-tool" data-tool="operator">
                 <div class="embedded-tool__surface operator-embedded" data-operator-embed>
@@ -411,7 +411,7 @@
           <button class="btn btn-primary btn-sm flow-nav-button flow-nav-button--next" type="button" data-flow-nav-direction="next" data-flow-nav-target="dictionary">次へ</button>
         </div>
         </section>
-        <section id="op-dictionary-panel" class="module module--secondary flow-tool-panel" data-panel="dictionary" aria-labelledby="op-dictionary-title" hidden>
+        <section id="op-dictionary-panel" class="module module--secondary flow-tool-panel flow-stage-panel" data-panel="dictionary" aria-labelledby="op-dictionary-title" hidden>
               <div class="module-header">
                 <div class="module-heading">
                   <h2 id="op-dictionary-title">ルビ辞書管理</h2>
@@ -456,7 +456,7 @@
           <button class="btn btn-primary btn-sm flow-nav-button flow-nav-button--next" type="button" data-flow-nav-direction="next" data-flow-nav-target="logs">次へ</button>
         </div>
         </section>
-        <section id="op-logs-panel" class="module module--secondary flow-tool-panel" data-panel="logs" aria-labelledby="op-logs-title" hidden>
+        <section id="op-logs-panel" class="module module--secondary flow-tool-panel flow-stage-panel" data-panel="logs" aria-labelledby="op-logs-title" hidden>
               <div class="module-header">
                 <div class="module-heading">
                   <h2 id="op-logs-title">操作ログ</h2>
