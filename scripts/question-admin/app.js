@@ -74,6 +74,77 @@ const hostSelectionBridge = {
   pendingSignature: ""
 };
 
+let lastSelectionBroadcastSignature = "";
+
+function getSelectionBroadcastSource() {
+  return isEmbeddedMode() ? "participants" : "question-admin";
+}
+
+function signatureForSelectionDetail(detail) {
+  if (!detail || typeof detail !== "object") {
+    return "";
+  }
+  const {
+    eventId = "",
+    scheduleId = "",
+    eventName = "",
+    scheduleLabel = "",
+    startAt = "",
+    endAt = ""
+  } = detail;
+  return [eventId, scheduleId, eventName, scheduleLabel, startAt, endAt].join("::");
+}
+
+function buildSelectionDetail() {
+  const eventId = state.selectedEventId || "";
+  const scheduleId = state.selectedScheduleId || "";
+  const selectedEvent = Array.isArray(state.events)
+    ? state.events.find(evt => evt.id === eventId) || null
+    : null;
+  const schedules = selectedEvent?.schedules || [];
+  const schedule = scheduleId ? schedules.find(item => item.id === scheduleId) || null : null;
+  const overrideKey = `${eventId}::${scheduleId}`;
+  const override =
+    scheduleId && state.scheduleContextOverrides instanceof Map
+      ? state.scheduleContextOverrides.get(overrideKey) || null
+      : null;
+
+  return {
+    eventId,
+    scheduleId,
+    eventName: selectedEvent?.name || "",
+    scheduleLabel: schedule?.label || override?.scheduleLabel || "",
+    startAt: schedule?.startAt || override?.startAt || "",
+    endAt: schedule?.endAt || override?.endAt || ""
+  };
+}
+
+function broadcastSelectionChange(options = {}) {
+  const source = options.source || getSelectionBroadcastSource();
+  const detail = buildSelectionDetail();
+  const signature = signatureForSelectionDetail(detail);
+  const changed = signature !== lastSelectionBroadcastSignature;
+  lastSelectionBroadcastSignature = signature;
+  if (!changed || source === "host") {
+    return;
+  }
+  if (typeof document === "undefined") {
+    return;
+  }
+  try {
+    document.dispatchEvent(
+      new CustomEvent("qa:selection-changed", {
+        detail: {
+          ...detail,
+          source
+        }
+      })
+    );
+  } catch (error) {
+    console.warn("Failed to dispatch selection change event", error);
+  }
+}
+
 function waitForEmbedReady() {
   if (state.user) {
     return Promise.resolve();
@@ -1501,17 +1572,26 @@ function selectEvent(eventId, options = {}) {
   const {
     nextScheduleId = null,
     skipContextUpdate = false,
-    skipParticipantLoad = false
+    skipParticipantLoad = false,
+    source = getSelectionBroadcastSource()
   } = options || {};
 
   const previousEventId = state.selectedEventId;
   const preservingScheduleId = nextScheduleId ? String(nextScheduleId) : null;
 
   if (previousEventId === eventId) {
+    let scheduleHandled = false;
     if (preservingScheduleId && state.selectedScheduleId !== preservingScheduleId) {
-      state.selectedScheduleId = preservingScheduleId;
+      selectSchedule(preservingScheduleId, {
+        preserveStatus: Boolean(preservingScheduleId),
+        suppressParticipantLoad: skipParticipantLoad,
+        source
+      });
+      scheduleHandled = true;
+    } else {
+      broadcastSelectionChange({ source });
     }
-    if (!skipContextUpdate) {
+    if (!skipContextUpdate && !scheduleHandled) {
       updateParticipantContext({ preserveStatus: Boolean(preservingScheduleId) });
     }
     return;
@@ -1543,13 +1623,16 @@ function selectEvent(eventId, options = {}) {
   if (!skipParticipantLoad && !preservingScheduleId) {
     loadParticipants().catch(err => console.error(err));
   }
+
+  broadcastSelectionChange({ source });
 }
 
 function selectSchedule(scheduleId, options = {}) {
   const {
     preserveStatus = false,
     suppressParticipantLoad = false,
-    forceReload = false
+    forceReload = false,
+    source = getSelectionBroadcastSource()
   } = options || {};
 
   const normalizedId = scheduleId ? String(scheduleId) : null;
@@ -1596,6 +1679,8 @@ function selectSchedule(scheduleId, options = {}) {
   if (needsParticipantLoad) {
     loadParticipants().catch(err => console.error(err));
   }
+
+  broadcastSelectionChange({ source });
 }
 
 function resolveScheduleFormValues({ label, date, startTime, endTime }) {
@@ -2484,6 +2569,7 @@ function resetState() {
   state.savedParticipants = [];
   state.selectedEventId = null;
   state.selectedScheduleId = null;
+  lastSelectionBroadcastSignature = "";
   state.lastSavedSignature = "";
   state.participantTokenMap = new Map();
   state.duplicateMatches = new Map();
@@ -3274,10 +3360,11 @@ async function applySelectionContext(selection = {}) {
     if (eventChanged) {
       selectEvent(trimmedEventId, {
         nextScheduleId: trimmedScheduleId || null,
-        skipParticipantLoad: Boolean(trimmedScheduleId)
+        skipParticipantLoad: Boolean(trimmedScheduleId),
+        source: "host"
       });
     } else if (!trimmedScheduleId) {
-      selectEvent(trimmedEventId);
+      selectEvent(trimmedEventId, { source: "host" });
     }
 
     const selectedEvent = state.events.find(evt => evt.id === trimmedEventId) || null;
@@ -3318,7 +3405,8 @@ async function applySelectionContext(selection = {}) {
       }
       selectSchedule(trimmedScheduleId, {
         forceReload: shouldReloadSchedule,
-        preserveStatus: !shouldReloadSchedule
+        preserveStatus: !shouldReloadSchedule,
+        source: "host"
       });
     } else {
       updateParticipantContext({ preserveStatus: true });

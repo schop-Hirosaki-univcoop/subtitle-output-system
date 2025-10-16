@@ -195,6 +195,7 @@ export class EventAdminApp {
     this.toolSyncPromise = null;
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
     this.handleParticipantSyncEvent = this.handleParticipantSyncEvent.bind(this);
+    this.handleParticipantSelectionBroadcast = this.handleParticipantSelectionBroadcast.bind(this);
     this.cleanup = this.cleanup.bind(this);
     this.eventCountNote = "";
     this.stageNote = "";
@@ -223,6 +224,7 @@ export class EventAdminApp {
     this.observeAuthState();
     if (typeof document !== "undefined") {
       document.addEventListener("qa:participants-synced", this.handleParticipantSyncEvent);
+      document.addEventListener("qa:selection-changed", this.handleParticipantSelectionBroadcast);
     }
     if (typeof window !== "undefined") {
       window.addEventListener("beforeunload", this.cleanup, { once: true });
@@ -1151,6 +1153,93 @@ export class EventAdminApp {
     });
   }
 
+  async handleParticipantSelectionBroadcast(event) {
+    if (!event || !event.detail) {
+      return;
+    }
+    const { detail } = event;
+    const source = ensureString(detail.source);
+    if (source && source !== "participants" && source !== "question-admin") {
+      return;
+    }
+    const eventId = ensureString(detail.eventId);
+    const scheduleId = ensureString(detail.scheduleId);
+    if (!eventId) {
+      return;
+    }
+
+    try {
+      if (!this.events.some((item) => item.id === eventId)) {
+        await this.loadEvents();
+      }
+    } catch (error) {
+      logError("Failed to refresh events after participant selection", error);
+      return;
+    }
+
+    const matchedEvent = this.events.find((item) => item.id === eventId) || null;
+    if (!matchedEvent) {
+      return;
+    }
+
+    const eventName = ensureString(detail.eventName);
+    if (eventName) {
+      matchedEvent.name = eventName;
+    }
+
+    if (!Array.isArray(matchedEvent.schedules)) {
+      matchedEvent.schedules = [];
+    }
+
+    let scheduleRecord = null;
+    if (scheduleId) {
+      scheduleRecord = matchedEvent.schedules.find((item) => item.id === scheduleId) || null;
+      if (!scheduleRecord) {
+        scheduleRecord = {
+          id: scheduleId,
+          label: ensureString(detail.scheduleLabel) || scheduleId,
+          startAt: ensureString(detail.startAt),
+          endAt: ensureString(detail.endAt)
+        };
+        matchedEvent.schedules.push(scheduleRecord);
+      } else {
+        const label = ensureString(detail.scheduleLabel);
+        if (label) {
+          scheduleRecord.label = label;
+        }
+        if (detail.startAt !== undefined) {
+          scheduleRecord.startAt = ensureString(detail.startAt);
+        }
+        if (detail.endAt !== undefined) {
+          scheduleRecord.endAt = ensureString(detail.endAt);
+        }
+      }
+    }
+
+    matchedEvent.scheduleCount = matchedEvent.schedules.length;
+
+    this.renderEvents();
+    this.updateEventSummary();
+
+    if (this.selectedEventId !== eventId) {
+      this.selectEvent(eventId);
+    } else {
+      this.updateScheduleStateFromSelection(scheduleId);
+    }
+
+    if (scheduleId) {
+      if (this.selectedScheduleId !== scheduleId) {
+        this.selectSchedule(scheduleId);
+      }
+    } else if (this.selectedScheduleId) {
+      this.selectSchedule("");
+    }
+
+    const tabPanels = new Set(["participants", "operator", "dictionary", "logs"]);
+    const targetPanel = tabPanels.has(this.activePanel) ? this.activePanel : "participants";
+    this.showPanel(targetPanel);
+  }
+
   clearLoadingIndicators() {
     this.eventsLoadingDepth = 0;
     this.eventsLoadingMessage = "";
@@ -1694,6 +1783,7 @@ export class EventAdminApp {
   cleanup() {
     if (typeof document !== "undefined") {
       document.removeEventListener("qa:participants-synced", this.handleParticipantSyncEvent);
+      document.removeEventListener("qa:selection-changed", this.handleParticipantSelectionBroadcast);
     }
     if (typeof window !== "undefined") {
       window.removeEventListener("beforeunload", this.cleanup);
