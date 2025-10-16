@@ -148,6 +148,116 @@ function cloneHostEvent(event) {
   };
 }
 
+function finalizeEventLoad({
+  preserveSelection = true,
+  previousEventId = null,
+  previousScheduleId = null,
+  previousEventsSnapshot = [],
+  preserveStatus = false
+} = {}) {
+  if (!preserveSelection) {
+    state.selectedEventId = null;
+    state.selectedScheduleId = null;
+  }
+
+  let selectionNotice = null;
+
+  let initialSelectionSatisfied = false;
+
+  if (!state.initialSelectionApplied && state.initialSelection?.eventId) {
+    const {
+      eventId,
+      scheduleId,
+      scheduleLabel,
+      eventLabel,
+      startAt: initialStartAt = null,
+      endAt: initialEndAt = null
+    } = state.initialSelection;
+    const targetEvent = state.events.find(evt => evt.id === eventId) || null;
+    if (targetEvent) {
+      state.selectedEventId = eventId;
+      if (scheduleId) {
+        const targetSchedule = targetEvent.schedules?.find(s => s.id === scheduleId) || null;
+        if (targetSchedule) {
+          state.selectedScheduleId = scheduleId;
+          if (state.scheduleContextOverrides instanceof Map) {
+            state.scheduleContextOverrides.delete(`${eventId}::${scheduleId}`);
+          }
+        } else {
+          const overrideKey = `${eventId}::${scheduleId}`;
+          if (!(state.scheduleContextOverrides instanceof Map)) {
+            state.scheduleContextOverrides = new Map();
+          }
+          const existingOverride = state.scheduleContextOverrides.get(overrideKey) || null;
+          const override = existingOverride || {
+            eventId,
+            eventName: eventLabel || targetEvent.name || eventId,
+            scheduleId,
+            scheduleLabel: scheduleLabel || scheduleId,
+            startAt: initialStartAt || "",
+            endAt: initialEndAt || ""
+          };
+          state.scheduleContextOverrides.set(overrideKey, override);
+          state.selectedScheduleId = scheduleId;
+        }
+      } else {
+        state.selectedScheduleId = null;
+      }
+      initialSelectionSatisfied = true;
+    } else {
+      state.selectedEventId = null;
+      state.selectedScheduleId = null;
+      const label = eventLabel || eventId;
+      selectionNotice = `指定されたイベント「${label}」が見つかりません。`;
+    }
+    state.initialSelectionApplied = initialSelectionSatisfied;
+    if (initialSelectionSatisfied) {
+      state.initialSelection = null;
+    }
+  } else if (preserveSelection && previousEventId && state.events.some(evt => evt.id === previousEventId)) {
+    state.selectedEventId = previousEventId;
+    if (previousScheduleId) {
+      const selectedEvent = state.events.find(evt => evt.id === previousEventId) || null;
+      const hasSchedule = selectedEvent?.schedules?.some(schedule => schedule.id === previousScheduleId) || false;
+      const overrideKey = `${previousEventId}::${previousScheduleId}`;
+      if (!(state.scheduleContextOverrides instanceof Map)) {
+        state.scheduleContextOverrides = new Map();
+      }
+      let hasOverride = state.scheduleContextOverrides.has(overrideKey);
+      if (!hasSchedule && previousEventsSnapshot?.length && previousEventId && previousScheduleId && !hasOverride) {
+        const previousEvent = previousEventsSnapshot.find(event => event.id === previousEventId) || null;
+        const previousSchedule = previousEvent?.schedules?.find(schedule => schedule.id === previousScheduleId) || null;
+        if (previousSchedule) {
+          const fallbackOverride = {
+            eventId: previousEventId,
+            eventName: previousEvent?.name || previousEventId,
+            scheduleId: previousScheduleId,
+            scheduleLabel: previousSchedule.label || previousScheduleId,
+            startAt: previousSchedule.startAt || "",
+            endAt: previousSchedule.endAt || ""
+          };
+          state.scheduleContextOverrides.set(overrideKey, fallbackOverride);
+          hasOverride = true;
+        }
+      }
+      state.selectedScheduleId = hasSchedule || hasOverride ? previousScheduleId : null;
+      if (hasSchedule && state.scheduleContextOverrides instanceof Map) {
+        state.scheduleContextOverrides.delete(overrideKey);
+      }
+    } else {
+      state.selectedScheduleId = null;
+    }
+  } else if (preserveSelection) {
+    state.selectedEventId = null;
+    state.selectedScheduleId = null;
+  }
+
+  state.initialSelectionNotice = selectionNotice;
+  renderEvents();
+  renderSchedules();
+  updateParticipantContext({ preserveStatus });
+}
+
 function applyHostEvents(events = [], { preserveSelection = true } = {}) {
   const previousEventId = preserveSelection ? state.selectedEventId : null;
   const previousScheduleId = preserveSelection ? state.selectedScheduleId : null;
@@ -164,48 +274,13 @@ function applyHostEvents(events = [], { preserveSelection = true } = {}) {
     ? events.map((event) => cloneHostEvent(event)).filter(Boolean)
     : [];
   state.events = cloned;
-  if (!preserveSelection) {
-    state.selectedEventId = null;
-    state.selectedScheduleId = null;
-  } else {
-    const availableIds = new Set(cloned.map((event) => event.id));
-    if (previousEventId && availableIds.has(previousEventId)) {
-      state.selectedEventId = previousEventId;
-    } else {
-      state.selectedEventId = null;
-    }
-    if (previousScheduleId) {
-      const selectedEvent = cloned.find((event) => event.id === state.selectedEventId) || null;
-      const hasSchedule = selectedEvent?.schedules?.some((schedule) => schedule.id === previousScheduleId) || false;
-      const overrideKey = `${previousEventId || ""}::${previousScheduleId}`;
-      if (!(state.scheduleContextOverrides instanceof Map)) {
-        state.scheduleContextOverrides = new Map();
-      }
-      let hasOverride = state.scheduleContextOverrides.has(overrideKey);
-      if (!hasSchedule && previousEventId && previousScheduleId && !hasOverride) {
-        const previousEvent = previousEventsSnapshot.find((event) => event.id === previousEventId) || null;
-        const previousSchedule = previousEvent?.schedules?.find((schedule) => schedule.id === previousScheduleId) || null;
-        if (previousSchedule) {
-          const fallbackOverride = {
-            eventId: previousEventId,
-            eventName: previousEvent?.name || previousEventId,
-            scheduleId: previousScheduleId,
-            scheduleLabel: previousSchedule.label || previousScheduleId,
-            startAt: previousSchedule.startAt || "",
-            endAt: previousSchedule.endAt || ""
-          };
-          state.scheduleContextOverrides.set(overrideKey, fallbackOverride);
-          hasOverride = true;
-        }
-      }
-      state.selectedScheduleId = hasSchedule || hasOverride ? previousScheduleId : null;
-    } else {
-      state.selectedScheduleId = null;
-    }
-  }
-  renderEvents();
-  renderSchedules();
-  updateParticipantContext({ preserveStatus: true });
+  finalizeEventLoad({
+    preserveSelection,
+    previousEventId,
+    previousScheduleId,
+    previousEventsSnapshot,
+    preserveStatus: true
+  });
 }
 
 function handleHostSelection(detail) {
@@ -1577,84 +1652,12 @@ async function loadEvents({ preserveSelection = true } = {}) {
 
   state.events = normalized;
 
-  let selectionNotice = null;
-  if (!state.initialSelectionApplied && state.initialSelection?.eventId) {
-    const {
-      eventId,
-      scheduleId,
-      scheduleLabel,
-      eventLabel,
-      startAt: initialStartAt = null,
-      endAt: initialEndAt = null
-    } = state.initialSelection;
-    const targetEvent = state.events.find(evt => evt.id === eventId) || null;
-    if (targetEvent) {
-      state.selectedEventId = eventId;
-      if (scheduleId) {
-        const targetSchedule = targetEvent.schedules?.find(s => s.id === scheduleId) || null;
-        if (targetSchedule) {
-          state.selectedScheduleId = scheduleId;
-          if (state.scheduleContextOverrides instanceof Map) {
-            state.scheduleContextOverrides.delete(`${eventId}::${scheduleId}`);
-          }
-        } else {
-          const overrideKey = `${eventId}::${scheduleId}`;
-          if (state.scheduleContextOverrides instanceof Map) {
-            const existingOverride = state.scheduleContextOverrides.get(overrideKey) || null;
-            const override = existingOverride || {
-              eventId,
-              eventName: eventLabel || targetEvent.name || eventId,
-              scheduleId,
-              scheduleLabel: scheduleLabel || scheduleId,
-              startAt: initialStartAt || "",
-              endAt: initialEndAt || ""
-            };
-            state.scheduleContextOverrides.set(overrideKey, override);
-            state.selectedScheduleId = scheduleId;
-          } else {
-            state.selectedScheduleId = null;
-            const label = scheduleLabel || scheduleId;
-            selectionNotice = `指定された日程「${label}」が見つかりません。`;
-          }
-        }
-      } else {
-        state.selectedScheduleId = null;
-      }
-    } else {
-      state.selectedEventId = null;
-      state.selectedScheduleId = null;
-      const label = eventLabel || eventId;
-      selectionNotice = `指定されたイベント「${label}」が見つかりません。`;
-    }
-    state.initialSelectionApplied = true;
-    state.initialSelection = null;
-  } else if (previousEventId && state.events.some(evt => evt.id === previousEventId)) {
-    state.selectedEventId = previousEventId;
-    const schedules = state.events.find(evt => evt.id === previousEventId)?.schedules || [];
-    const overrideKey = previousScheduleId ? `${previousEventId}::${previousScheduleId}` : "";
-    const hasOverride = Boolean(
-      previousScheduleId &&
-      state.scheduleContextOverrides instanceof Map &&
-      state.scheduleContextOverrides.has(overrideKey)
-    );
-    if (previousScheduleId && (schedules.some(s => s.id === previousScheduleId) || hasOverride)) {
-      state.selectedScheduleId = previousScheduleId;
-      if (hasOverride && schedules.some(s => s.id === previousScheduleId)) {
-        state.scheduleContextOverrides.delete(overrideKey);
-      }
-    } else {
-      state.selectedScheduleId = null;
-    }
-  } else {
-    state.selectedEventId = null;
-    state.selectedScheduleId = null;
-  }
-
-  state.initialSelectionNotice = selectionNotice;
-
-  renderEvents();
-  renderSchedules();
-  updateParticipantContext();
+  finalizeEventLoad({
+    preserveSelection,
+    previousEventId,
+    previousScheduleId,
+    preserveStatus: false
+  });
 
   return state.events;
 }
