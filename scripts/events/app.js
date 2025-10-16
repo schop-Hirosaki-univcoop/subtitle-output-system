@@ -1025,10 +1025,10 @@ export class EventAdminApp {
     const hasSelection = Boolean(this.selectedScheduleId);
     this.dom.scheduleSummary.hidden = !hasSchedule;
     if (this.dom.scheduleSummaryEmpty) {
-      if (hasSchedule || hasSelection) {
-        this.dom.scheduleSummaryEmpty.hidden = true;
-      } else {
-        this.dom.scheduleSummaryEmpty.hidden = false;
+      const shouldHidePlaceholder = hasSchedule || hasSelection;
+      this.dom.scheduleSummaryEmpty.hidden = shouldHidePlaceholder;
+      this.dom.scheduleSummaryEmpty.classList.toggle("is-hidden", shouldHidePlaceholder);
+      if (!shouldHidePlaceholder) {
         this.dom.scheduleSummaryEmpty.textContent = event
           ? "日程を選択してください。"
           : "イベントを選択してください。";
