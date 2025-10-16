@@ -23,9 +23,42 @@ const TIME_FORMATTER = hasIntlDateTime
   ? new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false })
   : null;
 
+function ensureTrimmedString(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+  return typeof value === "string" ? value.trim() : String(value).trim();
+}
+
+function coalesceTrimmed(...values) {
+  for (const value of values) {
+    const trimmed = ensureTrimmedString(value);
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return "";
+}
+
+class FormValidationError extends Error {
+  constructor(message, { focus } = {}) {
+    super(message);
+    this.name = "FormValidationError";
+    this.focus = typeof focus === "function" ? focus : null;
+  }
+
+  invokeFocus() {
+    if (!this.focus) return;
+    try {
+      this.focus();
+    } catch (error) {
+      console.error("Failed to focus field after validation error", error);
+    }
+  }
+}
+
 function parseDateTimeValue(value) {
-  if (!value) return null;
-  const trimmed = String(value).trim();
+  const trimmed = ensureTrimmedString(value);
   if (!trimmed) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
     const [year, month, day] = trimmed.split("-").map(Number);
@@ -58,10 +91,10 @@ function formatTimeDisplay(date) {
 }
 
 function formatScheduleSummary({ label = "", date = "", start = "", end = "" } = {}) {
-  const trimmedLabel = String(label || "").trim();
-  const trimmedDate = String(date || "").trim();
-  const startDate = parseDateTimeValue(start);
-  const endDate = parseDateTimeValue(end);
+  const trimmedLabel = ensureTrimmedString(label);
+  const trimmedDate = ensureTrimmedString(date);
+  const startDate = parseDateTimeValue(ensureTrimmedString(start));
+  const endDate = parseDateTimeValue(ensureTrimmedString(end));
   const baseDate = startDate || parseDateTimeValue(trimmedDate);
   const fallback = trimmedLabel || trimmedDate;
 
@@ -103,6 +136,70 @@ function formatScheduleSummary({ label = "", date = "", start = "", end = "" } =
     return trimmedLabel;
   }
   return fallback || "未設定";
+}
+
+function normalizeContextData(rawContext) {
+  if (!rawContext) {
+    return null;
+  }
+  return {
+    eventId: ensureTrimmedString(rawContext.eventId),
+    eventName: ensureTrimmedString(rawContext.eventName),
+    scheduleId: ensureTrimmedString(rawContext.scheduleId),
+    scheduleLabel: ensureTrimmedString(rawContext.scheduleLabel),
+    scheduleDate: ensureTrimmedString(rawContext.scheduleDate),
+    scheduleStart: ensureTrimmedString(rawContext.scheduleStart),
+    scheduleEnd: ensureTrimmedString(rawContext.scheduleEnd),
+    participantId: ensureTrimmedString(rawContext.participantId),
+    participantName: ensureTrimmedString(rawContext.participantName),
+    groupNumber: ensureTrimmedString(rawContext.groupNumber),
+    guidance: ensureTrimmedString(rawContext.guidance)
+  };
+}
+
+function buildContextDescription(eventName) {
+  const trimmedEventName = ensureTrimmedString(eventName);
+  if (!trimmedEventName) {
+    return "こちらは【なんでも相談ラジオ】の質問受付フォームです。気になることや相談したいことをお気軽にお寄せください。";
+  }
+  return `こちらは「${trimmedEventName}」の中で行われる【なんでも相談ラジオ】の質問受付フォームです。気になることや相談したいことをお気軽にお寄せください。`;
+}
+
+function createAbortError() {
+  if (typeof DOMException === "function") {
+    return new DOMException("Aborted", "AbortError");
+  }
+  const error = new Error("Aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function assertActiveController(controller) {
+  if (controller?.signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
+function isAbortError(error) {
+  return error?.name === "AbortError";
+}
+
+function sanitizeSubmissionPayload(values) {
+  return Object.entries(values).reduce((acc, [key, value]) => {
+    if (value === undefined || value === null) {
+      return acc;
+    }
+    if (typeof value === "string") {
+      acc[key] = value.trim();
+      return acc;
+    }
+    if (typeof value === "number") {
+      acc[key] = value;
+      return acc;
+    }
+    acc[key] = String(value);
+    return acc;
+  }, {});
 }
 
 export class QuestionFormApp {
@@ -162,6 +259,7 @@ export class QuestionFormApp {
   }
 
   lockFormWithMessage(message) {
+    this.abortPendingSubmission();
     this.state.locked = true;
     this.view.lockForm();
     this.view.setContextGuard(message);
@@ -169,44 +267,35 @@ export class QuestionFormApp {
     this.view.focusContextGuard();
   }
 
-  applyContext(context) {
+  applyContext(rawContext) {
+    const context = normalizeContextData(rawContext);
     this.state.context = context;
     if (!context) {
       this.lockFormWithMessage("アクセス情報を確認できませんでした。運営までお問い合わせください。");
       return;
     }
 
-    const displayName = context.participantName.trim();
-    const eventName = context.eventName.trim();
-    const scheduleLabel = context.scheduleLabel.trim();
-    const scheduleDate = context.scheduleDate.trim();
-    const scheduleStart = context.scheduleStart.trim();
-    const scheduleEnd = context.scheduleEnd.trim();
-
     this.view.setHiddenContext({
       eventId: context.eventId,
-      eventName,
+      eventName: context.eventName,
       scheduleId: context.scheduleId,
-      scheduleLabel,
-      scheduleDate,
+      scheduleLabel: context.scheduleLabel,
+      scheduleDate: context.scheduleDate,
       participantId: context.participantId,
       groupNumber: context.groupNumber
     });
 
-    this.view.setRadioNameValue("");
-    this.view.resetGenreSelection();
+    this.resetFormForContext();
 
-    const targetName = displayName || "ゲスト";
+    const targetName = context.participantName || "ゲスト";
     const scheduleSummary = formatScheduleSummary({
-      label: scheduleLabel,
-      date: scheduleDate,
-      start: scheduleStart,
-      end: scheduleEnd
+      label: context.scheduleLabel,
+      date: context.scheduleDate,
+      start: context.scheduleStart,
+      end: context.scheduleEnd
     });
     const scheduleText = `あなたの参加日程：${scheduleSummary}`;
-    const descriptionText = eventName
-      ? `こちらは「${eventName}」の中で行われる【なんでも相談ラジオ】の質問受付フォームです。気になることや相談したいことをお気軽にお寄せください。`
-      : "こちらは【なんでも相談ラジオ】の質問受付フォームです。気になることや相談したいことをお気軽にお寄せください。";
+    const descriptionText = buildContextDescription(context.eventName);
 
     this.view.setContextBanner({
       welcomeText: `ようこそ${targetName}さん`,
@@ -214,14 +303,10 @@ export class QuestionFormApp {
       scheduleText
     });
 
-    this.view.setGuidance(context.guidance?.trim() || "");
+    this.view.setGuidance(context.guidance || "");
     this.view.setContextGuard("");
-    this.view.setFormMetaVisible(true);
-    this.view.unlockForm();
-    this.view.setSubmitBusy(false, false);
-    this.state.locked = false;
+    this.unlockFormForContext();
     this.state.dirty = false;
-    this.updateQuestionCounter();
   }
 
   updateQuestionCounter() {
@@ -235,6 +320,19 @@ export class QuestionFormApp {
 
   markDirty() {
     this.state.dirty = true;
+  }
+
+  resetFormForContext() {
+    this.view.setRadioNameValue("");
+    this.view.resetGenreSelection();
+    this.updateQuestionCounter();
+  }
+
+  unlockFormForContext() {
+    this.view.setFormMetaVisible(true);
+    this.view.unlockForm();
+    this.view.setSubmitBusy(false, false);
+    this.state.locked = false;
   }
 
   handleReset() {
@@ -281,7 +379,7 @@ export class QuestionFormApp {
     event.preventDefault();
     this.view.clearFeedback();
 
-    if (!this.state.context || !this.state.token) {
+    if (!this.hasValidContext()) {
       this.view.setFeedback("アクセス情報を確認できませんでした。リンクを再度開き直してください。", "error");
       return;
     }
@@ -291,78 +389,27 @@ export class QuestionFormApp {
       return;
     }
 
-    const sanitizedName = sanitizeRadioName(this.view.getRadioNameValue(), MAX_RADIO_NAME_LENGTH);
-    if (this.view.getRadioNameValue() !== sanitizedName) {
-      this.view.setRadioNameValue(sanitizedName);
-    }
-    if (!sanitizedName) {
-      const input = this.view.radioNameInput;
-      if (input && typeof input.setCustomValidity === "function") {
-        input.setCustomValidity("ラジオネームを入力してください。");
-        input.reportValidity();
-        input.setCustomValidity("");
+    let formData;
+    try {
+      formData = this.getSanitizedFormData();
+    } catch (error) {
+      if (error instanceof FormValidationError) {
+        error.invokeFocus();
+        this.view.setFeedback(error.message, "error");
+        return;
       }
-      this.view.focusRadioName();
-      this.view.setFeedback("ラジオネームを入力してください。", "error");
-      return;
+      throw error;
     }
 
-    const normalizedQuestion = normalizeMultiline(this.view.getQuestionValue()).trim();
-    if (this.view.getQuestionValue() !== normalizedQuestion) {
-      this.view.setQuestionValue(normalizedQuestion);
-    }
-    const questionLength = countGraphemes(normalizedQuestion);
-
-    if (!questionLength) {
-      this.view.setFeedback("質問内容を入力してください。", "error");
-      this.view.focusQuestion();
-      return;
-    }
-    if (questionLength > MAX_QUESTION_LENGTH) {
-      this.view.setFeedback(`質問は${MAX_QUESTION_LENGTH}文字以内で入力してください。`, "error");
-      this.view.focusQuestion();
-      return;
-    }
-
-    const genre = this.view.getSelectedGenre();
-    if (!genre) {
-      this.view.setFeedback("ジャンルを選択してください。", "error");
-      this.view.focusGenre();
-      return;
-    }
-    if (!GENRE_OPTIONS.includes(genre)) {
-      this.view.setFeedback("ジャンルの選択が正しくありません。", "error");
-      return;
-    }
-
-    if (this.state.submittingController) {
-      this.state.submittingController.abort();
-    }
-
-    const controller = new AbortController();
-    this.state.submittingController = controller;
+    const controller = this.resetSubmissionController();
     this.setFormBusy(true);
     this.view.setFeedback("送信中です…");
 
     try {
-      const result = await this.submitQuestion(controller, {
-        radioName: sanitizedName,
-        question: normalizedQuestion,
-        questionLength,
-        genre
-      });
-      if (result?.queueProcessed) {
-        this.view.setFeedback("送信しました。ありがとうございました！", "success");
-      } else {
-        this.view.setFeedback("送信しました。反映まで数秒かかる場合があります。", "success");
-      }
-      this.view.setQuestionValue("");
-      this.view.resetGenreSelection();
-      this.updateQuestionCounter();
-      this.view.focusQuestion();
-      this.state.dirty = false;
+      const result = await this.submitQuestion(controller, formData);
+      this.handleSubmitSuccess(result);
     } catch (error) {
-      if (error.name === "AbortError") {
+      if (isAbortError(error)) {
         return;
       }
       console.error(error);
@@ -375,64 +422,161 @@ export class QuestionFormApp {
     }
   }
 
-  async submitQuestion(controller, { radioName, question, questionLength, genre }) {
-    if (controller?.signal?.aborted) {
-      const error = new DOMException("Aborted", "AbortError");
-      throw error;
+  hasValidContext() {
+    return Boolean(this.state.context && this.state.token);
+  }
+
+  captureSubmissionSnapshot() {
+    const context = this.state.context ?? {};
+    const groupNumber = coalesceTrimmed(this.view.getGroupNumber(), context.groupNumber);
+    const scheduleLabel = coalesceTrimmed(this.view.getScheduleLabel(), context.scheduleLabel);
+    const scheduleDate = coalesceTrimmed(this.view.getScheduleDate(), context.scheduleDate);
+    const eventId = coalesceTrimmed(this.view.getEventId(), context.eventId);
+    const eventName = coalesceTrimmed(this.view.getEventName(), context.eventName);
+    const scheduleId = coalesceTrimmed(this.view.getScheduleId(), context.scheduleId);
+    const participantId = coalesceTrimmed(this.view.getParticipantId(), context.participantId);
+
+    return {
+      groupNumber,
+      teamNumber: groupNumber,
+      scheduleLabel,
+      scheduleDate,
+      scheduleStart: context.scheduleStart,
+      scheduleEnd: context.scheduleEnd,
+      eventId,
+      eventName,
+      scheduleId,
+      participantId,
+      participantName: context.participantName,
+      guidance: context.guidance
+    };
+  }
+
+  getSanitizedFormData() {
+    const sanitizedName = sanitizeRadioName(this.view.getRadioNameValue(), MAX_RADIO_NAME_LENGTH);
+    if (this.view.getRadioNameValue() !== sanitizedName) {
+      this.view.setRadioNameValue(sanitizedName);
+    }
+    if (!sanitizedName) {
+      const input = this.view.radioNameInput;
+      if (input && typeof input.setCustomValidity === "function") {
+        input.setCustomValidity("ラジオネームを入力してください。");
+        input.reportValidity();
+        input.setCustomValidity("");
+      }
+      throw new FormValidationError("ラジオネームを入力してください。", {
+        focus: () => this.view.focusRadioName()
+      });
     }
 
+    const normalizedQuestion = normalizeMultiline(this.view.getQuestionValue()).trim();
+    if (this.view.getQuestionValue() !== normalizedQuestion) {
+      this.view.setQuestionValue(normalizedQuestion);
+    }
+
+    const questionLength = countGraphemes(normalizedQuestion);
+    this.updateQuestionCounter();
+
+    if (!questionLength) {
+      throw new FormValidationError("質問内容を入力してください。", {
+        focus: () => this.view.focusQuestion()
+      });
+    }
+    if (questionLength > MAX_QUESTION_LENGTH) {
+      throw new FormValidationError(`質問は${MAX_QUESTION_LENGTH}文字以内で入力してください。`, {
+        focus: () => this.view.focusQuestion()
+      });
+    }
+
+    const genre = this.view.getSelectedGenre();
+    if (!genre) {
+      throw new FormValidationError("ジャンルを選択してください。", {
+        focus: () => this.view.focusGenre()
+      });
+    }
+    if (!GENRE_OPTIONS.includes(genre)) {
+      throw new FormValidationError("ジャンルの選択が正しくありません。");
+    }
+
+    return { radioName: sanitizedName, question: normalizedQuestion, questionLength, genre };
+  }
+
+  abortPendingSubmission() {
+    if (this.state.submittingController) {
+      this.state.submittingController.abort();
+      this.state.submittingController = null;
+    }
+  }
+
+  resetSubmissionController() {
+    this.abortPendingSubmission();
+    const controller = new AbortController();
+    this.state.submittingController = controller;
+    return controller;
+  }
+
+  handleSubmitSuccess(result) {
+    if (result?.queueProcessed) {
+      this.view.setFeedback("送信しました。ありがとうございました！", "success");
+    } else {
+      this.view.setFeedback("送信しました。反映まで数秒かかる場合があります。", "success");
+    }
+    this.resetFormAfterSubmission();
+  }
+
+  resetFormAfterSubmission() {
+    this.view.setQuestionValue("");
+    this.view.resetGenreSelection();
+    this.updateQuestionCounter();
+    this.view.focusQuestion();
+    this.state.dirty = false;
+  }
+
+  createSubmissionData({ radioName, question, questionLength, genre }) {
     const token = this.state.token;
     if (!token) {
       throw new Error("アクセス情報が無効です。配布されたリンクからアクセスし直してください。");
     }
 
+    const snapshot = this.captureSubmissionSnapshot();
     const submissionBase = {
       token,
       radioName,
       question,
       questionLength,
       genre,
-      groupNumber: this.view.getGroupNumber(),
-      teamNumber: this.view.getGroupNumber(),
-      scheduleLabel: this.view.getScheduleLabel(),
-      scheduleDate: this.view.getScheduleDate(),
-      scheduleStart: String(this.state.context?.scheduleStart || ""),
-      scheduleEnd: String(this.state.context?.scheduleEnd || ""),
-      eventId: this.view.getEventId(),
-      eventName: this.view.getEventName(),
-      scheduleId: this.view.getScheduleId(),
-      participantId: this.view.getParticipantId(),
-      participantName: this.state.context?.participantName || "",
+      groupNumber: snapshot.groupNumber,
+      teamNumber: snapshot.teamNumber,
+      scheduleLabel: snapshot.scheduleLabel,
+      scheduleDate: snapshot.scheduleDate,
+      scheduleStart: snapshot.scheduleStart,
+      scheduleEnd: snapshot.scheduleEnd,
+      eventId: snapshot.eventId,
+      eventName: snapshot.eventName,
+      scheduleId: snapshot.scheduleId,
+      participantId: snapshot.participantId,
+      participantName: snapshot.participantName,
       clientTimestamp: Date.now(),
       language: navigator.language || "",
       userAgent: navigator.userAgent || "",
       referrer: document.referrer || "",
       formVersion: FORM_VERSION,
-      guidance: this.state.context?.guidance || "",
+      guidance: snapshot.guidance,
       origin: typeof window !== "undefined" && window.location ? window.location.origin : "",
       status: "pending"
     };
 
-    const submission = Object.entries(submissionBase).reduce((acc, [key, value]) => {
-      if (value === undefined || value === null) {
-        return acc;
-      }
-      if (typeof value === "string") {
-        acc[key] = value.trim();
-        return acc;
-      }
-      if (typeof value === "number") {
-        acc[key] = value;
-        return acc;
-      }
-      acc[key] = String(value);
-      return acc;
-    }, {});
+    const submission = sanitizeSubmissionPayload(submissionBase);
 
-    if (controller?.signal?.aborted) {
-      const error = new DOMException("Aborted", "AbortError");
-      throw error;
-    }
+    return { token, submission };
+  }
+
+  async submitQuestion(controller, formData) {
+    assertActiveController(controller);
+
+    const { token, submission } = this.createSubmissionData(formData);
+
+    assertActiveController(controller);
 
     const questionUid = generateQuestionUid();
     const entryRef = ref(this.database, `questions/${questionUid}`);
@@ -515,23 +659,22 @@ function buildQuestionRecord({
   context,
   timestamp
 }) {
-  const ensureString = (value) => (typeof value === "string" ? value.trim() : String(value ?? "").trim());
-  const coalescedGroup = ensureString(submission.groupNumber) || ensureString(context?.groupNumber);
-  const scheduleLabel = ensureString(submission.scheduleLabel) || ensureString(context?.scheduleLabel);
-  const scheduleStart = ensureString(submission.scheduleStart) || ensureString(context?.scheduleStart);
-  const scheduleEnd = ensureString(submission.scheduleEnd) || ensureString(context?.scheduleEnd);
-  const participantId = ensureString(submission.participantId) || ensureString(context?.participantId);
-  const eventId = ensureString(submission.eventId) || ensureString(context?.eventId);
-  const scheduleId = ensureString(submission.scheduleId) || ensureString(context?.scheduleId);
+  const coalescedGroup = coalesceTrimmed(submission.groupNumber, context?.groupNumber);
+  const scheduleLabel = coalesceTrimmed(submission.scheduleLabel, context?.scheduleLabel);
+  const scheduleStart = coalesceTrimmed(submission.scheduleStart, context?.scheduleStart);
+  const scheduleEnd = coalesceTrimmed(submission.scheduleEnd, context?.scheduleEnd);
+  const participantId = coalesceTrimmed(submission.participantId, context?.participantId);
+  const eventId = coalesceTrimmed(submission.eventId, context?.eventId);
+  const scheduleId = coalesceTrimmed(submission.scheduleId, context?.scheduleId);
   const questionLength = Number(submission.questionLength);
 
   const record = {
     uid,
-    token: ensureString(token),
-    name: ensureString(submission.radioName),
-    question: ensureString(submission.question),
+    token: ensureTrimmedString(token),
+    name: ensureTrimmedString(submission.radioName),
+    question: ensureTrimmedString(submission.question),
     group: coalescedGroup,
-    genre: ensureString(submission.genre) || "その他",
+    genre: coalesceTrimmed(submission.genre) || "その他",
     schedule: scheduleLabel,
     scheduleStart,
     scheduleEnd,
