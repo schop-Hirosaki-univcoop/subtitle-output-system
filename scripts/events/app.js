@@ -174,6 +174,12 @@ export class EventAdminApp {
     this.selectedEventId = "";
     this.schedules = [];
     this.selectedScheduleId = "";
+    this.selectionListeners = new Set();
+    this.eventListeners = new Set();
+    this.participantHostInterface = null;
+    this.suppressSelectionNotifications = false;
+    this.lastSelectionSignature = "";
+    this.lastSelectionSource = "";
     this.stage = "events";
     this.stageHistory = new Set(["events"]);
     this.activePanel = "events";
@@ -481,6 +487,8 @@ export class EventAdminApp {
     if (!user) {
       this.events = [];
       this.renderEvents();
+      this.notifyEventListeners();
+      this.notifySelectionListeners("host");
       this.clearAlert();
       this.showLoggedOutState();
       return;
@@ -619,6 +627,13 @@ export class EventAdminApp {
         this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools after refresh", error));
       }
     }
+
+    const eventChanged = previousEventId !== this.selectedEventId;
+    const scheduleChanged = previousScheduleId !== this.selectedScheduleId;
+    if (eventChanged || scheduleChanged) {
+      this.notifySelectionListeners("host");
+    }
+    this.notifyEventListeners();
 
     return this.events;
   }
@@ -761,6 +776,9 @@ export class EventAdminApp {
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
     this.handleToolContextAfterSelection();
+    if (previous !== normalized) {
+      this.notifySelectionListeners("host");
+    }
   }
 
   ensureSelectedSchedule(preferredId = "") {
@@ -779,6 +797,117 @@ export class EventAdminApp {
   getSelectedSchedule() {
     if (!this.selectedScheduleId) return null;
     return this.schedules.find((schedule) => schedule.id === this.selectedScheduleId) || null;
+  }
+
+  getCurrentSelectionContext() {
+    const event = this.getSelectedEvent();
+    const schedule = this.getSelectedSchedule();
+    return {
+      eventId: event?.id || "",
+      eventName: event?.name || event?.id || "",
+      scheduleId: schedule?.id || "",
+      scheduleLabel: schedule?.label || schedule?.id || "",
+      startAt: schedule?.startAt || "",
+      endAt: schedule?.endAt || ""
+    };
+  }
+
+  getParticipantEventsSnapshot() {
+    return this.events.map((event) => ({
+      ...event,
+      schedules: Array.isArray(event.schedules)
+        ? event.schedules.map((schedule) => ({ ...schedule }))
+        : []
+    }));
+  }
+
+  addSelectionListener(listener) {
+    if (typeof listener !== "function") {
+      return () => {};
+    }
+    this.selectionListeners.add(listener);
+    return () => {
+      this.selectionListeners.delete(listener);
+    };
+  }
+
+  addEventListener(listener) {
+    if (typeof listener !== "function") {
+      return () => {};
+    }
+    this.eventListeners.add(listener);
+    return () => {
+      this.eventListeners.delete(listener);
+    };
+  }
+
+  notifySelectionListeners(source = "host") {
+    if (this.suppressSelectionNotifications) {
+      return;
+    }
+    const detail = { ...this.getCurrentSelectionContext(), source };
+    const signature = [
+      detail.eventId,
+      detail.scheduleId,
+      detail.eventName,
+      detail.scheduleLabel,
+      detail.startAt,
+      detail.endAt
+    ].join("::");
+    if (signature === this.lastSelectionSignature && source === this.lastSelectionSource) {
+      return;
+    }
+    this.lastSelectionSignature = signature;
+    this.lastSelectionSource = source;
+    this.selectionListeners.forEach((listener) => {
+      try {
+        listener(detail);
+      } catch (error) {
+        logError("Selection listener failed", error);
+      }
+    });
+  }
+
+  notifyEventListeners() {
+    const snapshot = this.getParticipantEventsSnapshot();
+    this.eventListeners.forEach((listener) => {
+      try {
+        listener(snapshot);
+      } catch (error) {
+        logError("Event listener failed", error);
+      }
+    });
+  }
+
+  applySelectionFromParticipant(detail = {}) {
+    const eventId = ensureString(detail?.eventId);
+    const scheduleId = ensureString(detail?.scheduleId);
+    const previousSuppression = this.suppressSelectionNotifications;
+    this.suppressSelectionNotifications = true;
+    try {
+      if (eventId || (!eventId && detail?.eventId === "")) {
+        this.selectEvent(eventId);
+      }
+      if (scheduleId || (!scheduleId && detail?.scheduleId === "")) {
+        this.selectSchedule(scheduleId);
+      }
+    } finally {
+      this.suppressSelectionNotifications = previousSuppression;
+    }
+    this.notifySelectionListeners(detail?.source || "participants");
+  }
+
+  getParticipantHostInterface() {
+    if (!this.participantHostInterface) {
+      this.participantHostInterface = {
+        getSelection: () => this.getCurrentSelectionContext(),
+        getEvents: () => this.getParticipantEventsSnapshot(),
+        subscribeSelection: (listener) => this.addSelectionListener(listener),
+        subscribeEvents: (listener) => this.addEventListener(listener),
+        setSelection: (detail) => this.applySelectionFromParticipant(detail || {})
+      };
+    }
+    return this.participantHostInterface;
   }
 
   selectSchedule(scheduleId) {
@@ -801,6 +930,9 @@ export class EventAdminApp {
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
     this.handleToolContextAfterSelection();
+    if (previous !== normalized) {
+      this.notifySelectionListeners("host");
+    }
   }
 
   updateScheduleStateFromSelection(preferredScheduleId = "") {
@@ -1238,6 +1370,8 @@ export class EventAdminApp {
     const tabPanels = new Set(["participants", "operator", "dictionary", "logs"]);
     const targetPanel = tabPanels.has(this.activePanel) ? this.activePanel : "participants";
     this.showPanel(targetPanel);
+    this.notifyEventListeners();
+    this.notifySelectionListeners(source || "participants");
   }
 
   clearLoadingIndicators() {
@@ -1268,6 +1402,11 @@ export class EventAdminApp {
         }
         if (tool === "participants") {
           await import("../question-admin/index.js");
+          if (window.questionAdminEmbed?.attachHost) {
+            window.questionAdminEmbed.attachHost(this.getParticipantHostInterface());
+            this.notifyEventListeners();
+            this.notifySelectionListeners("host");
+          }
         } else {
           await import("../operator/index.js");
         }
@@ -1788,6 +1927,8 @@ export class EventAdminApp {
     if (typeof window !== "undefined") {
       window.removeEventListener("beforeunload", this.cleanup);
     }
+    this.selectionListeners.clear();
+    this.eventListeners.clear();
   }
 
   revealEventSelectionCue() {
