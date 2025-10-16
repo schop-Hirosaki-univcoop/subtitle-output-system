@@ -1025,10 +1025,10 @@ export class EventAdminApp {
     const hasSelection = Boolean(this.selectedScheduleId);
     this.dom.scheduleSummary.hidden = !hasSchedule;
     if (this.dom.scheduleSummaryEmpty) {
-      if (hasSchedule || hasSelection) {
-        this.dom.scheduleSummaryEmpty.hidden = true;
-      } else {
-        this.dom.scheduleSummaryEmpty.hidden = false;
+      const shouldHidePlaceholder = hasSchedule || hasSelection;
+      this.dom.scheduleSummaryEmpty.hidden = shouldHidePlaceholder;
+      this.dom.scheduleSummaryEmpty.classList.toggle("is-hidden", shouldHidePlaceholder);
+      if (!shouldHidePlaceholder) {
         this.dom.scheduleSummaryEmpty.textContent = event
           ? "日程を選択してください。"
           : "イベントを選択してください。";
@@ -2054,6 +2054,7 @@ export class EventAdminApp {
 
   updatePanelNavigation() {
     const buttons = this.dom.panelButtons || [];
+    let hasActiveSidebar = false;
     buttons.forEach((button) => {
       const target = button.dataset.panelTarget || "";
       const config = PANEL_CONFIG[target] || PANEL_CONFIG.events;
@@ -2063,8 +2064,18 @@ export class EventAdminApp {
       button.classList.toggle("is-active", isActive);
       if (isActive) {
         button.setAttribute("aria-current", "page");
+        hasActiveSidebar = true;
       } else {
         button.removeAttribute("aria-current");
+      }
+    });
+    const navigations = this.dom.panelNavigations || [];
+    navigations.forEach((nav) => {
+      if (!nav) return;
+      if (hasActiveSidebar) {
+        nav.setAttribute("hidden", "");
+      } else {
+        nav.removeAttribute("hidden");
       }
     });
     this.updateNavigationButtons();

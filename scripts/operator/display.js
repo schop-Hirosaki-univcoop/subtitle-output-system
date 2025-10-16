@@ -1,31 +1,12 @@
-import { formatOperatorName, formatRelative, normalizeUpdatedAt } from "./utils.js";
+import { escapeHtml, formatOperatorName, formatRelative, normalizeUpdatedAt, renderRubyHtml } from "./utils.js";
 
 export function handleRenderUpdate(app, snapshot) {
   const value = snapshot.val() || {};
   setLamp(app, value.phase);
-  const isHidden = value.phase === "hidden";
+  const phase = value.phase || "";
+  const isHidden = phase === "hidden";
   const now = isHidden ? null : value.nowShowing || null;
-  const pickupFlag = !!(now && now.pickup === true);
-  if (!now) {
-    if (app.dom.render.title) app.dom.render.title.textContent = "（送出なし）";
-    if (app.dom.render.question) app.dom.render.question.textContent = "";
-  } else {
-    const name = (now.name || "").trim();
-    const isPickup = pickupFlag || name === "Pick Up Question";
-    if (app.dom.render.title) {
-      const formattedName = formatOperatorName(name);
-      if (!name) {
-        app.dom.render.title.textContent = "—";
-      } else if (isPickup) {
-        app.dom.render.title.textContent = formattedName || "—";
-      } else {
-        app.dom.render.title.textContent = `ラジオネーム：${formattedName || name}`;
-      }
-    }
-    if (app.dom.render.question) {
-      app.dom.render.question.textContent = String(now.question || "").replace(/\s+/g, " ").trim();
-    }
-  }
+  renderNowShowingSummary(app, now, phase);
 
   const updatedAt = normalizeUpdatedAt(value.updatedAt) || 0;
   const previous = app.lastUpdatedAt || 0;
@@ -132,5 +113,60 @@ export function refreshStaleness(app) {
     app.dom.render.indicator.classList.add("is-stale");
   } else {
     app.dom.render.indicator.classList.remove("is-stale");
+  }
+}
+
+export function refreshRenderSummary(app) {
+  const phase = app.state.renderState?.phase || "";
+  const storedNow = app.state.renderState?.nowShowing || null;
+  renderNowShowingSummary(app, storedNow, phase);
+}
+
+function renderNowShowingSummary(app, now, phase = "") {
+  const dictionaryEntries = Array.isArray(app.dictionaryEntries) ? app.dictionaryEntries : [];
+  const isHidden = phase === "hidden";
+  const activeNow = !isHidden && now ? now : null;
+
+  if (!activeNow) {
+    if (app.dom.render.title) {
+      app.dom.render.title.textContent = "（送出なし）";
+    }
+    if (app.dom.render.question) {
+      app.dom.render.question.textContent = "";
+    }
+    return;
+  }
+
+  const rawName = String(activeNow.name || "");
+  const formattedName = formatOperatorName(rawName);
+  const baseName = formattedName || rawName;
+  const normalizedPickup = baseName.trim().toLowerCase().replace(/\s+/g, "");
+  const isPickup = activeNow.pickup === true || normalizedPickup === "pickupquestion";
+
+  if (app.dom.render.title) {
+    if (!baseName) {
+      app.dom.render.title.textContent = "—";
+    } else if (isPickup) {
+      const pickupDisplay = formattedName || baseName || "—";
+      const pickupHtml = renderRubyHtml(pickupDisplay, dictionaryEntries);
+      if (pickupHtml) {
+        app.dom.render.title.innerHTML = pickupHtml;
+      } else {
+        app.dom.render.title.textContent = pickupDisplay;
+      }
+    } else {
+      const nameHtml = renderRubyHtml(baseName, dictionaryEntries);
+      const safeName = nameHtml || escapeHtml(baseName);
+      app.dom.render.title.innerHTML = `ラジオネーム：${safeName}`;
+    }
+  }
+
+  if (app.dom.render.question) {
+    const questionHtml = renderRubyHtml(activeNow.question, dictionaryEntries);
+    if (questionHtml) {
+      app.dom.render.question.innerHTML = questionHtml;
+    } else {
+      app.dom.render.question.textContent = "";
+    }
   }
 }

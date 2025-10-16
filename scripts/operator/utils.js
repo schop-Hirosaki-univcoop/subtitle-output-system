@@ -18,6 +18,36 @@ export function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+export function renderRubyHtml(text, dictionaryEntries = []) {
+  const source = String(text ?? "");
+  const normalized = source.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+  if (typeof document === "undefined") {
+    return escapeHtml(normalized);
+  }
+
+  const container = document.createElement("div");
+  container.textContent = normalized;
+
+  const entries = Array.isArray(dictionaryEntries)
+    ? dictionaryEntries
+        .map((entry) => ({
+          term: String(entry?.term ?? "").trim(),
+          ruby: String(entry?.ruby ?? "").trim()
+        }))
+        .filter((entry) => entry.term && entry.ruby)
+    : [];
+
+  if (!entries.length) {
+    return container.innerHTML;
+  }
+
+  applyRubyToContainer(container, entries);
+  return container.innerHTML;
+}
+
 export function normalizeUpdatedAt(value) {
   if (!value) return 0;
   if (typeof value === "number") return value;
@@ -179,4 +209,68 @@ export function getLogLevel(log) {
   if (/(display|send|answer|set_answered|batch_set_answered|edit|add|toggle|update)/.test(action)) return "success";
   if (/(fetch|read|log|whoami)/.test(action)) return "info";
   return "info";
+}
+
+function applyRubyToContainer(container, entries) {
+  const sorted = [...entries].sort((a, b) => b.term.length - a.term.length);
+  const entryMap = new Map();
+  sorted.forEach((entry) => {
+    if (!entryMap.has(entry.term)) {
+      entryMap.set(entry.term, entry.ruby);
+    }
+  });
+  if (!entryMap.size) {
+    return;
+  }
+  const patternSource = Array.from(entryMap.keys())
+    .map((term) => escapeRegExp(term))
+    .join("|");
+  if (!patternSource) {
+    return;
+  }
+
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  while (walker.nextNode()) {
+    textNodes.push(walker.currentNode);
+  }
+
+  textNodes.forEach((node) => {
+    const value = node.nodeValue;
+    if (!value) return;
+    const regex = new RegExp(patternSource, "g");
+    let match;
+    let lastIndex = 0;
+    const fragment = document.createDocumentFragment();
+    while ((match = regex.exec(value)) !== null) {
+      const index = match.index;
+      if (index > lastIndex) {
+        fragment.appendChild(document.createTextNode(value.slice(lastIndex, index)));
+      }
+      const term = match[0];
+      const rubyText = entryMap.get(term);
+      if (rubyText) {
+        const rubyEl = document.createElement("ruby");
+        rubyEl.appendChild(document.createTextNode(term));
+        const rtEl = document.createElement("rt");
+        rtEl.textContent = rubyText;
+        rubyEl.appendChild(rtEl);
+        fragment.appendChild(rubyEl);
+      } else {
+        fragment.appendChild(document.createTextNode(term));
+      }
+      lastIndex = index + term.length;
+    }
+    if (lastIndex === 0) {
+      return;
+    }
+    if (lastIndex < value.length) {
+      fragment.appendChild(document.createTextNode(value.slice(lastIndex)));
+    }
+    node.replaceWith(fragment);
+  });
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
