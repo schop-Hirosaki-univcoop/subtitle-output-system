@@ -1664,8 +1664,67 @@ async function loadEvents({ preserveSelection = true } = {}) {
 
 async function loadParticipants(options = {}) {
   const { statusMessage, statusVariant = "success", suppressStatus = false } = options || {};
-  const eventId = state.selectedEventId;
-  const scheduleId = state.selectedScheduleId;
+  let eventId = state.selectedEventId ? String(state.selectedEventId) : "";
+  let scheduleId = state.selectedScheduleId ? String(state.selectedScheduleId) : "";
+  let selectionRecovered = false;
+
+  if (!eventId || !scheduleId) {
+    const hostSelection = readHostSelectionDataset(getHostSelectionElement());
+    if (hostSelection) {
+      const hostEventId = normalizeKey(hostSelection.eventId || "");
+      const hostScheduleId = normalizeKey(hostSelection.scheduleId || "");
+      if (hostEventId) {
+        if (eventId !== hostEventId) {
+          state.selectedEventId = hostEventId;
+          eventId = hostEventId;
+          selectionRecovered = true;
+        }
+        const matchedEvent = state.events.find(evt => evt.id === hostEventId) || null;
+        if (matchedEvent && hostSelection.eventName) {
+          matchedEvent.name = hostSelection.eventName;
+        }
+      }
+      if (hostScheduleId && eventId && (!hostEventId || hostEventId === eventId)) {
+        if (scheduleId !== hostScheduleId) {
+          state.selectedScheduleId = hostScheduleId;
+          scheduleId = hostScheduleId;
+          selectionRecovered = true;
+        }
+        const parentEvent = state.events.find(evt => evt.id === eventId) || null;
+        const scheduleRecord = parentEvent?.schedules?.find(s => s.id === hostScheduleId) || null;
+        if (scheduleRecord) {
+          if (hostSelection.scheduleLabel) scheduleRecord.label = hostSelection.scheduleLabel;
+          if (hostSelection.startAt) scheduleRecord.startAt = hostSelection.startAt;
+          if (hostSelection.endAt) scheduleRecord.endAt = hostSelection.endAt;
+        }
+      }
+      if (eventId && scheduleId && state.scheduleContextOverrides instanceof Map) {
+        const overrideKey = `${eventId}::${scheduleId}`;
+        const selectedEvent = state.events.find(evt => evt.id === eventId) || null;
+        const scheduleRecord = selectedEvent?.schedules?.find(s => s.id === scheduleId) || null;
+        if (!scheduleRecord) {
+          const override = state.scheduleContextOverrides.get(overrideKey) || {};
+          override.eventId = eventId;
+          override.eventName = hostSelection.eventName || override.eventName || selectedEvent?.name || eventId;
+          override.scheduleId = scheduleId;
+          override.scheduleLabel = hostSelection.scheduleLabel || override.scheduleLabel || scheduleId;
+          override.startAt = hostSelection.startAt || override.startAt || "";
+          override.endAt = hostSelection.endAt || override.endAt || "";
+          state.scheduleContextOverrides.set(overrideKey, override);
+        }
+      }
+    }
+  }
+
+  state.selectedEventId = eventId || null;
+  state.selectedScheduleId = scheduleId || null;
+
+  if (selectionRecovered) {
+    renderEvents();
+    renderSchedules();
+    updateParticipantContext({ preserveStatus: true });
+  }
+
   if (!eventId || !scheduleId) {
     state.participants = [];
     state.savedParticipants = snapshotParticipantList([]);
