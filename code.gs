@@ -2184,21 +2184,189 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
   }
 
   const accessToken = getFirebaseAccessToken_();
-  const participantBranch = fetchRtdb_(`questionIntake/participants/${trimmedEventId}/${trimmedScheduleId}`, accessToken) || {};
+  const now = Date.now();
 
+  const participantPath = `questionIntake/participants/${trimmedEventId}/${trimmedScheduleId}`;
+  const existingBranch = fetchRtdb_(participantPath, accessToken) || {};
+
+  let tokensBranch = {};
+  try {
+    tokensBranch = fetchRtdb_('questionIntake/tokens', accessToken) || {};
+  } catch (error) {
+    console.warn('Failed to fetch questionIntake/tokens during fetchQuestionParticipants_', error);
+    tokensBranch = {};
+  }
+
+  const scheduleNode = fetchRtdb_(`questionIntake/schedules/${trimmedEventId}/${trimmedScheduleId}`, accessToken) || {};
+  const eventNode = fetchRtdb_(`questionIntake/events/${trimmedEventId}`, accessToken) || {};
+
+  const nextParticipants = existingBranch && typeof existingBranch === 'object' ? { ...existingBranch } : {};
+  const usedTokens = new Set(Object.keys(tokensBranch));
+  Object.values(nextParticipants).forEach(record => {
+    const tokenValue = record && record.token ? String(record.token) : '';
+    if (tokenValue) {
+      usedTokens.add(tokenValue);
+    }
+  });
+
+  const tokenByKey = new Map();
+  Object.entries(tokensBranch).forEach(([token, record]) => {
+    if (!token || !record) return;
+    const mapKey = `${record.eventId || ''}::${record.scheduleId || ''}::${record.participantId || ''}`;
+    if (mapKey) {
+      tokenByKey.set(mapKey, { token, record });
+    }
+  });
+
+  const updates = {};
+  const tokenUpdates = {};
+  let insertedCount = 0;
+  let latestParticipantUpdate = parseDateToMillis_(scheduleNode.updatedAt, 0);
+
+  entries.forEach(entry => {
+    if (!entry || !entry.participantId) return;
+
+    const key = `${trimmedEventId}::${trimmedScheduleId}::${entry.participantId}`;
+    const existingRecord = nextParticipants[entry.participantId] && typeof nextParticipants[entry.participantId] === 'object'
+      ? { ...nextParticipants[entry.participantId] }
+      : null;
+
+    const participantUpdatedAt = parseDateToMillis_(entry.updatedAt, now);
+    const teamValue = String(entry.teamNumber || entry.groupNumber || '').trim();
+
+    let tokenValue = '';
+    let tokenRecord = {};
+    if (existingRecord && existingRecord.token) {
+      tokenValue = String(existingRecord.token);
+      tokenRecord = tokensBranch[tokenValue] || {};
+    } else {
+      const mapped = tokenByKey.get(key) || {};
+      tokenValue = mapped.token || '';
+      tokenRecord = mapped.record || {};
+    }
+
+    if (!tokenValue) {
+      tokenValue = generateQuestionToken_(usedTokens);
+      tokenRecord = {};
+    }
+
+    const guidance = existingRecord && typeof existingRecord.guidance === 'string'
+      ? existingRecord.guidance
+      : String(tokenRecord.guidance || '');
+
+    let recordToWrite = null;
+    if (existingRecord) {
+      const needsTokenUpdate = !existingRecord.token && tokenValue;
+      if (needsTokenUpdate) {
+        const merged = { ...existingRecord };
+        merged.token = tokenValue;
+        merged.guidance = guidance;
+        if (teamValue) {
+          merged.groupNumber = teamValue;
+          merged.teamNumber = teamValue;
+        }
+        merged.updatedAt = Math.max(parseDateToMillis_(existingRecord.updatedAt, now), participantUpdatedAt, now);
+        recordToWrite = merged;
+        nextParticipants[entry.participantId] = merged;
+        latestParticipantUpdate = Math.max(latestParticipantUpdate, merged.updatedAt || participantUpdatedAt, now);
+      }
+    } else {
+      const payload = {
+        participantId: entry.participantId,
+        name: entry.name || '',
+        phonetic: entry.phonetic || entry.furigana || '',
+        furigana: entry.furigana || entry.phonetic || '',
+        gender: entry.gender || '',
+        department: entry.department || '',
+        phone: entry.phone || '',
+        email: entry.email || '',
+        groupNumber: teamValue,
+        teamNumber: teamValue,
+        token: tokenValue,
+        guidance,
+        updatedAt: participantUpdatedAt
+      };
+      recordToWrite = payload;
+      nextParticipants[entry.participantId] = payload;
+      insertedCount++;
+      latestParticipantUpdate = Math.max(latestParticipantUpdate, payload.updatedAt || participantUpdatedAt, now);
+    }
+
+    if (recordToWrite) {
+      updates[`${participantPath}/${entry.participantId}`] = recordToWrite;
+    }
+
+    if (tokenValue) {
+      const existingTokenRecord = tokensBranch[tokenValue] || {};
+      if (
+        !existingTokenRecord.participantId ||
+        existingTokenRecord.participantId !== entry.participantId ||
+        existingTokenRecord.scheduleId !== trimmedScheduleId ||
+        existingTokenRecord.eventId !== trimmedEventId
+      ) {
+        const fallbackName = existingRecord ? String(existingRecord.name || '') : '';
+        const fallbackGroup = existingRecord ? String(existingRecord.groupNumber || existingRecord.teamNumber || '') : '';
+        const scheduleLabel = String(scheduleNode.label || existingTokenRecord.scheduleLabel || '');
+        const scheduleDate = String(scheduleNode.date || existingTokenRecord.scheduleDate || '');
+        const scheduleStart = String(scheduleNode.startAt || existingTokenRecord.scheduleStart || '');
+        const scheduleEnd = String(scheduleNode.endAt || existingTokenRecord.scheduleEnd || '');
+        const tokenCreatedAt = parseDateToMillis_(existingTokenRecord.createdAt, participantUpdatedAt);
+        const tokenUpdatedAt = Math.max(parseDateToMillis_(existingTokenRecord.updatedAt, participantUpdatedAt), participantUpdatedAt, now);
+        tokenUpdates[tokenValue] = {
+          eventId: trimmedEventId,
+          eventName: String(eventNode.name || existingTokenRecord.eventName || ''),
+          scheduleId: trimmedScheduleId,
+          scheduleLabel,
+          scheduleDate,
+          scheduleStart,
+          scheduleEnd,
+          participantId: entry.participantId,
+          displayName: String(entry.name || fallbackName || existingTokenRecord.displayName || ''),
+          groupNumber: teamValue || fallbackGroup || String(existingTokenRecord.groupNumber || ''),
+          teamNumber: teamValue || fallbackGroup || String(existingTokenRecord.teamNumber || ''),
+          guidance,
+          revoked: existingTokenRecord.revoked === true,
+          createdAt: tokenCreatedAt,
+          updatedAt: tokenUpdatedAt
+        };
+      }
+    }
+  });
+
+  Object.entries(tokenUpdates).forEach(([token, record]) => {
+    updates[`questionIntake/tokens/${token}`] = record;
+  });
+
+  if (insertedCount > 0) {
+    const participantCount = Object.keys(nextParticipants).length;
+    updates[`questionIntake/schedules/${trimmedEventId}/${trimmedScheduleId}/participantCount`] = participantCount;
+    const scheduleUpdatedAt = Math.max(latestParticipantUpdate || 0, parseDateToMillis_(scheduleNode.updatedAt, now));
+    updates[`questionIntake/schedules/${trimmedEventId}/${trimmedScheduleId}/updatedAt`] = scheduleUpdatedAt;
+    const eventUpdatedAt = Math.max(scheduleUpdatedAt, parseDateToMillis_(eventNode.updatedAt, now));
+    updates[`questionIntake/events/${trimmedEventId}/updatedAt`] = eventUpdatedAt;
+  }
+
+  if (Object.keys(updates).length) {
+    patchRtdb_(updates, accessToken);
+  }
+
+  const branchForReturn = nextParticipants;
   return entries.map(entry => {
-    const current = participantBranch[entry.participantId] || {};
+    const current = branchForReturn[entry.participantId] || {};
+    const fallbackGroup = current.groupNumber || current.teamNumber || entry.teamNumber || entry.groupNumber || '';
+    const phonetic = current.phonetic || current.furigana || entry.phonetic || entry.furigana || '';
+    const furigana = current.furigana || current.phonetic || entry.furigana || entry.phonetic || '';
     return {
-      participantId: entry.participantId,
-      name: entry.name,
-      phonetic: entry.phonetic || entry.furigana || '',
-      furigana: entry.furigana || entry.phonetic || '',
-      gender: entry.gender || '',
-      department: entry.department || '',
-      phone: entry.phone || '',
-      email: entry.email || '',
-      groupNumber: entry.teamNumber || entry.groupNumber,
-      teamNumber: entry.teamNumber || entry.groupNumber,
+      participantId: current.participantId || entry.participantId,
+      name: current.name || entry.name,
+      phonetic,
+      furigana,
+      gender: current.gender || entry.gender || '',
+      department: current.department || entry.department || '',
+      phone: current.phone || entry.phone || '',
+      email: current.email || entry.email || '',
+      groupNumber: fallbackGroup,
+      teamNumber: fallbackGroup,
       token: current.token || '',
       guidance: current.guidance || ''
     };
