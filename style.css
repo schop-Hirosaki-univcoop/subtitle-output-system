@@ -2620,25 +2620,29 @@ body.sidebar-overlay-open{
 }
 
 #flow-panel-participants .qa-embedded .admin-controls{
-  display:flex;
-  flex-wrap:wrap;
-  align-items:flex-start;
-  gap:clamp(.6rem, 1.6vw, 1rem);
-  padding:clamp(.95rem, 2.2vw, 1.35rem) clamp(1.1rem, 2.6vw, 1.6rem);
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(11.5rem, 1fr));
+  align-items:stretch;
+  gap:clamp(.65rem, 1.8vw, 1.1rem);
+  padding:clamp(.95rem, 2.2vw, 1.35rem) clamp(1.1rem, 2.6vw, 1.7rem);
   border-radius:clamp(.85rem, 1.8vw, 1.2rem);
   border:1px solid rgba(86,134,204,.45);
-  background:linear-gradient(180deg, rgba(12,26,44,.78), rgba(6,18,34,.72));
-  box-shadow:0 20px 42px rgba(5,12,28,.46), inset 0 1px 0 rgba(255,255,255,.04);
+  background:linear-gradient(185deg, rgba(12,26,44,.82), rgba(6,18,34,.74));
+  box-shadow:0 22px 44px rgba(5,12,28,.46), inset 0 1px 0 rgba(255,255,255,.04);
 }
 
 #flow-panel-participants .qa-embedded .admin-controls .btn,
 #flow-panel-participants .qa-embedded .admin-controls .file-input{
-  flex:0 0 auto;
+  width:100%;
+  justify-content:center;
 }
 
 #flow-panel-participants .qa-embedded .admin-controls .file-input{
   position:relative;
   overflow:hidden;
+  display:inline-flex;
+  align-items:center;
+  gap:.45rem;
 }
 
 #flow-panel-participants .qa-embedded .admin-controls .file-input input{
@@ -2652,14 +2656,16 @@ body.sidebar-overlay-open{
   display:inline-flex;
   align-items:center;
   gap:.45rem;
-  padding:.38rem .85rem;
+  padding:.4rem .9rem;
   border-radius:999px;
-  border:1px solid rgba(98,152,214,.55);
-  background:linear-gradient(180deg, rgba(12,30,52,.82), rgba(8,20,38,.78));
-  box-shadow:0 18px 34px rgba(4,12,26,.45), inset 0 1px 0 rgba(255,255,255,.04);
-  color:#dce9ff;
+  border:1px solid rgba(98,152,214,.58);
+  background:linear-gradient(180deg, rgba(14,36,62,.86), rgba(8,22,40,.8));
+  box-shadow:0 18px 34px rgba(4,12,26,.45), inset 0 1px 0 rgba(255,255,255,.05);
+  color:#e2edff;
   font-size:.8rem;
-  letter-spacing:.01em;
+  letter-spacing:.02em;
+  grid-column:1 / -1;
+  justify-self:flex-start;
 }
 
 #flow-panel-participants .qa-embedded .status-pill::before{
@@ -2676,8 +2682,8 @@ body.sidebar-overlay-open{
   padding:clamp(.9rem, 2.2vw, 1.3rem);
   border-radius:clamp(.85rem, 1.8vw, 1.2rem);
   border:1px solid rgba(86,134,204,.4);
-  background:linear-gradient(180deg, rgba(14,30,54,.78), rgba(8,18,36,.74));
-  box-shadow:0 20px 40px rgba(4,12,28,.45), inset 0 1px 0 rgba(255,255,255,.04);
+  background:linear-gradient(180deg, rgba(14,30,54,.8), rgba(8,18,36,.72));
+  box-shadow:0 22px 44px rgba(4,12,28,.48), inset 0 1px 0 rgba(255,255,255,.04);
 }
 
 #flow-panel-participants .qa-embedded .change-preview__header{
@@ -2695,6 +2701,19 @@ body.sidebar-overlay-open{
   display:flex;
   flex-direction:column;
   gap:.35rem;
+  max-height:14rem;
+  overflow:auto;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(108,132,168,.6) transparent;
+}
+
+#flow-panel-participants .qa-embedded .change-preview__list::-webkit-scrollbar{
+  width:8px;
+}
+
+#flow-panel-participants .qa-embedded .change-preview__list::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg, rgba(46,141,255,.5), rgba(30,200,255,.38));
+  border-radius:999px;
 }
 
 #flow-panel-participants .qa-embedded .change-preview__note{
@@ -2713,25 +2732,42 @@ body.sidebar-overlay-open{
 }
 
 #flow-panel-participants .qa-embedded .table-scroller{
-  border-radius:clamp(.85rem, 1.8vw, 1.2rem);
-  border:1px solid rgba(72,112,168,.45);
-  background:linear-gradient(180deg, rgba(10,20,36,.82), rgba(6,14,26,.78));
+  padding:clamp(.2rem, .8vw, .45rem);
+  border-radius:clamp(.9rem, 1.9vw, 1.25rem);
+  border:1px solid rgba(72,112,168,.48);
+  background:linear-gradient(180deg, rgba(10,20,36,.84), rgba(6,14,26,.78));
   box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
 }
 
 #flow-panel-participants .qa-embedded .mapping-table thead th{
-  background:rgba(16,32,58,.72);
-  color:#c2d4ef;
+  position:sticky;
+  top:0;
+  z-index:1;
+  background:linear-gradient(180deg, rgba(18,36,64,.86), rgba(14,26,50,.78));
+  color:#cfe1ff;
   letter-spacing:.05em;
   text-transform:uppercase;
+  box-shadow:0 1px 0 rgba(6,12,22,.85);
 }
 
 #flow-panel-participants .qa-embedded .mapping-table tbody td{
   color:#edf4ff;
+  border-bottom:1px solid rgba(60,96,150,.35);
+  font-size:.92rem;
+  transition:background .18s ease, transform .18s ease;
 }
 
 #flow-panel-participants .qa-embedded .mapping-table tbody tr:hover{
-  background:rgba(34,62,108,.28);
+  background:rgba(34,62,108,.32);
+  transform:translateY(-1px);
+}
+
+#flow-panel-participants .qa-embedded .mapping-table tbody tr:nth-child(even){
+  background:rgba(18,32,56,.32);
+}
+
+#flow-panel-participants .qa-embedded .mapping-table tbody tr:nth-child(even):hover{
+  background:rgba(42,76,126,.36);
 }
 
 #flow-panel-participants .qa-embedded .loading-panel{
@@ -2809,18 +2845,40 @@ body.sidebar-overlay-open{
 }
 
 .operator-embedded #op-action-panel{
-  display:flex;
-  flex-wrap:wrap;
-  gap:.6rem;
+  position:sticky;
+  bottom:clamp(.85rem, 2.4vh, 1.6rem);
+  margin-top:auto;
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(9.5rem, 1fr));
   align-items:center;
-  padding:.75rem 1rem;
-  border-radius:.75rem;
-  background:rgba(8,18,32,.82);
-  border:1px solid rgba(60,96,143,.4);
+  gap:clamp(.55rem, 1.4vw, .85rem);
+  padding:clamp(.8rem, 1.8vw, 1.1rem) clamp(1rem, 2.4vw, 1.35rem);
+  border-radius:clamp(.9rem, 1.9vw, 1.25rem);
+  background:linear-gradient(182deg, rgba(18,30,52,.9), rgba(10,18,34,.92));
+  border:1px solid rgba(58,104,168,.45);
+  box-shadow:0 22px 40px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.04);
+  backdrop-filter:blur(12px);
 }
 
 .operator-embedded #op-action-panel[hidden]{
   display:none;
+}
+
+.operator-embedded #op-action-panel .btn{
+  width:100%;
+}
+
+.operator-embedded #op-action-panel #op-selected-info{
+  grid-column:1 / -1;
+  color:#c6d7f0;
+  font-size:.85rem;
+}
+
+.operator-embedded #op-action-panel .action-panel-right{
+  margin-left:0;
+  justify-content:flex-end;
+  grid-column:1 / -1;
+  gap:.5rem;
 }
 
 .operator-embedded__actions{
@@ -2835,6 +2893,12 @@ body.sidebar-overlay-open{
 .operator-embedded__buttons{
   display:flex;
   gap:.5rem;
+}
+
+@media (max-width: 720px){
+  .operator-embedded #op-action-panel{
+    grid-template-columns:repeat(auto-fit, minmax(11rem, 1fr));
+  }
 }
 
 .auth-card{
