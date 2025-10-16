@@ -93,13 +93,27 @@ function resolveEmbedReady() {
 
 function getElementById(id) {
   const prefix = getEmbedPrefix();
+  const candidates = [];
+
   if (prefix) {
-    const prefixed = document.getElementById(`${prefix}${id}`);
-    if (prefixed) {
-      return prefixed;
+    candidates.push(`${prefix}${id}`);
+  }
+
+  candidates.push(id);
+
+  if (!prefix) {
+    candidates.push(`qa-${id}`);
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const element = document.getElementById(candidate);
+    if (element) {
+      return element;
     }
   }
-  return document.getElementById(id);
+
+  return null;
 }
 import {
   normalizeEventParticipantCache,
@@ -1152,14 +1166,7 @@ function updateParticipantContext(options = {}) {
   const { preserveStatus = false } = options;
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
-  const selectedEvent = state.events.find(evt => evt.id === eventId);
-  const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === scheduleId);
-  const overrideKey = eventId && scheduleId ? `${eventId}::${scheduleId}` : "";
-  const override = overrideKey && state.scheduleContextOverrides instanceof Map
-    ? state.scheduleContextOverrides.get(overrideKey)
-    : null;
-
-  if (!eventId || !scheduleId || (!selectedEvent && !override)) {
+  if (!eventId || !scheduleId) {
     if (dom.participantContext) {
       dom.participantContext.textContent = "日程を選択すると、現在登録されている参加者が表示されます。";
     }
@@ -1185,6 +1192,13 @@ function updateParticipantContext(options = {}) {
     return;
   }
 
+  const overrideKey = `${eventId}::${scheduleId}`;
+  const selectedEvent = state.events.find(evt => evt.id === eventId);
+  const override = state.scheduleContextOverrides instanceof Map
+    ? state.scheduleContextOverrides.get(overrideKey) || null
+    : null;
+  const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === scheduleId);
+
   if (dom.csvInput) dom.csvInput.disabled = false;
   if (dom.teamCsvInput) dom.teamCsvInput.disabled = false;
   if (dom.participantContext) {
@@ -1200,7 +1214,7 @@ function updateParticipantContext(options = {}) {
           date: override.date || (override.startAt ? String(override.startAt).slice(0, 10) : "")
         })
         : "";
-    if (overrideKey && override && selectedSchedule) {
+    if (state.scheduleContextOverrides instanceof Map && override && selectedSchedule) {
       state.scheduleContextOverrides.delete(overrideKey);
     }
     const rangeSuffix = scheduleRange ? `（${scheduleRange}）` : "";
@@ -1269,7 +1283,14 @@ async function loadEvents({ preserveSelection = true } = {}) {
 
   let selectionNotice = null;
   if (!state.initialSelectionApplied && state.initialSelection?.eventId) {
-    const { eventId, scheduleId, scheduleLabel, eventLabel } = state.initialSelection;
+    const {
+      eventId,
+      scheduleId,
+      scheduleLabel,
+      eventLabel,
+      startAt: initialStartAt = null,
+      endAt: initialEndAt = null
+    } = state.initialSelection;
     const targetEvent = state.events.find(evt => evt.id === eventId) || null;
     if (targetEvent) {
       state.selectedEventId = eventId;
@@ -1277,10 +1298,28 @@ async function loadEvents({ preserveSelection = true } = {}) {
         const targetSchedule = targetEvent.schedules?.find(s => s.id === scheduleId) || null;
         if (targetSchedule) {
           state.selectedScheduleId = scheduleId;
+          if (state.scheduleContextOverrides instanceof Map) {
+            state.scheduleContextOverrides.delete(`${eventId}::${scheduleId}`);
+          }
         } else {
-          state.selectedScheduleId = null;
-          const label = scheduleLabel || scheduleId;
-          selectionNotice = `指定された日程「${label}」が見つかりません。`;
+          const overrideKey = `${eventId}::${scheduleId}`;
+          if (state.scheduleContextOverrides instanceof Map) {
+            const existingOverride = state.scheduleContextOverrides.get(overrideKey) || null;
+            const override = existingOverride || {
+              eventId,
+              eventName: eventLabel || targetEvent.name || eventId,
+              scheduleId,
+              scheduleLabel: scheduleLabel || scheduleId,
+              startAt: initialStartAt || "",
+              endAt: initialEndAt || ""
+            };
+            state.scheduleContextOverrides.set(overrideKey, override);
+            state.selectedScheduleId = scheduleId;
+          } else {
+            state.selectedScheduleId = null;
+            const label = scheduleLabel || scheduleId;
+            selectionNotice = `指定された日程「${label}」が見つかりません。`;
+          }
         }
       } else {
         state.selectedScheduleId = null;
@@ -1296,8 +1335,17 @@ async function loadEvents({ preserveSelection = true } = {}) {
   } else if (previousEventId && state.events.some(evt => evt.id === previousEventId)) {
     state.selectedEventId = previousEventId;
     const schedules = state.events.find(evt => evt.id === previousEventId)?.schedules || [];
-    if (previousScheduleId && schedules.some(s => s.id === previousScheduleId)) {
+    const overrideKey = previousScheduleId ? `${previousEventId}::${previousScheduleId}` : "";
+    const hasOverride = Boolean(
+      previousScheduleId &&
+      state.scheduleContextOverrides instanceof Map &&
+      state.scheduleContextOverrides.has(overrideKey)
+    );
+    if (previousScheduleId && (schedules.some(s => s.id === previousScheduleId) || hasOverride)) {
       state.selectedScheduleId = previousScheduleId;
+      if (hasOverride && schedules.some(s => s.id === previousScheduleId)) {
+        state.scheduleContextOverrides.delete(overrideKey);
+      }
     } else {
       state.selectedScheduleId = null;
     }
@@ -1433,11 +1481,28 @@ async function loadParticipants(options = {}) {
   }
 }
 
-function selectEvent(eventId) {
+function selectEvent(eventId, options = {}) {
+  const {
+    nextScheduleId = null,
+    skipContextUpdate = false,
+    skipParticipantLoad = false
+  } = options || {};
+
   const previousEventId = state.selectedEventId;
-  if (previousEventId === eventId) return;
+  const preservingScheduleId = nextScheduleId ? String(nextScheduleId) : null;
+
+  if (previousEventId === eventId) {
+    if (preservingScheduleId && state.selectedScheduleId !== preservingScheduleId) {
+      state.selectedScheduleId = preservingScheduleId;
+    }
+    if (!skipContextUpdate) {
+      updateParticipantContext({ preserveStatus: Boolean(preservingScheduleId) });
+    }
+    return;
+  }
+
   state.selectedEventId = eventId;
-  state.selectedScheduleId = null;
+  state.selectedScheduleId = preservingScheduleId;
   setCalendarPickedDate("", { updateInput: true });
   state.participants = [];
   state.participantTokenMap = new Map();
@@ -1450,25 +1515,64 @@ function selectEvent(eventId) {
   }
   renderEvents();
   renderSchedules();
-  updateParticipantContext();
-  loadParticipants().catch(err => console.error(err));
+  renderParticipants();
+
+  if (!skipContextUpdate) {
+    updateParticipantContext({ preserveStatus: Boolean(preservingScheduleId) });
+  } else {
+    syncTemplateButtons();
+    syncClearButtonState();
+  }
+
+  if (!skipParticipantLoad && !preservingScheduleId) {
+    loadParticipants().catch(err => console.error(err));
+  }
 }
 
-function selectSchedule(scheduleId) {
-  if (state.selectedScheduleId === scheduleId) return;
-  state.selectedScheduleId = scheduleId;
+function selectSchedule(scheduleId, options = {}) {
+  const {
+    preserveStatus = false,
+    suppressParticipantLoad = false,
+    forceReload = false
+  } = options || {};
+
+  const normalizedId = scheduleId ? String(scheduleId) : null;
+  const previousScheduleId = state.selectedScheduleId;
+  const shouldReload = forceReload || previousScheduleId !== normalizedId;
+
+  state.selectedScheduleId = normalizedId;
+
   const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
-  const schedule = selectedEvent?.schedules?.find(s => s.id === scheduleId);
+  const schedule = normalizedId ? selectedEvent?.schedules?.find(s => s.id === normalizedId) : null;
   if (schedule) {
     const primaryDate = getSchedulePrimaryDate(schedule);
     if (primaryDate) {
       setCalendarPickedDate(formatDatePart(primaryDate), { updateInput: true });
     }
+  } else if (!normalizedId) {
+    setCalendarPickedDate("", { updateInput: true });
   }
+
   renderSchedules();
-  updateParticipantContext();
-  state.savedParticipants = [];
-  loadParticipants().catch(err => console.error(err));
+
+  if (!normalizedId) {
+    state.participants = [];
+    state.savedParticipants = snapshotParticipantList([]);
+    state.participantTokenMap = new Map();
+    state.lastSavedSignature = "";
+    state.duplicateMatches = new Map();
+    state.duplicateGroups = new Map();
+    renderParticipants();
+    syncSaveButtonState();
+  } else if (shouldReload) {
+    state.savedParticipants = [];
+  }
+
+  updateParticipantContext({ preserveStatus });
+
+  if (normalizedId && shouldReload && !suppressParticipantLoad) {
+    loadParticipants().catch(err => console.error(err));
+  }
 }
 
 function resolveScheduleFormValues({ label, date, startTime, endTime }) {
@@ -3137,7 +3241,19 @@ async function applySelectionContext(selection = {}) {
       await loadEvents({ preserveSelection: true });
     }
 
-    if (state.selectedEventId !== trimmedEventId) {
+    const previousEventId = state.selectedEventId;
+    const previousScheduleId = state.selectedScheduleId;
+    const eventChanged = previousEventId !== trimmedEventId;
+    const shouldReloadSchedule = Boolean(trimmedScheduleId)
+      ? eventChanged || previousScheduleId !== trimmedScheduleId
+      : false;
+
+    if (eventChanged) {
+      selectEvent(trimmedEventId, {
+        nextScheduleId: trimmedScheduleId || null,
+        skipParticipantLoad: Boolean(trimmedScheduleId)
+      });
+    } else if (!trimmedScheduleId) {
       selectEvent(trimmedEventId);
     }
 
@@ -3177,7 +3293,10 @@ async function applySelectionContext(selection = {}) {
         effectiveStartAt = override.startAt;
         effectiveEndAt = override.endAt;
       }
-      selectSchedule(trimmedScheduleId);
+      selectSchedule(trimmedScheduleId, {
+        forceReload: shouldReloadSchedule,
+        preserveStatus: !shouldReloadSchedule
+      });
     } else {
       updateParticipantContext({ preserveStatus: true });
     }
