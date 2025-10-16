@@ -2054,6 +2054,7 @@ export class EventAdminApp {
 
   updatePanelNavigation() {
     const buttons = this.dom.panelButtons || [];
+    let hasActiveSidebar = false;
     buttons.forEach((button) => {
       const target = button.dataset.panelTarget || "";
       const config = PANEL_CONFIG[target] || PANEL_CONFIG.events;
@@ -2063,8 +2064,18 @@ export class EventAdminApp {
       button.classList.toggle("is-active", isActive);
       if (isActive) {
         button.setAttribute("aria-current", "page");
+        hasActiveSidebar = true;
       } else {
         button.removeAttribute("aria-current");
+      }
+    });
+    const navigations = this.dom.panelNavigations || [];
+    navigations.forEach((nav) => {
+      if (!nav) return;
+      if (hasActiveSidebar) {
+        nav.setAttribute("hidden", "");
+      } else {
+        nav.removeAttribute("hidden");
       }
     });
     this.updateNavigationButtons();

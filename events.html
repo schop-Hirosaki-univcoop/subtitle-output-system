@@ -154,19 +154,23 @@
                       </div>
                       <div class="module-body">
                         <div class="admin-controls">
-                          <button id="qa-download-participant-template" class="btn btn-ghost btn-sm" type="button">参加者CSVテンプレート</button>
-                          <label class="btn btn-ghost file-input" for="qa-csv-input">
-                            <span id="qa-file-label">CSVファイルを選択</span>
-                            <input id="qa-csv-input" type="file" accept=".csv,text/csv">
-                          </label>
-                          <button id="qa-download-team-template" class="btn btn-ghost btn-sm" type="button" disabled>班番号テンプレート</button>
-                          <label class="btn btn-ghost file-input" for="qa-team-csv-input">
-                            <span id="qa-team-file-label">班番号CSVを選択</span>
-                            <input id="qa-team-csv-input" type="file" accept=".csv,text/csv">
-                          </label>
-                          <button id="qa-clear-participants-button" class="btn btn-danger btn-sm" type="button" disabled>参加者リストを全削除</button>
-                          <button id="qa-discard-button" class="btn btn-ghost btn-sm" type="button" disabled>変更を取り消す</button>
-                          <button id="qa-save-button" class="btn btn-primary" type="button" disabled>参加者リストを保存</button>
+                          <div class="admin-controls__row admin-controls__row--imports">
+                            <button id="qa-download-participant-template" class="btn btn-ghost btn-sm" type="button">参加者CSVテンプレート</button>
+                            <label class="btn btn-ghost file-input" for="qa-csv-input">
+                              <span id="qa-file-label">CSVファイルを選択</span>
+                              <input id="qa-csv-input" type="file" accept=".csv,text/csv">
+                            </label>
+                            <button id="qa-download-team-template" class="btn btn-ghost btn-sm" type="button" disabled>班番号テンプレート</button>
+                            <label class="btn btn-ghost file-input" for="qa-team-csv-input">
+                              <span id="qa-team-file-label">班番号CSVを選択</span>
+                              <input id="qa-team-csv-input" type="file" accept=".csv,text/csv">
+                            </label>
+                          </div>
+                          <div class="admin-controls__row admin-controls__row--actions">
+                            <button id="qa-discard-button" class="btn btn-ghost btn-sm" type="button" disabled>変更を取り消す</button>
+                            <button id="qa-save-button" class="btn btn-primary" type="button" disabled>参加者リストを保存</button>
+                            <button id="qa-clear-participants-button" class="btn btn-danger btn-sm" type="button" disabled>参加者リストを全削除</button>
+                          </div>
                         </div>
                         <div id="qa-change-preview" class="change-preview" hidden aria-live="polite">
                           <div class="change-preview__header">
@@ -430,6 +434,21 @@
                     </thead>
                     <tbody></tbody>
                   </table>
+                </div>
+                <div id="op-dictionary-confirm-dialog" class="modal modal--inline" role="dialog" aria-modal="true" aria-labelledby="op-dictionary-confirm-dialog-title" hidden>
+                  <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+                  <div class="modal-panel">
+                    <div class="modal-header">
+                      <h2 id="op-dictionary-confirm-dialog-title">確認</h2>
+                    </div>
+                    <div class="modal-body">
+                      <p id="op-dictionary-confirm-dialog-message"></p>
+                    </div>
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-ghost" id="op-dictionary-confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
+                      <button type="button" class="btn btn-danger" id="op-dictionary-confirm-accept-button">削除する</button>
+                    </div>
+                  </div>
                 </div>
               </div>
         <div class="flow-navigation flow-navigation--panel">

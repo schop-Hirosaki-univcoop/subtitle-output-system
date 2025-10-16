@@ -198,6 +198,8 @@ export class OperatorApp {
     this.dictionaryUnsubscribe = null;
     this.dictionaryData = [];
     this.dictionaryEntries = [];
+    this.dictionaryConfirmState = { resolver: null, lastFocused: null };
+    this.dictionaryConfirmSetup = false;
     this.eventsBranch = {};
     this.schedulesBranch = {};
     this.authFlow = "idle";

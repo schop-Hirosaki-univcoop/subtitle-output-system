@@ -2,6 +2,111 @@ import { dictionaryRef, onValue, set } from "./firebase.js";
 import { DICTIONARY_STATE_KEY } from "./constants.js";
 import { escapeHtml } from "./utils.js";
 
+function ensureDictionaryConfirm(app) {
+  if (!app || app.dictionaryConfirmSetup) {
+    return;
+  }
+  const dialog = app.dom.dictionaryConfirmDialog;
+  if (!dialog) {
+    return;
+  }
+  const cancelTargets = new Set();
+  if (app.dom.dictionaryConfirmCancelButton) {
+    cancelTargets.add(app.dom.dictionaryConfirmCancelButton);
+  }
+  dialog.querySelectorAll("[data-dialog-dismiss]").forEach((element) => {
+    if (element instanceof HTMLElement) {
+      cancelTargets.add(element);
+    }
+  });
+  const handleCancel = (event) => {
+    event.preventDefault();
+    finishDictionaryConfirm(app, false);
+  };
+  cancelTargets.forEach((element) => {
+    element.addEventListener("click", handleCancel);
+  });
+  if (app.dom.dictionaryConfirmAcceptButton) {
+    app.dom.dictionaryConfirmAcceptButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      finishDictionaryConfirm(app, true);
+    });
+  }
+  dialog.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      finishDictionaryConfirm(app, false);
+    }
+  });
+  app.dictionaryConfirmSetup = true;
+}
+
+function openDictionaryConfirm(app) {
+  const dialog = app.dom.dictionaryConfirmDialog;
+  if (!dialog) {
+    return;
+  }
+  const state = app.dictionaryConfirmState || (app.dictionaryConfirmState = { resolver: null, lastFocused: null });
+  state.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  dialog.removeAttribute("hidden");
+  const focusTarget = app.dom.dictionaryConfirmAcceptButton || dialog.querySelector("button");
+  if (focusTarget instanceof HTMLElement) {
+    requestAnimationFrame(() => focusTarget.focus());
+  }
+}
+
+function finishDictionaryConfirm(app, result) {
+  const dialog = app.dom.dictionaryConfirmDialog;
+  if (!dialog) {
+    return;
+  }
+  if (!dialog.hasAttribute("hidden")) {
+    dialog.setAttribute("hidden", "");
+  }
+  const state = app.dictionaryConfirmState || (app.dictionaryConfirmState = { resolver: null, lastFocused: null });
+  const resolver = state.resolver;
+  state.resolver = null;
+  const toFocus = state.lastFocused;
+  state.lastFocused = null;
+  if (toFocus && typeof toFocus.focus === "function") {
+    requestAnimationFrame(() => toFocus.focus());
+  }
+  if (typeof resolver === "function") {
+    resolver(result);
+  }
+}
+
+async function confirmDictionaryAction(app, { title = "確認", description = "", confirmLabel = "削除する", cancelLabel = "キャンセル" } = {}) {
+  ensureDictionaryConfirm(app);
+  const dialog = app.dom.dictionaryConfirmDialog;
+  if (!dialog) {
+    if (typeof app.confirmAction === "function") {
+      return await app.confirmAction({ title, description, confirmLabel, cancelLabel, tone: "danger" });
+    }
+    return false;
+  }
+  const state = app.dictionaryConfirmState || (app.dictionaryConfirmState = { resolver: null, lastFocused: null });
+  if (state.resolver) {
+    finishDictionaryConfirm(app, false);
+  }
+  if (app.dom.dictionaryConfirmTitle) {
+    app.dom.dictionaryConfirmTitle.textContent = title || "確認";
+  }
+  if (app.dom.dictionaryConfirmMessage) {
+    app.dom.dictionaryConfirmMessage.textContent = description || "";
+  }
+  if (app.dom.dictionaryConfirmAcceptButton) {
+    app.dom.dictionaryConfirmAcceptButton.textContent = confirmLabel || "削除する";
+  }
+  if (app.dom.dictionaryConfirmCancelButton) {
+    app.dom.dictionaryConfirmCancelButton.textContent = cancelLabel || "キャンセル";
+  }
+  openDictionaryConfirm(app);
+  return await new Promise((resolve) => {
+    state.resolver = resolve;
+  });
+}
+
 function normalizeDictionaryEntries(data) {
   const list = Array.isArray(data)
     ? data
@@ -170,12 +275,11 @@ export async function addTerm(app, event) {
 
 export async function deleteTerm(app, term) {
   if (!term) return;
-  const confirmed = await app.confirmAction({
+  const confirmed = await confirmDictionaryAction(app, {
     title: "辞書から削除",
     description: `「${term}」を辞書から削除します。よろしいですか？`,
     confirmLabel: "削除する",
-    cancelLabel: "キャンセル",
-    tone: "danger"
+    cancelLabel: "キャンセル"
   });
   if (!confirmed) return;
   try {
