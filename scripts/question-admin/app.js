@@ -74,6 +74,222 @@ const hostSelectionBridge = {
   pendingSignature: ""
 };
 
+let lastSelectionBroadcastSignature = "";
+
+const hostIntegration = {
+  controller: null,
+  selectionUnsubscribe: null,
+  eventsUnsubscribe: null
+};
+
+function getSelectionBroadcastSource() {
+  return isEmbeddedMode() ? "participants" : "question-admin";
+}
+
+function isHostAttached() {
+  return Boolean(hostIntegration.controller);
+}
+
+function detachHost() {
+  if (hostIntegration.selectionUnsubscribe) {
+    try {
+      hostIntegration.selectionUnsubscribe();
+    } catch (error) {
+      console.warn("Failed to detach host selection listener", error);
+    }
+  }
+  if (hostIntegration.eventsUnsubscribe) {
+    try {
+      hostIntegration.eventsUnsubscribe();
+    } catch (error) {
+      console.warn("Failed to detach host events listener", error);
+    }
+  }
+  hostIntegration.controller = null;
+  hostIntegration.selectionUnsubscribe = null;
+  hostIntegration.eventsUnsubscribe = null;
+  startHostSelectionBridge();
+}
+
+function cloneHostEvent(event) {
+  if (!event || typeof event !== "object") {
+    return null;
+  }
+  const schedules = Array.isArray(event.schedules)
+    ? event.schedules.map((schedule) => ({ ...schedule }))
+    : [];
+  const scheduleCount = typeof event.scheduleCount === "number" ? event.scheduleCount : schedules.length;
+  const totalParticipants = typeof event.totalParticipants === "number"
+    ? event.totalParticipants
+    : schedules.reduce((acc, item) => acc + Number(item?.participantCount || 0), 0);
+  return {
+    ...event,
+    schedules,
+    scheduleCount,
+    totalParticipants
+  };
+}
+
+function applyHostEvents(events = [], { preserveSelection = true } = {}) {
+  const previousEventId = preserveSelection ? state.selectedEventId : null;
+  const previousScheduleId = preserveSelection ? state.selectedScheduleId : null;
+  const cloned = Array.isArray(events)
+    ? events.map((event) => cloneHostEvent(event)).filter(Boolean)
+    : [];
+  state.events = cloned;
+  if (!preserveSelection) {
+    state.selectedEventId = null;
+    state.selectedScheduleId = null;
+  } else {
+    const availableIds = new Set(cloned.map((event) => event.id));
+    if (previousEventId && availableIds.has(previousEventId)) {
+      state.selectedEventId = previousEventId;
+    } else {
+      state.selectedEventId = null;
+    }
+    if (previousScheduleId) {
+      const selectedEvent = cloned.find((event) => event.id === state.selectedEventId) || null;
+      const hasSchedule = selectedEvent?.schedules?.some((schedule) => schedule.id === previousScheduleId) || false;
+      state.selectedScheduleId = hasSchedule ? previousScheduleId : null;
+    } else {
+      state.selectedScheduleId = null;
+    }
+  }
+  renderEvents();
+  updateParticipantContext({ preserveStatus: true });
+}
+
+function handleHostSelection(detail) {
+  if (!detail || typeof detail !== "object") {
+    return;
+  }
+  const promise = applySelectionContext(detail);
+  if (promise && typeof promise.catch === "function") {
+    promise.catch((error) => {
+      console.error("Failed to apply selection from host", error);
+    });
+  }
+}
+
+function handleHostEventsUpdate(events) {
+  applyHostEvents(events, { preserveSelection: true });
+}
+
+function attachHost(controller) {
+  detachHost();
+  if (!controller || typeof controller !== "object") {
+    return;
+  }
+  hostIntegration.controller = controller;
+  stopHostSelectionBridge();
+  hostSelectionBridge.lastSignature = "";
+  hostSelectionBridge.pendingSignature = "";
+
+  if (typeof controller.subscribeSelection === "function") {
+    hostIntegration.selectionUnsubscribe = controller.subscribeSelection(handleHostSelection);
+  }
+  if (typeof controller.subscribeEvents === "function") {
+    hostIntegration.eventsUnsubscribe = controller.subscribeEvents(handleHostEventsUpdate);
+  }
+
+  if (typeof controller.getEvents === "function") {
+    try {
+      const events = controller.getEvents();
+      applyHostEvents(events, { preserveSelection: true });
+    } catch (error) {
+      console.warn("Failed to fetch events from host", error);
+    }
+  }
+
+  if (typeof controller.getSelection === "function") {
+    try {
+      const selection = controller.getSelection();
+      if (selection) {
+        const promise = applySelectionContext(selection);
+        if (promise && typeof promise.catch === "function") {
+          promise.catch((error) => {
+            console.error("Failed to apply initial host selection", error);
+          });
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to fetch selection from host", error);
+    }
+  }
+}
+
+function signatureForSelectionDetail(detail) {
+  if (!detail || typeof detail !== "object") {
+    return "";
+  }
+  const {
+    eventId = "",
+    scheduleId = "",
+    eventName = "",
+    scheduleLabel = "",
+    startAt = "",
+    endAt = ""
+  } = detail;
+  return [eventId, scheduleId, eventName, scheduleLabel, startAt, endAt].join("::");
+}
+
+function buildSelectionDetail() {
+  const eventId = state.selectedEventId || "";
+  const scheduleId = state.selectedScheduleId || "";
+  const selectedEvent = Array.isArray(state.events)
+    ? state.events.find(evt => evt.id === eventId) || null
+    : null;
+  const schedules = selectedEvent?.schedules || [];
+  const schedule = scheduleId ? schedules.find(item => item.id === scheduleId) || null : null;
+  const overrideKey = `${eventId}::${scheduleId}`;
+  const override =
+    scheduleId && state.scheduleContextOverrides instanceof Map
+      ? state.scheduleContextOverrides.get(overrideKey) || null
+      : null;
+
+  return {
+    eventId,
+    scheduleId,
+    eventName: selectedEvent?.name || "",
+    scheduleLabel: schedule?.label || override?.scheduleLabel || "",
+    startAt: schedule?.startAt || override?.startAt || "",
+    endAt: schedule?.endAt || override?.endAt || ""
+  };
+}
+
+function broadcastSelectionChange(options = {}) {
+  const source = options.source || getSelectionBroadcastSource();
+  const detail = buildSelectionDetail();
+  const signature = signatureForSelectionDetail(detail);
+  const changed = signature !== lastSelectionBroadcastSignature;
+  lastSelectionBroadcastSignature = signature;
+  if (!changed || source === "host") {
+    return;
+  }
+  if (hostIntegration.controller && typeof hostIntegration.controller.setSelection === "function") {
+    try {
+      hostIntegration.controller.setSelection({ ...detail, source });
+    } catch (error) {
+      console.warn("Failed to propagate selection to host", error);
+    }
+  }
+  if (typeof document === "undefined") {
+    return;
+  }
+  try {
+    document.dispatchEvent(
+      new CustomEvent("qa:selection-changed", {
+        detail: {
+          ...detail,
+          source
+        }
+      })
+    );
+  } catch (error) {
+    console.warn("Failed to dispatch selection change event", error);
+  }
+}
+
 function waitForEmbedReady() {
   if (state.user) {
     return Promise.resolve();
@@ -1246,6 +1462,17 @@ function updateParticipantContext(options = {}) {
 }
 
 async function loadEvents({ preserveSelection = true } = {}) {
+  if (isHostAttached() && hostIntegration.controller) {
+    try {
+      if (typeof hostIntegration.controller.getEvents === "function") {
+        const events = hostIntegration.controller.getEvents();
+        applyHostEvents(events, { preserveSelection });
+        return state.events;
+      }
+    } catch (error) {
+      console.warn("Failed to retrieve host events", error);
+    }
+  }
   const previousEventId = preserveSelection ? state.selectedEventId : null;
   const previousScheduleId = preserveSelection ? state.selectedScheduleId : null;
 
@@ -1501,17 +1728,26 @@ function selectEvent(eventId, options = {}) {
   const {
     nextScheduleId = null,
     skipContextUpdate = false,
-    skipParticipantLoad = false
+    skipParticipantLoad = false,
+    source = getSelectionBroadcastSource()
   } = options || {};
 
   const previousEventId = state.selectedEventId;
   const preservingScheduleId = nextScheduleId ? String(nextScheduleId) : null;
 
   if (previousEventId === eventId) {
+    let scheduleHandled = false;
     if (preservingScheduleId && state.selectedScheduleId !== preservingScheduleId) {
-      state.selectedScheduleId = preservingScheduleId;
+      selectSchedule(preservingScheduleId, {
+        preserveStatus: Boolean(preservingScheduleId),
+        suppressParticipantLoad: skipParticipantLoad,
+        source
+      });
+      scheduleHandled = true;
+    } else {
+      broadcastSelectionChange({ source });
     }
-    if (!skipContextUpdate) {
+    if (!skipContextUpdate && !scheduleHandled) {
       updateParticipantContext({ preserveStatus: Boolean(preservingScheduleId) });
     }
     return;
@@ -1543,13 +1779,16 @@ function selectEvent(eventId, options = {}) {
   if (!skipParticipantLoad && !preservingScheduleId) {
     loadParticipants().catch(err => console.error(err));
   }
+
+  broadcastSelectionChange({ source });
 }
 
 function selectSchedule(scheduleId, options = {}) {
   const {
     preserveStatus = false,
     suppressParticipantLoad = false,
-    forceReload = false
+    forceReload = false,
+    source = getSelectionBroadcastSource()
   } = options || {};
 
   const normalizedId = scheduleId ? String(scheduleId) : null;
@@ -1596,6 +1835,8 @@ function selectSchedule(scheduleId, options = {}) {
   if (needsParticipantLoad) {
     loadParticipants().catch(err => console.error(err));
   }
+
+  broadcastSelectionChange({ source });
 }
 
 function resolveScheduleFormValues({ label, date, startTime, endTime }) {
@@ -2484,6 +2725,7 @@ function resetState() {
   state.savedParticipants = [];
   state.selectedEventId = null;
   state.selectedScheduleId = null;
+  lastSelectionBroadcastSignature = "";
   state.lastSavedSignature = "";
   state.participantTokenMap = new Map();
   state.duplicateMatches = new Map();
@@ -3175,6 +3417,9 @@ function readHostSelectionDataset(target) {
 }
 
 function applyHostSelectionFromDataset() {
+  if (isHostAttached()) {
+    return;
+  }
   const selection = readHostSelectionDataset(getHostSelectionElement());
   if (!selection) {
     hostSelectionBridge.lastSignature = "";
@@ -3201,6 +3446,9 @@ function applyHostSelectionFromDataset() {
 }
 
 function startHostSelectionBridge() {
+  if (isHostAttached()) {
+    return;
+  }
   if (typeof document === "undefined") {
     return;
   }
@@ -3217,6 +3465,17 @@ function startHostSelectionBridge() {
     hostSelectionBridge.observer = observer;
   }
   applyHostSelectionFromDataset();
+}
+
+function stopHostSelectionBridge() {
+  if (hostSelectionBridge.observer) {
+    try {
+      hostSelectionBridge.observer.disconnect();
+    } catch (error) {
+      console.warn("Failed to disconnect host selection observer", error);
+    }
+    hostSelectionBridge.observer = null;
+  }
 }
 
 async function applySelectionContext(selection = {}) {
@@ -3274,10 +3533,11 @@ async function applySelectionContext(selection = {}) {
     if (eventChanged) {
       selectEvent(trimmedEventId, {
         nextScheduleId: trimmedScheduleId || null,
-        skipParticipantLoad: Boolean(trimmedScheduleId)
+        skipParticipantLoad: Boolean(trimmedScheduleId),
+        source: "host"
       });
     } else if (!trimmedScheduleId) {
-      selectEvent(trimmedEventId);
+      selectEvent(trimmedEventId, { source: "host" });
     }
 
     const selectedEvent = state.events.find(evt => evt.id === trimmedEventId) || null;
@@ -3318,7 +3578,8 @@ async function applySelectionContext(selection = {}) {
       }
       selectSchedule(trimmedScheduleId, {
         forceReload: shouldReloadSchedule,
-        preserveStatus: !shouldReloadSchedule
+        preserveStatus: !shouldReloadSchedule,
+        source: "host"
       });
     } else {
       updateParticipantContext({ preserveStatus: true });
@@ -3376,6 +3637,7 @@ if (typeof window !== "undefined") {
         hideLoader();
         setAuthUi(false);
         resetState();
+        detachHost();
         hostSelectionBridge.lastSignature = "";
         hostSelectionBridge.pendingSignature = "";
         applyHostSelectionFromDataset();
@@ -3389,6 +3651,20 @@ if (typeof window !== "undefined") {
         embedReadyDeferred = null;
       } catch (error) {
         console.error("questionAdminEmbed.reset failed", error);
+      }
+    },
+    attachHost(controller) {
+      try {
+        attachHost(controller);
+      } catch (error) {
+        console.error("questionAdminEmbed.attachHost failed", error);
+      }
+    },
+    detachHost() {
+      try {
+        detachHost();
+      } catch (error) {
+        console.error("questionAdminEmbed.detachHost failed", error);
       }
     }
   };

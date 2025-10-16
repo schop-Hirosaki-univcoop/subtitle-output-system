@@ -174,6 +174,12 @@ export class EventAdminApp {
     this.selectedEventId = "";
     this.schedules = [];
     this.selectedScheduleId = "";
+    this.selectionListeners = new Set();
+    this.eventListeners = new Set();
+    this.participantHostInterface = null;
+    this.suppressSelectionNotifications = false;
+    this.lastSelectionSignature = "";
+    this.lastSelectionSource = "";
     this.stage = "events";
     this.stageHistory = new Set(["events"]);
     this.activePanel = "events";
@@ -195,6 +201,7 @@ export class EventAdminApp {
     this.toolSyncPromise = null;
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
     this.handleParticipantSyncEvent = this.handleParticipantSyncEvent.bind(this);
+    this.handleParticipantSelectionBroadcast = this.handleParticipantSelectionBroadcast.bind(this);
     this.cleanup = this.cleanup.bind(this);
     this.eventCountNote = "";
     this.stageNote = "";
@@ -223,6 +230,7 @@ export class EventAdminApp {
     this.observeAuthState();
     if (typeof document !== "undefined") {
       document.addEventListener("qa:participants-synced", this.handleParticipantSyncEvent);
+      document.addEventListener("qa:selection-changed", this.handleParticipantSelectionBroadcast);
     }
     if (typeof window !== "undefined") {
       window.addEventListener("beforeunload", this.cleanup, { once: true });
@@ -479,6 +487,8 @@ export class EventAdminApp {
     if (!user) {
       this.events = [];
       this.renderEvents();
+      this.notifyEventListeners();
+      this.notifySelectionListeners("host");
       this.clearAlert();
       this.showLoggedOutState();
       return;
@@ -617,6 +627,13 @@ export class EventAdminApp {
         this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools after refresh", error));
       }
     }
+
+    const eventChanged = previousEventId !== this.selectedEventId;
+    const scheduleChanged = previousScheduleId !== this.selectedScheduleId;
+    if (eventChanged || scheduleChanged) {
+      this.notifySelectionListeners("host");
+    }
+    this.notifyEventListeners();
 
     return this.events;
   }
@@ -759,6 +776,9 @@ export class EventAdminApp {
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
     this.handleToolContextAfterSelection();
+    if (previous !== normalized) {
+      this.notifySelectionListeners("host");
+    }
   }
 
   ensureSelectedSchedule(preferredId = "") {
@@ -777,6 +797,117 @@ export class EventAdminApp {
   getSelectedSchedule() {
     if (!this.selectedScheduleId) return null;
     return this.schedules.find((schedule) => schedule.id === this.selectedScheduleId) || null;
+  }
+
+  getCurrentSelectionContext() {
+    const event = this.getSelectedEvent();
+    const schedule = this.getSelectedSchedule();
+    return {
+      eventId: event?.id || "",
+      eventName: event?.name || event?.id || "",
+      scheduleId: schedule?.id || "",
+      scheduleLabel: schedule?.label || schedule?.id || "",
+      startAt: schedule?.startAt || "",
+      endAt: schedule?.endAt || ""
+    };
+  }
+
+  getParticipantEventsSnapshot() {
+    return this.events.map((event) => ({
+      ...event,
+      schedules: Array.isArray(event.schedules)
+        ? event.schedules.map((schedule) => ({ ...schedule }))
+        : []
+    }));
+  }
+
+  addSelectionListener(listener) {
+    if (typeof listener !== "function") {
+      return () => {};
+    }
+    this.selectionListeners.add(listener);
+    return () => {
+      this.selectionListeners.delete(listener);
+    };
+  }
+
+  addEventListener(listener) {
+    if (typeof listener !== "function") {
+      return () => {};
+    }
+    this.eventListeners.add(listener);
+    return () => {
+      this.eventListeners.delete(listener);
+    };
+  }
+
+  notifySelectionListeners(source = "host") {
+    if (this.suppressSelectionNotifications) {
+      return;
+    }
+    const detail = { ...this.getCurrentSelectionContext(), source };
+    const signature = [
+      detail.eventId,
+      detail.scheduleId,
+      detail.eventName,
+      detail.scheduleLabel,
+      detail.startAt,
+      detail.endAt
+    ].join("::");
+    if (signature === this.lastSelectionSignature && source === this.lastSelectionSource) {
+      return;
+    }
+    this.lastSelectionSignature = signature;
+    this.lastSelectionSource = source;
+    this.selectionListeners.forEach((listener) => {
+      try {
+        listener(detail);
+      } catch (error) {
+        logError("Selection listener failed", error);
+      }
+    });
+  }
+
+  notifyEventListeners() {
+    const snapshot = this.getParticipantEventsSnapshot();
+    this.eventListeners.forEach((listener) => {
+      try {
+        listener(snapshot);
+      } catch (error) {
+        logError("Event listener failed", error);
+      }
+    });
+  }
+
+  applySelectionFromParticipant(detail = {}) {
+    const eventId = ensureString(detail?.eventId);
+    const scheduleId = ensureString(detail?.scheduleId);
+    const previousSuppression = this.suppressSelectionNotifications;
+    this.suppressSelectionNotifications = true;
+    try {
+      if (eventId || (!eventId && detail?.eventId === "")) {
+        this.selectEvent(eventId);
+      }
+      if (scheduleId || (!scheduleId && detail?.scheduleId === "")) {
+        this.selectSchedule(scheduleId);
+      }
+    } finally {
+      this.suppressSelectionNotifications = previousSuppression;
+    }
+    this.notifySelectionListeners(detail?.source || "participants");
+  }
+
+  getParticipantHostInterface() {
+    if (!this.participantHostInterface) {
+      this.participantHostInterface = {
+        getSelection: () => this.getCurrentSelectionContext(),
+        getEvents: () => this.getParticipantEventsSnapshot(),
+        subscribeSelection: (listener) => this.addSelectionListener(listener),
+        subscribeEvents: (listener) => this.addEventListener(listener),
+        setSelection: (detail) => this.applySelectionFromParticipant(detail || {})
+      };
+    }
+    return this.participantHostInterface;
   }
 
   selectSchedule(scheduleId) {
@@ -799,6 +930,9 @@ export class EventAdminApp {
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
     this.handleToolContextAfterSelection();
+    if (previous !== normalized) {
+      this.notifySelectionListeners("host");
+    }
   }
 
   updateScheduleStateFromSelection(preferredScheduleId = "") {
@@ -1151,6 +1285,95 @@ export class EventAdminApp {
     });
   }
 
+  async handleParticipantSelectionBroadcast(event) {
+    if (!event || !event.detail) {
+      return;
+    }
+    const { detail } = event;
+    const source = ensureString(detail.source);
+    if (source && source !== "participants" && source !== "question-admin") {
+      return;
+    }
+    const eventId = ensureString(detail.eventId);
+    const scheduleId = ensureString(detail.scheduleId);
+    if (!eventId) {
+      return;
+    }
+
+    try {
+      if (!this.events.some((item) => item.id === eventId)) {
+        await this.loadEvents();
+      }
+    } catch (error) {
+      logError("Failed to refresh events after participant selection", error);
+      return;
+    }
+
+    const matchedEvent = this.events.find((item) => item.id === eventId) || null;
+    if (!matchedEvent) {
+      return;
+    }
+
+    const eventName = ensureString(detail.eventName);
+    if (eventName) {
+      matchedEvent.name = eventName;
+    }
+
+    if (!Array.isArray(matchedEvent.schedules)) {
+      matchedEvent.schedules = [];
+    }
+
+    let scheduleRecord = null;
+    if (scheduleId) {
+      scheduleRecord = matchedEvent.schedules.find((item) => item.id === scheduleId) || null;
+      if (!scheduleRecord) {
+        scheduleRecord = {
+          id: scheduleId,
+          label: ensureString(detail.scheduleLabel) || scheduleId,
+          startAt: ensureString(detail.startAt),
+          endAt: ensureString(detail.endAt)
+        };
+        matchedEvent.schedules.push(scheduleRecord);
+      } else {
+        const label = ensureString(detail.scheduleLabel);
+        if (label) {
+          scheduleRecord.label = label;
+        }
+        if (detail.startAt !== undefined) {
+          scheduleRecord.startAt = ensureString(detail.startAt);
+        }
+        if (detail.endAt !== undefined) {
+          scheduleRecord.endAt = ensureString(detail.endAt);
+        }
+      }
+    }
+
+    matchedEvent.scheduleCount = matchedEvent.schedules.length;
+
+    this.renderEvents();
+    this.updateEventSummary();
+
+    if (this.selectedEventId !== eventId) {
+      this.selectEvent(eventId);
+    } else {
+      this.updateScheduleStateFromSelection(scheduleId);
+    }
+
+    if (scheduleId) {
+      if (this.selectedScheduleId !== scheduleId) {
+        this.selectSchedule(scheduleId);
+      }
+    } else if (this.selectedScheduleId) {
+      this.selectSchedule("");
+    }
+
+    const tabPanels = new Set(["participants", "operator", "dictionary", "logs"]);
+    const targetPanel = tabPanels.has(this.activePanel) ? this.activePanel : "participants";
+    this.showPanel(targetPanel);
+    this.notifyEventListeners();
+    this.notifySelectionListeners(source || "participants");
+  }
+
   clearLoadingIndicators() {
     this.eventsLoadingDepth = 0;
     this.eventsLoadingMessage = "";
@@ -1179,6 +1402,11 @@ export class EventAdminApp {
         }
         if (tool === "participants") {
           await import("../question-admin/index.js");
+          if (window.questionAdminEmbed?.attachHost) {
+            window.questionAdminEmbed.attachHost(this.getParticipantHostInterface());
+            this.notifyEventListeners();
+            this.notifySelectionListeners("host");
+          }
         } else {
           await import("../operator/index.js");
         }
@@ -1694,10 +1922,13 @@ export class EventAdminApp {
   cleanup() {
     if (typeof document !== "undefined") {
       document.removeEventListener("qa:participants-synced", this.handleParticipantSyncEvent);
+      document.removeEventListener("qa:selection-changed", this.handleParticipantSelectionBroadcast);
     }
     if (typeof window !== "undefined") {
       window.removeEventListener("beforeunload", this.cleanup);
     }
+    this.selectionListeners.clear();
+    this.eventListeners.clear();
   }
 
   revealEventSelectionCue() {
