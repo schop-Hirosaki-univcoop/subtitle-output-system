@@ -76,6 +76,7 @@ export class EventAdminApp {
     this.stageNote = "";
     this.lastParticipantsErrorMessage = "";
     this.participantSyncInfo = null;
+    this.lastParticipantSyncSignature = "";
     this.applyMetaNote();
   }
 
@@ -133,6 +134,7 @@ export class EventAdminApp {
     this.stageNote = "";
     this.lastParticipantsErrorMessage = "";
     this.forceSelectionBroadcast = true;
+    this.lastParticipantSyncSignature = "";
     this.updateParticipantToolDataset(null);
     this.applyMetaNote();
     this.applyEventsLoadingState();
@@ -645,6 +647,7 @@ export class EventAdminApp {
       this.lastToolContextSignature = "";
       this.lastToolContextApplied = false;
       this.pendingToolSync = false;
+      this.lastParticipantSyncSignature = "";
     } else {
       this.logParticipantAction("イベント選択は既に最新の状態です", {
         eventId: normalized || ""
@@ -678,6 +681,7 @@ export class EventAdminApp {
       this.pendingToolSync = false;
       this.lastToolContextSignature = "";
       this.lastToolContextApplied = false;
+      this.lastParticipantSyncSignature = "";
       this.logParticipantAction("利用可能な日程が見つからないため選択をクリアしました", {
         previousScheduleId: previousScheduleId || "",
         preferredScheduleId: preferredId || ""
@@ -841,6 +845,7 @@ export class EventAdminApp {
       this.lastToolContextSignature = "";
       this.lastToolContextApplied = false;
       this.pendingToolSync = false;
+      this.lastParticipantSyncSignature = "";
     } else {
       this.logParticipantAction("日程選択は既に最新の状態です", {
         scheduleId: normalized || ""
@@ -1135,6 +1140,29 @@ export class EventAdminApp {
     const detail = event.detail;
     const eventId = ensureString(detail.eventId);
     const scheduleId = ensureString(detail.scheduleId);
+    const normalizedTimestamp = Number(detail.timestamp) || 0;
+    const successFlag = detail.success !== false;
+    const normalizedReason = ensureString(detail.reason);
+    const normalizedError = ensureString(detail.error);
+    const participantCountValue = Number(detail.participantCount);
+    const normalizedParticipantCount = Number.isFinite(participantCountValue)
+      ? participantCountValue
+      : null;
+    const signaturePayload = {
+      eventId,
+      scheduleId,
+      success: successFlag,
+      participantCount: normalizedParticipantCount,
+      reason: normalizedReason,
+      error: normalizedError,
+      timestamp: normalizedTimestamp
+    };
+    const signature = JSON.stringify(signaturePayload);
+    if (signature && signature === this.lastParticipantSyncSignature) {
+      this.logParticipantAction("同一内容の同期イベントを受信したため既存の状態を維持します", signaturePayload);
+      return;
+    }
+    this.lastParticipantSyncSignature = signature;
     this.logParticipantAction("参加者ツールから同期イベントを受信しました", {
       eventId,
       scheduleId,
@@ -1155,7 +1183,7 @@ export class EventAdminApp {
       });
       return;
     }
-    const timestamp = Number(detail.timestamp) || Date.now();
+    const timestamp = normalizedTimestamp || Date.now();
     if (!eventId || !scheduleId) {
       if (!this.selectedEventId || !this.selectedScheduleId) {
         const message = this.selectedEventId
@@ -1167,18 +1195,28 @@ export class EventAdminApp {
           delete this.dom.participantsTool.dataset.syncedEventId;
           delete this.dom.participantsTool.dataset.syncedScheduleId;
           delete this.dom.participantsTool.dataset.syncedAt;
+          this.logParticipantAction("同期イベントに選択情報が含まれていないため同期済みメタ情報をクリアしました", {
+            eventId,
+            scheduleId
+          });
+        } else {
+          this.logParticipantAction("同期イベントに選択情報が含まれていないものの同期済みメタ情報を保持する要素が見つかりません", {
+            eventId,
+            scheduleId
+          });
         }
         this.logParticipantAction("同期イベントに選択情報が含まれていないため案内メッセージを表示しました", {
           eventId,
           scheduleId
         });
       }
+      this.lastParticipantSyncSignature = "";
       return;
     }
 
-    const success = detail.success !== false;
+    const success = successFlag;
     if (success) {
-      const participantCount = Number(detail.participantCount);
+      const participantCount = normalizedParticipantCount;
       const countText = Number.isFinite(participantCount) && participantCount >= 0 ? `参加者 ${participantCount}名` : "";
       let scheduleRange = ensureString(detail.scheduleRange);
       if (!scheduleRange) {
@@ -1212,6 +1250,11 @@ export class EventAdminApp {
         this.dom.participantsTool.dataset.syncedEventId = eventId;
         this.dom.participantsTool.dataset.syncedScheduleId = scheduleId;
         this.dom.participantsTool.dataset.syncedAt = String(timestamp);
+        this.logParticipantAction("参加者ツールの同期済みメタ情報を更新しました", {
+          syncedEventId: this.dom.participantsTool.dataset.syncedEventId,
+          syncedScheduleId: this.dom.participantsTool.dataset.syncedScheduleId,
+          syncedAt: this.dom.participantsTool.dataset.syncedAt
+        });
       }
       this.logParticipantAction("参加者ツールの同期完了イベントを処理しました", {
         eventId,
@@ -1238,6 +1281,7 @@ export class EventAdminApp {
         eventId,
         scheduleId
       });
+      this.lastParticipantSyncSignature = "";
       return;
     }
 
@@ -1262,6 +1306,16 @@ export class EventAdminApp {
       error: errorMessage || "",
       reason: reason || ""
     });
+    if (this.dom.participantsTool) {
+      delete this.dom.participantsTool.dataset.syncedEventId;
+      delete this.dom.participantsTool.dataset.syncedScheduleId;
+      delete this.dom.participantsTool.dataset.syncedAt;
+      this.logParticipantAction("エラーのため参加者ツールの同期済みメタ情報をクリアしました", {
+        eventId,
+        scheduleId
+      });
+    }
+    this.lastParticipantSyncSignature = "";
   }
 
   async handleParticipantSelectionBroadcast(event) {
@@ -1539,6 +1593,7 @@ export class EventAdminApp {
       delete tool.dataset.syncedScheduleId;
       delete tool.dataset.syncedAt;
       this.logParticipantAction("参加者ツールの期待コンテキストをクリアしました");
+      this.lastParticipantSyncSignature = "";
     };
     if (!context || !context.eventId || !context.scheduleId) {
       clear();
@@ -1575,6 +1630,7 @@ export class EventAdminApp {
           selectedEventId: event?.id || "",
           selectedScheduleId: schedule?.id || ""
         });
+        this.lastParticipantSyncSignature = "";
         return;
       }
       const eventLabel = event.name || event.id;
