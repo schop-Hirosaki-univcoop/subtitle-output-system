@@ -23,6 +23,23 @@ const TIME_FORMATTER = hasIntlDateTime
   ? new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false })
   : null;
 
+class FormValidationError extends Error {
+  constructor(message, { focus } = {}) {
+    super(message);
+    this.name = "FormValidationError";
+    this.focus = typeof focus === "function" ? focus : null;
+  }
+
+  invokeFocus() {
+    if (!this.focus) return;
+    try {
+      this.focus();
+    } catch (error) {
+      console.error("Failed to focus field after validation error", error);
+    }
+  }
+}
+
 function parseDateTimeValue(value) {
   if (!value) return null;
   const trimmed = String(value).trim();
@@ -281,7 +298,7 @@ export class QuestionFormApp {
     event.preventDefault();
     this.view.clearFeedback();
 
-    if (!this.state.context || !this.state.token) {
+    if (!this.hasValidContext()) {
       this.view.setFeedback("アクセス情報を確認できませんでした。リンクを再度開き直してください。", "error");
       return;
     }
@@ -291,76 +308,25 @@ export class QuestionFormApp {
       return;
     }
 
-    const sanitizedName = sanitizeRadioName(this.view.getRadioNameValue(), MAX_RADIO_NAME_LENGTH);
-    if (this.view.getRadioNameValue() !== sanitizedName) {
-      this.view.setRadioNameValue(sanitizedName);
-    }
-    if (!sanitizedName) {
-      const input = this.view.radioNameInput;
-      if (input && typeof input.setCustomValidity === "function") {
-        input.setCustomValidity("ラジオネームを入力してください。");
-        input.reportValidity();
-        input.setCustomValidity("");
+    let formData;
+    try {
+      formData = this.getSanitizedFormData();
+    } catch (error) {
+      if (error instanceof FormValidationError) {
+        error.invokeFocus();
+        this.view.setFeedback(error.message, "error");
+        return;
       }
-      this.view.focusRadioName();
-      this.view.setFeedback("ラジオネームを入力してください。", "error");
-      return;
+      throw error;
     }
 
-    const normalizedQuestion = normalizeMultiline(this.view.getQuestionValue()).trim();
-    if (this.view.getQuestionValue() !== normalizedQuestion) {
-      this.view.setQuestionValue(normalizedQuestion);
-    }
-    const questionLength = countGraphemes(normalizedQuestion);
-
-    if (!questionLength) {
-      this.view.setFeedback("質問内容を入力してください。", "error");
-      this.view.focusQuestion();
-      return;
-    }
-    if (questionLength > MAX_QUESTION_LENGTH) {
-      this.view.setFeedback(`質問は${MAX_QUESTION_LENGTH}文字以内で入力してください。`, "error");
-      this.view.focusQuestion();
-      return;
-    }
-
-    const genre = this.view.getSelectedGenre();
-    if (!genre) {
-      this.view.setFeedback("ジャンルを選択してください。", "error");
-      this.view.focusGenre();
-      return;
-    }
-    if (!GENRE_OPTIONS.includes(genre)) {
-      this.view.setFeedback("ジャンルの選択が正しくありません。", "error");
-      return;
-    }
-
-    if (this.state.submittingController) {
-      this.state.submittingController.abort();
-    }
-
-    const controller = new AbortController();
-    this.state.submittingController = controller;
+    const controller = this.resetSubmissionController();
     this.setFormBusy(true);
     this.view.setFeedback("送信中です…");
 
     try {
-      const result = await this.submitQuestion(controller, {
-        radioName: sanitizedName,
-        question: normalizedQuestion,
-        questionLength,
-        genre
-      });
-      if (result?.queueProcessed) {
-        this.view.setFeedback("送信しました。ありがとうございました！", "success");
-      } else {
-        this.view.setFeedback("送信しました。反映まで数秒かかる場合があります。", "success");
-      }
-      this.view.setQuestionValue("");
-      this.view.resetGenreSelection();
-      this.updateQuestionCounter();
-      this.view.focusQuestion();
-      this.state.dirty = false;
+      const result = await this.submitQuestion(controller, formData);
+      this.handleSubmitSuccess(result);
     } catch (error) {
       if (error.name === "AbortError") {
         return;
@@ -375,12 +341,82 @@ export class QuestionFormApp {
     }
   }
 
-  async submitQuestion(controller, { radioName, question, questionLength, genre }) {
-    if (controller?.signal?.aborted) {
-      const error = new DOMException("Aborted", "AbortError");
-      throw error;
+  hasValidContext() {
+    return Boolean(this.state.context && this.state.token);
+  }
+
+  getSanitizedFormData() {
+    const sanitizedName = sanitizeRadioName(this.view.getRadioNameValue(), MAX_RADIO_NAME_LENGTH);
+    if (this.view.getRadioNameValue() !== sanitizedName) {
+      this.view.setRadioNameValue(sanitizedName);
+    }
+    if (!sanitizedName) {
+      const input = this.view.radioNameInput;
+      if (input && typeof input.setCustomValidity === "function") {
+        input.setCustomValidity("ラジオネームを入力してください。");
+        input.reportValidity();
+        input.setCustomValidity("");
+      }
+      throw new FormValidationError("ラジオネームを入力してください。", {
+        focus: () => this.view.focusRadioName()
+      });
     }
 
+    const normalizedQuestion = normalizeMultiline(this.view.getQuestionValue()).trim();
+    if (this.view.getQuestionValue() !== normalizedQuestion) {
+      this.view.setQuestionValue(normalizedQuestion);
+    }
+
+    const questionLength = countGraphemes(normalizedQuestion);
+    this.updateQuestionCounter();
+
+    if (!questionLength) {
+      throw new FormValidationError("質問内容を入力してください。", {
+        focus: () => this.view.focusQuestion()
+      });
+    }
+    if (questionLength > MAX_QUESTION_LENGTH) {
+      throw new FormValidationError(`質問は${MAX_QUESTION_LENGTH}文字以内で入力してください。`, {
+        focus: () => this.view.focusQuestion()
+      });
+    }
+
+    const genre = this.view.getSelectedGenre();
+    if (!genre) {
+      throw new FormValidationError("ジャンルを選択してください。", {
+        focus: () => this.view.focusGenre()
+      });
+    }
+    if (!GENRE_OPTIONS.includes(genre)) {
+      throw new FormValidationError("ジャンルの選択が正しくありません。");
+    }
+
+    return { radioName: sanitizedName, question: normalizedQuestion, questionLength, genre };
+  }
+
+  resetSubmissionController() {
+    if (this.state.submittingController) {
+      this.state.submittingController.abort();
+    }
+    const controller = new AbortController();
+    this.state.submittingController = controller;
+    return controller;
+  }
+
+  handleSubmitSuccess(result) {
+    if (result?.queueProcessed) {
+      this.view.setFeedback("送信しました。ありがとうございました！", "success");
+    } else {
+      this.view.setFeedback("送信しました。反映まで数秒かかる場合があります。", "success");
+    }
+    this.view.setQuestionValue("");
+    this.view.resetGenreSelection();
+    this.updateQuestionCounter();
+    this.view.focusQuestion();
+    this.state.dirty = false;
+  }
+
+  createSubmissionData({ radioName, question, questionLength, genre }) {
     const token = this.state.token;
     if (!token) {
       throw new Error("アクセス情報が無効です。配布されたリンクからアクセスし直してください。");
@@ -428,6 +464,17 @@ export class QuestionFormApp {
       acc[key] = String(value);
       return acc;
     }, {});
+
+    return { token, submission };
+  }
+
+  async submitQuestion(controller, formData) {
+    if (controller?.signal?.aborted) {
+      const error = new DOMException("Aborted", "AbortError");
+      throw error;
+    }
+
+    const { token, submission } = this.createSubmissionData(formData);
 
     if (controller?.signal?.aborted) {
       const error = new DOMException("Aborted", "AbortError");
