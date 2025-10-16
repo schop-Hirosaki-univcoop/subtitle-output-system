@@ -18,7 +18,11 @@ import { createApiClient } from "./api-client.js";
 import { showToast } from "./toast.js";
 import * as Questions from "./questions.js";
 import { resolveGenreLabel } from "./utils.js";
-import { bindModuleMethods } from "./module-registry.js";
+import * as Dictionary from "./dictionary.js";
+import * as Logs from "./logs.js";
+import * as Display from "./display.js";
+import * as Dialog from "./dialog.js";
+import * as Loader from "./loader.js";
 
 const DOM_EVENT_BINDINGS = [
   { element: "loginButton", type: "click", handler: "login", guard: (app) => !app.isEmbedded },
@@ -49,6 +53,89 @@ const ACTION_BUTTON_BINDINGS = [
   { index: 1, handler: "handleUnanswer" },
   { index: 2, handler: "handleEdit" }
 ];
+
+const MODULE_METHOD_GROUPS = [
+  {
+    module: Dictionary,
+    methods: [
+      "fetchDictionary",
+      "applyInitialDictionaryState",
+      "toggleDictionaryDrawer",
+      "addTerm"
+    ]
+  },
+  {
+    module: Logs,
+    methods: [
+      "fetchLogs",
+      "renderLogs",
+      "applyLogFilters",
+      "renderLogsStream",
+      "applyInitialLogsState",
+      "toggleLogsDrawer",
+      "startLogsUpdateMonitor"
+    ]
+  },
+  {
+    module: Questions,
+    methods: [
+      "renderQuestions",
+      "updateScheduleContext",
+      "switchSubTab",
+      "switchGenre",
+      "handleDisplay",
+      "handleUnanswer",
+      "handleSelectAll",
+      "handleBatchUnanswer",
+      "clearTelop",
+      "updateActionAvailability",
+      "updateBatchButtonVisibility",
+      "syncSelectAllState"
+    ]
+  },
+  {
+    module: Display,
+    methods: ["handleRenderUpdate", "redrawUpdatedAt", "refreshStaleness"]
+  },
+  {
+    module: Dialog,
+    methods: [
+      "openDialog",
+      "closeEditDialog",
+      "handleDialogKeydown",
+      "handleEdit",
+      "handleEditSubmit"
+    ]
+  },
+  {
+    module: Loader,
+    methods: [
+      "showLoader",
+      "updateLoader",
+      "hideLoader",
+      "initLoaderSteps",
+      "setLoaderStep",
+      "finishLoaderSteps"
+    ]
+  }
+];
+
+function bindModuleMethods(app) {
+  MODULE_METHOD_GROUPS.forEach(({ module, methods }) => {
+    methods.forEach((methodName) => {
+      const implementation = module?.[methodName];
+      if (typeof implementation !== "function") {
+        throw new Error(`Missing method "${methodName}" on module.`);
+      }
+      Object.defineProperty(app, methodName, {
+        configurable: true,
+        enumerable: false,
+        writable: true,
+        value: (...args) => implementation(app, ...args)
+      });
+    });
+  });
+}
 
 function bindDomEvents(app) {
   DOM_EVENT_BINDINGS.forEach(({ element, type, handler, guard }) => {
