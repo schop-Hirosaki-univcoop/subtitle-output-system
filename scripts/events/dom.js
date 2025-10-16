@@ -50,14 +50,12 @@ export function queryDom() {
     confirmDialogMessage: document.getElementById("flow-confirm-dialog-message"),
     confirmAcceptButton: document.getElementById("flow-confirm-accept-button"),
     confirmCancelButton: document.getElementById("flow-confirm-cancel-button"),
-    participantsPanel: document.getElementById("flow-panel-participants"),
-    operatorPanel: document.getElementById("flow-panel-operator"),
-    dictionaryPanel: document.getElementById("op-dictionary-panel"),
-    logsPanel: document.getElementById("op-logs-panel"),
+    participantsPanel: document.querySelector('[data-panel="participants"]'),
+    operatorPanel: document.querySelector('[data-panel="operator"]'),
+    dictionaryPanel: document.querySelector('[data-panel="dictionary"]'),
+    logsPanel: document.querySelector('[data-panel="logs"]'),
     participantsTool: document.getElementById("participants-tool"),
     operatorTool: document.getElementById("operator-tool"),
-    panelButtons: Array.from(document.querySelectorAll("[data-panel-target]")),
-    navigationButtons: Array.from(document.querySelectorAll("[data-flow-nav-target]")),
-    flowNavigations: Array.from(document.querySelectorAll(".flow-navigation"))
+    panelButtons: Array.from(document.querySelectorAll("[data-panel-target]"))
   };
 }
