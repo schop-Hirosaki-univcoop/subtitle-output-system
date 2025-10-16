@@ -93,13 +93,27 @@ function resolveEmbedReady() {
 
 function getElementById(id) {
   const prefix = getEmbedPrefix();
+  const candidates = [];
+
   if (prefix) {
-    const prefixed = document.getElementById(`${prefix}${id}`);
-    if (prefixed) {
-      return prefixed;
+    candidates.push(`${prefix}${id}`);
+  }
+
+  candidates.push(id);
+
+  if (!prefix) {
+    candidates.push(`qa-${id}`);
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const element = document.getElementById(candidate);
+    if (element) {
+      return element;
     }
   }
-  return document.getElementById(id);
+
+  return null;
 }
 import {
   normalizeEventParticipantCache,
