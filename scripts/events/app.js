@@ -2069,10 +2069,12 @@ export class EventAdminApp {
         button.removeAttribute("aria-current");
       }
     });
+    const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
+    const shouldHideNavigation = hasActiveSidebar || activeConfig.stage === "tabs";
     const navigations = this.dom.flowNavigations || [];
     navigations.forEach((nav) => {
       if (!nav) return;
-      if (hasActiveSidebar) {
+      if (shouldHideNavigation) {
         nav.setAttribute("hidden", "");
       } else {
         nav.removeAttribute("hidden");
