@@ -1467,11 +1467,28 @@ async function loadParticipants(options = {}) {
   }
 }
 
-function selectEvent(eventId) {
+function selectEvent(eventId, options = {}) {
+  const {
+    nextScheduleId = null,
+    skipContextUpdate = false,
+    skipParticipantLoad = false
+  } = options || {};
+
   const previousEventId = state.selectedEventId;
-  if (previousEventId === eventId) return;
+  const preservingScheduleId = nextScheduleId ? String(nextScheduleId) : null;
+
+  if (previousEventId === eventId) {
+    if (preservingScheduleId && state.selectedScheduleId !== preservingScheduleId) {
+      state.selectedScheduleId = preservingScheduleId;
+    }
+    if (!skipContextUpdate) {
+      updateParticipantContext({ preserveStatus: Boolean(preservingScheduleId) });
+    }
+    return;
+  }
+
   state.selectedEventId = eventId;
-  state.selectedScheduleId = null;
+  state.selectedScheduleId = preservingScheduleId;
   setCalendarPickedDate("", { updateInput: true });
   state.participants = [];
   state.participantTokenMap = new Map();
@@ -1484,28 +1501,64 @@ function selectEvent(eventId) {
   }
   renderEvents();
   renderSchedules();
-  updateParticipantContext();
-  loadParticipants().catch(err => console.error(err));
+  renderParticipants();
+
+  if (!skipContextUpdate) {
+    updateParticipantContext({ preserveStatus: Boolean(preservingScheduleId) });
+  } else {
+    syncTemplateButtons();
+    syncClearButtonState();
+  }
+
+  if (!skipParticipantLoad && !preservingScheduleId) {
+    loadParticipants().catch(err => console.error(err));
+  }
 }
 
-function selectSchedule(scheduleId) {
-  if (state.selectedScheduleId === scheduleId) {
-    updateParticipantContext();
-    return;
-  }
-  state.selectedScheduleId = scheduleId;
+function selectSchedule(scheduleId, options = {}) {
+  const {
+    preserveStatus = false,
+    suppressParticipantLoad = false,
+    forceReload = false
+  } = options || {};
+
+  const normalizedId = scheduleId ? String(scheduleId) : null;
+  const previousScheduleId = state.selectedScheduleId;
+  const shouldReload = forceReload || previousScheduleId !== normalizedId;
+
+  state.selectedScheduleId = normalizedId;
+
   const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
-  const schedule = selectedEvent?.schedules?.find(s => s.id === scheduleId);
+  const schedule = normalizedId ? selectedEvent?.schedules?.find(s => s.id === normalizedId) : null;
   if (schedule) {
     const primaryDate = getSchedulePrimaryDate(schedule);
     if (primaryDate) {
       setCalendarPickedDate(formatDatePart(primaryDate), { updateInput: true });
     }
+  } else if (!normalizedId) {
+    setCalendarPickedDate("", { updateInput: true });
   }
+
   renderSchedules();
-  updateParticipantContext();
-  state.savedParticipants = [];
-  loadParticipants().catch(err => console.error(err));
+
+  if (!normalizedId) {
+    state.participants = [];
+    state.savedParticipants = snapshotParticipantList([]);
+    state.participantTokenMap = new Map();
+    state.lastSavedSignature = "";
+    state.duplicateMatches = new Map();
+    state.duplicateGroups = new Map();
+    renderParticipants();
+    syncSaveButtonState();
+  } else if (shouldReload) {
+    state.savedParticipants = [];
+  }
+
+  updateParticipantContext({ preserveStatus });
+
+  if (normalizedId && shouldReload && !suppressParticipantLoad) {
+    loadParticipants().catch(err => console.error(err));
+  }
 }
 
 function resolveScheduleFormValues({ label, date, startTime, endTime }) {
@@ -3174,7 +3227,19 @@ async function applySelectionContext(selection = {}) {
       await loadEvents({ preserveSelection: true });
     }
 
-    if (state.selectedEventId !== trimmedEventId) {
+    const previousEventId = state.selectedEventId;
+    const previousScheduleId = state.selectedScheduleId;
+    const eventChanged = previousEventId !== trimmedEventId;
+    const shouldReloadSchedule = Boolean(trimmedScheduleId)
+      ? eventChanged || previousScheduleId !== trimmedScheduleId
+      : false;
+
+    if (eventChanged) {
+      selectEvent(trimmedEventId, {
+        nextScheduleId: trimmedScheduleId || null,
+        skipParticipantLoad: Boolean(trimmedScheduleId)
+      });
+    } else if (!trimmedScheduleId) {
       selectEvent(trimmedEventId);
     }
 
@@ -3214,7 +3279,10 @@ async function applySelectionContext(selection = {}) {
         effectiveStartAt = override.startAt;
         effectiveEndAt = override.endAt;
       }
-      selectSchedule(trimmedScheduleId);
+      selectSchedule(trimmedScheduleId, {
+        forceReload: shouldReloadSchedule,
+        preserveStatus: !shouldReloadSchedule
+      });
     } else {
       updateParticipantContext({ preserveStatus: true });
     }
