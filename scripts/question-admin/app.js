@@ -1694,8 +1694,10 @@ async function loadParticipants(options = {}) {
     const scheduleBranch = eventBranch && typeof eventBranch[scheduleId] === "object"
       ? eventBranch[scheduleId]
       : {};
-    const normalized = Object.values(scheduleBranch)
-      .map(normalizeParticipantRecord)
+    const normalized = Object.entries(scheduleBranch)
+      .map(([participantKey, participantValue]) =>
+        normalizeParticipantRecord(participantValue, participantKey)
+      )
       .filter(entry => entry.participantId);
 
     let participants = sortParticipants(normalized);

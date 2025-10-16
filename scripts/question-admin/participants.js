@@ -101,9 +101,9 @@ function normalizeEventParticipantCache(eventBranch) {
       cache[String(scheduleId)] = [];
       return;
     }
-    const normalized = Object.values(scheduleBranch).map(entry => ensureRowKey({
-      key: String(entry?.participantId || entry?.id || ""),
-      participantId: String(entry?.participantId || entry?.id || ""),
+    const normalized = Object.entries(scheduleBranch).map(([participantKey, entry]) => ensureRowKey({
+      key: String(entry?.participantId || entry?.id || participantKey || ""),
+      participantId: String(entry?.participantId || entry?.id || participantKey || ""),
       name: String(entry?.name || ""),
       department: String(entry?.department || entry?.groupNumber || ""),
       groupNumber: String(entry?.groupNumber || entry?.teamNumber || ""),
@@ -469,8 +469,8 @@ function applyAssignmentsToEventCache(eventId, assignmentMap) {
   return matchedIds;
 }
 
-function normalizeParticipantRecord(entry) {
-  const participantId = String(entry?.participantId || entry?.id || "");
+function normalizeParticipantRecord(entry, fallbackId = "") {
+  const participantId = String(entry?.participantId || entry?.id || fallbackId || "");
   const name = String(entry?.name || "");
   const phonetic = String(entry?.phonetic || entry?.furigana || "");
   const gender = String(entry?.gender || "");
