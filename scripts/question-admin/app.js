@@ -63,10 +63,18 @@ const HOST_SELECTION_ATTRIBUTE_KEYS = [
   "data-expected-end-at"
 ];
 
-const UPLOAD_STATUS_PLACEHOLDERS = new Set([
-  "日程を選択してください。",
-  "イベントコントロールセンターで対象の日程を選択してください。"
-]);
+const UPLOAD_STATUS_PLACEHOLDERS = new Set(
+  [
+    "日程を選択してください。",
+    "イベントコントロールセンターで対象の日程を選択してください。"
+  ].map(normalizeKey)
+);
+
+function getMissingSelectionStatusMessage() {
+  return isEmbeddedMode()
+    ? "イベントコントロールセンターで対象の日程を選択してください。"
+    : "日程を選択してください。";
+}
 
 function getMissingSelectionStatusMessage() {
   return isEmbeddedMode()
@@ -589,6 +597,10 @@ async function requestSheetSync({ suppressError = true } = {}) {
 }
 
 function setUploadStatus(message, variant = "") {
+  const normalized = normalizeKey(message);
+  if (normalized && UPLOAD_STATUS_PLACEHOLDERS.has(normalized)) {
+    message = getMissingSelectionStatusMessage();
+  }
   state.lastUploadStatusMessage = message;
   state.lastUploadStatusVariant = variant || "";
   if (!dom.uploadStatus) return;
