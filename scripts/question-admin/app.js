@@ -76,10 +76,14 @@ function getMissingSelectionStatusMessage() {
     : "日程を選択してください。";
 }
 
-function getMissingSelectionStatusMessage() {
-  return isEmbeddedMode()
+function getSelectionRequiredMessage(prefix = "") {
+  const requirement = isEmbeddedMode()
     ? "イベントコントロールセンターで対象の日程を選択してください。"
-    : "日程を選択してください。";
+    : "イベントと日程を選択してください。";
+  if (!prefix) {
+    return requirement;
+  }
+  return `${prefix}${requirement}`;
 }
 
 const hostSelectionBridge = {
@@ -2243,7 +2247,7 @@ async function handleCsvChange(event) {
 
   try {
     if (!eventId || !scheduleId) {
-      throw new Error("イベントと日程を選択してください。");
+      throw new Error(getSelectionRequiredMessage());
     }
 
     const expectedName = buildParticipantCsvFilename(eventId, scheduleId);
@@ -2326,7 +2330,7 @@ async function handleTeamCsvChange(event) {
 
   try {
     if (!eventId || !scheduleId) {
-      throw new Error("イベントと日程を選択してください。");
+      throw new Error(getSelectionRequiredMessage());
     }
 
     const expectedName = buildTeamCsvFilename(eventId, scheduleId);
@@ -2383,7 +2387,7 @@ async function handleTeamCsvChange(event) {
 function downloadParticipantTemplate() {
   const { eventId, scheduleId } = getSelectionIdentifiers();
   if (!eventId || !scheduleId) {
-    setUploadStatus("参加者CSVテンプレートを作成するにはイベントと日程を選択してください。", "error");
+    setUploadStatus(getSelectionRequiredMessage("参加者CSVテンプレートを作成するには"), "error");
     return;
   }
 
@@ -2395,7 +2399,7 @@ function downloadParticipantTemplate() {
 function downloadTeamTemplate() {
   const { eventId, scheduleId } = getSelectionIdentifiers();
   if (!eventId || !scheduleId) {
-    setUploadStatus("班番号テンプレートを作成するにはイベントと日程を選択してください。", "error");
+    setUploadStatus(getSelectionRequiredMessage("班番号テンプレートを作成するには"), "error");
     return;
   }
 
@@ -2595,7 +2599,7 @@ async function handleClearParticipants() {
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) {
-    setUploadStatus("イベントと日程を選択してください。", "error");
+    setUploadStatus(getSelectionRequiredMessage(), "error");
     return;
   }
 
