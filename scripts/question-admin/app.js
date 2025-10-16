@@ -162,6 +162,8 @@ function finalizeEventLoad({
 
   let selectionNotice = null;
 
+  let initialSelectionSatisfied = false;
+
   if (!state.initialSelectionApplied && state.initialSelection?.eventId) {
     const {
       eventId,
@@ -201,14 +203,17 @@ function finalizeEventLoad({
       } else {
         state.selectedScheduleId = null;
       }
+      initialSelectionSatisfied = true;
     } else {
       state.selectedEventId = null;
       state.selectedScheduleId = null;
       const label = eventLabel || eventId;
       selectionNotice = `指定されたイベント「${label}」が見つかりません。`;
     }
-    state.initialSelectionApplied = true;
-    state.initialSelection = null;
+    state.initialSelectionApplied = initialSelectionSatisfied;
+    if (initialSelectionSatisfied) {
+      state.initialSelection = null;
+    }
   } else if (preserveSelection && previousEventId && state.events.some(evt => evt.id === previousEventId)) {
     state.selectedEventId = previousEventId;
     if (previousScheduleId) {
