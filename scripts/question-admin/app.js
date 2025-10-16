@@ -70,6 +70,9 @@ const UPLOAD_STATUS_PLACEHOLDERS = new Set(
   ].map(normalizeKey)
 );
 
+const PARTICIPANT_DESCRIPTION_DEFAULT = "イベントコントロールセンター（events.html）のフローで日程を選択してこのページを開くと、参加者情報（CSVの列順はテンプレートをご利用ください。参加者ID列は不要で、読み込み時に自動採番されます）をアップロードして管理できます。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。";
+const PARTICIPANT_CONTEXT_DEFAULT = "イベントと日程を選択すると、該当する参加者リストがここに表示されます。";
+
 function getMissingSelectionStatusMessage() {
   return isEmbeddedMode()
     ? "イベントコントロールセンターで対象の日程を選択してください。"
@@ -1018,17 +1021,30 @@ function renderParticipants() {
     const changeKey = participantChangeKey(entry, index);
     const changeInfo = changeInfoByKey.get(changeKey);
     const idTd = document.createElement("td");
+    idTd.className = "participant-id-cell numeric-cell";
     applyParticipantIdText(idTd, entry.participantId);
     const nameTd = document.createElement("td");
-    nameTd.textContent = entry.name;
-    const phoneticTd = document.createElement("td");
-    phoneticTd.textContent = entry.phonetic || entry.furigana || "";
+    nameTd.className = "participant-name-cell";
+    const nameWrapper = document.createElement("span");
+    nameWrapper.className = "participant-name";
+    const phoneticText = entry.phonetic || entry.furigana || "";
+    if (phoneticText) {
+      const phoneticSpan = document.createElement("span");
+      phoneticSpan.className = "participant-name__phonetic";
+      phoneticSpan.textContent = phoneticText;
+      nameWrapper.appendChild(phoneticSpan);
+    }
+    const fullNameSpan = document.createElement("span");
+    fullNameSpan.className = "participant-name__text";
+    fullNameSpan.textContent = entry.name || "";
+    nameWrapper.appendChild(fullNameSpan);
+    nameTd.appendChild(nameWrapper);
     const genderTd = document.createElement("td");
     genderTd.textContent = entry.gender || "";
     const departmentTd = document.createElement("td");
     departmentTd.textContent = entry.department || entry.groupNumber || "";
     const teamTd = document.createElement("td");
-    teamTd.className = "team-cell";
+    teamTd.className = "team-cell numeric-cell";
     teamTd.textContent = entry.teamNumber || entry.groupNumber || "";
     const linkTd = document.createElement("td");
     linkTd.className = "link-cell";
@@ -1037,7 +1053,7 @@ function renderParticipants() {
 
     const editButton = document.createElement("button");
     editButton.type = "button";
-    editButton.className = "edit-link-btn";
+    editButton.className = "link-action-btn edit-link-btn";
     editButton.dataset.participantId = entry.participantId;
     if (entry.rowKey) {
       editButton.dataset.rowKey = entry.rowKey;
@@ -1049,7 +1065,7 @@ function renderParticipants() {
       shareUrl = createShareUrl(entry.token);
       const copyButton = document.createElement("button");
       copyButton.type = "button";
-      copyButton.className = "copy-link-btn";
+      copyButton.className = "link-action-btn copy-link-btn";
       copyButton.dataset.token = entry.token;
       copyButton.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M6.25 1.75A2.25 2.25 0 0 0 4 4v7A2.25 2.25 0 0 0 6.25 13.25h4A2.25 2.25 0 0 0 12.5 11V4A2.25 2.25 0 0 0 10.25 1.75h-4Zm0 1.5h4c.414 0 .75.336.75.75v7c0 .414-.336.75-.75.75h-4a.75.75 0 0 1-.75-.75V4c0-.414.336-.75.75-.75ZM3 4.75A.75.75 0 0 0 2.25 5.5v7A2.25 2.25 0 0 0 4.5 14.75h4a.75.75 0 0 0 0-1.5h-4a.75.75 0 0 1-.75-.75v-7A.75.75 0 0 0 3 4.75Z\" fill=\"currentColor\"/></svg><span>コピー</span>";
       linkActions.appendChild(copyButton);
@@ -1063,7 +1079,7 @@ function renderParticipants() {
     linkActions.appendChild(editButton);
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
-    deleteButton.className = "delete-link-btn";
+    deleteButton.className = "link-action-btn delete-link-btn";
     deleteButton.dataset.participantId = entry.participantId;
     if (entry.rowKey) {
       deleteButton.dataset.rowKey = entry.rowKey;
@@ -1140,7 +1156,7 @@ function renderParticipants() {
       nameTd.append(" ", chip);
     }
 
-    tr.append(idTd, nameTd, phoneticTd, genderTd, departmentTd, teamTd, linkTd);
+    tr.append(idTd, nameTd, genderTd, departmentTd, teamTd, linkTd);
     tbody.appendChild(tr);
   });
 
@@ -1526,12 +1542,13 @@ function updateParticipantContext(options = {}) {
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   const shouldPreserveStatus = preserveStatus && !isPlaceholderUploadStatus();
+  const descriptionTarget = dom.participantDescriptionMain || dom.participantDescription;
   if (!eventId || !scheduleId) {
-    if (dom.participantContext) {
-      dom.participantContext.textContent = "日程を選択すると、現在登録されている参加者が表示されます。";
+    if (descriptionTarget) {
+      descriptionTarget.textContent = PARTICIPANT_DESCRIPTION_DEFAULT;
     }
-    if (dom.participantDescription) {
-      dom.participantDescription.textContent = "日程を選択し、参加者ID・名前・フリガナ・性別・学部学科・携帯電話・メールアドレスを含むCSVをアップロードしてください（連絡先は編集ダイアログでのみ表示されます）。保存後は各参加者ごとに専用リンクを発行できます。";
+    if (dom.participantContext) {
+      dom.participantContext.textContent = PARTICIPANT_CONTEXT_DEFAULT;
     }
     if (dom.saveButton) dom.saveButton.disabled = true;
     if (dom.csvInput) {
@@ -1561,6 +1578,9 @@ function updateParticipantContext(options = {}) {
 
   if (dom.csvInput) dom.csvInput.disabled = false;
   if (dom.teamCsvInput) dom.teamCsvInput.disabled = false;
+  if (descriptionTarget) {
+    descriptionTarget.textContent = PARTICIPANT_DESCRIPTION_DEFAULT;
+  }
   if (dom.participantContext) {
     const scheduleLabel = selectedSchedule?.label || override?.scheduleLabel || scheduleId || "";
     const scheduleRange = selectedSchedule

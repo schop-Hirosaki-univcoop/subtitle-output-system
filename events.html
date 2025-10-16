@@ -141,13 +141,18 @@
                     <section class="module module--primary admin-module" aria-labelledby="qa-participant-title">
                       <div class="module-header">
                         <div class="module-heading">
-                          <h2 id="qa-participant-title">参加者リストの管理</h2>
-                          <p class="module-description" id="qa-participant-description">イベントコントロールセンター（events.html）のフローで日程を選択してこのページを開くと、参加者情報（CSVの列順はテンプレートをご利用ください。参加者ID列は不要で、読み込み時に自動採番されます）をアップロードして管理できます。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。</p>
+                          <div class="module-title-row">
+                            <h2 id="qa-participant-title">参加者リストの管理</h2>
+                            <span id="qa-upload-status" class="status-pill status-pill--inline">イベントコントロールセンターで対象の日程を選択してください。</span>
+                          </div>
+                          <p class="module-description" id="qa-participant-description">
+                            <span id="qa-participant-description-main">イベントコントロールセンター（events.html）のフローで日程を選択してこのページを開くと、参加者情報（CSVの列順はテンプレートをご利用ください。参加者ID列は不要で、読み込み時に自動採番されます）をアップロードして管理できます。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。</span>
+                            <span id="qa-participant-context" class="description-context">イベントと日程を選択すると、該当する参加者リストがここに表示されます。</span>
+                          </p>
                         </div>
                         <div class="module-actions"></div>
                       </div>
                       <div class="module-body">
-                        <p id="qa-participant-context" class="admin-context">イベントと日程を選択すると、該当する参加者リストがここに表示されます。</p>
                         <div class="admin-controls">
                           <button id="qa-download-participant-template" class="btn btn-ghost btn-sm" type="button">参加者CSVテンプレート</button>
                           <label class="btn btn-ghost file-input" for="qa-csv-input">
@@ -162,7 +167,6 @@
                           <button id="qa-clear-participants-button" class="btn btn-danger btn-sm" type="button" disabled>参加者リストを全削除</button>
                           <button id="qa-discard-button" class="btn btn-ghost btn-sm" type="button" disabled>変更を取り消す</button>
                           <button id="qa-save-button" class="btn btn-primary" type="button" disabled>参加者リストを保存</button>
-                          <span id="qa-upload-status" class="status-pill">イベントコントロールセンターで対象の日程を選択してください。</span>
                         </div>
                         <div id="qa-change-preview" class="change-preview" hidden aria-live="polite">
                           <div class="change-preview__header">
@@ -177,12 +181,11 @@
                           <table class="mapping-table" aria-describedby="qa-participant-description">
                             <thead>
                               <tr>
-                                <th scope="col">参加者ID</th>
-                                <th scope="col">氏名 / ラジオネーム</th>
-                                <th scope="col">フリガナ</th>
+                                <th scope="col" class="is-numeric">参加者ID</th>
+                                <th scope="col">氏名</th>
                                 <th scope="col">性別</th>
                                 <th scope="col">学部学科</th>
-                                <th scope="col">班番号</th>
+                                <th scope="col" class="is-numeric">班番号</th>
                                 <th scope="col">専用リンク</th>
                               </tr>
                             </thead>
