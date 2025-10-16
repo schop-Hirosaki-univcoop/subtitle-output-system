@@ -70,8 +70,7 @@ const UPLOAD_STATUS_PLACEHOLDERS = new Set(
   ].map(normalizeKey)
 );
 
-const PARTICIPANT_DESCRIPTION_DEFAULT = "イベントコントロールセンター（events.html）のフローで日程を選択してこのページを開くと、参加者情報（CSVの列順はテンプレートをご利用ください。参加者ID列は不要で、読み込み時に自動採番されます）をアップロードして管理できます。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。";
-const PARTICIPANT_CONTEXT_DEFAULT = "イベントと日程を選択すると、該当する参加者リストがここに表示されます。";
+const PARTICIPANT_DESCRIPTION_DEFAULT = "イベントコントロールセンター（events.html）のフローで日程を選択してこのページを開くと、参加者情報（CSVの列順はテンプレートをご利用ください。参加者ID列は不要で、読み込み時に自動採番されます）をアップロードして管理できます。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。専用リンクは各行のボタンまたはURLから取得できます。";
 
 function getMissingSelectionStatusMessage() {
   return isEmbeddedMode()
@@ -1547,9 +1546,6 @@ function updateParticipantContext(options = {}) {
     if (descriptionTarget) {
       descriptionTarget.textContent = PARTICIPANT_DESCRIPTION_DEFAULT;
     }
-    if (dom.participantContext) {
-      dom.participantContext.textContent = PARTICIPANT_CONTEXT_DEFAULT;
-    }
     if (dom.saveButton) dom.saveButton.disabled = true;
     if (dom.csvInput) {
       dom.csvInput.disabled = true;
@@ -1581,25 +1577,8 @@ function updateParticipantContext(options = {}) {
   if (descriptionTarget) {
     descriptionTarget.textContent = PARTICIPANT_DESCRIPTION_DEFAULT;
   }
-  if (dom.participantContext) {
-    const scheduleLabel = selectedSchedule?.label || override?.scheduleLabel || scheduleId || "";
-    const scheduleRange = selectedSchedule
-      ? describeScheduleRange(selectedSchedule)
-      : override
-        ? describeScheduleRange({
-          id: scheduleId,
-          label: scheduleLabel,
-          startAt: override.startAt || "",
-          endAt: override.endAt || "",
-          date: override.date || (override.startAt ? String(override.startAt).slice(0, 10) : "")
-        })
-        : "";
-    if (state.scheduleContextOverrides instanceof Map && override && selectedSchedule) {
-      state.scheduleContextOverrides.delete(overrideKey);
-    }
-    const rangeSuffix = scheduleRange ? `（${scheduleRange}）` : "";
-    const eventName = selectedEvent?.name || override?.eventName || eventId;
-    dom.participantContext.textContent = `イベント「${eventName}」/ 日程「${scheduleLabel}」${rangeSuffix}の参加者を管理しています。上部のタブからテロップ操作パネルに切り替え可能です。専用リンクは各行のボタンまたはURLから取得できます。`;
+  if (state.scheduleContextOverrides instanceof Map && override && selectedSchedule) {
+    state.scheduleContextOverrides.delete(overrideKey);
   }
   if (!shouldPreserveStatus) {
     setUploadStatus("ファイルを選択して参加者リストを更新してください。");
@@ -2850,7 +2829,7 @@ function resolveFocusTargetElement(target) {
 
   switch (target) {
     case "participants":
-      return getElementById("participant-title") || dom.participantContext || null;
+      return getElementById("participant-title") || dom.participantDescription || null;
     case "schedules":
       return getElementById("schedule-title") || dom.scheduleDescription || null;
     case "events":

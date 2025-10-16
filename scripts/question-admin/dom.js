@@ -64,7 +64,6 @@ const dom = {
   scheduleList: resolve("schedule-list"),
   scheduleEmpty: resolve("schedule-empty"),
   scheduleDescription: resolve("schedule-description"),
-  participantContext: resolve("participant-context"),
   participantDescription: resolve("participant-description"),
   participantDescriptionMain: resolve("participant-description-main"),
   downloadParticipantTemplateButton: resolve("download-participant-template"),
