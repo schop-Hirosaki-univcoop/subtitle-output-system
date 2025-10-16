@@ -79,6 +79,16 @@ export class EventAdminApp {
     this.applyMetaNote();
   }
 
+  logParticipantAction(message, detail = null) {
+    const timestamp = new Date().toISOString();
+    const prefix = `[Participants] ${timestamp} ${message}`;
+    if (detail && typeof detail === "object" && Object.keys(detail).length > 0) {
+      console.info(prefix, detail);
+    } else {
+      console.info(prefix);
+    }
+  }
+
   init() {
     if (auth && auth.currentUser) {
       this.currentUser = auth.currentUser;
@@ -613,15 +623,32 @@ export class EventAdminApp {
   selectEvent(eventId) {
     const previous = this.selectedEventId;
     const normalized = ensureString(eventId);
+    this.logParticipantAction("イベント選択リクエストを受信しました", {
+      requestedEventId: normalized || "",
+      previousEventId: previous || "",
+      totalEvents: this.events.length
+    });
     if (normalized && !this.events.some((event) => event.id === normalized)) {
+      this.logParticipantAction("指定されたイベントが見つからないため選択を維持します", {
+        requestedEventId: normalized
+      });
       return;
     }
 
     this.selectedEventId = normalized;
-    if (previous !== normalized) {
+    const changed = previous !== normalized;
+    if (changed) {
+      this.logParticipantAction("イベント選択を更新しました", {
+        eventId: normalized || "",
+        previousEventId: previous || ""
+      });
       this.lastToolContextSignature = "";
       this.lastToolContextApplied = false;
       this.pendingToolSync = false;
+    } else {
+      this.logParticipantAction("イベント選択は既に最新の状態です", {
+        eventId: normalized || ""
+      });
     }
     this.renderEvents();
     this.updateScheduleStateFromSelection();
@@ -631,7 +658,7 @@ export class EventAdminApp {
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
     this.handleToolContextAfterSelection();
-    if (previous !== normalized) {
+    if (changed) {
       this.notifySelectionListeners("host");
     }
   }
@@ -641,11 +668,20 @@ export class EventAdminApp {
     const desiredId = preferredId || this.selectedScheduleId;
     if (desiredId && availableIds.has(desiredId)) {
       this.selectedScheduleId = desiredId;
+      this.logParticipantAction("利用可能な日程選択を維持しました", {
+        scheduleId: this.selectedScheduleId,
+        preferredScheduleId: preferredId || ""
+      });
     } else {
+      const previousScheduleId = this.selectedScheduleId;
       this.selectedScheduleId = "";
       this.pendingToolSync = false;
       this.lastToolContextSignature = "";
       this.lastToolContextApplied = false;
+      this.logParticipantAction("利用可能な日程が見つからないため選択をクリアしました", {
+        previousScheduleId: previousScheduleId || "",
+        preferredScheduleId: preferredId || ""
+      });
     }
   }
 
@@ -699,6 +735,7 @@ export class EventAdminApp {
 
   notifySelectionListeners(source = "host") {
     if (this.suppressSelectionNotifications) {
+      this.logParticipantAction("選択通知は抑制設定のため送信しません", { source });
       return;
     }
     const detail = { ...this.getCurrentSelectionContext(), source };
@@ -715,11 +752,13 @@ export class EventAdminApp {
       signature === this.lastSelectionSignature &&
       source === this.lastSelectionSource
     ) {
+      this.logParticipantAction("前回と同じ内容のため選択通知を省略しました", detail);
       return;
     }
     this.lastSelectionSignature = signature;
     this.lastSelectionSource = source;
     this.forceSelectionBroadcast = false;
+    this.logParticipantAction("選択内容をリスナーに通知します", detail);
     this.selectionListeners.forEach((listener) => {
       try {
         listener(detail);
@@ -745,6 +784,11 @@ export class EventAdminApp {
     const scheduleId = ensureString(detail?.scheduleId);
     const previousSuppression = this.suppressSelectionNotifications;
     this.suppressSelectionNotifications = true;
+    this.logParticipantAction("参加者ツールからの選択反映リクエストを受け取りました", {
+      eventId,
+      scheduleId,
+      source: detail?.source || "participants"
+    });
     try {
       if (eventId || (!eventId && detail?.eventId === "")) {
         this.selectEvent(eventId);
@@ -760,6 +804,7 @@ export class EventAdminApp {
 
   getParticipantHostInterface() {
     if (!this.participantHostInterface) {
+      this.logParticipantAction("参加者ツール用ホストインターフェースを初期化します");
       this.participantHostInterface = {
         getSelection: () => this.getCurrentSelectionContext(),
         getEvents: () => this.getParticipantEventsSnapshot(),
@@ -774,15 +819,32 @@ export class EventAdminApp {
   selectSchedule(scheduleId) {
     const previous = this.selectedScheduleId;
     const normalized = ensureString(scheduleId);
+    this.logParticipantAction("日程選択リクエストを受信しました", {
+      requestedScheduleId: normalized || "",
+      previousScheduleId: previous || "",
+      totalSchedules: this.schedules.length
+    });
     if (normalized && !this.schedules.some((schedule) => schedule.id === normalized)) {
+      this.logParticipantAction("指定された日程が見つからないため選択を維持します", {
+        requestedScheduleId: normalized
+      });
       return;
     }
 
     this.selectedScheduleId = normalized;
-    if (previous !== normalized) {
+    const changed = previous !== normalized;
+    if (changed) {
+      this.logParticipantAction("日程選択を更新しました", {
+        scheduleId: normalized || "",
+        previousScheduleId: previous || ""
+      });
       this.lastToolContextSignature = "";
       this.lastToolContextApplied = false;
       this.pendingToolSync = false;
+    } else {
+      this.logParticipantAction("日程選択は既に最新の状態です", {
+        scheduleId: normalized || ""
+      });
     }
     this.renderScheduleList();
     this.updateScheduleSummary();
@@ -791,7 +853,7 @@ export class EventAdminApp {
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
     this.handleToolContextAfterSelection();
-    if (previous !== normalized) {
+    if (changed) {
       this.notifySelectionListeners("host");
     }
   }
@@ -799,6 +861,11 @@ export class EventAdminApp {
   updateScheduleStateFromSelection(preferredScheduleId = "") {
     const event = this.getSelectedEvent();
     this.schedules = event ? [...event.schedules] : [];
+    this.logParticipantAction("イベント選択に基づいて日程一覧を更新します", {
+      selectedEventId: event?.id || "",
+      scheduleCount: this.schedules.length,
+      preferredScheduleId
+    });
     this.ensureSelectedSchedule(preferredScheduleId);
     this.renderScheduleList();
     this.updateScheduleSummary();
@@ -979,6 +1046,7 @@ export class EventAdminApp {
 
   handleToolContextAfterSelection() {
     const context = this.getCurrentSelectionContext();
+    this.logParticipantAction("参加者ツールへのコンテキスト適用を確認します", context);
     if (!context.eventId || !context.scheduleId) {
       this.pendingToolSync = false;
       this.lastToolContextSignature = "";
@@ -987,6 +1055,10 @@ export class EventAdminApp {
       const message = this.selectedEventId
         ? "日程を選択すると参加者リストを読み込みます。"
         : "イベントと日程を選択すると参加者リストを読み込みます。";
+      this.logParticipantAction("選択が不足しているため参加者ツールの同期を保留します", {
+        eventId: context.eventId,
+        scheduleId: context.scheduleId
+      });
       this.setParticipantStatus({ text: message, variant: "info" });
       return;
     }
@@ -994,15 +1066,29 @@ export class EventAdminApp {
     const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
     if (activeConfig.stage === "tabs" && activeConfig.requireSchedule) {
       this.pendingToolSync = false;
+      this.logParticipantAction("参加者ツールの即時同期を開始します", {
+        eventId: context.eventId,
+        scheduleId: context.scheduleId
+      });
       this.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
     } else {
       this.pendingToolSync = true;
+      this.logParticipantAction("参加者ツールの同期を保留状態に設定しました", {
+        eventId: context.eventId,
+        scheduleId: context.scheduleId,
+        activePanel: this.activePanel
+      });
     }
   }
 
   setParticipantStatus({ text = "", meta = "", variant = "info" } = {}) {
     const container = this.dom.participantsStatus;
     if (!container) {
+      this.logParticipantAction("参加者ステータスの表示領域が見つからないため更新できません", {
+        text,
+        meta,
+        variant
+      });
       return;
     }
     const baseClass = "flow-sync-status";
@@ -1034,19 +1120,39 @@ export class EventAdminApp {
         metaEl.textContent = "";
       }
     }
+    this.logParticipantAction("参加者ステータスを更新しました", {
+      text,
+      meta,
+      variant: normalizedVariant
+    });
   }
 
   handleParticipantSyncEvent(event) {
     if (!event || !event.detail) {
+      this.logParticipantAction("参加者ツールからの同期イベントに詳細が含まれていません");
       return;
     }
     const detail = event.detail;
     const eventId = ensureString(detail.eventId);
     const scheduleId = ensureString(detail.scheduleId);
+    this.logParticipantAction("参加者ツールから同期イベントを受信しました", {
+      eventId,
+      scheduleId,
+      success: detail.success !== false,
+      detail
+    });
     if (eventId && this.selectedEventId && eventId !== this.selectedEventId) {
+      this.logParticipantAction("現在のイベント選択と一致しないため同期イベントを無視しました", {
+        eventId,
+        selectedEventId: this.selectedEventId
+      });
       return;
     }
     if (scheduleId && this.selectedScheduleId && scheduleId !== this.selectedScheduleId) {
+      this.logParticipantAction("現在の日程選択と一致しないため同期イベントを無視しました", {
+        scheduleId,
+        selectedScheduleId: this.selectedScheduleId
+      });
       return;
     }
     const timestamp = Number(detail.timestamp) || Date.now();
@@ -1062,6 +1168,10 @@ export class EventAdminApp {
           delete this.dom.participantsTool.dataset.syncedScheduleId;
           delete this.dom.participantsTool.dataset.syncedAt;
         }
+        this.logParticipantAction("同期イベントに選択情報が含まれていないため案内メッセージを表示しました", {
+          eventId,
+          scheduleId
+        });
       }
       return;
     }
@@ -1103,6 +1213,12 @@ export class EventAdminApp {
         this.dom.participantsTool.dataset.syncedScheduleId = scheduleId;
         this.dom.participantsTool.dataset.syncedAt = String(timestamp);
       }
+      this.logParticipantAction("参加者ツールの同期完了イベントを処理しました", {
+        eventId,
+        scheduleId,
+        participantCount,
+        meta: metaParts
+      });
       return;
     }
 
@@ -1118,6 +1234,10 @@ export class EventAdminApp {
         delete this.dom.participantsTool.dataset.syncedScheduleId;
         delete this.dom.participantsTool.dataset.syncedAt;
       }
+      this.logParticipantAction("選択不足のため参加者ツールの同期が見送られたイベントを処理しました", {
+        eventId,
+        scheduleId
+      });
       return;
     }
 
@@ -1136,34 +1256,62 @@ export class EventAdminApp {
       meta: metaParts.join(" / "),
       variant: "error"
     });
+    this.logParticipantAction("参加者ツールの同期エラーイベントを処理しました", {
+      eventId,
+      scheduleId,
+      error: errorMessage || "",
+      reason: reason || ""
+    });
   }
 
   async handleParticipantSelectionBroadcast(event) {
     if (!event || !event.detail) {
+      this.logParticipantAction("参加者ツールからの選択イベントに詳細が含まれていません");
       return;
     }
     const { detail } = event;
     const source = ensureString(detail.source);
     if (source && source !== "participants" && source !== "question-admin") {
+      this.logParticipantAction("参加者ツール以外のソースからの選択イベントのため無視します", {
+        source
+      });
       return;
     }
     const eventId = ensureString(detail.eventId);
     const scheduleId = ensureString(detail.scheduleId);
     if (!eventId) {
+      this.logParticipantAction("選択イベントにイベントIDが含まれていないため無視します", {
+        detail
+      });
       return;
     }
+    this.logParticipantAction("参加者ツールから選択イベントを受信しました", {
+      eventId,
+      scheduleId,
+      source: source || "participants"
+    });
 
     try {
       if (!this.events.some((item) => item.id === eventId)) {
+        this.logParticipantAction("参加者ツールから通知されたイベントが未取得のため再読み込みを試みます", {
+          eventId
+        });
         await this.loadEvents();
       }
     } catch (error) {
       logError("Failed to refresh events after participant selection", error);
+      this.logParticipantAction("参加者ツールからの選択イベント処理中にイベント再取得へ失敗しました", {
+        eventId,
+        error: error instanceof Error ? error.message : String(error ?? "")
+      });
       return;
     }
 
     const matchedEvent = this.events.find((item) => item.id === eventId) || null;
     if (!matchedEvent) {
+      this.logParticipantAction("参加者ツールから通知されたイベントが見つかりません", {
+        eventId
+      });
       return;
     }
 
@@ -1187,6 +1335,10 @@ export class EventAdminApp {
           endAt: ensureString(detail.endAt)
         };
         matchedEvent.schedules.push(scheduleRecord);
+        this.logParticipantAction("参加者ツールから新しい日程情報を追加しました", {
+          eventId,
+          scheduleId
+        });
       } else {
         const label = ensureString(detail.scheduleLabel);
         if (label) {
@@ -1198,6 +1350,10 @@ export class EventAdminApp {
         if (detail.endAt !== undefined) {
           scheduleRecord.endAt = ensureString(detail.endAt);
         }
+        this.logParticipantAction("参加者ツールからの情報で既存の日程を更新しました", {
+          eventId,
+          scheduleId
+        });
       }
     }
 
@@ -1225,6 +1381,11 @@ export class EventAdminApp {
     this.showPanel(targetPanel);
     this.notifyEventListeners();
     this.notifySelectionListeners(source || "participants");
+    this.logParticipantAction("参加者ツールからの選択イベント処理を完了しました", {
+      eventId,
+      scheduleId,
+      activePanel: targetPanel
+    });
   }
 
   clearLoadingIndicators() {
@@ -1234,13 +1395,29 @@ export class EventAdminApp {
 
   async loadEmbeddedTool(tool) {
     const entry = this.embeddedTools[tool];
+    if (tool === "participants") {
+      this.logParticipantAction("参加者ツールの読み込み処理を開始します", {
+        entryExists: Boolean(entry),
+        alreadyReady: Boolean(entry?.ready),
+        hasPendingPromise: Boolean(entry?.promise)
+      });
+    }
     if (!entry) {
+      if (tool === "participants") {
+        this.logParticipantAction("参加者ツールの設定が見つからないため読み込みを中止します");
+      }
       return;
     }
     if (entry.ready) {
+      if (tool === "participants") {
+        this.logParticipantAction("参加者ツールは既に読み込み済みです");
+      }
       return;
     }
     if (!entry.promise) {
+      if (tool === "participants") {
+        this.logParticipantAction("参加者ツールの読み込みを初期化します");
+      }
       entry.promise = (async () => {
         if (typeof document !== "undefined") {
           if (tool === "participants") {
@@ -1250,24 +1427,40 @@ export class EventAdminApp {
           }
         }
         if (tool === "participants") {
+          this.logParticipantAction("参加者ツールのスクリプトを読み込みます");
           await import("../question-admin/index.js");
           if (window.questionAdminEmbed?.attachHost) {
+            this.logParticipantAction("参加者ツールにホストインターフェースを接続します");
             window.questionAdminEmbed.attachHost(this.getParticipantHostInterface());
             this.notifyEventListeners();
             this.notifySelectionListeners("host");
+            this.logParticipantAction("参加者ツールの初期化シグナルを送信しました");
           }
         } else {
           await import("../operator/index.js");
         }
         entry.ready = true;
+        if (tool === "participants") {
+          this.logParticipantAction("参加者ツールの読み込み処理が完了しました");
+        }
       })().catch((error) => {
         logError(`Failed to load ${tool} tool`, error);
         entry.ready = false;
         entry.promise = null;
+        if (tool === "participants") {
+          this.logParticipantAction("参加者ツールの読み込みに失敗しました", {
+            error: error instanceof Error ? error.message : String(error ?? "")
+          });
+        }
         throw error;
       });
+    } else if (tool === "participants") {
+      this.logParticipantAction("参加者ツールの読み込み完了を待機します");
     }
     await entry.promise;
+    if (tool === "participants") {
+      this.logParticipantAction("参加者ツールの読み込みを確認しました");
+    }
   }
 
   prepareToolFrames() {
@@ -1330,6 +1523,9 @@ export class EventAdminApp {
   updateParticipantToolDataset(context) {
     const tool = this.dom.participantsTool;
     if (!tool) {
+      this.logParticipantAction("参加者ツールの埋め込み要素が見つからないためデータセットを更新できません", {
+        context
+      });
       return;
     }
     const clear = () => {
@@ -1342,9 +1538,13 @@ export class EventAdminApp {
       delete tool.dataset.syncedEventId;
       delete tool.dataset.syncedScheduleId;
       delete tool.dataset.syncedAt;
+      this.logParticipantAction("参加者ツールの期待コンテキストをクリアしました");
     };
     if (!context || !context.eventId || !context.scheduleId) {
       clear();
+      this.logParticipantAction("選択情報が不足しているため参加者ツールの期待値をリセットしました", {
+        context
+      });
       return;
     }
     tool.dataset.expectedEventId = context.eventId;
@@ -1353,10 +1553,12 @@ export class EventAdminApp {
     tool.dataset.expectedScheduleLabel = context.scheduleLabel || context.scheduleId;
     tool.dataset.expectedStartAt = context.startAt || "";
     tool.dataset.expectedEndAt = context.endAt || "";
+    this.logParticipantAction("参加者ツールの期待コンテキストを更新しました", context);
   }
 
   async syncEmbeddedTools() {
     if (this.toolSyncPromise) {
+      this.logParticipantAction("参加者ツールの同期処理が進行中のため既存のPromiseを再利用します");
       return this.toolSyncPromise;
     }
 
@@ -1369,6 +1571,10 @@ export class EventAdminApp {
         this.lastToolContextApplied = false;
         this.pendingToolSync = false;
         this.updateParticipantToolDataset(null);
+        this.logParticipantAction("イベントまたは日程が未選択のため参加者ツールの同期を中止します", {
+          selectedEventId: event?.id || "",
+          selectedScheduleId: schedule?.id || ""
+        });
         return;
       }
       const eventLabel = event.name || event.id;
@@ -1384,6 +1590,10 @@ export class EventAdminApp {
       ].join("::");
       if (this.lastToolContextSignature === contextKey && this.lastToolContextApplied) {
         this.pendingToolSync = false;
+        this.logParticipantAction("参加者ツールは既に最新のコンテキストを保持しているため同期をスキップします", {
+          eventId: event.id,
+          scheduleId: schedule.id
+        });
         return;
       }
       this.lastToolContextApplied = false;
@@ -1396,6 +1606,7 @@ export class EventAdminApp {
         endAt: schedule.endAt || ""
       };
       this.updateParticipantToolDataset(context);
+      this.logParticipantAction("参加者ツールとの同期を開始します", context);
       const pendingMeta = [];
       if (rangeText) {
         pendingMeta.push(`時間 ${rangeText}`);
@@ -1411,19 +1622,38 @@ export class EventAdminApp {
       try {
         await this.loadEmbeddedTool("participants");
         if (window.questionAdminEmbed?.waitUntilReady) {
+          this.logParticipantAction("参加者ツールの準備完了を待機します", context);
           await window.questionAdminEmbed.waitUntilReady();
         }
         if (window.questionAdminEmbed?.setSelection) {
+          this.logParticipantAction("参加者ツールへ選択情報を送信します", context);
           await window.questionAdminEmbed.setSelection(context);
           const acknowledged = await waitForParticipantSelectionAck(context.eventId, context.scheduleId);
           if (!acknowledged) {
+            this.logParticipantAction("参加者ツールから選択反映の応答がありません", {
+              eventId: context.eventId,
+              scheduleId: context.scheduleId
+            });
             throw new Error("参加者ツールに選択内容が反映されませんでした。");
           }
+          this.logParticipantAction("参加者ツールが選択内容の受信を確認しました", {
+            eventId: context.eventId,
+            scheduleId: context.scheduleId
+          });
         }
         participantsSynced = true;
+        this.logParticipantAction("参加者ツールとの同期が完了しました", {
+          eventId: context.eventId,
+          scheduleId: context.scheduleId
+        });
       } catch (error) {
         participantsError = error instanceof Error ? error : new Error(String(error ?? ""));
         logError("Failed to sync participant tool", error);
+        this.logParticipantAction("参加者ツールとの同期中にエラーが発生しました", {
+          eventId: context.eventId,
+          scheduleId: context.scheduleId,
+          error: participantsError.message || String(error ?? "")
+        });
       }
       try {
         await this.loadEmbeddedTool("operator");
@@ -1477,6 +1707,7 @@ export class EventAdminApp {
     this.toolSyncPromise = run.finally(() => {
       if (this.toolSyncPromise === run) {
         this.toolSyncPromise = null;
+        this.logParticipantAction("参加者ツールの同期処理をクリーンアップしました");
       }
     });
 
