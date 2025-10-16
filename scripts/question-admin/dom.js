@@ -66,6 +66,7 @@ const dom = {
   scheduleDescription: resolve("schedule-description"),
   participantContext: resolve("participant-context"),
   participantDescription: resolve("participant-description"),
+  participantDescriptionMain: resolve("participant-description-main"),
   downloadParticipantTemplateButton: resolve("download-participant-template"),
   csvInput: resolve("csv-input"),
   downloadTeamTemplateButton: resolve("download-team-template"),
