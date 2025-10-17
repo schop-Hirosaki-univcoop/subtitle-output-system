@@ -2,7 +2,8 @@ import { GENRE_OPTIONS } from "./constants.js";
 
 export function createInitialState(autoScroll = true) {
   return {
-    rawQuestions: [],
+    questionsByUid: new Map(),
+    questionStatusByUid: new Map(),
     allQuestions: [],
     allLogs: [],
     currentSubTab: "all",

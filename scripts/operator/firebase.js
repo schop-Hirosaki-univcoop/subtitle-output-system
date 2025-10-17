@@ -6,7 +6,8 @@ import {
   remove,
   set,
   get,
-  onValue
+  onValue,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   initializeAuth,
@@ -34,13 +35,15 @@ export const auth = apps.length
 export const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
-export const renderRef = ref(database, "render_state");
-export const displaySessionRef = ref(database, "render_control/session");
+export const renderRef = ref(database, "render/state");
+export const renderNowShowingRef = ref(database, "render/state/nowShowing");
+export const displaySessionRef = ref(database, "render/session");
 export const questionsRef = ref(database, "questions");
+export const questionStatusRef = ref(database, "questionStatus");
 export const questionIntakeEventsRef = ref(database, "questionIntake/events");
 export const questionIntakeSchedulesRef = ref(database, "questionIntake/schedules");
-export const telopRef = ref(database, "currentTelop");
-export const updateTriggerRef = ref(database, "update_trigger");
+export const telopRef = renderNowShowingRef;
+export const updateTriggerRef = ref(database, "signals/logs");
 export const dictionaryRef = ref(database, "dictionary");
 
 export {
@@ -50,6 +53,7 @@ export {
   set,
   get,
   onValue,
+  serverTimestamp,
   signInWithPopup,
   signOut,
   onAuthStateChanged

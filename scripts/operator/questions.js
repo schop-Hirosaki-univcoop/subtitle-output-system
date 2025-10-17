@@ -1,5 +1,5 @@
 import { GENRE_OPTIONS, QUESTIONS_SUBTAB_KEY } from "./constants.js";
-import { database, ref, update, set, remove, get, telopRef } from "./firebase.js";
+import { database, ref, update, set, remove, get, telopRef, serverTimestamp } from "./firebase.js";
 import { escapeHtml, formatOperatorName, resolveGenreLabel, formatScheduleRange } from "./utils.js";
 
 const SUB_TAB_OPTIONS = new Set(["all", "normal", "puq"]);
@@ -309,19 +309,22 @@ export async function handleDisplay(app) {
   try {
     const updates = {};
     if (previousUid) {
-      updates[`questions/${previousUid}/selecting`] = false;
-      updates[`questions/${previousUid}/answered`] = true;
+      updates[`questionStatus/${previousUid}/selecting`] = false;
+      updates[`questionStatus/${previousUid}/answered`] = true;
+      updates[`questionStatus/${previousUid}/updatedAt`] = serverTimestamp();
     } else if (previousTelop) {
       const prev = app.state.allQuestions.find(
         (q) => q["ラジオネーム"] === previousTelop.name && q["質問・お悩み"] === previousTelop.question
       );
       if (prev) {
-        updates[`questions/${prev.UID}/selecting`] = false;
-        updates[`questions/${prev.UID}/answered`] = true;
+        updates[`questionStatus/${prev.UID}/selecting`] = false;
+        updates[`questionStatus/${prev.UID}/answered`] = true;
+        updates[`questionStatus/${prev.UID}/updatedAt`] = serverTimestamp();
       }
     }
-    updates[`questions/${app.state.selectedRowData.uid}/selecting`] = true;
-    updates[`questions/${app.state.selectedRowData.uid}/answered`] = false;
+    updates[`questionStatus/${app.state.selectedRowData.uid}/selecting`] = true;
+    updates[`questionStatus/${app.state.selectedRowData.uid}/answered`] = false;
+    updates[`questionStatus/${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
     await update(ref(database), updates);
     const genre = String(app.state.selectedRowData.genre ?? "").trim();
     await set(telopRef, {
@@ -367,7 +370,8 @@ export async function handleUnanswer(app) {
     tone: "danger"
   });
   if (!confirmed) return;
-  update(ref(database, `questions/${app.state.selectedRowData.uid}`), { answered: false });
+  const uid = app.state.selectedRowData.uid;
+  update(ref(database, `questionStatus/${uid}`), { answered: false, updatedAt: serverTimestamp() });
   app.api.fireAndForgetApi({ action: "updateStatus", uid: app.state.selectedRowData.uid, status: false });
 }
 
@@ -401,7 +405,8 @@ export async function handleBatchUnanswer(app) {
   const uidsToUpdate = checkedBoxes.map((checkbox) => checkbox.dataset.uid);
   const updates = {};
   for (const uid of uidsToUpdate) {
-    updates[`questions/${uid}/answered`] = false;
+    updates[`questionStatus/${uid}/answered`] = false;
+    updates[`questionStatus/${uid}/updatedAt`] = serverTimestamp();
   }
   try {
     await update(ref(database), updates);
@@ -432,14 +437,16 @@ export async function clearTelop(app) {
     const updates = {};
     const selectingItems = app.state.allQuestions.filter((item) => item["選択中"] === true);
     selectingItems.forEach((item) => {
-      updates[`questions/${item.UID}/selecting`] = false;
+      updates[`questionStatus/${item.UID}/selecting`] = false;
+      updates[`questionStatus/${item.UID}/updatedAt`] = serverTimestamp();
     });
     if (previousTelop) {
       const prevItem = app.state.allQuestions.find(
         (q) => q["ラジオネーム"] === previousTelop.name && q["質問・お悩み"] === previousTelop.question
       );
       if (prevItem) {
-        updates[`questions/${prevItem.UID}/answered`] = true;
+        updates[`questionStatus/${prevItem.UID}/answered`] = true;
+        updates[`questionStatus/${prevItem.UID}/updatedAt`] = serverTimestamp();
         app.api.fireAndForgetApi({ action: "updateStatus", uid: prevItem.UID, status: true });
       }
     }
