@@ -292,6 +292,17 @@
                   </div>
                 </div>
               </div>
+              <div id="op-dictionary-action-panel" class="action-panel" hidden>
+                <button id="op-dictionary-btn-enable" class="btn btn-primary" type="button" disabled>有効にする</button>
+                <button id="op-dictionary-btn-disable" class="btn" type="button" disabled>無効にする</button>
+                <button id="op-dictionary-btn-delete" class="btn btn-danger" type="button" disabled>削除</button>
+                <span id="op-dictionary-selected-info">単語を選択してください</span>
+                <div class="action-panel-right">
+                  <button id="op-dictionary-btn-batch-enable" class="btn btn-ghost" type="button" hidden>選択項目を有効にする</button>
+                  <button id="op-dictionary-btn-batch-disable" class="btn btn-ghost" type="button" hidden>選択項目を無効にする</button>
+                  <button id="op-dictionary-btn-batch-delete" class="btn btn-danger" type="button" hidden>選択項目を削除</button>
+                </div>
+              </div>
         </section>
         <section id="flow-panel-operator" class="flow-tool-panel flow-stage-panel" data-panel="operator" aria-labelledby="flow-panel-operator-title" hidden>
               <h2 id="flow-panel-operator-title" class="visually-hidden">テロップ操作</h2>
@@ -425,13 +436,15 @@
                   <input type="text" id="op-new-ruby" class="input" placeholder="ルビ" required>
                   <button type="submit" class="btn btn-primary">追加</button>
                 </form>
-                <div class="table-scroller">
-                  <table id="op-dictionary-table">
-                    <thead>
-                      <tr><th>単語</th><th>ルビ</th><th>状態</th><th>操作</th></tr>
-                    </thead>
-                    <tbody></tbody>
-                  </table>
+                <div class="dictionary-toolbar">
+                  <label class="chk">
+                    <input type="checkbox" id="op-dictionary-select-all" disabled>
+                    全選択
+                  </label>
+                  <span id="op-dictionary-count" class="dictionary-count" aria-live="polite">登録なし</span>
+                </div>
+                <div class="cards-scroll">
+                  <div id="op-dictionary-cards" class="dictionary-cards" aria-live="polite"></div>
                 </div>
                 <div id="op-dictionary-confirm-dialog" class="modal modal--inline" role="dialog" aria-modal="true" aria-labelledby="op-dictionary-confirm-dialog-title" hidden>
                   <div class="modal-backdrop" data-dialog-dismiss="true"></div>
@@ -447,6 +460,17 @@
                       <button type="button" class="btn btn-danger" id="op-dictionary-confirm-accept-button">削除する</button>
                     </div>
                   </div>
+                </div>
+              </div>
+              <div id="op-dictionary-action-panel" class="action-panel" hidden>
+                <button id="op-dictionary-btn-enable" class="btn btn-primary" type="button" disabled>有効にする</button>
+                <button id="op-dictionary-btn-disable" class="btn" type="button" disabled>無効にする</button>
+                <button id="op-dictionary-btn-delete" class="btn btn-danger" type="button" disabled>削除</button>
+                <span id="op-dictionary-selected-info">単語を選択してください</span>
+                <div class="action-panel-right">
+                  <button id="op-dictionary-btn-batch-enable" class="btn btn-ghost" type="button" hidden>選択項目を有効にする</button>
+                  <button id="op-dictionary-btn-batch-disable" class="btn btn-ghost" type="button" hidden>選択項目を無効にする</button>
+                  <button id="op-dictionary-btn-batch-delete" class="btn btn-danger" type="button" hidden>選択項目を削除</button>
                 </div>
               </div>
         </section>

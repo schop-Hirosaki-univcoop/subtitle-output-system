@@ -610,10 +610,16 @@ function doPost(e) {
         return ok(addDictionaryTerm(req.term, req.ruby));
       case 'deleteTerm':
         assertOperator_(principal);
-        return ok(deleteDictionaryTerm(req.term));
+        return ok(deleteDictionaryTerm(req.uid, req.term));
       case 'toggleTerm':
         assertOperator_(principal);
-        return ok(toggleDictionaryTerm(req.term, req.enabled));
+        return ok(toggleDictionaryTerm(req.uid, req.enabled, req.term));
+      case 'batchDeleteTerms':
+        assertOperator_(principal);
+        return ok(batchDeleteDictionaryTerms(req.uids));
+      case 'batchToggleTerms':
+        assertOperator_(principal);
+        return ok(batchToggleDictionaryTerms(req.uids, req.enabled));
       case 'updateStatus':
         assertOperator_(principal);
         return ok(updateAnswerStatus(req.uid, req.status));
@@ -3187,46 +3193,252 @@ function updateAnswerStatus(uid, status) {
   return { success: true, message: `UID: ${uid} updated.` };
 }
 
+function ensureDictionarySheetStructure_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('dictionary');
+  if (!sheet) {
+    throw new Error('Dictionary sheet not found.');
+  }
+  let info = readSheetWithHeaders_(sheet);
+  if (!info.sheet) {
+    return { sheet, info, uidIdx: null, termIdx: null, rubyIdx: null, enabledIdx: null };
+  }
+  const headers = Array.isArray(info.headers) ? info.headers.slice() : [];
+  const normalized = headers.map((header) => normalizeHeaderKey_(header));
+  const required = [
+    { key: 'term', header: 'term' },
+    { key: 'ruby', header: 'ruby' },
+    { key: 'enabled', header: 'enabled' },
+    { key: 'uid', header: 'uid' }
+  ];
+  let changed = false;
+  required.forEach(({ key, header }) => {
+    if (!normalized.includes(key)) {
+      headers.push(header);
+      normalized.push(key);
+      changed = true;
+    }
+  });
+  if (changed) {
+    const columnCount = headers.length;
+    const maxColumns = sheet.getMaxColumns();
+    if (maxColumns < columnCount) {
+      sheet.insertColumnsAfter(maxColumns, columnCount - maxColumns);
+    }
+    sheet.getRange(1, 1, 1, columnCount).setValues([headers]);
+    info = readSheetWithHeaders_(sheet);
+  }
+  let uidIdx = getHeaderIndex_(info.headerMap, 'uid');
+  let termIdx = getHeaderIndex_(info.headerMap, 'term');
+  let rubyIdx = getHeaderIndex_(info.headerMap, 'ruby');
+  let enabledIdx = getHeaderIndex_(info.headerMap, 'enabled');
+  if (uidIdx == null || termIdx == null || rubyIdx == null || enabledIdx == null) {
+    info = readSheetWithHeaders_(sheet);
+    uidIdx = getHeaderIndex_(info.headerMap, 'uid');
+    termIdx = getHeaderIndex_(info.headerMap, 'term');
+    rubyIdx = getHeaderIndex_(info.headerMap, 'ruby');
+    enabledIdx = getHeaderIndex_(info.headerMap, 'enabled');
+  }
+  if (uidIdx == null) {
+    throw new Error('Failed to ensure dictionary UID column.');
+  }
+  const missing = [];
+  info.rows.forEach((row, index) => {
+    const uid = String(row[uidIdx] || '').trim();
+    if (!uid) {
+      missing.push({ index, rowNumber: index + 2, columnNumber: uidIdx + 1 });
+    }
+  });
+  if (missing.length) {
+    missing.forEach((item) => {
+      sheet.getRange(item.rowNumber, item.columnNumber).setValue(Utilities.getUuid());
+    });
+    info = readSheetWithHeaders_(sheet);
+    uidIdx = getHeaderIndex_(info.headerMap, 'uid');
+    termIdx = getHeaderIndex_(info.headerMap, 'term');
+    rubyIdx = getHeaderIndex_(info.headerMap, 'ruby');
+    enabledIdx = getHeaderIndex_(info.headerMap, 'enabled');
+  }
+  return { sheet, info, uidIdx, termIdx, rubyIdx, enabledIdx };
+}
+
+function normalizeDictionaryEnabled_(value) {
+  if (value === true || value === false) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['', '0', 'false', 'off', 'no'].includes(normalized)) {
+      return false;
+    }
+    if (['1', 'true', 'on', 'yes'].includes(normalized)) {
+      return true;
+    }
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  return Boolean(value);
+}
+
+function findDictionaryRowByUid_(info, uidIdx, uid) {
+  const normalized = String(uid || '').trim();
+  if (!normalized) {
+    return null;
+  }
+  for (let i = 0; i < info.rows.length; i++) {
+    const rowUid = String(info.rows[i][uidIdx] || '').trim();
+    if (rowUid === normalized) {
+      return { index: i, rowNumber: i + 2, values: info.rows[i] };
+    }
+  }
+  return null;
+}
+
 function addDictionaryTerm(term, ruby) {
-  if (!term || !ruby) {
+  const normalizedTerm = String(term || '').trim();
+  const normalizedRuby = String(ruby || '').trim();
+  if (!normalizedTerm || !normalizedRuby) {
     throw new Error('Term and ruby are required.');
   }
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('dictionary');
-  sheet.appendRow([term, ruby, 'default', true]);
-  return { success: true, message: `Term "${term}" added.` };
-}
-
-function deleteDictionaryTerm(term) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('dictionary');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const lower = headers.map(h => String(h||'').toLowerCase());
-  const termColIndex = lower.indexOf('term');
-
-  for (let i = data.length - 1; i > 0; i--) {
-    if (data[i][termColIndex] === term) {
-      sheet.deleteRow(i + 1);
-      return { success: true, message: `Term "${term}" deleted.` };
+  const { sheet, info, uidIdx, termIdx, rubyIdx, enabledIdx } = ensureDictionarySheetStructure_();
+  if (sheet == null || uidIdx == null || termIdx == null || rubyIdx == null || enabledIdx == null) {
+    throw new Error('Dictionary sheet is not properly configured.');
+  }
+  for (let i = 0; i < info.rows.length; i++) {
+    const rowTerm = String(info.rows[i][termIdx] || '').trim();
+    if (rowTerm === normalizedTerm) {
+      const rowNumber = i + 2;
+      sheet.getRange(rowNumber, rubyIdx + 1).setValue(normalizedRuby);
+      sheet.getRange(rowNumber, enabledIdx + 1).setValue(true);
+      const uid = String(info.rows[i][uidIdx] || '').trim();
+      return { success: true, message: `Term "${normalizedTerm}" updated.`, uid };
     }
   }
-  throw new Error(`Term "${term}" not found.`);
+  const headers = info.headers || [];
+  const newUid = Utilities.getUuid();
+  const rowValues = headers.map((header, column) => {
+    const key = normalizeHeaderKey_(header);
+    if (key === 'term') return normalizedTerm;
+    if (key === 'ruby') return normalizedRuby;
+    if (key === 'enabled') return true;
+    if (key === 'uid') return newUid;
+    if (key === 'type') return 'default';
+    return '';
+  });
+  sheet.appendRow(rowValues);
+  return { success: true, message: `Term "${normalizedTerm}" added.`, uid: newUid };
 }
 
-function toggleDictionaryTerm(term, enabled) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('dictionary');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const lower = headers.map(h => String(h||'').toLowerCase());
-  const termColIndex = lower.indexOf('term');
-  const enabledColIndex = lower.indexOf('enabled');
-
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][termColIndex] === term) {
-      sheet.getRange(i + 1, enabledColIndex + 1).setValue(enabled);
-      return { success: true, message: `Term "${term}" status updated.` };
+function deleteDictionaryTerm(uid, fallbackTerm) {
+  const { sheet, info, uidIdx, termIdx } = ensureDictionarySheetStructure_();
+  if (sheet == null || uidIdx == null || termIdx == null) {
+    throw new Error('Dictionary sheet is not properly configured.');
+  }
+  const target = findDictionaryRowByUid_(info, uidIdx, uid);
+  let rowInfo = target;
+  if (!rowInfo && fallbackTerm) {
+    const normalizedTerm = String(fallbackTerm || '').trim();
+    if (normalizedTerm) {
+      for (let i = 0; i < info.rows.length; i++) {
+        const rowTerm = String(info.rows[i][termIdx] || '').trim();
+        if (rowTerm === normalizedTerm) {
+          rowInfo = { index: i, rowNumber: i + 2, values: info.rows[i] };
+          break;
+        }
+      }
     }
   }
-  throw new Error(`Term "${term}" not found.`);
+  if (!rowInfo) {
+    throw new Error(`Term not found: ${uid || fallbackTerm || ''}`);
+  }
+  const termLabel = String(rowInfo.values[termIdx] || '').trim();
+  sheet.deleteRow(rowInfo.rowNumber);
+  return { success: true, message: `Term "${termLabel}" deleted.` };
+}
+
+function toggleDictionaryTerm(uid, enabled, fallbackTerm) {
+  const { sheet, info, uidIdx, termIdx, enabledIdx } = ensureDictionarySheetStructure_();
+  if (sheet == null || uidIdx == null || termIdx == null || enabledIdx == null) {
+    throw new Error('Dictionary sheet is not properly configured.');
+  }
+  const normalizedEnabled = normalizeDictionaryEnabled_(enabled);
+  let rowInfo = findDictionaryRowByUid_(info, uidIdx, uid);
+  if (!rowInfo && fallbackTerm) {
+    const normalizedTerm = String(fallbackTerm || '').trim();
+    if (normalizedTerm) {
+      for (let i = 0; i < info.rows.length; i++) {
+        const rowTerm = String(info.rows[i][termIdx] || '').trim();
+        if (rowTerm === normalizedTerm) {
+          rowInfo = { index: i, rowNumber: i + 2, values: info.rows[i] };
+          break;
+        }
+      }
+    }
+  }
+  if (!rowInfo) {
+    throw new Error(`Term not found: ${uid || fallbackTerm || ''}`);
+  }
+  const termLabel = String(rowInfo.values[termIdx] || '').trim();
+  sheet.getRange(rowInfo.rowNumber, enabledIdx + 1).setValue(normalizedEnabled);
+  return { success: true, message: `Term "${termLabel}" status updated.` };
+}
+
+function batchDeleteDictionaryTerms(uids) {
+  if (!Array.isArray(uids) || !uids.length) {
+    return { success: true, message: 'No terms deleted.' };
+  }
+  const unique = Array.from(new Set(uids.map((uid) => String(uid || '').trim()).filter(Boolean)));
+  if (!unique.length) {
+    return { success: true, message: 'No terms deleted.' };
+  }
+  const { sheet, info, uidIdx, termIdx } = ensureDictionarySheetStructure_();
+  if (sheet == null || uidIdx == null || termIdx == null) {
+    throw new Error('Dictionary sheet is not properly configured.');
+  }
+  const matches = [];
+  unique.forEach((uid) => {
+    const rowInfo = findDictionaryRowByUid_(info, uidIdx, uid);
+    if (rowInfo) {
+      matches.push({ rowNumber: rowInfo.rowNumber, term: String(rowInfo.values[termIdx] || '').trim() });
+    }
+  });
+  if (!matches.length) {
+    throw new Error('指定した語句が見つかりませんでした。');
+  }
+  matches.sort((a, b) => b.rowNumber - a.rowNumber).forEach((match) => {
+    sheet.deleteRow(match.rowNumber);
+  });
+  return { success: true, message: `${matches.length} 件の語句を削除しました。` };
+}
+
+function batchToggleDictionaryTerms(uids, enabled) {
+  if (!Array.isArray(uids) || !uids.length) {
+    return { success: true, message: 'No terms updated.' };
+  }
+  const unique = Array.from(new Set(uids.map((uid) => String(uid || '').trim()).filter(Boolean)));
+  if (!unique.length) {
+    return { success: true, message: 'No terms updated.' };
+  }
+  const normalizedEnabled = normalizeDictionaryEnabled_(enabled);
+  const { sheet, info, uidIdx, enabledIdx } = ensureDictionarySheetStructure_();
+  if (sheet == null || uidIdx == null || enabledIdx == null) {
+    throw new Error('Dictionary sheet is not properly configured.');
+  }
+  const updates = [];
+  unique.forEach((uid) => {
+    const rowInfo = findDictionaryRowByUid_(info, uidIdx, uid);
+    if (rowInfo) {
+      updates.push(rowInfo.rowNumber);
+    }
+  });
+  if (!updates.length) {
+    throw new Error('指定した語句が見つかりませんでした。');
+  }
+  updates.forEach((rowNumber) => {
+    sheet.getRange(rowNumber, enabledIdx + 1).setValue(normalizedEnabled);
+  });
+  return { success: true, message: `${updates.length} 件の語句を${normalizedEnabled ? '有効' : '無効'}にしました。` };
 }
 
 function dailyCheckAndResetUserForm() {
@@ -3451,6 +3663,9 @@ function getSheetData_(sheetKey) {
 
   if (sheetKey === 'question' || sheetKey === 'pick_up_question') {
     ensureQuestionUids_();
+  }
+  if (sheetKey === 'dictionary') {
+    ensureDictionarySheetStructure_();
   }
 
   const range = sh.getDataRange();

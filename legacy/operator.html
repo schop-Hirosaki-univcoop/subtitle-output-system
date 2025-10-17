@@ -129,14 +129,42 @@
                     <input type="text" id="new-ruby" class="input" placeholder="ルビ" required>
                     <button type="submit" class="btn btn-primary">追加</button>
                 </form>
-                <div class="table-scroller">
-                    <table id="dictionary-table">
-                        <thead>
-                            <tr><th>単語</th><th>ルビ</th><th>状態</th><th>操作</th></tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
+                <div class="dictionary-toolbar">
+                    <label class="chk">
+                        <input type="checkbox" id="dictionary-select-all" disabled>
+                        全選択
+                    </label>
+                    <span id="dictionary-count" class="dictionary-count" aria-live="polite">登録なし</span>
                 </div>
+                <div class="cards-scroll">
+                    <div id="dictionary-cards" class="dictionary-cards" aria-live="polite"></div>
+                </div>
+            </div>
+            <div id="dictionary-action-panel" class="action-panel" hidden>
+                <button id="dictionary-btn-enable" class="btn btn-primary" type="button" disabled>有効にする</button>
+                <button id="dictionary-btn-disable" class="btn" type="button" disabled>無効にする</button>
+                <button id="dictionary-btn-delete" class="btn btn-danger" type="button" disabled>削除</button>
+                <span id="dictionary-selected-info">単語を選択してください</span>
+                <div class="action-panel-right">
+                    <button id="dictionary-btn-batch-enable" class="btn btn-ghost" type="button" hidden>選択項目を有効にする</button>
+                    <button id="dictionary-btn-batch-disable" class="btn btn-ghost" type="button" hidden>選択項目を無効にする</button>
+                    <button id="dictionary-btn-batch-delete" class="btn btn-danger" type="button" hidden>選択項目を削除</button>
+                </div>
+            </div>
+            <div id="dictionary-confirm-dialog" class="modal modal--inline" role="dialog" aria-modal="true" aria-labelledby="dictionary-confirm-dialog-title" hidden>
+              <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+              <div class="modal-panel">
+                <div class="modal-header">
+                  <h2 id="dictionary-confirm-dialog-title">確認</h2>
+                </div>
+                <div class="modal-body">
+                  <p id="dictionary-confirm-dialog-message"></p>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-ghost" id="dictionary-confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
+                  <button type="button" class="btn btn-danger" id="dictionary-confirm-accept-button">削除する</button>
+                </div>
+              </div>
             </div>
         </aside>
         <aside class="module module--secondary" id="logs-panel" aria-labelledby="logs-title" hidden>
