@@ -3333,6 +3333,11 @@ body.sidebar-overlay-open{
   box-shadow:none;
 }
 
+.qa-embedded .admin-main.is-loading-hidden{
+  visibility:hidden;
+  pointer-events:none;
+}
+
 .qa-embedded .loading-overlay,
 .operator-embedded .loading-overlay{
   border-radius:clamp(1rem, 2.4vw, 1.45rem);
