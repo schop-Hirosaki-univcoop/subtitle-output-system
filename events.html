@@ -16,9 +16,13 @@
     </div>
   </noscript>
   <telop-header tagline="Broadcast Subtitle Console" context-label="管理フロー">
-    <span slot="meta" id="flow-user-label" class="user-label" hidden></span>
-    <div slot="meta" id="events-meta" class="hub-meta-note" hidden></div>
-    <button slot="actions" id="flow-logout-button" class="btn btn-ghost btn-sm" type="button">ログアウト</button>
+    <div slot="meta" class="flow-user-info">
+      <span id="flow-user-label" class="user-label flow-user-info__label" hidden></span>
+      <div class="flow-user-info__footer">
+        <div id="events-meta" class="hub-meta-note flow-user-info__meta" hidden></div>
+        <button id="flow-logout-button" class="btn btn-ghost btn-sm flow-user-info__logout" type="button">ログアウト</button>
+      </div>
+    </div>
   </telop-header>
 
   <main id="events-main" class="flow-main" data-stage="events">
