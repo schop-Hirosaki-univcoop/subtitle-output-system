@@ -8,7 +8,7 @@ import {
   MAX_QUESTION_LENGTH,
   MAX_RADIO_NAME_LENGTH
 } from "./constants.js";
-import { ref, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { ref, remove, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   countGraphemes,
   normalizeMultiline,
@@ -579,7 +579,6 @@ export class QuestionFormApp {
     assertActiveController(controller);
 
     const questionUid = generateQuestionUid();
-    const entryRef = ref(this.database, `questions/${questionUid}`);
     submission.uid = questionUid;
 
     let queueProcessed = false;
@@ -591,11 +590,25 @@ export class QuestionFormApp {
       context: this.state.context,
       timestamp
     });
+    const statusRecord = { answered: false, selecting: false, updatedAt: timestamp };
+
+    const questionRef = ref(this.database, `questions/normal/${questionUid}`);
+    const statusRef = ref(this.database, `questionStatus/${questionUid}`);
+    let questionCreated = false;
 
     try {
-      await set(entryRef, questionRecord);
+      await set(questionRef, questionRecord);
+      questionCreated = true;
+      await set(statusRef, statusRecord);
       queueProcessed = true;
     } catch (error) {
+      if (questionCreated) {
+        try {
+          await remove(questionRef);
+        } catch (cleanupError) {
+          console.warn("Failed to roll back question record after status write error", cleanupError);
+        }
+      }
       const isPermissionError = error?.code === "PERMISSION_DENIED";
       const message = isPermissionError
         ? "フォームを送信できませんでした。リンクの有効期限が切れていないかご確認ください。"
@@ -678,12 +691,14 @@ function buildQuestionRecord({
     schedule: scheduleLabel,
     scheduleStart,
     scheduleEnd,
+    scheduleDate: coalesceTrimmed(submission.scheduleDate, context?.scheduleDate),
     participantId,
+    participantName: coalesceTrimmed(submission.participantName, context?.participantName),
+    guidance: coalesceTrimmed(submission.guidance, context?.guidance),
     eventId,
+    eventName: coalesceTrimmed(submission.eventName, context?.eventName),
     scheduleId,
     ts: timestamp,
-    answered: false,
-    selecting: false,
     updatedAt: timestamp,
     type: "normal"
   };

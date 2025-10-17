@@ -285,9 +285,10 @@ function ensureQuestionUids_() {
 function mirrorQuestionsFromRtdbToSheet_(providedAccessToken) {
   const accessToken = providedAccessToken || getFirebaseAccessToken_();
   const questionsBranch = fetchRtdb_('questions', accessToken) || {};
+  const statusBranch = fetchRtdb_('questionStatus', accessToken) || {};
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  const ensureString = value => {
+  const ensureString = (value) => {
     if (value == null) return '';
     if (typeof value === 'string') return value.trim();
     return String(value).trim();
@@ -315,13 +316,11 @@ function mirrorQuestionsFromRtdbToSheet_(providedAccessToken) {
       return null;
     }
 
-    const ensureDateTimeFormat = columnIdx => {
+    const ensureDateTimeFormat = (columnIdx) => {
       if (columnIdx == null) return;
       const columnNumber = columnIdx + 1;
       const formatRows = Math.max(sheet.getMaxRows() - 1, 1);
-      sheet
-        .getRange(2, columnNumber, formatRows, 1)
-        .setNumberFormat('yyyy/MM/dd HH:mm:ss');
+      sheet.getRange(2, columnNumber, formatRows, 1).setNumberFormat('yyyy/MM/dd HH:mm:ss');
     };
 
     ensureDateTimeFormat(getHeaderIndex_(info.headerMap, ['開始日時', '日程開始']));
@@ -375,145 +374,157 @@ function mirrorQuestionsFromRtdbToSheet_(providedAccessToken) {
     pickupAppended: 0
   };
 
-  Object.keys(questionsBranch || {}).forEach(uidKey => {
-    const record = questionsBranch[uidKey];
-    if (!record || typeof record !== 'object') {
-      return;
+  const branches = [];
+  if (questionsBranch && typeof questionsBranch === 'object') {
+    const normalBranch = questionsBranch.normal && typeof questionsBranch.normal === 'object' ? questionsBranch.normal : null;
+    const pickupBranch = questionsBranch.pickup && typeof questionsBranch.pickup === 'object' ? questionsBranch.pickup : null;
+    if (normalBranch || pickupBranch) {
+      if (normalBranch) branches.push(['normal', normalBranch]);
+      if (pickupBranch) branches.push(['pickup', pickupBranch]);
+    } else {
+      branches.push(['normal', questionsBranch]);
     }
-    const resolvedUid = ensureString(record.uid || uidKey);
-    if (!resolvedUid) {
-      return;
-    }
-    const isPickup = record.type === 'pickup' || record.pickup === true;
-    const data = initSheetData(isPickup ? 'pickup' : 'normal');
-    if (!data) {
-      return;
-    }
+  }
 
-    const existing = data.existingByUid.get(resolvedUid);
-    const currentRow = existing ? existing.values : null;
-    const columnCount = data.info.headers.length;
-    const nextRow = currentRow ? currentRow.slice() : Array(columnCount).fill('');
-    const touched = new Set();
-
-    const setValue = (headerKeys, value) => {
-      const list = Array.isArray(headerKeys) ? headerKeys : [headerKeys];
-      list.forEach(headerKey => {
-        const idx = getHeaderIndex_(data.info.headerMap, headerKey);
-        if (idx == null) return;
-        nextRow[idx] = value;
-        touched.add(idx);
-      });
+  const resolveStatus = (uid) => {
+    const entry = statusBranch && typeof statusBranch === 'object' ? statusBranch[uid] : null;
+    return {
+      answered: entry && entry.answered === true,
+      selecting: entry && entry.selecting === true,
+      updatedAt: Number(entry && entry.updatedAt)
     };
+  };
 
-    const tsValue = Number(record.ts || record.timestamp || 0);
-    const tsDate = Number.isFinite(tsValue) && tsValue > 0 ? new Date(tsValue) : null;
-    const timestampLabel = formatQuestionTimestamp_(tsDate || new Date());
-    setValue(['タイムスタンプ', 'Timestamp'], timestampLabel);
-    if (tsValue) {
-      setValue('__ts', tsValue);
-    }
-
-    setValue('ラジオネーム', ensureString(record.name));
-    setValue('質問・お悩み', ensureString(record.question));
-
-    const groupValue = ensureString(record.group);
-    setValue('班番号', groupValue);
-
-    const genreValue = ensureString(record.genre) || 'その他';
-    setValue('ジャンル', genreValue);
-    if (record.genre != null) {
-      setValue('ジャンル(送信時)', ensureString(record.genre));
-    }
-
-    const scheduleStartMs = parseDateToMillis_(record.scheduleStart, 0);
-    const scheduleEndMs = parseDateToMillis_(record.scheduleEnd, 0);
-    const scheduleStartValue = scheduleStartMs ? new Date(scheduleStartMs) : ensureString(record.scheduleStart);
-    const scheduleEndValue = scheduleEndMs ? new Date(scheduleEndMs) : ensureString(record.scheduleEnd);
-    setValue(['日程開始', '開始日時'], scheduleStartValue || '');
-    setValue(['日程終了', '終了日時'], scheduleEndValue || '');
-
-    const scheduleLabel = ensureString(record.schedule) || formatScheduleLabel_(scheduleStartValue, scheduleEndValue);
-    setValue(['日程', '日程表示'], scheduleLabel);
-    setValue('日程日付', ensureString(record.scheduleDate));
-
-    setValue('イベントID', ensureString(record.eventId));
-    setValue('日程ID', ensureString(record.scheduleId));
-    setValue('参加者ID', ensureString(record.participantId));
-    if (record.participantName != null) {
-      const participantName = ensureString(record.participantName);
-      setValue(['参加者名', '氏名'], participantName);
-    }
-    if (record.eventName != null) {
-      setValue('イベント名', ensureString(record.eventName));
-    }
-
-    const tokenValue = ensureString(record.token);
-    setValue(['リンクトークン', 'Token'], tokenValue);
-
-    if (record.guidance != null) {
-      setValue(['ガイダンス', '案内文'], ensureString(record.guidance));
-    }
-
-    const questionLength = Number(record.questionLength);
-    setValue('質問文字数', Number.isFinite(questionLength) && questionLength > 0 ? questionLength : '');
-
-    setValue(['uid', 'UID'], resolvedUid);
-    setValue('回答済', record.answered === true);
-    setValue('選択中', record.selecting === true);
-
-    if (record.language != null) {
-      setValue('言語', ensureString(record.language));
-    }
-    if (record.origin != null) {
-      setValue('起点', ensureString(record.origin));
-    }
-    if (record.formVersion != null) {
-      setValue('フォームバージョン', ensureString(record.formVersion));
-    }
-    const updatedAtMs = Number(record.updatedAt);
-    if (Number.isFinite(updatedAtMs) && updatedAtMs > 0) {
-      setValue('更新日時', new Date(updatedAtMs));
-    }
-    setValue('タイプ', ensureString(record.type));
-    if (isPickup) {
-      setValue('ピックアップ', true);
-    } else {
-      setValue('ピックアップ', false);
-    }
-
-    const touchedIndexes = Array.from(touched);
-    let rowChanged = !currentRow;
-    if (currentRow) {
-      rowChanged = touchedIndexes.some(idx => !valuesEqual(currentRow[idx], nextRow[idx]));
-    }
-
-    results.total += 1;
-    if (!rowChanged) {
-      return;
-    }
-
-    if (currentRow) {
-      data.updates.push({ rowNumber: existing.rowNumber, values: nextRow });
-      if (isPickup) {
-        results.pickupUpdated += 1;
-      } else {
-        results.updated += 1;
+  branches.forEach(([type, branch]) => {
+    const sheetType = type === 'pickup' ? 'pickup' : 'normal';
+    Object.keys(branch || {}).forEach((uidKey) => {
+      const record = branch[uidKey];
+      if (!record || typeof record !== 'object') {
+        return;
       }
-    } else {
-      data.appends.push(nextRow);
-      if (isPickup) {
-        results.pickupAppended += 1;
-      } else {
-        results.appended += 1;
+      const resolvedUid = ensureString(record.uid || uidKey);
+      if (!resolvedUid) {
+        return;
       }
-    }
+
+      const data = initSheetData(sheetType);
+      if (!data) {
+        return;
+      }
+
+      const status = resolveStatus(resolvedUid);
+      const existing = data.existingByUid.get(resolvedUid);
+      const currentRow = existing ? existing.values : null;
+      const columnCount = data.info.headers.length;
+      const nextRow = currentRow ? currentRow.slice() : Array(columnCount).fill('');
+      const touched = new Set();
+
+      const setValue = (headerKeys, value) => {
+        const list = Array.isArray(headerKeys) ? headerKeys : [headerKeys];
+        list.forEach((headerKey) => {
+          const idx = getHeaderIndex_(data.info.headerMap, headerKey);
+          if (idx == null) return;
+          nextRow[idx] = value;
+          touched.add(idx);
+        });
+      };
+
+      const tsValue = Number(record.ts || record.timestamp || 0);
+      const tsDate = Number.isFinite(tsValue) && tsValue > 0 ? new Date(tsValue) : null;
+      const timestampLabel = formatQuestionTimestamp_(tsDate || new Date());
+      setValue(['タイムスタンプ', 'Timestamp'], timestampLabel);
+      if (tsValue) {
+        setValue('__ts', tsValue);
+      }
+
+      setValue('ラジオネーム', ensureString(record.name));
+      setValue('質問・お悩み', ensureString(record.question));
+
+      const groupValue = ensureString(record.group);
+      setValue('班番号', groupValue);
+
+      const genreValue = ensureString(record.genre) || 'その他';
+      setValue('ジャンル', genreValue);
+      if (record.genre != null) {
+        setValue('ジャンル(送信時)', ensureString(record.genre));
+      }
+
+      const scheduleStartMs = parseDateToMillis_(record.scheduleStart, 0);
+      const scheduleEndMs = parseDateToMillis_(record.scheduleEnd, 0);
+      const scheduleStartValue = scheduleStartMs ? new Date(scheduleStartMs) : ensureString(record.scheduleStart);
+      const scheduleEndValue = scheduleEndMs ? new Date(scheduleEndMs) : ensureString(record.scheduleEnd);
+      setValue(['日程開始', '開始日時'], scheduleStartValue || '');
+      setValue(['日程終了', '終了日時'], scheduleEndValue || '');
+
+      const scheduleLabel = ensureString(record.schedule) || formatScheduleLabel_(scheduleStartValue, scheduleEndValue);
+      setValue(['日程', '日程表示'], scheduleLabel);
+      setValue('日程日付', ensureString(record.scheduleDate));
+
+      setValue('イベントID', ensureString(record.eventId));
+      setValue('日程ID', ensureString(record.scheduleId));
+      setValue('参加者ID', ensureString(record.participantId));
+      if (record.participantName != null) {
+        const participantName = ensureString(record.participantName);
+        setValue(['参加者名', '氏名'], participantName);
+      }
+      if (record.eventName != null) {
+        setValue('イベント名', ensureString(record.eventName));
+      }
+
+      const tokenValue = ensureString(record.token);
+      setValue(['リンクトークン', 'Token'], tokenValue);
+
+      if (record.guidance != null) {
+        setValue(['ガイダンス', '案内文'], ensureString(record.guidance));
+      }
+
+      const questionLength = Number(record.questionLength);
+      setValue('質問文字数', Number.isFinite(questionLength) && questionLength > 0 ? questionLength : '');
+
+      setValue(['uid', 'UID'], resolvedUid);
+      setValue('回答済', status.answered);
+      setValue('選択中', status.selecting);
+
+      const updatedAtMs = Number(record.updatedAt || status.updatedAt);
+      if (Number.isFinite(updatedAtMs) && updatedAtMs > 0) {
+        setValue('更新日時', new Date(updatedAtMs));
+      }
+      setValue('タイプ', sheetType === 'pickup' ? 'pickup' : ensureString(record.type));
+      setValue('ピックアップ', sheetType === 'pickup');
+
+      const touchedIndexes = Array.from(touched);
+      let rowChanged = !currentRow;
+      if (currentRow) {
+        rowChanged = touchedIndexes.some((idx) => !valuesEqual(currentRow[idx], nextRow[idx]));
+      }
+
+      results.total += 1;
+      if (!rowChanged) {
+        return;
+      }
+
+      if (currentRow) {
+        data.updates.push({ rowNumber: existing.rowNumber, values: nextRow });
+        if (sheetType === 'pickup') {
+          results.pickupUpdated += 1;
+        } else {
+          results.updated += 1;
+        }
+      } else {
+        data.appends.push(nextRow);
+        if (sheetType === 'pickup') {
+          results.pickupAppended += 1;
+        } else {
+          results.appended += 1;
+        }
+      }
+    });
   });
 
-  sheetDataMap.forEach(data => {
+  sheetDataMap.forEach((data) => {
     if (!data) return;
     const columnCount = data.info.headers.length;
-    data.updates.forEach(entry => {
+    data.updates.forEach((entry) => {
       data.sheet.getRange(entry.rowNumber, 1, 1, columnCount).setValues([entry.values]);
     });
     if (data.appends.length) {
@@ -1013,19 +1024,26 @@ function processQuestionSubmissionQueue_(providedAccessToken, options) {
           schedule: scheduleLabel,
           scheduleStart: scheduleStartIso,
           scheduleEnd: scheduleEndIso,
+          scheduleDate,
           participantId,
+          participantName,
           eventId,
+          eventName,
           scheduleId,
+          guidance,
           ts: timestamp.getTime(),
-          answered: false,
-          selecting: false,
           updatedAt: processedAt,
           type: 'normal'
         };
         if (Number.isFinite(questionLength) && questionLength > 0) {
           questionPayload.questionLength = questionLength;
         }
-        questionUpdates[`questions/${uid}`] = questionPayload;
+        questionUpdates[`questions/normal/${uid}`] = questionPayload;
+        questionUpdates[`questionStatus/${uid}`] = {
+          answered: false,
+          selecting: false,
+          updatedAt: processedAt
+        };
         updates[submissionPath] = null;
         processed += 1;
       } catch (err) {
@@ -1184,6 +1202,7 @@ function applyParticipantGroupsToQuestionSheet_(participantsBranch, questionsBra
       return;
     }
 
+    const sheetType = sheet.getName() === PICKUP_QUESTION_SHEET_NAME ? 'pickup' : 'normal';
     info.rows.forEach((row, index) => {
       let desired = null;
       if (participantIdx != null) {
@@ -1213,15 +1232,18 @@ function applyParticipantGroupsToQuestionSheet_(participantsBranch, questionsBra
         return;
       }
 
-      sheetUpdates.push({ sheet, rowNumber: index + 2, column: groupIdx + 1, value: normalizedDesired, uid });
-      uidUpdateMap.set(uid, normalizedDesired);
+      sheetUpdates.push({ sheet, rowNumber: index + 2, column: groupIdx + 1, value: normalizedDesired, uid, type: sheetType });
+      uidUpdateMap.set(uid, { value: normalizedDesired, type: sheetType });
     });
   });
 
   const pendingQuestionUpdates = new Map();
-  if (questionsBranch && typeof questionsBranch === 'object') {
-    Object.keys(questionsBranch).forEach(uid => {
-      const question = questionsBranch[uid] || {};
+  const assignPendingUpdates = (branch, typeHint) => {
+    if (!branch || typeof branch !== 'object') {
+      return;
+    }
+    Object.keys(branch).forEach(uid => {
+      const question = branch[uid] || {};
       const participantId = String(question.participantId || '').trim();
       const token = String(question.token || '').trim();
       let desired = null;
@@ -1241,21 +1263,33 @@ function applyParticipantGroupsToQuestionSheet_(participantsBranch, questionsBra
         return;
       }
 
-      pendingQuestionUpdates.set(uid, normalizedDesired);
+      const type = String(question.type || typeHint || 'normal').toLowerCase() === 'pickup' ? 'pickup' : 'normal';
+      pendingQuestionUpdates.set(uid, { value: normalizedDesired, type });
     });
+  };
+
+  if (questionsBranch && typeof questionsBranch === 'object') {
+    if (questionsBranch.normal || questionsBranch.pickup) {
+      assignPendingUpdates(questionsBranch.normal, 'normal');
+      assignPendingUpdates(questionsBranch.pickup, 'pickup');
+    } else {
+      assignPendingUpdates(questionsBranch, null);
+    }
   }
 
-  pendingQuestionUpdates.forEach((value, uid) => {
-    uidUpdateMap.set(uid, value);
+  pendingQuestionUpdates.forEach((entry, uid) => {
+    uidUpdateMap.set(uid, entry);
   });
 
   let patchedCount = 0;
   if (uidUpdateMap.size) {
     const now = Date.now();
     const questionUpdates = {};
-    uidUpdateMap.forEach((value, uid) => {
-      questionUpdates[`questions/${uid}/group`] = value || '';
-      questionUpdates[`questions/${uid}/updatedAt`] = now;
+    uidUpdateMap.forEach((entry, uid) => {
+      const type = entry && entry.type === 'pickup' ? 'pickup' : 'normal';
+      const value = entry && typeof entry === 'object' ? entry.value : entry;
+      questionUpdates[`questions/${type}/${uid}/group`] = value || '';
+      questionUpdates[`questions/${type}/${uid}/updatedAt`] = now;
     });
     try {
       patchRtdb_(questionUpdates, getFirebaseAccessToken_());
@@ -2592,7 +2626,8 @@ function mirrorSheetToRtdb_(){
     sources.push({ info: ensureQuestionSheetInfoWithEventColumns_(pickupSheet), type: 'pickup' });
   }
   const now = Date.now();
-  const map = {};
+  const questionBranch = { normal: {}, pickup: {} };
+  const statusBranch = {};
 
   sources.forEach(source => {
     const info = source.info;
@@ -2617,6 +2652,12 @@ function mirrorSheetToRtdb_(){
     const startIdx = getHeaderIndex_(info.headerMap, ['開始日時', '日程開始']);
     const endIdx = getHeaderIndex_(info.headerMap, ['終了日時', '日程終了']);
     const nameIdx = getHeaderIndex_(info.headerMap, 'ラジオネーム');
+    const scheduleLabelIdx = getHeaderIndex_(info.headerMap, ['日程', '日程表示']);
+    const scheduleDateIdx = getHeaderIndex_(info.headerMap, '日程日付');
+    const eventNameIdx = getHeaderIndex_(info.headerMap, 'イベント名');
+    const participantNameIdx = getHeaderIndex_(info.headerMap, ['参加者名', '氏名']);
+    const guidanceIdx = getHeaderIndex_(info.headerMap, ['ガイダンス', '案内文']);
+    const questionLengthIdx = getHeaderIndex_(info.headerMap, '質問文字数');
 
     info.rows.forEach(row => {
       const uid = String(row[uidIdx] || '').trim();
@@ -2634,15 +2675,22 @@ function mirrorSheetToRtdb_(){
       const endValue = endIdx != null ? row[endIdx] : '';
       const scheduleStart = startIdx != null ? toIsoStringOrValue_(startValue) : '';
       const scheduleEnd = endIdx != null ? toIsoStringOrValue_(endValue) : '';
-      const scheduleLabel = formatScheduleLabel_(startValue, endValue);
+      const scheduleLabelCell = scheduleLabelIdx != null ? row[scheduleLabelIdx] : '';
+      const scheduleLabel = scheduleLabelCell ? String(scheduleLabelCell || '').trim() : formatScheduleLabel_(startValue, endValue);
 
       const participantId = participantIdx != null ? String(row[participantIdx] || '').trim() : '';
       const eventId = eventIdIdx != null ? String(row[eventIdIdx] || '').trim() : '';
       const scheduleId = scheduleIdIdx != null ? String(row[scheduleIdIdx] || '').trim() : '';
       const groupValue = groupIdx != null ? String(row[groupIdx] || '').trim() : '';
       const genreValue = genreIdx != null ? String(row[genreIdx] || '').trim() : '';
+      const scheduleDate = scheduleDateIdx != null ? row[scheduleDateIdx] : '';
+      const eventName = eventNameIdx != null ? String(row[eventNameIdx] || '').trim() : '';
+      const participantName = participantNameIdx != null ? String(row[participantNameIdx] || '').trim() : '';
+      const guidance = guidanceIdx != null ? String(row[guidanceIdx] || '').trim() : '';
+      const questionLength = questionLengthIdx != null ? Number(row[questionLengthIdx]) : null;
 
-      map[uid] = {
+      const targetBranch = source.type === 'pickup' ? questionBranch.pickup : questionBranch.normal;
+      const record = {
         uid,
         name,
         question: String(row[questionIdx] || ''),
@@ -2651,31 +2699,41 @@ function mirrorSheetToRtdb_(){
         schedule: scheduleLabel,
         scheduleStart,
         scheduleEnd,
+        scheduleDate: scheduleDate ? String(scheduleDate || '').trim() : '',
         participantId,
+        participantName,
+        guidance,
         eventId,
+        eventName,
         scheduleId,
         ts: tsMs || 0,
-        answered: answeredIdx != null ? toBooleanCell_(row[answeredIdx]) : false,
-        selecting: selectingIdx != null ? toBooleanCell_(row[selectingIdx]) : false,
         updatedAt: now,
         type: source.type
       };
-
       if (source.type === 'pickup') {
-        map[uid].pickup = true;
+        record.pickup = true;
       }
+      if (Number.isFinite(questionLength) && questionLength > 0) {
+        record.questionLength = Number(questionLength);
+      }
+      targetBranch[uid] = record;
+
+      statusBranch[uid] = {
+        answered: answeredIdx != null ? toBooleanCell_(row[answeredIdx]) : false,
+        selecting: selectingIdx != null ? toBooleanCell_(row[selectingIdx]) : false,
+        updatedAt: now
+      };
     });
   });
 
+  const updates = {
+    'questions/normal': questionBranch.normal,
+    'questions/pickup': questionBranch.pickup,
+    questionStatus: statusBranch
+  };
   const token = getFirebaseAccessToken_();
-  const res = UrlFetchApp.fetch(rtdbUrl_('questions'), {
-    method: 'put',
-    contentType: 'application/json',
-    payload: JSON.stringify(map),
-    headers: { Authorization: 'Bearer ' + token },
-    muteHttpExceptions: true
-  });
-  return { count: Object.keys(map).length, status: res.getResponseCode() };
+  patchRtdb_(updates, token);
+  return { count: Object.keys(questionBranch.normal).length + Object.keys(questionBranch.pickup).length, status: 200 };
 }
 
 function logAction_(principal, actionType, details) {
@@ -2993,7 +3051,7 @@ function beginDisplaySession_(principal) {
   ensureDisplayPrincipal_(principal, 'Only anonymous display accounts can begin sessions');
   const token = getFirebaseAccessToken_();
   const now = Date.now();
-  const current = fetchRtdb_('render_control/session', token);
+  const current = fetchRtdb_('render/session', token);
   const updates = {};
 
   if (current && current.sessionId) {
@@ -3030,7 +3088,7 @@ function beginDisplaySession_(principal) {
 
   updates[`screens/approved/${principal.uid}`] = true;
   updates[`screens/sessions/${principal.uid}`] = session;
-  updates['render_control/session'] = session;
+  updates['render/session'] = session;
   patchRtdb_(updates, token);
   return { session };
 }
@@ -3040,11 +3098,11 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
   const sessionId = requireSessionId_(rawSessionId);
   const token = getFirebaseAccessToken_();
   const now = Date.now();
-  const current = fetchRtdb_('render_control/session', token);
+  const current = fetchRtdb_('render/session', token);
   if (!current || current.uid !== principal.uid || current.sessionId !== sessionId) {
     if (current && Number(current.expiresAt || 0) <= now) {
       const updates = {};
-      updates['render_control/session'] = null;
+      updates['render/session'] = null;
       if (current.uid) {
         updates[`screens/approved/${current.uid}`] = null;
         updates[`screens/sessions/${current.uid}`] = Object.assign({}, current, {
@@ -3061,7 +3119,7 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
 
   if (Number(current.expiresAt || 0) <= now) {
     const updates = {};
-    updates['render_control/session'] = null;
+    updates['render/session'] = null;
     updates[`screens/approved/${current.uid}`] = null;
     updates[`screens/sessions/${current.uid}`] = Object.assign({}, current, {
       status: 'expired',
@@ -3081,7 +3139,7 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
   const updates = {};
   updates[`screens/approved/${principal.uid}`] = true;
   updates[`screens/sessions/${principal.uid}`] = session;
-  updates['render_control/session'] = session;
+  updates['render/session'] = session;
   patchRtdb_(updates, token);
   return { active: true, session };
 }
@@ -3091,7 +3149,7 @@ function endDisplaySession_(principal, rawSessionId, reason) {
   const sessionId = requireSessionId_(rawSessionId);
   const token = getFirebaseAccessToken_();
   const now = Date.now();
-  const current = fetchRtdb_('render_control/session', token);
+  const current = fetchRtdb_('render/session', token);
   if (!current || current.uid !== principal.uid || current.sessionId !== sessionId) {
     return { ended: false };
   }
@@ -3106,7 +3164,7 @@ function endDisplaySession_(principal, rawSessionId, reason) {
   const updates = {};
   updates[`screens/approved/${principal.uid}`] = null;
   updates[`screens/sessions/${principal.uid}`] = session;
-  updates['render_control/session'] = null;
+  updates['render/session'] = null;
   patchRtdb_(updates, token);
   return { ended: true };
 }
@@ -3163,6 +3221,25 @@ function updateSelectingStatus(uid) {
   });
 
   target.sheet.getRange(target.rowNumber, target.selectingIdx + 1).setValue(true);
+  const statusUpdates = {};
+  const now = Date.now();
+  infos.forEach(info => {
+    const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
+    if (uidIdx == null) return;
+    info.rows.forEach(row => {
+      const rowUid = String(row[uidIdx] || '').trim();
+      if (!rowUid || rowUid === targetUid) return;
+      statusUpdates[`questionStatus/${rowUid}/selecting`] = false;
+      statusUpdates[`questionStatus/${rowUid}/updatedAt`] = now;
+    });
+  });
+  statusUpdates[`questionStatus/${targetUid}/selecting`] = true;
+  statusUpdates[`questionStatus/${targetUid}/updatedAt`] = Date.now();
+  try {
+    patchRtdb_(statusUpdates, getFirebaseAccessToken_());
+  } catch (error) {
+    console.warn('updateSelectingStatus failed to patch RTDB', error);
+  }
   return { success: true, message: `UID: ${uid} is now selecting.` };
 }
 
@@ -3193,6 +3270,14 @@ function updateAnswerStatus(uid, status) {
   }
   const isAnswered = status === true || status === 'true' || status === 1;
   match.sheet.getRange(match.rowNumber, answeredIdx + 1).setValue(isAnswered);
+  const updates = {};
+  updates[`questionStatus/${uid}/answered`] = isAnswered;
+  updates[`questionStatus/${uid}/updatedAt`] = Date.now();
+  try {
+    patchRtdb_(updates, getFirebaseAccessToken_());
+  } catch (error) {
+    console.warn('updateAnswerStatus failed to patch RTDB', error);
+  }
   return { success: true, message: `UID: ${uid} updated.` };
 }
 
@@ -3561,8 +3646,9 @@ function notifyUpdate(kind) {
       if (kind !== 'logs') {
         mirrorSheetToRtdb_();
       }
-      const url = `${FIREBASE_DB_URL}/update_trigger.json`;
-      const payload = new Date().getTime();
+      const signalKey = kind ? `signals/${kind}` : 'signals/misc';
+      const url = `${FIREBASE_DB_URL}/${signalKey}.json`;
+      const payload = { triggeredAt: new Date().getTime() };
 
       const options = {
         method: 'put',
@@ -3619,6 +3705,7 @@ function batchUpdateStatus(uids, status) {
 
     const isAnswered = status === true || status === 'true' || status === 1;
     let updatedCount = 0;
+    const statusUpdates = {};
 
     QUESTION_SHEET_NAMES.forEach(name => {
       const sheet = ss.getSheetByName(name);
@@ -3641,12 +3728,22 @@ function batchUpdateStatus(uids, status) {
           values[i][0] = isAnswered;
           changed = true;
         }
+        statusUpdates[`questionStatus/${rowUid}/answered`] = isAnswered;
+        statusUpdates[`questionStatus/${rowUid}/updatedAt`] = Date.now();
       }
 
       if (changed) {
         range.setValues(values);
       }
     });
+
+    if (Object.keys(statusUpdates).length) {
+      try {
+        patchRtdb_(statusUpdates, getFirebaseAccessToken_());
+      } catch (error) {
+        console.warn('batchUpdateStatus failed to patch RTDB', error);
+      }
+    }
 
     return { success: true, message: `${updatedCount} items updated.` };
 
@@ -3660,12 +3757,15 @@ function clearSelectingStatus() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     let changedAny = false;
+    const statusUpdates = {};
+    const now = Date.now();
     QUESTION_SHEET_NAMES.forEach(name => {
       const sheet = ss.getSheetByName(name);
       if (!sheet) return;
       const info = readSheetWithHeaders_(sheet);
       const selectingIdx = getHeaderIndex_(info.headerMap, '選択中');
-      if (selectingIdx == null || !info.rows.length) return;
+      const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
+      if (selectingIdx == null || uidIdx == null || !info.rows.length) return;
       const range = sheet.getRange(2, selectingIdx + 1, info.rows.length, 1);
       const values = range.getValues();
       let changed = false;
@@ -3674,12 +3774,24 @@ function clearSelectingStatus() {
           values[i][0] = false;
           changed = true;
         }
+        const rowUid = String(info.rows[i][uidIdx] || '').trim();
+        if (rowUid) {
+          statusUpdates[`questionStatus/${rowUid}/selecting`] = false;
+          statusUpdates[`questionStatus/${rowUid}/updatedAt`] = now;
+        }
       }
       if (changed) {
         range.setValues(values);
         changedAny = true;
       }
     });
+    if (Object.keys(statusUpdates).length) {
+      try {
+        patchRtdb_(statusUpdates, getFirebaseAccessToken_());
+      } catch (error) {
+        console.warn('clearSelectingStatus failed to patch RTDB', error);
+      }
+    }
     return { success: true, changed: changedAny };
   } catch (error) {
     return { success: false, error: error.message };

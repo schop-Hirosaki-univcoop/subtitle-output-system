@@ -32,6 +32,7 @@ export function closeEditDialog(app) {
   }
   app.editSubmitting = false;
   app.pendingEditUid = null;
+  app.pendingEditType = null;
   app.pendingEditOriginal = "";
   if (app.dom.editSaveButton) {
     app.dom.editSaveButton.disabled = false;
@@ -48,6 +49,7 @@ export function handleDialogKeydown(app, event) {
 export function handleEdit(app) {
   if (!app.state.selectedRowData || !app.dom.editDialog || !app.dom.editTextarea) return;
   app.pendingEditUid = app.state.selectedRowData.uid;
+  app.pendingEditType = app.state.selectedRowData.isPickup ? "pickup" : "normal";
   app.pendingEditOriginal = String(app.state.selectedRowData.question || "");
   app.dom.editTextarea.value = app.pendingEditOriginal;
   if (typeof app.dom.editTextarea.setSelectionRange === "function") {
@@ -76,7 +78,8 @@ export async function handleEditSubmit(app) {
     app.dom.editSaveButton.disabled = true;
   }
   try {
-    await update(ref(database, `questions/${app.pendingEditUid}`), { question: newText });
+    const branch = app.pendingEditType === "pickup" ? "questions/pickup" : "questions/normal";
+    await update(ref(database, `${branch}/${app.pendingEditUid}`), { question: newText, updatedAt: Date.now() });
     app.api.fireAndForgetApi({ action: "editQuestion", uid: app.pendingEditUid, text: newText });
     app.api.logAction("EDIT", `UID: ${app.pendingEditUid}`);
     app.toast("質問を更新しました。", "success");
