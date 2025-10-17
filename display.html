@@ -651,8 +651,8 @@
           }
         });
 
-        const currentTelopRef = ref(database, 'currentTelop');
-        const renderRef = ref(database, 'render_state');
+        const nowShowingRef = ref(database, 'render/state/nowShowing');
+        const renderRef = ref(database, 'render/state');
 
         function flushPendingRender(reason) {
           if (!pendingRenderUpdate) return;
@@ -739,7 +739,7 @@
           if (next?.uid) showingPayload.uid = String(next.uid);
           if (next?.participantId) showingPayload.participantId = String(next.participantId);
           if (next?.pickup) showingPayload.pickup = true;
-          reportRender('showing', { nowShowing: showingPayload });
+          reportRender('showing');
           try{
             if (__currentToken !== token) return;
             await flipResize(next);
@@ -749,7 +749,7 @@
             if (next?.uid) visiblePayload.uid = String(next.uid);
             if (next?.participantId) visiblePayload.participantId = String(next.participantId);
             if (next?.pickup) visiblePayload.pickup = true;
-            await reportRender('visible', { nowShowing: visiblePayload });
+            await reportRender('visible');
           } catch(e){
             console.error(e);
             await reportRender('error', { error: String(e && e.message || e) });
@@ -1043,8 +1043,8 @@
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }
 
-        // Firebaseの 'currentTelop' の場所の変更を監視する
-        onValue(currentTelopRef, (snapshot) => {
+        // Firebaseの nowShowing の変更を監視する
+        onValue(nowShowingRef, (snapshot) => {
           const telopData  = snapshot.val() || null;
           const name       = telopData?.name ?? '';
           const question   = telopData?.question ?? '';
@@ -1064,7 +1064,7 @@
           // ラベル制御（Pick Up Question はラベル非表示）※ ここでは切り替え“しない”
           const isPickup = (n, flag) => flag === true || String(n).trim().toLowerCase().replace(/\s+/g,'') === 'pickupquestion';
           const willNoLabel = isPickup(name, pickup);
-          // ★ currentTelop 更新時に前回値との差分を把握して、必要なDOMだけを入れ替える
+          // ★ nowShowing 更新時に前回値との差分を把握して、必要なDOMだけを入れ替える
           const nameChanged  = name.trim() !== prevName.trim();
           const qChanged     = question.trim() !== prevQuestion.trim();
           const prevGenreTrim = prevGenre.trim();
@@ -1105,7 +1105,7 @@
                 if (participantId) showingPayload.participantId = participantId;
                 if (pickup) showingPayload.pickup = true;
                 if (genre) showingPayload.genre = genre;
-                reportRender('showing', { nowShowing: showingPayload });
+                reportRender('showing');
 
                 await fontsReady();
                 await flipResize(next);              // サイズ補間（座布団も滑らか）
@@ -1123,7 +1123,7 @@
                 if (participantId) visiblePayload.participantId = participantId;
                 if (pickup) visiblePayload.pickup = true;
                 if (genre) visiblePayload.genre = genre;
-                reportRender('visible', { nowShowing: visiblePayload });
+                reportRender('visible');
               });
             } else {
               // 変更なしでも不可視が残っていたら強制復帰

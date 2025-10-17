@@ -2649,15 +2649,15 @@ export class EventAdminApp {
     }
   }
 
-  async requestSheetSync() {
+  requestSheetSync() {
     if (!this.api) {
       return;
     }
-    try {
-      await this.api.apiPost({ action: "syncQuestionIntakeToSheet" });
-    } catch (error) {
-      console.warn("Failed to request sheet sync:", error);
-    }
+    this.api
+      .apiPost({ action: "syncQuestionIntakeToSheet" })
+      .catch((error) => {
+        console.warn("Failed to request sheet sync:", error);
+      });
   }
 
   bindDialogDismiss(element) {
