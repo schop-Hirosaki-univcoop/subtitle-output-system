@@ -618,7 +618,7 @@ function doPost(e) {
         return ok(saveQuestionParticipants_(req.eventId, req.scheduleId, req.entries));
       case 'addTerm':
         assertOperator_(principal);
-        return ok(addDictionaryTerm(req.term, req.ruby));
+        return ok(addDictionaryTerm(req.term, req.ruby, req.uid));
       case 'updateTerm':
         assertOperator_(principal);
         return ok(updateDictionaryTerm(req.uid, req.term, req.ruby));
@@ -1609,6 +1609,12 @@ function mirrorQuestionIntake_() {
     const guidance = existingParticipant.guidance || tokenRecord.guidance || '';
 
     const teamValue = String(entry.teamNumber || entry.groupNumber || '');
+
+    const scheduleNodeExisting = ((existingSchedules[entry.eventId] || {})[entry.scheduleId]) || {};
+    const scheduleUpdatedAt = parseDateToMillis_(scheduleNodeExisting.updatedAt, 0);
+    if (scheduleUpdatedAt && participantUpdatedAt && participantUpdatedAt < scheduleUpdatedAt) {
+      return;
+    }
 
     participantsTree[entry.eventId][entry.scheduleId][entry.participantId] = {
       participantId: entry.participantId,
@@ -3383,7 +3389,7 @@ function findDictionaryRowByUid_(info, uidIdx, uid) {
   return null;
 }
 
-function addDictionaryTerm(term, ruby) {
+function addDictionaryTerm(term, ruby, providedUid) {
   const normalizedTerm = String(term || '').trim();
   const normalizedRuby = String(ruby || '').trim();
   if (!normalizedTerm || !normalizedRuby) {
@@ -3393,18 +3399,34 @@ function addDictionaryTerm(term, ruby) {
   if (sheet == null || uidIdx == null || termIdx == null || rubyIdx == null || enabledIdx == null) {
     throw new Error('Dictionary sheet is not properly configured.');
   }
+  const suppliedUid = String(providedUid || '').trim();
+  const token = getFirebaseAccessToken_();
+  const now = Date.now();
   for (let i = 0; i < info.rows.length; i++) {
     const rowTerm = String(info.rows[i][termIdx] || '').trim();
     if (rowTerm === normalizedTerm) {
       const rowNumber = i + 2;
       sheet.getRange(rowNumber, rubyIdx + 1).setValue(normalizedRuby);
       sheet.getRange(rowNumber, enabledIdx + 1).setValue(true);
-      const uid = String(info.rows[i][uidIdx] || '').trim();
+      let uid = String(info.rows[i][uidIdx] || '').trim();
+      if (!uid) {
+        uid = suppliedUid || Utilities.getUuid();
+        sheet.getRange(rowNumber, uidIdx + 1).setValue(uid);
+      }
+      const updates = {};
+      updates[`dictionary/${uid}`] = {
+        uid,
+        term: normalizedTerm,
+        ruby: normalizedRuby,
+        enabled: true,
+        updatedAt: now
+      };
+      patchRtdb_(updates, token);
       return { success: true, message: `Term "${normalizedTerm}" updated.`, uid };
     }
   }
   const headers = info.headers || [];
-  const newUid = Utilities.getUuid();
+  const newUid = suppliedUid || Utilities.getUuid();
   const rowValues = headers.map((header, column) => {
     const key = normalizeHeaderKey_(header);
     if (key === 'term') return normalizedTerm;
@@ -3415,6 +3437,15 @@ function addDictionaryTerm(term, ruby) {
     return '';
   });
   sheet.appendRow(rowValues);
+  const updates = {};
+  updates[`dictionary/${newUid}`] = {
+    uid: newUid,
+    term: normalizedTerm,
+    ruby: normalizedRuby,
+    enabled: true,
+    updatedAt: now
+  };
+  patchRtdb_(updates, token);
   return { success: true, message: `Term "${normalizedTerm}" added.`, uid: newUid };
 }
 
@@ -3455,6 +3486,15 @@ function updateDictionaryTerm(uid, term, ruby) {
   if (enabledIdx != null) {
     info.rows[rowInfo.index][enabledIdx] = true;
   }
+  const updates = {};
+  updates[`dictionary/${normalizedUid}`] = {
+    uid: normalizedUid,
+    term: normalizedTerm,
+    ruby: normalizedRuby,
+    enabled: true,
+    updatedAt: Date.now()
+  };
+  patchRtdb_(updates, getFirebaseAccessToken_());
   return { success: true, message: `Term "${normalizedTerm}" updated.` };
 }
 
@@ -3481,13 +3521,19 @@ function deleteDictionaryTerm(uid, fallbackTerm) {
     throw new Error(`Term not found: ${uid || fallbackTerm || ''}`);
   }
   const termLabel = String(rowInfo.values[termIdx] || '').trim();
+  const uidValue = String(rowInfo.values[uidIdx] || '').trim();
   sheet.deleteRow(rowInfo.rowNumber);
+  if (uidValue) {
+    const updates = {};
+    updates[`dictionary/${uidValue}`] = null;
+    patchRtdb_(updates, getFirebaseAccessToken_());
+  }
   return { success: true, message: `Term "${termLabel}" deleted.` };
 }
 
 function toggleDictionaryTerm(uid, enabled, fallbackTerm) {
-  const { sheet, info, uidIdx, termIdx, enabledIdx } = ensureDictionarySheetStructure_();
-  if (sheet == null || uidIdx == null || termIdx == null || enabledIdx == null) {
+  const { sheet, info, uidIdx, termIdx, rubyIdx, enabledIdx } = ensureDictionarySheetStructure_();
+  if (sheet == null || uidIdx == null || termIdx == null || enabledIdx == null || rubyIdx == null) {
     throw new Error('Dictionary sheet is not properly configured.');
   }
   const normalizedEnabled = normalizeDictionaryEnabled_(enabled);
@@ -3509,6 +3555,18 @@ function toggleDictionaryTerm(uid, enabled, fallbackTerm) {
   }
   const termLabel = String(rowInfo.values[termIdx] || '').trim();
   sheet.getRange(rowInfo.rowNumber, enabledIdx + 1).setValue(normalizedEnabled);
+  const uidValue = String(rowInfo.values[uidIdx] || '').trim();
+  if (uidValue) {
+    const updates = {};
+    updates[`dictionary/${uidValue}`] = {
+      uid: uidValue,
+      term: termLabel,
+      ruby: String(rowInfo.values[rubyIdx] || '').trim(),
+      enabled: normalizedEnabled,
+      updatedAt: Date.now()
+    };
+    patchRtdb_(updates, getFirebaseAccessToken_());
+  }
   return { success: true, message: `Term "${termLabel}" status updated.` };
 }
 
@@ -3537,6 +3595,15 @@ function batchDeleteDictionaryTerms(uids) {
   matches.sort((a, b) => b.rowNumber - a.rowNumber).forEach((match) => {
     sheet.deleteRow(match.rowNumber);
   });
+  const updates = {};
+  uids.forEach(uid => {
+    const normalized = String(uid || '').trim();
+    if (!normalized) return;
+    updates[`dictionary/${normalized}`] = null;
+  });
+  if (Object.keys(updates).length) {
+    patchRtdb_(updates, getFirebaseAccessToken_());
+  }
   return { success: true, message: `${matches.length} 件の語句を削除しました。` };
 }
 
@@ -3549,8 +3616,8 @@ function batchToggleDictionaryTerms(uids, enabled) {
     return { success: true, message: 'No terms updated.' };
   }
   const normalizedEnabled = normalizeDictionaryEnabled_(enabled);
-  const { sheet, info, uidIdx, enabledIdx } = ensureDictionarySheetStructure_();
-  if (sheet == null || uidIdx == null || enabledIdx == null) {
+  const { sheet, info, uidIdx, termIdx, rubyIdx, enabledIdx } = ensureDictionarySheetStructure_();
+  if (sheet == null || uidIdx == null || termIdx == null || rubyIdx == null || enabledIdx == null) {
     throw new Error('Dictionary sheet is not properly configured.');
   }
   const updates = [];
@@ -3566,6 +3633,26 @@ function batchToggleDictionaryTerms(uids, enabled) {
   updates.forEach((rowNumber) => {
     sheet.getRange(rowNumber, enabledIdx + 1).setValue(normalizedEnabled);
   });
+  const patch = {};
+  const now = Date.now();
+  uids.forEach(uid => {
+    const normalized = String(uid || '').trim();
+    if (!normalized) return;
+    const rowInfo = findDictionaryRowByUid_(info, uidIdx, normalized);
+    if (!rowInfo) return;
+    const termLabel = String(rowInfo.values[termIdx] || '').trim();
+    const rubyValue = String(rowInfo.values[rubyIdx] || '').trim();
+    patch[`dictionary/${normalized}`] = {
+      uid: normalized,
+      term: termLabel,
+      ruby: rubyValue,
+      enabled: normalizedEnabled,
+      updatedAt: now
+    };
+  });
+  if (Object.keys(patch).length) {
+    patchRtdb_(patch, getFirebaseAccessToken_());
+  }
   return { success: true, message: `${updates.length} 件の語句を${normalizedEnabled ? '有効' : '無効'}にしました。` };
 }
 

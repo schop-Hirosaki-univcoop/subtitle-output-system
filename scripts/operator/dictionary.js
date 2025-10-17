@@ -1,6 +1,57 @@
 import { database, dictionaryRef, onValue, ref, set, update } from "./firebase.js";
 import { DICTIONARY_STATE_KEY } from "./constants.js";
 
+function generateDictionaryUid() {
+  const cryptoObj = globalThis.crypto || globalThis.msCrypto;
+  if (cryptoObj && typeof cryptoObj.randomUUID === "function") {
+    return cryptoObj.randomUUID();
+  }
+  const chars = "abcdef0123456789";
+  let seed = "";
+  for (let i = 0; i < 32; i += 1) {
+    seed += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `dic_${seed}`;
+}
+
+function snapshotDictionaryEntries(app) {
+  return Array.isArray(app.dictionaryData)
+    ? app.dictionaryData.map((entry) => ({ ...entry }))
+    : [];
+}
+
+function buildDictionaryPayload(entries, timestamp = Date.now()) {
+  if (!Array.isArray(entries) || !entries.length) {
+    return {};
+  }
+  return entries.reduce((acc, entry) => {
+    if (!entry || !entry.uid) {
+      return acc;
+    }
+    acc[entry.uid] = {
+      uid: entry.uid,
+      term: entry.term,
+      ruby: entry.ruby,
+      enabled: !!entry.enabled,
+      updatedAt: timestamp
+    };
+    return acc;
+  }, {});
+}
+
+async function revertDictionarySnapshot(app, previousEntries) {
+  const normalized = Array.isArray(previousEntries)
+    ? previousEntries.map((entry) => ({ ...entry }))
+    : [];
+  applyDictionarySnapshot(app, normalized);
+  const payload = buildDictionaryPayload(normalized);
+  if (Object.keys(payload).length) {
+    await set(dictionaryRef, payload);
+  } else {
+    await set(dictionaryRef, {});
+  }
+}
+
 function ensureDictionaryConfirm(app) {
   if (!app || app.dictionaryConfirmSetup) {
     return;
@@ -263,7 +314,7 @@ export async function handleDictionaryEditSubmit(app, event) {
       throw new Error("辞書データが読み込まれていません。");
     }
     app.dictionarySelectedId = targetUid;
-    previousEntries = app.dictionaryData.map((entry) => ({ ...entry }));
+    previousEntries = snapshotDictionaryEntries(app);
     const hasTarget = previousEntries.some((entry) => entry.uid === targetUid);
     if (!hasTarget) {
       throw new Error("対象の単語が見つかりませんでした。");
@@ -271,45 +322,32 @@ export async function handleDictionaryEditSubmit(app, event) {
     const updatedEntries = previousEntries.map((entry) =>
       entry.uid === targetUid ? { ...entry, term, ruby, enabled: true } : entry
     );
-    const normalizedEntries = applyDictionarySnapshot(app, updatedEntries);
+    applyDictionarySnapshot(app, updatedEntries);
     appliedRealtime = true;
-    const timestamp = Date.now();
-    const updates = normalizedEntries.reduce((acc, { uid, term: nextTerm, ruby: nextRuby, enabled }) => {
-      if (!uid) {
-        return acc;
+    await update(ref(database), {
+      [`dictionary/${targetUid}`]: {
+        uid: targetUid,
+        term,
+        ruby,
+        enabled: true,
+        updatedAt: Date.now()
       }
-      acc[`dictionary/${uid}`] = {
-        uid,
-        term: nextTerm,
-        ruby: nextRuby,
-        enabled,
-        updatedAt: timestamp
-      };
-      return acc;
-    }, {});
-    if (Object.keys(updates).length === 0) {
-      await set(dictionaryRef, {});
-    } else {
-      await update(ref(database), updates);
+    });
+    const result = await app.api.apiPost({ action: "updateTerm", uid: targetUid, term, ruby });
+    if (!result?.success) {
+      throw new Error(result?.error || "更新に失敗しました。");
     }
     closeDictionaryEditDialog(app);
-    app.api
-      .apiPost({ action: "updateTerm", uid: targetUid, term, ruby })
-      .then((result) => {
-        if (!result?.success) {
-          throw new Error(result?.error || "更新に失敗しました。");
-        }
-      })
-      .catch((error) => {
-        console.error("辞書シートへの同期に失敗しました", error);
-        app.toast("シートへの同期に失敗しました: " + error.message, "warning");
-      });
   } catch (error) {
     if (appliedRealtime && previousEntries) {
-      applyDictionarySnapshot(app, previousEntries);
+      try {
+        await revertDictionarySnapshot(app, previousEntries);
+      } catch (revertError) {
+        console.error("辞書の状態復元に失敗しました", revertError);
+      }
     }
     console.error("辞書のリアルタイム更新に失敗しました", error);
-    app.toast("更新失敗: " + error.message, "error");
+    app.toast("更新失敗: " + (error?.message || "不明なエラー"), "error");
   } finally {
     state.submitting = false;
     if (saveButton) {
@@ -502,13 +540,58 @@ async function setDictionaryEntriesEnabled(app, uids, enabled) {
   if (!unique.length) {
     return;
   }
+  const entries = Array.isArray(app.dictionaryData) ? app.dictionaryData : [];
+  const entryMap = new Map(entries.map((entry) => [entry.uid, entry]));
+  const targets = unique
+    .map((uid) => entryMap.get(uid))
+    .filter((entry) => !!entry);
+  if (!targets.length) {
+    app.toast("対象の語句が見つかりません。", "error");
+    return;
+  }
+
+  const previousEntries = snapshotDictionaryEntries(app);
+  const now = Date.now();
+  const updatePaths = {};
+  const uniqueSet = new Set(unique);
+  const nextEntries = entries.map((entry) => {
+    if (!uniqueSet.has(entry.uid)) {
+      return entry;
+    }
+    const next = { ...entry, enabled: !!enabled };
+    updatePaths[`dictionary/${entry.uid}`] = {
+      uid: entry.uid,
+      term: entry.term,
+      ruby: entry.ruby,
+      enabled: !!enabled,
+      updatedAt: now
+    };
+    return next;
+  });
+
+  let appliedRealtime = false;
   try {
+    applyDictionarySnapshot(app, nextEntries);
+    appliedRealtime = true;
+    await update(ref(database), updatePaths);
     const action = unique.length > 1 ? "batchToggleTerms" : "toggleTerm";
-    const payload = unique.length > 1 ? { action: "batchToggleTerms", uids: unique, enabled } : { action: "toggleTerm", uid: unique[0], enabled };
-    await app.api.apiPost(payload);
-    await fetchDictionary(app);
+    const payload = unique.length > 1
+      ? { action: "batchToggleTerms", uids: unique, enabled }
+      : { action: "toggleTerm", uid: unique[0], enabled };
+    const result = await app.api.apiPost(payload);
+    if (!result?.success) {
+      throw new Error(result?.error || "辞書の更新に失敗しました。");
+    }
   } catch (error) {
-    app.toast("状態の更新失敗: " + error.message, "error");
+    console.error("辞書の状態更新に失敗しました", error);
+    app.toast("状態の更新失敗: " + (error?.message || "不明なエラー"), "error");
+    if (appliedRealtime) {
+      try {
+        await revertDictionarySnapshot(app, previousEntries);
+      } catch (revertError) {
+        console.error("辞書の状態復元に失敗しました", revertError);
+      }
+    }
   }
 }
 
@@ -520,13 +603,48 @@ async function deleteDictionaryEntries(app, uids) {
   if (!unique.length) {
     return;
   }
+  const entries = Array.isArray(app.dictionaryData) ? app.dictionaryData : [];
+  const uniqueSet = new Set(unique);
+  const targets = entries.filter((entry) => uniqueSet.has(entry.uid));
+  if (!targets.length) {
+    app.toast("削除対象の語句が見つかりません。", "error");
+    return;
+  }
+
+  const previousEntries = snapshotDictionaryEntries(app);
+  const updates = unique.reduce((acc, uid) => {
+    const normalized = uid ? String(uid) : "";
+    if (normalized) {
+      acc[`dictionary/${normalized}`] = null;
+    }
+    return acc;
+  }, {});
+
+  const nextEntries = entries.filter((entry) => !uniqueSet.has(entry.uid));
+  let appliedRealtime = false;
+
   try {
+    applyDictionarySnapshot(app, nextEntries);
+    appliedRealtime = true;
+    await update(ref(database), updates);
     const action = unique.length > 1 ? "batchDeleteTerms" : "deleteTerm";
-    const payload = unique.length > 1 ? { action: "batchDeleteTerms", uids: unique } : { action: "deleteTerm", uid: unique[0] };
-    await app.api.apiPost(payload);
-    await fetchDictionary(app);
+    const payload = unique.length > 1
+      ? { action: "batchDeleteTerms", uids: unique }
+      : { action: "deleteTerm", uid: unique[0] };
+    const result = await app.api.apiPost(payload);
+    if (!result?.success) {
+      throw new Error(result?.error || "辞書の削除に失敗しました。");
+    }
   } catch (error) {
-    app.toast("削除失敗: " + error.message, "error");
+    console.error("辞書の削除に失敗しました", error);
+    app.toast("削除失敗: " + (error?.message || "不明なエラー"), "error");
+    if (appliedRealtime) {
+      try {
+        await revertDictionarySnapshot(app, previousEntries);
+      } catch (revertError) {
+        console.error("辞書の状態復元に失敗しました", revertError);
+      }
+    }
   }
 }
 
@@ -745,17 +863,40 @@ export async function addTerm(app, event) {
   const term = app.dom.newTermInput?.value.trim();
   const ruby = app.dom.newRubyInput?.value.trim();
   if (!term || !ruby) return;
+
+  const entries = Array.isArray(app.dictionaryData) ? app.dictionaryData : [];
+  const previousEntries = snapshotDictionaryEntries(app);
+  const existing = entries.find((entry) => entry.term === term);
+  const uid = existing?.uid || generateDictionaryUid();
+  const now = Date.now();
+  const nextEntry = { uid, term, ruby, enabled: true };
+  let appliedRealtime = false;
+
   try {
-    const result = await app.api.apiPost({ action: "addTerm", term, ruby });
-    if (result.success) {
-      if (app.dom.newTermInput) app.dom.newTermInput.value = "";
-      if (app.dom.newRubyInput) app.dom.newRubyInput.value = "";
-      await fetchDictionary(app);
-    } else {
-      app.toast("追加失敗: " + result.error, "error");
+    const nextEntries = existing
+      ? entries.map((entry) => (entry.uid === uid ? { ...nextEntry } : entry))
+      : entries.concat(nextEntry);
+    applyDictionarySnapshot(app, nextEntries);
+    appliedRealtime = true;
+    await update(ref(database), {
+      [`dictionary/${uid}`]: { ...nextEntry, updatedAt: now }
+    });
+    if (app.dom.newTermInput) app.dom.newTermInput.value = "";
+    if (app.dom.newRubyInput) app.dom.newRubyInput.value = "";
+    const result = await app.api.apiPost({ action: "addTerm", term, ruby, uid });
+    if (!result?.success) {
+      throw new Error(result?.error || "辞書の更新に失敗しました。");
     }
   } catch (error) {
-    app.toast("通信エラー: " + error.message, "error");
+    console.error("辞書の追加に失敗しました", error);
+    app.toast("追加失敗: " + (error?.message || "不明なエラー"), "error");
+    if (appliedRealtime) {
+      try {
+        await revertDictionarySnapshot(app, previousEntries);
+      } catch (revertError) {
+        console.error("辞書の状態復元に失敗しました", revertError);
+      }
+    }
   }
 }
 
