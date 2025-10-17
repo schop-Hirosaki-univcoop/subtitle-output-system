@@ -3327,6 +3327,10 @@ body.sidebar-overlay-open{
   min-height:0;
 }
 
+.qa-embedded .qa-admin-primary{
+  position:relative;
+}
+
 .qa-embedded .admin-main{
   padding:0;
   background:transparent;
@@ -3334,6 +3338,11 @@ body.sidebar-overlay-open{
 }
 
 .qa-embedded .admin-main.is-loading-hidden{
+  visibility:hidden;
+  pointer-events:none;
+}
+
+.qa-embedded .admin-module.is-loading-hidden{
   visibility:hidden;
   pointer-events:none;
 }

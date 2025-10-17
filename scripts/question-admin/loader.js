@@ -3,20 +3,22 @@ import { loaderState } from "./state.js";
 
 function showLoader(message = "初期化しています…") {
   if (dom.loadingOverlay) dom.loadingOverlay.hidden = false;
-  if (dom.adminMain) {
-    dom.adminMain.classList.add("is-loading-hidden");
-    dom.adminMain.setAttribute("aria-hidden", "true");
-    dom.adminMain.setAttribute("inert", "");
+  const target = dom.participantModule || dom.adminMain;
+  if (target) {
+    target.classList.add("is-loading-hidden");
+    target.setAttribute("aria-hidden", "true");
+    target.setAttribute("inert", "");
   }
   updateLoaderText(message);
 }
 
 function hideLoader() {
   if (dom.loadingOverlay) dom.loadingOverlay.hidden = true;
-  if (dom.adminMain) {
-    dom.adminMain.classList.remove("is-loading-hidden");
-    dom.adminMain.removeAttribute("aria-hidden");
-    dom.adminMain.removeAttribute("inert");
+  const target = dom.participantModule || dom.adminMain;
+  if (target) {
+    target.classList.remove("is-loading-hidden");
+    target.removeAttribute("aria-hidden");
+    target.removeAttribute("inert");
   }
 }
 
