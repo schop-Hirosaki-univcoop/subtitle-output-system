@@ -1,4 +1,4 @@
-import { dictionaryRef, onValue, set } from "./firebase.js";
+import { database, dictionaryRef, onValue, ref, set, update } from "./firebase.js";
 import { DICTIONARY_STATE_KEY } from "./constants.js";
 
 function ensureDictionaryConfirm(app) {
@@ -273,13 +273,25 @@ export async function handleDictionaryEditSubmit(app, event) {
     );
     const normalizedEntries = applyDictionarySnapshot(app, updatedEntries);
     appliedRealtime = true;
-    const payload = normalizedEntries.map(({ uid, term: nextTerm, ruby: nextRuby, enabled }) => ({
-      uid,
-      term: nextTerm,
-      ruby: nextRuby,
-      enabled
-    }));
-    await set(dictionaryRef, payload);
+    const timestamp = Date.now();
+    const updates = normalizedEntries.reduce((acc, { uid, term: nextTerm, ruby: nextRuby, enabled }) => {
+      if (!uid) {
+        return acc;
+      }
+      acc[`dictionary/${uid}`] = {
+        uid,
+        term: nextTerm,
+        ruby: nextRuby,
+        enabled,
+        updatedAt: timestamp
+      };
+      return acc;
+    }, {});
+    if (Object.keys(updates).length === 0) {
+      await set(dictionaryRef, {});
+    } else {
+      await update(ref(database), updates);
+    }
     closeDictionaryEditDialog(app);
     app.api
       .apiPost({ action: "updateTerm", uid: targetUid, term, ruby })
@@ -646,7 +658,14 @@ export async function fetchDictionary(app) {
     const result = await app.api.apiPost({ action: "fetchSheet", sheet: "dictionary" });
     if (!result.success) return;
     const normalized = applyDictionarySnapshot(app, result.data || []);
-    const payload = normalized.map(({ uid, term, ruby, enabled }) => ({ uid, term, ruby, enabled }));
+    const timestamp = Date.now();
+    const payload = normalized.reduce((acc, { uid, term, ruby, enabled }) => {
+      if (!uid) {
+        return acc;
+      }
+      acc[uid] = { uid, term, ruby, enabled, updatedAt: timestamp };
+      return acc;
+    }, {});
     await set(dictionaryRef, payload);
   } catch (error) {
     app.toast("辞書の取得に失敗: " + error.message, "error");
@@ -661,7 +680,7 @@ export function startDictionaryListener(app) {
   app.dictionaryUnsubscribe = onValue(
     dictionaryRef,
     (snapshot) => {
-      applyDictionarySnapshot(app, snapshot.val() || []);
+      applyDictionarySnapshot(app, snapshot.val() || {});
     },
     (error) => {
       console.error("辞書データの購読に失敗しました", error);

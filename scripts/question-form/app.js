@@ -8,7 +8,7 @@ import {
   MAX_QUESTION_LENGTH,
   MAX_RADIO_NAME_LENGTH
 } from "./constants.js";
-import { ref, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { ref, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   countGraphemes,
   normalizeMultiline,
@@ -579,7 +579,6 @@ export class QuestionFormApp {
     assertActiveController(controller);
 
     const questionUid = generateQuestionUid();
-    const entryRef = ref(this.database, `questions/${questionUid}`);
     submission.uid = questionUid;
 
     let queueProcessed = false;
@@ -591,9 +590,13 @@ export class QuestionFormApp {
       context: this.state.context,
       timestamp
     });
+    const statusRecord = { answered: false, selecting: false, updatedAt: timestamp };
 
     try {
-      await set(entryRef, questionRecord);
+      await update(ref(this.database), {
+        [`questions/normal/${questionUid}`]: questionRecord,
+        [`questionStatus/${questionUid}`]: statusRecord
+      });
       queueProcessed = true;
     } catch (error) {
       const isPermissionError = error?.code === "PERMISSION_DENIED";
@@ -678,12 +681,14 @@ function buildQuestionRecord({
     schedule: scheduleLabel,
     scheduleStart,
     scheduleEnd,
+    scheduleDate: coalesceTrimmed(submission.scheduleDate, context?.scheduleDate),
     participantId,
+    participantName: coalesceTrimmed(submission.participantName, context?.participantName),
+    guidance: coalesceTrimmed(submission.guidance, context?.guidance),
     eventId,
+    eventName: coalesceTrimmed(submission.eventName, context?.eventName),
     scheduleId,
     ts: timestamp,
-    answered: false,
-    selecting: false,
     updatedAt: timestamp,
     type: "normal"
   };
