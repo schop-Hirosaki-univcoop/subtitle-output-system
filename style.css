@@ -164,6 +164,32 @@ html.embedded-view .site-footer{ display:none !important; }
 }
 .user-info .btn{ align-self:flex-end; }
 .user-label{ font-weight:500; letter-spacing:.01em; }
+.flow-user-info{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:clamp(.3rem, .9vw, .55rem);
+  text-align:left;
+  min-width:clamp(12rem, 28vw, 18rem);
+}
+.flow-user-info__label{
+  display:block;
+  max-width:100%;
+}
+.flow-user-info__footer{
+  display:flex;
+  align-items:flex-end;
+  justify-content:flex-end;
+  gap:clamp(.45rem, 1.4vw, .85rem);
+  width:100%;
+  flex-wrap:wrap;
+}
+.flow-user-info__meta{
+  margin-right:auto;
+}
+.flow-user-info__logout{
+  white-space:nowrap;
+}
 @media (max-width: 720px){
   .header-inner{
     gap:clamp(.75rem, 2.4vw, 1.2rem);
@@ -195,6 +221,13 @@ html.embedded-view .site-footer{ display:none !important; }
   .user-info{
     align-items:flex-start;
     text-align:left;
+  }
+  .flow-user-info{
+    width:100%;
+    min-width:0;
+  }
+  .flow-user-info__footer{
+    justify-content:space-between;
   }
 }
 

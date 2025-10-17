@@ -2430,14 +2430,14 @@ export class EventAdminApp {
     if (!this.dom.metaNote) {
       return;
     }
-    const parts = [this.eventCountNote, this.stageNote].filter(Boolean);
-    if (!parts.length) {
+    const note = (this.eventCountNote || "").trim();
+    if (!note) {
       this.dom.metaNote.hidden = true;
       this.dom.metaNote.textContent = "";
       return;
     }
     this.dom.metaNote.hidden = false;
-    this.dom.metaNote.textContent = parts.join(" — ");
+    this.dom.metaNote.textContent = note;
   }
 
   updateMetaNote() {
