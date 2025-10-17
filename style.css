@@ -432,6 +432,8 @@ body.logs-open #logs-panel{ display:flex; }
   display:flex;
   align-items:flex-start;
   gap:.65rem;
+  position:relative;
+  padding-right:clamp(2.8rem, 5.5vw, 3.4rem);
 }
 .dictionary-card__term{
   font-size:clamp(1.05rem, 1.9vw, 1.35rem);
@@ -457,6 +459,8 @@ body.logs-open #logs-panel{ display:flex; }
   letter-spacing:.08em;
   font-weight:600;
   text-transform:uppercase;
+  position:relative;
+  z-index:0;
 }
 .dictionary-card.is-disabled .dictionary-card__status{
   background:rgba(148,163,184,.22);
@@ -465,7 +469,7 @@ body.logs-open #logs-panel{ display:flex; }
 .dictionary-card__check{
   position:absolute;
   top:clamp(.55rem, 1.2vw, .85rem);
-  right:clamp(.55rem, 1.2vw, .85rem);
+  right:clamp(.6rem, 1.6vw, 1rem);
   display:flex;
   align-items:center;
   justify-content:center;
@@ -475,6 +479,7 @@ body.logs-open #logs-panel{ display:flex; }
   border:1px solid transparent;
   transition:border-color .2s ease, background .2s ease, box-shadow .2s ease;
   cursor:pointer;
+  z-index:1;
 }
 .dictionary-card__check:hover{ background:var(--card-check-hover-bg); }
 .dictionary-card__check:focus-within{ border-color:var(--card-check-focus-border); background:var(--card-check-hover-bg); }
@@ -1235,6 +1240,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   background:linear-gradient(180deg, rgba(24,32,54,.88), rgba(13,19,32,.9));
   box-shadow:0 14px 36px rgba(0,0,0,.32);
   backdrop-filter:blur(10px);
+  transition:opacity .2s ease;
 }
 #op-dictionary-action-panel[hidden],
 #dictionary-action-panel[hidden]{ display:none !important; }
@@ -1242,6 +1248,8 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 #dictionary-action-panel .btn{ padding:clamp(.45rem, 1vw, .58rem) clamp(.85rem, 2vw, 1.05rem); }
 #op-dictionary-action-panel #op-dictionary-selected-info,
 #dictionary-action-panel #dictionary-selected-info{ font-size:.9rem; color:var(--muted); }
+#op-dictionary-action-panel.is-idle,
+#dictionary-action-panel.is-idle{ opacity:.82; }
 #action-panel .btn{ padding:clamp(.45rem, 1vw, .55rem) clamp(.85rem, 2vw, 1rem); }
 
 @media (max-width: 720px){

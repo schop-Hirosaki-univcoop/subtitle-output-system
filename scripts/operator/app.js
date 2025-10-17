@@ -813,7 +813,8 @@ export class OperatorApp {
       this.dom.dictionarySelectedInfo.textContent = "単語を選択してください";
     }
     if (this.dom.dictionaryActionPanel) {
-      this.dom.dictionaryActionPanel.hidden = true;
+      this.dom.dictionaryActionPanel.hidden = false;
+      this.dom.dictionaryActionPanel.classList.add("is-idle");
     }
     if (this.dom.dictionaryCount) {
       this.dom.dictionaryCount.textContent = "登録なし";
