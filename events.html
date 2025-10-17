@@ -450,10 +450,35 @@
                     </div>
                   </div>
                 </div>
+                <div id="op-dictionary-edit-dialog" class="modal modal--inline" role="dialog" aria-modal="true" aria-labelledby="op-dictionary-edit-dialog-title" hidden>
+                  <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+                  <div class="modal-panel">
+                    <div class="modal-header">
+                      <h2 id="op-dictionary-edit-dialog-title">語句を編集</h2>
+                    </div>
+                    <form id="op-dictionary-edit-form" class="modal-form">
+                      <div class="modal-body">
+                        <div class="modal-field">
+                          <label for="op-dictionary-edit-term">単語</label>
+                          <input id="op-dictionary-edit-term" class="input" type="text" required data-autofocus>
+                        </div>
+                        <div class="modal-field">
+                          <label for="op-dictionary-edit-ruby">ルビ</label>
+                          <input id="op-dictionary-edit-ruby" class="input" type="text" required>
+                        </div>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-ghost" id="op-dictionary-edit-cancel-button">キャンセル</button>
+                        <button type="submit" class="btn btn-primary" id="op-dictionary-edit-save-button">更新</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
               </div>
               <div id="op-dictionary-action-panel" class="action-panel is-idle">
                 <button id="op-dictionary-btn-enable" class="btn btn-primary" type="button" disabled>有効にする</button>
                 <button id="op-dictionary-btn-disable" class="btn" type="button" disabled>無効にする</button>
+                <button id="op-dictionary-btn-edit" class="btn" type="button" disabled>編集</button>
                 <button id="op-dictionary-btn-delete" class="btn btn-danger" type="button" disabled>削除</button>
                 <span id="op-dictionary-selected-info">単語を選択してください</span>
                 <div class="action-panel-right">

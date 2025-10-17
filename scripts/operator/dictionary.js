@@ -106,6 +106,209 @@ async function confirmDictionaryAction(app, { title = "確認", description = ""
   });
 }
 
+function getDictionaryEditState(app) {
+  if (!app.dictionaryEditState) {
+    app.dictionaryEditState = { uid: "", originalTerm: "", originalRuby: "", submitting: false, lastFocused: null };
+  }
+  return app.dictionaryEditState;
+}
+
+function ensureDictionaryEditDialog(app) {
+  if (!app || app.dictionaryEditSetup) {
+    return;
+  }
+  const dialog = app.dom.dictionaryEditDialog;
+  if (!dialog) {
+    return;
+  }
+  dialog.querySelectorAll("[data-dialog-dismiss]").forEach((element) => {
+    if (element instanceof HTMLElement) {
+      element.addEventListener("click", (event) => {
+        event.preventDefault();
+        closeDictionaryEditDialog(app);
+      });
+    }
+  });
+  dialog.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeDictionaryEditDialog(app);
+    }
+  });
+  app.dictionaryEditSetup = true;
+}
+
+export function closeDictionaryEditDialog(app, eventOrOptions) {
+  let restoreFocus = true;
+  if (eventOrOptions instanceof Event) {
+    eventOrOptions.preventDefault?.();
+  } else if (eventOrOptions && typeof eventOrOptions === "object") {
+    if (eventOrOptions.restoreFocus === false) {
+      restoreFocus = false;
+    }
+  }
+  const dialog = app.dom.dictionaryEditDialog;
+  if (!dialog) {
+    return;
+  }
+  if (!dialog.hasAttribute("hidden")) {
+    dialog.setAttribute("hidden", "");
+  }
+  const state = getDictionaryEditState(app);
+  state.uid = "";
+  state.originalTerm = "";
+  state.originalRuby = "";
+  state.submitting = false;
+  const form = app.dom.dictionaryEditForm;
+  if (form instanceof HTMLFormElement) {
+    form.reset();
+  } else {
+    if (app.dom.dictionaryEditTermInput) {
+      app.dom.dictionaryEditTermInput.value = "";
+    }
+    if (app.dom.dictionaryEditRubyInput) {
+      app.dom.dictionaryEditRubyInput.value = "";
+    }
+  }
+  if (app.dom.dictionaryEditSaveButton) {
+    app.dom.dictionaryEditSaveButton.disabled = false;
+  }
+  if (app.dom.dictionaryEditCancelButton) {
+    app.dom.dictionaryEditCancelButton.disabled = false;
+  }
+  const toFocus = restoreFocus ? state.lastFocused : null;
+  state.lastFocused = null;
+  if (toFocus && typeof toFocus.focus === "function") {
+    requestAnimationFrame(() => toFocus.focus());
+  }
+}
+
+export function handleDictionaryEdit(app) {
+  const entry = app.dictionarySelectedEntry;
+  if (!entry) {
+    return;
+  }
+  ensureDictionaryEditDialog(app);
+  const dialog = app.dom.dictionaryEditDialog;
+  const termInput = app.dom.dictionaryEditTermInput;
+  const rubyInput = app.dom.dictionaryEditRubyInput;
+  if (!dialog || !(termInput instanceof HTMLInputElement) || !(rubyInput instanceof HTMLInputElement)) {
+    return;
+  }
+  const state = getDictionaryEditState(app);
+  state.uid = entry.uid;
+  state.originalTerm = entry.term;
+  state.originalRuby = entry.ruby;
+  state.submitting = false;
+  state.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  termInput.value = entry.term;
+  rubyInput.value = entry.ruby;
+  if (app.dom.dictionaryEditSaveButton) {
+    app.dom.dictionaryEditSaveButton.disabled = false;
+  }
+  if (app.dom.dictionaryEditCancelButton) {
+    app.dom.dictionaryEditCancelButton.disabled = false;
+  }
+  dialog.removeAttribute("hidden");
+  requestAnimationFrame(() => termInput.focus());
+}
+
+export async function handleDictionaryEditSubmit(app, event) {
+  event?.preventDefault?.();
+  ensureDictionaryEditDialog(app);
+  const state = getDictionaryEditState(app);
+  if (!state.uid) {
+    closeDictionaryEditDialog(app);
+    return;
+  }
+  const termInput = app.dom.dictionaryEditTermInput;
+  const rubyInput = app.dom.dictionaryEditRubyInput;
+  if (!(termInput instanceof HTMLInputElement) || !(rubyInput instanceof HTMLInputElement)) {
+    closeDictionaryEditDialog(app);
+    return;
+  }
+  const saveButton = app.dom.dictionaryEditSaveButton;
+  const cancelButton = app.dom.dictionaryEditCancelButton;
+  const term = termInput.value.trim();
+  const ruby = rubyInput.value.trim();
+  if (!term) {
+    app.toast("単語を入力してください。", "error");
+    termInput.focus();
+    return;
+  }
+  if (!ruby) {
+    app.toast("ルビを入力してください。", "error");
+    rubyInput.focus();
+    return;
+  }
+  if (term === state.originalTerm && ruby === state.originalRuby) {
+    closeDictionaryEditDialog(app);
+    return;
+  }
+  if (state.submitting) {
+    return;
+  }
+  state.submitting = true;
+  if (saveButton) {
+    saveButton.disabled = true;
+  }
+  if (cancelButton) {
+    cancelButton.disabled = true;
+  }
+  let previousEntries = null;
+  let appliedRealtime = false;
+  const targetUid = state.uid;
+  try {
+    if (!Array.isArray(app.dictionaryData) || !app.dictionaryData.length) {
+      throw new Error("辞書データが読み込まれていません。");
+    }
+    app.dictionarySelectedId = targetUid;
+    previousEntries = app.dictionaryData.map((entry) => ({ ...entry }));
+    const hasTarget = previousEntries.some((entry) => entry.uid === targetUid);
+    if (!hasTarget) {
+      throw new Error("対象の単語が見つかりませんでした。");
+    }
+    const updatedEntries = previousEntries.map((entry) =>
+      entry.uid === targetUid ? { ...entry, term, ruby, enabled: true } : entry
+    );
+    const normalizedEntries = applyDictionarySnapshot(app, updatedEntries);
+    appliedRealtime = true;
+    const payload = normalizedEntries.map(({ uid, term: nextTerm, ruby: nextRuby, enabled }) => ({
+      uid,
+      term: nextTerm,
+      ruby: nextRuby,
+      enabled
+    }));
+    await set(dictionaryRef, payload);
+    closeDictionaryEditDialog(app);
+    app.api
+      .apiPost({ action: "updateTerm", uid: targetUid, term, ruby })
+      .then((result) => {
+        if (!result?.success) {
+          throw new Error(result?.error || "更新に失敗しました。");
+        }
+      })
+      .catch((error) => {
+        console.error("辞書シートへの同期に失敗しました", error);
+        app.toast("シートへの同期に失敗しました: " + error.message, "warning");
+      });
+  } catch (error) {
+    if (appliedRealtime && previousEntries) {
+      applyDictionarySnapshot(app, previousEntries);
+    }
+    console.error("辞書のリアルタイム更新に失敗しました", error);
+    app.toast("更新失敗: " + error.message, "error");
+  } finally {
+    state.submitting = false;
+    if (saveButton) {
+      saveButton.disabled = false;
+    }
+    if (cancelButton) {
+      cancelButton.disabled = false;
+    }
+  }
+}
+
 function normalizeDictionaryEntries(data) {
   const list = Array.isArray(data)
     ? data
@@ -232,12 +435,16 @@ function updateDictionarySelectionState(app) {
   }
   const enableButton = app.dom.dictionaryEnableButton;
   const disableButton = app.dom.dictionaryDisableButton;
+  const editButton = app.dom.dictionaryEditButton;
   const deleteButton = app.dom.dictionaryDeleteButton;
   if (enableButton) {
     enableButton.disabled = !selection || selection.enabled;
   }
   if (disableButton) {
     disableButton.disabled = !selection || !selection.enabled;
+  }
+  if (editButton) {
+    editButton.disabled = !selection;
   }
   if (deleteButton) {
     deleteButton.disabled = !selection;
