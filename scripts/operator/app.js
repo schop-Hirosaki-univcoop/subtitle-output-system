@@ -35,10 +35,13 @@ const DOM_EVENT_BINDINGS = [
   { element: "dictionarySelectAllCheckbox", type: "change", handler: "handleDictionarySelectAll" },
   { element: "dictionaryEnableButton", type: "click", handler: "handleDictionaryEnable" },
   { element: "dictionaryDisableButton", type: "click", handler: "handleDictionaryDisable" },
+  { element: "dictionaryEditButton", type: "click", handler: "handleDictionaryEdit" },
   { element: "dictionaryDeleteButton", type: "click", handler: "handleDictionaryDelete" },
   { element: "dictionaryBatchEnableButton", type: "click", handler: "handleDictionaryBatchEnable" },
   { element: "dictionaryBatchDisableButton", type: "click", handler: "handleDictionaryBatchDisable" },
   { element: "dictionaryBatchDeleteButton", type: "click", handler: "handleDictionaryBatchDelete" },
+  { element: "dictionaryEditCancelButton", type: "click", handler: "closeDictionaryEditDialog" },
+  { element: "dictionaryEditForm", type: "submit", handler: "handleDictionaryEditSubmit" },
   { element: "selectAllCheckbox", type: "change", handler: "handleSelectAll" },
   { element: "batchUnanswerBtn", type: "click", handler: "handleBatchUnanswer" },
   { element: "editCancelButton", type: "click", handler: "closeEditDialog" },
@@ -72,10 +75,13 @@ const MODULE_METHOD_GROUPS = [
       "handleDictionarySelectAll",
       "handleDictionaryEnable",
       "handleDictionaryDisable",
+      "handleDictionaryEdit",
       "handleDictionaryDelete",
       "handleDictionaryBatchEnable",
       "handleDictionaryBatchDisable",
       "handleDictionaryBatchDelete",
+      "handleDictionaryEditSubmit",
+      "closeDictionaryEditDialog",
       "startDictionaryListener",
       "stopDictionaryListener"
     ]
@@ -217,6 +223,8 @@ export class OperatorApp {
     this.dictionaryBatchSelection = new Set();
     this.dictionaryConfirmState = { resolver: null, lastFocused: null };
     this.dictionaryConfirmSetup = false;
+    this.dictionaryEditState = { uid: "", originalTerm: "", originalRuby: "", submitting: false, lastFocused: null };
+    this.dictionaryEditSetup = false;
     this.eventsBranch = {};
     this.schedulesBranch = {};
     this.authFlow = "idle";

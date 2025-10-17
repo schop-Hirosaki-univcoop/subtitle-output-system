@@ -12,7 +12,10 @@ const MODULE_BINDINGS = [
       fetchDictionary: "fetchDictionary",
       applyInitialDictionaryState: "applyInitialDictionaryState",
       toggleDictionaryDrawer: "toggleDictionaryDrawer",
-      addTerm: "addTerm"
+      addTerm: "addTerm",
+      handleDictionaryEdit: "handleDictionaryEdit",
+      handleDictionaryEditSubmit: "handleDictionaryEditSubmit",
+      closeDictionaryEditDialog: "closeDictionaryEditDialog"
     }
   },
   {
