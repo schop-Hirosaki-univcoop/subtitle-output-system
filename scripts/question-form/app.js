@@ -8,7 +8,7 @@ import {
   MAX_QUESTION_LENGTH,
   MAX_RADIO_NAME_LENGTH
 } from "./constants.js";
-import { ref, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { ref, remove, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   countGraphemes,
   normalizeMultiline,
@@ -592,13 +592,23 @@ export class QuestionFormApp {
     });
     const statusRecord = { answered: false, selecting: false, updatedAt: timestamp };
 
+    const questionRef = ref(this.database, `questions/normal/${questionUid}`);
+    const statusRef = ref(this.database, `questionStatus/${questionUid}`);
+    let questionCreated = false;
+
     try {
-      await update(ref(this.database), {
-        [`questions/normal/${questionUid}`]: questionRecord,
-        [`questionStatus/${questionUid}`]: statusRecord
-      });
+      await set(questionRef, questionRecord);
+      questionCreated = true;
+      await set(statusRef, statusRecord);
       queueProcessed = true;
     } catch (error) {
+      if (questionCreated) {
+        try {
+          await remove(questionRef);
+        } catch (cleanupError) {
+          console.warn("Failed to roll back question record after status write error", cleanupError);
+        }
+      }
       const isPermissionError = error?.code === "PERMISSION_DENIED";
       const message = isPermissionError
         ? "フォームを送信できませんでした。リンクの有効期限が切れていないかご確認ください。"
