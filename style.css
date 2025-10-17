@@ -1240,6 +1240,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   background:linear-gradient(180deg, rgba(24,32,54,.88), rgba(13,19,32,.9));
   box-shadow:0 14px 36px rgba(0,0,0,.32);
   backdrop-filter:blur(10px);
+  transition:opacity .2s ease;
 }
 #op-dictionary-action-panel[hidden],
 #dictionary-action-panel[hidden]{ display:none !important; }
@@ -1247,6 +1248,8 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 #dictionary-action-panel .btn{ padding:clamp(.45rem, 1vw, .58rem) clamp(.85rem, 2vw, 1.05rem); }
 #op-dictionary-action-panel #op-dictionary-selected-info,
 #dictionary-action-panel #dictionary-selected-info{ font-size:.9rem; color:var(--muted); }
+#op-dictionary-action-panel.is-idle,
+#dictionary-action-panel.is-idle{ opacity:.82; }
 #action-panel .btn{ padding:clamp(.45rem, 1vw, .55rem) clamp(.85rem, 2vw, 1rem); }
 
 @media (max-width: 720px){

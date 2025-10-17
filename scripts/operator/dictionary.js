@@ -227,7 +227,8 @@ function updateDictionarySelectionState(app) {
   const hasBatch = batchEntries.length > 0;
   const panel = app.dom.dictionaryActionPanel;
   if (panel) {
-    panel.hidden = !selection && !hasBatch;
+    panel.hidden = false;
+    panel.classList.toggle("is-idle", !selection && !hasBatch);
   }
   const enableButton = app.dom.dictionaryEnableButton;
   const disableButton = app.dom.dictionaryDisableButton;
