@@ -7,6 +7,7 @@ import {
   onValue,
   get,
   questionsRef,
+  questionStatusRef,
   questionIntakeEventsRef,
   questionIntakeSchedulesRef,
   displaySessionRef,
@@ -632,18 +633,20 @@ export class OperatorApp {
 
       this.setLoaderStep(4, this.isEmbedded ? "リアルタイム購読を開始しています…" : "購読開始…");
       this.updateLoader("データ同期中…");
-      const [questionsSnapshot, eventsSnapshot, schedulesSnapshot] = await Promise.all([
+      const [questionsSnapshot, questionStatusSnapshot, eventsSnapshot, schedulesSnapshot] = await Promise.all([
         get(questionsRef),
+        get(questionStatusRef),
         get(questionIntakeEventsRef),
         get(questionIntakeSchedulesRef)
       ]);
       this.eventsBranch = eventsSnapshot.val() || {};
       this.schedulesBranch = schedulesSnapshot.val() || {};
-      const questionsValue = questionsSnapshot.val() || {};
-      this.state.rawQuestions = Object.values(questionsValue).filter((item) => item && typeof item === "object");
+      this.applyQuestionsBranch(questionsSnapshot.val() || {});
+      this.applyQuestionStatusSnapshot(questionStatusSnapshot.val() || {});
       this.rebuildScheduleMetadata();
       this.applyContextToState();
       this.startQuestionsStream();
+      this.startQuestionStatusStream();
       this.startScheduleMetadataStreams();
       this.startDictionaryListener();
       this.startDisplaySessionMonitor();
@@ -752,6 +755,10 @@ export class OperatorApp {
       this.displaySessionUnsubscribe();
       this.displaySessionUnsubscribe = null;
     }
+    if (this.questionStatusUnsubscribe) {
+      this.questionStatusUnsubscribe();
+      this.questionStatusUnsubscribe = null;
+    }
     if (this.updateTriggerUnsubscribe) {
       this.updateTriggerUnsubscribe();
       this.updateTriggerUnsubscribe = null;
@@ -834,10 +841,72 @@ export class OperatorApp {
   startQuestionsStream() {
     if (this.questionsUnsubscribe) this.questionsUnsubscribe();
     this.questionsUnsubscribe = onValue(questionsRef, (snapshot) => {
-      const value = snapshot.val() || {};
-      this.state.rawQuestions = Object.values(value).filter((item) => item && typeof item === "object");
-      this.rebuildQuestions();
+      this.applyQuestionsBranch(snapshot.val());
     });
+  }
+
+  startQuestionStatusStream() {
+    if (this.questionStatusUnsubscribe) this.questionStatusUnsubscribe();
+    this.questionStatusUnsubscribe = onValue(questionStatusRef, (snapshot) => {
+      this.applyQuestionStatusSnapshot(snapshot.val());
+    });
+  }
+
+  applyQuestionsBranch(value) {
+    const branch = value && typeof value === "object" ? value : {};
+    const next = new Map();
+
+    const mergeRecord = (uidKey, record, type) => {
+      if (!record || typeof record !== "object") {
+        return;
+      }
+      const resolvedUid = String(record.uid ?? uidKey ?? "").trim();
+      if (!resolvedUid) {
+        return;
+      }
+      const normalized = { ...record, uid: resolvedUid };
+      if (type) {
+        normalized.type = type;
+      }
+      if (type === "pickup" && normalized.pickup !== true) {
+        normalized.pickup = true;
+      }
+      next.set(resolvedUid, normalized);
+    };
+
+    if (branch && (branch.normal || branch.pickup)) {
+      const normal = branch.normal && typeof branch.normal === "object" ? branch.normal : {};
+      const pickup = branch.pickup && typeof branch.pickup === "object" ? branch.pickup : {};
+      Object.entries(normal).forEach(([uid, record]) => mergeRecord(uid, record, "normal"));
+      Object.entries(pickup).forEach(([uid, record]) => mergeRecord(uid, record, "pickup"));
+    } else {
+      Object.entries(branch).forEach(([uid, record]) => mergeRecord(uid, record, record?.type));
+    }
+
+    this.state.questionsByUid = next;
+    this.rebuildQuestions();
+  }
+
+  applyQuestionStatusSnapshot(value) {
+    const branch = value && typeof value === "object" ? value : {};
+    const next = new Map();
+    Object.entries(branch).forEach(([uidKey, record]) => {
+      if (!record || typeof record !== "object") {
+        return;
+      }
+      const resolvedUid = String(record.uid ?? uidKey ?? "").trim();
+      if (!resolvedUid) {
+        return;
+      }
+      next.set(resolvedUid, {
+        answered: record.answered === true,
+        selecting: record.selecting === true,
+        pickup: record.pickup === true,
+        updatedAt: Number(record.updatedAt || 0)
+      });
+    });
+    this.state.questionStatusByUid = next;
+    this.rebuildQuestions();
   }
 
   normalizeQuestionRecord(item) {
@@ -894,8 +963,14 @@ export class OperatorApp {
   }
 
   rebuildQuestions() {
-    const list = Array.isArray(this.state.rawQuestions) ? this.state.rawQuestions : [];
-    this.state.allQuestions = list.map((item) => this.normalizeQuestionRecord(item));
+    const questionMap = this.state.questionsByUid instanceof Map ? this.state.questionsByUid : new Map();
+    const statusMap = this.state.questionStatusByUid instanceof Map ? this.state.questionStatusByUid : new Map();
+    const list = [];
+    questionMap.forEach((record, uid) => {
+      const status = statusMap.get(uid) || {};
+      list.push(this.normalizeQuestionRecord({ ...record, ...status, uid }));
+    });
+    this.state.allQuestions = list;
     this.updateScheduleContext();
     this.renderQuestions();
   }
