@@ -2776,8 +2776,9 @@ async function handleClearParticipants() {
 function setAuthUi(signedIn) {
   const embedded = isEmbeddedMode();
   const shouldShowLogin = !signedIn && !embedded;
+  const shouldShowAdmin = signedIn || embedded;
   toggleSectionVisibility(dom.loginCard, shouldShowLogin);
-  toggleSectionVisibility(dom.adminMain, signedIn);
+  toggleSectionVisibility(dom.adminMain, shouldShowAdmin);
 
   if (signedIn) {
     renderUserSummary(state.user);
