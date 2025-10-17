@@ -32,6 +32,13 @@ const DOM_EVENT_BINDINGS = [
   { element: "clearButton", type: "click", handler: "clearTelop" },
   { element: "fetchDictionaryButton", type: "click", handler: "fetchDictionary" },
   { element: "addTermForm", type: "submit", handler: "addTerm" },
+  { element: "dictionarySelectAllCheckbox", type: "change", handler: "handleDictionarySelectAll" },
+  { element: "dictionaryEnableButton", type: "click", handler: "handleDictionaryEnable" },
+  { element: "dictionaryDisableButton", type: "click", handler: "handleDictionaryDisable" },
+  { element: "dictionaryDeleteButton", type: "click", handler: "handleDictionaryDelete" },
+  { element: "dictionaryBatchEnableButton", type: "click", handler: "handleDictionaryBatchEnable" },
+  { element: "dictionaryBatchDisableButton", type: "click", handler: "handleDictionaryBatchDisable" },
+  { element: "dictionaryBatchDeleteButton", type: "click", handler: "handleDictionaryBatchDelete" },
   { element: "selectAllCheckbox", type: "change", handler: "handleSelectAll" },
   { element: "batchUnanswerBtn", type: "click", handler: "handleBatchUnanswer" },
   { element: "editCancelButton", type: "click", handler: "closeEditDialog" },
@@ -62,6 +69,13 @@ const MODULE_METHOD_GROUPS = [
       "applyInitialDictionaryState",
       "toggleDictionaryDrawer",
       "addTerm",
+      "handleDictionarySelectAll",
+      "handleDictionaryEnable",
+      "handleDictionaryDisable",
+      "handleDictionaryDelete",
+      "handleDictionaryBatchEnable",
+      "handleDictionaryBatchDisable",
+      "handleDictionaryBatchDelete",
       "startDictionaryListener",
       "stopDictionaryListener"
     ]
@@ -198,6 +212,9 @@ export class OperatorApp {
     this.dictionaryUnsubscribe = null;
     this.dictionaryData = [];
     this.dictionaryEntries = [];
+    this.dictionarySelectedId = "";
+    this.dictionarySelectedEntry = null;
+    this.dictionaryBatchSelection = new Set();
     this.dictionaryConfirmState = { resolver: null, lastFocused: null };
     this.dictionaryConfirmSetup = false;
     this.eventsBranch = {};
@@ -775,11 +792,32 @@ export class OperatorApp {
     this.updateBatchButtonVisibility();
     if (this.dom.cardsContainer) this.dom.cardsContainer.innerHTML = "";
     if (this.dom.logStream) this.dom.logStream.innerHTML = "";
-    if (this.dom.dictionaryTableBody) this.dom.dictionaryTableBody.innerHTML = "";
+    if (this.dom.dictionaryCardsContainer) this.dom.dictionaryCardsContainer.innerHTML = "";
     this.eventsBranch = {};
     this.schedulesBranch = {};
     this.dictionaryData = [];
     this.dictionaryEntries = [];
+    this.dictionarySelectedId = "";
+    this.dictionarySelectedEntry = null;
+    if (this.dictionaryBatchSelection instanceof Set) {
+      this.dictionaryBatchSelection.clear();
+    } else {
+      this.dictionaryBatchSelection = new Set();
+    }
+    if (this.dom.dictionarySelectAllCheckbox instanceof HTMLInputElement) {
+      this.dom.dictionarySelectAllCheckbox.checked = false;
+      this.dom.dictionarySelectAllCheckbox.indeterminate = false;
+      this.dom.dictionarySelectAllCheckbox.disabled = true;
+    }
+    if (this.dom.dictionarySelectedInfo) {
+      this.dom.dictionarySelectedInfo.textContent = "単語を選択してください";
+    }
+    if (this.dom.dictionaryActionPanel) {
+      this.dom.dictionaryActionPanel.hidden = true;
+    }
+    if (this.dom.dictionaryCount) {
+      this.dom.dictionaryCount.textContent = "登録なし";
+    }
     this.dictionaryLoaded = false;
     this.updateScheduleContext();
   }
