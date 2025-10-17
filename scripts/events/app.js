@@ -68,6 +68,7 @@ export class EventAdminApp {
     this.lastToolContextApplied = false;
     this.pendingToolSync = false;
     this.toolSyncPromise = null;
+    this.operatorPreloadPromise = null;
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
     this.handleParticipantSyncEvent = this.handleParticipantSyncEvent.bind(this);
     this.handleParticipantSelectionBroadcast = this.handleParticipantSelectionBroadcast.bind(this);
@@ -373,6 +374,7 @@ export class EventAdminApp {
       this.updateScheduleSummary();
       this.updateStageHeader();
       this.updateSelectionNotes();
+      this.preloadOperatorGlobals();
     } catch (error) {
       logError("Event admin initialization failed", error);
       if (this.isPermissionError(error)) {
@@ -2103,6 +2105,19 @@ export class EventAdminApp {
       }
     }
     return window.operatorEmbed?.app || null;
+  }
+
+  preloadOperatorGlobals() {
+    if (!this.operatorPreloadPromise) {
+      this.operatorPreloadPromise = (async () => {
+        try {
+          await this.ensureOperatorAppReady();
+        } catch (error) {
+          logError("Failed to preload operator tool", error);
+        }
+      })();
+    }
+    return this.operatorPreloadPromise;
   }
 
   async setDrawerState({ dictionary, logs }) {
