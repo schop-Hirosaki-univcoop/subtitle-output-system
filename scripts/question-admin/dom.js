@@ -37,6 +37,7 @@ const dom = {
   loginCard: resolve("login-card"),
   loginButton: resolve("login-button"),
   adminMain: resolve("admin-main"),
+  participantModule: resolve("participant-module"),
   headerLogout: resolve("header-logout"),
   userInfo: resolve("user-info"),
   logoutButton: resolve("logout-button"),
