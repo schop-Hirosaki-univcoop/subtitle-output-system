@@ -1390,9 +1390,22 @@ function ensureQuestionScheduleSheet_() {
 function ensureQuestionParticipantSheet_() {
   const sheet = ensureSheetWithHeaders_(
     QUESTION_PARTICIPANT_SHEET,
-    ['イベントID', '日程ID', '参加者ID', '氏名', 'フリガナ', '性別', '学部学科', '携帯電話', 'メールアドレス', '班番号', '更新日時']
+    [
+      'イベントID',
+      '日程ID',
+      '参加者ID',
+      '氏名',
+      'フリガナ',
+      '性別',
+      '学部学科',
+      '携帯電話',
+      'メールアドレス',
+      '班番号',
+      'トークン',
+      '更新日時'
+    ]
   );
-  sheet.getRange('K2:K').setNumberFormat('yyyy/MM/dd HH:mm:ss');
+  sheet.getRange('L2:L').setNumberFormat('yyyy/MM/dd HH:mm:ss');
   return sheet;
 }
 
@@ -1830,6 +1843,7 @@ function syncQuestionIntakeToSheet_() {
           phone: String(participant.phone || ''),
           email: String(participant.email || ''),
           groupNumber: String(participant.teamNumber || participant.groupNumber || ''),
+          token: String(participant.token || ''),
           updatedAt
         });
       });
@@ -1860,9 +1874,10 @@ function syncQuestionIntakeToSheet_() {
     row.phone,
     row.email,
     row.groupNumber,
+    row.token,
     toSheetDate(row.updatedAt)
   ]);
-  replaceSheetRows_(ensureQuestionParticipantSheet_(), participantSheetRows, 11);
+  replaceSheetRows_(ensureQuestionParticipantSheet_(), participantSheetRows, 12);
 
   let groupUpdateResult = { updated: 0 };
   try {
@@ -1971,7 +1986,7 @@ function readParticipantEntries_() {
   if (lastRow < 2) {
     return [];
   }
-  const values = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
+  const values = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
   return values
     .map(row => {
       const eventId = String(row[0] || '').trim();
@@ -1984,6 +1999,7 @@ function readParticipantEntries_() {
       const phone = String(row[7] || '').trim();
       const email = String(row[8] || '').trim();
       const teamNumber = String(row[9] || '').trim();
+      const token = String(row[10] || '').trim();
       return {
         eventId,
         scheduleId,
@@ -1997,7 +2013,8 @@ function readParticipantEntries_() {
         email,
         groupNumber: teamNumber,
         teamNumber,
-        updatedAt: row[10] instanceof Date ? toIsoJst_(row[10]) : ''
+        token,
+        updatedAt: row[11] instanceof Date ? toIsoJst_(row[11]) : ''
       };
     })
     .filter(Boolean);
