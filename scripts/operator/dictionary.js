@@ -255,16 +255,50 @@ export async function handleDictionaryEditSubmit(app, event) {
   if (cancelButton) {
     cancelButton.disabled = true;
   }
+  let previousEntries = null;
+  let appliedRealtime = false;
+  const targetUid = state.uid;
   try {
-    const result = await app.api.apiPost({ action: "updateTerm", uid: state.uid, term, ruby });
-    if (!result?.success) {
-      throw new Error(result?.error || "更新に失敗しました。");
+    if (!Array.isArray(app.dictionaryData) || !app.dictionaryData.length) {
+      throw new Error("辞書データが読み込まれていません。");
     }
-    app.dictionarySelectedId = state.uid;
-    await fetchDictionary(app);
+    app.dictionarySelectedId = targetUid;
+    previousEntries = app.dictionaryData.map((entry) => ({ ...entry }));
+    const hasTarget = previousEntries.some((entry) => entry.uid === targetUid);
+    if (!hasTarget) {
+      throw new Error("対象の単語が見つかりませんでした。");
+    }
+    const updatedEntries = previousEntries.map((entry) =>
+      entry.uid === targetUid ? { ...entry, term, ruby, enabled: true } : entry
+    );
+    const normalizedEntries = applyDictionarySnapshot(app, updatedEntries);
+    appliedRealtime = true;
+    const payload = normalizedEntries.map(({ uid, term: nextTerm, ruby: nextRuby, enabled }) => ({
+      uid,
+      term: nextTerm,
+      ruby: nextRuby,
+      enabled
+    }));
+    await set(dictionaryRef, payload);
     closeDictionaryEditDialog(app);
+    app.api
+      .apiPost({ action: "updateTerm", uid: targetUid, term, ruby })
+      .then((result) => {
+        if (!result?.success) {
+          throw new Error(result?.error || "更新に失敗しました。");
+        }
+      })
+      .catch((error) => {
+        console.error("辞書シートへの同期に失敗しました", error);
+        app.toast("シートへの同期に失敗しました: " + error.message, "warning");
+      });
   } catch (error) {
+    if (appliedRealtime && previousEntries) {
+      applyDictionarySnapshot(app, previousEntries);
+    }
+    console.error("辞書のリアルタイム更新に失敗しました", error);
     app.toast("更新失敗: " + error.message, "error");
+  } finally {
     state.submitting = false;
     if (saveButton) {
       saveButton.disabled = false;
@@ -272,14 +306,6 @@ export async function handleDictionaryEditSubmit(app, event) {
     if (cancelButton) {
       cancelButton.disabled = false;
     }
-    return;
-  }
-  state.submitting = false;
-  if (saveButton) {
-    saveButton.disabled = false;
-  }
-  if (cancelButton) {
-    cancelButton.disabled = false;
   }
 }
 
