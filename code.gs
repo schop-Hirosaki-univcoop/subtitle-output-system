@@ -608,6 +608,9 @@ function doPost(e) {
       case 'addTerm':
         assertOperator_(principal);
         return ok(addDictionaryTerm(req.term, req.ruby));
+      case 'updateTerm':
+        assertOperator_(principal);
+        return ok(updateDictionaryTerm(req.uid, req.term, req.ruby));
       case 'deleteTerm':
         assertOperator_(principal);
         return ok(deleteDictionaryTerm(req.uid, req.term));
@@ -3328,6 +3331,46 @@ function addDictionaryTerm(term, ruby) {
   });
   sheet.appendRow(rowValues);
   return { success: true, message: `Term "${normalizedTerm}" added.`, uid: newUid };
+}
+
+function updateDictionaryTerm(uid, term, ruby) {
+  const normalizedUid = String(uid || '').trim();
+  const normalizedTerm = String(term || '').trim();
+  const normalizedRuby = String(ruby || '').trim();
+  if (!normalizedUid) {
+    throw new Error('Term UID is required.');
+  }
+  if (!normalizedTerm || !normalizedRuby) {
+    throw new Error('Term and ruby are required.');
+  }
+  const { sheet, info, uidIdx, termIdx, rubyIdx, enabledIdx } = ensureDictionarySheetStructure_();
+  if (sheet == null || uidIdx == null || termIdx == null || rubyIdx == null) {
+    throw new Error('Dictionary sheet is not properly configured.');
+  }
+  const rowInfo = findDictionaryRowByUid_(info, uidIdx, normalizedUid);
+  if (!rowInfo) {
+    throw new Error('Term not found: ' + normalizedUid);
+  }
+  for (let i = 0; i < info.rows.length; i++) {
+    if (i === rowInfo.index) continue;
+    const rowTerm = String(info.rows[i][termIdx] || '').trim();
+    const rowUid = String(info.rows[i][uidIdx] || '').trim();
+    if (rowTerm && rowTerm === normalizedTerm && rowUid !== normalizedUid) {
+      throw new Error('同じ単語が別の UID に紐づいています。');
+    }
+  }
+  const rowNumber = rowInfo.rowNumber;
+  sheet.getRange(rowNumber, termIdx + 1).setValue(normalizedTerm);
+  sheet.getRange(rowNumber, rubyIdx + 1).setValue(normalizedRuby);
+  if (enabledIdx != null) {
+    sheet.getRange(rowNumber, enabledIdx + 1).setValue(true);
+  }
+  info.rows[rowInfo.index][termIdx] = normalizedTerm;
+  info.rows[rowInfo.index][rubyIdx] = normalizedRuby;
+  if (enabledIdx != null) {
+    info.rows[rowInfo.index][enabledIdx] = true;
+  }
+  return { success: true, message: `Term "${normalizedTerm}" updated.` };
 }
 
 function deleteDictionaryTerm(uid, fallbackTerm) {
