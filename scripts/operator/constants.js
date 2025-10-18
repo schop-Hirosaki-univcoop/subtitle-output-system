@@ -25,6 +25,7 @@ export const STEP_LABELS = [
   "準備完了"
 ];
 
+export const GENRE_ALL_VALUE = "all";
 export const GENRE_OPTIONS = ["学び", "活動", "暮らし", "食・スポット", "移動・季節", "その他"];
 
 export const DICTIONARY_STATE_KEY = "telop-ops-dictionary-open";

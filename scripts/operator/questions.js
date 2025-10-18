@@ -1,4 +1,4 @@
-import { GENRE_OPTIONS, QUESTIONS_SUBTAB_KEY } from "./constants.js";
+import { QUESTIONS_SUBTAB_KEY, GENRE_ALL_VALUE } from "./constants.js";
 import { database, ref, update, set, remove, get, telopRef, serverTimestamp } from "./firebase.js";
 import { escapeHtml, formatOperatorName, resolveGenreLabel, formatScheduleRange } from "./utils.js";
 
@@ -33,7 +33,8 @@ export function renderQuestions(app) {
   const currentTab = app.state.currentSubTab;
   const viewingPuqTab = currentTab === "puq";
   const viewingNormalTab = currentTab === "normal";
-  const selectedGenre = app.state.currentGenre || GENRE_OPTIONS[0];
+  const selectedGenre = typeof app.state.currentGenre === "string" ? app.state.currentGenre.trim() : "";
+  const viewingAllGenres = !selectedGenre || selectedGenre.toLowerCase() === GENRE_ALL_VALUE;
   const selectedSchedule = viewingNormalTab ? app.state.currentSchedule || "" : "";
   let list = app.state.allQuestions.filter((item) => {
     const isPuq = item["ピックアップ"] === true || item["ラジオネーム"] === "Pick Up Question";
@@ -44,7 +45,7 @@ export function renderQuestions(app) {
       return false;
     }
     const itemGenre = String(item["ジャンル"] ?? "").trim() || "その他";
-    if (selectedGenre && itemGenre !== selectedGenre) return false;
+    if (!viewingAllGenres && itemGenre !== selectedGenre) return false;
     const itemSchedule = String(item.__scheduleKey ?? item["日程"] ?? "").trim();
     if (viewingNormalTab && selectedSchedule && itemSchedule !== selectedSchedule) return false;
     return true;
@@ -280,13 +281,19 @@ export function switchSubTab(app, tabName) {
 }
 
 export function switchGenre(app, genreKey) {
-  if (!genreKey) return;
-  const current = app.state.currentGenre || GENRE_OPTIONS[0];
-  const nextGenre = resolveGenreLabel(genreKey);
-  if (nextGenre === current) return;
+  const rawValue = typeof genreKey === "string" ? genreKey : String(genreKey ?? "");
+  const trimmedValue = rawValue.trim();
+  const isAll = !trimmedValue || trimmedValue.toLowerCase() === GENRE_ALL_VALUE;
+  const nextGenre = isAll ? "" : resolveGenreLabel(trimmedValue);
+  const current = typeof app.state.currentGenre === "string" ? app.state.currentGenre : "";
+  if (nextGenre === current) {
+    return;
+  }
   app.state.currentGenre = nextGenre;
   document.querySelectorAll(".genre-tab-button").forEach((button) => {
-    const isActive = button.dataset.genre === nextGenre;
+    const value = String(button.dataset.genre ?? "").trim();
+    const buttonIsAll = !value || value.toLowerCase() === GENRE_ALL_VALUE;
+    const isActive = buttonIsAll ? nextGenre === "" : nextGenre !== "" && resolveGenreLabel(value) === nextGenre;
     button.classList.toggle("active", isActive);
     button.setAttribute("aria-selected", String(isActive));
   });

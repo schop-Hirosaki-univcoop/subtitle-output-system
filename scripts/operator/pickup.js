@@ -1,8 +1,8 @@
-import { GENRE_OPTIONS } from "./constants.js";
+import { GENRE_OPTIONS, GENRE_ALL_VALUE } from "./constants.js";
 import { pickupQuestionsRef, database, ref, update, onValue } from "./firebase.js";
 import { escapeHtml, resolveGenreLabel, formatRelative } from "./utils.js";
 
-const ALL_FILTER_VALUE = "all";
+const ALL_FILTER_VALUE = GENRE_ALL_VALUE;
 
 const PICKUP_DEFAULT_FIELDS = {
   name: "Pick Up Question",
