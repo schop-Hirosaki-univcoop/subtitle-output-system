@@ -39,6 +39,7 @@ export const renderRef = ref(database, "render/state");
 export const renderNowShowingRef = ref(database, "render/state/nowShowing");
 export const displaySessionRef = ref(database, "render/session");
 export const questionsRef = ref(database, "questions");
+export const pickupQuestionsRef = ref(database, "questions/pickup");
 export const questionStatusRef = ref(database, "questionStatus");
 export const questionIntakeEventsRef = ref(database, "questionIntake/events");
 export const questionIntakeSchedulesRef = ref(database, "questionIntake/schedules");

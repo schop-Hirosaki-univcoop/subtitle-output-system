@@ -1251,6 +1251,7 @@ export class EventAdminApp {
       participants: this.dom.participantsPanel,
       operator: this.dom.operatorPanel,
       dictionary: this.dom.dictionaryPanel,
+      pickup: this.dom.pickupPanel,
       logs: this.dom.logsPanel
     };
   }

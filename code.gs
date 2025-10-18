@@ -282,6 +282,50 @@ function ensureQuestionUids_() {
   return updated;
 }
 
+function ensurePickupQuestionSheetStructure_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(PICKUP_QUESTION_SHEET_NAME);
+  if (!sheet) {
+    throw new Error('Pick Up Question シートが見つかりませんでした。');
+  }
+  let info = readSheetWithHeaders_(sheet);
+  if (!info.sheet || !info.headers.length) {
+    const headers = ['UID', '質問・お悩み', 'ジャンル', '回答済', '選択中', 'タイムスタンプ'];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    info = readSheetWithHeaders_(sheet);
+  }
+  const headers = Array.isArray(info.headers) ? info.headers.slice() : [];
+  const required = ['UID', '質問・お悩み', 'ジャンル', '回答済', '選択中', 'タイムスタンプ'];
+  const missing = required.filter((header) => !headers.includes(header));
+  if (missing.length) {
+    const nextHeaders = headers.concat(missing);
+    const maxColumns = sheet.getMaxColumns();
+    if (maxColumns < nextHeaders.length) {
+      sheet.insertColumnsAfter(maxColumns, nextHeaders.length - maxColumns);
+    }
+    sheet.getRange(1, 1, 1, nextHeaders.length).setValues([nextHeaders]);
+    info = readSheetWithHeaders_(sheet);
+  }
+  ensureQuestionSheetUids_(sheet);
+  info = readSheetWithHeaders_(sheet);
+  const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
+  const questionIdx = getHeaderIndex_(info.headerMap, '質問・お悩み');
+  const genreIdx = getHeaderIndex_(info.headerMap, 'ジャンル');
+  const answeredIdx = getHeaderIndex_(info.headerMap, '回答済');
+  const selectingIdx = getHeaderIndex_(info.headerMap, '選択中');
+  const timestampIdx = getHeaderIndex_(info.headerMap, ['タイムスタンプ', 'timestamp']);
+  return {
+    sheet,
+    info,
+    uidIdx,
+    questionIdx,
+    genreIdx,
+    answeredIdx,
+    selectingIdx,
+    timestampIdx
+  };
+}
+
 function mirrorQuestionsFromRtdbToSheet_(providedAccessToken) {
   const accessToken = providedAccessToken || getFirebaseAccessToken_();
   const questionsBranch = fetchRtdb_('questions', accessToken) || {};
@@ -634,6 +678,15 @@ function doPost(e) {
       case 'batchToggleTerms':
         assertOperator_(principal);
         return ok(batchToggleDictionaryTerms(req.uids, req.enabled));
+      case 'createPickupQuestion':
+        assertOperator_(principal);
+        return ok(createPickupQuestion(req.question, req.genre));
+      case 'updatePickupQuestion':
+        assertOperator_(principal);
+        return ok(updatePickupQuestion(req.uid, req.question, req.genre));
+      case 'deletePickupQuestion':
+        assertOperator_(principal);
+        return ok(deletePickupQuestion(req.uid));
       case 'updateStatus':
         assertOperator_(principal);
         return ok(updateAnswerStatus(req.uid, req.status));
@@ -3263,6 +3316,148 @@ function editQuestionText(uid, newText) {
   }
   match.sheet.getRange(match.rowNumber, questionIdx + 1).setValue(newText);
   return { success: true, message: `UID: ${uid} question updated.` };
+}
+
+function createPickupQuestion(question, genre) {
+  const normalizedQuestion = String(question || '').trim();
+  if (!normalizedQuestion) {
+    throw new Error('質問内容を入力してください。');
+  }
+  const normalizedGenre = String(genre || '').trim() || 'その他';
+  const { sheet, info, uidIdx, questionIdx, genreIdx } =
+    ensurePickupQuestionSheetStructure_();
+  if (sheet == null || uidIdx == null || questionIdx == null || genreIdx == null) {
+    throw new Error('Pick Up Question シートの構成が正しくありません。');
+  }
+  const existingUids = new Set();
+  info.rows.forEach((row) => {
+    const value = String(row[uidIdx] || '').trim();
+    if (value) existingUids.add(value);
+  });
+  let newUid = '';
+  do {
+    newUid = Utilities.getUuid();
+  } while (existingUids.has(newUid));
+
+  const now = new Date();
+  const rowValues = new Array(info.headers.length).fill('');
+  info.headers.forEach((header, index) => {
+    switch (String(header || '').trim()) {
+      case 'UID':
+        rowValues[index] = newUid;
+        break;
+      case '質問・お悩み':
+        rowValues[index] = normalizedQuestion;
+        break;
+      case 'ジャンル':
+        rowValues[index] = normalizedGenre;
+        break;
+      case '回答済':
+      case '選択中':
+        rowValues[index] = false;
+        break;
+      case 'タイムスタンプ':
+        rowValues[index] = formatQuestionTimestamp_(now);
+        break;
+      default:
+        rowValues[index] = '';
+    }
+  });
+  sheet.appendRow(rowValues);
+
+  const nowMs = Date.now();
+  const token = getFirebaseAccessToken_();
+  const record = {
+    uid: newUid,
+    name: 'Pick Up Question',
+    question: normalizedQuestion,
+    genre: normalizedGenre,
+    pickup: true,
+    type: 'pickup',
+    schedule: '',
+    scheduleStart: '',
+    scheduleEnd: '',
+    scheduleDate: '',
+    participantId: '',
+    participantName: '',
+    guidance: '',
+    eventId: '',
+    eventName: '',
+    scheduleId: '',
+    ts: nowMs,
+    updatedAt: nowMs
+  };
+  const updates = {};
+  updates[`questions/pickup/${newUid}`] = record;
+  updates[`questionStatus/${newUid}`] = { answered: false, selecting: false, pickup: true, updatedAt: nowMs };
+  patchRtdb_(updates, token);
+  return { success: true, question: { uid: newUid, question: normalizedQuestion, genre: normalizedGenre } };
+}
+
+function updatePickupQuestion(uid, question, genre) {
+  const normalizedUid = String(uid || '').trim();
+  if (!normalizedUid) {
+    throw new Error('UID is required.');
+  }
+  const normalizedQuestion = String(question || '').trim();
+  if (!normalizedQuestion) {
+    throw new Error('質問内容を入力してください。');
+  }
+  const normalizedGenre = String(genre || '').trim() || 'その他';
+  const match = findQuestionRowByUid_(normalizedUid);
+  if (!match || match.sheet.getName() !== PICKUP_QUESTION_SHEET_NAME) {
+    throw new Error('指定した Pick Up Question が見つかりませんでした。');
+  }
+  const questionIdx = getHeaderIndex_(match.headerMap, '質問・お悩み');
+  const genreIdx = getHeaderIndex_(match.headerMap, 'ジャンル');
+  if (questionIdx == null || genreIdx == null) {
+    throw new Error('Pick Up Question シートに必要な列がありません。');
+  }
+  match.sheet.getRange(match.rowNumber, questionIdx + 1).setValue(normalizedQuestion);
+  match.sheet.getRange(match.rowNumber, genreIdx + 1).setValue(normalizedGenre);
+  const timestampIdx = getHeaderIndex_(match.headerMap, ['タイムスタンプ', 'timestamp']);
+  if (timestampIdx != null) {
+    match.sheet.getRange(match.rowNumber, timestampIdx + 1).setValue(formatQuestionTimestamp_(new Date()));
+  }
+
+  const token = getFirebaseAccessToken_();
+  let current = null;
+  try {
+    current = fetchRtdb_(`questions/pickup/${normalizedUid}`, token);
+  } catch (error) {
+    current = null;
+  }
+  const nextRecord = current && typeof current === 'object' ? { ...current } : { uid: normalizedUid };
+  nextRecord.uid = normalizedUid;
+  nextRecord.question = normalizedQuestion;
+  nextRecord.genre = normalizedGenre;
+  nextRecord.pickup = true;
+  nextRecord.type = 'pickup';
+  nextRecord.name = String(nextRecord.name || 'Pick Up Question');
+  nextRecord.updatedAt = Date.now();
+  const updates = {};
+  updates[`questions/pickup/${normalizedUid}`] = nextRecord;
+  updates[`questionStatus/${normalizedUid}/updatedAt`] = nextRecord.updatedAt;
+  updates[`questionStatus/${normalizedUid}/pickup`] = true;
+  patchRtdb_(updates, token);
+  return { success: true, message: `UID: ${normalizedUid} updated.` };
+}
+
+function deletePickupQuestion(uid) {
+  const normalizedUid = String(uid || '').trim();
+  if (!normalizedUid) {
+    throw new Error('UID is required.');
+  }
+  const match = findQuestionRowByUid_(normalizedUid);
+  if (!match || match.sheet.getName() !== PICKUP_QUESTION_SHEET_NAME) {
+    throw new Error('指定した Pick Up Question が見つかりませんでした。');
+  }
+  match.sheet.deleteRow(match.rowNumber);
+  const updates = {};
+  updates[`questions/pickup/${normalizedUid}`] = null;
+  updates[`questionStatus/${normalizedUid}`] = null;
+  patchRtdb_(updates, getFirebaseAccessToken_());
+  return { success: true, message: `UID: ${normalizedUid} deleted.` };
 }
 
 function updateAnswerStatus(uid, status) {

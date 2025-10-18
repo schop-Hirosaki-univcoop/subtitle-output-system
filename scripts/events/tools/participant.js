@@ -643,7 +643,7 @@ export class ParticipantToolManager {
       this.app.selectSchedule("");
     }
 
-    const tabPanels = new Set(["participants", "operator", "dictionary", "logs"]);
+    const tabPanels = new Set(["participants", "operator", "dictionary", "pickup", "logs"]);
     const targetPanel = tabPanels.has(this.app.activePanel) ? this.app.activePanel : "participants";
     this.app.showPanel(targetPanel);
     this.app.notifyEventListeners();

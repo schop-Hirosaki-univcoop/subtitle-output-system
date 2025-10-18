@@ -529,6 +529,23 @@ body.logs-open #logs-panel{ display:flex; }
 .dictionary-form .input{ flex:1 1 14rem; min-width:10rem; }
 .dictionary-form .btn{ flex:0 0 auto; }
 
+.pickup-body{ display:flex; flex-direction:column; gap:clamp(.9rem, 1.7vw, 1.3rem); }
+.pickup-body .cards-scroll{ flex:1; min-height:0; overflow:auto; }
+.pickup-form{ display:flex; flex-wrap:wrap; gap:clamp(.55rem, 1.2vw, .85rem); align-items:flex-end; }
+.pickup-form textarea{ flex:1 1 clamp(18rem, 40vw, 28rem); min-height:clamp(5.5rem, 10vw, 7rem); }
+.pickup-form__genre{ display:flex; flex-direction:column; flex:0 0 clamp(12rem, 18vw, 14rem); }
+.pickup-form select{ width:100%; }
+.pickup-form .btn{ flex:0 0 auto; }
+.pickup-list{ display:flex; flex-direction:column; gap:clamp(.6rem, 1.1vw, .9rem); margin:0; padding:0; list-style:none; }
+.pickup-card{ background:linear-gradient(180deg, rgba(17,24,37,.92), rgba(11,16,26,.96)); border:1px solid rgba(46,68,96,.65); border-radius:clamp(.9rem, 1.5vw, 1.2rem); box-shadow:0 12px 32px rgba(0,0,0,.42); padding:clamp(.85rem, 1.6vw, 1.2rem) clamp(.95rem, 1.8vw, 1.3rem); display:flex; flex-direction:column; gap:clamp(.65rem, 1.1vw, .85rem); color:var(--txt); transition:border-color .18s ease, box-shadow .18s ease; }
+.pickup-card:hover{ border-color:rgba(41,182,246,.6); box-shadow:0 18px 42px rgba(0,0,0,.5); }
+.pickup-card__question{ margin:0; white-space:pre-wrap; line-height:1.55; font-size:.96rem; }
+.pickup-card__meta{ display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; font-size:.82rem; color:var(--muted); }
+.pickup-card__genre{ display:inline-flex; align-items:center; gap:.35rem; padding:.3rem .85rem; border-radius:999px; background:rgba(30,200,255,.12); border:1px solid rgba(30,200,255,.3); font-weight:600; letter-spacing:.04em; color:var(--txt); }
+.pickup-card__time{ color:var(--muted); }
+.pickup-card__actions{ display:flex; flex-wrap:wrap; gap:.5rem; }
+.pickup-card__actions .btn{ flex:0 0 auto; }
+
 .logs-toolbar{ display:flex; gap:clamp(.55rem, 1.2vw, .85rem); align-items:center; flex-wrap:wrap; }
 .logs-toolbar .input{ flex:1 1 14rem; min-width:0; max-width:20rem; }
 
