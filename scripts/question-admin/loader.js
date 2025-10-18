@@ -1,8 +1,63 @@
 import { dom } from "./dom.js";
 import { loaderState } from "./state.js";
 
+function ensureLoaderTargets() {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  if (!dom.loadingOverlay) {
+    dom.loadingOverlay =
+      document.getElementById("qa-loading-overlay") ||
+      document.getElementById("loading-overlay") ||
+      dom.adminMain?.querySelector(".loading-overlay") ||
+      null;
+  }
+
+  if (!dom.participantModule) {
+    dom.participantModule =
+      document.getElementById("qa-participant-module") ||
+      document.getElementById("participant-module") ||
+      null;
+  }
+
+  if (!dom.adminMain) {
+    dom.adminMain =
+      document.getElementById("qa-admin-main") ||
+      document.getElementById("admin-main") ||
+      null;
+  }
+
+  if (!dom.loadingText && dom.loadingOverlay) {
+    dom.loadingText =
+      document.getElementById("qa-loading-text") ||
+      document.getElementById("loading-text") ||
+      dom.loadingOverlay.querySelector("#loading-text, #qa-loading-text, .loading-text span") ||
+      null;
+  }
+
+  if (!dom.loaderSteps && dom.loadingOverlay) {
+    dom.loaderSteps =
+      document.getElementById("qa-loader-steps") ||
+      document.getElementById("loader-steps") ||
+      dom.loadingOverlay.querySelector("#loader-steps, #qa-loader-steps, .loader-steps") ||
+      null;
+  }
+}
+
 function showLoader(message = "初期化しています…") {
-  if (dom.loadingOverlay) dom.loadingOverlay.hidden = false;
+  ensureLoaderTargets();
+  if (dom.adminMain) {
+    dom.adminMain.hidden = false;
+    dom.adminMain.removeAttribute("aria-hidden");
+    dom.adminMain.removeAttribute("inert");
+  }
+  if (dom.loadingOverlay) {
+    dom.loadingOverlay.hidden = false;
+    dom.loadingOverlay.removeAttribute("hidden");
+    dom.loadingOverlay.removeAttribute("aria-hidden");
+    dom.loadingOverlay.removeAttribute("inert");
+  }
   const target = dom.participantModule || dom.adminMain;
   if (target) {
     target.classList.add("is-loading-hidden");
@@ -13,7 +68,13 @@ function showLoader(message = "初期化しています…") {
 }
 
 function hideLoader() {
-  if (dom.loadingOverlay) dom.loadingOverlay.hidden = true;
+  ensureLoaderTargets();
+  if (dom.loadingOverlay) {
+    dom.loadingOverlay.hidden = true;
+    dom.loadingOverlay.setAttribute("hidden", "");
+    dom.loadingOverlay.setAttribute("aria-hidden", "true");
+    dom.loadingOverlay.setAttribute("inert", "");
+  }
   const target = dom.participantModule || dom.adminMain;
   if (target) {
     target.classList.remove("is-loading-hidden");
