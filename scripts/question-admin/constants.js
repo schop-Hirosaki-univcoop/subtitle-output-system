@@ -15,7 +15,13 @@ export const PARTICIPANT_TEMPLATE_HEADERS = [
   "携帯電話",
   "メールアドレス"
 ];
-export const TEAM_TEMPLATE_HEADERS = ["参加者ID", "班番号"];
+export const TEAM_TEMPLATE_HEADERS = [
+  "学部学科",
+  "性別",
+  "名前",
+  "班番号",
+  "uid"
+];
 export const firebaseConfig = {
   apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
   authDomain: "subtitle-output-system-9bc14.firebaseapp.com",
