@@ -1,6 +1,12 @@
 import { state } from "./state.js";
 import { normalizeKey } from "./utils.js";
 
+const STRING_COLLATOR = new Intl.Collator("ja", { numeric: true, sensitivity: "base" });
+
+function normalizeText(value) {
+  return String(value ?? "").trim();
+}
+
 let rowKeyCounter = 0;
 
 function generateRowKey(prefix = "row") {
@@ -24,6 +30,67 @@ function sanitizePrefixComponent(value) {
     .replace(/[^A-Za-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .toLowerCase();
+}
+
+function resolveParticipantUid(entry, fallback = "") {
+  if (!entry || typeof entry !== "object") return normalizeText(fallback);
+  const candidates = [
+    entry.uid,
+    entry.UID,
+    entry.participantUid,
+    entry.participantuid,
+    entry.participant_id,
+    entry.participantId,
+    entry.id,
+    fallback
+  ];
+  for (const candidate of candidates) {
+    const normalized = normalizeText(candidate);
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function normalizeGroupNumberValue(value) {
+  const normalized = normalizeText(value);
+  return normalized;
+}
+
+function isCancellationValue(value) {
+  if (!value) return false;
+  const normalized = normalizeText(value).toLowerCase();
+  if (!normalized) return false;
+  return normalized.includes("キャンセル") || normalized === "cancel" || normalized === "cancelled";
+}
+
+function resolveParticipantStatus(entry, normalizedGroupValue) {
+  const normalizedStatus = normalizeText(
+    entry?.status || entry?.participantStatus || entry?.cancellationStatus || entry?.relocationStatus
+  ).toLowerCase();
+
+  if (normalizedStatus === "relocated" || normalizedStatus === "destination" || normalizedStatus === "relocation-destination") {
+    return "relocated";
+  }
+  if (normalizedStatus === "cancelled" || normalizedStatus === "cancel" || normalizedStatus === "cancelled-origin") {
+    return "cancelled";
+  }
+  if (normalizedStatus === "cancelled-destination") {
+    return "relocated";
+  }
+
+  if (entry?.relocated === true || entry?.relocationDestination === true || entry?.destinationScheduleId) {
+    return "relocated";
+  }
+
+  if (entry?.cancelled === true || entry?.cancellation === true) {
+    return "cancelled";
+  }
+
+  if (isCancellationValue(normalizedGroupValue)) {
+    return "cancelled";
+  }
+
+  return "active";
 }
 
 function createParticipantIdPrefix(eventId, scheduleId) {
@@ -101,16 +168,26 @@ function normalizeEventParticipantCache(eventBranch) {
       cache[String(scheduleId)] = [];
       return;
     }
-    const normalized = Object.entries(scheduleBranch).map(([participantKey, entry]) => ensureRowKey({
-      key: String(entry?.participantId || entry?.id || participantKey || ""),
-      participantId: String(entry?.participantId || entry?.id || participantKey || ""),
-      name: String(entry?.name || ""),
-      department: String(entry?.department || entry?.groupNumber || ""),
-      groupNumber: String(entry?.groupNumber || entry?.teamNumber || ""),
-      teamNumber: String(entry?.teamNumber || entry?.groupNumber || ""),
-      scheduleId: String(scheduleId),
-      rowKey: String(entry?.rowKey || "")
-    }, "cache"));
+    const normalized = Object.entries(scheduleBranch).map(([participantKey, entry]) => {
+      const uid = resolveParticipantUid(entry, participantKey);
+      const groupNumber = normalizeGroupNumberValue(entry?.groupNumber ?? entry?.teamNumber ?? "");
+      const status = resolveParticipantStatus(entry, groupNumber);
+      return ensureRowKey({
+        key: uid || String(entry?.participantId || entry?.id || participantKey || ""),
+        uid,
+        participantId: uid || String(entry?.participantId || entry?.id || participantKey || ""),
+        legacyParticipantId: uid && entry?.participantId && uid !== entry.participantId ? String(entry.participantId) : "",
+        name: String(entry?.name || ""),
+        department: String(entry?.department || entry?.groupNumber || ""),
+        groupNumber,
+        teamNumber: groupNumber,
+        scheduleId: String(scheduleId),
+        status,
+        isCancelled: status === "cancelled",
+        isRelocated: status === "relocated",
+        rowKey: String(entry?.rowKey || "")
+      }, "cache");
+    });
     cache[String(scheduleId)] = normalized;
   });
   return cache;
@@ -250,13 +327,18 @@ function syncCurrentScheduleCache() {
   }
   const cache = state.eventParticipantCache.get(eventId) || {};
   cache[scheduleId] = state.participants.map(entry => ensureRowKey({
-    key: String(entry?.participantId || ""),
-    participantId: String(entry?.participantId || ""),
+    key: resolveParticipantUid(entry) || String(entry?.participantId || ""),
+    uid: resolveParticipantUid(entry),
+    participantId: resolveParticipantUid(entry) || String(entry?.participantId || ""),
+    legacyParticipantId: entry?.legacyParticipantId || "",
     name: String(entry?.name || ""),
     department: String(entry?.department || entry?.groupNumber || ""),
     groupNumber: String(entry?.teamNumber || entry?.groupNumber || ""),
     teamNumber: String(entry?.teamNumber || entry?.groupNumber || ""),
     scheduleId: String(scheduleId),
+    status: entry?.status || "active",
+    isCancelled: Boolean(entry?.isCancelled),
+    isRelocated: Boolean(entry?.isRelocated),
     isCurrent: true,
     rowKey: String(entry?.rowKey || "")
   }, "current-cache"));
@@ -284,6 +366,7 @@ function parseParticipantRows(rows) {
 
   const indexMap = {
     id: findIndex(["id", "参加", "member"], -1),
+    uid: findIndex(["uid"], -1),
     name: findIndex(["name", "氏名", "名前", "ラジオ", "radio"], 1),
     phonetic: findIndex(["フリ", "ふり", "furigana", "yomi", "reading"], 2),
     gender: findIndex(["性別", "gender"], 3),
@@ -303,6 +386,7 @@ function parseParticipantRows(rows) {
   const entries = [];
 
   dataRows.forEach(cols => {
+    const uid = normalizeColumn(cols, indexMap.uid);
     const participantId = normalizeColumn(cols, indexMap.id);
     const name = normalizeColumn(cols, indexMap.name);
     const phonetic = normalizeColumn(cols, indexMap.phonetic);
@@ -320,8 +404,10 @@ function parseParticipantRows(rows) {
       throw new Error("氏名のない行があります。CSVを確認してください。");
     }
 
+    const resolvedId = uid || participantId;
     entries.push(ensureRowKey({
-      participantId,
+      uid: resolvedId,
+      participantId: resolvedId,
       name,
       phonetic,
       furigana: phonetic,
@@ -346,16 +432,10 @@ function parseTeamAssignmentRows(rows) {
     throw new Error("CSVにデータがありません。");
   }
 
-  const headerCandidate = rows[0].map(cell => normalizeKey(cell).toLowerCase());
-  const hasHeader =
-    headerCandidate.some(cell => /id|参加|member/.test(cell)) &&
-    headerCandidate.some(cell => /班|group|team/.test(cell));
+  const headerRaw = rows[0].map(cell => normalizeText(cell));
+  const headerCandidate = headerRaw.map(cell => normalizeKey(cell).toLowerCase());
 
-  if (!hasHeader) {
-    throw new Error("ヘッダー行が見つかりません。テンプレートを利用して参加者IDと班番号の列を用意してください。");
-  }
-
-  const findIndex = (keywords, fallback) => {
+  const findIndex = (keywords, fallback = -1) => {
     for (const keyword of keywords) {
       const idx = headerCandidate.findIndex(cell => cell.includes(keyword));
       if (idx !== -1) return idx;
@@ -363,27 +443,41 @@ function parseTeamAssignmentRows(rows) {
     return fallback;
   };
 
-  const idIndex = findIndex(["id", "参加", "member"], -1);
+  const uidIndex = findIndex(["uid"], -1);
   const teamIndex = findIndex(["班", "group", "team"], -1);
-
-  if (idIndex < 0 || teamIndex < 0) {
-    throw new Error("CSVの列が認識できません。参加者IDと班番号の列をヘッダーに含めてください。");
-  }
 
   const dataRows = rows.slice(1);
 
+  if (uidIndex >= 0 && teamIndex >= 0) {
+    const assignments = new Map();
+    dataRows.forEach(cols => {
+      const uid = normalizeText(cols[uidIndex]);
+      if (!uid) return;
+      const teamNumber = normalizeGroupNumberValue(cols[teamIndex]);
+      assignments.set(uid, teamNumber);
+    });
+    if (!assignments.size) {
+      throw new Error("有効なuidが含まれていません。");
+    }
+    return assignments;
+  }
+
+  const legacyIdIndex = findIndex(["id", "参加", "member"], -1);
+
+  if (legacyIdIndex < 0 || teamIndex < 0) {
+    throw new Error("ヘッダー行が見つかりません。テンプレート（学部学科,性別,名前,班番号,uid）を利用してください。");
+  }
+
   const assignments = new Map();
   dataRows.forEach(cols => {
-    const participantId = normalizeKey(cols[idIndex] ?? "");
-    const teamNumber = normalizeKey(cols[teamIndex] ?? "");
-    if (!participantId) {
-      return;
-    }
-    assignments.set(participantId, teamNumber);
+    const key = normalizeText(cols[legacyIdIndex]);
+    const teamNumber = normalizeGroupNumberValue(cols[teamIndex]);
+    if (!key) return;
+    assignments.set(key, teamNumber);
   });
 
   if (!assignments.size) {
-    throw new Error("有効な参加者IDが含まれていません。");
+    throw new Error("有効なIDが含まれていません。");
   }
 
   return assignments;
@@ -415,21 +509,32 @@ function applyAssignmentsToEntries(entries, assignmentMap) {
   const matchedIds = new Set();
   const updatedIds = new Set();
   const updatedEntries = entries.map(entry => {
-    const participantId = String(entry?.participantId || "");
-    if (!participantId || !assignmentMap.has(participantId)) {
+    const uid = resolveParticipantUid(entry);
+    const fallbackId = String(entry?.participantId || "");
+    const key = uid || fallbackId;
+    if (!key) {
       return entry;
     }
-    matchedIds.add(participantId);
-    const teamNumber = String(assignmentMap.get(participantId) || "");
+    const hasAssignment = assignmentMap.has(key) || (fallbackId && assignmentMap.has(fallbackId));
+    if (!hasAssignment) {
+      return entry;
+    }
+    const assignmentKey = assignmentMap.has(key) ? key : fallbackId;
+    matchedIds.add(assignmentKey);
+    const teamNumber = String(assignmentMap.get(assignmentKey) || "");
     const currentTeam = String(entry?.teamNumber || entry?.groupNumber || "");
     if (currentTeam === teamNumber) {
       return entry;
     }
-    updatedIds.add(participantId);
+    updatedIds.add(assignmentKey);
+    const nextStatus = resolveParticipantStatus({ ...entry, teamNumber }, teamNumber);
     return {
       ...entry,
       teamNumber,
-      groupNumber: teamNumber
+      groupNumber: teamNumber,
+      status: nextStatus,
+      isCancelled: nextStatus === "cancelled",
+      isRelocated: nextStatus === "relocated"
     };
   });
 
@@ -451,16 +556,27 @@ function applyAssignmentsToEventCache(eventId, assignmentMap) {
   Object.keys(cache).forEach(scheduleId => {
     const list = Array.isArray(cache[scheduleId]) ? cache[scheduleId] : [];
     cache[scheduleId] = list.map(record => {
-      const participantId = String(record?.participantId || "");
-      if (!participantId || !assignmentMap.has(participantId)) {
+      const uid = resolveParticipantUid(record);
+      const fallbackId = String(record?.participantId || "");
+      const key = uid || fallbackId;
+      if (!key) {
         return record;
       }
-      matchedIds.add(participantId);
-      const teamNumber = String(assignmentMap.get(participantId) || "");
+      const hasAssignment = assignmentMap.has(key) || (fallbackId && assignmentMap.has(fallbackId));
+      if (!hasAssignment) {
+        return record;
+      }
+      const assignmentKey = assignmentMap.has(key) ? key : fallbackId;
+      matchedIds.add(assignmentKey);
+      const teamNumber = String(assignmentMap.get(assignmentKey) || "");
+      const nextStatus = resolveParticipantStatus({ ...record, teamNumber }, teamNumber);
       return {
         ...record,
         groupNumber: teamNumber,
         teamNumber,
+        status: nextStatus,
+        isCancelled: nextStatus === "cancelled",
+        isRelocated: nextStatus === "relocated",
         rowKey: String(record?.rowKey || "")
       };
     });
@@ -470,19 +586,26 @@ function applyAssignmentsToEventCache(eventId, assignmentMap) {
 }
 
 function normalizeParticipantRecord(entry, fallbackId = "") {
-  const participantId = String(entry?.participantId || entry?.id || fallbackId || "");
-  const name = String(entry?.name || "");
-  const phonetic = String(entry?.phonetic || entry?.furigana || "");
-  const gender = String(entry?.gender || "");
-  const department = String(entry?.department || entry?.faculty || entry?.groupNumber || "");
+  const uid = resolveParticipantUid(entry, fallbackId);
+  const legacyParticipantId = normalizeText(entry?.participantId || entry?.id || "");
+  const participantId = uid || legacyParticipantId;
+  const name = normalizeText(entry?.name || entry?.displayName);
+  const phonetic = normalizeText(entry?.phonetic || entry?.furigana);
+  const gender = normalizeText(entry?.gender);
+  const department = normalizeText(entry?.department || entry?.faculty || entry?.groupNumber);
   const rawGroup = entry?.teamNumber ?? entry?.groupNumber ?? "";
-  const teamNumber = String(rawGroup || "");
-  const phone = String(entry?.phone || "");
-  const email = String(entry?.email || "");
-  const token = String(entry?.token || "");
-  const guidance = String(entry?.guidance || "");
+  const teamNumber = normalizeGroupNumberValue(rawGroup);
+  const phone = normalizeText(entry?.phone);
+  const email = normalizeText(entry?.email);
+  const token = normalizeText(entry?.token);
+  const guidance = normalizeText(entry?.guidance);
+  const status = resolveParticipantStatus(entry, teamNumber);
+  const isCancelled = status === "cancelled";
+  const isRelocated = status === "relocated";
   return ensureRowKey({
+    uid,
     participantId,
+    legacyParticipantId: uid && legacyParticipantId && uid !== legacyParticipantId ? legacyParticipantId : "",
     name,
     phonetic,
     furigana: phonetic,
@@ -494,6 +617,9 @@ function normalizeParticipantRecord(entry, fallbackId = "") {
     email,
     token,
     guidance,
+    status,
+    isCancelled,
+    isRelocated,
     rowKey: String(entry?.rowKey || "")
   }, "record");
 }
@@ -567,6 +693,82 @@ function assignParticipantIds(entries, existingParticipants = [], options = {}) 
   });
 
   return resolved;
+}
+
+const STATUS_PRIORITY = new Map([
+  ["active", 0],
+  ["relocated", 0],
+  ["cancelled", 1]
+]);
+
+function compareStrings(a, b) {
+  const textA = normalizeText(a);
+  const textB = normalizeText(b);
+  if (!textA && !textB) return 0;
+  if (!textA) return 1;
+  if (!textB) return -1;
+  return STRING_COLLATOR.compare(textA, textB);
+}
+
+function getGroupSortInfo(entry) {
+  const groupValue = normalizeGroupNumberValue(entry?.teamNumber ?? entry?.groupNumber ?? "");
+  if (!groupValue) {
+    return { bucket: 2, number: Number.POSITIVE_INFINITY, text: "" };
+  }
+  const numeric = Number(groupValue);
+  if (!Number.isNaN(numeric)) {
+    return { bucket: 0, number: numeric, text: groupValue };
+  }
+  return { bucket: 1, number: Number.POSITIVE_INFINITY, text: groupValue };
+}
+
+function compareParticipants(a, b) {
+  const statusA = a?.status || "active";
+  const statusB = b?.status || "active";
+  const statusRankA = STATUS_PRIORITY.has(statusA) ? STATUS_PRIORITY.get(statusA) : STATUS_PRIORITY.get("active");
+  const statusRankB = STATUS_PRIORITY.has(statusB) ? STATUS_PRIORITY.get(statusB) : STATUS_PRIORITY.get("active");
+  if (statusRankA !== statusRankB) {
+    return statusRankA - statusRankB;
+  }
+
+  const groupInfoA = getGroupSortInfo(a);
+  const groupInfoB = getGroupSortInfo(b);
+  if (groupInfoA.bucket !== groupInfoB.bucket) {
+    return groupInfoA.bucket - groupInfoB.bucket;
+  }
+  if (groupInfoA.bucket === 0) {
+    if (groupInfoA.number !== groupInfoB.number) {
+      return groupInfoA.number - groupInfoB.number;
+    }
+  } else if (groupInfoA.bucket === 1) {
+    const groupCompare = compareStrings(groupInfoA.text, groupInfoB.text);
+    if (groupCompare !== 0) {
+      return groupCompare;
+    }
+  }
+
+  const departmentCompare = compareStrings(a?.department, b?.department);
+  if (departmentCompare !== 0) {
+    return departmentCompare;
+  }
+
+  const phoneticCompare = compareStrings(a?.phonetic || a?.furigana, b?.phonetic || b?.furigana);
+  if (phoneticCompare !== 0) {
+    return phoneticCompare;
+  }
+
+  const nameCompare = compareStrings(a?.name, b?.name);
+  if (nameCompare !== 0) {
+    return nameCompare;
+  }
+
+  const uidA = resolveParticipantUid(a);
+  const uidB = resolveParticipantUid(b);
+  return compareStrings(uidA, uidB);
+}
+
+function sortParticipants(entries = []) {
+  return entries.slice().sort(compareParticipants);
 }
 
 const PARTICIPANT_DIFF_FIELDS = [
@@ -703,6 +905,9 @@ export {
   applyAssignmentsToEventCache,
   normalizeParticipantRecord,
   assignParticipantIds,
+  resolveParticipantUid,
+  resolveParticipantStatus,
+  sortParticipants,
   signatureForEntries,
   formatParticipantIdDisplay,
   snapshotParticipantList,

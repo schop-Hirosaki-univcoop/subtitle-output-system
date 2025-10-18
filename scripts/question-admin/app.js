@@ -38,6 +38,26 @@ import {
   parseCsv,
   parseDateTimeLocal
 } from "./utils.js";
+import {
+  normalizeEventParticipantCache,
+  describeDuplicateMatch,
+  formatParticipantIdDisplay,
+  updateDuplicateMatches,
+  syncCurrentScheduleCache,
+  parseParticipantRows,
+  parseTeamAssignmentRows,
+  ensureTeamAssignmentMap,
+  getTeamAssignmentMap,
+  applyAssignmentsToEntries,
+  applyAssignmentsToEventCache,
+  normalizeParticipantRecord,
+  assignParticipantIds,
+  resolveParticipantUid,
+  sortParticipants,
+  signatureForEntries,
+  snapshotParticipantList,
+  diffParticipantLists
+} from "./participants.js";
 
 let redirectingToIndex = false;
 
@@ -86,7 +106,7 @@ const UPLOAD_STATUS_PLACEHOLDERS = new Set(
   ].map(normalizeKey)
 );
 
-const PARTICIPANT_DESCRIPTION_DEFAULT = "イベントコントロールセンター（events.html）のフローで日程を選択してこのページを開くと、参加者情報（CSVの列順はテンプレートをご利用ください。参加者ID列は不要で、読み込み時に自動採番されます）をアップロードして管理できます。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。専用リンクは各行のボタンまたはURLから取得できます。";
+const PARTICIPANT_DESCRIPTION_DEFAULT = "イベントコントロールセンター（events.html）のフローで日程を選択してこのページを開くと、参加者情報（CSVの列順はテンプレートをご利用ください。ヘッダーは「名前,フリガナ,性別,学部学科,携帯電話,メールアドレス」で、UIDは各参加者に対して一意です）をアップロードして管理できます。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。専用リンクは各行のボタンまたはURLから取得できます。";
 
 function getMissingSelectionStatusMessage() {
   return isEmbeddedMode()
@@ -479,24 +499,6 @@ function getElementById(id) {
   return null;
 }
 import {
-  normalizeEventParticipantCache,
-  describeDuplicateMatch,
-  formatParticipantIdDisplay,
-  updateDuplicateMatches,
-  syncCurrentScheduleCache,
-  parseParticipantRows,
-  parseTeamAssignmentRows,
-  ensureTeamAssignmentMap,
-  getTeamAssignmentMap,
-  applyAssignmentsToEntries,
-  applyAssignmentsToEventCache,
-  normalizeParticipantRecord,
-  assignParticipantIds,
-  signatureForEntries,
-  snapshotParticipantList,
-  diffParticipantLists
-} from "./participants.js";
-import {
   openDialog,
   closeDialog,
   bindDialogDismiss,
@@ -687,21 +689,27 @@ async function drainQuestionQueue() {
 }
 
 function getDisplayParticipantId(participantId) {
-  const raw = String(participantId || "").trim();
-  if (!raw) {
-    return "";
-  }
-  const display = formatParticipantIdDisplay(raw);
-  return display || raw;
+  return String(participantId || "").trim();
 }
 
-function applyParticipantIdText(element, participantId) {
+function applyParticipantNoText(element, index) {
   if (!element) return;
-  const raw = String(participantId || "").trim();
-  const displayId = getDisplayParticipantId(participantId);
-  element.textContent = displayId;
-  if (raw && displayId !== raw) {
-    element.setAttribute("title", raw);
+  if (Number.isFinite(index)) {
+    element.textContent = String(index);
+  } else {
+    element.textContent = "";
+  }
+}
+
+function applyParticipantUidText(element, entry) {
+  if (!element) return;
+  const uid = String(entry?.uid || entry?.participantId || "").trim();
+  const legacyId = String(entry?.legacyParticipantId || "").trim();
+  element.textContent = uid;
+  if (uid && legacyId && legacyId !== uid) {
+    element.setAttribute("title", `旧ID: ${legacyId}`);
+  } else if (uid) {
+    element.setAttribute("title", uid);
   } else {
     element.removeAttribute("title");
   }
@@ -907,22 +915,6 @@ function emitParticipantSyncEvent(detail = {}) {
   }
 }
 
-function sortParticipants(entries) {
-  return entries.slice().sort((a, b) => {
-    const idA = String(a.participantId || "");
-    const idB = String(b.participantId || "");
-    const numA = Number(idA);
-    const numB = Number(idB);
-    if (!Number.isNaN(numA) && !Number.isNaN(numB) && numA !== numB) {
-      return numA - numB;
-    }
-    if (idA !== idB) {
-      return idA.localeCompare(idB, "ja", { numeric: true });
-    }
-    return String(a.name || "").localeCompare(String(b.name || ""), "ja", { numeric: true });
-  });
-}
-
 function encodeCsvValue(value) {
   if (value == null) return "";
   const text = String(value);
@@ -1035,9 +1027,9 @@ function renderParticipants() {
     const tr = document.createElement("tr");
     const changeKey = participantChangeKey(entry, index);
     const changeInfo = changeInfoByKey.get(changeKey);
-    const idTd = document.createElement("td");
-    idTd.className = "participant-id-cell numeric-cell";
-    applyParticipantIdText(idTd, entry.participantId);
+    const noTd = document.createElement("td");
+    noTd.className = "participant-no-cell numeric-cell";
+    applyParticipantNoText(noTd, index + 1);
     const nameTd = document.createElement("td");
     nameTd.className = "participant-name-cell";
     const nameWrapper = document.createElement("span");
@@ -1061,6 +1053,9 @@ function renderParticipants() {
     const teamTd = document.createElement("td");
     teamTd.className = "team-cell numeric-cell";
     teamTd.textContent = entry.teamNumber || entry.groupNumber || "";
+    const uidTd = document.createElement("td");
+    uidTd.className = "participant-uid-cell";
+    applyParticipantUidText(uidTd, entry);
     const linkTd = document.createElement("td");
     linkTd.className = "link-cell";
     const linkActions = document.createElement("div");
@@ -1114,6 +1109,13 @@ function renderParticipants() {
       previewLink.className = "share-link-preview";
       previewLink.textContent = shareUrl;
       linkTd.appendChild(previewLink);
+    }
+
+    if (entry.isCancelled) {
+      tr.classList.add("is-cancelled-origin");
+    }
+    if (entry.isRelocated) {
+      tr.classList.add("is-relocated-destination");
     }
 
     const duplicateKey = entry.rowKey
@@ -1171,7 +1173,7 @@ function renderParticipants() {
       nameTd.append(" ", chip);
     }
 
-    tr.append(idTd, nameTd, genderTd, departmentTd, teamTd, linkTd);
+    tr.append(noTd, nameTd, genderTd, departmentTd, teamTd, uidTd, linkTd);
     tbody.appendChild(tr);
   });
 
@@ -1254,13 +1256,13 @@ function describeParticipantForChange(entry) {
   const name = String(entry.name || "").trim();
   const displayId = getDisplayParticipantId(entry.participantId);
   if (name && displayId) {
-    return `参加者「${name}」（ID: ${displayId}）`;
+    return `参加者「${name}」（UID: ${displayId}）`;
   }
   if (name) {
     return `参加者「${name}」`;
   }
   if (displayId) {
-    return `ID: ${displayId}`;
+    return `UID: ${displayId}`;
   }
   return "参加者";
 }
@@ -1269,7 +1271,7 @@ function buildChangeMeta(entry) {
   if (!entry) return "";
   const metaParts = [];
   const displayId = getDisplayParticipantId(entry.participantId);
-  metaParts.push(displayId ? `ID: ${displayId}` : "ID: 未設定");
+  metaParts.push(displayId ? `UID: ${displayId}` : "UID: 未設定");
   const team = String(entry.teamNumber || "").trim();
   if (team) {
     metaParts.push(`班番号: ${team}`);
@@ -1529,7 +1531,7 @@ function syncClearButtonState() {
 
 function syncTemplateButtons() {
   const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
-  const hasParticipants = hasSelection && state.participants.some(entry => entry.participantId);
+  const hasParticipants = hasSelection && state.participants.some(entry => resolveParticipantUid(entry));
 
   if (dom.downloadParticipantTemplateButton) {
     dom.downloadParticipantTemplateButton.disabled = !hasSelection;
@@ -1770,7 +1772,7 @@ async function loadParticipants(options = {}) {
       .map(([participantKey, participantValue]) =>
         normalizeParticipantRecord(participantValue, participantKey)
       )
-      .filter(entry => entry.participantId);
+      .filter(entry => resolveParticipantUid(entry));
     let hydratedFromSheet = false;
 
     if (!normalized.length) {
@@ -1793,7 +1795,7 @@ async function loadParticipants(options = {}) {
             .map(([participantKey, participantValue]) =>
               normalizeParticipantRecord(participantValue, participantKey)
             )
-            .filter(entry => entry.participantId);
+            .filter(entry => resolveParticipantUid(entry));
         }
       } catch (error) {
         console.warn("Failed to synchronize participants from sheet", error);
@@ -1817,7 +1819,7 @@ async function loadParticipants(options = {}) {
     state.lastSavedSignature = savedSignature;
     state.savedParticipants = snapshotParticipantList(participants);
     state.participantTokenMap = new Map(
-      state.participants.map(entry => [entry.participantId, entry.token])
+      state.participants.map(entry => [resolveParticipantUid(entry) || entry.participantId, entry.token])
     );
     state.participantTokenMap.forEach(token => {
       if (token) {
@@ -2418,15 +2420,26 @@ async function handleCsvChange(event) {
       state.participants,
       { eventId: state.selectedEventId, scheduleId: state.selectedScheduleId }
     );
-    const existingMap = new Map(state.participants.map(entry => [entry.participantId, entry]));
+    const existingMap = new Map(
+      state.participants
+        .map(entry => {
+          const key = resolveParticipantUid(entry) || entry.participantId || entry.id;
+          return key ? [key, entry] : null;
+        })
+        .filter(Boolean)
+    );
     state.participants = sortParticipants(
       entries.map(entry => {
-        const existing = existingMap.get(entry.participantId) || {};
+        const entryKey = resolveParticipantUid(entry) || entry.participantId;
+        const existing = entryKey ? existingMap.get(entryKey) || {} : {};
         const department = entry.department || existing.department || "";
         const teamNumber = entry.teamNumber || existing.teamNumber || existing.groupNumber || "";
         const phonetic = entry.phonetic || entry.furigana || existing.phonetic || existing.furigana || "";
+        const status = existing.status || "active";
         return {
           participantId: entry.participantId,
+          uid: entry.participantId,
+          legacyParticipantId: existing.legacyParticipantId || "",
           name: entry.name || existing.name || "",
           phonetic,
           furigana: phonetic,
@@ -2437,7 +2450,10 @@ async function handleCsvChange(event) {
           phone: entry.phone || existing.phone || "",
           email: entry.email || existing.email || "",
           token: existing.token || "",
-          guidance: existing.guidance || ""
+          guidance: existing.guidance || "",
+          status,
+          isCancelled: status === "cancelled",
+          isRelocated: status === "relocated"
         };
       })
     );
@@ -2548,10 +2564,13 @@ function downloadTeamTemplate() {
   }
 
   const rows = sortParticipants(state.participants)
-    .filter(entry => entry.participantId)
+    .filter(entry => resolveParticipantUid(entry))
     .map(entry => [
-      String(entry.participantId || ""),
-      String(entry.teamNumber || entry.groupNumber || "")
+      String(entry.department || ""),
+      String(entry.gender || ""),
+      String(entry.name || ""),
+      String(entry.teamNumber || entry.groupNumber || ""),
+      resolveParticipantUid(entry)
     ]);
 
   if (!rows.length) {
@@ -2974,7 +2993,7 @@ async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
 
   const nameLabel = entry.name ? `「${entry.name}」` : "";
   const displayId = getDisplayParticipantId(entry.participantId);
-  const idLabel = entry.participantId ? `ID: ${displayId}` : "ID未設定";
+  const idLabel = entry.participantId ? `UID: ${displayId}` : "UID未設定";
   const description = nameLabel
     ? `参加者${nameLabel}（${idLabel}）を削除します。保存するまで確定されません。よろしいですか？`
     : `参加者（${idLabel}）を削除します。保存するまで確定されません。よろしいですか？`;
@@ -3001,8 +3020,8 @@ async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
   const identifier = removed.name
     ? `参加者「${removed.name}」`
     : removed.participantId
-      ? `参加者ID: ${removedDisplayId}`
-      : "参加者ID未設定";
+      ? `UID: ${removedDisplayId}`
+      : "UID未設定";
 
   updateDuplicateMatches();
   renderParticipants();
@@ -3034,9 +3053,9 @@ function openParticipantEditor(participantId, rowKey) {
   if (dom.participantDialogTitle) {
     const displayId = getDisplayParticipantId(entry.participantId);
     if (entry.participantId) {
-      dom.participantDialogTitle.textContent = `参加者情報を編集（ID: ${displayId}）`;
+      dom.participantDialogTitle.textContent = `参加者情報を編集（UID: ${displayId}）`;
       if (displayId !== String(entry.participantId).trim()) {
-        dom.participantDialogTitle.setAttribute("title", `内部ID: ${entry.participantId}`);
+        dom.participantDialogTitle.setAttribute("title", `UID: ${entry.participantId}`);
       } else {
         dom.participantDialogTitle.removeAttribute("title");
       }
@@ -3045,7 +3064,7 @@ function openParticipantEditor(participantId, rowKey) {
       dom.participantDialogTitle.removeAttribute("title");
     }
   }
-  if (dom.participantIdInput) dom.participantIdInput.value = entry.participantId;
+  if (dom.participantUidInput) dom.participantUidInput.value = entry.participantId;
   if (dom.participantNameInput) dom.participantNameInput.value = entry.name || "";
   if (dom.participantPhoneticInput) dom.participantPhoneticInput.value = entry.phonetic || entry.furigana || "";
   if (dom.participantGenderInput) dom.participantGenderInput.value = entry.gender || "";
@@ -3059,9 +3078,9 @@ function openParticipantEditor(participantId, rowKey) {
 
 function saveParticipantEdits() {
   const eventId = state.selectedEventId;
-  const participantId = state.editingParticipantId || String(dom.participantIdInput?.value || "").trim();
+  const participantId = state.editingParticipantId || String(dom.participantUidInput?.value || "").trim();
   if (!participantId) {
-    throw new Error("参加者IDが不明です。");
+    throw new Error("UIDが不明です。");
   }
   const rowKey = state.editingRowKey || "";
   let index = -1;

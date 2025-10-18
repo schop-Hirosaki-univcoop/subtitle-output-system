@@ -110,7 +110,7 @@ dom.participantDialog = resolve("participant-dialog");
 dom.participantForm = resolve("participant-form");
 dom.participantDialogTitle = resolve("participant-dialog-title");
 dom.participantError = resolve("participant-error");
-dom.participantIdInput = resolve("participant-id-input");
+dom.participantUidInput = resolve("participant-uid-input");
 dom.participantNameInput = resolve("participant-name-input");
 dom.participantPhoneticInput = resolve("participant-phonetic-input");
 dom.participantGenderInput = resolve("participant-gender-input");
@@ -129,7 +129,7 @@ dom.scheduleDialogFields = {
 };
 
 dom.participantFormFields = {
-  id: dom.participantIdInput,
+  id: dom.participantUidInput,
   name: dom.participantNameInput,
   phonetic: dom.participantPhoneticInput,
   gender: dom.participantGenderInput,
