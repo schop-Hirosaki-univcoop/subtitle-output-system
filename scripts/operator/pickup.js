@@ -1,6 +1,148 @@
 import { GENRE_OPTIONS } from "./constants.js";
-import { pickupQuestionsRef, onValue } from "./firebase.js";
+import { pickupQuestionsRef, database, ref, update, onValue } from "./firebase.js";
 import { escapeHtml, resolveGenreLabel, formatRelative } from "./utils.js";
+
+const ALL_FILTER_VALUE = "all";
+
+const PICKUP_DEFAULT_FIELDS = {
+  name: "Pick Up Question",
+  pickup: true,
+  type: "pickup",
+  schedule: "",
+  scheduleStart: "",
+  scheduleEnd: "",
+  scheduleDate: "",
+  participantId: "",
+  participantName: "",
+  guidance: "",
+  eventId: "",
+  eventName: "",
+  scheduleId: ""
+};
+
+function normalizeGenreValue(value) {
+  const label = resolveGenreLabel(value);
+  return label || "その他";
+}
+
+function normalizeFilterValue(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return ALL_FILTER_VALUE;
+  }
+  if (raw.toLowerCase() === ALL_FILTER_VALUE) {
+    return ALL_FILTER_VALUE;
+  }
+  return normalizeGenreValue(raw);
+}
+
+function getFilterOptions() {
+  return [{ value: ALL_FILTER_VALUE, label: "すべて" }].concat(
+    GENRE_OPTIONS.map((label) => ({ value: label, label }))
+  );
+}
+
+function getPickupFilterButtons(app) {
+  const container = app?.dom?.pickupTabs;
+  if (!container) {
+    return [];
+  }
+  return Array.from(container.querySelectorAll("button[data-genre]"))
+    .filter((button) => button instanceof HTMLButtonElement);
+}
+
+function renderPickupFilterTabs(app) {
+  const container = app?.dom?.pickupTabs;
+  if (!container) {
+    return;
+  }
+  container.innerHTML = "";
+  container.setAttribute("role", "tablist");
+  getFilterOptions().forEach((option, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "pickup-tab";
+    button.dataset.genre = option.value;
+    button.textContent = option.label;
+    button.setAttribute("role", "tab");
+    button.setAttribute("aria-selected", "false");
+    button.tabIndex = index === 0 ? 0 : -1;
+    container.appendChild(button);
+  });
+}
+
+function updatePickupFilterUi(app) {
+  const buttons = getPickupFilterButtons(app);
+  if (!buttons.length) {
+    return false;
+  }
+  const active = normalizeFilterValue(app?.pickupActiveFilter);
+  let matched = false;
+  buttons.forEach((button) => {
+    const value = normalizeFilterValue(button.dataset.genre);
+    const isActive = !matched && value === active;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+    button.tabIndex = isActive ? 0 : -1;
+    if (isActive) {
+      matched = true;
+    }
+  });
+  if (!matched) {
+    const [first] = buttons;
+    if (first) {
+      first.classList.add("is-active");
+      first.setAttribute("aria-selected", "true");
+      first.tabIndex = 0;
+      const previous = normalizeFilterValue(app.pickupActiveFilter);
+      app.pickupActiveFilter = ALL_FILTER_VALUE;
+      return previous !== ALL_FILTER_VALUE;
+    }
+  }
+  return false;
+}
+
+function getFilteredPickupEntries(app) {
+  const entries = Array.isArray(app?.pickupEntries) ? app.pickupEntries : [];
+  const active = normalizeFilterValue(app?.pickupActiveFilter);
+  if (active === ALL_FILTER_VALUE) {
+    return entries;
+  }
+  return entries.filter((entry) => normalizeGenreValue(entry.genre) === active);
+}
+
+function createPickupRecord(uid, question, genre, existingRecord = null, timestamp = Date.now()) {
+  const base = existingRecord && typeof existingRecord === "object" ? { ...existingRecord } : {};
+  const defaults = { ...PICKUP_DEFAULT_FIELDS };
+  const record = { ...defaults, ...base };
+  record.uid = uid;
+  record.question = question;
+  record.genre = genre;
+  record.pickup = true;
+  record.type = "pickup";
+  record.name = String(record.name || defaults.name);
+  if (!record.ts) {
+    record.ts = timestamp;
+  }
+  record.updatedAt = timestamp;
+  return record;
+}
+
+function scheduleSheetSync(app) {
+  if (!app?.api?.apiPost) {
+    return;
+  }
+  try {
+    const promise = app.api.apiPost({ action: "syncQuestionIntakeToSheet" });
+    if (promise && typeof promise.catch === "function") {
+      promise.catch((error) => {
+        console.debug("pickup sheet sync skipped", error);
+      });
+    }
+  } catch (error) {
+    console.debug("pickup sheet sync not scheduled", error);
+  }
+}
 
 function ensureGenreOptions(select) {
   if (!(select instanceof HTMLSelectElement)) {
@@ -89,6 +231,10 @@ function applyPickupSnapshot(app, value) {
   list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   app.pickupEntries = list;
   renderPickupList(app);
+  const filterChanged = updatePickupFilterUi(app);
+  if (filterChanged) {
+    renderPickupList(app);
+  }
   app.pickupLoaded = true;
 }
 
@@ -115,12 +261,19 @@ export function renderPickupList(app) {
     return;
   }
   container.innerHTML = "";
-  const entries = Array.isArray(app.pickupEntries) ? app.pickupEntries : [];
+  const allEntries = Array.isArray(app.pickupEntries) ? app.pickupEntries : [];
+  const entries = getFilteredPickupEntries(app);
   if (!entries.length) {
     renderEmptyState(app, true);
+    if (app.dom.pickupEmpty && app.dom.pickupEmpty.dataset) {
+      app.dom.pickupEmpty.dataset.state = allEntries.length ? "filtered" : "empty";
+    }
     return;
   }
   renderEmptyState(app, false);
+  if (app.dom.pickupEmpty && app.dom.pickupEmpty.dataset) {
+    delete app.dom.pickupEmpty.dataset.state;
+  }
   entries.forEach((entry) => {
     const item = document.createElement("li");
     item.className = "pickup-card";
@@ -207,6 +360,12 @@ export function applyInitialPickupState(app) {
       app.dom.pickupGenreSelect.value = first.value;
     }
   }
+  renderPickupFilterTabs(app);
+  if (!app.pickupActiveFilter) {
+    app.pickupActiveFilter = ALL_FILTER_VALUE;
+  }
+  app.pickupActiveFilter = normalizeFilterValue(app.pickupActiveFilter);
+  updatePickupFilterUi(app);
   hidePickupAlert(app);
   renderPickupList(app);
 }
@@ -248,11 +407,6 @@ function setBusy(target, busy) {
   }
 }
 
-function normalizeGenreValue(value) {
-  const label = resolveGenreLabel(value);
-  return label || "その他";
-}
-
 export async function fetchPickupQuestions(app) {
   const button = app.dom.pickupRefreshButton;
   setBusy(button, true);
@@ -267,6 +421,91 @@ export async function fetchPickupQuestions(app) {
     app.toast("Pick Up Question の再読み込みに失敗しました。", "error");
   } finally {
     setBusy(button, false);
+  }
+}
+
+function setPickupFilter(app, value) {
+  const next = normalizeFilterValue(value);
+  const current = normalizeFilterValue(app?.pickupActiveFilter);
+  app.pickupActiveFilter = next;
+  const changedByUi = updatePickupFilterUi(app);
+  if (changedByUi || next !== current) {
+    renderPickupList(app);
+  }
+}
+
+export function handlePickupFilterClick(app, event) {
+  if (!event) {
+    return;
+  }
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target) {
+    return;
+  }
+  const button = target.closest("button[data-genre]");
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+  const value = button.dataset.genre || ALL_FILTER_VALUE;
+  setPickupFilter(app, value);
+  button.focus();
+}
+
+export function handlePickupFilterKeydown(app, event) {
+  if (!event) {
+    return;
+  }
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement) || !target.dataset.genre) {
+    return;
+  }
+  const buttons = getPickupFilterButtons(app);
+  if (!buttons.length) {
+    return;
+  }
+  const currentIndex = buttons.indexOf(target);
+  if (currentIndex === -1) {
+    return;
+  }
+  let handled = false;
+  let nextIndex = currentIndex;
+  switch (event.key) {
+    case "ArrowRight":
+    case "ArrowDown":
+      nextIndex = (currentIndex + 1) % buttons.length;
+      handled = true;
+      break;
+    case "ArrowLeft":
+    case "ArrowUp":
+      nextIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+      handled = true;
+      break;
+    case "Home":
+      nextIndex = 0;
+      handled = true;
+      break;
+    case "End":
+      nextIndex = buttons.length - 1;
+      handled = true;
+      break;
+    case " ":
+    case "Space":
+    case "Spacebar":
+    case "Enter":
+      event.preventDefault();
+      setPickupFilter(app, target.dataset.genre || ALL_FILTER_VALUE);
+      return;
+    default:
+      break;
+  }
+  if (!handled) {
+    return;
+  }
+  event.preventDefault();
+  const nextButton = buttons[nextIndex];
+  if (nextButton) {
+    nextButton.focus();
+    setPickupFilter(app, nextButton.dataset.genre || ALL_FILTER_VALUE);
   }
 }
 
@@ -288,18 +527,27 @@ export async function handlePickupFormSubmit(app, event) {
   const genre = genreSelect ? normalizeGenreValue(genreSelect.value) : "その他";
   setBusy(submitButton, true);
   try {
-    const result = await app.api.apiPost({ action: "createPickupQuestion", question, genre });
-    if (!result?.success) {
-      throw new Error(result?.error || "Pick Up Question の追加に失敗しました。");
-    }
+    const now = Date.now();
+    const uid =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${now}-${Math.random().toString(16).slice(2, 10)}`;
+    const record = createPickupRecord(uid, question, genre, null, now);
+    const updates = {
+      [`questions/pickup/${uid}`]: record,
+      [`questionStatus/${uid}`]: { answered: false, selecting: false, pickup: true, updatedAt: now }
+    };
+    await update(ref(database), updates);
     if (questionInput) {
       questionInput.value = "";
       questionInput.focus();
     }
     app.toast("Pick Up Question を追加しました。", "success");
+    scheduleSheetSync(app);
   } catch (error) {
     console.error("Failed to add pickup question", error);
     app.toast("Pick Up Question の追加に失敗しました。", "error");
+    showPickupAlert(app, "Pick Up Question の追加に失敗しました。もう一度お試しください。");
   } finally {
     setBusy(submitButton, false);
   }
@@ -380,12 +628,31 @@ export async function handlePickupEditSubmit(app, event) {
     cancelButton.setAttribute("disabled", "true");
   }
   try {
-    const result = await app.api.apiPost({ action: "updatePickupQuestion", uid: state.uid, question, genre });
-    if (!result?.success) {
-      throw new Error(result?.error || "Pick Up Question の更新に失敗しました。");
+    const now = Date.now();
+    const existing = Array.isArray(app.pickupEntries)
+      ? app.pickupEntries.find((entry) => entry.uid === state.uid)
+      : null;
+    const record = createPickupRecord(state.uid, question, genre, existing?.raw || null, now);
+    const updates = {
+      [`questions/pickup/${state.uid}`]: record
+    };
+    const statusMap = app.state?.questionStatusByUid;
+    const statusEntry = statusMap instanceof Map ? statusMap.get(state.uid) : null;
+    if (statusEntry) {
+      updates[`questionStatus/${state.uid}/updatedAt`] = now;
+      updates[`questionStatus/${state.uid}/pickup`] = true;
+    } else {
+      updates[`questionStatus/${state.uid}`] = {
+        answered: false,
+        selecting: false,
+        pickup: true,
+        updatedAt: now
+      };
     }
+    await update(ref(database), updates);
     app.toast("Pick Up Question を更新しました。", "success");
     closePickupEditDialog(app);
+    scheduleSheetSync(app);
   } catch (error) {
     console.error("Failed to update pickup question", error);
     app.toast("Pick Up Question の更新に失敗しました。", "error");
@@ -464,12 +731,14 @@ export async function handlePickupDelete(app) {
     cancelButton.setAttribute("disabled", "true");
   }
   try {
-    const result = await app.api.apiPost({ action: "deletePickupQuestion", uid: state.uid });
-    if (!result?.success) {
-      throw new Error(result?.error || "Pick Up Question の削除に失敗しました。");
-    }
+    const updates = {
+      [`questions/pickup/${state.uid}`]: null,
+      [`questionStatus/${state.uid}`]: null
+    };
+    await update(ref(database), updates);
     app.toast("Pick Up Question を削除しました。", "success");
     closePickupConfirmDialog(app);
+    scheduleSheetSync(app);
   } catch (error) {
     console.error("Failed to delete pickup question", error);
     app.toast("Pick Up Question の削除に失敗しました。", "error");
