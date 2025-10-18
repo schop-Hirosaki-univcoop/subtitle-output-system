@@ -53,6 +53,7 @@ export function queryDom() {
     participantsPanel: document.getElementById("flow-panel-participants"),
     operatorPanel: document.getElementById("flow-panel-operator"),
     dictionaryPanel: document.getElementById("op-dictionary-panel"),
+    pickupPanel: document.getElementById("op-pickup-panel"),
     logsPanel: document.getElementById("op-logs-panel"),
     participantsTool: document.getElementById("participants-tool"),
     operatorTool: document.getElementById("operator-tool"),

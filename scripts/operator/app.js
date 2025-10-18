@@ -24,6 +24,7 @@ import * as Logs from "./logs.js";
 import * as Display from "./display.js";
 import * as Dialog from "./dialog.js";
 import * as Loader from "./loader.js";
+import * as Pickup from "./pickup.js";
 
 const DOM_EVENT_BINDINGS = [
   { element: "loginButton", type: "click", handler: "login", guard: (app) => !app.isEmbedded },
@@ -43,6 +44,12 @@ const DOM_EVENT_BINDINGS = [
   { element: "dictionaryBatchDeleteButton", type: "click", handler: "handleDictionaryBatchDelete" },
   { element: "dictionaryEditCancelButton", type: "click", handler: "closeDictionaryEditDialog" },
   { element: "dictionaryEditForm", type: "submit", handler: "handleDictionaryEditSubmit" },
+  { element: "pickupForm", type: "submit", handler: "handlePickupFormSubmit" },
+  { element: "pickupRefreshButton", type: "click", handler: "fetchPickupQuestions" },
+  { element: "pickupEditCancelButton", type: "click", handler: "closePickupEditDialog" },
+  { element: "pickupEditForm", type: "submit", handler: "handlePickupEditSubmit" },
+  { element: "pickupConfirmCancelButton", type: "click", handler: "closePickupConfirmDialog" },
+  { element: "pickupConfirmAcceptButton", type: "click", handler: "handlePickupDelete" },
   { element: "selectAllCheckbox", type: "change", handler: "handleSelectAll" },
   { element: "batchUnanswerBtn", type: "click", handler: "handleBatchUnanswer" },
   { element: "editCancelButton", type: "click", handler: "closeEditDialog" },
@@ -85,6 +92,20 @@ const MODULE_METHOD_GROUPS = [
       "closeDictionaryEditDialog",
       "startDictionaryListener",
       "stopDictionaryListener"
+    ]
+  },
+  {
+    module: Pickup,
+    methods: [
+      "fetchPickupQuestions",
+      "applyInitialPickupState",
+      "startPickupListener",
+      "stopPickupListener",
+      "handlePickupFormSubmit",
+      "handlePickupEditSubmit",
+      "closePickupEditDialog",
+      "closePickupConfirmDialog",
+      "handlePickupDelete"
     ]
   },
   {
@@ -226,6 +247,13 @@ export class OperatorApp {
     this.dictionaryConfirmSetup = false;
     this.dictionaryEditState = { uid: "", originalTerm: "", originalRuby: "", submitting: false, lastFocused: null };
     this.dictionaryEditSetup = false;
+    this.pickupUnsubscribe = null;
+    this.pickupEntries = [];
+    this.pickupLoaded = false;
+    this.pickupEditState = { uid: "", submitting: false, lastFocused: null };
+    this.pickupConfirmState = { uid: "", submitting: false, lastFocused: null, question: "" };
+    this.pickupEditDialogSetup = false;
+    this.pickupConfirmDialogSetup = false;
     this.eventsBranch = {};
     this.schedulesBranch = {};
     this.authFlow = "idle";
@@ -243,6 +271,13 @@ export class OperatorApp {
 
     this.toast = showToast;
     bindModuleMethods(this);
+    if (typeof this.applyInitialPickupState === "function") {
+      try {
+        this.applyInitialPickupState();
+      } catch (error) {
+        console.debug("failed to initialize pickup panel", error);
+      }
+    }
     this.redirectingToIndex = false;
     this.embedReadyDeferred = null;
   }
@@ -649,6 +684,7 @@ export class OperatorApp {
       this.startQuestionStatusStream();
       this.startScheduleMetadataStreams();
       this.startDictionaryListener();
+      this.startPickupListener();
       this.startDisplaySessionMonitor();
       this.setLoaderStep(5, this.isEmbedded ? "辞書データを取得しています…" : "辞書取得…");
       await this.fetchDictionary();
@@ -774,6 +810,9 @@ export class OperatorApp {
     if (typeof this.stopDictionaryListener === "function") {
       this.stopDictionaryListener();
     }
+    if (typeof this.stopPickupListener === "function") {
+      this.stopPickupListener();
+    }
     if (this.renderTicker) {
       clearInterval(this.renderTicker);
       this.renderTicker = null;
@@ -808,6 +847,7 @@ export class OperatorApp {
     if (this.dom.cardsContainer) this.dom.cardsContainer.innerHTML = "";
     if (this.dom.logStream) this.dom.logStream.innerHTML = "";
     if (this.dom.dictionaryCardsContainer) this.dom.dictionaryCardsContainer.innerHTML = "";
+    if (this.dom.pickupList) this.dom.pickupList.innerHTML = "";
     this.eventsBranch = {};
     this.schedulesBranch = {};
     this.dictionaryData = [];
@@ -835,6 +875,22 @@ export class OperatorApp {
       this.dom.dictionaryCount.textContent = "登録なし";
     }
     this.dictionaryLoaded = false;
+    this.pickupEntries = [];
+    this.pickupLoaded = false;
+    if (this.dom.pickupEmpty) {
+      this.dom.pickupEmpty.hidden = false;
+    }
+    if (this.dom.pickupAlert) {
+      this.dom.pickupAlert.hidden = true;
+      this.dom.pickupAlert.textContent = "";
+    }
+    if (typeof this.applyInitialPickupState === "function") {
+      try {
+        this.applyInitialPickupState();
+      } catch (error) {
+        console.debug("failed to reset pickup panel", error);
+      }
+    }
     this.updateScheduleContext();
   }
 

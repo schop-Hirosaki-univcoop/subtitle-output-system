@@ -18,6 +18,7 @@ export const PANEL_CONFIG = {
   participants: { stage: "tabs", requireEvent: true, requireSchedule: true },
   operator: { stage: "tabs", requireEvent: true, requireSchedule: true },
   dictionary: { stage: "tabs", requireEvent: false, requireSchedule: false, dictionary: true },
+  pickup: { stage: "tabs", requireEvent: false, requireSchedule: false },
   logs: { stage: "tabs", requireEvent: false, requireSchedule: false, logs: true }
 };
 
@@ -35,6 +36,10 @@ export const PANEL_STAGE_INFO = {
   dictionary: {
     title: "ルビ辞書管理",
     description: "登録語句を編集して即座に共有できます。"
+  },
+  pickup: {
+    title: "Pick Up Question 管理",
+    description: "Pick Up Question の内容とジャンルを整備します。"
   },
   logs: {
     title: "操作ログ",
