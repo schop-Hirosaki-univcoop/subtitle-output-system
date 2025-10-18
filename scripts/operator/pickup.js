@@ -419,11 +419,89 @@ export function renderPickupList(app) {
 
 function ensurePickupStates(app) {
   ensurePickupSelectionState(app);
+  if (!app.pickupAddState) {
+    app.pickupAddState = { submitting: false, lastFocused: null };
+  }
   if (!app.pickupEditState) {
     app.pickupEditState = { uid: "", submitting: false, lastFocused: null };
   }
   if (!app.pickupConfirmState) {
     app.pickupConfirmState = { uid: "", submitting: false, lastFocused: null, question: "" };
+  }
+}
+
+function setupPickupAddDialog(app) {
+  if (app.pickupAddDialogSetup) {
+    return;
+  }
+  const dialog = app.dom.pickupAddDialog;
+  if (!dialog) {
+    return;
+  }
+  dialog.addEventListener("click", (event) => {
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (!target || !target.dataset.dialogDismiss) {
+      return;
+    }
+    event.preventDefault();
+    if (app.pickupAddState?.submitting) {
+      return;
+    }
+    closePickupAddDialog(app);
+  });
+  dialog.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (app.pickupAddState?.submitting) {
+        return;
+      }
+      closePickupAddDialog(app);
+    }
+  });
+  app.pickupAddDialogSetup = true;
+}
+
+export function openPickupAddDialog(app, event) {
+  ensurePickupStates(app);
+  setupPickupAddDialog(app);
+  const dialog = app.dom.pickupAddDialog;
+  if (!dialog) {
+    return;
+  }
+  const state = app.pickupAddState;
+  const trigger = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement;
+  state.lastFocused = trigger instanceof HTMLElement ? trigger : null;
+  state.submitting = false;
+  ensureGenreOptions(app.dom.pickupGenreSelect);
+  if (app.dom.pickupGenreSelect instanceof HTMLSelectElement && !app.dom.pickupGenreSelect.value) {
+    const first = app.dom.pickupGenreSelect.options[0];
+    if (first) {
+      app.dom.pickupGenreSelect.value = first.value;
+    }
+  }
+  dialog.hidden = false;
+  const focusTarget = app.dom.pickupQuestionInput || dialog.querySelector("textarea, input");
+  if (focusTarget instanceof HTMLElement) {
+    focusTarget.focus();
+  }
+}
+
+export function closePickupAddDialog(app) {
+  const dialog = app.dom.pickupAddDialog;
+  if (!dialog) {
+    return;
+  }
+  dialog.hidden = true;
+  if (app.dom.pickupAddCancelButton instanceof HTMLButtonElement) {
+    app.dom.pickupAddCancelButton.removeAttribute("disabled");
+  }
+  const state = app.pickupAddState;
+  if (state?.lastFocused instanceof HTMLElement) {
+    state.lastFocused.focus();
+  }
+  if (state) {
+    state.submitting = false;
+    state.lastFocused = null;
   }
 }
 
@@ -634,6 +712,8 @@ export async function handlePickupFormSubmit(app, event) {
   const questionInput = app.dom.pickupQuestionInput;
   const genreSelect = app.dom.pickupGenreSelect;
   const submitButton = event.submitter instanceof HTMLButtonElement ? event.submitter : null;
+  const cancelButton = app.dom.pickupAddCancelButton instanceof HTMLButtonElement ? app.dom.pickupAddCancelButton : null;
+  const addState = app.pickupAddState || null;
   const question = questionInput ? questionInput.value.trim() : "";
   if (!question) {
     showPickupAlert(app, "質問内容を入力してください。");
@@ -644,6 +724,12 @@ export async function handlePickupFormSubmit(app, event) {
   }
   const genre = genreSelect ? normalizeGenreValue(genreSelect.value) : "その他";
   setBusy(submitButton, true);
+  if (cancelButton) {
+    cancelButton.setAttribute("disabled", "true");
+  }
+  if (addState) {
+    addState.submitting = true;
+  }
   try {
     const now = Date.now();
     const uid =
@@ -658,7 +744,6 @@ export async function handlePickupFormSubmit(app, event) {
     await update(ref(database), updates);
     if (questionInput) {
       questionInput.value = "";
-      questionInput.focus();
     }
     app.pickupSelectedId = uid;
     app.pickupSelectedEntry = {
@@ -671,12 +756,19 @@ export async function handlePickupFormSubmit(app, event) {
     syncPickupSelectionUi(app);
     app.toast("Pick Up Question を追加しました。", "success");
     scheduleSheetSync(app);
+    closePickupAddDialog(app);
   } catch (error) {
     console.error("Failed to add pickup question", error);
     app.toast("Pick Up Question の追加に失敗しました。", "error");
     showPickupAlert(app, "Pick Up Question の追加に失敗しました。もう一度お試しください。");
   } finally {
     setBusy(submitButton, false);
+    if (cancelButton) {
+      cancelButton.removeAttribute("disabled");
+    }
+    if (addState) {
+      addState.submitting = false;
+    }
   }
 }
 

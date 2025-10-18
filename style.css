@@ -530,6 +530,7 @@ body.logs-open #logs-panel{ display:flex; }
 .dictionary-form .btn{ flex:0 0 auto; }
 
 .pickup-body{ display:flex; flex-direction:column; gap:clamp(.9rem, 1.7vw, 1.3rem); }
+.pickup-add-body textarea{ min-height:clamp(6.5rem, 18vh, 12rem); }
 .pickup-tabs{ display:flex; flex-wrap:wrap; gap:clamp(.5rem, 1.2vw, .75rem); margin:0; }
 .pickup-tab{ padding:clamp(.45rem, 1vw, .6rem) clamp(.9rem, 2vw, 1.15rem); border-radius:999px; border:1px solid rgba(70,94,128,.5); background:rgba(12,20,34,.6); color:var(--muted); font-weight:600; cursor:pointer; transition:background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease; }
 .pickup-tab.is-active,

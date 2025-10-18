@@ -44,12 +44,14 @@ const DOM_EVENT_BINDINGS = [
   { element: "dictionaryBatchDeleteButton", type: "click", handler: "handleDictionaryBatchDelete" },
   { element: "dictionaryEditCancelButton", type: "click", handler: "closeDictionaryEditDialog" },
   { element: "dictionaryEditForm", type: "submit", handler: "handleDictionaryEditSubmit" },
+  { element: "pickupOpenAddButton", type: "click", handler: "openPickupAddDialog" },
   { element: "pickupForm", type: "submit", handler: "handlePickupFormSubmit" },
   { element: "pickupTabs", type: "click", handler: "handlePickupFilterClick" },
   { element: "pickupTabs", type: "keydown", handler: "handlePickupFilterKeydown" },
   { element: "pickupRefreshButton", type: "click", handler: "fetchPickupQuestions" },
   { element: "pickupEditButton", type: "click", handler: "handlePickupActionEdit" },
   { element: "pickupDeleteButton", type: "click", handler: "handlePickupActionDelete" },
+  { element: "pickupAddCancelButton", type: "click", handler: "closePickupAddDialog" },
   { element: "pickupEditCancelButton", type: "click", handler: "closePickupEditDialog" },
   { element: "pickupEditForm", type: "submit", handler: "handlePickupEditSubmit" },
   { element: "pickupConfirmCancelButton", type: "click", handler: "closePickupConfirmDialog" },
@@ -105,6 +107,8 @@ const MODULE_METHOD_GROUPS = [
       "applyInitialPickupState",
       "startPickupListener",
       "stopPickupListener",
+      "openPickupAddDialog",
+      "closePickupAddDialog",
       "handlePickupFormSubmit",
       "handlePickupFilterClick",
       "handlePickupFilterKeydown",
@@ -259,8 +263,10 @@ export class OperatorApp {
     this.pickupEntries = [];
     this.pickupLoaded = false;
     this.pickupActiveFilter = "all";
+    this.pickupAddState = { submitting: false, lastFocused: null };
     this.pickupEditState = { uid: "", submitting: false, lastFocused: null };
     this.pickupConfirmState = { uid: "", submitting: false, lastFocused: null, question: "" };
+    this.pickupAddDialogSetup = false;
     this.pickupEditDialogSetup = false;
     this.pickupConfirmDialogSetup = false;
     this.eventsBranch = {};
