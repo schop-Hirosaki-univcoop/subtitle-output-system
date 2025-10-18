@@ -48,6 +48,8 @@ const DOM_EVENT_BINDINGS = [
   { element: "pickupTabs", type: "click", handler: "handlePickupFilterClick" },
   { element: "pickupTabs", type: "keydown", handler: "handlePickupFilterKeydown" },
   { element: "pickupRefreshButton", type: "click", handler: "fetchPickupQuestions" },
+  { element: "pickupEditButton", type: "click", handler: "handlePickupActionEdit" },
+  { element: "pickupDeleteButton", type: "click", handler: "handlePickupActionDelete" },
   { element: "pickupEditCancelButton", type: "click", handler: "closePickupEditDialog" },
   { element: "pickupEditForm", type: "submit", handler: "handlePickupEditSubmit" },
   { element: "pickupConfirmCancelButton", type: "click", handler: "closePickupConfirmDialog" },
@@ -107,6 +109,8 @@ const MODULE_METHOD_GROUPS = [
       "handlePickupFilterClick",
       "handlePickupFilterKeydown",
       "handlePickupEditSubmit",
+      "handlePickupActionEdit",
+      "handlePickupActionDelete",
       "closePickupEditDialog",
       "closePickupConfirmDialog",
       "handlePickupDelete"

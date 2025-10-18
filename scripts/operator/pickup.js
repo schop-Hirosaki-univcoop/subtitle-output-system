@@ -230,6 +230,7 @@ function applyPickupSnapshot(app, value) {
   }
   list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   app.pickupEntries = list;
+  syncPickupSelectionFromEntries(app);
   renderPickupList(app);
   const filterChanged = updatePickupFilterUi(app);
   if (filterChanged) {
@@ -255,11 +256,118 @@ function createMetaHtml(entry) {
   `;
 }
 
+function ensurePickupSelectionState(app) {
+  if (typeof app.pickupSelectedId !== "string") {
+    app.pickupSelectedId = "";
+  }
+  if (!app.pickupSelectedEntry || typeof app.pickupSelectedEntry !== "object") {
+    app.pickupSelectedEntry = null;
+  }
+}
+
+function syncPickupSelectionFromEntries(app) {
+  ensurePickupSelectionState(app);
+  const entries = Array.isArray(app.pickupEntries) ? app.pickupEntries : [];
+  const selectedId = app.pickupSelectedId;
+  if (!selectedId) {
+    app.pickupSelectedEntry = null;
+    return;
+  }
+  const match = entries.find((entry) => entry.uid === selectedId);
+  if (match) {
+    app.pickupSelectedEntry = match;
+  } else {
+    app.pickupSelectedId = "";
+    app.pickupSelectedEntry = null;
+  }
+}
+
+function summarizeQuestion(question, limit = 42) {
+  const normalized = String(question || "").replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+  return normalized.length > limit ? `${normalized.slice(0, limit)}…` : normalized;
+}
+
+function isPickupEntryVisible(app, uid) {
+  if (!uid) {
+    return false;
+  }
+  const container = app.dom.pickupList;
+  if (!container) {
+    return false;
+  }
+  const items = container.querySelectorAll(".pickup-card");
+  return Array.from(items).some((element) => element instanceof HTMLElement && element.dataset.uid === uid);
+}
+
+function updatePickupActionPanel(app) {
+  const panel = app.dom.pickupActionPanel;
+  if (!panel) {
+    return;
+  }
+  ensurePickupSelectionState(app);
+  const selected = app.pickupSelectedEntry && app.pickupSelectedEntry.uid === app.pickupSelectedId
+    ? app.pickupSelectedEntry
+    : null;
+  const hasSelection = Boolean(selected);
+  panel.classList.toggle("is-idle", !hasSelection);
+  const info = app.dom.pickupSelectedInfo;
+  if (info) {
+    if (hasSelection) {
+      const snippet = summarizeQuestion(selected.question);
+      const visible = isPickupEntryVisible(app, selected.uid);
+      info.textContent = visible ? `選択中: ${snippet}` : `選択中 (表示外): ${snippet}`;
+    } else {
+      info.textContent = "質問を選択してください";
+    }
+  }
+  if (app.dom.pickupEditButton instanceof HTMLButtonElement) {
+    app.dom.pickupEditButton.disabled = !hasSelection;
+  }
+  if (app.dom.pickupDeleteButton instanceof HTMLButtonElement) {
+    app.dom.pickupDeleteButton.disabled = !hasSelection;
+  }
+}
+
+function syncPickupSelectionUi(app) {
+  const container = app.dom.pickupList;
+  if (container) {
+    const selectedId = typeof app.pickupSelectedId === "string" ? app.pickupSelectedId : "";
+    container.querySelectorAll(".pickup-card").forEach((element) => {
+      if (!(element instanceof HTMLElement)) {
+        return;
+      }
+      const isSelected = element.dataset.uid === selectedId;
+      element.classList.toggle("is-selected", isSelected);
+      element.setAttribute("aria-pressed", String(isSelected));
+    });
+  }
+  updatePickupActionPanel(app);
+}
+
+function togglePickupSelection(app, entry) {
+  ensurePickupSelectionState(app);
+  if (!entry || !entry.uid) {
+    return;
+  }
+  if (app.pickupSelectedId === entry.uid) {
+    app.pickupSelectedId = "";
+    app.pickupSelectedEntry = null;
+  } else {
+    app.pickupSelectedId = entry.uid;
+    app.pickupSelectedEntry = entry;
+  }
+  syncPickupSelectionUi(app);
+}
+
 export function renderPickupList(app) {
   const container = app.dom.pickupList;
   if (!container) {
     return;
   }
+  ensurePickupSelectionState(app);
   container.innerHTML = "";
   const allEntries = Array.isArray(app.pickupEntries) ? app.pickupEntries : [];
   const entries = getFilteredPickupEntries(app);
@@ -268,6 +376,7 @@ export function renderPickupList(app) {
     if (app.dom.pickupEmpty && app.dom.pickupEmpty.dataset) {
       app.dom.pickupEmpty.dataset.state = allEntries.length ? "filtered" : "empty";
     }
+    syncPickupSelectionUi(app);
     return;
   }
   renderEmptyState(app, false);
@@ -278,30 +387,38 @@ export function renderPickupList(app) {
     const item = document.createElement("li");
     item.className = "pickup-card";
     item.dataset.uid = entry.uid;
+    const isSelected = app.pickupSelectedId === entry.uid;
+    if (isSelected) {
+      item.classList.add("is-selected");
+    }
+    item.tabIndex = 0;
+    item.setAttribute("role", "button");
+    item.setAttribute("aria-pressed", String(isSelected));
     const escapedQuestion = escapeHtml(entry.question).replace(/\n/g, "<br>");
     item.innerHTML = `
       <div class="pickup-card__body">
         <p class="pickup-card__question">${escapedQuestion}</p>
         ${createMetaHtml(entry)}
       </div>
-      <div class="pickup-card__actions">
-        <button type="button" class="btn btn-ghost btn-sm" data-action="edit">編集</button>
-        <button type="button" class="btn btn-danger btn-sm" data-action="delete">削除</button>
-      </div>
     `;
-    const editButton = item.querySelector('[data-action="edit"]');
-    if (editButton instanceof HTMLButtonElement) {
-      editButton.addEventListener("click", () => openPickupEditDialog(app, entry, editButton));
-    }
-    const deleteButton = item.querySelector('[data-action="delete"]');
-    if (deleteButton instanceof HTMLButtonElement) {
-      deleteButton.addEventListener("click", () => confirmPickupDelete(app, entry, deleteButton));
-    }
+    item.addEventListener("click", () => togglePickupSelection(app, entry));
+    item.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        togglePickupSelection(app, entry);
+      } else if (event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        confirmPickupDelete(app, entry, item);
+      }
+    });
+    item.addEventListener("dblclick", () => openPickupEditDialog(app, entry, item));
     container.appendChild(item);
   });
+  syncPickupSelectionUi(app);
 }
 
 function ensurePickupStates(app) {
+  ensurePickupSelectionState(app);
   if (!app.pickupEditState) {
     app.pickupEditState = { uid: "", submitting: false, lastFocused: null };
   }
@@ -368,6 +485,7 @@ export function applyInitialPickupState(app) {
   updatePickupFilterUi(app);
   hidePickupAlert(app);
   renderPickupList(app);
+  updatePickupActionPanel(app);
 }
 
 export function startPickupListener(app) {
@@ -542,6 +660,15 @@ export async function handlePickupFormSubmit(app, event) {
       questionInput.value = "";
       questionInput.focus();
     }
+    app.pickupSelectedId = uid;
+    app.pickupSelectedEntry = {
+      uid,
+      question,
+      genre,
+      updatedAt: now,
+      raw: { ...record }
+    };
+    syncPickupSelectionUi(app);
     app.toast("Pick Up Question を追加しました。", "success");
     scheduleSheetSync(app);
   } catch (error) {
@@ -664,6 +791,30 @@ export async function handlePickupEditSubmit(app, event) {
   }
 }
 
+export function handlePickupActionEdit(app, event) {
+  ensurePickupSelectionState(app);
+  const entry = app.pickupSelectedEntry && app.pickupSelectedEntry.uid === app.pickupSelectedId
+    ? app.pickupSelectedEntry
+    : null;
+  if (!entry) {
+    return;
+  }
+  const trigger = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+  openPickupEditDialog(app, entry, trigger);
+}
+
+export function handlePickupActionDelete(app, event) {
+  ensurePickupSelectionState(app);
+  const entry = app.pickupSelectedEntry && app.pickupSelectedEntry.uid === app.pickupSelectedId
+    ? app.pickupSelectedEntry
+    : null;
+  if (!entry) {
+    return;
+  }
+  const trigger = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+  confirmPickupDelete(app, entry, trigger);
+}
+
 export function confirmPickupDelete(app, entry, triggerButton) {
   ensurePickupStates(app);
   setupPickupConfirmDialog(app);
@@ -737,7 +888,12 @@ export async function handlePickupDelete(app) {
     };
     await update(ref(database), updates);
     app.toast("Pick Up Question を削除しました。", "success");
+    if (app.pickupSelectedId === state.uid) {
+      app.pickupSelectedId = "";
+      app.pickupSelectedEntry = null;
+    }
     closePickupConfirmDialog(app);
+    syncPickupSelectionUi(app);
     scheduleSheetSync(app);
   } catch (error) {
     console.error("Failed to delete pickup question", error);
