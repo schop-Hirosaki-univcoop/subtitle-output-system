@@ -530,6 +530,11 @@ body.logs-open #logs-panel{ display:flex; }
 .dictionary-form .btn{ flex:0 0 auto; }
 
 .pickup-body{ display:flex; flex-direction:column; gap:clamp(.9rem, 1.7vw, 1.3rem); }
+.pickup-tabs{ display:flex; flex-wrap:wrap; gap:clamp(.5rem, 1.2vw, .75rem); margin:0; }
+.pickup-tab{ padding:clamp(.45rem, 1vw, .6rem) clamp(.9rem, 2vw, 1.15rem); border-radius:999px; border:1px solid rgba(70,94,128,.5); background:rgba(12,20,34,.6); color:var(--muted); font-weight:600; cursor:pointer; transition:background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.pickup-tab.is-active,
+.pickup-tab[aria-selected="true"]{ color:var(--text); border-color:rgba(30,200,255,.6); background:linear-gradient(180deg, rgba(30,200,255,.22), rgba(14,110,190,.18)); box-shadow:0 10px 24px rgba(0,0,0,.28); }
+.pickup-tab:focus-visible{ outline:2px solid rgba(30,200,255,.8); outline-offset:2px; }
 .pickup-body .cards-scroll{ flex:1; min-height:0; overflow:auto; }
 .pickup-form{ display:flex; flex-wrap:wrap; gap:clamp(.55rem, 1.2vw, .85rem); align-items:flex-end; }
 .pickup-form textarea{ flex:1 1 clamp(18rem, 40vw, 28rem); min-height:clamp(5.5rem, 10vw, 7rem); }
@@ -537,14 +542,15 @@ body.logs-open #logs-panel{ display:flex; }
 .pickup-form select{ width:100%; }
 .pickup-form .btn{ flex:0 0 auto; }
 .pickup-list{ display:flex; flex-direction:column; gap:clamp(.6rem, 1.1vw, .9rem); margin:0; padding:0; list-style:none; }
-.pickup-card{ background:linear-gradient(180deg, rgba(17,24,37,.92), rgba(11,16,26,.96)); border:1px solid rgba(46,68,96,.65); border-radius:clamp(.9rem, 1.5vw, 1.2rem); box-shadow:0 12px 32px rgba(0,0,0,.42); padding:clamp(.85rem, 1.6vw, 1.2rem) clamp(.95rem, 1.8vw, 1.3rem); display:flex; flex-direction:column; gap:clamp(.65rem, 1.1vw, .85rem); color:var(--txt); transition:border-color .18s ease, box-shadow .18s ease; }
-.pickup-card:hover{ border-color:rgba(41,182,246,.6); box-shadow:0 18px 42px rgba(0,0,0,.5); }
+.pickup-card{ background:linear-gradient(180deg, rgba(17,24,37,.92), rgba(11,16,26,.96)); border:1px solid rgba(46,68,96,.65); border-radius:clamp(.9rem, 1.5vw, 1.2rem); box-shadow:0 12px 32px rgba(0,0,0,.42); padding:clamp(.85rem, 1.6vw, 1.2rem) clamp(.95rem, 1.8vw, 1.3rem); display:flex; flex-direction:column; gap:clamp(.65rem, 1.1vw, .85rem); color:var(--txt); transition:border-color .18s ease, box-shadow .18s ease, transform .2s ease; cursor:pointer; outline:none; }
+.pickup-card:hover{ border-color:rgba(41,182,246,.6); box-shadow:0 18px 42px rgba(0,0,0,.5); transform:translateY(-2px); }
+.pickup-card:focus-visible{ outline:2px solid rgba(41,182,246,.85); outline-offset:4px; }
+.pickup-card.is-selected{ border-color:rgba(59,201,255,.85); box-shadow:0 22px 48px rgba(16,110,190,.45); }
+.pickup-card.is-selected .pickup-card__genre{ background:rgba(41,182,246,.18); border-color:rgba(41,182,246,.6); color:#e8f7ff; }
 .pickup-card__question{ margin:0; white-space:pre-wrap; line-height:1.55; font-size:.96rem; }
 .pickup-card__meta{ display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; font-size:.82rem; color:var(--muted); }
 .pickup-card__genre{ display:inline-flex; align-items:center; gap:.35rem; padding:.3rem .85rem; border-radius:999px; background:rgba(30,200,255,.12); border:1px solid rgba(30,200,255,.3); font-weight:600; letter-spacing:.04em; color:var(--txt); }
 .pickup-card__time{ color:var(--muted); }
-.pickup-card__actions{ display:flex; flex-wrap:wrap; gap:.5rem; }
-.pickup-card__actions .btn{ flex:0 0 auto; }
 
 .logs-toolbar{ display:flex; gap:clamp(.55rem, 1.2vw, .85rem); align-items:center; flex-wrap:wrap; }
 .logs-toolbar .input{ flex:1 1 14rem; min-width:0; max-width:20rem; }
@@ -1244,7 +1250,8 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 #action-panel #selected-info { font-size: 0.9rem; color: var(--muted); }
 #op-dictionary-action-panel,
-#dictionary-action-panel{
+#dictionary-action-panel,
+#op-pickup-action-panel{
   position:sticky;
   bottom:0;
   margin-top:clamp(.8rem, 1.6vw, 1.2rem);
@@ -1260,13 +1267,17 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   transition:opacity .2s ease;
 }
 #op-dictionary-action-panel[hidden],
-#dictionary-action-panel[hidden]{ display:none !important; }
+#dictionary-action-panel[hidden],
+#op-pickup-action-panel[hidden]{ display:none !important; }
 #op-dictionary-action-panel .btn,
-#dictionary-action-panel .btn{ padding:clamp(.45rem, 1vw, .58rem) clamp(.85rem, 2vw, 1.05rem); }
+#dictionary-action-panel .btn,
+#op-pickup-action-panel .btn{ padding:clamp(.45rem, 1vw, .58rem) clamp(.85rem, 2vw, 1.05rem); }
 #op-dictionary-action-panel #op-dictionary-selected-info,
-#dictionary-action-panel #dictionary-selected-info{ font-size:.9rem; color:var(--muted); }
+#dictionary-action-panel #dictionary-selected-info,
+#op-pickup-action-panel #op-pickup-selected-info{ font-size:.9rem; color:var(--muted); }
 #op-dictionary-action-panel.is-idle,
-#dictionary-action-panel.is-idle{ opacity:.82; }
+#dictionary-action-panel.is-idle,
+#op-pickup-action-panel.is-idle{ opacity:.82; }
 #action-panel .btn{ padding:clamp(.45rem, 1vw, .55rem) clamp(.85rem, 2vw, 1rem); }
 
 @media (max-width: 720px){
@@ -1279,14 +1290,17 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   #action-panel .btn{ flex:1 1 calc(50% - .75rem); }
   #action-panel #selected-info{ order:5; width:100%; }
   #op-dictionary-action-panel,
-  #dictionary-action-panel{
+  #dictionary-action-panel,
+  #op-pickup-action-panel{
     flex-wrap:wrap;
     justify-content:flex-start;
   }
   #op-dictionary-action-panel .btn,
-  #dictionary-action-panel .btn{ flex:1 1 calc(50% - .75rem); }
+  #dictionary-action-panel .btn,
+  #op-pickup-action-panel .btn{ flex:1 1 calc(50% - .75rem); }
   #op-dictionary-action-panel #op-dictionary-selected-info,
-  #dictionary-action-panel #dictionary-selected-info{ order:5; width:100%; }
+  #dictionary-action-panel #dictionary-selected-info,
+  #op-pickup-action-panel #op-pickup-selected-info{ order:5; width:100%; }
 }
 
 /* Button accents */
@@ -2111,6 +2125,56 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 .flow-stage-panel.flow-tool-panel{
   display:flex;
+}
+
+.flow-tool-panel--popup{
+  position:fixed;
+  inset:0;
+  min-height:100vh;
+  z-index:1200;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:clamp(1.5rem, 4vw, 3rem);
+  background:rgba(4,12,24,.78);
+  backdrop-filter:blur(18px);
+}
+
+.flow-tool-panel--popup.is-active{
+  display:flex;
+}
+
+.flow-tool-panel--popup[hidden]{
+  display:none !important;
+}
+
+.flow-tool-panel__backdrop{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+}
+
+.flow-tool-panel__surface{
+  position:relative;
+  z-index:1;
+  width:min(960px, 94vw);
+  max-height:90vh;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+
+.flow-tool-panel__surface .module-body{
+  display:flex;
+  flex-direction:column;
+  gap:clamp(.75rem, 1.4vw, 1.1rem);
+  overflow:hidden;
+}
+
+.flow-tool-panel__surface .cards-scroll{
+  flex:1 1 auto;
+  max-height:clamp(320px, 60vh, 540px);
+  overflow:auto;
 }
 
 .flow-nav-button--next{
@@ -3568,7 +3632,8 @@ body.sidebar-overlay-open{
 }
 
 .operator-embedded #op-dictionary-action-panel,
-.operator-embedded #dictionary-action-panel{
+.operator-embedded #dictionary-action-panel,
+.operator-embedded #op-pickup-action-panel{
   position:static;
   margin-top:clamp(.75rem, 1.6vw, 1.1rem);
   display:grid;
@@ -3583,17 +3648,21 @@ body.sidebar-overlay-open{
   backdrop-filter:blur(12px);
 }
 .operator-embedded #op-dictionary-action-panel[hidden],
-.operator-embedded #dictionary-action-panel[hidden]{ display:none; }
+.operator-embedded #dictionary-action-panel[hidden],
+.operator-embedded #op-pickup-action-panel[hidden]{ display:none; }
 .operator-embedded #op-dictionary-action-panel .btn,
-.operator-embedded #dictionary-action-panel .btn{ width:100%; }
+.operator-embedded #dictionary-action-panel .btn,
+.operator-embedded #op-pickup-action-panel .btn{ width:100%; }
 .operator-embedded #op-dictionary-action-panel #op-dictionary-selected-info,
-.operator-embedded #dictionary-action-panel #dictionary-selected-info{
+.operator-embedded #dictionary-action-panel #dictionary-selected-info,
+.operator-embedded #op-pickup-action-panel #op-pickup-selected-info{
   grid-column:1 / -1;
   color:#c6d7f0;
   font-size:.85rem;
 }
 .operator-embedded #op-dictionary-action-panel .action-panel-right,
-.operator-embedded #dictionary-action-panel .action-panel-right{
+.operator-embedded #dictionary-action-panel .action-panel-right,
+.operator-embedded #op-pickup-action-panel .action-panel-right{
   margin-left:0;
   justify-content:flex-end;
   grid-column:1 / -1;

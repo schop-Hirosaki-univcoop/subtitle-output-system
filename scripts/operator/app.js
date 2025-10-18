@@ -45,7 +45,11 @@ const DOM_EVENT_BINDINGS = [
   { element: "dictionaryEditCancelButton", type: "click", handler: "closeDictionaryEditDialog" },
   { element: "dictionaryEditForm", type: "submit", handler: "handleDictionaryEditSubmit" },
   { element: "pickupForm", type: "submit", handler: "handlePickupFormSubmit" },
+  { element: "pickupTabs", type: "click", handler: "handlePickupFilterClick" },
+  { element: "pickupTabs", type: "keydown", handler: "handlePickupFilterKeydown" },
   { element: "pickupRefreshButton", type: "click", handler: "fetchPickupQuestions" },
+  { element: "pickupEditButton", type: "click", handler: "handlePickupActionEdit" },
+  { element: "pickupDeleteButton", type: "click", handler: "handlePickupActionDelete" },
   { element: "pickupEditCancelButton", type: "click", handler: "closePickupEditDialog" },
   { element: "pickupEditForm", type: "submit", handler: "handlePickupEditSubmit" },
   { element: "pickupConfirmCancelButton", type: "click", handler: "closePickupConfirmDialog" },
@@ -102,7 +106,11 @@ const MODULE_METHOD_GROUPS = [
       "startPickupListener",
       "stopPickupListener",
       "handlePickupFormSubmit",
+      "handlePickupFilterClick",
+      "handlePickupFilterKeydown",
       "handlePickupEditSubmit",
+      "handlePickupActionEdit",
+      "handlePickupActionDelete",
       "closePickupEditDialog",
       "closePickupConfirmDialog",
       "handlePickupDelete"
@@ -250,6 +258,7 @@ export class OperatorApp {
     this.pickupUnsubscribe = null;
     this.pickupEntries = [];
     this.pickupLoaded = false;
+    this.pickupActiveFilter = "all";
     this.pickupEditState = { uid: "", submitting: false, lastFocused: null };
     this.pickupConfirmState = { uid: "", submitting: false, lastFocused: null, question: "" };
     this.pickupEditDialogSetup = false;
@@ -877,6 +886,7 @@ export class OperatorApp {
     this.dictionaryLoaded = false;
     this.pickupEntries = [];
     this.pickupLoaded = false;
+    this.pickupActiveFilter = "all";
     if (this.dom.pickupEmpty) {
       this.dom.pickupEmpty.hidden = false;
     }
