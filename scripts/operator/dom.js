@@ -89,6 +89,7 @@ export function queryDom() {
     pickupForm: resolve("pickup-form"),
     pickupQuestionInput: resolve("pickup-question"),
     pickupGenreSelect: resolve("pickup-genre"),
+    pickupTabs: resolve("pickup-tabs"),
     pickupRefreshButton: resolve("pickup-refresh-button"),
     pickupList: resolve("pickup-list"),
     pickupEmpty: resolve("pickup-empty"),
