@@ -45,7 +45,23 @@ function getEmbedPrefix() {
   if (typeof document === "undefined") {
     return "";
   }
-  return document.documentElement?.dataset?.qaEmbedPrefix || "";
+  const html = document.documentElement;
+  const existingPrefix = html?.dataset?.qaEmbedPrefix?.trim();
+  if (existingPrefix) {
+    return existingPrefix;
+  }
+
+  const embedSurface = document.querySelector("[data-qa-embed]");
+  if (embedSurface) {
+    const detectedPrefix =
+      embedSurface.getAttribute("data-qa-embed-prefix")?.trim() || "qa-";
+    if (html) {
+      html.dataset.qaEmbedPrefix = detectedPrefix;
+    }
+    return detectedPrefix;
+  }
+
+  return "";
 }
 
 function isEmbeddedMode() {
