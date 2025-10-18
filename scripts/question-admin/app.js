@@ -3752,8 +3752,12 @@ async function applySelectionContext(selection = {}) {
 
 function init() {
   attachEventHandlers();
+  setAuthUi(Boolean(state.user));
   initLoaderSteps(isEmbeddedMode() ? [] : STEP_LABELS);
   resetState();
+  if (isEmbeddedMode()) {
+    showLoader("利用状態を確認しています…");
+  }
   parseInitialSelectionFromUrl();
   startHostSelectionBridge();
   initAuthWatcher();

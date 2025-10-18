@@ -1,7 +1,40 @@
 import { dom } from "./dom.js";
 import { loaderState } from "./state.js";
 
+function ensureLoaderTargets() {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  if (!dom.loadingOverlay) {
+    dom.loadingOverlay =
+      document.getElementById("qa-loading-overlay") ||
+      document.getElementById("loading-overlay") ||
+      null;
+  }
+
+  if (!dom.participantModule) {
+    dom.participantModule =
+      document.getElementById("qa-participant-module") ||
+      document.getElementById("participant-module") ||
+      null;
+  }
+
+  if (!dom.adminMain) {
+    dom.adminMain =
+      document.getElementById("qa-admin-main") ||
+      document.getElementById("admin-main") ||
+      null;
+  }
+}
+
 function showLoader(message = "初期化しています…") {
+  ensureLoaderTargets();
+  if (dom.adminMain) {
+    dom.adminMain.hidden = false;
+    dom.adminMain.removeAttribute("aria-hidden");
+    dom.adminMain.removeAttribute("inert");
+  }
   if (dom.loadingOverlay) dom.loadingOverlay.hidden = false;
   const target = dom.participantModule || dom.adminMain;
   if (target) {
@@ -13,6 +46,7 @@ function showLoader(message = "初期化しています…") {
 }
 
 function hideLoader() {
+  ensureLoaderTargets();
   if (dom.loadingOverlay) dom.loadingOverlay.hidden = true;
   const target = dom.participantModule || dom.adminMain;
   if (target) {
