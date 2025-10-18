@@ -30,6 +30,11 @@ function ensureLoaderTargets() {
 
 function showLoader(message = "初期化しています…") {
   ensureLoaderTargets();
+  if (dom.adminMain) {
+    dom.adminMain.hidden = false;
+    dom.adminMain.removeAttribute("aria-hidden");
+    dom.adminMain.removeAttribute("inert");
+  }
   if (dom.loadingOverlay) dom.loadingOverlay.hidden = false;
   const target = dom.participantModule || dom.adminMain;
   if (target) {
