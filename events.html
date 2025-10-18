@@ -490,69 +490,68 @@
               </div>
         </section>
         <section id="op-pickup-panel" class="module module--secondary flow-tool-panel flow-stage-panel" data-panel="pickup" aria-labelledby="op-pickup-title" hidden>
-              <div class="module-header">
-                <div class="module-heading">
-                  <h2 id="op-pickup-title">Pick Up Question 管理</h2>
-                  <p class="module-description">Pick Up Question の候補を追加・編集し、ジャンルを整理できます。</p>
+          <div class="module-header">
+            <div class="module-heading">
+              <h2 id="op-pickup-title">Pick Up Question 管理</h2>
+              <p class="module-description">Pick Up Question の候補を追加・編集し、ジャンルを整理できます。</p>
+            </div>
+            <div class="module-actions">
+              <button id="op-pickup-open-add-button" class="btn btn-primary" type="button">質問を追加</button>
+              <button id="op-pickup-refresh-button" class="btn btn-ghost" type="button">再読み込み</button>
+            </div>
+          </div>
+          <div class="module-body pickup-body">
+            <div id="op-pickup-alert" class="hub-alert" role="alert" hidden></div>
+            <div id="op-pickup-tabs" class="pickup-tabs" role="tablist" aria-label="ジャンルで絞り込む"></div>
+            <div class="cards-scroll">
+              <ul id="op-pickup-list" class="pickup-list" aria-live="polite"></ul>
+              <p id="op-pickup-empty" class="entity-empty" hidden>条件に一致する Pick Up Question がありません。質問を追加するか、別のジャンルを選択してください。</p>
+            </div>
+            <div id="op-pickup-edit-dialog" class="modal modal--inline" role="dialog" aria-modal="true" aria-labelledby="op-pickup-edit-dialog-title" hidden>
+              <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+              <div class="modal-panel">
+                <div class="modal-header">
+                  <h2 id="op-pickup-edit-dialog-title">Pick Up Question を編集</h2>
                 </div>
-                <div class="module-actions">
-                  <button id="op-pickup-refresh-button" class="btn btn-ghost" type="button">再読み込み</button>
-                </div>
-              </div>
-              <div class="module-body pickup-body">
-                <form id="op-pickup-form" class="pickup-form">
-                  <textarea id="op-pickup-question" class="input" rows="3" placeholder="質問内容" required></textarea>
-                  <label class="pickup-form__genre">
-                    <span class="visually-hidden">ジャンル</span>
-                    <select id="op-pickup-genre" class="input" required></select>
-                  </label>
-                  <button type="submit" class="btn btn-primary">追加</button>
+                <form id="op-pickup-edit-form" class="modal-form">
+                  <div class="modal-body">
+                    <div class="modal-field">
+                      <label for="op-pickup-edit-question">質問内容</label>
+                      <textarea id="op-pickup-edit-question" class="input" rows="6" required data-autofocus></textarea>
+                    </div>
+                    <div class="modal-field">
+                      <label for="op-pickup-edit-genre">ジャンル</label>
+                      <select id="op-pickup-edit-genre" class="input" required></select>
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-ghost" id="op-pickup-edit-cancel-button">キャンセル</button>
+                    <button type="submit" class="btn btn-primary" id="op-pickup-edit-save-button">更新</button>
+                  </div>
                 </form>
-                <div id="op-pickup-alert" class="hub-alert" role="alert" hidden></div>
-                <div class="cards-scroll">
-                  <ul id="op-pickup-list" class="pickup-list" aria-live="polite"></ul>
-                  <p id="op-pickup-empty" class="entity-empty" hidden>Pick Up Question はまだ登録されていません。まずは質問を追加してください。</p>
+              </div>
+            </div>
+            <div id="op-pickup-confirm-dialog" class="modal modal--inline" role="dialog" aria-modal="true" aria-labelledby="op-pickup-confirm-dialog-title" hidden>
+              <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+              <div class="modal-panel">
+                <div class="modal-header">
+                  <h2 id="op-pickup-confirm-dialog-title">確認</h2>
                 </div>
-                <div id="op-pickup-edit-dialog" class="modal modal--inline" role="dialog" aria-modal="true" aria-labelledby="op-pickup-edit-dialog-title" hidden>
-                  <div class="modal-backdrop" data-dialog-dismiss="true"></div>
-                  <div class="modal-panel">
-                    <div class="modal-header">
-                      <h2 id="op-pickup-edit-dialog-title">Pick Up Question を編集</h2>
-                    </div>
-                    <form id="op-pickup-edit-form" class="modal-form">
-                      <div class="modal-body">
-                        <div class="modal-field">
-                          <label for="op-pickup-edit-question">質問内容</label>
-                          <textarea id="op-pickup-edit-question" class="input" rows="6" required data-autofocus></textarea>
-                        </div>
-                        <div class="modal-field">
-                          <label for="op-pickup-edit-genre">ジャンル</label>
-                          <select id="op-pickup-edit-genre" class="input" required></select>
-                        </div>
-                      </div>
-                      <div class="modal-footer">
-                        <button type="button" class="btn btn-ghost" id="op-pickup-edit-cancel-button">キャンセル</button>
-                        <button type="submit" class="btn btn-primary" id="op-pickup-edit-save-button">更新</button>
-                      </div>
-                    </form>
-                  </div>
+                <div class="modal-body">
+                  <p id="op-pickup-confirm-message"></p>
                 </div>
-                <div id="op-pickup-confirm-dialog" class="modal modal--inline" role="dialog" aria-modal="true" aria-labelledby="op-pickup-confirm-dialog-title" hidden>
-                  <div class="modal-backdrop" data-dialog-dismiss="true"></div>
-                  <div class="modal-panel">
-                    <div class="modal-header">
-                      <h2 id="op-pickup-confirm-dialog-title">確認</h2>
-                    </div>
-                    <div class="modal-body">
-                      <p id="op-pickup-confirm-message"></p>
-                    </div>
-                    <div class="modal-footer">
-                      <button type="button" class="btn btn-ghost" id="op-pickup-confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
-                      <button type="button" class="btn btn-danger" id="op-pickup-confirm-accept-button">削除する</button>
-                    </div>
-                  </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-ghost" id="op-pickup-confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
+                  <button type="button" class="btn btn-danger" id="op-pickup-confirm-accept-button">削除する</button>
                 </div>
               </div>
+            </div>
+          </div>
+          <div id="op-pickup-action-panel" class="action-panel is-idle">
+            <button id="op-pickup-btn-edit" class="btn" type="button" disabled>編集</button>
+            <button id="op-pickup-btn-delete" class="btn btn-danger" type="button" disabled>削除</button>
+            <span id="op-pickup-selected-info">質問を選択してください</span>
+          </div>
         </section>
         <section id="op-logs-panel" class="module module--secondary flow-tool-panel flow-stage-panel" data-panel="logs" aria-labelledby="op-logs-title" hidden>
               <div class="module-header">
@@ -595,6 +594,31 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost" data-dialog-dismiss="true">キャンセル</button>
+          <button type="submit" class="btn btn-primary">追加</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="op-pickup-add-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="op-pickup-add-dialog-title" hidden>
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <form id="op-pickup-form" class="modal-form">
+        <div class="modal-header">
+          <h2 id="op-pickup-add-dialog-title">Pick Up Question を追加</h2>
+        </div>
+        <div class="modal-body pickup-add-body">
+          <div class="modal-field">
+            <label for="op-pickup-question">質問内容</label>
+            <textarea id="op-pickup-question" class="input" rows="6" placeholder="質問内容" required data-autofocus></textarea>
+          </div>
+          <div class="modal-field">
+            <label for="op-pickup-genre">ジャンル</label>
+            <select id="op-pickup-genre" class="input" required></select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="op-pickup-add-cancel-button" data-dialog-dismiss="true">キャンセル</button>
           <button type="submit" class="btn btn-primary">追加</button>
         </div>
       </form>
