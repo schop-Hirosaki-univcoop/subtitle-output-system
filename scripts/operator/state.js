@@ -1,5 +1,3 @@
-import { GENRE_OPTIONS } from "./constants.js";
-
 export function createInitialState(autoScroll = true) {
   return {
     questionsByUid: new Map(),
@@ -7,7 +5,7 @@ export function createInitialState(autoScroll = true) {
     allQuestions: [],
     allLogs: [],
     currentSubTab: "all",
-    currentGenre: GENRE_OPTIONS[0],
+    currentGenre: "",
     currentSchedule: "",
     lastNormalSchedule: "",
     availableSchedules: [],
