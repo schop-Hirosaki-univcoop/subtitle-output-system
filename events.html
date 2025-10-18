@@ -523,6 +523,21 @@
                       <label for="op-pickup-edit-genre">ジャンル</label>
                       <select id="op-pickup-edit-genre" class="input" required></select>
                     </div>
+                  </form>
+                </div>
+              </div>
+              <div id="op-pickup-confirm-dialog" class="modal modal--inline" role="dialog" aria-modal="true" aria-labelledby="op-pickup-confirm-dialog-title" hidden>
+                <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+                <div class="modal-panel">
+                  <div class="modal-header">
+                    <h2 id="op-pickup-confirm-dialog-title">確認</h2>
+                  </div>
+                  <div class="modal-body">
+                    <p id="op-pickup-confirm-message"></p>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-ghost" id="op-pickup-confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
+                    <button type="button" class="btn btn-danger" id="op-pickup-confirm-accept-button">削除する</button>
                   </div>
                   <div class="modal-footer">
                     <button type="button" class="btn btn-ghost" id="op-pickup-edit-cancel-button">キャンセル</button>
