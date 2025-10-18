@@ -308,11 +308,6 @@ export class ParticipantToolManager {
         });
       }
 
-      const overlay = typeof document !== "undefined" ? document.getElementById("qa-loading-overlay") : null;
-      if (overlay) {
-        overlay.hidden = true;
-      }
-
       if (participantsSynced) {
         this.lastContextSignature = contextKey;
         this.lastContextApplied = true;
