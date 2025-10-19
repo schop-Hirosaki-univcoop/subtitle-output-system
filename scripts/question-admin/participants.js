@@ -751,6 +751,82 @@ function sortParticipants(entries = []) {
   return entries.slice().sort(compareParticipants);
 }
 
+const STATUS_PRIORITY = new Map([
+  ["active", 0],
+  ["relocated", 0],
+  ["cancelled", 1]
+]);
+
+function compareStrings(a, b) {
+  const textA = normalizeText(a);
+  const textB = normalizeText(b);
+  if (!textA && !textB) return 0;
+  if (!textA) return 1;
+  if (!textB) return -1;
+  return STRING_COLLATOR.compare(textA, textB);
+}
+
+function getGroupSortInfo(entry) {
+  const groupValue = normalizeGroupNumberValue(entry?.teamNumber ?? entry?.groupNumber ?? "");
+  if (!groupValue) {
+    return { bucket: 2, number: Number.POSITIVE_INFINITY, text: "" };
+  }
+  const numeric = Number(groupValue);
+  if (!Number.isNaN(numeric)) {
+    return { bucket: 0, number: numeric, text: groupValue };
+  }
+  return { bucket: 1, number: Number.POSITIVE_INFINITY, text: groupValue };
+}
+
+function compareParticipants(a, b) {
+  const statusA = a?.status || "active";
+  const statusB = b?.status || "active";
+  const statusRankA = STATUS_PRIORITY.has(statusA) ? STATUS_PRIORITY.get(statusA) : STATUS_PRIORITY.get("active");
+  const statusRankB = STATUS_PRIORITY.has(statusB) ? STATUS_PRIORITY.get(statusB) : STATUS_PRIORITY.get("active");
+  if (statusRankA !== statusRankB) {
+    return statusRankA - statusRankB;
+  }
+
+  const groupInfoA = getGroupSortInfo(a);
+  const groupInfoB = getGroupSortInfo(b);
+  if (groupInfoA.bucket !== groupInfoB.bucket) {
+    return groupInfoA.bucket - groupInfoB.bucket;
+  }
+  if (groupInfoA.bucket === 0) {
+    if (groupInfoA.number !== groupInfoB.number) {
+      return groupInfoA.number - groupInfoB.number;
+    }
+  } else if (groupInfoA.bucket === 1) {
+    const groupCompare = compareStrings(groupInfoA.text, groupInfoB.text);
+    if (groupCompare !== 0) {
+      return groupCompare;
+    }
+  }
+
+  const departmentCompare = compareStrings(a?.department, b?.department);
+  if (departmentCompare !== 0) {
+    return departmentCompare;
+  }
+
+  const phoneticCompare = compareStrings(a?.phonetic || a?.furigana, b?.phonetic || b?.furigana);
+  if (phoneticCompare !== 0) {
+    return phoneticCompare;
+  }
+
+  const nameCompare = compareStrings(a?.name, b?.name);
+  if (nameCompare !== 0) {
+    return nameCompare;
+  }
+
+  const uidA = resolveParticipantUid(a);
+  const uidB = resolveParticipantUid(b);
+  return compareStrings(uidA, uidB);
+}
+
+function sortParticipants(entries = []) {
+  return entries.slice().sort(compareParticipants);
+}
+
 const PARTICIPANT_DIFF_FIELDS = [
   { key: "name", label: "氏名" },
   { key: "phonetic", label: "フリガナ" },
