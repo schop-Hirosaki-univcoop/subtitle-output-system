@@ -725,6 +725,205 @@ function ensurePendingRelocationMap() {
   return state.pendingRelocations;
 }
 
+function resolveParticipantActionTarget({ participantId = "", rowKey = "", rowIndex = null } = {}) {
+  const normalizedId = String(participantId || "").trim();
+  const normalizedRowKey = String(rowKey || "").trim();
+  const numericIndex = Number.isInteger(rowIndex) && rowIndex >= 0 ? rowIndex : null;
+
+  let index = -1;
+  let entry = null;
+
+  if (normalizedRowKey) {
+    index = state.participants.findIndex(item => String(item?.rowKey || "") === normalizedRowKey);
+    if (index !== -1) {
+      entry = state.participants[index];
+    }
+  }
+
+  if (!entry && normalizedId) {
+    index = state.participants.findIndex(item => String(item?.participantId || "") === normalizedId);
+    if (index !== -1) {
+      entry = state.participants[index];
+    }
+  }
+
+  if (!entry && numericIndex !== null) {
+    const sorted = sortParticipants(state.participants);
+    const candidate = sorted[numericIndex];
+    if (candidate) {
+      index = state.participants.findIndex(item => item === candidate);
+      if (index === -1) {
+        const candidateRowKey = String(candidate?.rowKey || "");
+        if (candidateRowKey) {
+          index = state.participants.findIndex(item => String(item?.rowKey || "") === candidateRowKey);
+        }
+      }
+      if (index === -1) {
+        const candidateId = String(candidate?.participantId || "");
+        if (candidateId) {
+          index = state.participants.findIndex(item => String(item?.participantId || "") === candidateId);
+        }
+      }
+      if (index !== -1) {
+        entry = state.participants[index];
+      }
+    }
+  }
+
+  return { entry: entry || null, index };
+}
+
+function formatParticipantIdentifier(entry) {
+  if (!entry) {
+    return "参加者";
+  }
+  const name = String(entry.name || "").trim();
+  if (name) {
+    return `参加者「${name}」`;
+  }
+  const displayId = getDisplayParticipantId(entry.participantId);
+  if (displayId) {
+    return `UID: ${displayId}`;
+  }
+  return "UID未設定";
+}
+
+function commitParticipantQuickEdit(index, updated, { successMessage, successVariant = "success" } = {}) {
+  if (index < 0 || !updated) {
+    return null;
+  }
+
+  const nextEntry = ensureRowKey({ ...updated });
+  const rowKey = String(nextEntry.rowKey || "");
+  const uid = resolveParticipantUid(nextEntry) || String(nextEntry.participantId || "");
+
+  state.participants[index] = nextEntry;
+  state.participants = sortParticipants(state.participants);
+
+  const eventId = state.selectedEventId;
+  const teamNumber = String(nextEntry.teamNumber || nextEntry.groupNumber || "");
+  if (eventId && uid) {
+    const assignmentMap = ensureTeamAssignmentMap(eventId);
+    if (assignmentMap) {
+      assignmentMap.set(uid, teamNumber);
+    }
+    const singleMap = new Map([[uid, teamNumber]]);
+    applyAssignmentsToEventCache(eventId, singleMap);
+  }
+
+  syncCurrentScheduleCache();
+  updateDuplicateMatches();
+  renderParticipants();
+  syncSaveButtonState();
+
+  if (successMessage) {
+    setUploadStatus(successMessage, successVariant);
+  } else if (hasUnsavedChanges()) {
+    setUploadStatus("編集内容は未保存です。「参加者リストを保存」で確定します。");
+  } else {
+    setUploadStatus("保存済みの内容と同じため変更はありません。");
+  }
+
+  if (rowKey) {
+    return state.participants.find(item => String(item?.rowKey || "") === rowKey) || nextEntry;
+  }
+  if (uid) {
+    return (
+      state.participants.find(item => {
+        const itemUid = resolveParticipantUid(item) || String(item?.participantId || "");
+        return itemUid === uid;
+      }) || nextEntry
+    );
+  }
+  return nextEntry;
+}
+
+function handleQuickCancelAction(participantId, rowIndex, rowKey) {
+  const target = resolveParticipantActionTarget({ participantId, rowKey, rowIndex });
+  const entry = target.entry;
+  const index = target.index;
+  if (!entry || index === -1) {
+    setUploadStatus("キャンセル対象の参加者が見つかりません。", "error");
+    return;
+  }
+
+  const cancellationLabel = "キャンセル";
+  const updated = {
+    ...entry,
+    teamNumber: cancellationLabel,
+    groupNumber: cancellationLabel
+  };
+  const nextStatus = resolveParticipantStatus(updated, cancellationLabel);
+  updated.status = nextStatus;
+  updated.isCancelled = nextStatus === "cancelled";
+  updated.isRelocated = nextStatus === "relocated";
+  updated.relocationDestinationScheduleId = "";
+  updated.relocationDestinationScheduleLabel = "";
+  updated.relocationDestinationTeamNumber = "";
+
+  const uid = resolveParticipantUid(updated) || String(updated.participantId || "");
+  if (uid) {
+    const relocationMap = ensurePendingRelocationMap();
+    const previous = relocationMap.get(uid);
+    if (previous) {
+      clearRelocationPreview(previous);
+      relocationMap.delete(uid);
+    }
+  }
+
+  const identifier = formatParticipantIdentifier(entry);
+  const message = `${identifier}をキャンセルに設定しました。「参加者リストを保存」で確定します。`;
+  commitParticipantQuickEdit(index, updated, { successMessage: message, successVariant: "success" });
+}
+
+function handleQuickRelocateAction(participantId, rowIndex, rowKey) {
+  const target = resolveParticipantActionTarget({ participantId, rowKey, rowIndex });
+  const entry = target.entry;
+  const index = target.index;
+  if (!entry || index === -1) {
+    setUploadStatus("別日に移動する対象の参加者が見つかりません。", "error");
+    return;
+  }
+
+  const cancellationLabel = "キャンセル";
+  const updated = {
+    ...entry,
+    teamNumber: cancellationLabel,
+    groupNumber: cancellationLabel
+  };
+  const nextStatus = resolveParticipantStatus(updated, cancellationLabel);
+  updated.status = nextStatus;
+  updated.isCancelled = nextStatus === "cancelled";
+  updated.isRelocated = nextStatus === "relocated";
+  updated.relocationDestinationScheduleId = "";
+  updated.relocationDestinationScheduleLabel = "";
+  updated.relocationDestinationTeamNumber = "";
+
+  const uid = resolveParticipantUid(updated) || String(updated.participantId || "");
+  if (uid) {
+    const relocationMap = ensurePendingRelocationMap();
+    const previous = relocationMap.get(uid);
+    if (previous) {
+      clearRelocationPreview(previous);
+      relocationMap.delete(uid);
+    }
+  }
+
+  const identifier = formatParticipantIdentifier(entry);
+  const message = `${identifier}を別日の移動対象として設定しました。移動先を選んで保存してください。`;
+  const actionRowKey = String(entry.rowKey || "");
+  const actionParticipantId = String(entry.participantId || "");
+
+  commitParticipantQuickEdit(index, updated, { successMessage: message, successVariant: "info" });
+
+  const openEditor = () => openParticipantEditor(actionParticipantId, actionRowKey);
+  if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(openEditor);
+  } else {
+    openEditor();
+  }
+}
+
 function getScheduleRecord(eventId, scheduleId) {
   if (!eventId || !scheduleId) return null;
   const event = state.events.find(evt => evt.id === eventId);
@@ -1290,10 +1489,33 @@ function renderParticipants() {
     }
 
     linkActions.appendChild(editButton);
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.className = "link-action-btn cancel-link-btn";
+    cancelButton.dataset.participantId = entry.participantId || "";
+    if (entry.rowKey) {
+      cancelButton.dataset.rowKey = entry.rowKey;
+    }
+    cancelButton.dataset.rowIndex = String(index);
+    cancelButton.innerHTML =
+      "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm2.146 3.354a.5.5 0 0 1 .708.708L8.707 8.708l2.147 2.146a.5.5 0 0 1-.708.708L8 9.415l-2.146 2.147a.5.5 0 0 1-.708-.708L7.293 8.708 5.146 6.562a.5.5 0 1 1 .708-.708L8 7.999l2.146-2.145Z\"/></svg><span>キャンセル</span>";
+    linkActions.appendChild(cancelButton);
+
+    const relocateButton = document.createElement("button");
+    relocateButton.type = "button";
+    relocateButton.className = "link-action-btn relocate-link-btn";
+    relocateButton.dataset.participantId = entry.participantId || "";
+    if (entry.rowKey) {
+      relocateButton.dataset.rowKey = entry.rowKey;
+    }
+    relocateButton.dataset.rowIndex = String(index);
+    relocateButton.innerHTML =
+      "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M2.5 8a.5.5 0 0 1 .5-.5h6.793L7.146 4.354a.5.5 0 1 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 1 1-.708-.708L9.793 8.5H3a.5.5 0 0 1-.5-.5Z\"/><path fill=\"currentColor\" d=\"M12 3.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-9Z\"/></svg><span>別日</span>";
+    linkActions.appendChild(relocateButton);
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.className = "link-action-btn delete-link-btn";
-    deleteButton.dataset.participantId = entry.participantId;
+    deleteButton.dataset.participantId = entry.participantId || "";
     if (entry.rowKey) {
       deleteButton.dataset.rowKey = entry.rowKey;
     }
@@ -3338,6 +3560,26 @@ function resetState() {
 }
 
 function handleMappingTableClick(event) {
+  const cancelButton = event.target.closest(".cancel-link-btn");
+  if (cancelButton) {
+    event.preventDefault();
+    const participantId = cancelButton.dataset.participantId || "";
+    const rowKey = cancelButton.dataset.rowKey || "";
+    const rowIndexValue = Number.parseInt(cancelButton.dataset.rowIndex || "", 10);
+    handleQuickCancelAction(participantId, Number.isInteger(rowIndexValue) ? rowIndexValue : null, rowKey);
+    return;
+  }
+
+  const relocateButton = event.target.closest(".relocate-link-btn");
+  if (relocateButton) {
+    event.preventDefault();
+    const participantId = relocateButton.dataset.participantId || "";
+    const rowKey = relocateButton.dataset.rowKey || "";
+    const rowIndexValue = Number.parseInt(relocateButton.dataset.rowIndex || "", 10);
+    handleQuickRelocateAction(participantId, Number.isInteger(rowIndexValue) ? rowIndexValue : null, rowKey);
+    return;
+  }
+
   const deleteButton = event.target.closest(".delete-link-btn");
   if (deleteButton) {
     event.preventDefault();
