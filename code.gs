@@ -2392,6 +2392,8 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
     } else {
       const payload = {
         participantId: entry.participantId,
+        uid: entry.uid || entry.participantId,
+        legacyParticipantId: entry.legacyParticipantId || '',
         name: entry.name || '',
         phonetic: entry.phonetic || entry.furigana || '',
         furigana: entry.furigana || entry.phonetic || '',
@@ -2401,6 +2403,9 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
         email: entry.email || '',
         groupNumber: teamValue,
         teamNumber: teamValue,
+        status: entry.status || '',
+        isCancelled: entry.isCancelled === true,
+        isRelocated: entry.isRelocated === true,
         token: tokenValue,
         guidance,
         updatedAt: participantUpdatedAt
@@ -2513,10 +2518,10 @@ function saveQuestionParticipants_(eventId, scheduleId, entries) {
   const seen = new Set();
   entries.forEach(entry => {
     if (!entry) return;
-    const participantId = String(entry.participantId || entry.id || '').trim();
-    if (!participantId) return;
-    if (seen.has(participantId)) return;
-    seen.add(participantId);
+    const uid = String(entry.uid || entry.participantId || entry.id || '').trim();
+    if (!uid) return;
+    if (seen.has(uid)) return;
+    seen.add(uid);
     const name = normalizeNameKey_(entry.name || entry.displayName || '');
     const phonetic = normalizeNameKey_(entry.phonetic || entry.furigana || '');
     const gender = String(entry.gender || '').trim();
@@ -2524,15 +2529,24 @@ function saveQuestionParticipants_(eventId, scheduleId, entries) {
     const phone = String(entry.phone || '').trim();
     const email = String(entry.email || '').trim();
     const groupNumber = String(entry.groupNumber || entry.group || entry.teamNumber || '').trim();
+    const legacyId = String(entry.legacyParticipantId || '').trim();
+    const status = String(entry.status || '').trim();
+    const isCancelled = entry.isCancelled === true || /cancel/i.test(groupNumber);
+    const isRelocated = entry.isRelocated === true;
     deduped.push({
-      participantId,
+      participantId: uid,
+      uid,
+      legacyParticipantId: legacyId && legacyId !== uid ? legacyId : '',
       name,
       phonetic,
       gender,
       department,
       phone,
       email,
-      groupNumber
+      groupNumber,
+      status,
+      isCancelled,
+      isRelocated
     });
   });
 
