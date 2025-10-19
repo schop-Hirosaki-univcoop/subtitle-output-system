@@ -152,7 +152,7 @@
                             <span id="qa-upload-status" class="status-pill status-pill--inline">イベントコントロールセンターで対象の日程を選択してください。</span>
                           </div>
                           <p class="module-description" id="qa-participant-description">
-                            <span id="qa-participant-description-main">イベントコントロールセンター（events.html）のフローで日程を選択してこのページを開くと、参加者情報（CSVの列順はテンプレートをご利用ください。参加者ID列は不要で、読み込み時に自動採番されます）をアップロードして管理できます。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。専用リンクは各行のボタンまたはURLから取得できます。</span>
+                            <span id="qa-participant-description-main">イベントコントロールセンター（events.html）のフローで日程を選択してこのページを開くと、参加者情報（CSVの列順はテンプレートをご利用ください。No.列は不要で、既存のUIDをそのまま利用します）をアップロードして管理できます。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。専用リンクは各行のボタンまたはURLから取得できます。</span>
                             <span id="qa-admin-summary" class="module-description__meta" aria-live="polite"></span>
                           </p>
                         </div>
@@ -190,11 +190,12 @@
                           <table class="mapping-table" aria-describedby="qa-participant-description">
                             <thead>
                               <tr>
-                                <th scope="col" class="is-numeric">参加者ID</th>
+                                <th scope="col" class="is-numeric">No.</th>
                                 <th scope="col">氏名</th>
                                 <th scope="col">性別</th>
                                 <th scope="col">学部学科</th>
                                 <th scope="col" class="is-numeric">班番号</th>
+                                <th scope="col">UID</th>
                                 <th scope="col">専用リンク</th>
                               </tr>
                             </thead>
@@ -209,18 +210,18 @@
                       <div class="module-header">
                         <div class="module-heading">
                           <h2 id="qa-format-title">CSVの形式について</h2>
-                          <p class="module-description">1列目から順に「名前」「フリガナ」「性別」「学部学科」「携帯電話」「メールアドレス」を配置してください。アップロード時には必ずヘッダー行が必要です。テンプレートボタンからダウンロードできます。ファイル名は「イベントID_日程ID_participants.csv」を使用してください。電話番号とメールアドレスは内部で保存され、編集ダイアログでのみ確認できます。</p>
+                          <p class="module-description">1列目から順に「名前」「フリガナ」「性別」「学部学科」「携帯電話」「メールアドレス」を配置し、各行に既存のUIDを含めてください。アップロード時には必ずヘッダー行が必要です。テンプレートボタンからダウンロードできます。ファイル名は「イベントID_日程ID_participants.csv」を使用してください。電話番号とメールアドレスは内部で保存され、編集ダイアログでのみ確認できます。</p>
                         </div>
                       </div>
                       <div class="module-body">
                         <ul>
                           <li>ヘッダー行（例: <code>名前,フリガナ,性別,学部学科,携帯電話,メールアドレス</code>）が必須です。</li>
-                          <li>同じ参加者IDや同じ氏名・学部学科の行が複数あっても全て読み込み、一覧上で重複候補として確認できます。</li>
-                          <li>CSVに参加者ID列は不要です。読み込み時に学部学科→フリガナの順で並べ替え、必要な参加者IDを自動発番します。</li>
+                          <li>同じUIDや同じ氏名・学部学科の行が複数あっても全て読み込み、一覧上で重複候補として確認できます。</li>
+                          <li>CSVにNo.列は不要です。読み込み時に学部学科→フリガナの順で並べ替え、表示用のNo.は自動採番されます。</li>
                           <li>同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補（件数付き）として一覧に表示されます。</li>
                           <li>各列は空欄でもアップロードできますが、氏名は必須です。</li>
                           <li>保存後はフォームに即座に反映されます。</li>
-                          <li>班番号は別途、<code>参加者ID,班番号</code>形式のCSV（ヘッダー必須）をアップロードすると一括で紐付けられます（キャンセルの場合は班番号に「キャンセル」と入力してください）。テンプレートには現在の参加者IDがあらかじめ記載されます。ファイル名は「イベントID_日程ID_teams.csv」としてください。</li>
+                          <li>班番号は別途、<code>学部学科,性別,名前,班番号,uid</code>形式のCSV（ヘッダー必須）をアップロードすると一括で紐付けられます（キャンセルの場合は班番号に「キャンセル」と入力してください）。テンプレートには現在のUIDがあらかじめ記載されます。ファイル名は「イベントID_日程ID_teams.csv」としてください。</li>
                         </ul>
                       </div>
                     </section>
@@ -235,8 +236,8 @@
                         </div>
                         <div class="modal-body">
                           <div class="modal-field">
-                            <label for="qa-participant-id-input">参加者ID</label>
-                            <input id="qa-participant-id-input" name="participant-id" class="input" type="text" readonly>
+                            <label for="qa-participant-uid-input">UID</label>
+                            <input id="qa-participant-uid-input" name="participant-uid" class="input" type="text" readonly>
                           </div>
                           <div class="modal-field">
                             <label for="qa-participant-name-input">氏名 / ラジオネーム</label>
@@ -257,6 +258,18 @@
                           <div class="modal-field">
                             <label for="qa-participant-team-input">班番号</label>
                             <input id="qa-participant-team-input" name="participant-team" class="input" type="text" autocomplete="off" placeholder="例: A-1 / キャンセルなど">
+                          </div>
+                          <div id="qa-participant-relocation-field" class="modal-field" hidden>
+                            <label for="qa-participant-relocation-select">別日に移動</label>
+                            <select id="qa-participant-relocation-select" class="input">
+                              <option value="">移動しない（キャンセルのまま）</option>
+                            </select>
+                            <p id="qa-participant-relocation-helper" class="modal-helper">班番号に「キャンセル」と入力した参加者を別日の日程へ移す場合に選択してください。保存すると質問も移動先の日程へ移動します。</p>
+                          </div>
+                          <div id="qa-participant-relocation-team-field" class="modal-field" hidden>
+                            <label for="qa-participant-relocation-team-input">移動先の班番号</label>
+                            <input id="qa-participant-relocation-team-input" class="input" type="text" autocomplete="off" placeholder="移動先で使用する班番号">
+                            <p class="modal-helper">移動先の日程での班番号が決まっている場合は入力してください。（未定の場合は空欄のままで構いません）</p>
                           </div>
                           <div class="modal-field">
                             <label for="qa-participant-phone-input">携帯電話</label>

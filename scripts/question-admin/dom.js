@@ -110,12 +110,17 @@ dom.participantDialog = resolve("participant-dialog");
 dom.participantForm = resolve("participant-form");
 dom.participantDialogTitle = resolve("participant-dialog-title");
 dom.participantError = resolve("participant-error");
-dom.participantIdInput = resolve("participant-id-input");
+dom.participantUidInput = resolve("participant-uid-input");
 dom.participantNameInput = resolve("participant-name-input");
 dom.participantPhoneticInput = resolve("participant-phonetic-input");
 dom.participantGenderInput = resolve("participant-gender-input");
 dom.participantDepartmentInput = resolve("participant-department-input");
 dom.participantTeamInput = resolve("participant-team-input");
+dom.participantRelocationField = resolve("participant-relocation-field");
+dom.participantRelocationSelect = resolve("participant-relocation-select");
+dom.participantRelocationHelper = resolve("participant-relocation-helper");
+dom.participantRelocationTeamField = resolve("participant-relocation-team-field");
+dom.participantRelocationTeamInput = resolve("participant-relocation-team-input");
 dom.participantPhoneInput = resolve("participant-phone-input");
 dom.participantEmailInput = resolve("participant-email-input");
 
@@ -129,7 +134,7 @@ dom.scheduleDialogFields = {
 };
 
 dom.participantFormFields = {
-  id: dom.participantIdInput,
+  id: dom.participantUidInput,
   name: dom.participantNameInput,
   phonetic: dom.participantPhoneticInput,
   gender: dom.participantGenderInput,

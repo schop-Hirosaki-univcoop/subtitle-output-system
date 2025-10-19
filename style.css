@@ -3431,12 +3431,48 @@ body.sidebar-overlay-open{
   color:#f4f9ff;
 }
 
-#flow-panel-participants .qa-embedded .participant-id-cell{
-  min-width:5.25rem;
+#flow-panel-participants .qa-embedded .participant-no-cell{
+  min-width:4rem;
 }
 
 #flow-panel-participants .qa-embedded .team-cell{
   min-width:5rem;
+}
+
+#flow-panel-participants .qa-embedded .participant-uid-cell{
+  font-family:var(--font-mono, "Roboto Mono", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+  font-size:.85rem;
+  letter-spacing:.03em;
+  max-width:12rem;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+#flow-panel-participants .qa-embedded .mapping-table tbody tr.is-cancelled-origin{
+  background:rgba(120,32,38,.12);
+  color:#ffd9de;
+}
+
+#flow-panel-participants .qa-embedded .mapping-table tbody tr.is-cancelled-origin td{
+  color:#ffd9de;
+}
+
+#flow-panel-participants .qa-embedded .mapping-table tbody tr.is-relocated-destination{
+  background:rgba(160,90,18,.16);
+  color:#ffe8cc;
+}
+
+#flow-panel-participants .qa-embedded .mapping-table tbody tr.is-relocated-destination td{
+  color:#ffe8cc;
+}
+
+#flow-panel-participants .qa-embedded .mapping-table tbody tr.is-cancelled-origin:hover{
+  background:rgba(158,48,52,.2);
+}
+
+#flow-panel-participants .qa-embedded .mapping-table tbody tr.is-relocated-destination:hover{
+  background:rgba(190,118,36,.22);
 }
 
 #flow-panel-participants .qa-embedded .participant-name-cell{
