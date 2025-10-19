@@ -53,6 +53,7 @@ import {
   normalizeParticipantRecord,
   assignParticipantIds,
   resolveParticipantUid,
+  resolveParticipantStatus,
   sortParticipants,
   signatureForEntries,
   snapshotParticipantList,
@@ -1819,7 +1820,10 @@ async function loadParticipants(options = {}) {
     state.lastSavedSignature = savedSignature;
     state.savedParticipants = snapshotParticipantList(participants);
     state.participantTokenMap = new Map(
-      state.participants.map(entry => [resolveParticipantUid(entry) || entry.participantId, entry.token])
+      state.participants.map(entry => {
+        const key = resolveParticipantUid(entry) || String(entry.participantId || "").trim();
+        return [key, entry.token];
+      }).filter(([key]) => Boolean(key))
     );
     state.participantTokenMap.forEach(token => {
       if (token) {
@@ -2430,16 +2434,18 @@ async function handleCsvChange(event) {
     );
     state.participants = sortParticipants(
       entries.map(entry => {
-        const entryKey = resolveParticipantUid(entry) || entry.participantId;
+        const uid = resolveParticipantUid(entry) || entry.participantId;
+        const entryKey = uid;
         const existing = entryKey ? existingMap.get(entryKey) || {} : {};
         const department = entry.department || existing.department || "";
         const teamNumber = entry.teamNumber || existing.teamNumber || existing.groupNumber || "";
         const phonetic = entry.phonetic || entry.furigana || existing.phonetic || existing.furigana || "";
-        const status = existing.status || "active";
+        const status = resolveParticipantStatus({ ...existing, ...entry, teamNumber }, teamNumber) || existing.status || "active";
+        const legacyParticipantId = existing.legacyParticipantId || (existing.participantId && existing.participantId !== uid ? existing.participantId : "");
         return {
-          participantId: entry.participantId,
-          uid: entry.participantId,
-          legacyParticipantId: existing.legacyParticipantId || "",
+          participantId: uid,
+          uid,
+          legacyParticipantId,
           name: entry.name || existing.name || "",
           phonetic,
           furigana: phonetic,
@@ -2625,7 +2631,8 @@ async function handleSave(options = {}) {
     state.tokenRecords = tokenRecords;
 
     state.participants.forEach(entry => {
-      const participantId = String(entry.participantId || "").trim();
+      const uid = resolveParticipantUid(entry);
+      const participantId = uid || String(entry.participantId || "").trim();
       if (!participantId) return;
 
       let token = String(entry.token || "").trim();
@@ -2647,9 +2654,16 @@ async function handleSave(options = {}) {
       const departmentValue = String(entry.department || "");
       const storedDepartment = departmentValue;
       const teamNumber = String(entry.teamNumber || entry.groupNumber || "");
+      const status = entry.status || resolveParticipantStatus(entry, teamNumber) || "active";
+      const isCancelled = entry.isCancelled === true || status === "cancelled";
+      const isRelocated = entry.isRelocated === true || status === "relocated";
+      const legacyIdRaw = String(entry.legacyParticipantId || "").trim();
+      const legacyParticipantId = legacyIdRaw && legacyIdRaw !== participantId ? legacyIdRaw : "";
 
       participantsPayload[participantId] = {
         participantId,
+        uid: participantId,
+        legacyParticipantId,
         name: String(entry.name || ""),
         phonetic: String(entry.phonetic || entry.furigana || ""),
         furigana: String(entry.phonetic || entry.furigana || ""),
@@ -2661,6 +2675,9 @@ async function handleSave(options = {}) {
         email: String(entry.email || ""),
         token,
         guidance,
+        status,
+        isCancelled,
+        isRelocated,
         updatedAt: now
       };
 
@@ -2674,6 +2691,7 @@ async function handleSave(options = {}) {
         scheduleStart: scheduleStartAt || existingTokenRecord.scheduleStart || "",
         scheduleEnd: scheduleEndAt || existingTokenRecord.scheduleEnd || "",
         participantId,
+        participantUid: participantId,
         displayName: String(entry.name || ""),
         groupNumber: teamNumber,
         teamNumber,
@@ -3117,16 +3135,22 @@ function saveParticipantEdits() {
     phone,
     email
   };
+  const nextStatus = resolveParticipantStatus(updated, teamNumber);
+  updated.status = nextStatus;
+  updated.isCancelled = nextStatus === "cancelled";
+  updated.isRelocated = nextStatus === "relocated";
 
   state.participants[index] = updated;
   state.participants = sortParticipants(state.participants);
 
-  if (eventId) {
+  const uid = resolveParticipantUid(updated) || participantId;
+
+  if (eventId && uid) {
     const assignmentMap = ensureTeamAssignmentMap(eventId);
     if (assignmentMap) {
-      assignmentMap.set(participantId, teamNumber);
+      assignmentMap.set(uid, teamNumber);
     }
-    const singleMap = new Map([[participantId, teamNumber]]);
+    const singleMap = new Map([[uid, teamNumber]]);
     applyAssignmentsToEventCache(eventId, singleMap);
   }
 

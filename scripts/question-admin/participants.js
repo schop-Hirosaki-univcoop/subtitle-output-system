@@ -386,7 +386,7 @@ function parseParticipantRows(rows) {
   const entries = [];
 
   dataRows.forEach(cols => {
-    const uid = normalizeColumn(cols, indexMap.uid);
+    const uid = normalizeText(indexMap.uid != null && indexMap.uid >= 0 ? cols[indexMap.uid] : "");
     const participantId = normalizeColumn(cols, indexMap.id);
     const name = normalizeColumn(cols, indexMap.name);
     const phonetic = normalizeColumn(cols, indexMap.phonetic);
@@ -404,7 +404,10 @@ function parseParticipantRows(rows) {
       throw new Error("氏名のない行があります。CSVを確認してください。");
     }
 
-    const resolvedId = uid || participantId;
+    const resolvedId = normalizeText(uid) || participantId;
+    if (!resolvedId) {
+      throw new Error("UIDが未入力の行があります。テンプレートのuid列に値を設定してください。");
+    }
     entries.push(ensureRowKey({
       uid: resolvedId,
       participantId: resolvedId,
@@ -650,6 +653,10 @@ function assignParticipantIds(entries, existingParticipants = [], options = {}) 
   const assignedExistingIds = new Set();
   resolved.forEach(entry => {
     if (entry.participantId) return;
+    if (entry.uid) {
+      entry.participantId = normalizeText(entry.uid);
+      return;
+    }
     const key = participantIdentityKey(entry);
     if (!key) return;
     const existingId = existingByKey.get(key);
@@ -660,39 +667,88 @@ function assignParticipantIds(entries, existingParticipants = [], options = {}) 
     }
   });
 
-  const { eventId = "", scheduleId = "" } = options || {};
-  const prefix = createParticipantIdPrefix(eventId, scheduleId);
-  const prefixPattern = new RegExp(`^${prefix.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}_(\\d+)$`);
-  let prefixMax = 0;
-  let prefixPad = 3;
-
-  usedIds.forEach(id => {
-    const match = id.match(prefixPattern);
-    if (!match) return;
-    const value = Number(match[1]);
-    if (Number.isFinite(value)) {
-      prefixMax = Math.max(prefixMax, value);
-      prefixPad = Math.max(prefixPad, match[1].length);
-    }
-  });
-
-  let nextNumber = prefixMax ? prefixMax + 1 : 1;
-
-  resolved.forEach(entry => {
-    if (entry.participantId) return;
-    let candidateNumber = nextNumber;
-    let candidateId = "";
-    while (!candidateId || usedIds.has(candidateId)) {
-      const suffix = String(candidateNumber).padStart(prefixPad, "0");
-      candidateId = `${prefix}_${suffix}`;
-      candidateNumber += 1;
-    }
-    nextNumber = candidateNumber;
-    entry.participantId = candidateId;
-    usedIds.add(candidateId);
-  });
+  const missingIds = resolved.filter(entry => !entry.participantId);
+  if (missingIds.length) {
+    throw new Error("UIDが設定されていない参加者があります。UID列を確認してください。");
+  }
 
   return resolved;
+}
+
+const STATUS_PRIORITY = new Map([
+  ["active", 0],
+  ["relocated", 0],
+  ["cancelled", 1]
+]);
+
+function compareStrings(a, b) {
+  const textA = normalizeText(a);
+  const textB = normalizeText(b);
+  if (!textA && !textB) return 0;
+  if (!textA) return 1;
+  if (!textB) return -1;
+  return STRING_COLLATOR.compare(textA, textB);
+}
+
+function getGroupSortInfo(entry) {
+  const groupValue = normalizeGroupNumberValue(entry?.teamNumber ?? entry?.groupNumber ?? "");
+  if (!groupValue) {
+    return { bucket: 2, number: Number.POSITIVE_INFINITY, text: "" };
+  }
+  const numeric = Number(groupValue);
+  if (!Number.isNaN(numeric)) {
+    return { bucket: 0, number: numeric, text: groupValue };
+  }
+  return { bucket: 1, number: Number.POSITIVE_INFINITY, text: groupValue };
+}
+
+function compareParticipants(a, b) {
+  const statusA = a?.status || "active";
+  const statusB = b?.status || "active";
+  const statusRankA = STATUS_PRIORITY.has(statusA) ? STATUS_PRIORITY.get(statusA) : STATUS_PRIORITY.get("active");
+  const statusRankB = STATUS_PRIORITY.has(statusB) ? STATUS_PRIORITY.get(statusB) : STATUS_PRIORITY.get("active");
+  if (statusRankA !== statusRankB) {
+    return statusRankA - statusRankB;
+  }
+
+  const groupInfoA = getGroupSortInfo(a);
+  const groupInfoB = getGroupSortInfo(b);
+  if (groupInfoA.bucket !== groupInfoB.bucket) {
+    return groupInfoA.bucket - groupInfoB.bucket;
+  }
+  if (groupInfoA.bucket === 0) {
+    if (groupInfoA.number !== groupInfoB.number) {
+      return groupInfoA.number - groupInfoB.number;
+    }
+  } else if (groupInfoA.bucket === 1) {
+    const groupCompare = compareStrings(groupInfoA.text, groupInfoB.text);
+    if (groupCompare !== 0) {
+      return groupCompare;
+    }
+  }
+
+  const departmentCompare = compareStrings(a?.department, b?.department);
+  if (departmentCompare !== 0) {
+    return departmentCompare;
+  }
+
+  const phoneticCompare = compareStrings(a?.phonetic || a?.furigana, b?.phonetic || b?.furigana);
+  if (phoneticCompare !== 0) {
+    return phoneticCompare;
+  }
+
+  const nameCompare = compareStrings(a?.name, b?.name);
+  if (nameCompare !== 0) {
+    return nameCompare;
+  }
+
+  const uidA = resolveParticipantUid(a);
+  const uidB = resolveParticipantUid(b);
+  return compareStrings(uidA, uidB);
+}
+
+function sortParticipants(entries = []) {
+  return entries.slice().sort(compareParticipants);
 }
 
 const STATUS_PRIORITY = new Map([

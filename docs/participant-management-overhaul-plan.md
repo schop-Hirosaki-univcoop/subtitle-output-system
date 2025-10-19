@@ -89,3 +89,12 @@ The participant administration UI and backend currently assume `participantId` v
 - Review this plan with stakeholders for validation.
 - Prioritize implementation phases and schedule development milestones.
 - After approval, begin updating the codebase following the phased approach above.
+
+## Progress Status
+- ✅ UI table renders the requested sequential `No.` column, surfaces each UID, and applies the cancellation/relocation styling with
+  the new comparator.
+- ✅ CSV import/export logic now requires UIDs in both participant and team templates, rejecting rows without them.
+- ✅ RTDB writes and token metadata include `uid`, `legacyParticipantId`, and `status` flags so cancellation state survives reloads,
+  keeping the backend aligned with the UID-first plan.
+- ⏳ Pending: cross-schedule relocation UI, question/token migration for moves, and deprecating legacy `participantId` keys in Apps
+  Script.
