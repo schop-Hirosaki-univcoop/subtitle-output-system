@@ -116,6 +116,11 @@ dom.participantPhoneticInput = resolve("participant-phonetic-input");
 dom.participantGenderInput = resolve("participant-gender-input");
 dom.participantDepartmentInput = resolve("participant-department-input");
 dom.participantTeamInput = resolve("participant-team-input");
+dom.participantRelocationField = resolve("participant-relocation-field");
+dom.participantRelocationSelect = resolve("participant-relocation-select");
+dom.participantRelocationHelper = resolve("participant-relocation-helper");
+dom.participantRelocationTeamField = resolve("participant-relocation-team-field");
+dom.participantRelocationTeamInput = resolve("participant-relocation-team-input");
 dom.participantPhoneInput = resolve("participant-phone-input");
 dom.participantEmailInput = resolve("participant-email-input");
 

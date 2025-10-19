@@ -1671,6 +1671,7 @@ function mirrorQuestionIntake_() {
 
     participantsTree[entry.eventId][entry.scheduleId][entry.participantId] = {
       participantId: entry.participantId,
+      uid: entry.participantId,
       name: entry.name || '',
       phonetic: entry.phonetic || entry.furigana || '',
       furigana: entry.furigana || entry.phonetic || '',
@@ -1682,6 +1683,14 @@ function mirrorQuestionIntake_() {
       teamNumber: teamValue,
       token: tokenValue,
       guidance,
+      status: existingParticipant.status || '',
+      isCancelled: existingParticipant.isCancelled === true,
+      isRelocated: existingParticipant.isRelocated === true,
+      relocationSourceScheduleId: existingParticipant.relocationSourceScheduleId || '',
+      relocationSourceScheduleLabel: existingParticipant.relocationSourceScheduleLabel || '',
+      relocationDestinationScheduleId: existingParticipant.relocationDestinationScheduleId || '',
+      relocationDestinationScheduleLabel: existingParticipant.relocationDestinationScheduleLabel || '',
+      relocationDestinationTeamNumber: existingParticipant.relocationDestinationTeamNumber || '',
       updatedAt: participantUpdatedAt
     };
 

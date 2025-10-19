@@ -259,6 +259,18 @@
                             <label for="qa-participant-team-input">班番号</label>
                             <input id="qa-participant-team-input" name="participant-team" class="input" type="text" autocomplete="off" placeholder="例: A-1 / キャンセルなど">
                           </div>
+                          <div id="qa-participant-relocation-field" class="modal-field" hidden>
+                            <label for="qa-participant-relocation-select">別日に移動</label>
+                            <select id="qa-participant-relocation-select" class="input">
+                              <option value="">移動しない（キャンセルのまま）</option>
+                            </select>
+                            <p id="qa-participant-relocation-helper" class="modal-helper">班番号に「キャンセル」と入力した参加者を別日の日程へ移す場合に選択してください。保存すると質問も移動先の日程へ移動します。</p>
+                          </div>
+                          <div id="qa-participant-relocation-team-field" class="modal-field" hidden>
+                            <label for="qa-participant-relocation-team-input">移動先の班番号</label>
+                            <input id="qa-participant-relocation-team-input" class="input" type="text" autocomplete="off" placeholder="移動先で使用する班番号">
+                            <p class="modal-helper">移動先の日程での班番号が決まっている場合は入力してください。（未定の場合は空欄のままで構いません）</p>
+                          </div>
                           <div class="modal-field">
                             <label for="qa-participant-phone-input">携帯電話</label>
                             <input id="qa-participant-phone-input" name="participant-phone" class="input" type="tel" autocomplete="tel">

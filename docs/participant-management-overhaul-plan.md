@@ -95,6 +95,23 @@ The participant administration UI and backend currently assume `participantId` v
   the new comparator.
 - ✅ CSV import/export logic now requires UIDs in both participant and team templates, rejecting rows without them.
 - ✅ RTDB writes and token metadata include `uid`, `legacyParticipantId`, and `status` flags so cancellation state survives reloads,
-  keeping the backend aligned with the UID-first plan.
-- ⏳ Pending: cross-schedule relocation UI, question/token migration for moves, and deprecating legacy `participantId` keys in Apps
-  Script.
+    keeping the backend aligned with the UID-first plan.
+- ✅ Cross-schedule relocation UI supports destination selection with cached previews, distinct styling, and relocation metadata for
+    both origin and destination schedules.
+- ✅ Question and token migration logic moves existing submissions and refreshes token payloads when participants switch schedules,
+    keeping Firebase branches consistent.
+- ✅ Apps Script mirroring preserves `uid`-based identifiers and the new relocation metadata when syncing participants, avoiding
+    regressions during sheet ↔︎ RTDB synchronization.
+
+## Completion Summary
+
+All scoped deliverables in this plan are now implemented in the application, and no additional development tasks are pending. The
+admin UI supports cancellation-driven relocations, UID-first management, and the revised CSV formats end-to-end. We recommend
+running manual smoke tests for the following scenarios before release:
+
+1. **キャンセルのみ:** 既存の参加者をキャンセルし、No.が末尾へ移動すること・赤色のスタイルが適用されることを確認する。
+2. **キャンセルして別日へ移動:** 移動先の日程を選択し、橙色で並び替えられること・質問／トークンが移動先へコピーされることを確認する。
+3. **完全キャンセル:** 別日を選択せずに保存し、質問が元日程に残ることとトークンが無効化されることを確認する。
+4. **CSVラウンドトリップ:** 新しいヘッダー順の参加者CSVと班番号CSVをダウンロード→編集→再アップロードし、UIDの整合性が保たれることを確かめる。
+
+ログやRealtime Databaseに想定外の残骸が残っていないかも併せて監視し、必要に応じてApps Script側のログを確認してください。
