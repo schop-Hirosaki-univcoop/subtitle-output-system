@@ -1,5 +1,5 @@
 import { state } from "./state.js";
-import { normalizeKey } from "./utils.js";
+import { normalizeKey, ensureCrypto } from "./utils.js";
 
 const STRING_COLLATOR = new Intl.Collator("ja", { numeric: true, sensitivity: "base" });
 
@@ -30,6 +30,38 @@ function sanitizePrefixComponent(value) {
     .replace(/[^A-Za-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .toLowerCase();
+}
+
+function generateParticipantUid(usedIds = new Set()) {
+  const cryptoObj = ensureCrypto();
+  const attempts = 1000;
+
+  for (let i = 0; i < attempts; i += 1) {
+    let candidate = "";
+
+    if (cryptoObj && typeof cryptoObj.randomUUID === "function") {
+      candidate = cryptoObj.randomUUID().replace(/-/g, "");
+    } else if (cryptoObj) {
+      const bytes = new Uint8Array(16);
+      cryptoObj.getRandomValues(bytes);
+      candidate = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+    } else {
+      const timestampPart = Date.now().toString(36);
+      const randomPartA = Math.random().toString(36).slice(2, 10);
+      const randomPartB = Math.random().toString(36).slice(2, 10);
+      candidate = `${timestampPart}${randomPartA}${randomPartB}`;
+    }
+
+    const normalized = normalizeText(candidate).slice(0, 32);
+    if (!normalized || normalized.length < 12) {
+      continue;
+    }
+    if (!usedIds.has(normalized)) {
+      return normalized;
+    }
+  }
+
+  throw new Error("新しいUIDを生成できませんでした。");
 }
 
 function resolveParticipantUid(entry, fallback = "") {
@@ -63,10 +95,26 @@ function isCancellationValue(value) {
   return normalized.includes("キャンセル") || normalized === "cancel" || normalized === "cancelled";
 }
 
+function isRelocationValue(value) {
+  if (!value) return false;
+  const normalized = normalizeText(value);
+  const lower = normalized.toLowerCase();
+  if (!normalized) return false;
+  return normalized.includes("別日") || lower === "relocate" || lower === "relocated";
+}
+
 function resolveParticipantStatus(entry, normalizedGroupValue) {
-  const normalizedStatus = normalizeText(
+  const rawStatus = normalizeText(
     entry?.status || entry?.participantStatus || entry?.cancellationStatus || entry?.relocationStatus
-  ).toLowerCase();
+  );
+  const normalizedStatus = rawStatus.toLowerCase();
+
+  if (rawStatus.includes("別日")) {
+    return "relocated";
+  }
+  if (rawStatus.includes("キャンセル")) {
+    return "cancelled";
+  }
 
   if (normalizedStatus === "relocated" || normalizedStatus === "destination" || normalizedStatus === "relocation-destination") {
     return "relocated";
@@ -89,6 +137,10 @@ function resolveParticipantStatus(entry, normalizedGroupValue) {
 
   if (entry?.cancelled === true || entry?.cancellation === true) {
     return "cancelled";
+  }
+
+  if (isRelocationValue(normalizedGroupValue)) {
+    return "relocated";
   }
 
   if (isCancellationValue(normalizedGroupValue)) {
@@ -392,6 +444,7 @@ function parseParticipantRows(rows) {
   };
 
   const dataRows = rows.slice(1);
+  const hasUidColumn = indexMap.uid != null && indexMap.uid >= 0;
 
   const normalizeColumn = (cols, index) => {
     if (index == null || index < 0 || index >= cols.length) return "";
@@ -401,8 +454,8 @@ function parseParticipantRows(rows) {
   const entries = [];
 
   dataRows.forEach(cols => {
-    const uid = normalizeText(indexMap.uid != null && indexMap.uid >= 0 ? cols[indexMap.uid] : "");
-    const participantId = normalizeColumn(cols, indexMap.id);
+    const uid = hasUidColumn ? normalizeText(cols[indexMap.uid]) : "";
+    const legacyId = normalizeColumn(cols, indexMap.id);
     const name = normalizeColumn(cols, indexMap.name);
     const phonetic = normalizeColumn(cols, indexMap.phonetic);
     const gender = normalizeColumn(cols, indexMap.gender);
@@ -411,7 +464,9 @@ function parseParticipantRows(rows) {
     const email = normalizeColumn(cols, indexMap.email);
     const teamNumber = normalizeColumn(cols, indexMap.team);
 
-    if (!participantId && !name && !phonetic && !gender && !department && !phone && !email) {
+    const identifier = hasUidColumn ? uid || legacyId : legacyId;
+
+    if (!identifier && !name && !phonetic && !gender && !department && !phone && !email) {
       return;
     }
 
@@ -419,13 +474,11 @@ function parseParticipantRows(rows) {
       throw new Error("氏名のない行があります。CSVを確認してください。");
     }
 
-    const resolvedId = normalizeText(uid) || participantId;
-    if (!resolvedId) {
-      throw new Error("UIDが未入力の行があります。テンプレートのuid列に値を設定してください。");
-    }
+    const participantId = hasUidColumn ? normalizeText(uid) || legacyId : "";
     entries.push(ensureRowKey({
-      uid: resolvedId,
-      participantId: resolvedId,
+      uid,
+      participantId,
+      legacyParticipantId: legacyId,
       name,
       phonetic,
       furigana: phonetic,
@@ -663,21 +716,42 @@ function assignParticipantIds(entries, existingParticipants = [], options = {}) 
 
   const usedIds = new Set();
   const existingByKey = new Map();
+  const existingByAnyId = new Map();
 
   existingParticipants.forEach(participant => {
-    const participantId = normalizeKey(participant.participantId || participant.id || "");
-    if (participantId) {
-      usedIds.add(participantId);
-    }
+    const canonicalId =
+      resolveParticipantUid(participant) ||
+      normalizeText(participant.participantId || participant.id || "");
+    const candidateIds = [
+      canonicalId,
+      normalizeText(participant.participantId),
+      normalizeText(participant.id),
+      normalizeText(participant.legacyParticipantId)
+    ];
+
+    candidateIds.forEach(value => {
+      if (!value) return;
+      usedIds.add(value);
+      if (canonicalId && !existingByAnyId.has(value)) {
+        existingByAnyId.set(value, canonicalId);
+      }
+    });
+
     const key = participantIdentityKey(participant);
-    if (key && participantId && !existingByKey.has(key)) {
-      existingByKey.set(key, participantId);
+    if (key && canonicalId && !existingByKey.has(key)) {
+      existingByKey.set(key, canonicalId);
     }
   });
 
   resolved.forEach(entry => {
+    entry.participantId = normalizeText(entry.participantId);
+    entry.uid = normalizeText(entry.uid);
+    entry.legacyParticipantId = normalizeText(entry.legacyParticipantId);
     if (entry.participantId) {
       usedIds.add(entry.participantId);
+    }
+    if (entry.uid) {
+      usedIds.add(entry.uid);
     }
   });
 
@@ -686,6 +760,9 @@ function assignParticipantIds(entries, existingParticipants = [], options = {}) 
     if (entry.participantId) return;
     if (entry.uid) {
       entry.participantId = normalizeText(entry.uid);
+      if (entry.participantId) {
+        usedIds.add(entry.participantId);
+      }
       return;
     }
     const key = participantIdentityKey(entry);
@@ -698,10 +775,34 @@ function assignParticipantIds(entries, existingParticipants = [], options = {}) 
     }
   });
 
-  const missingIds = resolved.filter(entry => !entry.participantId);
-  if (missingIds.length) {
-    throw new Error("UIDが設定されていない参加者があります。UID列を確認してください。");
-  }
+  resolved.forEach(entry => {
+    if (entry.participantId) return;
+    const legacyId = entry.legacyParticipantId;
+    if (!legacyId) return;
+    const existingId = existingByAnyId.get(legacyId);
+    if (existingId && !assignedExistingIds.has(existingId)) {
+      entry.participantId = existingId;
+      usedIds.add(existingId);
+      assignedExistingIds.add(existingId);
+    }
+  });
+
+  resolved.forEach(entry => {
+    if (entry.participantId) return;
+    const newId = generateParticipantUid(usedIds);
+    entry.participantId = newId;
+    entry.uid = newId;
+    usedIds.add(newId);
+  });
+
+  resolved.forEach(entry => {
+    if (!entry.uid && entry.participantId) {
+      entry.uid = entry.participantId;
+    }
+    if (entry.legacyParticipantId && entry.legacyParticipantId === entry.participantId) {
+      entry.legacyParticipantId = "";
+    }
+  });
 
   return resolved;
 }
