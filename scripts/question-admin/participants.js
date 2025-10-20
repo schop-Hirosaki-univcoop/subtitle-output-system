@@ -95,10 +95,26 @@ function isCancellationValue(value) {
   return normalized.includes("キャンセル") || normalized === "cancel" || normalized === "cancelled";
 }
 
+function isRelocationValue(value) {
+  if (!value) return false;
+  const normalized = normalizeText(value);
+  const lower = normalized.toLowerCase();
+  if (!normalized) return false;
+  return normalized.includes("別日") || lower === "relocate" || lower === "relocated";
+}
+
 function resolveParticipantStatus(entry, normalizedGroupValue) {
-  const normalizedStatus = normalizeText(
+  const rawStatus = normalizeText(
     entry?.status || entry?.participantStatus || entry?.cancellationStatus || entry?.relocationStatus
-  ).toLowerCase();
+  );
+  const normalizedStatus = rawStatus.toLowerCase();
+
+  if (rawStatus.includes("別日")) {
+    return "relocated";
+  }
+  if (rawStatus.includes("キャンセル")) {
+    return "cancelled";
+  }
 
   if (normalizedStatus === "relocated" || normalizedStatus === "destination" || normalizedStatus === "relocation-destination") {
     return "relocated";
@@ -121,6 +137,10 @@ function resolveParticipantStatus(entry, normalizedGroupValue) {
 
   if (entry?.cancelled === true || entry?.cancellation === true) {
     return "cancelled";
+  }
+
+  if (isRelocationValue(normalizedGroupValue)) {
+    return "relocated";
   }
 
   if (isCancellationValue(normalizedGroupValue)) {
