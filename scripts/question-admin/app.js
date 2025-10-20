@@ -912,10 +912,13 @@ function handleQuickRelocateAction(participantId, rowIndex, rowKey) {
   const message = `${identifier}を${RELOCATE_LABEL}の移動対象として設定しました。移動先を選んで保存してください。`;
   const actionRowKey = String(entry.rowKey || "");
   const actionParticipantId = String(entry.participantId || "");
+  const focusKey = uid || actionRowKey || actionParticipantId;
 
   commitParticipantQuickEdit(index, updated, { successMessage: message, successVariant: "info" });
 
-  queueRelocationPrompt([{ participantId: actionParticipantId, rowKey: actionRowKey }]);
+  queueRelocationPrompt([{ participantId: actionParticipantId, rowKey: actionRowKey }], {
+    focusKey
+  });
 }
 
 function getRelocationScheduleOptions(eventId, excludeScheduleId) {
@@ -1111,7 +1114,48 @@ function renderRelocationPrompt() {
 
 }
 
-function queueRelocationPrompt(targets = [], { replace = false } = {}) {
+function focusRelocationPromptItem(targetKey = "") {
+  const normalizedKey = String(targetKey || "").trim();
+  if (!normalizedKey || !dom.relocationList) {
+    return;
+  }
+
+  const rows = Array.from(dom.relocationList.querySelectorAll(".relocation-item"));
+  if (!rows.length) {
+    return;
+  }
+
+  const findMatch = () =>
+    rows.find(row => {
+      if (!row) return false;
+      const candidates = [row.dataset.uid, row.dataset.rowKey, row.dataset.participantId]
+        .map(value => String(value || "").trim())
+        .filter(Boolean);
+      return candidates.includes(normalizedKey);
+    });
+
+  const focusRow = () => {
+    const match = findMatch();
+    if (!match) return;
+    const select = match.querySelector("[data-relocation-select]");
+    if (select && !select.disabled && typeof select.focus === "function") {
+      select.focus();
+      return;
+    }
+    const teamInput = match.querySelector("[data-relocation-team]");
+    if (teamInput && typeof teamInput.focus === "function") {
+      teamInput.focus();
+    }
+  };
+
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(focusRow);
+  } else {
+    setTimeout(focusRow, 0);
+  }
+}
+
+function queueRelocationPrompt(targets = [], { replace = false, focusKey = "" } = {}) {
   if (replace) {
     state.relocationPromptTargets = [];
   }
@@ -1121,7 +1165,7 @@ function queueRelocationPrompt(targets = [], { replace = false } = {}) {
     if (replace || state.relocationPromptTargets?.length) {
       renderRelocationPrompt();
     }
-    return;
+    return false;
   }
 
   const existing = new Map();
@@ -1133,6 +1177,8 @@ function queueRelocationPrompt(targets = [], { replace = false } = {}) {
       }
     });
   }
+
+  const addedKeys = [];
 
   targetList.forEach(target => {
     const resolved = resolveParticipantActionTarget(target);
@@ -1150,6 +1196,9 @@ function queueRelocationPrompt(targets = [], { replace = false } = {}) {
     if (!key) {
       return;
     }
+    if (!existing.has(key)) {
+      addedKeys.push(key);
+    }
     existing.set(key, {
       uid,
       participantId: entry.participantId || "",
@@ -1159,13 +1208,25 @@ function queueRelocationPrompt(targets = [], { replace = false } = {}) {
 
   state.relocationPromptTargets = Array.from(existing.values());
   if (!state.relocationPromptTargets.length) {
-    return;
+    return false;
   }
 
   renderRelocationPrompt();
+
+  const preferredFocusKey = String(focusKey || "").trim() || addedKeys[0] ||
+    String(state.relocationPromptTargets[0]?.uid || "") ||
+    String(state.relocationPromptTargets[0]?.rowKey || "") ||
+    String(state.relocationPromptTargets[0]?.participantId || "");
+
   if (dom.relocationDialog) {
     openDialog(dom.relocationDialog);
   }
+
+  if (preferredFocusKey) {
+    focusRelocationPromptItem(preferredFocusKey);
+  }
+
+  return true;
 }
 
 function handleRelocationFormSubmit(event) {
