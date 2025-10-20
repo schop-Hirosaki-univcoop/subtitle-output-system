@@ -1648,7 +1648,10 @@ function mirrorQuestionIntake_() {
       participantsTree[entry.eventId][entry.scheduleId] = {};
     }
 
-    const existingParticipant = (((existingParticipants[entry.eventId] || {})[entry.scheduleId] || {})[entry.participantId]) || {};
+    const existingBranch = (existingParticipants[entry.eventId] || {})[entry.scheduleId] || {};
+    const existingParticipantRecord = existingBranch[entry.participantId];
+    const hasExistingParticipant = existingParticipantRecord && typeof existingParticipantRecord === 'object';
+    const existingParticipant = hasExistingParticipant ? existingParticipantRecord : {};
     const key = `${entry.eventId}::${entry.scheduleId}::${entry.participantId}`;
     const tokenInfo = tokenByKey.get(key) || {};
     let tokenValue = tokenInfo.token;
@@ -1658,15 +1661,24 @@ function mirrorQuestionIntake_() {
       tokenRecord = {};
     }
 
-    const participantUpdatedAt = parseDateToMillis_(entry.updatedAt, now);
-    const guidance = existingParticipant.guidance || tokenRecord.guidance || '';
+    const sheetTimestamp = typeof entry.updatedAt === 'string' ? entry.updatedAt.trim() : '';
+    const hasSheetTimestamp = sheetTimestamp.length > 0;
+    const participantUpdatedAt = parseDateToMillis_(entry.updatedAt, 0);
+    const effectiveUpdatedAt = participantUpdatedAt > 0 ? participantUpdatedAt : now;
+    const existingGuidance = hasExistingParticipant ? String(existingParticipant.guidance || '') : '';
+    const guidance = existingGuidance || String(tokenRecord.guidance || '');
 
     const teamValue = String(entry.teamNumber || entry.groupNumber || '');
 
     const scheduleNodeExisting = ((existingSchedules[entry.eventId] || {})[entry.scheduleId]) || {};
     const scheduleUpdatedAt = parseDateToMillis_(scheduleNodeExisting.updatedAt, 0);
-    if (scheduleUpdatedAt && participantUpdatedAt && participantUpdatedAt < scheduleUpdatedAt) {
-      return;
+    if (scheduleUpdatedAt) {
+      if (!hasSheetTimestamp && !hasExistingParticipant) {
+        return;
+      }
+      if (participantUpdatedAt > 0 && participantUpdatedAt < scheduleUpdatedAt) {
+        return;
+      }
     }
 
     participantsTree[entry.eventId][entry.scheduleId][entry.participantId] = {
@@ -1691,16 +1703,16 @@ function mirrorQuestionIntake_() {
       relocationDestinationScheduleId: existingParticipant.relocationDestinationScheduleId || '',
       relocationDestinationScheduleLabel: existingParticipant.relocationDestinationScheduleLabel || '',
       relocationDestinationTeamNumber: existingParticipant.relocationDestinationTeamNumber || '',
-      updatedAt: participantUpdatedAt
+      updatedAt: effectiveUpdatedAt
     };
 
-    scheduleUpdateMap[key] = Math.max(scheduleUpdateMap[key] || 0, participantUpdatedAt);
-    eventUpdateMap[entry.eventId] = Math.max(eventUpdateMap[entry.eventId] || 0, participantUpdatedAt);
+    scheduleUpdateMap[key] = Math.max(scheduleUpdateMap[key] || 0, effectiveUpdatedAt);
+    eventUpdateMap[entry.eventId] = Math.max(eventUpdateMap[entry.eventId] || 0, effectiveUpdatedAt);
 
     const event = eventLookup.get(entry.eventId) || { id: entry.eventId, name: '' };
     const schedule = scheduleLookup.get(`${entry.eventId}::${entry.scheduleId}`) || { id: entry.scheduleId, label: entry.scheduleId, date: '' };
-    const tokenCreatedAt = tokenRecord.createdAt || participantUpdatedAt;
-    const tokenUpdatedAt = Math.max(tokenRecord.updatedAt || 0, participantUpdatedAt);
+    const tokenCreatedAt = parseDateToMillis_(tokenRecord.createdAt, effectiveUpdatedAt);
+    const tokenUpdatedAt = Math.max(parseDateToMillis_(tokenRecord.updatedAt, effectiveUpdatedAt), effectiveUpdatedAt);
 
     tokensMap[tokenValue] = {
       eventId: entry.eventId,
@@ -1711,6 +1723,7 @@ function mirrorQuestionIntake_() {
       scheduleStart: schedule.startAt || tokenRecord.scheduleStart || '',
       scheduleEnd: schedule.endAt || tokenRecord.scheduleEnd || '',
       participantId: entry.participantId,
+      participantUid: entry.participantId || tokenRecord.participantUid || '',
       displayName: entry.name || '',
       groupNumber: teamValue,
       teamNumber: teamValue,
@@ -2349,7 +2362,8 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
   const updates = {};
   const tokenUpdates = {};
   let insertedCount = 0;
-  let latestParticipantUpdate = parseDateToMillis_(scheduleNode.updatedAt, 0);
+  const scheduleUpdatedAt = parseDateToMillis_(scheduleNode.updatedAt, 0);
+  let latestParticipantUpdate = scheduleUpdatedAt;
 
   entries.forEach(entry => {
     if (!entry || !entry.participantId) return;
@@ -2359,7 +2373,18 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
       ? { ...nextParticipants[entry.participantId] }
       : null;
 
-    const participantUpdatedAt = parseDateToMillis_(entry.updatedAt, now);
+    const sheetTimestamp = typeof entry.updatedAt === 'string' ? entry.updatedAt.trim() : '';
+    const hasSheetTimestamp = sheetTimestamp.length > 0;
+    const participantUpdatedAt = parseDateToMillis_(entry.updatedAt, 0);
+    const effectiveUpdatedAt = participantUpdatedAt > 0 ? participantUpdatedAt : now;
+    if (scheduleUpdatedAt) {
+      if (!hasSheetTimestamp && !existingRecord) {
+        return;
+      }
+      if (participantUpdatedAt > 0 && participantUpdatedAt < scheduleUpdatedAt) {
+        return;
+      }
+    }
     const teamValue = String(entry.teamNumber || entry.groupNumber || '').trim();
 
     let tokenValue = '';
@@ -2378,9 +2403,10 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
       tokenRecord = {};
     }
 
-    const guidance = existingRecord && typeof existingRecord.guidance === 'string'
+    const existingGuidance = existingRecord && typeof existingRecord.guidance === 'string'
       ? existingRecord.guidance
-      : String(tokenRecord.guidance || '');
+      : '';
+    const guidance = existingGuidance || String(tokenRecord.guidance || '');
 
     let recordToWrite = null;
     if (existingRecord) {
@@ -2393,10 +2419,10 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
           merged.groupNumber = teamValue;
           merged.teamNumber = teamValue;
         }
-        merged.updatedAt = Math.max(parseDateToMillis_(existingRecord.updatedAt, now), participantUpdatedAt, now);
+        merged.updatedAt = Math.max(parseDateToMillis_(existingRecord.updatedAt, effectiveUpdatedAt), effectiveUpdatedAt, now);
         recordToWrite = merged;
         nextParticipants[entry.participantId] = merged;
-        latestParticipantUpdate = Math.max(latestParticipantUpdate, merged.updatedAt || participantUpdatedAt, now);
+        latestParticipantUpdate = Math.max(latestParticipantUpdate, merged.updatedAt || effectiveUpdatedAt, now);
       }
     } else {
       const payload = {
@@ -2417,12 +2443,12 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
         isRelocated: entry.isRelocated === true,
         token: tokenValue,
         guidance,
-        updatedAt: participantUpdatedAt
+        updatedAt: effectiveUpdatedAt
       };
       recordToWrite = payload;
       nextParticipants[entry.participantId] = payload;
       insertedCount++;
-      latestParticipantUpdate = Math.max(latestParticipantUpdate, payload.updatedAt || participantUpdatedAt, now);
+      latestParticipantUpdate = Math.max(latestParticipantUpdate, payload.updatedAt || effectiveUpdatedAt, now);
     }
 
     if (recordToWrite) {
@@ -2443,8 +2469,8 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
         const scheduleDate = String(scheduleNode.date || existingTokenRecord.scheduleDate || '');
         const scheduleStart = String(scheduleNode.startAt || existingTokenRecord.scheduleStart || '');
         const scheduleEnd = String(scheduleNode.endAt || existingTokenRecord.scheduleEnd || '');
-        const tokenCreatedAt = parseDateToMillis_(existingTokenRecord.createdAt, participantUpdatedAt);
-        const tokenUpdatedAt = Math.max(parseDateToMillis_(existingTokenRecord.updatedAt, participantUpdatedAt), participantUpdatedAt, now);
+        const tokenCreatedAt = parseDateToMillis_(existingTokenRecord.createdAt, effectiveUpdatedAt);
+        const tokenUpdatedAt = Math.max(parseDateToMillis_(existingTokenRecord.updatedAt, effectiveUpdatedAt), effectiveUpdatedAt, now);
         tokenUpdates[tokenValue] = {
           eventId: trimmedEventId,
           eventName: String(eventNode.name || existingTokenRecord.eventName || ''),
@@ -2454,11 +2480,12 @@ function fetchQuestionParticipants_(eventId, scheduleId) {
           scheduleStart,
           scheduleEnd,
           participantId: entry.participantId,
+          participantUid: entry.participantId || existingTokenRecord.participantUid || '',
           displayName: String(entry.name || fallbackName || existingTokenRecord.displayName || ''),
           groupNumber: teamValue || fallbackGroup || String(existingTokenRecord.groupNumber || ''),
           teamNumber: teamValue || fallbackGroup || String(existingTokenRecord.teamNumber || ''),
-          guidance,
-          revoked: existingTokenRecord.revoked === true,
+          guidance: guidance || existingTokenRecord.guidance || '',
+          revoked: false,
           createdAt: tokenCreatedAt,
           updatedAt: tokenUpdatedAt
         };

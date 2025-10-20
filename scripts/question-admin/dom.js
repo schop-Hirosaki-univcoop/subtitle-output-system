@@ -110,19 +110,21 @@ dom.participantDialog = resolve("participant-dialog");
 dom.participantForm = resolve("participant-form");
 dom.participantDialogTitle = resolve("participant-dialog-title");
 dom.participantError = resolve("participant-error");
-dom.participantUidInput = resolve("participant-uid-input");
 dom.participantNameInput = resolve("participant-name-input");
 dom.participantPhoneticInput = resolve("participant-phonetic-input");
 dom.participantGenderInput = resolve("participant-gender-input");
 dom.participantDepartmentInput = resolve("participant-department-input");
 dom.participantTeamInput = resolve("participant-team-input");
-dom.participantRelocationField = resolve("participant-relocation-field");
-dom.participantRelocationSelect = resolve("participant-relocation-select");
-dom.participantRelocationHelper = resolve("participant-relocation-helper");
-dom.participantRelocationTeamField = resolve("participant-relocation-team-field");
-dom.participantRelocationTeamInput = resolve("participant-relocation-team-input");
+dom.participantRelocationSummary = resolve("participant-relocation-summary");
+dom.participantRelocationSummaryText = resolve("participant-relocation-summary-text");
 dom.participantPhoneInput = resolve("participant-phone-input");
 dom.participantEmailInput = resolve("participant-email-input");
+
+dom.relocationDialog = resolve("relocation-dialog");
+dom.relocationForm = resolve("relocation-form");
+dom.relocationList = resolve("relocation-list");
+dom.relocationDescription = resolve("relocation-description");
+dom.relocationError = resolve("relocation-error");
 
 dom.eventDialogForm = dom.eventForm;
 
@@ -134,7 +136,6 @@ dom.scheduleDialogFields = {
 };
 
 dom.participantFormFields = {
-  id: dom.participantUidInput,
   name: dom.participantNameInput,
   phonetic: dom.participantPhoneticInput,
   gender: dom.participantGenderInput,
