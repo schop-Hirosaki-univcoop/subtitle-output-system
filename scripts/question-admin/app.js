@@ -713,6 +713,156 @@ function ensurePendingRelocationMap() {
   return state.pendingRelocations;
 }
 
+function ensureRelocationDraftMap() {
+  if (!(state.relocationDraftOriginals instanceof Map)) {
+    state.relocationDraftOriginals = new Map();
+  }
+  return state.relocationDraftOriginals;
+}
+
+function storeRelocationDraftOriginal(entry) {
+  if (!entry) {
+    return null;
+  }
+  const uid = resolveParticipantUid(entry) || "";
+  const rowKey = String(entry.rowKey || "");
+  const participantId = String(entry.participantId || "");
+  const key = uid || rowKey || participantId;
+  if (!key) {
+    return null;
+  }
+  const map = ensureRelocationDraftMap();
+  if (map.has(key)) {
+    return key;
+  }
+  const teamValue = String(entry.teamNumber ?? entry.groupNumber ?? "");
+  map.set(key, {
+    key,
+    uid,
+    rowKey,
+    participantId,
+    teamNumber: entry.teamNumber ?? "",
+    groupNumber: entry.groupNumber ?? "",
+    status: entry.status || resolveParticipantStatus(entry, teamValue),
+    isCancelled: Boolean(entry.isCancelled),
+    isRelocated: Boolean(entry.isRelocated),
+    relocationDestinationScheduleId: entry.relocationDestinationScheduleId || "",
+    relocationDestinationScheduleLabel: entry.relocationDestinationScheduleLabel || "",
+    relocationDestinationTeamNumber: entry.relocationDestinationTeamNumber || ""
+  });
+  return key;
+}
+
+function findParticipantForSnapshot(snapshot) {
+  if (!snapshot) {
+    return null;
+  }
+  const uid = String(snapshot.uid || snapshot.key || "").trim();
+  if (uid) {
+    const matchByUid = state.participants.find(entry => {
+      const entryUid = resolveParticipantUid(entry) || String(entry?.participantId || "");
+      return entryUid === uid;
+    });
+    if (matchByUid) {
+      return matchByUid;
+    }
+  }
+  const rowKey = String(snapshot.rowKey || "").trim();
+  if (rowKey) {
+    const matchByRow = state.participants.find(entry => String(entry?.rowKey || "") === rowKey);
+    if (matchByRow) {
+      return matchByRow;
+    }
+  }
+  const participantId = String(snapshot.participantId || "").trim();
+  if (participantId) {
+    const matchById = state.participants.find(entry => String(entry?.participantId || "") === participantId);
+    if (matchById) {
+      return matchById;
+    }
+  }
+  return null;
+}
+
+function restoreRelocationDrafts(keys = []) {
+  if (!(state.relocationDraftOriginals instanceof Map)) {
+    state.relocationDraftOriginals = new Map();
+  }
+  const draftMap = state.relocationDraftOriginals;
+  const keyList = Array.isArray(keys) && keys.length ? keys : Array.from(draftMap.keys());
+  if (!keyList.length) {
+    return false;
+  }
+  const eventId = state.selectedEventId;
+  const assignmentMap = eventId ? ensureTeamAssignmentMap(eventId) : null;
+  let changed = false;
+  keyList.forEach(key => {
+    const normalizedKey = String(key || "").trim();
+    if (!normalizedKey) {
+      return;
+    }
+    const snapshot = draftMap.get(normalizedKey);
+    draftMap.delete(normalizedKey);
+    if (!snapshot) {
+      return;
+    }
+    const entry = findParticipantForSnapshot(snapshot);
+    if (!entry) {
+      return;
+    }
+    entry.teamNumber = snapshot.teamNumber || "";
+    entry.groupNumber = snapshot.groupNumber || "";
+    const teamValue = String(entry.teamNumber || entry.groupNumber || "");
+    entry.status = snapshot.status || resolveParticipantStatus(entry, teamValue);
+    entry.isCancelled = Boolean(snapshot.isCancelled);
+    entry.isRelocated = Boolean(snapshot.isRelocated);
+    entry.relocationDestinationScheduleId = snapshot.relocationDestinationScheduleId || "";
+    entry.relocationDestinationScheduleLabel = snapshot.relocationDestinationScheduleLabel || "";
+    entry.relocationDestinationTeamNumber = snapshot.relocationDestinationTeamNumber || "";
+    if (assignmentMap) {
+      const assignmentKey = String(snapshot.uid || snapshot.participantId || snapshot.rowKey || normalizedKey).trim();
+      const assignmentValue = String(snapshot.teamNumber || snapshot.groupNumber || "");
+      if (assignmentKey) {
+        if (assignmentValue) {
+          assignmentMap.set(assignmentKey, assignmentValue);
+        } else {
+          assignmentMap.delete(assignmentKey);
+        }
+      }
+    }
+    changed = true;
+  });
+  if (changed) {
+    state.participants = sortParticipants(state.participants);
+    syncCurrentScheduleCache();
+    updateDuplicateMatches();
+    renderParticipants();
+    syncSaveButtonState();
+  }
+  return changed;
+}
+
+function resolveRelocationDraftKey(entry, target = null, draftMap = state.relocationDraftOriginals) {
+  if (!entry || !(draftMap instanceof Map) || !draftMap.size) {
+    return null;
+  }
+  const candidates = [
+    resolveParticipantUid(entry),
+    target?.uid,
+    entry?.participantId,
+    target?.participantId,
+    entry?.rowKey,
+    target?.rowKey
+  ];
+  for (const candidate of candidates) {
+    const normalized = String(candidate || "").trim();
+    if (normalized && draftMap.has(normalized)) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
 function resolveParticipantActionTarget({ participantId = "", rowKey = "", rowIndex = null } = {}) {
   const normalizedId = String(participantId || "").trim();
   const normalizedRowKey = String(rowKey || "").trim();
@@ -873,6 +1023,14 @@ function handleQuickCancelAction(participantId, rowIndex, rowKey) {
       renderRelocationPrompt();
     }
   }
+
+  if (state.relocationDraftOriginals instanceof Map) {
+    const draftMap = state.relocationDraftOriginals;
+    [uid, String(updated.rowKey || ""), String(updated.participantId || "")]
+      .map(value => String(value || "").trim())
+      .filter(Boolean)
+      .forEach(key => draftMap.delete(key));
+  }
 }
 
 function handleQuickRelocateAction(participantId, rowIndex, rowKey) {
@@ -883,6 +1041,8 @@ function handleQuickRelocateAction(participantId, rowIndex, rowKey) {
     setUploadStatus("別日に移動する対象の参加者が見つかりません。", "error");
     return;
   }
+
+  storeRelocationDraftOriginal(entry);
 
   const relocationLabel = RELOCATE_LABEL;
   const updated = {
@@ -1109,7 +1269,7 @@ function renderRelocationPrompt() {
   }
 
   if (!cleanedTargets.length && dom.relocationDialog) {
-    closeDialog(dom.relocationDialog);
+    closeDialog(dom.relocationDialog, { reason: "empty" });
   }
 
 }
@@ -1237,7 +1397,7 @@ function handleRelocationFormSubmit(event) {
 
   const rows = Array.from(dom.relocationList.querySelectorAll(".relocation-item"));
   if (!rows.length) {
-    closeDialog(dom.relocationDialog);
+    closeDialog(dom.relocationDialog, { reason: "empty" });
     return;
   }
 
@@ -1293,8 +1453,10 @@ function handleRelocationFormSubmit(event) {
     if (!entry || index === -1) {
       return;
     }
-    const uid = resolveParticipantUid(entry) || update.uid || update.participantId;
-    if (!uid) {
+    const uid = resolveParticipantUid(entry) || update.uid || "";
+    const rowKey = String(entry.rowKey || update.rowKey || "");
+    const participantId = String(entry.participantId || update.participantId || "");
+    if (!uid && !rowKey && !participantId) {
       return;
     }
     entry.teamNumber = RELOCATE_LABEL;
@@ -1304,7 +1466,7 @@ function handleRelocationFormSubmit(event) {
     entry.isCancelled = false;
     applyRelocationDraft(entry, update.scheduleId, update.teamNumber);
     state.participants[index] = entry;
-    processed.push(uid);
+    processed.push({ uid, rowKey, participantId });
   });
 
   if (!processed.length) {
@@ -1321,13 +1483,28 @@ function handleRelocationFormSubmit(event) {
   renderParticipants();
   syncSaveButtonState();
 
-  const processedSet = new Set(processed);
+  const processedKeys = new Set();
+  processed.forEach(item => {
+    [item.uid, item.participantId, item.rowKey]
+      .map(value => String(value || "").trim())
+      .filter(Boolean)
+      .forEach(key => processedKeys.add(key));
+  });
   state.relocationPromptTargets = Array.isArray(state.relocationPromptTargets)
     ? state.relocationPromptTargets.filter(item => {
         const key = item?.uid || item?.participantId || item?.rowKey;
-        return key && !processedSet.has(key);
+        return key && !processedKeys.has(String(key));
       })
     : [];
+
+  if (state.relocationDraftOriginals instanceof Map) {
+    const draftMap = state.relocationDraftOriginals;
+    processedKeys.forEach(key => {
+      if (draftMap.has(key)) {
+        draftMap.delete(key);
+      }
+    });
+  }
 
   if (dom.relocationError) {
     dom.relocationError.hidden = true;
@@ -1337,13 +1514,70 @@ function handleRelocationFormSubmit(event) {
   if (state.relocationPromptTargets.length) {
     renderRelocationPrompt();
   } else {
-    closeDialog(dom.relocationDialog);
+    closeDialog(dom.relocationDialog, { reason: "submit" });
   }
 
   const message = processed.length === 1
     ? "別日の移動先を設定しました。変更は未保存です。"
     : `別日の移動先を${processed.length}名分設定しました。変更は未保存です。`;
   setUploadStatus(message, "info");
+}
+
+function handleRelocationDialogClose(event) {
+  const reason = event?.detail?.reason || "dismiss";
+  if (reason === "submit" || reason === "empty") {
+    return;
+  }
+  if (!(state.relocationDraftOriginals instanceof Map) || !state.relocationDraftOriginals.size) {
+    return;
+  }
+
+  const draftMap = state.relocationDraftOriginals;
+  const remainingTargets = [];
+  const revertKeys = new Set();
+
+  if (Array.isArray(state.relocationPromptTargets)) {
+    state.relocationPromptTargets.forEach(target => {
+      if (!target) {
+        return;
+      }
+      const { entry } = resolveParticipantActionTarget({
+        participantId: target.participantId,
+        rowKey: target.rowKey
+      });
+      if (!entry) {
+        return;
+      }
+      const key = resolveRelocationDraftKey(entry, target, draftMap);
+      if (key) {
+        revertKeys.add(key);
+      } else {
+        remainingTargets.push(target);
+      }
+    });
+  }
+
+  state.relocationPromptTargets = remainingTargets;
+
+  if (dom.relocationError) {
+    dom.relocationError.hidden = true;
+    dom.relocationError.textContent = "";
+  }
+
+  if (remainingTargets.length) {
+    renderRelocationPrompt();
+  } else if (dom.relocationList) {
+    dom.relocationList.innerHTML = "";
+  }
+
+  if (!revertKeys.size) {
+    return;
+  }
+
+  const restored = restoreRelocationDrafts(Array.from(revertKeys));
+  if (restored) {
+    setUploadStatus("別日の設定を取り消しました。", "info");
+  }
 }
 
 function getScheduleRecord(eventId, scheduleId) {
@@ -2608,6 +2842,7 @@ async function loadParticipants(options = {}) {
 
     state.participants = participants;
     state.pendingRelocations = new Map();
+    state.relocationDraftOriginals = new Map();
     state.lastSavedSignature = savedSignature;
     state.savedParticipants = snapshotParticipantList(participants);
     state.participantTokenMap = new Map(
@@ -3742,6 +3977,11 @@ async function handleRevertParticipants() {
 
   setUploadStatus("未保存の変更を破棄しています…");
   try {
+    const eventId = state.selectedEventId;
+    if (eventId && state.teamAssignments instanceof Map) {
+      state.teamAssignments.delete(eventId);
+    }
+    state.relocationDraftOriginals = new Map();
     await loadParticipants({ statusMessage: "未保存の変更を取り消しました。", statusVariant: "success" });
   } catch (error) {
     console.error(error);
@@ -3913,6 +4153,7 @@ function resetState() {
   state.editingParticipantId = null;
   state.editingRowKey = null;
   state.pendingRelocations = new Map();
+  state.relocationDraftOriginals = new Map();
   state.relocationPromptTargets = [];
   state.initialSelection = null;
   state.initialSelectionApplied = false;
@@ -4391,6 +4632,10 @@ function attachEventHandlers() {
   bindDialogDismiss(dom.scheduleDialog);
   bindDialogDismiss(dom.participantDialog);
   bindDialogDismiss(dom.relocationDialog);
+
+  if (dom.relocationDialog) {
+    dom.relocationDialog.addEventListener("dialog:close", handleRelocationDialogClose);
+  }
 
   if (dom.addEventButton) {
     dom.addEventButton.addEventListener("click", () => {

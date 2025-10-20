@@ -21,6 +21,7 @@ const state = {
   editingParticipantId: null,
   editingRowKey: null,
   pendingRelocations: new Map(),
+  relocationDraftOriginals: new Map(),
   relocationPromptTargets: [],
   initialSelection: null,
   initialSelectionApplied: false,
