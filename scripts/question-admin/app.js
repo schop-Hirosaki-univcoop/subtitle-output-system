@@ -3629,7 +3629,10 @@ async function handleSave(options = {}) {
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) return;
-  if (!allowEmpty && !state.participants.length) {
+  const savingEmptyList = state.participants.length === 0;
+  const hasPendingChanges = hasUnsavedChanges();
+
+  if (!allowEmpty && savingEmptyList && !hasPendingChanges) {
     setUploadStatus("保存する参加者がありません。", "error");
     return false;
   }
