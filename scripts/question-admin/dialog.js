@@ -29,8 +29,9 @@ function openDialog(element) {
   }
 }
 
-function closeDialog(element) {
+function closeDialog(element, options = {}) {
   if (!element) return;
+  const { reason = "dismiss" } = options || {};
   if (!element.hasAttribute("hidden")) {
     element.setAttribute("hidden", "");
   }
@@ -41,6 +42,7 @@ function closeDialog(element) {
     }
     setFormError(dom.participantError);
   }
+  element.dispatchEvent(new CustomEvent("dialog:close", { detail: { reason } }));
   if (dialogState.active === element) {
     document.body.classList.remove("modal-open");
     document.removeEventListener("keydown", handleDialogKeydown);
