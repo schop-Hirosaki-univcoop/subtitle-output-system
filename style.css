@@ -2340,6 +2340,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 
 .chat-message{
+  position:relative;
   display:flex;
   flex-direction:column;
   gap:.35rem;
@@ -2347,11 +2348,36 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   align-self:flex-start;
   max-width:100%;
   color:#f0f6ff;
+  isolation:isolate;
+}
+
+.chat-message::after{
+  content:"";
+  position:absolute;
+  bottom:.62rem;
+  left:-.46rem;
+  width:.9rem;
+  height:.9rem;
+  background:var(--bubble-bg, linear-gradient(180deg, rgba(18,34,58,.82), rgba(8,18,32,.78)));
+  border-left:1px solid var(--bubble-border, rgba(86,132,194,.45));
+  border-bottom:1px solid var(--bubble-border, rgba(86,132,194,.45));
+  border-top:none;
+  border-right:none;
+  border-radius:.25rem;
+  transform:rotate(45deg);
+  transform-origin:center;
+  z-index:-1;
+  box-shadow:0 14px 32px rgba(4,12,28,.28);
 }
 
 .chat-message--self{
   align-items:flex-end;
   align-self:flex-end;
+}
+
+.chat-message--self .chat-message__meta{
+  flex-direction:row-reverse;
+  text-align:right;
 }
 
 .chat-message__author{
@@ -2448,6 +2474,10 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 .chat-message--self .chat-message__time{
   color:rgba(210,228,255,.75);
   text-align:right;
+}
+
+.chat-message--self .chat-message__time{
+  color:rgba(210,228,255,.75);
 }
 
 .chat-message__body{
