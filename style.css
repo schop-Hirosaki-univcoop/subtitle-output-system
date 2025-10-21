@@ -706,7 +706,7 @@ input[type="checkbox"]{
   display:flex;
   flex-direction:column;
   gap:clamp(.3rem, .9vw, .5rem);
-  padding:clamp(.55rem, 1.4vw, .75rem) clamp(.75rem, 2vw, 1.15rem);
+  padding:0.5rem 1rem;
   border-radius:1rem;
   position:relative;
   overflow:hidden;
@@ -728,7 +728,7 @@ input[type="checkbox"]{
 }
 .genre-tab-button,
 .sub-tab-button{
-  padding:clamp(.45rem, 1vw, .6rem) clamp(.9rem, 2vw, 1.15rem);
+  padding:0.25rem 0.5rem;
   border-radius:999px;
   border:1px solid rgba(70,94,128,.5);
   background:rgba(12,20,34,.6);
@@ -2395,7 +2395,6 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   flex:1 1 auto;
   height:100%;
   overflow:auto;
-  padding:1rem .5rem 1rem 0;
 }
 
 .chat-scroll:focus-visible{
