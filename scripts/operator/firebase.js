@@ -11,7 +11,8 @@ import {
   push,
   query,
   limitToLast,
-  orderByChild
+  orderByChild,
+  child
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   initializeAuth,
@@ -64,6 +65,7 @@ export {
   query,
   limitToLast,
   orderByChild,
+  child,
   signInWithPopup,
   signOut,
   onAuthStateChanged

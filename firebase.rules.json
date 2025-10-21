@@ -30,6 +30,7 @@
       ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
       ".write": "auth != null && root.child('admins').child(auth.uid).val() == true",
       "messages": {
+        ".indexOn": ["timestamp"],
         "$messageId": {
           ".validate": "newData.hasChildren(['uid','message','timestamp']) && newData.child('uid').isString() && newData.child('message').isString() && newData.child('message').val().length > 0 && newData.child('message').val().length <= 1000 && (newData.child('timestamp').isNumber() || newData.child('timestamp').val() == now)",
           "uid": { ".validate": "newData.isString()" },
@@ -37,6 +38,13 @@
           "email": { ".validate": "newData.isString() || !newData.exists()" },
           "message": { ".validate": "newData.isString()" },
           "timestamp": { ".validate": "newData.isNumber() || newData.val() == now" },
+          "replyTo": {
+            ".validate": "!newData.exists() || (newData.hasChildren(['id','message']) && newData.child('id').isString() && newData.child('id').val().length > 0 && newData.child('message').isString() && newData.child('message').val().length > 0 && newData.child('message').val().length <= 300 && (!newData.child('author').exists() || newData.child('author').isString()))",
+            "id": { ".validate": "newData.isString()" },
+            "author": { ".validate": "newData.isString() || !newData.exists()" },
+            "message": { ".validate": "newData.isString()" },
+            "$other": { ".validate": false }
+          },
           "$other": { ".validate": false }
         }
       }
