@@ -2399,7 +2399,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   position:relative;
   flex:1 1 auto;
   min-width:0;
-  padding:.85rem 1rem .95rem;
+  padding:.5rem .5rem .5rem;
   border-radius:1rem 1rem 1rem .35rem;
   border:1px solid var(--bubble-border, rgba(86,132,194,.45));
   background:var(--bubble-bg, linear-gradient(180deg, rgba(18,34,58,.82), rgba(8,18,32,.78)));
