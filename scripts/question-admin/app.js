@@ -108,7 +108,8 @@ const UPLOAD_STATUS_PLACEHOLDERS = new Set(
   ].map(normalizeKey)
 );
 
-const PARTICIPANT_DESCRIPTION_DEFAULT = "イベントコントロールセンター（events.html）のフローで日程を選択してこのページを開くと、参加者情報（CSVの列順はテンプレートをご利用ください。ヘッダーは「名前,フリガナ,性別,学部学科,携帯電話,メールアドレス」で、UIDは各参加者に対して一意で未入力の場合は自動採番されます）をアップロードして管理できます。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。専用リンクは各行のボタンまたはURLから取得できます。班番号には「キャンセル」または「別日」を指定してステータスを管理します。";
+const PARTICIPANT_DESCRIPTION_DEFAULT =
+  "選択したイベント・日程の参加者情報を管理できます。各参加者ごとに質問フォームの専用リンクを発行でき、「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は重複候補として件数付きで表示されます。専用リンクは各行のボタンまたはURLから取得できます。";
 
 const CANCEL_LABEL = "キャンセル";
 const RELOCATE_LABEL = "別日";
@@ -957,9 +958,9 @@ function commitParticipantQuickEdit(index, updated, { successMessage, successVar
   if (successMessage) {
     setUploadStatus(successMessage, successVariant);
   } else if (hasUnsavedChanges()) {
-    setUploadStatus("編集内容は未保存です。「参加者リストを保存」で確定します。");
+    setUploadStatus("編集内容は未保存です。「適応」で確定します。");
   } else {
-    setUploadStatus("保存済みの内容と同じため変更はありません。");
+    setUploadStatus("適応済みの内容と同じため変更はありません。");
   }
 
   if (rowKey) {
@@ -1010,7 +1011,7 @@ function handleQuickCancelAction(participantId, rowIndex, rowKey) {
   }
 
   const identifier = formatParticipantIdentifier(entry);
-  const message = `${identifier}を${CANCEL_LABEL}に設定しました。「参加者リストを保存」で確定します。`;
+  const message = `${identifier}を${CANCEL_LABEL}に設定しました。「適応」で確定します。`;
   commitParticipantQuickEdit(index, updated, { successMessage: message, successVariant: "success" });
 
   if (uid && Array.isArray(state.relocationPromptTargets)) {
@@ -1069,7 +1070,7 @@ function handleQuickRelocateAction(participantId, rowIndex, rowKey) {
   }
 
   const identifier = formatParticipantIdentifier(entry);
-  const message = `${identifier}を${RELOCATE_LABEL}の移動対象として設定しました。移動先を選んで保存してください。`;
+  const message = `${identifier}を${RELOCATE_LABEL}の移動対象として設定しました。移動先を選んで適応してください。`;
   const actionRowKey = String(entry.rowKey || "");
   const actionParticipantId = String(entry.participantId || "");
   const focusKey = uid || actionRowKey || actionParticipantId;
@@ -2401,7 +2402,7 @@ function renderParticipantChangePreview(diff, changeInfoByKey, participants = []
   dom.changePreviewList.appendChild(fragment);
 
   if (dom.changePreviewNote) {
-    dom.changePreviewNote.textContent = "「参加者リストを保存」で変更を確定し、「変更を取り消す」で破棄できます。";
+    dom.changePreviewNote.textContent = "「適応」で変更を確定し、「取消」で破棄できます。";
   }
 }
 
@@ -3636,7 +3637,7 @@ async function handleTeamCsvChange(event) {
 function downloadParticipantTemplate() {
   const { eventId, scheduleId } = getSelectionIdentifiers();
   if (!eventId || !scheduleId) {
-    setUploadStatus(getSelectionRequiredMessage("参加者CSVテンプレートを作成するには"), "error");
+    setUploadStatus(getSelectionRequiredMessage("参加者CSVテンプレをダウンロードするには"), "error");
     return;
   }
 
@@ -3648,7 +3649,7 @@ function downloadParticipantTemplate() {
 function downloadTeamTemplate() {
   const { eventId, scheduleId } = getSelectionIdentifiers();
   if (!eventId || !scheduleId) {
-    setUploadStatus(getSelectionRequiredMessage("班番号テンプレートを作成するには"), "error");
+    setUploadStatus(getSelectionRequiredMessage("班番号CSVテンプレをダウンロードするには"), "error");
     return;
   }
 
@@ -3663,7 +3664,7 @@ function downloadTeamTemplate() {
     ]);
 
   if (!rows.length) {
-    setUploadStatus("テンプレートに出力できる参加者が見つかりません。参加者リストを読み込んでからお試しください。", "error");
+    setUploadStatus("テンプレに出力できる参加者が見つかりません。参加者リストを読み込んでからお試しください。", "error");
     return;
   }
 
@@ -3682,14 +3683,14 @@ async function handleSave(options = {}) {
   const hasPendingChanges = hasUnsavedChanges();
 
   if (!allowEmpty && savingEmptyList && !hasPendingChanges) {
-    setUploadStatus("保存する参加者がありません。", "error");
+    setUploadStatus("適応する参加者がありません。", "error");
     return false;
   }
 
   state.saving = true;
   if (dom.saveButton) dom.saveButton.disabled = true;
   syncSaveButtonState();
-  setUploadStatus("保存中です…");
+  setUploadStatus("適応中です…");
   syncClearButtonState();
 
   try {
@@ -4000,7 +4001,7 @@ async function handleSave(options = {}) {
     return true;
   } catch (error) {
     console.error(error);
-    setUploadStatus(error.message || "保存に失敗しました。", "error");
+    setUploadStatus(error.message || "適応に失敗しました。", "error");
     if (dom.saveButton) dom.saveButton.disabled = false;
     return false;
   } finally {
@@ -4060,7 +4061,7 @@ async function handleClearParticipants() {
 
   const confirmed = await confirmAction({
     title: "参加者リストの全削除",
-    description: `日程「${label}」に登録されている参加者を全て削除します。保存すると元に戻せません。よろしいですか？`,
+    description: `日程「${label}」に登録されている参加者を全て削除します。適応すると元に戻せません。よろしいですか？`,
     confirmLabel: "全て削除する",
     cancelLabel: "キャンセル",
     tone: "danger"
@@ -4301,8 +4302,8 @@ async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
   const displayId = getDisplayParticipantId(entry.participantId);
   const idLabel = entry.participantId ? `UID: ${displayId}` : "UID未設定";
   const description = nameLabel
-    ? `参加者${nameLabel}（${idLabel}）を削除します。保存するまで確定されません。よろしいですか？`
-    : `参加者（${idLabel}）を削除します。保存するまで確定されません。よろしいですか？`;
+    ? `参加者${nameLabel}（${idLabel}）を削除します。適応するまで確定されません。よろしいですか？`
+    : `参加者（${idLabel}）を削除します。適応するまで確定されません。よろしいですか？`;
 
   const confirmed = await confirmAction({
     title: "参加者の削除",
@@ -4332,9 +4333,9 @@ async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
   updateDuplicateMatches();
   renderParticipants();
   if (hasUnsavedChanges()) {
-    setUploadStatus(`${identifier}を削除予定です。「参加者リストを保存」で確定します。`);
+    setUploadStatus(`${identifier}を削除予定です。「適応」で確定します。`);
   } else {
-    setUploadStatus("変更は保存済みの状態に戻りました。");
+    setUploadStatus("変更は適応済みの状態に戻りました。");
   }
 }
 
@@ -4488,9 +4489,9 @@ function saveParticipantEdits() {
   renderParticipants();
   syncSaveButtonState();
   if (hasUnsavedChanges()) {
-    setUploadStatus("編集内容は未保存です。「参加者リストを保存」で確定します。");
+    setUploadStatus("編集内容は未保存です。「適応」で確定します。");
   } else {
-    setUploadStatus("保存済みの内容と同じため変更はありません。");
+    setUploadStatus("適応済みの内容と同じため変更はありません。");
   }
 
   state.editingParticipantId = null;
@@ -4799,7 +4800,7 @@ function attachEventHandlers() {
         setFormError(dom.participantError);
         saveParticipantEdits();
         closeDialog(dom.participantDialog);
-        setUploadStatus("参加者情報を更新しました。保存または取り消しを選択してください。", "success");
+        setUploadStatus("参加者情報を更新しました。適応または取消を選択してください。", "success");
       } catch (error) {
         console.error(error);
         setFormError(dom.participantError, error.message || "参加者情報の更新に失敗しました。");
@@ -4817,7 +4818,7 @@ function attachEventHandlers() {
     dom.saveButton.addEventListener("click", () => {
       handleSave().catch(err => {
         console.error(err);
-        setUploadStatus(err.message || "保存に失敗しました。", "error");
+        setUploadStatus(err.message || "適応に失敗しました。", "error");
       });
     });
     dom.saveButton.disabled = true;
