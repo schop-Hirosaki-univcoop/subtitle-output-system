@@ -1578,6 +1578,205 @@ function handleRelocationDialogClose(event) {
   if (restored) {
     setUploadStatus("別日の設定を取り消しました。", "info");
   }
+
+  const updates = [];
+  let hasSelectableSchedule = false;
+  rows.forEach(row => {
+    const select = row.querySelector("[data-relocation-select]");
+    const teamInput = row.querySelector("[data-relocation-team]");
+    const participantId = row.dataset.participantId || "";
+    const rowKey = row.dataset.rowKey || "";
+    const uid = row.dataset.uid || participantId || "";
+    const scheduleId = String(select?.value || "").trim();
+    const teamNumber = String(teamInput?.value || "").trim();
+    const selectable = Boolean(select && !select.disabled);
+    if (selectable) {
+      hasSelectableSchedule = true;
+    }
+    if (!scheduleId) {
+      return;
+    }
+    updates.push({ uid, participantId, rowKey, scheduleId, teamNumber });
+  });
+
+  if (!updates.length) {
+    if (dom.relocationError) {
+      dom.relocationError.hidden = false;
+      dom.relocationError.textContent = hasSelectableSchedule
+        ? "移動先の日程を選択してください。"
+        : "移動先として選択できる日程がありません。";
+    }
+    if (hasSelectableSchedule) {
+      const focusRow = rows.find(row => {
+        const select = row.querySelector("[data-relocation-select]");
+        return select && !select.disabled && !select.value;
+      });
+      const focusTarget = focusRow?.querySelector("[data-relocation-select]");
+      if (focusTarget instanceof HTMLElement) {
+        focusTarget.focus();
+      }
+    }
+    return;
+  }
+
+  const processed = [];
+
+  updates.forEach(update => {
+    const resolved = resolveParticipantActionTarget({
+      participantId: update.participantId,
+      rowKey: update.rowKey
+    });
+    const entry = resolved.entry;
+    const index = resolved.index;
+    if (!entry || index === -1) {
+      return;
+    }
+    const uid = resolveParticipantUid(entry) || update.uid || "";
+    const rowKey = String(entry.rowKey || update.rowKey || "");
+    const participantId = String(entry.participantId || update.participantId || "");
+    if (!uid && !rowKey && !participantId) {
+      return;
+    }
+    entry.teamNumber = RELOCATE_LABEL;
+    entry.groupNumber = RELOCATE_LABEL;
+    entry.status = "relocated";
+    entry.isRelocated = true;
+    entry.isCancelled = false;
+    applyRelocationDraft(entry, update.scheduleId, update.teamNumber);
+    state.participants[index] = entry;
+    processed.push({ uid, rowKey, participantId });
+  });
+
+  if (!processed.length) {
+    if (dom.relocationError) {
+      dom.relocationError.hidden = false;
+      dom.relocationError.textContent = "移動先の更新に失敗しました。";
+    }
+    return;
+  }
+
+  state.participants = sortParticipants(state.participants);
+  syncCurrentScheduleCache();
+  updateDuplicateMatches();
+  renderParticipants();
+  syncSaveButtonState();
+
+  const processedKeys = new Set();
+  processed.forEach(item => {
+    [item.uid, item.participantId, item.rowKey]
+      .map(value => String(value || "").trim())
+      .filter(Boolean)
+      .forEach(key => processedKeys.add(key));
+  });
+  state.relocationPromptTargets = Array.isArray(state.relocationPromptTargets)
+    ? state.relocationPromptTargets.filter(item => {
+        const key = item?.uid || item?.participantId || item?.rowKey;
+        return key && !processedKeys.has(String(key));
+      })
+    : [];
+
+  if (state.relocationDraftOriginals instanceof Map) {
+    const draftMap = state.relocationDraftOriginals;
+    processedKeys.forEach(key => {
+      if (draftMap.has(key)) {
+        draftMap.delete(key);
+      }
+    });
+  }
+
+  if (dom.relocationError) {
+    dom.relocationError.hidden = true;
+    dom.relocationError.textContent = "";
+  }
+
+  if (state.relocationPromptTargets.length) {
+    renderRelocationPrompt();
+  } else {
+    closeDialog(dom.relocationDialog, { reason: "submit" });
+  }
+
+  const message = processed.length === 1
+    ? "別日の移動先を設定しました。変更は未保存です。"
+    : `別日の移動先を${processed.length}名分設定しました。変更は未保存です。`;
+  setUploadStatus(message, "info");
+}
+
+function handleRelocationDialogClose(event) {
+  const reason = event?.detail?.reason || "dismiss";
+  if (reason === "submit" || reason === "empty") {
+    return;
+  }
+  if (!(state.relocationDraftOriginals instanceof Map) || !state.relocationDraftOriginals.size) {
+    return;
+  }
+
+  const draftMap = state.relocationDraftOriginals;
+  const remainingTargets = [];
+  const revertKeys = new Set();
+
+  if (Array.isArray(state.relocationPromptTargets)) {
+    state.relocationPromptTargets.forEach(target => {
+      if (!target) {
+        return;
+      }
+      const { entry } = resolveParticipantActionTarget({
+        participantId: target.participantId,
+        rowKey: target.rowKey
+      });
+      if (!entry) {
+        return;
+      }
+      const key = resolveRelocationDraftKey(entry, target, draftMap);
+      if (key) {
+        revertKeys.add(key);
+      } else {
+        remainingTargets.push(target);
+      }
+    });
+  }
+
+  state.relocationPromptTargets = remainingTargets;
+
+  if (dom.relocationError) {
+    dom.relocationError.hidden = true;
+    dom.relocationError.textContent = "";
+  }
+
+  if (remainingTargets.length) {
+    renderRelocationPrompt();
+  } else if (dom.relocationList) {
+    dom.relocationList.innerHTML = "";
+  }
+
+  if (!revertKeys.size) {
+    return;
+  }
+
+  const restored = restoreRelocationDrafts(Array.from(revertKeys));
+  if (restored) {
+    setUploadStatus("別日の設定を取り消しました。", "info");
+  }
+}
+
+function getScheduleRecord(eventId, scheduleId) {
+  if (!eventId || !scheduleId) return null;
+  const event = state.events.find(evt => evt.id === eventId);
+  if (!event || !Array.isArray(event.schedules)) {
+    return null;
+  }
+  return event.schedules.find(schedule => schedule.id === scheduleId) || null;
+}
+
+function buildScheduleOptionLabel(schedule) {
+  if (!schedule) {
+    return "";
+  }
+  const baseLabel = schedule.label || schedule.date || schedule.id || "";
+  const rangeText = describeScheduleRange(schedule);
+  if (rangeText && rangeText !== baseLabel) {
+    return baseLabel ? `${baseLabel}（${rangeText}）` : rangeText;
+  }
+  return baseLabel || rangeText || "";
 }
 
 function getScheduleRecord(eventId, scheduleId) {
@@ -2001,7 +2200,10 @@ async function copyShareLink(token) {
 
 function renderParticipants() {
   const tbody = dom.mappingTbody;
-  if (!tbody) return;
+  if (!tbody) {
+    syncSelectedEventSummary();
+    return;
+  }
   tbody.innerHTML = "";
 
   const eventId = state.selectedEventId;
@@ -2239,6 +2441,7 @@ function renderParticipants() {
   syncClearButtonState();
   syncTemplateButtons();
   renderRelocationPrompt();
+  syncSelectedEventSummary();
 }
 
 function participantChangeKey(entry, fallbackIndex = 0) {
@@ -2398,6 +2601,49 @@ function renderParticipantChangePreview(diff, changeInfoByKey, participants = []
     dom.changePreviewNote.textContent = "「参加者リストを保存」で変更を確定し、「変更を取り消す」で破棄できます。";
   }
 }
+
+function syncSelectedEventSummary() {
+  const eventId = state.selectedEventId;
+  if (!eventId) return;
+
+  const selectedEvent = state.events.find(evt => evt.id === eventId);
+  if (!selectedEvent) return;
+
+  const schedules = Array.isArray(selectedEvent.schedules) ? selectedEvent.schedules : [];
+  const participantCount = Array.isArray(state.participants) ? state.participants.length : 0;
+  const scheduleId = state.selectedScheduleId;
+
+  let changed = false;
+
+  if (scheduleId && schedules.length) {
+    const schedule = schedules.find(item => item.id === scheduleId);
+    if (schedule && Number(schedule.participantCount || 0) !== participantCount) {
+      schedule.participantCount = participantCount;
+      changed = true;
+    }
+  }
+
+  const totalParticipants = schedules.reduce(
+    (acc, schedule) => acc + Number(schedule?.participantCount || 0),
+    0
+  );
+
+  if (Number(selectedEvent.totalParticipants || 0) !== totalParticipants) {
+    selectedEvent.totalParticipants = totalParticipants;
+    changed = true;
+  }
+
+  if (Number(selectedEvent.scheduleCount || 0) !== schedules.length) {
+    selectedEvent.scheduleCount = schedules.length;
+    changed = true;
+  }
+
+  if (changed) {
+    renderSchedules();
+    renderEvents();
+  }
+}
+
 function renderEvents() {
   const list = dom.eventList;
   if (!list) return;
@@ -4498,8 +4744,6 @@ function removeParticipantFromState(participantId, fallbackEntry, rowKey) {
   }
 
   renderParticipants();
-  renderSchedules();
-  renderEvents();
   updateParticipantContext({ preserveStatus: true });
   state.editingParticipantId = null;
   state.editingRowKey = null;
