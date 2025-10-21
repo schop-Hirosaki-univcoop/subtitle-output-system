@@ -289,6 +289,10 @@ export class EventChat {
     const bubble = document.createElement("div");
     bubble.className = "chat-message__bubble";
 
+    const tail = document.createElement("span");
+    tail.className = "chat-message__tail";
+    tail.setAttribute("aria-hidden", "true");
+
     const time = document.createElement("time");
     time.className = "chat-message__time";
     if (message.timestamp) {
@@ -303,7 +307,7 @@ export class EventChat {
     body.className = "chat-message__body";
     body.textContent = message.message;
 
-    bubble.append(body);
+    bubble.append(tail, body);
     bubbleWrap.append(bubble, time);
 
     article.append(author, bubbleWrap);
