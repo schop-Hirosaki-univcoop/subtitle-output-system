@@ -1456,17 +1456,13 @@ export class EventAdminApp {
     const headerHeight = header ? header.getBoundingClientRect().height : 0;
     const flowStageHeight = flowStage ? flowStage.getBoundingClientRect().height : 0;
 
-    const stickyTop = bodyPaddingTop + safeAreaTop + headerHeight + bodyGap;
+    const chatStyles = window.getComputedStyle(chatContainer);
+    const cssStickyTop = parseCssPixels(chatStyles.top);
+    const fallbackStickyTop = bodyPaddingTop + safeAreaTop + headerHeight + bodyGap;
+    const stickyTop = cssStickyTop > 0 ? cssStickyTop : fallbackStickyTop;
     const chatOffset = stickyTop + flowStageHeight + mainGap + layoutPaddingTop;
     const viewportHeight = window.innerHeight || docEl.clientHeight;
     const availableHeight = viewportHeight - chatOffset - layoutPaddingBottom - safeAreaBottom;
-
-    const stickyTopValue = Math.max(0, Math.round(stickyTop));
-    if (stickyTopValue > 0) {
-      chatContainer.style.setProperty("--events-chat-top", `${stickyTopValue}px`);
-    } else {
-      chatContainer.style.removeProperty("--events-chat-top");
-    }
 
     const heightValue = Math.max(0, Math.round(availableHeight));
     if (heightValue > 0) {
