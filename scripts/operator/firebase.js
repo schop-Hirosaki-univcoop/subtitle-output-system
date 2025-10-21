@@ -7,7 +7,11 @@ import {
   set,
   get,
   onValue,
-  serverTimestamp
+  serverTimestamp,
+  push,
+  query,
+  limitToLast,
+  orderByChild
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   initializeAuth,
@@ -46,6 +50,7 @@ export const questionIntakeSchedulesRef = ref(database, "questionIntake/schedule
 export const telopRef = renderNowShowingRef;
 export const updateTriggerRef = ref(database, "signals/logs");
 export const dictionaryRef = ref(database, "dictionary");
+export const operatorChatMessagesRef = ref(database, "operatorChat/messages");
 
 export {
   ref,
@@ -55,6 +60,10 @@ export {
   get,
   onValue,
   serverTimestamp,
+  push,
+  query,
+  limitToLast,
+  orderByChild,
   signInWithPopup,
   signOut,
   onAuthStateChanged

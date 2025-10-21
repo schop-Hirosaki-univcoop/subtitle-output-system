@@ -26,6 +26,22 @@
       }
     },
 
+    "operatorChat": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() == true",
+      "messages": {
+        "$messageId": {
+          ".validate": "newData.hasChildren(['uid','message','timestamp']) && newData.child('uid').isString() && newData.child('message').isString() && newData.child('message').val().length > 0 && newData.child('message').val().length <= 1000 && (newData.child('timestamp').isNumber() || newData.child('timestamp').val() == now)",
+          "uid": { ".validate": "newData.isString()" },
+          "displayName": { ".validate": "newData.isString() || !newData.exists()" },
+          "email": { ".validate": "newData.isString() || !newData.exists()" },
+          "message": { ".validate": "newData.isString()" },
+          "timestamp": { ".validate": "newData.isNumber() || newData.val() == now" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+
     "questions": {
       ".read": "auth != null",
       "normal": {
