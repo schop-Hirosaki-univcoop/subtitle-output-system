@@ -2648,6 +2648,9 @@ body.sidebar-overlay-open{
 }
 
 .flow-selection-summary{
+  display:block;
+  width:100%;
+  box-sizing:border-box;
   margin:0 0 1rem;
   padding:1rem 1.25rem;
   border-radius:.85rem;
