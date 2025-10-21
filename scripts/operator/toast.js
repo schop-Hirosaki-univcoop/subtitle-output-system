@@ -47,7 +47,7 @@ function buildToastElement(doc, message, type) {
   return { toast, closeButton };
 }
 
-function scheduleRemoval(toast, stack, duration) {
+function scheduleRemoval(toast, stack, duration, options = {}) {
   const win = typeof window !== "undefined" ? window : null;
   if (!win) {
     return {
@@ -57,6 +57,7 @@ function scheduleRemoval(toast, stack, duration) {
   }
 
   let timerId = win.setTimeout(() => dismiss(), duration);
+  const { onDismissStart } = options;
 
   const removeStackIfEmpty = () => {
     if (!stack || stack.children.length > 0) {
@@ -73,6 +74,11 @@ function scheduleRemoval(toast, stack, duration) {
     if (!toast.isConnected) {
       return;
     }
+
+    if (typeof onDismissStart === "function") {
+      onDismissStart();
+    }
+
     toast.classList.remove("on");
     toast.setAttribute("aria-hidden", "true");
 
@@ -135,22 +141,53 @@ export function showToast(message, type = "success", options = {}) {
   const { toast, closeButton } = buildToastElement(doc, text, safeType);
   stack.append(toast);
 
+  const previouslyFocusedElement = (() => {
+    const active = doc.activeElement;
+    if (!active || typeof active.focus !== "function") {
+      return null;
+    }
+    return active;
+  })();
+
   const rawDuration = Number(options.duration);
   const duration = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : DEFAULT_DURATION;
 
-  const removal = scheduleRemoval(toast, stack, duration);
+  const removal = scheduleRemoval(toast, stack, duration, {
+    onDismissStart() {
+      const toastDoc = toast.ownerDocument;
+      if (!toastDoc) {
+        return;
+      }
+      const active = toastDoc.activeElement;
+      if (!active || !toast.contains(active)) {
+        return;
+      }
+
+      if (
+        previouslyFocusedElement &&
+        previouslyFocusedElement !== active &&
+        previouslyFocusedElement.isConnected &&
+        typeof previouslyFocusedElement.focus === "function"
+      ) {
+        try {
+          previouslyFocusedElement.focus();
+          return;
+        } catch (error) {
+          // Fallback to blurring the active element below
+        }
+      }
+
+      if (typeof active.blur === "function") {
+        active.blur();
+      }
+    }
+  });
 
   closeButton.addEventListener("click", () => removal.clear());
 
   requestAnimationFrame(() => {
     toast.classList.add("on");
     toast.removeAttribute("aria-hidden");
-    try {
-      toast.focus({ preventScroll: true });
-    } catch (error) {
-      // older browsers may not support focus options
-      toast.focus();
-    }
   });
 
   return {
