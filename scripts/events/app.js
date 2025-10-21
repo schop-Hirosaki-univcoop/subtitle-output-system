@@ -29,6 +29,7 @@ import {
   FOCUSABLE_SELECTOR
 } from "./config.js";
 import { ToolCoordinator } from "./tool-coordinator.js";
+import { EventChat } from "./chat.js";
 
 export class EventAdminApp {
   constructor() {
@@ -66,6 +67,7 @@ export class EventAdminApp {
     this.eventCountNote = "";
     this.stageNote = "";
     this.applyMetaNote();
+    this.chat = new EventChat(this);
   }
 
   logParticipantAction(message, detail = null) {
@@ -95,6 +97,7 @@ export class EventAdminApp {
     this.updatePanelNavigation();
     this.updateSelectionNotes();
     this.applyMetaNote();
+    this.chat.init();
     this.observeAuthState();
     if (typeof document !== "undefined") {
       document.addEventListener("qa:participants-synced", this.tools.handleParticipantSyncEvent);
@@ -331,6 +334,7 @@ export class EventAdminApp {
 
   async handleAuthState(user) {
     this.currentUser = user;
+    this.chat.handleAuthChange(user);
     this.updateUserLabel();
     if (!user) {
       this.events = [];
@@ -1322,6 +1326,7 @@ export class EventAdminApp {
     }
     this.selectionListeners.clear();
     this.eventListeners.clear();
+    this.chat.dispose();
   }
 
   revealEventSelectionCue() {
