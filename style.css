@@ -2065,7 +2065,6 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 .flow-main{
   display:flex;
   flex-direction:column;
-  gap:1.5rem;
   padding-bottom:2rem;
 }
 
@@ -2706,8 +2705,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  height:2.4rem;
-  padding:0 1.3rem;
+  padding:0 0.8rem;
   border-radius:1rem;
   border:1px solid rgba(98,162,255,.7);
   background:linear-gradient(180deg, rgba(60,130,230,.95), rgba(30,90,200,.92));
@@ -2718,7 +2716,6 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   cursor:pointer;
   transition:transform .18s ease, box-shadow .18s ease, background .2s ease, border-color .2s ease;
   box-shadow:0 16px 32px rgba(22,60,120,.4);
-  min-width:5.5rem;
 }
 
 .chat-composer__submit:hover:not(:disabled){
