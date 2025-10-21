@@ -2249,13 +2249,14 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 
 .events-layout{
+  --events-layout-padding: clamp(1.25rem, 2.4vw, 2rem);
   display:grid;
   gap:clamp(1.25rem, 2vw, 1.75rem);
   grid-template-columns:minmax(190px, 15vw) minmax(0, 1fr) clamp(260px, 22vw, 340px);
   align-items:start;
   width:min(100%, 96vw);
   margin-inline:auto;
-  padding:clamp(1.25rem, 2.4vw, 2rem);
+  padding:var(--events-layout-padding);
   border-radius:1.4rem;
   border:1px solid rgba(70,108,156,.42);
   background:linear-gradient(145deg, rgba(8,20,36,.88), rgba(6,14,28,.78));
@@ -2270,8 +2271,12 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   align-self:start;
   min-width:0;
   position:sticky;
-  top:calc(var(--header-height, 64px) + 1.5rem);
-  height:calc(100vh - var(--header-height, 64px) - 3rem);
+  --chat-safe-area-top: env(safe-area-inset-top, 0px);
+  --chat-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --chat-available-height: calc(100vh - var(--header-height, 64px) - 2 * var(--events-layout-padding) - var(--chat-safe-area-top) - var(--chat-safe-area-bottom));
+  top:calc(var(--header-height, 64px) + var(--events-layout-padding) + var(--chat-safe-area-top));
+  height:max(0px, var(--chat-available-height));
+  max-height:max(0px, var(--chat-available-height));
 }
 
 .chat-panel{
@@ -2358,25 +2363,6 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   isolation:isolate;
 }
 
-.chat-message::after{
-  content:"";
-  position:absolute;
-  bottom:.62rem;
-  left:-.46rem;
-  width:.9rem;
-  height:.9rem;
-  background:var(--bubble-bg, linear-gradient(180deg, rgba(18,34,58,.82), rgba(8,18,32,.78)));
-  border-left:1px solid var(--bubble-border, rgba(86,132,194,.45));
-  border-bottom:1px solid var(--bubble-border, rgba(86,132,194,.45));
-  border-top:none;
-  border-right:none;
-  border-radius:.25rem;
-  transform:rotate(45deg);
-  transform-origin:center;
-  z-index:-1;
-  box-shadow:0 14px 32px rgba(4,12,28,.28);
-}
-
 .chat-message--self{
   align-items:flex-end;
   align-self:flex-end;
@@ -2419,27 +2405,30 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   overflow:visible;
 }
 
-.chat-message__tail{
+.chat-message__bubble::before,
+.chat-message__bubble::after{
+  content:"";
   position:absolute;
   bottom:.78rem;
-  left:-.68rem;
   width:1.05rem;
   height:1.05rem;
-  background:var(--bubble-border, rgba(86,132,194,.45));
-  transform:rotate(45deg);
   border-radius:.28rem;
+  transform:rotate(45deg);
+  transition:background .25s ease;
+}
+
+.chat-message__bubble::before{
+  left:-.68rem;
+  background:var(--bubble-border, rgba(86,132,194,.45));
   box-shadow:0 16px 36px rgba(4,12,28,.3);
   z-index:-2;
 }
 
-.chat-message__tail::after{
-  content:"";
-  position:absolute;
-  inset:1px;
+.chat-message__bubble::after{
+  left:-.6rem;
   background:var(--bubble-bg, linear-gradient(180deg, rgba(18,34,58,.82), rgba(8,18,32,.78)));
-  border-radius:inherit;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
-  z-index:1;
+  z-index:-1;
 }
 
 .chat-message--self .chat-message__bubble{
@@ -2449,9 +2438,14 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   box-shadow:0 18px 40px rgba(8,24,52,.42);
 }
 
-.chat-message--self .chat-message__tail{
+.chat-message--self .chat-message__bubble::before{
   left:auto;
   right:-.68rem;
+}
+
+.chat-message--self .chat-message__bubble::after{
+  left:auto;
+  right:-.6rem;
 }
 
 .chat-message__time{
@@ -2778,7 +2772,8 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 @media (max-width: 960px){
   .events-layout{
     grid-template-columns:minmax(0,1fr);
-    padding:clamp(.85rem, 3vw, 1.4rem);
+    --events-layout-padding: clamp(.85rem, 3vw, 1.4rem);
+    padding:var(--events-layout-padding);
   }
   .events-sidebar{
     position:static;
@@ -2789,6 +2784,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
     position:static;
     top:auto;
     height:auto;
+    max-height:none;
   }
   .chat-scroll{
     flex:initial;
