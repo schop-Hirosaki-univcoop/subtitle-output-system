@@ -610,6 +610,46 @@
           </div>
         </section>
       </div>
+      <aside class="events-chat" aria-label="オペレーターチャット">
+        <section id="flow-chat-panel" class="chat-panel" aria-labelledby="flow-chat-title">
+          <div class="chat-panel__header">
+            <h2 id="flow-chat-title">オペレーターチャット</h2>
+            <span id="flow-chat-status" class="chat-status" aria-live="polite">未接続</span>
+          </div>
+          <div class="chat-panel__body">
+            <div
+              id="flow-chat-scroll"
+              class="chat-scroll"
+              role="log"
+              aria-live="polite"
+              aria-relevant="additions"
+              tabindex="0"
+            >
+              <p id="flow-chat-empty" class="chat-empty">まだメッセージがありません。最初のメッセージを送信しましょう。</p>
+              <div id="flow-chat-messages" class="chat-messages"></div>
+            </div>
+            <button id="flow-chat-unread-button" class="chat-unread" type="button" hidden>
+              新着メッセージ <span id="flow-chat-unread-count"></span>
+            </button>
+          </div>
+          <form id="flow-chat-form" class="chat-form" novalidate>
+            <label class="visually-hidden" for="flow-chat-input">メッセージ</label>
+            <textarea
+              id="flow-chat-input"
+              class="chat-input input"
+              name="message"
+              rows="2"
+              maxlength="500"
+              placeholder="ログインするとメッセージを送信できます"
+              disabled
+            ></textarea>
+            <div class="chat-form__footer">
+              <p id="flow-chat-error" class="chat-error" role="alert" hidden></p>
+              <button id="flow-chat-send-button" class="btn btn-primary" type="submit" disabled>送信</button>
+            </div>
+          </form>
+        </section>
+      </aside>
     </div>
   </main>
 
