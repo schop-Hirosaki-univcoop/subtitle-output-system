@@ -632,6 +632,11 @@ textarea.input{
   resize:vertical;
   line-height:1.6;
 }
+
+textarea.input.chat-input,
+.chat-input.input{
+  min-height:1.65em;
+}
 .input:focus-visible,
 .btn:focus-visible,
 input[type="checkbox"]:focus-visible{
@@ -2290,6 +2295,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   min-height:0;
   flex:1 1 auto;
   height:100%;
+  position:relative;
 }
 
 .chat-panel__header{
@@ -2429,6 +2435,53 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   white-space:pre-wrap;
   word-break:break-word;
   line-height:1.6;
+}
+
+.chat-message--menu-open .chat-message__bubble{
+  box-shadow:0 0 0 2px rgba(104,168,255,.5), 0 18px 40px rgba(8,24,52,.42);
+}
+
+.chat-context[hidden]{
+  display:none;
+}
+
+.chat-context{
+  position:absolute;
+  min-width:180px;
+  padding:.35rem;
+  border-radius:.75rem;
+  border:1px solid rgba(90,140,210,.55);
+  background:rgba(8,20,38,.95);
+  box-shadow:0 16px 36px rgba(4,12,28,.5);
+  display:flex;
+  flex-direction:column;
+  gap:.25rem;
+  z-index:20;
+}
+
+.chat-context__item{
+  width:100%;
+  padding:.55rem .75rem;
+  border-radius:.6rem;
+  border:0;
+  background:transparent;
+  color:#eaf4ff;
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+  transition:background-color .16s ease, color .16s ease;
+}
+
+.chat-context__item:hover,
+.chat-context__item:focus-visible{
+  background:rgba(82,132,210,.28);
+  outline:none;
+}
+
+.chat-context__item[disabled]{
+  opacity:.45;
+  cursor:default;
+  pointer-events:none;
 }
 
 @media (max-width: 720px){
