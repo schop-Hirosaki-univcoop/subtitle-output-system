@@ -70,6 +70,8 @@ export function queryDom() {
     chatError: document.getElementById("flow-chat-error"),
     chatUnreadButton: document.getElementById("flow-chat-unread-button"),
     chatUnreadCount: document.getElementById("flow-chat-unread-count"),
+    chatContextMenu: document.getElementById("flow-chat-menu"),
+    chatContextCancelButton: document.getElementById("flow-chat-menu-cancel"),
     panelButtons: Array.from(document.querySelectorAll("[data-panel-target]")),
     navigationButtons: Array.from(document.querySelectorAll("[data-flow-nav-target]")),
     flowNavigations: Array.from(document.querySelectorAll(".flow-navigation"))

@@ -631,6 +631,23 @@
             <button id="flow-chat-unread-button" class="chat-unread" type="button" hidden>
               新着メッセージ <span id="flow-chat-unread-count"></span>
             </button>
+            <div id="flow-chat-menu" class="chat-context" role="menu" hidden>
+              <button type="button" class="chat-context__item" data-chat-action="reply" role="menuitem">
+                リプライ
+              </button>
+              <button type="button" class="chat-context__item" data-chat-action="copy" role="menuitem">
+                コピー
+              </button>
+              <button
+                type="button"
+                id="flow-chat-menu-cancel"
+                class="chat-context__item"
+                data-chat-action="cancel"
+                role="menuitem"
+              >
+                送信取り消し
+              </button>
+            </div>
           </div>
           <form id="flow-chat-form" class="chat-form" novalidate>
             <label class="visually-hidden" for="flow-chat-input">メッセージ</label>
