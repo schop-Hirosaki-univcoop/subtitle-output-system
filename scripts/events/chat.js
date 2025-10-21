@@ -85,6 +85,12 @@ export class EventChat {
         this.clearError();
         this.updateSendAvailability();
       });
+      chatInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          this.handleSubmit();
+        }
+      });
     }
     if (chatScroll) {
       chatScroll.addEventListener("scroll", () => this.handleScroll());
@@ -278,13 +284,16 @@ export class EventChat {
       article.classList.add("chat-message--self");
     }
 
-    const meta = document.createElement("div");
-    meta.className = "chat-message__meta";
-
     const author = document.createElement("span");
     author.className = "chat-message__author";
     const resolvedName = message.displayName || message.email || "不明なユーザー";
     author.textContent = resolvedName;
+
+    const bubbleWrap = document.createElement("div");
+    bubbleWrap.className = "chat-message__bubble-wrap";
+
+    const bubble = document.createElement("div");
+    bubble.className = "chat-message__bubble";
 
     const time = document.createElement("time");
     time.className = "chat-message__time";
@@ -296,13 +305,14 @@ export class EventChat {
       time.textContent = "送信中…";
     }
 
-    meta.append(author, time);
-
     const body = document.createElement("p");
     body.className = "chat-message__body";
     body.textContent = message.message;
 
-    article.append(meta, body);
+    bubble.append(body);
+    bubbleWrap.append(bubble, time);
+
+    article.append(author, bubbleWrap);
     return article;
   }
 
