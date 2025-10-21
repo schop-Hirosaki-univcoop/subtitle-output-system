@@ -631,19 +631,53 @@
             <button id="flow-chat-unread-button" class="chat-unread" type="button" hidden>
               新着メッセージ <span id="flow-chat-unread-count"></span>
             </button>
+            <div id="flow-chat-menu" class="chat-context" role="menu" hidden>
+              <button type="button" class="chat-context__item" data-chat-action="reply" role="menuitem">
+                リプライ
+              </button>
+              <button type="button" class="chat-context__item" data-chat-action="copy" role="menuitem">
+                コピー
+              </button>
+              <button
+                type="button"
+                id="flow-chat-menu-cancel"
+                class="chat-context__item"
+                data-chat-action="cancel"
+                role="menuitem"
+              >
+                送信取り消し
+              </button>
+            </div>
           </div>
           <form id="flow-chat-form" class="chat-form" novalidate>
             <label class="visually-hidden" for="flow-chat-input">メッセージ</label>
             <div class="chat-composer">
-              <textarea
-                id="flow-chat-input"
-                class="chat-input input"
-                name="message"
-                rows="1"
-                maxlength="500"
-                placeholder="ログインするとメッセージを送信できます"
-                disabled
-              ></textarea>
+              <div class="chat-composer__input">
+                <div id="flow-chat-reply" class="chat-reply" hidden>
+                  <span class="chat-reply__bar" aria-hidden="true"></span>
+                  <div class="chat-reply__content">
+                    <span id="flow-chat-reply-author" class="chat-reply__author"></span>
+                    <p id="flow-chat-reply-text" class="chat-reply__text"></p>
+                  </div>
+                  <button
+                    type="button"
+                    id="flow-chat-reply-cancel"
+                    class="chat-reply__dismiss"
+                    aria-label="引用をキャンセル"
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
+                </div>
+                <textarea
+                  id="flow-chat-input"
+                  class="chat-input input"
+                  name="message"
+                  rows="1"
+                  maxlength="500"
+                  placeholder="ログインするとメッセージを送信できます"
+                  disabled
+                ></textarea>
+              </div>
               <button id="flow-chat-send-button" class="chat-composer__submit" type="submit" disabled>
                 送信
               </button>
