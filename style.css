@@ -632,6 +632,11 @@ textarea.input{
   resize:vertical;
   line-height:1.6;
 }
+
+textarea.input.chat-input,
+.chat-input.input{
+  min-height:1.65em;
+}
 .input:focus-visible,
 .btn:focus-visible,
 input[type="checkbox"]:focus-visible{
