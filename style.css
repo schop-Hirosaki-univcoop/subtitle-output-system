@@ -2251,7 +2251,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 .events-layout{
   display:grid;
   gap:clamp(1.25rem, 2vw, 1.75rem);
-  grid-template-columns:minmax(190px, 16vw) minmax(0, min(56vw, 1fr)) minmax(260px, 24vw);
+  grid-template-columns:minmax(190px, 15vw) minmax(0, 1fr) clamp(260px, 22vw, 340px);
   align-items:start;
   width:min(100%, 96vw);
   margin-inline:auto;
@@ -2462,7 +2462,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 @media (max-width: 1440px){
   .events-layout{
-    grid-template-columns:minmax(190px, 18vw) minmax(0, 1fr);
+    grid-template-columns:minmax(190px, 15vw) minmax(0, 1fr);
   }
   .events-chat{
     grid-column:1 / -1;
