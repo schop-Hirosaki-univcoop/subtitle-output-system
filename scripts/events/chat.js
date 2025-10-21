@@ -84,6 +84,7 @@ export class EventChat {
         this.state.draft = chatInput.value || "";
         this.clearError();
         this.updateSendAvailability();
+        this.syncComposerHeight();
       });
       chatInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
@@ -91,6 +92,13 @@ export class EventChat {
           this.handleSubmit();
         }
       });
+      chatInput.addEventListener("focus", () => this.syncComposerHeight());
+      const scheduleInitialResize = () => this.syncComposerHeight();
+      if (typeof queueMicrotask === "function") {
+        queueMicrotask(scheduleInitialResize);
+      } else {
+        requestAnimationFrame(scheduleInitialResize);
+      }
     }
     if (chatScroll) {
       chatScroll.addEventListener("scroll", () => this.handleScroll());
@@ -117,6 +125,7 @@ export class EventChat {
     }
     this.updateAvailability(true);
     this.startListening();
+    this.syncComposerHeight();
   }
 
   startListening() {
@@ -204,6 +213,7 @@ export class EventChat {
       this.clearError();
     }
     this.updateSendAvailability();
+    this.syncComposerHeight();
   }
 
   updateSendAvailability() {
@@ -216,6 +226,26 @@ export class EventChat {
     const canInteract = Boolean(this.app.currentUser) && Boolean(input) && !input.disabled;
     const shouldEnable = canInteract && !this.sending && hasText;
     chatSendButton.disabled = !shouldEnable;
+  }
+
+  syncComposerHeight() {
+    const { chatInput } = this.app.dom;
+    if (!chatInput) {
+      return;
+    }
+    const computed = window.getComputedStyle(chatInput);
+    const lineHeight = parseFloat(computed.lineHeight);
+    const fontSize = parseFloat(computed.fontSize);
+    const fallbackLineHeight = (Number.isFinite(fontSize) && fontSize > 0 ? fontSize * 1.6 : 20);
+    const baseLineHeight = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : fallbackLineHeight;
+    const minHeight = baseLineHeight;
+    const maxHeight = baseLineHeight * 5;
+    chatInput.style.height = "auto";
+    chatInput.style.overflowY = "hidden";
+    const scrollHeight = chatInput.scrollHeight;
+    const clampedHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
+    chatInput.style.height = `${clampedHeight}px`;
+    chatInput.style.overflowY = scrollHeight > maxHeight ? "auto" : "hidden";
   }
 
   handleScroll() {
