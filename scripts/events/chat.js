@@ -6,11 +6,15 @@ import {
   serverTimestamp,
   query,
   orderByChild,
-  limitToLast
+  limitToLast,
+  remove,
+  child
 } from "../operator/firebase.js";
 
 const MESSAGE_LIMIT = 200;
 const SCROLL_THRESHOLD = 48;
+const REPLY_PAYLOAD_LIMIT = 300;
+const REPLY_PREVIEW_LIMIT = 180;
 
 function formatTime(date) {
   try {
@@ -33,13 +37,28 @@ function normalizeMessage(id, value) {
     return null;
   }
   const timestamp = typeof value.timestamp === "number" ? value.timestamp : 0;
+  let replyTo = null;
+  if (value && typeof value === "object" && value.replyTo && typeof value.replyTo === "object") {
+    const replyId = typeof value.replyTo.id === "string" ? value.replyTo.id.trim() : "";
+    const replyAuthor = typeof value.replyTo.author === "string" ? value.replyTo.author.trim() : "";
+    const replyMessageRaw = typeof value.replyTo.message === "string" ? value.replyTo.message : "";
+    const replyMessage = replyMessageRaw.trim().slice(0, REPLY_PAYLOAD_LIMIT);
+    if (replyId && replyMessage) {
+      replyTo = {
+        id: replyId,
+        author: replyAuthor,
+        message: replyMessage
+      };
+    }
+  }
   return {
     id,
     uid: typeof value.uid === "string" ? value.uid : "",
     displayName: typeof value.displayName === "string" ? value.displayName : "",
     email: typeof value.email === "string" ? value.email : "",
     message: trimmed,
-    timestamp
+    timestamp,
+    replyTo
   };
 }
 
@@ -53,11 +72,19 @@ export class EventChat {
       messages: [],
       draft: "",
       autoScroll: true,
-      unreadCount: 0
+      unreadCount: 0,
+      replyTarget: null
     };
     this.initialized = false;
     this.sending = false;
     this.lastMessageCount = 0;
+    this.menuState = {
+      element: null,
+      targetId: null,
+      targetElement: null
+    };
+    this.handleGlobalPointerDown = this.handleGlobalPointerDown.bind(this);
+    this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
   }
 
   init() {
@@ -72,7 +99,15 @@ export class EventChat {
     if (this.initialized) {
       return;
     }
-    const { chatForm, chatInput, chatScroll, chatUnreadButton } = this.app.dom;
+    const {
+      chatForm,
+      chatInput,
+      chatScroll,
+      chatUnreadButton,
+      chatMessages,
+      chatContextMenu,
+      chatReplyDismiss
+    } = this.app.dom;
     if (chatForm) {
       chatForm.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -106,6 +141,37 @@ export class EventChat {
     if (chatUnreadButton) {
       chatUnreadButton.addEventListener("click", () => this.scrollToLatest(true));
     }
+    if (chatMessages) {
+      chatMessages.addEventListener("contextmenu", (event) => this.handleMessageContextMenu(event));
+      chatMessages.addEventListener("click", () => this.hideContextMenu());
+    }
+    if (chatReplyDismiss) {
+      chatReplyDismiss.addEventListener("click", () => {
+        this.clearReplyTarget();
+        this.focusComposer();
+      });
+    }
+    this.updateReplyPreview();
+    if (chatContextMenu) {
+      this.menuState.element = chatContextMenu;
+      chatContextMenu.addEventListener("click", (event) => {
+        if (!(event.target instanceof Element)) {
+          return;
+        }
+        const button = event.target.closest("[data-chat-action]");
+        if (!button || button.hasAttribute("disabled") || button.hasAttribute("hidden")) {
+          return;
+        }
+        event.preventDefault();
+        const action = button.getAttribute("data-chat-action");
+        if (!action) {
+          return;
+        }
+        void this.handleMenuAction(action);
+      });
+    }
+    document.addEventListener("pointerdown", this.handleGlobalPointerDown);
+    document.addEventListener("keydown", this.handleGlobalKeydown, true);
     this.initialized = true;
   }
 
@@ -118,6 +184,7 @@ export class EventChat {
       this.updateAvailability(false);
       this.updateStatus("disabled");
       this.updateUnreadIndicator();
+      this.hideContextMenu();
       return;
     }
     if (this.app.dom.chatInput) {
@@ -126,6 +193,7 @@ export class EventChat {
     this.updateAvailability(true);
     this.startListening();
     this.syncComposerHeight();
+    this.hideContextMenu();
   }
 
   startListening() {
@@ -168,6 +236,7 @@ export class EventChat {
     this.state.messages = [];
     this.lastMessageCount = 0;
     this.renderMessages();
+    this.hideContextMenu();
   }
 
   updateStatus(state) {
@@ -210,6 +279,7 @@ export class EventChat {
       }
     }
     if (!enabled) {
+      this.clearReplyTarget();
       this.clearError();
     }
     this.updateSendAvailability();
@@ -249,6 +319,7 @@ export class EventChat {
   }
 
   handleScroll() {
+    this.hideContextMenu();
     const { chatScroll } = this.app.dom;
     if (!chatScroll) {
       return;
@@ -279,6 +350,7 @@ export class EventChat {
   }
 
   renderMessages() {
+    this.hideContextMenu();
     const { chatMessages, chatEmpty } = this.app.dom;
     if (!chatMessages) {
       return;
@@ -309,6 +381,7 @@ export class EventChat {
   renderMessage(message) {
     const article = document.createElement("article");
     article.className = "chat-message";
+    article.dataset.messageId = message.id;
     const currentUser = this.app.currentUser;
     if (currentUser && message.uid && message.uid === currentUser.uid) {
       article.classList.add("chat-message--self");
@@ -339,6 +412,26 @@ export class EventChat {
     body.className = "chat-message__body";
     body.textContent = message.message;
 
+    if (message.replyTo && message.replyTo.message) {
+      const quote = document.createElement("blockquote");
+      quote.className = "chat-message__quote";
+      if (message.replyTo.id) {
+        quote.dataset.replyId = message.replyTo.id;
+      }
+      const replyAuthor = (message.replyTo.author || "").trim();
+      if (replyAuthor) {
+        const quoteAuthor = document.createElement("span");
+        quoteAuthor.className = "chat-message__quote-author";
+        quoteAuthor.textContent = replyAuthor;
+        quote.appendChild(quoteAuthor);
+      }
+      const quoteText = document.createElement("p");
+      quoteText.className = "chat-message__quote-text";
+      quoteText.textContent = message.replyTo.message;
+      quote.appendChild(quoteText);
+      bubble.append(quote);
+    }
+
     bubble.append(body);
     bubbleWrap.append(bubble, time);
 
@@ -367,12 +460,17 @@ export class EventChat {
         message: text,
         timestamp: serverTimestamp()
       };
+      const replyPayload = this.getReplyPayload();
+      if (replyPayload) {
+        payload.replyTo = replyPayload;
+      }
       const newRef = push(operatorChatMessagesRef);
       await set(newRef, payload);
       if (chatInput) {
         chatInput.value = "";
       }
       this.state.draft = "";
+      this.clearReplyTarget();
       this.state.autoScroll = true;
       this.scrollToLatest(false);
     } catch (error) {
@@ -402,6 +500,303 @@ export class EventChat {
     chatError.textContent = "";
   }
 
+  handleMessageContextMenu(event) {
+    if (!(event instanceof MouseEvent) || !(event.target instanceof Element)) {
+      return;
+    }
+    const messageElement = event.target.closest(".chat-message");
+    if (!messageElement) {
+      this.hideContextMenu();
+      return;
+    }
+    const messageId = messageElement.dataset.messageId;
+    if (!messageId) {
+      return;
+    }
+    event.preventDefault();
+    this.showContextMenu(messageId, event, messageElement);
+  }
+
+  showContextMenu(messageId, event, targetElement) {
+    const menu = this.menuState.element || this.app.dom.chatContextMenu;
+    const panel = this.app.dom.chatPanel;
+    if (!menu || !panel) {
+      this.hideContextMenu();
+      return;
+    }
+    const message = this.state.messages.find((item) => item && item.id === messageId);
+    if (!message) {
+      this.hideContextMenu();
+      return;
+    }
+    if (this.menuState.targetElement && this.menuState.targetElement !== targetElement) {
+      this.menuState.targetElement.classList.remove("chat-message--menu-open");
+    }
+    this.menuState.targetId = messageId;
+    this.menuState.targetElement = targetElement;
+    targetElement.classList.add("chat-message--menu-open");
+
+    const cancelButton = this.app.dom.chatContextCancelButton || menu.querySelector("[data-chat-action=\"cancel\"]");
+    const user = this.app.currentUser;
+    const canCancel = Boolean(user && message.uid && user.uid === message.uid);
+    if (cancelButton instanceof HTMLElement) {
+      cancelButton.hidden = !canCancel;
+      cancelButton.disabled = !canCancel;
+      if (canCancel) {
+        cancelButton.removeAttribute("aria-hidden");
+      } else {
+        cancelButton.setAttribute("aria-hidden", "true");
+      }
+    }
+
+    menu.hidden = false;
+    menu.style.visibility = "hidden";
+    menu.style.pointerEvents = "none";
+    menu.style.left = "0px";
+    menu.style.top = "0px";
+
+    const panelRect = panel.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    let left = event.clientX - panelRect.left;
+    let top = event.clientY - panelRect.top;
+    if (left + menuRect.width > panelRect.width) {
+      left = Math.max(panelRect.width - menuRect.width - 8, 0);
+    }
+    if (top + menuRect.height > panelRect.height) {
+      top = Math.max(panelRect.height - menuRect.height - 8, 0);
+    }
+    menu.style.left = `${Math.max(left, 0)}px`;
+    menu.style.top = `${Math.max(top, 0)}px`;
+    menu.style.visibility = "";
+    menu.style.pointerEvents = "";
+  }
+
+  hideContextMenu() {
+    const menu = this.menuState.element || this.app.dom.chatContextMenu;
+    if (!menu || menu.hidden) {
+      return;
+    }
+    menu.hidden = true;
+    menu.style.left = "";
+    menu.style.top = "";
+    menu.style.visibility = "";
+    menu.style.pointerEvents = "";
+    if (this.menuState.targetElement) {
+      this.menuState.targetElement.classList.remove("chat-message--menu-open");
+    }
+    this.menuState.targetId = null;
+    this.menuState.targetElement = null;
+  }
+
+  async handleMenuAction(action) {
+    const messageId = this.menuState.targetId;
+    if (!messageId) {
+      this.hideContextMenu();
+      return;
+    }
+    const message = this.state.messages.find((item) => item && item.id === messageId);
+    if (!message) {
+      this.hideContextMenu();
+      return;
+    }
+    try {
+      if (action === "reply") {
+        this.performReply(message);
+      } else if (action === "copy") {
+        await this.performCopy(message);
+      } else if (action === "cancel") {
+        await this.performCancel(message);
+      }
+    } finally {
+      this.hideContextMenu();
+    }
+  }
+
+  performReply(message) {
+    const { chatInput } = this.app.dom;
+    if (!chatInput || chatInput.disabled) {
+      return;
+    }
+    this.setReplyTarget(message);
+  }
+
+  async performCopy(message) {
+    const text = message.message || "";
+    if (!text) {
+      return;
+    }
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      try {
+        await navigator.clipboard.writeText(text);
+        return;
+      } catch (error) {
+        console.warn("Navigator clipboard copy failed", error);
+      }
+    }
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "absolute";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand("copy");
+    } catch (error) {
+      console.warn("Fallback clipboard copy failed", error);
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  }
+
+  async performCancel(message) {
+    const user = this.app.currentUser;
+    if (!user || !message.uid || user.uid !== message.uid) {
+      return;
+    }
+    try {
+      const messageRef = child(operatorChatMessagesRef, message.id);
+      await remove(messageRef);
+    } catch (error) {
+      console.error("Failed to cancel chat message:", error);
+      this.showError("メッセージの削除に失敗しました。権限を確認してください。");
+    }
+  }
+
+  setReplyTarget(message) {
+    const target = this.createReplyTarget(message);
+    if (!target) {
+      return;
+    }
+    this.state.replyTarget = target;
+    this.updateReplyPreview();
+    this.focusComposer();
+  }
+
+  clearReplyTarget() {
+    if (!this.state.replyTarget) {
+      this.updateReplyPreview();
+      return;
+    }
+    this.state.replyTarget = null;
+    this.updateReplyPreview();
+    this.syncComposerHeight();
+    this.updateSendAvailability();
+  }
+
+  updateReplyPreview() {
+    const { chatReplyPreview, chatReplyAuthor, chatReplyText } = this.app.dom;
+    const target = this.state.replyTarget;
+    if (!chatReplyPreview || !chatReplyAuthor || !chatReplyText) {
+      return;
+    }
+    if (!target) {
+      chatReplyPreview.hidden = true;
+      delete chatReplyPreview.dataset.replyId;
+      chatReplyAuthor.textContent = "";
+      chatReplyText.textContent = "";
+      return;
+    }
+    chatReplyPreview.hidden = false;
+    if (target.id) {
+      chatReplyPreview.dataset.replyId = target.id;
+    } else {
+      delete chatReplyPreview.dataset.replyId;
+    }
+    const author = (target.author || "").trim() || "不明なユーザー";
+    chatReplyAuthor.textContent = author;
+    chatReplyText.textContent = this.buildReplyExcerpt(target.message);
+  }
+
+  focusComposer() {
+    const { chatInput } = this.app.dom;
+    if (!chatInput || chatInput.disabled) {
+      return;
+    }
+    chatInput.focus();
+    const caret = chatInput.value.length;
+    try {
+      chatInput.setSelectionRange(caret, caret);
+    } catch (error) {
+      // ignore selection errors (e.g., unsupported inputs)
+    }
+    this.state.draft = chatInput.value || "";
+    this.syncComposerHeight();
+    this.updateSendAvailability();
+  }
+
+  createReplyTarget(message) {
+    if (!message || !message.id) {
+      return null;
+    }
+    const baseText = typeof message.message === "string" ? message.message : "";
+    const trimmed = baseText.trim().slice(0, REPLY_PAYLOAD_LIMIT);
+    if (!trimmed) {
+      return null;
+    }
+    const author = message.displayName || message.email || "不明なユーザー";
+    return {
+      id: message.id,
+      author,
+      message: trimmed
+    };
+  }
+
+  buildReplyExcerpt(text) {
+    const normalized = typeof text === "string" ? text.trim() : "";
+    if (!normalized) {
+      return "";
+    }
+    if (normalized.length <= REPLY_PREVIEW_LIMIT) {
+      return normalized;
+    }
+    return `${normalized.slice(0, REPLY_PREVIEW_LIMIT).trimEnd()}…`;
+  }
+
+  getReplyPayload() {
+    const target = this.state.replyTarget;
+    if (!target || !target.id) {
+      return null;
+    }
+    const message = typeof target.message === "string" ? target.message.trim() : "";
+    if (!message) {
+      return null;
+    }
+    return {
+      id: target.id,
+      author: target.author || "",
+      message
+    };
+  }
+
+  handleGlobalPointerDown(event) {
+    const menu = this.menuState.element || this.app.dom.chatContextMenu;
+    if (!menu || menu.hidden) {
+      return;
+    }
+    if (!(event.target instanceof Element)) {
+      this.hideContextMenu();
+      return;
+    }
+    if (menu.contains(event.target)) {
+      return;
+    }
+    if (this.menuState.targetElement && this.menuState.targetElement.contains(event.target)) {
+      return;
+    }
+    this.hideContextMenu();
+  }
+
+  handleGlobalKeydown(event) {
+    if (event.key === "Escape") {
+      const menu = this.menuState.element || this.app.dom.chatContextMenu;
+      if (menu && !menu.hidden) {
+        event.preventDefault();
+        this.hideContextMenu();
+      }
+    }
+  }
+
   updateUnreadIndicator() {
     const { chatUnreadButton, chatUnreadCount } = this.app.dom;
     const count = this.state.unreadCount || 0;
@@ -415,5 +810,9 @@ export class EventChat {
 
   dispose() {
     this.stopListening();
+    document.removeEventListener("pointerdown", this.handleGlobalPointerDown);
+    document.removeEventListener("keydown", this.handleGlobalKeydown, true);
+    this.clearReplyTarget();
+    this.hideContextMenu();
   }
 }
