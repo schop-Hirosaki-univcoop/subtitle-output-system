@@ -47,26 +47,30 @@
       <div class="module-header">
         <div class="module-heading">
           <h2 id="participant-title">参加者リストの管理</h2>
-          <p class="module-description" id="participant-description">イベントコントロールセンター（events.html）のフローで日程を選択してこのページを開くと、参加者情報（CSVの列順はテンプレートをご利用ください。参加者ID列は不要で、読み込み時に自動採番されます）をアップロードして管理できます。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。</p>
+          <p class="module-description" id="participant-description">選択したイベント・日程の参加者情報を管理できます。各参加者ごとに質問フォームの専用リンクを発行でき、「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は重複候補として件数付きで表示されます。専用リンクは各行のボタンまたはURLから取得できます。<span id="admin-summary" class="module-description__meta" aria-live="polite"></span></p>
         </div>
       </div>
       <div class="module-body">
         <p id="participant-context" class="admin-context">イベントコントロールセンターで指定した日程の参加者が表示されます。URL の <code>eventId</code> と <code>scheduleId</code> パラメーターを確認してください。</p>
         <div class="admin-controls">
-          <button id="download-participant-template" class="btn btn-ghost btn-sm" type="button">参加者CSVテンプレート</button>
-          <label class="btn btn-ghost file-input" for="csv-input">
-            <span id="file-label">CSVファイルを選択</span>
-            <input id="csv-input" type="file" accept=".csv,text/csv">
-          </label>
-          <button id="download-team-template" class="btn btn-ghost btn-sm" type="button" disabled>班番号テンプレート</button>
-          <label class="btn btn-ghost file-input" for="team-csv-input">
-            <span id="team-file-label">班番号CSVを選択</span>
-            <input id="team-csv-input" type="file" accept=".csv,text/csv">
-          </label>
-          <button id="clear-participants-button" class="btn btn-danger btn-sm" type="button" disabled>参加者リストを全削除</button>
-          <button id="discard-button" class="btn btn-ghost btn-sm" type="button" disabled>変更を取り消す</button>
-          <button id="save-button" class="btn btn-primary" type="button" disabled>参加者リストを保存</button>
-          <span id="upload-status" class="status-pill">イベントコントロールセンターで対象の日程を選択してください。</span>
+          <div class="admin-controls__row admin-controls__row--imports">
+            <button id="download-participant-template" class="btn btn-ghost btn-sm" type="button">参加者CSVテンプレのDL</button>
+            <label class="btn btn-ghost file-input" for="csv-input">
+              <span id="file-label">参加者CSVをアップロード</span>
+              <input id="csv-input" type="file" accept=".csv,text/csv">
+            </label>
+            <button id="download-team-template" class="btn btn-ghost btn-sm" type="button" disabled>班番号CSVテンプレ</button>
+            <label class="btn btn-ghost file-input" for="team-csv-input">
+              <span id="team-file-label">班番号CSVをアップロード</span>
+              <input id="team-csv-input" type="file" accept=".csv,text/csv">
+            </label>
+          </div>
+          <div class="admin-controls__row admin-controls__row--actions">
+            <button id="discard-button" class="btn btn-ghost btn-sm" type="button" disabled>取消</button>
+            <button id="save-button" class="btn btn-primary" type="button" disabled>適応</button>
+            <button id="clear-participants-button" class="btn btn-danger btn-sm" type="button" disabled>参加者リストを全削除</button>
+            <span id="upload-status" class="status-pill status-pill--inline">イベントコントロールセンターで対象の日程を選択してください。</span>
+          </div>
         </div>
         <div id="change-preview" class="change-preview" hidden aria-live="polite">
           <div class="change-preview__header">
@@ -74,19 +78,17 @@
             <span id="change-preview-count" class="change-preview__count"></span>
           </div>
           <ul id="change-preview-list" class="change-preview__list" aria-label="未保存の変更一覧"></ul>
-          <p id="change-preview-note" class="change-preview__note">「参加者リストを保存」で変更を確定し、「変更を取り消す」で破棄できます。</p>
+          <p id="change-preview-note" class="change-preview__note">「適応」で変更を確定し、「取消」で破棄できます。</p>
         </div>
-        <p class="admin-summary" id="admin-summary"></p>
         <div class="table-scroller">
           <table class="mapping-table" aria-describedby="participant-description">
             <thead>
               <tr>
-                <th scope="col">参加者ID</th>
-                <th scope="col">氏名 / ラジオネーム</th>
-                <th scope="col">フリガナ</th>
+                <th scope="col" class="is-numeric">No.</th>
+                <th scope="col">氏名</th>
                 <th scope="col">性別</th>
                 <th scope="col">学部学科</th>
-                <th scope="col">班番号</th>
+                <th scope="col" class="is-numeric">班番号</th>
                 <th scope="col">専用リンク</th>
               </tr>
             </thead>
@@ -100,18 +102,18 @@
       <div class="module-header">
         <div class="module-heading">
           <h2 id="format-title">CSVの形式について</h2>
-          <p class="module-description">1列目から順に「名前」「フリガナ」「性別」「学部学科」「携帯電話」「メールアドレス」を配置してください。アップロード時には必ずヘッダー行が必要です。テンプレートボタンからダウンロードできます。ファイル名は「イベントID_日程ID_participants.csv」を使用してください。電話番号とメールアドレスは内部で保存され、編集ダイアログでのみ確認できます。</p>
+          <p class="module-description">ヘッダー行として、1列目から順に「名前」「フリガナ」「性別」「学部学科」「携帯電話」「メールアドレス」を配置してください。アップロード時には必ずヘッダー行が必要です。テンプレボタンからダウンロードできます。ファイル名は「イベントID_日程ID_participants.csv」を使用してください。電話番号とメールアドレスは内部で保存され、編集ダイアログでのみ確認できます。</p>
         </div>
       </div>
       <div class="module-body">
         <ul>
-          <li>ヘッダー行（例: <code>名前,フリガナ,性別,学部学科,携帯電話,メールアドレス</code>）が必須です。</li>
-          <li>同じ参加者IDや同じ氏名・学部学科の行が複数あっても全て読み込み、一覧上で重複候補として確認できます。</li>
-          <li>CSVに参加者ID列は不要です。読み込み時に学部学科→フリガナの順で並べ替え、必要な参加者IDを自動発番します。</li>
-          <li>同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補（件数付き）として一覧に表示されます。</li>
+          <li>ヘッダー行が必須です。</li>
+          <li>同じUIDや同じ氏名・学部学科の行が複数あっても全て読み込み、一覧上で重複候補として確認できます。</li>
+          <li>CSVにNo.列は不要です。読み込み時に学部学科→フリガナの順で並べ替え、表示用のNo.は自動採番されます。</li>
+          <li>同じイベント内で名前と学部学科が一致する参加者は重複候補として件数付きで表示されます。</li>
           <li>各列は空欄でもアップロードできますが、氏名は必須です。</li>
           <li>保存後はフォームに即座に反映されます。</li>
-          <li>班番号は別途、<code>参加者ID,班番号</code>形式のCSV（ヘッダー必須）をアップロードすると一括で紐付けられます（キャンセルの場合は班番号に「キャンセル」と入力してください）。テンプレートには現在の参加者IDがあらかじめ記載されます。ファイル名は「イベントID_日程ID_teams.csv」としてください。</li>
+          <li>班番号は別途、<code>学部学科,性別,名前,班番号,uid</code>形式のCSV（ヘッダー必須）をアップロードすると一括で紐付けられます（「キャンセル」はキャンセル済み、「別日」は別日移動として扱われます）。テンプレートには現在のUIDがあらかじめ記載されます。ファイル名は「イベントID_日程ID_teams.csv」としてください。</li>
         </ul>
       </div>
     </section>
@@ -125,10 +127,6 @@
           <h2 id="participant-dialog-title">参加者情報を編集</h2>
         </div>
         <div class="modal-body">
-          <div class="modal-field">
-            <label for="participant-id-input">参加者ID</label>
-            <input id="participant-id-input" name="participant-id" class="input" type="text" readonly>
-          </div>
           <div class="modal-field">
             <label for="participant-name-input">氏名 / ラジオネーム</label>
             <input id="participant-name-input" name="participant-name" class="input" type="text" autocomplete="off" required>
@@ -147,7 +145,11 @@
           </div>
           <div class="modal-field">
             <label for="participant-team-input">班番号</label>
-            <input id="participant-team-input" name="participant-team" class="input" type="text" autocomplete="off" placeholder="例: A-1 / キャンセルなど">
+            <input id="participant-team-input" name="participant-team" class="input" type="text" autocomplete="off" placeholder="例: A-1 / キャンセル / 別日など">
+          </div>
+          <div id="participant-relocation-summary" class="modal-field" hidden>
+            <div class="modal-label">別日への移動情報</div>
+            <p id="participant-relocation-summary-text" class="modal-helper"></p>
           </div>
           <div class="modal-field">
             <label for="participant-phone-input">携帯電話</label>
@@ -167,6 +169,26 @@
     </div>
   </div>
 
+  <div id="relocation-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="relocation-dialog-title" hidden>
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <form id="relocation-form">
+        <div class="modal-header">
+          <h2 id="relocation-dialog-title">別日への移動先を確認</h2>
+        </div>
+        <div class="modal-body">
+          <p id="relocation-description" class="modal-helper">CSVで「別日」と入力された参加者、または「別日」ボタンから設定した参加者の移動先を選択してください。</p>
+          <ul id="relocation-list" class="relocation-list" aria-live="polite"></ul>
+          <p id="relocation-error" class="form-error" role="alert" hidden></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-dialog-dismiss="true">キャンセル</button>
+          <button type="submit" class="btn btn-primary">設定を適用</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div id="confirm-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" hidden>
     <div class="modal-backdrop" data-dialog-dismiss="true"></div>
     <div class="modal-panel">
@@ -178,7 +200,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-ghost" id="confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
-        <button type="button" class="btn btn-danger" id="confirm-accept-button">実行する</button>
+        <button type="button" class="btn btn-danger" id="confirm-accept-button">実行</button>
       </div>
     </div>
   </div>

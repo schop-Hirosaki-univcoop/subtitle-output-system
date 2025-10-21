@@ -294,9 +294,31 @@ body.question-admin-page{
 
 .admin-controls{
   display:flex;
+  flex-direction:column;
+  gap:.75rem;
+  align-items:stretch;
+}
+
+.admin-controls__row{
+  display:flex;
   flex-wrap:wrap;
   gap:.75rem;
   align-items:center;
+}
+
+.admin-controls__row .btn,
+.admin-controls__row .file-input{
+  flex:1 1 12rem;
+  justify-content:center;
+}
+
+.admin-controls__row--actions{
+  justify-content:flex-start;
+  gap:.65rem;
+}
+
+.admin-controls__row--actions .btn{
+  flex:0 1 10rem;
 }
 
 .file-input{
@@ -322,6 +344,10 @@ body.question-admin-page{
   background:rgba(20,28,46,.6);
   border:1px solid rgba(80,104,142,.45);
   color:var(--muted);
+}
+
+.status-pill--inline{
+  align-self:center;
 }
 
 .change-preview{
