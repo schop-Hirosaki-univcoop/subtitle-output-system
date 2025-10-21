@@ -822,7 +822,6 @@ input[type="checkbox"]{
   gap:clamp(.4rem, 1.2vw, .7rem);
   top:0;
   z-index:2;
-  padding:0 clamp(.25rem, 1vw, .75rem) clamp(.5rem, 1.4vw, .85rem);
   background:linear-gradient(180deg, rgba(18,24,38,.97), rgba(18,24,38,.82) 65%, rgba(18,24,38,0));
   backdrop-filter:blur(2px);
 }
@@ -846,7 +845,6 @@ input[type="checkbox"]{
   align-items:center;
   justify-content:space-between;
   gap:clamp(.45rem, 1vw, .7rem);
-  padding:0 0 4px;
   color:var(--muted);
   flex-wrap:wrap;
 }
@@ -919,7 +917,7 @@ input[type="checkbox"]{
   position:relative;
   display:flex;
   flex-direction:column;
-  gap:clamp(.5rem, 1.1vw, .8rem);
+  gap:0.5rem;
   border-radius:clamp(.9rem, 1.5vw, 1.2rem);
   --card-bg:linear-gradient(180deg, rgba(17,24,37,.9), rgba(11,16,26,.94));
   --card-border:rgba(46,68,96,.68);
@@ -933,8 +931,7 @@ input[type="checkbox"]{
   background:var(--card-bg);
   border:1px solid var(--card-border);
   box-shadow:var(--card-shadow);
-  padding:clamp(.7rem, 1.4vw, 1rem) clamp(.85rem, 1.8vw, 1.2rem) clamp(.85rem, 1.6vw, 1.15rem);
-  padding-top:clamp(1.3rem, 2.1vw, 1.6rem);
+  padding:1rem;
   color:var(--txt);
   transition:border-color .18s ease, box-shadow .18s ease;
   width:100%;
