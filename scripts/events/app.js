@@ -31,6 +31,14 @@ import {
 import { ToolCoordinator } from "./tool-coordinator.js";
 import { EventChat } from "./chat.js";
 
+function parseCssPixels(value) {
+  if (typeof value !== "string") {
+    return 0;
+  }
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export class EventAdminApp {
   constructor() {
     this.dom = queryDom();
@@ -68,6 +76,11 @@ export class EventAdminApp {
     this.stageNote = "";
     this.applyMetaNote();
     this.chat = new EventChat(this);
+    this.handleWindowResize = this.handleWindowResize.bind(this);
+    this.updateChatLayoutMetrics = this.updateChatLayoutMetrics.bind(this);
+    this.chatLayoutResizeObserver = null;
+    this.chatLayoutRaf = 0;
+    this.visualViewportResize = null;
   }
 
   logParticipantAction(message, detail = null) {
@@ -98,6 +111,7 @@ export class EventAdminApp {
     this.updateSelectionNotes();
     this.applyMetaNote();
     this.chat.init();
+    this.setupChatLayoutObservers();
     this.observeAuthState();
     if (typeof document !== "undefined") {
       document.addEventListener("qa:participants-synced", this.tools.handleParticipantSyncEvent);
@@ -1045,6 +1059,7 @@ export class EventAdminApp {
     this.updateStageIndicator();
     this.updatePanelVisibility();
     this.updatePanelNavigation();
+    this.updateChatLayoutMetrics();
   }
 
   updateStageIndicator() {
@@ -1326,7 +1341,139 @@ export class EventAdminApp {
     }
     this.selectionListeners.clear();
     this.eventListeners.clear();
+    this.teardownChatLayoutObservers();
     this.chat.dispose();
+  }
+
+  setupChatLayoutObservers() {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+    this.updateChatLayoutMetrics();
+    if (typeof ResizeObserver === "function") {
+      if (this.chatLayoutResizeObserver) {
+        this.chatLayoutResizeObserver.disconnect();
+      }
+      const observer = new ResizeObserver(() => this.updateChatLayoutMetrics());
+      const header = document.querySelector(".op-header");
+      const layout = this.dom.chatContainer?.closest(".events-layout");
+      const targets = [
+        document.body,
+        header,
+        this.dom.main,
+        this.dom.flowStage,
+        layout,
+        this.dom.chatContainer,
+        this.dom.chatPanel
+      ];
+      const uniqueTargets = Array.from(new Set(targets.filter(Boolean)));
+      uniqueTargets.forEach((target) => observer.observe(target));
+      this.chatLayoutResizeObserver = observer;
+    }
+    window.removeEventListener("resize", this.handleWindowResize);
+    window.removeEventListener("orientationchange", this.handleWindowResize);
+    window.addEventListener("resize", this.handleWindowResize, { passive: true });
+    window.addEventListener("orientationchange", this.handleWindowResize);
+    if (window.visualViewport) {
+      if (this.visualViewportResize) {
+        window.visualViewport.removeEventListener("resize", this.visualViewportResize);
+        window.visualViewport.removeEventListener("scroll", this.visualViewportResize);
+      }
+      this.visualViewportResize = () => this.updateChatLayoutMetrics();
+      window.visualViewport.addEventListener("resize", this.visualViewportResize);
+      window.visualViewport.addEventListener("scroll", this.visualViewportResize);
+    }
+  }
+
+  teardownChatLayoutObservers() {
+    if (this.chatLayoutResizeObserver) {
+      this.chatLayoutResizeObserver.disconnect();
+      this.chatLayoutResizeObserver = null;
+    }
+    if (typeof window !== "undefined") {
+      window.removeEventListener("resize", this.handleWindowResize);
+      window.removeEventListener("orientationchange", this.handleWindowResize);
+      if (this.chatLayoutRaf) {
+        window.cancelAnimationFrame(this.chatLayoutRaf);
+        this.chatLayoutRaf = 0;
+      }
+      if (window.visualViewport && this.visualViewportResize) {
+        window.visualViewport.removeEventListener("resize", this.visualViewportResize);
+        window.visualViewport.removeEventListener("scroll", this.visualViewportResize);
+        this.visualViewportResize = null;
+      }
+    }
+    if (this.dom.chatContainer) {
+      this.dom.chatContainer.style.removeProperty("--events-chat-top");
+      this.dom.chatContainer.style.removeProperty("--events-chat-height");
+    }
+  }
+
+  handleWindowResize() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (this.chatLayoutRaf) {
+      return;
+    }
+    this.chatLayoutRaf = window.requestAnimationFrame(() => {
+      this.chatLayoutRaf = 0;
+      this.updateChatLayoutMetrics();
+    });
+  }
+
+  updateChatLayoutMetrics() {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+    const chatPanel = this.dom.chatPanel;
+    const chatContainer = this.dom.chatContainer || chatPanel?.closest(".events-chat");
+    if (!chatPanel || !chatContainer) {
+      return;
+    }
+    if (window.matchMedia && window.matchMedia("(max-width: 960px)").matches) {
+      chatContainer.style.removeProperty("--events-chat-top");
+      chatContainer.style.removeProperty("--events-chat-height");
+      return;
+    }
+    const docEl = document.documentElement;
+    const header = document.querySelector(".op-header");
+    const flowStage = this.dom.flowStage || document.querySelector(".flow-stage");
+    const layout = chatContainer.closest(".events-layout");
+    const bodyStyles = window.getComputedStyle(document.body);
+    const docStyles = window.getComputedStyle(docEl);
+    const mainStyles = this.dom.main ? window.getComputedStyle(this.dom.main) : null;
+    const layoutStyles = layout ? window.getComputedStyle(layout) : null;
+
+    const safeAreaTop = parseCssPixels(docStyles.getPropertyValue("--safe-area-top"));
+    const safeAreaBottom = parseCssPixels(docStyles.getPropertyValue("--safe-area-bottom"));
+    const bodyPaddingTop = parseCssPixels(bodyStyles.paddingTop);
+    const bodyGap = parseCssPixels(bodyStyles.gap);
+    const mainGap = mainStyles ? parseCssPixels(mainStyles.gap) : 0;
+    const layoutPaddingTop = layoutStyles ? parseCssPixels(layoutStyles.paddingTop) : 0;
+    const layoutPaddingBottom = layoutStyles ? parseCssPixels(layoutStyles.paddingBottom) : 0;
+
+    const headerHeight = header ? header.getBoundingClientRect().height : 0;
+    const flowStageHeight = flowStage ? flowStage.getBoundingClientRect().height : 0;
+
+    const stickyTop = bodyPaddingTop + safeAreaTop + headerHeight + bodyGap;
+    const chatOffset = stickyTop + flowStageHeight + mainGap + layoutPaddingTop;
+    const viewportHeight = window.innerHeight || docEl.clientHeight;
+    const availableHeight = viewportHeight - chatOffset - layoutPaddingBottom - safeAreaBottom;
+
+    const stickyTopValue = Math.max(0, Math.round(stickyTop));
+    if (stickyTopValue > 0) {
+      chatContainer.style.setProperty("--events-chat-top", `${stickyTopValue}px`);
+    } else {
+      chatContainer.style.removeProperty("--events-chat-top");
+    }
+
+    const heightValue = Math.max(0, Math.round(availableHeight));
+    if (heightValue > 0) {
+      chatContainer.style.setProperty("--events-chat-height", `${heightValue}px`);
+    } else {
+      chatContainer.style.removeProperty("--events-chat-height");
+    }
   }
 
   revealEventSelectionCue() {

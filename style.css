@@ -18,6 +18,8 @@
   --flow-stage-panel-border: rgba(78,122,186,.36);
   --flow-stage-panel-background: linear-gradient(160deg, rgba(18,28,46,.88), rgba(10,16,30,.94));
   --flow-stage-panel-shadow: 0 18px 42px rgba(4,12,28,.44);
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   /* aliases for consistency */
   --bg: var(--ui-bg);
   --text: var(--txt);
@@ -2271,12 +2273,9 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   align-self:start;
   min-width:0;
   position:sticky;
-  --chat-safe-area-top: env(safe-area-inset-top, 0px);
-  --chat-safe-area-bottom: env(safe-area-inset-bottom, 0px);
-  --chat-available-height: calc(100vh - var(--header-height, 64px) - 2 * var(--events-layout-padding) - var(--chat-safe-area-top) - var(--chat-safe-area-bottom));
-  top:calc(var(--header-height, 64px) + var(--events-layout-padding) + var(--chat-safe-area-top));
-  height:max(0px, var(--chat-available-height));
-  max-height:max(0px, var(--chat-available-height));
+  top:var(--events-chat-top, calc(var(--header-height, 64px) + 1.5rem + var(--safe-area-top)));
+  height:var(--events-chat-height, auto);
+  max-height:var(--events-chat-height, none);
 }
 
 .chat-panel{
@@ -2402,33 +2401,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   box-shadow:0 16px 36px rgba(4,12,28,.32), inset 0 1px 0 rgba(255,255,255,.03);
   isolation:isolate;
   max-width:min(480px, 85%);
-  overflow:visible;
-}
-
-.chat-message__bubble::before,
-.chat-message__bubble::after{
-  content:"";
-  position:absolute;
-  bottom:.78rem;
-  width:1.05rem;
-  height:1.05rem;
-  border-radius:.28rem;
-  transform:rotate(45deg);
-  transition:background .25s ease;
-}
-
-.chat-message__bubble::before{
-  left:-.68rem;
-  background:var(--bubble-border, rgba(86,132,194,.45));
-  box-shadow:0 16px 36px rgba(4,12,28,.3);
-  z-index:-2;
-}
-
-.chat-message__bubble::after{
-  left:-.6rem;
-  background:var(--bubble-bg, linear-gradient(180deg, rgba(18,34,58,.82), rgba(8,18,32,.78)));
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
-  z-index:-1;
+  overflow:hidden;
 }
 
 .chat-message--self .chat-message__bubble{
@@ -2436,16 +2409,6 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   --bubble-bg: linear-gradient(180deg, rgba(30,70,118,.88), rgba(16,32,60,.82));
   border-radius:1rem .35rem 1rem 1rem;
   box-shadow:0 18px 40px rgba(8,24,52,.42);
-}
-
-.chat-message--self .chat-message__bubble::before{
-  left:auto;
-  right:-.68rem;
-}
-
-.chat-message--self .chat-message__bubble::after{
-  left:auto;
-  right:-.6rem;
 }
 
 .chat-message__time{
