@@ -20,6 +20,8 @@
   --flow-stage-panel-shadow: 0 18px 42px rgba(4,12,28,.44);
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --page-padding-top: 0px;
+  --page-gap: 0px;
   /* aliases for consistency */
   --bg: var(--ui-bg);
   --text: var(--txt);
@@ -53,9 +55,10 @@ html{ overflow:auto; }
 body.op-theme{
   --page-gap:clamp(1rem, 2.2vw, 1.8rem);
   --page-pad-inline:max(2.5vw, 1.4rem);
+  --page-padding-top:clamp(.45rem, 1.2vh, .85rem);
   min-height:100dvh;
   padding-inline:var(--page-pad-inline);
-  padding-block-start:clamp(.45rem, 1.2vh, .85rem);
+  padding-block-start:var(--page-padding-top);
   padding-block-end:calc(var(--footer-clearance) + var(--footer-gap) + 5rem);
   position:relative;
   background-color:var(--bg);
@@ -2256,6 +2259,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 .events-layout{
   --events-layout-padding: clamp(1.25rem, 2.4vw, 2rem);
+  --events-sticky-top: calc(var(--page-padding-top, 0px) + var(--safe-area-top, 0px) + var(--header-height, 64px) + var(--page-gap, 0px) + 1.5rem);
   display:grid;
   gap:clamp(1.25rem, 2vw, 1.75rem);
   grid-template-columns:minmax(190px, 15vw) minmax(0, 1fr) clamp(260px, 22vw, 340px);
@@ -2277,7 +2281,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   align-self:start;
   min-width:0;
   position:sticky;
-  top:var(--events-chat-top, calc(var(--header-height, 64px) + 1.5rem + var(--safe-area-top)));
+  top:var(--events-chat-top, var(--events-sticky-top));
   height:var(--events-chat-height, auto);
   max-height:var(--events-chat-height, none);
 }
@@ -2789,7 +2793,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   flex-direction:column;
   gap:1.25rem;
   position:sticky;
-  top:calc(var(--header-height, 64px) + 1.5rem);
+  top:var(--events-sticky-top);
   align-self:start;
 }
 
