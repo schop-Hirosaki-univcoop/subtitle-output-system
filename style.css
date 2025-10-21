@@ -2351,6 +2351,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 
 .chat-message{
+  position:relative;
   display:flex;
   flex-direction:column;
   gap:.35rem;
@@ -2358,6 +2359,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   align-self:flex-start;
   max-width:100%;
   color:#f0f6ff;
+  isolation:isolate;
 }
 
 .chat-message--self{
