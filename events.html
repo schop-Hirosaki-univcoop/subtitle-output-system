@@ -652,15 +652,32 @@
           <form id="flow-chat-form" class="chat-form" novalidate>
             <label class="visually-hidden" for="flow-chat-input">メッセージ</label>
             <div class="chat-composer">
-              <textarea
-                id="flow-chat-input"
-                class="chat-input input"
-                name="message"
-                rows="1"
-                maxlength="500"
-                placeholder="ログインするとメッセージを送信できます"
-                disabled
-              ></textarea>
+              <div class="chat-composer__input">
+                <div id="flow-chat-reply" class="chat-reply" hidden>
+                  <span class="chat-reply__bar" aria-hidden="true"></span>
+                  <div class="chat-reply__content">
+                    <span id="flow-chat-reply-author" class="chat-reply__author"></span>
+                    <p id="flow-chat-reply-text" class="chat-reply__text"></p>
+                  </div>
+                  <button
+                    type="button"
+                    id="flow-chat-reply-cancel"
+                    class="chat-reply__dismiss"
+                    aria-label="引用をキャンセル"
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
+                </div>
+                <textarea
+                  id="flow-chat-input"
+                  class="chat-input input"
+                  name="message"
+                  rows="1"
+                  maxlength="500"
+                  placeholder="ログインするとメッセージを送信できます"
+                  disabled
+                ></textarea>
+              </div>
               <button id="flow-chat-send-button" class="chat-composer__submit" type="submit" disabled>
                 送信
               </button>

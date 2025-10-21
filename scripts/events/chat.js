@@ -8,11 +8,13 @@ import {
   orderByChild,
   limitToLast,
   remove,
-  ref
+  child
 } from "../operator/firebase.js";
 
 const MESSAGE_LIMIT = 200;
 const SCROLL_THRESHOLD = 48;
+const REPLY_PAYLOAD_LIMIT = 300;
+const REPLY_PREVIEW_LIMIT = 180;
 
 function formatTime(date) {
   try {
@@ -35,13 +37,28 @@ function normalizeMessage(id, value) {
     return null;
   }
   const timestamp = typeof value.timestamp === "number" ? value.timestamp : 0;
+  let replyTo = null;
+  if (value && typeof value === "object" && value.replyTo && typeof value.replyTo === "object") {
+    const replyId = typeof value.replyTo.id === "string" ? value.replyTo.id.trim() : "";
+    const replyAuthor = typeof value.replyTo.author === "string" ? value.replyTo.author.trim() : "";
+    const replyMessageRaw = typeof value.replyTo.message === "string" ? value.replyTo.message : "";
+    const replyMessage = replyMessageRaw.trim().slice(0, REPLY_PAYLOAD_LIMIT);
+    if (replyId && replyMessage) {
+      replyTo = {
+        id: replyId,
+        author: replyAuthor,
+        message: replyMessage
+      };
+    }
+  }
   return {
     id,
     uid: typeof value.uid === "string" ? value.uid : "",
     displayName: typeof value.displayName === "string" ? value.displayName : "",
     email: typeof value.email === "string" ? value.email : "",
     message: trimmed,
-    timestamp
+    timestamp,
+    replyTo
   };
 }
 
@@ -55,7 +72,8 @@ export class EventChat {
       messages: [],
       draft: "",
       autoScroll: true,
-      unreadCount: 0
+      unreadCount: 0,
+      replyTarget: null
     };
     this.initialized = false;
     this.sending = false;
@@ -81,7 +99,15 @@ export class EventChat {
     if (this.initialized) {
       return;
     }
-    const { chatForm, chatInput, chatScroll, chatUnreadButton, chatMessages, chatContextMenu } = this.app.dom;
+    const {
+      chatForm,
+      chatInput,
+      chatScroll,
+      chatUnreadButton,
+      chatMessages,
+      chatContextMenu,
+      chatReplyDismiss
+    } = this.app.dom;
     if (chatForm) {
       chatForm.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -119,6 +145,13 @@ export class EventChat {
       chatMessages.addEventListener("contextmenu", (event) => this.handleMessageContextMenu(event));
       chatMessages.addEventListener("click", () => this.hideContextMenu());
     }
+    if (chatReplyDismiss) {
+      chatReplyDismiss.addEventListener("click", () => {
+        this.clearReplyTarget();
+        this.focusComposer();
+      });
+    }
+    this.updateReplyPreview();
     if (chatContextMenu) {
       this.menuState.element = chatContextMenu;
       chatContextMenu.addEventListener("click", (event) => {
@@ -246,6 +279,7 @@ export class EventChat {
       }
     }
     if (!enabled) {
+      this.clearReplyTarget();
       this.clearError();
     }
     this.updateSendAvailability();
@@ -378,6 +412,26 @@ export class EventChat {
     body.className = "chat-message__body";
     body.textContent = message.message;
 
+    if (message.replyTo && message.replyTo.message) {
+      const quote = document.createElement("blockquote");
+      quote.className = "chat-message__quote";
+      if (message.replyTo.id) {
+        quote.dataset.replyId = message.replyTo.id;
+      }
+      const replyAuthor = (message.replyTo.author || "").trim();
+      if (replyAuthor) {
+        const quoteAuthor = document.createElement("span");
+        quoteAuthor.className = "chat-message__quote-author";
+        quoteAuthor.textContent = replyAuthor;
+        quote.appendChild(quoteAuthor);
+      }
+      const quoteText = document.createElement("p");
+      quoteText.className = "chat-message__quote-text";
+      quoteText.textContent = message.replyTo.message;
+      quote.appendChild(quoteText);
+      bubble.append(quote);
+    }
+
     bubble.append(body);
     bubbleWrap.append(bubble, time);
 
@@ -406,12 +460,17 @@ export class EventChat {
         message: text,
         timestamp: serverTimestamp()
       };
+      const replyPayload = this.getReplyPayload();
+      if (replyPayload) {
+        payload.replyTo = replyPayload;
+      }
       const newRef = push(operatorChatMessagesRef);
       await set(newRef, payload);
       if (chatInput) {
         chatInput.value = "";
       }
       this.state.draft = "";
+      this.clearReplyTarget();
       this.state.autoScroll = true;
       this.scrollToLatest(false);
     } catch (error) {
@@ -558,24 +617,7 @@ export class EventChat {
     if (!chatInput || chatInput.disabled) {
       return;
     }
-    const resolvedName = message.displayName || message.email || "不明なユーザー";
-    const mention = `@${resolvedName}`;
-    const currentValue = chatInput.value || "";
-    const alreadyMentioned = currentValue.startsWith(`${mention} `) || currentValue === mention;
-    const nextValue = alreadyMentioned
-      ? currentValue
-      : currentValue
-          ? `${mention} ${currentValue}`
-          : `${mention} `;
-    if (nextValue !== currentValue) {
-      chatInput.value = nextValue;
-    }
-    this.state.draft = chatInput.value;
-    chatInput.focus();
-    const caret = chatInput.value.length;
-    chatInput.setSelectionRange(caret, caret);
-    this.syncComposerHeight();
-    this.updateSendAvailability();
+    this.setReplyTarget(message);
   }
 
   async performCopy(message) {
@@ -613,12 +655,118 @@ export class EventChat {
       return;
     }
     try {
-      const messageRef = ref(operatorChatMessagesRef, message.id);
+      const messageRef = child(operatorChatMessagesRef, message.id);
       await remove(messageRef);
     } catch (error) {
       console.error("Failed to cancel chat message:", error);
       this.showError("メッセージの削除に失敗しました。権限を確認してください。");
     }
+  }
+
+  setReplyTarget(message) {
+    const target = this.createReplyTarget(message);
+    if (!target) {
+      return;
+    }
+    this.state.replyTarget = target;
+    this.updateReplyPreview();
+    this.focusComposer();
+  }
+
+  clearReplyTarget() {
+    if (!this.state.replyTarget) {
+      this.updateReplyPreview();
+      return;
+    }
+    this.state.replyTarget = null;
+    this.updateReplyPreview();
+    this.syncComposerHeight();
+    this.updateSendAvailability();
+  }
+
+  updateReplyPreview() {
+    const { chatReplyPreview, chatReplyAuthor, chatReplyText } = this.app.dom;
+    const target = this.state.replyTarget;
+    if (!chatReplyPreview || !chatReplyAuthor || !chatReplyText) {
+      return;
+    }
+    if (!target) {
+      chatReplyPreview.hidden = true;
+      delete chatReplyPreview.dataset.replyId;
+      chatReplyAuthor.textContent = "";
+      chatReplyText.textContent = "";
+      return;
+    }
+    chatReplyPreview.hidden = false;
+    if (target.id) {
+      chatReplyPreview.dataset.replyId = target.id;
+    } else {
+      delete chatReplyPreview.dataset.replyId;
+    }
+    const author = (target.author || "").trim() || "不明なユーザー";
+    chatReplyAuthor.textContent = author;
+    chatReplyText.textContent = this.buildReplyExcerpt(target.message);
+  }
+
+  focusComposer() {
+    const { chatInput } = this.app.dom;
+    if (!chatInput || chatInput.disabled) {
+      return;
+    }
+    chatInput.focus();
+    const caret = chatInput.value.length;
+    try {
+      chatInput.setSelectionRange(caret, caret);
+    } catch (error) {
+      // ignore selection errors (e.g., unsupported inputs)
+    }
+    this.state.draft = chatInput.value || "";
+    this.syncComposerHeight();
+    this.updateSendAvailability();
+  }
+
+  createReplyTarget(message) {
+    if (!message || !message.id) {
+      return null;
+    }
+    const baseText = typeof message.message === "string" ? message.message : "";
+    const trimmed = baseText.trim().slice(0, REPLY_PAYLOAD_LIMIT);
+    if (!trimmed) {
+      return null;
+    }
+    const author = message.displayName || message.email || "不明なユーザー";
+    return {
+      id: message.id,
+      author,
+      message: trimmed
+    };
+  }
+
+  buildReplyExcerpt(text) {
+    const normalized = typeof text === "string" ? text.trim() : "";
+    if (!normalized) {
+      return "";
+    }
+    if (normalized.length <= REPLY_PREVIEW_LIMIT) {
+      return normalized;
+    }
+    return `${normalized.slice(0, REPLY_PREVIEW_LIMIT).trimEnd()}…`;
+  }
+
+  getReplyPayload() {
+    const target = this.state.replyTarget;
+    if (!target || !target.id) {
+      return null;
+    }
+    const message = typeof target.message === "string" ? target.message.trim() : "";
+    if (!message) {
+      return null;
+    }
+    return {
+      id: target.id,
+      author: target.author || "",
+      message
+    };
   }
 
   handleGlobalPointerDown(event) {
@@ -664,6 +812,7 @@ export class EventChat {
     this.stopListening();
     document.removeEventListener("pointerdown", this.handleGlobalPointerDown);
     document.removeEventListener("keydown", this.handleGlobalKeydown, true);
+    this.clearReplyTarget();
     this.hideContextMenu();
   }
 }
