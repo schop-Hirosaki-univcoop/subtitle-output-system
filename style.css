@@ -2338,7 +2338,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 .sidebar-card__stats{
   margin:0;
   display:grid;
-  grid-template-columns:repeat(auto-fit, minmax(9.5rem, 1fr));
+  grid-template-columns:repeat(auto-fit, minmax(10vw, 1fr));
   gap:.55rem;
 }
 
