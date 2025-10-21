@@ -1,6 +1,8 @@
 export function queryDom() {
   return {
     main: document.getElementById("events-main"),
+    flowStage: document.querySelector(".flow-stage"),
+    chatContainer: document.querySelector(".events-chat"),
     eventsModule: document.querySelector('[data-panel="events"]'),
     schedulesModule: document.querySelector('[data-panel="schedules"]'),
     stageIndicators: Array.from(document.querySelectorAll("[data-stage-indicator]")),

@@ -634,18 +634,23 @@
           </div>
           <form id="flow-chat-form" class="chat-form" novalidate>
             <label class="visually-hidden" for="flow-chat-input">メッセージ</label>
-            <textarea
-              id="flow-chat-input"
-              class="chat-input input"
-              name="message"
-              rows="2"
-              maxlength="500"
-              placeholder="ログインするとメッセージを送信できます"
-              disabled
-            ></textarea>
+            <div class="chat-composer">
+              <textarea
+                id="flow-chat-input"
+                class="chat-input input"
+                name="message"
+                rows="1"
+                maxlength="500"
+                placeholder="ログインするとメッセージを送信できます"
+                disabled
+              ></textarea>
+              <button id="flow-chat-send-button" class="chat-composer__submit" type="submit" disabled>
+                送信
+              </button>
+            </div>
             <div class="chat-form__footer">
               <p id="flow-chat-error" class="chat-error" role="alert" hidden></p>
-              <button id="flow-chat-send-button" class="btn btn-primary" type="submit" disabled>送信</button>
+              <p class="chat-form__shortcut" aria-hidden="true">Ctrl / ⌘ + Enter で送信</p>
             </div>
           </form>
         </section>
