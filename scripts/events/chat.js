@@ -85,6 +85,12 @@ export class EventChat {
         this.clearError();
         this.updateSendAvailability();
       });
+      chatInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          this.handleSubmit();
+        }
+      });
     }
     if (chatScroll) {
       chatScroll.addEventListener("scroll", () => this.handleScroll());
