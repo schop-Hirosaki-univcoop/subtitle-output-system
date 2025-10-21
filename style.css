@@ -2358,17 +2358,20 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 .chat-message::after{
   content:"";
   position:absolute;
-  bottom:.7rem;
-  left:-.55rem;
-  width:1.05rem;
-  height:1.05rem;
+  bottom:.62rem;
+  left:-.46rem;
+  width:.9rem;
+  height:.9rem;
   background:var(--bubble-bg, linear-gradient(180deg, rgba(18,34,58,.82), rgba(8,18,32,.78)));
   border-left:1px solid var(--bubble-border, rgba(86,132,194,.45));
   border-bottom:1px solid var(--bubble-border, rgba(86,132,194,.45));
-  border-bottom-left-radius:1rem;
-  transform:skewX(-18deg);
+  border-top:none;
+  border-right:none;
+  border-radius:.25rem;
+  transform:rotate(45deg);
+  transform-origin:center;
   z-index:-1;
-  box-shadow:inherit;
+  box-shadow:0 14px 32px rgba(4,12,28,.28);
 }
 
 .chat-message--self{
@@ -2381,12 +2384,11 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 .chat-message--self::after{
   left:auto;
-  right:-.55rem;
+  right:-.46rem;
   border-left:none;
-  border-bottom:1px solid var(--bubble-border, rgba(90,172,255,.55));
+  border-top:none;
   border-right:1px solid var(--bubble-border, rgba(90,172,255,.55));
-  border-bottom-right-radius:1rem;
-  transform:scaleX(-1) skewX(-18deg);
+  border-bottom:1px solid var(--bubble-border, rgba(90,172,255,.55));
 }
 
 
