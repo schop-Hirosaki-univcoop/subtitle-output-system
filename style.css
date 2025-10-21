@@ -2275,7 +2275,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   display:flex;
   flex-direction:column;
   gap:clamp(.85rem, 1.6vw, 1.2rem);
-  padding:clamp(.95rem, 1.8vw, 1.35rem) clamp(1rem, 2vw, 1.5rem);
+  padding:1rem 1rem;
   border-radius:clamp(.95rem, 1.8vw, 1.4rem);
   border:1px solid rgba(74,116,178,.55);
   background:linear-gradient(180deg, rgba(16,30,52,.92), rgba(10,20,38,.88));
