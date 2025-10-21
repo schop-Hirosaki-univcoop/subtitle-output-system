@@ -108,7 +108,8 @@ const UPLOAD_STATUS_PLACEHOLDERS = new Set(
   ].map(normalizeKey)
 );
 
-const PARTICIPANT_DESCRIPTION_DEFAULT = "イベントコントロールセンター（events.html）のフローで日程を選択してこのページを開くと、参加者情報（CSVの列順はテンプレートをご利用ください。ヘッダーは「名前,フリガナ,性別,学部学科,携帯電話,メールアドレス」で、UIDは各参加者に対して一意で未入力の場合は自動採番されます）をアップロードして管理できます。保存後は各参加者ごとに専用リンクを発行でき、一覧の「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は、日程が同じでも異なっても重複候補として件数付きで表示されます。専用リンクは各行のボタンまたはURLから取得できます。班番号には「キャンセル」または「別日」を指定してステータスを管理します。";
+const PARTICIPANT_DESCRIPTION_DEFAULT =
+  "選択したイベント・日程の参加者情報を管理できます。各参加者ごとに質問フォームの専用リンクを発行でき、「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は重複候補として件数付きで表示されます。専用リンクは各行のボタンまたはURLから取得できます。";
 
 const CANCEL_LABEL = "キャンセル";
 const RELOCATE_LABEL = "別日";
@@ -957,7 +958,7 @@ function commitParticipantQuickEdit(index, updated, { successMessage, successVar
   if (successMessage) {
     setUploadStatus(successMessage, successVariant);
   } else if (hasUnsavedChanges()) {
-    setUploadStatus("編集内容は未保存です。「参加者リストを保存」で確定します。");
+    setUploadStatus("編集内容は未保存です。「適応」で確定します。");
   } else {
     setUploadStatus("保存済みの内容と同じため変更はありません。");
   }
@@ -1010,7 +1011,7 @@ function handleQuickCancelAction(participantId, rowIndex, rowKey) {
   }
 
   const identifier = formatParticipantIdentifier(entry);
-  const message = `${identifier}を${CANCEL_LABEL}に設定しました。「参加者リストを保存」で確定します。`;
+  const message = `${identifier}を${CANCEL_LABEL}に設定しました。「適応」で確定します。`;
   commitParticipantQuickEdit(index, updated, { successMessage: message, successVariant: "success" });
 
   if (uid && Array.isArray(state.relocationPromptTargets)) {
@@ -2401,7 +2402,7 @@ function renderParticipantChangePreview(diff, changeInfoByKey, participants = []
   dom.changePreviewList.appendChild(fragment);
 
   if (dom.changePreviewNote) {
-    dom.changePreviewNote.textContent = "「参加者リストを保存」で変更を確定し、「変更を取り消す」で破棄できます。";
+    dom.changePreviewNote.textContent = "「適応」で変更を確定し、「取消」で破棄できます。";
   }
 }
 
@@ -3636,7 +3637,7 @@ async function handleTeamCsvChange(event) {
 function downloadParticipantTemplate() {
   const { eventId, scheduleId } = getSelectionIdentifiers();
   if (!eventId || !scheduleId) {
-    setUploadStatus(getSelectionRequiredMessage("参加者CSVテンプレートを作成するには"), "error");
+    setUploadStatus(getSelectionRequiredMessage("参加者CSVテンプレをダウンロードするには"), "error");
     return;
   }
 
@@ -3648,7 +3649,7 @@ function downloadParticipantTemplate() {
 function downloadTeamTemplate() {
   const { eventId, scheduleId } = getSelectionIdentifiers();
   if (!eventId || !scheduleId) {
-    setUploadStatus(getSelectionRequiredMessage("班番号テンプレートを作成するには"), "error");
+    setUploadStatus(getSelectionRequiredMessage("班番号CSVテンプレをダウンロードするには"), "error");
     return;
   }
 
@@ -3663,7 +3664,7 @@ function downloadTeamTemplate() {
     ]);
 
   if (!rows.length) {
-    setUploadStatus("テンプレートに出力できる参加者が見つかりません。参加者リストを読み込んでからお試しください。", "error");
+    setUploadStatus("テンプレに出力できる参加者が見つかりません。参加者リストを読み込んでからお試しください。", "error");
     return;
   }
 
@@ -4332,7 +4333,7 @@ async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
   updateDuplicateMatches();
   renderParticipants();
   if (hasUnsavedChanges()) {
-    setUploadStatus(`${identifier}を削除予定です。「参加者リストを保存」で確定します。`);
+    setUploadStatus(`${identifier}を削除予定です。「適応」で確定します。`);
   } else {
     setUploadStatus("変更は保存済みの状態に戻りました。");
   }
@@ -4488,7 +4489,7 @@ function saveParticipantEdits() {
   renderParticipants();
   syncSaveButtonState();
   if (hasUnsavedChanges()) {
-    setUploadStatus("編集内容は未保存です。「参加者リストを保存」で確定します。");
+    setUploadStatus("編集内容は未保存です。「適応」で確定します。");
   } else {
     setUploadStatus("保存済みの内容と同じため変更はありません。");
   }

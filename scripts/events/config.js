@@ -4,11 +4,11 @@ export const STAGE_INFO = {
   events: {
     title: "イベントの管理",
     description:
-      "質問フォームで使用するイベントを追加・編集・削除し、選択したイベントを次のステップへ引き継ぎます。"
+      "イベントを追加・編集・削除できます。イベントを選択し、次のステップへ引き継ぎます。"
   },
   schedules: {
     title: "日程の管理",
-    description: "選択したイベントに紐づく日程を整理し、次のツールに引き継ぐ日程を決めます。"
+    description: "選択したイベントに紐づく日程を整理できます。日程を選択し、次のツールに引き継ぎます。"
   }
 };
 
@@ -27,23 +27,24 @@ export const PANEL_STAGE_INFO = {
   schedules: STAGE_INFO.schedules,
   participants: {
     title: "参加者リストの管理",
-    description: "選択した日程の参加者リストを整理・更新します。"
+    description:
+      "選択したイベント・日程の参加者情報を管理できます。各参加者ごとに質問フォームの専用リンクを発行でき、「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は重複候補として件数付きで表示されます。専用リンクは各行のボタンまたはURLから取得できます。"
   },
   operator: {
     title: "テロップ操作パネル",
-    description: "質問の送出とステータス監視を行います。"
+    description: "質問を選択・送出できます。"
   },
   dictionary: {
     title: "ルビ辞書管理",
-    description: "登録語句を編集して即座に共有できます。"
+    description: "登録語句の追加や更新が即座にディスプレイへ反映されます。"
   },
   pickup: {
     title: "Pick Up Question 管理",
-    description: "Pick Up Question の内容とジャンルを整備します。"
+    description: "Pick Up Question の候補を追加・編集し、ジャンルを整理できます。"
   },
   logs: {
     title: "操作ログ",
-    description: "テロップ操作の履歴を確認します。"
+    description: "直近の操作履歴を確認し、異常を素早く検知できます。"
   }
 };
 
