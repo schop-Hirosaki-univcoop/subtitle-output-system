@@ -2462,10 +2462,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 @media (max-width: 1440px){
   .events-layout{
-    grid-template-columns:minmax(190px, 15vw) minmax(0, 1fr);
-  }
-  .events-chat{
-    grid-column:1 / -1;
+    grid-template-columns:minmax(190px, 15vw) minmax(0, 1fr) clamp(240px, 28vw, 320px);
   }
   .chat-scroll{
     max-height:min(54vh, 420px);
