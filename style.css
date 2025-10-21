@@ -2251,7 +2251,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 .events-layout{
   display:grid;
   gap:clamp(1.25rem, 2vw, 1.75rem);
-  grid-template-columns:minmax(240px, 300px) minmax(0, 1fr);
+  grid-template-columns:15vw minmax(0, 1fr);
   align-items:start;
   width:min(100%, 96vw);
   margin-inline:auto;
