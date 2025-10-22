@@ -1,20 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00bcd4" />
-      <stop offset="100%" stop-color="#0065ff" />
+      <stop offset="0%" stop-color="#5138ee" />
+      <stop offset="100%" stop-color="#c54bff" />
     </linearGradient>
-    <linearGradient id="glow" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.9)" />
-      <stop offset="100%" stop-color="rgba(255,255,255,0.1)" />
+    <linearGradient id="card" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.95)" />
+      <stop offset="100%" stop-color="rgba(255,255,255,0.75)" />
     </linearGradient>
   </defs>
   <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#bg)" />
-  <path d="M20 34c6 0 6-14 12-14s6 14 12 14" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="3" stroke-linecap="round" />
-  <g fill="none" stroke="white" stroke-width="4" stroke-linecap="round">
-    <path d="M24 34v-8" />
-    <path d="M32 34v-14" />
-    <path d="M40 34v-10" />
+  <g fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="2.5" stroke-linecap="round">
+    <rect x="14" y="14" width="36" height="26" rx="9" fill="rgba(255,255,255,0.14)" />
+    <path d="M47 18c4 4 4 10 0 14" />
+    <path d="M43 20c3 3 3 7 0 10" />
   </g>
-  <path d="M20 36c6 0 6 14 12 14s6-14 12-14" fill="none" stroke="url(#glow)" stroke-width="3" stroke-linecap="round" />
+  <g>
+    <rect x="18" y="30" width="28" height="12" rx="6" fill="url(#card)" />
+    <path d="M22 36h12" stroke="#5733ff" stroke-width="3" stroke-linecap="round" />
+    <path d="M22 32h20" stroke="#8156ff" stroke-width="2.5" stroke-linecap="round" />
+    <path d="M22 40h10" stroke="#8156ff" stroke-width="2.5" stroke-linecap="round" />
+  </g>
+  <path d="M28 24h12" stroke="rgba(255,255,255,0.7)" stroke-width="3" stroke-linecap="round" />
 </svg>
