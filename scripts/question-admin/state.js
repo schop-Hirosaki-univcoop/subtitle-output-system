@@ -26,7 +26,8 @@ const state = {
   initialSelection: null,
   initialSelectionApplied: false,
   initialSelectionNotice: null,
-  initialFocusTarget: ""
+  initialFocusTarget: "",
+  activeParticipantTab: "manage"
 };
 
 const calendarState = {
