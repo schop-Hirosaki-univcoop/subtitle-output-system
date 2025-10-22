@@ -159,71 +159,80 @@
                         <div class="module-actions"></div>
                       </div>
                       <div class="module-body">
-                        <div class="admin-controls">
-                          <div class="admin-controls__row admin-controls__row--imports">
-                            <button id="qa-download-participant-template" class="btn btn-ghost btn-sm" type="button">参加者CSVテンプレのDL</button>
-                            <label class="btn btn-ghost file-input" for="qa-csv-input">
-                              <span id="qa-file-label">参加者CSVをアップロード</span>
-                              <input id="qa-csv-input" type="file" accept=".csv,text/csv">
-                            </label>
-                            <button id="qa-download-team-template" class="btn btn-ghost btn-sm" type="button" disabled>班番号CSVテンプレのDL</button>
-                            <label class="btn btn-ghost file-input" for="qa-team-csv-input">
-                              <span id="qa-team-file-label">班番号CSVをアップロード</span>
-                              <input id="qa-team-csv-input" type="file" accept=".csv,text/csv">
-                            </label>
+                        <div class="qa-participant-card-switcher">
+                          <div class="qa-participant-card-tabs">
+                            <span class="qa-participant-card-tabs__label" aria-hidden="true">表示モード</span>
+                            <div id="qa-participant-tablist" class="qa-participant-card-tabs__buttons" role="tablist" aria-label="参加者ツールの表示を切り替え">
+                              <button id="qa-participant-tab-manage" class="qa-participant-card-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="qa-participant-tabpanel-manage" tabindex="0">
+                                <span class="qa-participant-card-tab__label">参加者リスト管理</span>
+                              </button>
+                              <button id="qa-participant-tab-csv" class="qa-participant-card-tab" type="button" role="tab" aria-selected="false" aria-controls="qa-participant-tabpanel-csv" tabindex="-1">
+                                <span class="qa-participant-card-tab__label">CSVの形式</span>
+                              </button>
+                            </div>
                           </div>
-                          <div class="admin-controls__row admin-controls__row--actions">
-                            <button id="qa-discard-button" class="btn btn-ghost btn-sm" type="button" disabled>取消</button>
-                            <button id="qa-save-button" class="btn btn-primary" type="button" disabled>適用</button>
-                            <button id="qa-clear-participants-button" class="btn btn-danger btn-sm" type="button" disabled>参加者リストを全削除</button>
+                          <div class="qa-participant-tabpanels">
+                            <section id="qa-participant-tabpanel-manage" class="qa-participant-tabpanel" role="tabpanel" aria-labelledby="qa-participant-tab-manage">
+                              <div class="qa-participant-card qa-participant-card--manage">
+                                <div class="qa-participant-card__body">
+                                  <div class="admin-controls">
+                                    <div class="admin-controls__row admin-controls__row--imports">
+                                      <button id="qa-download-participant-template" class="btn btn-ghost btn-sm" type="button">参加者CSVテンプレのDL</button>
+                                      <label class="btn btn-ghost file-input" for="qa-csv-input">
+                                        <span id="qa-file-label">参加者CSVをアップロード</span>
+                                        <input id="qa-csv-input" type="file" accept=".csv,text/csv">
+                                      </label>
+                                      <button id="qa-download-team-template" class="btn btn-ghost btn-sm" type="button" disabled>班番号CSVテンプレのDL</button>
+                                      <label class="btn btn-ghost file-input" for="qa-team-csv-input">
+                                        <span id="qa-team-file-label">班番号CSVをアップロード</span>
+                                        <input id="qa-team-csv-input" type="file" accept=".csv,text/csv">
+                                      </label>
+                                    </div>
+                                  </div>
+                                  <div id="qa-change-preview" class="change-preview" hidden aria-live="polite">
+                                    <div class="change-preview__header">
+                                      <span class="change-preview__title">未保存の変更があります</span>
+                                      <span id="qa-change-preview-count" class="change-preview__count"></span>
+                                    </div>
+                                    <ul id="qa-change-preview-list" class="change-preview__list" aria-label="未保存の変更一覧"></ul>
+                                    <p id="qa-change-preview-note" class="change-preview__note">「適用」で変更を確定し、「取消」で破棄できます。</p>
+                                  </div>
+                                  <div class="participant-card-shell">
+                                    <div id="qa-participant-card-list" class="participant-card-list" role="list" aria-live="polite"></div>
+                                  </div>
+                                </div>
+                              </div>
+                            </section>
+                            <section id="qa-participant-tabpanel-csv" class="qa-participant-tabpanel" role="tabpanel" aria-labelledby="qa-participant-tab-csv" hidden aria-hidden="true">
+                              <div class="qa-participant-card qa-participant-card--info">
+                                <div class="qa-participant-card__header">
+                                  <h2 id="qa-format-title">CSVの形式について</h2>
+                                  <p class="qa-participant-card__description">ヘッダー行として、1列目から順に「名前」「フリガナ」「性別」「学部学科」「携帯電話」「メールアドレス」を配置してください。アップロード時には必ずヘッダー行が必要です。テンプレボタンからダウンロードできます。ファイル名は「イベントID_日程ID_participants.csv」を使用してください。電話番号とメールアドレスは内部で保存され、編集ダイアログでのみ確認できます。</p>
+                                </div>
+                                <div class="qa-participant-card__body">
+                                  <ul>
+                                    <li>ヘッダー行が必須です。</li>
+                                    <li>同じUIDや同じ氏名・学部学科の行が複数あっても全て読み込み、一覧上で重複候補として確認できます。</li>
+                                    <li>CSVにNo.列は不要です。読み込み時に学部学科→フリガナの順で並べ替え、表示用のNo.は自動採番されます。</li>
+                                    <li>同じイベント内で名前と学部学科が一致する参加者は重複候補として件数付きで表示されます。</li>
+                                    <li>各列は空欄でもアップロードできますが、氏名は必須です。</li>
+                                    <li>保存後はフォームに即座に反映されます。</li>
+                                    <li>班番号は別途、<code>学部学科,性別,名前,班番号,uid</code>形式のCSV（ヘッダー必須）をアップロードすると一括で紐付けられます（「キャンセル」はキャンセル済み、「別日」は別日移動として扱われます）。テンプレートには現在のUIDがあらかじめ記載されます。ファイル名は「イベントID_日程ID_teams.csv」としてください。</li>
+                                  </ul>
+                                </div>
+                              </div>
+                            </section>
                           </div>
                         </div>
-                        <div id="qa-change-preview" class="change-preview" hidden aria-live="polite">
-                          <div class="change-preview__header">
-                            <span class="change-preview__title">未保存の変更があります</span>
-                            <span id="qa-change-preview-count" class="change-preview__count"></span>
-                          </div>
-                          <ul id="qa-change-preview-list" class="change-preview__list" aria-label="未保存の変更一覧"></ul>
-                          <p id="qa-change-preview-note" class="change-preview__note">「適用」で変更を確定し、「取消」で破棄できます。</p>
-                        </div>
-                        <div class="table-scroller">
-                          <table class="mapping-table" aria-describedby="qa-participant-description">
-                            <thead>
-                              <tr>
-                                <th scope="col" class="is-numeric">No.</th>
-                                <th scope="col">氏名</th>
-                                <th scope="col">性別</th>
-                                <th scope="col">学部学科</th>
-                                <th scope="col" class="is-numeric">班番号</th>
-                                <th scope="col">専用リンク</th>
-                              </tr>
-                            </thead>
-                            <tbody id="qa-mapping-tbody"></tbody>
-                          </table>
-                        </div>
+                      </div>
+                      <div id="qa-participant-action-panel" class="action-panel is-idle" role="region" aria-label="参加者リストの操作" aria-live="polite">
+                        <button id="qa-discard-button" class="btn btn-ghost btn-sm" type="button" disabled>取消</button>
+                        <button id="qa-save-button" class="btn btn-primary" type="button" disabled>適用</button>
+                        <button id="qa-clear-participants-button" class="btn btn-danger btn-sm" type="button" disabled>参加者リストを全削除</button>
+                        <span id="qa-participant-action-info" class="action-panel__meta">操作可能なボタンはありません。</span>
                       </div>
                       </section>
                     </div>
-
-                    <section class="module module--secondary admin-module" aria-labelledby="qa-format-title">
-                      <div class="module-header">
-                        <div class="module-heading">
-                          <h2 id="qa-format-title">CSVの形式について</h2>
-                          <p class="module-description">ヘッダー行として、1列目から順に「名前」「フリガナ」「性別」「学部学科」「携帯電話」「メールアドレス」を配置してください。アップロード時には必ずヘッダー行が必要です。テンプレボタンからダウンロードできます。ファイル名は「イベントID_日程ID_participants.csv」を使用してください。電話番号とメールアドレスは内部で保存され、編集ダイアログでのみ確認できます。</p>
-                        </div>
-                      </div>
-                      <div class="module-body">
-                        <ul>
-                          <li>ヘッダー行が必須です。</li>
-                          <li>同じUIDや同じ氏名・学部学科の行が複数あっても全て読み込み、一覧上で重複候補として確認できます。</li>
-                          <li>CSVにNo.列は不要です。読み込み時に学部学科→フリガナの順で並べ替え、表示用のNo.は自動採番されます。</li>
-                          <li>同じイベント内で名前と学部学科が一致する参加者は重複候補として件数付きで表示されます。</li>
-                          <li>各列は空欄でもアップロードできますが、氏名は必須です。</li>
-                          <li>保存後はフォームに即座に反映されます。</li>
-                          <li>班番号は別途、<code>学部学科,性別,名前,班番号,uid</code>形式のCSV（ヘッダー必須）をアップロードすると一括で紐付けられます（「キャンセル」はキャンセル済み、「別日」は別日移動として扱われます）。テンプレートには現在のUIDがあらかじめ記載されます。ファイル名は「イベントID_日程ID_teams.csv」としてください。</li>
-                        </ul>
-                      </div>
-                    </section>
                   </main>
 
                   <div id="qa-participant-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="qa-participant-dialog-title" hidden>
