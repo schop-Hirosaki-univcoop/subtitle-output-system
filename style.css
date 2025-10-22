@@ -4241,6 +4241,7 @@ body.sidebar-overlay-open{
 
 :is(#flow-panel-participants .qa-embedded, .question-admin-page) .participant-card__header{
   display:flex;
+  flex-direction:column;
   align-items:flex-start;
   gap:clamp(.55rem, 1.4vw, .85rem);
 }
@@ -4295,7 +4296,8 @@ body.sidebar-overlay-open{
 :is(#flow-panel-participants .qa-embedded, .question-admin-page) .participant-card__badges{
   display:flex;
   flex-wrap:wrap;
-  gap:.35rem;
+  align-items:center;
+  gap:.45rem;
 }
 
 :is(#flow-panel-participants .qa-embedded, .question-admin-page) .participant-badge{
@@ -4348,6 +4350,26 @@ body.sidebar-overlay-open{
   flex-wrap:wrap;
   align-items:center;
   gap:.45rem;
+}
+
+:is(#flow-panel-participants .qa-embedded, .question-admin-page) .participant-card__link-row{
+  flex-wrap:nowrap;
+  width:100%;
+}
+
+:is(#flow-panel-participants .qa-embedded, .question-admin-page) .participant-card__link-row .share-link-preview{
+  flex:1 1 0%;
+  min-width:0;
+  max-width:max(0px, calc(100% - 6.5rem));
+  margin-top:0;
+}
+
+:is(#flow-panel-participants .qa-embedded, .question-admin-page) .participant-card__link-row .link-action-btn{
+  flex:0 0 auto;
+}
+
+:is(#flow-panel-participants .qa-embedded, .question-admin-page) .participant-card__link-row .link-placeholder{
+  flex:1 1 auto;
 }
 
 :is(#flow-panel-participants .qa-embedded, .question-admin-page) .participant-card__warning{
@@ -4503,8 +4525,8 @@ body.sidebar-overlay-open{
 }
 
 :is(#flow-panel-participants .qa-embedded, .question-admin-page) .share-link-preview{
-  display:inline-block;
-  margin-top:.35rem;
+  display:block;
+  margin-top:0;
   font-size:.78rem;
   color:#9dd4ff;
   word-break:break-all;
