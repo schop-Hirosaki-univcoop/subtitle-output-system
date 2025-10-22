@@ -2595,6 +2595,7 @@ function syncSaveButtonState() {
       dom.discardButton.removeAttribute("aria-disabled");
     }
   }
+  updateParticipantActionPanelState();
 }
 
 function syncClearButtonState() {
@@ -2602,6 +2603,7 @@ function syncClearButtonState() {
   const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
   const hasParticipants = hasSelection && state.participants.length > 0;
   dom.clearParticipantsButton.disabled = !hasSelection || !hasParticipants || state.saving;
+  updateParticipantActionPanelState();
 }
 
 function syncTemplateButtons() {
@@ -2627,6 +2629,95 @@ function syncTemplateButtons() {
       dom.downloadTeamTemplateButton.setAttribute("title", "参加者リストを読み込むとダウンロードできます。");
     }
   }
+}
+
+function updateParticipantActionPanelState() {
+  if (!dom.participantActionPanel) {
+    return;
+  }
+  const actionable = Boolean(
+    (dom.saveButton && !dom.saveButton.disabled) ||
+    (dom.discardButton && !dom.discardButton.disabled) ||
+    (dom.clearParticipantsButton && !dom.clearParticipantsButton.disabled)
+  );
+  dom.participantActionPanel.classList.toggle("is-idle", !actionable);
+  if (dom.participantActionInfo) {
+    dom.participantActionInfo.textContent = actionable
+      ? "実行する操作を選択してください。"
+      : "操作可能なボタンはありません。";
+  }
+}
+
+function setParticipantTab(tabKey = "manage") {
+  const target = tabKey === "csv" ? "csv" : "manage";
+  state.activeParticipantTab = target;
+  const entries = [
+    { key: "manage", tab: dom.participantManageTab, panel: dom.participantManagePanel },
+    { key: "csv", tab: dom.participantCsvTab, panel: dom.participantCsvPanel }
+  ];
+  entries.forEach(({ key, tab, panel }) => {
+    const isActive = key === target;
+    if (tab) {
+      tab.classList.toggle("is-active", isActive);
+      tab.setAttribute("aria-selected", isActive ? "true" : "false");
+      tab.setAttribute("tabindex", isActive ? "0" : "-1");
+    }
+    if (panel) {
+      panel.hidden = !isActive;
+      if (isActive) {
+        panel.removeAttribute("aria-hidden");
+      } else {
+        panel.setAttribute("aria-hidden", "true");
+      }
+    }
+  });
+}
+
+function focusParticipantTab(tabKey) {
+  if (tabKey === "csv" && dom.participantCsvTab) {
+    dom.participantCsvTab.focus();
+    return;
+  }
+  if (dom.participantManageTab) {
+    dom.participantManageTab.focus();
+  }
+}
+
+function setupParticipantTabs() {
+  const entries = [
+    { key: "manage", tab: dom.participantManageTab },
+    { key: "csv", tab: dom.participantCsvTab }
+  ].filter(entry => entry.tab instanceof HTMLElement);
+
+  if (!entries.length) {
+    return;
+  }
+
+  entries.forEach(({ key, tab }, index) => {
+    tab.addEventListener("click", () => setParticipantTab(key));
+    tab.addEventListener("keydown", event => {
+      if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        const nextIndex = (index + direction + entries.length) % entries.length;
+        const next = entries[nextIndex];
+        setParticipantTab(next.key);
+        focusParticipantTab(next.key);
+      } else if (event.key === "Home" || event.key === "PageUp") {
+        event.preventDefault();
+        const first = entries[0];
+        setParticipantTab(first.key);
+        focusParticipantTab(first.key);
+      } else if (event.key === "End" || event.key === "PageDown") {
+        event.preventDefault();
+        const last = entries[entries.length - 1];
+        setParticipantTab(last.key);
+        focusParticipantTab(last.key);
+      }
+    });
+  });
+
+  setParticipantTab(state.activeParticipantTab || "manage");
 }
 
 function updateParticipantContext(options = {}) {
@@ -3559,6 +3650,7 @@ async function handleCsvChange(event) {
       if (dom.saveButton) dom.saveButton.disabled = false;
       setUploadStatus(`読み込み成功: ${state.participants.length}名`, "success");
     }
+    updateParticipantActionPanelState();
   } catch (error) {
     console.error(error);
     setUploadStatus(error.message || "CSVの読み込みに失敗しました。", "error");
@@ -4140,6 +4232,8 @@ function setAuthUi(signedIn) {
     if (dom.csvInput) dom.csvInput.disabled = true;
     if (dom.saveButton) dom.saveButton.disabled = true;
   }
+
+  updateParticipantActionPanelState();
 }
 
 function resolveFocusTargetElement(target) {
@@ -4631,6 +4725,9 @@ async function ensureAdminAccess() {
 }
 
 function attachEventHandlers() {
+  setupParticipantTabs();
+  updateParticipantActionPanelState();
+
   if (dom.loginButton) {
     dom.loginButton.addEventListener("click", async () => {
       if (dom.loginButton.disabled) return;
@@ -4822,6 +4919,7 @@ function attachEventHandlers() {
       });
     });
     dom.saveButton.disabled = true;
+    updateParticipantActionPanelState();
   }
 
   if (dom.discardButton) {
@@ -4832,6 +4930,7 @@ function attachEventHandlers() {
       });
     });
     dom.discardButton.disabled = true;
+    updateParticipantActionPanelState();
   }
 
   if (dom.mappingTbody) {
@@ -4849,6 +4948,7 @@ function attachEventHandlers() {
         setUploadStatus(err.message || "参加者リストの削除に失敗しました。", "error");
       });
     });
+    updateParticipantActionPanelState();
   }
 
   if (dom.eventEmpty) dom.eventEmpty.hidden = true;
