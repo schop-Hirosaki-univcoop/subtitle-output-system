@@ -160,15 +160,16 @@
                       </div>
                       <div class="module-body">
                         <div class="qa-participant-card-switcher">
-                          <div id="qa-participant-tablist" class="qa-participant-card-tabs" role="tablist" aria-label="参加者ツールの表示を切り替え">
-                            <button id="qa-participant-tab-manage" class="qa-participant-card-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="qa-participant-tabpanel-manage" tabindex="0">
-                              <span class="qa-participant-card-tab__title">参加者リスト管理</span>
-                              <span class="qa-participant-card-tab__meta">読み込みと編集</span>
-                            </button>
-                            <button id="qa-participant-tab-csv" class="qa-participant-card-tab" type="button" role="tab" aria-selected="false" aria-controls="qa-participant-tabpanel-csv" tabindex="-1">
-                              <span class="qa-participant-card-tab__title">CSVの形式</span>
-                              <span class="qa-participant-card-tab__meta">ヘッダー構成など</span>
-                            </button>
+                          <div class="qa-participant-card-tabs">
+                            <span class="qa-participant-card-tabs__label" aria-hidden="true">表示モード</span>
+                            <div id="qa-participant-tablist" class="qa-participant-card-tabs__buttons" role="tablist" aria-label="参加者ツールの表示を切り替え">
+                              <button id="qa-participant-tab-manage" class="qa-participant-card-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="qa-participant-tabpanel-manage" tabindex="0">
+                                <span class="qa-participant-card-tab__label">参加者リスト管理</span>
+                              </button>
+                              <button id="qa-participant-tab-csv" class="qa-participant-card-tab" type="button" role="tab" aria-selected="false" aria-controls="qa-participant-tabpanel-csv" tabindex="-1">
+                                <span class="qa-participant-card-tab__label">CSVの形式</span>
+                              </button>
+                            </div>
                           </div>
                           <div class="qa-participant-tabpanels">
                             <section id="qa-participant-tabpanel-manage" class="qa-participant-tabpanel" role="tabpanel" aria-labelledby="qa-participant-tab-manage">
@@ -196,20 +197,8 @@
                                     <ul id="qa-change-preview-list" class="change-preview__list" aria-label="未保存の変更一覧"></ul>
                                     <p id="qa-change-preview-note" class="change-preview__note">「適用」で変更を確定し、「取消」で破棄できます。</p>
                                   </div>
-                                  <div class="table-scroller">
-                                    <table class="mapping-table" aria-describedby="qa-participant-description">
-                                      <thead>
-                                        <tr>
-                                          <th scope="col" class="is-numeric">No.</th>
-                                          <th scope="col">氏名</th>
-                                          <th scope="col">性別</th>
-                                          <th scope="col">学部学科</th>
-                                          <th scope="col" class="is-numeric">班番号</th>
-                                          <th scope="col">専用リンク</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody id="qa-mapping-tbody"></tbody>
-                                    </table>
+                                  <div class="participant-card-shell">
+                                    <div id="qa-participant-card-list" class="participant-card-list" role="list" aria-live="polite"></div>
                                   </div>
                                 </div>
                               </div>

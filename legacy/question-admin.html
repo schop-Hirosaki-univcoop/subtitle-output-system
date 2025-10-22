@@ -52,8 +52,8 @@
       </div>
       <div class="module-body">
         <p id="participant-context" class="admin-context">イベントコントロールセンターで指定した日程の参加者が表示されます。URL の <code>eventId</code> と <code>scheduleId</code> パラメーターを確認してください。</p>
-        <div class="admin-controls">
-          <div class="admin-controls__row admin-controls__row--imports">
+      <div class="admin-controls">
+        <div class="admin-controls__row admin-controls__row--imports">
             <button id="download-participant-template" class="btn btn-ghost btn-sm" type="button">参加者CSVテンプレのDL</button>
             <label class="btn btn-ghost file-input" for="csv-input">
               <span id="file-label">参加者CSVをアップロード</span>
@@ -80,20 +80,8 @@
           <ul id="change-preview-list" class="change-preview__list" aria-label="未保存の変更一覧"></ul>
           <p id="change-preview-note" class="change-preview__note">「適用」で変更を確定し、「取消」で破棄できます。</p>
         </div>
-        <div class="table-scroller">
-          <table class="mapping-table" aria-describedby="participant-description">
-            <thead>
-              <tr>
-                <th scope="col" class="is-numeric">No.</th>
-                <th scope="col">氏名</th>
-                <th scope="col">性別</th>
-                <th scope="col">学部学科</th>
-                <th scope="col" class="is-numeric">班番号</th>
-                <th scope="col">専用リンク</th>
-              </tr>
-            </thead>
-            <tbody id="mapping-tbody"></tbody>
-          </table>
+        <div class="participant-card-shell">
+          <div id="participant-card-list" class="participant-card-list" role="list" aria-live="polite"></div>
         </div>
       </div>
     </section>

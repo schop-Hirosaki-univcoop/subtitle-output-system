@@ -105,7 +105,7 @@ const dom = {
   changePreviewNote: resolve("change-preview-note"),
   fileLabel: resolve("file-label"),
   teamFileLabel: resolve("team-file-label"),
-  mappingTbody: resolve("mapping-tbody"),
+  participantCardList: resolve("participant-card-list"),
   adminSummary: resolve("admin-summary"),
   loginError: resolve("login-error"),
   copyrightYear: resolve("copyright-year")

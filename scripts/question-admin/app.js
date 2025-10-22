@@ -2003,12 +2003,12 @@ async function copyShareLink(token) {
 }
 
 function renderParticipants() {
-  const tbody = dom.mappingTbody;
-  if (!tbody) {
+  const list = dom.participantCardList;
+  if (!list) {
     syncSelectedEventSummary();
     return;
   }
-  tbody.innerHTML = "";
+  list.innerHTML = "";
 
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
@@ -2033,17 +2033,26 @@ function renderParticipants() {
     });
   });
 
+  list.setAttribute("data-count", String(participants.length));
+
+  const fragment = document.createDocumentFragment();
+
   participants.forEach((entry, index) => {
-    const tr = document.createElement("tr");
+    const card = document.createElement("article");
+    card.className = "participant-card";
+    card.setAttribute("role", "listitem");
     const changeKey = participantChangeKey(entry, index);
     const changeInfo = changeInfoByKey.get(changeKey);
-    const noTd = document.createElement("td");
-    noTd.className = "participant-no-cell numeric-cell";
-    applyParticipantNoText(noTd, index + 1);
-    const nameTd = document.createElement("td");
-    nameTd.className = "participant-name-cell";
+    const header = document.createElement("header");
+    header.className = "participant-card__header";
+
+    const numberBadge = document.createElement("span");
+    numberBadge.className = "participant-card__no";
+    applyParticipantNoText(numberBadge, index + 1);
+    header.appendChild(numberBadge);
+
     const nameWrapper = document.createElement("span");
-    nameWrapper.className = "participant-name";
+    nameWrapper.className = "participant-card__name participant-name";
     const phoneticText = entry.phonetic || entry.furigana || "";
     if (phoneticText) {
       const phoneticSpan = document.createElement("span");
@@ -2055,18 +2064,36 @@ function renderParticipants() {
     fullNameSpan.className = "participant-name__text";
     fullNameSpan.textContent = entry.name || "";
     nameWrapper.appendChild(fullNameSpan);
-    nameTd.appendChild(nameWrapper);
-    const genderTd = document.createElement("td");
-    genderTd.textContent = entry.gender || "";
-    const departmentTd = document.createElement("td");
-    departmentTd.textContent = entry.department || entry.groupNumber || "";
-    const teamTd = document.createElement("td");
-    teamTd.className = "team-cell numeric-cell";
-    teamTd.textContent = entry.teamNumber || entry.groupNumber || "";
-    const linkTd = document.createElement("td");
-    linkTd.className = "link-cell";
+    header.appendChild(nameWrapper);
+
+    const body = document.createElement("div");
+    body.className = "participant-card__body";
+
+    const meta = document.createElement("dl");
+    meta.className = "participant-card__meta";
+    const metaEntries = [
+      { label: "性別", value: entry.gender || "" },
+      { label: "学部学科", value: entry.department || entry.groupNumber || "" },
+      { label: "班番号", value: entry.teamNumber || entry.groupNumber || "" }
+    ];
+    metaEntries.forEach(({ label, value }) => {
+      const item = document.createElement("div");
+      item.className = "participant-card__meta-item";
+      const dt = document.createElement("dt");
+      dt.className = "participant-card__meta-label";
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.className = "participant-card__meta-value";
+      dd.textContent = value || "—";
+      item.append(dt, dd);
+      meta.appendChild(item);
+    });
+    body.appendChild(meta);
+
+    const actions = document.createElement("div");
+    actions.className = "participant-card__actions";
     const linkActions = document.createElement("div");
-    linkActions.className = "link-action-row";
+    linkActions.className = "link-action-row participant-card__buttons";
 
     const editButton = document.createElement("button");
     editButton.type = "button";
@@ -2129,7 +2156,7 @@ function renderParticipants() {
     deleteButton.innerHTML =
       "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z\"/></svg><span>削除</span>";
     linkActions.appendChild(deleteButton);
-    linkTd.appendChild(linkActions);
+    actions.appendChild(linkActions);
 
     if (shareUrl) {
       const previewLink = document.createElement("a");
@@ -2138,14 +2165,14 @@ function renderParticipants() {
       previewLink.rel = "noopener noreferrer";
       previewLink.className = "share-link-preview";
       previewLink.textContent = shareUrl;
-      linkTd.appendChild(previewLink);
+      actions.appendChild(previewLink);
     }
 
     if (entry.isCancelled) {
-      tr.classList.add("is-cancelled-origin");
+      card.classList.add("is-cancelled-origin");
     }
     if (entry.isRelocated) {
-      tr.classList.add("is-relocated-destination");
+      card.classList.add("is-relocated-destination");
     }
 
     const duplicateKey = entry.rowKey
@@ -2157,9 +2184,9 @@ function renderParticipants() {
     const matches = duplicateInfo?.others || [];
     const duplicateCount = duplicateInfo?.totalCount || (matches.length ? matches.length + 1 : 0);
     if (matches.length) {
-      tr.classList.add("is-duplicate");
+      card.classList.add("is-duplicate");
       const warning = document.createElement("div");
-      warning.className = "duplicate-warning";
+      warning.className = "duplicate-warning participant-card__warning";
       warning.setAttribute("role", "text");
 
       const icon = document.createElement("span");
@@ -2182,13 +2209,13 @@ function renderParticipants() {
       }
 
       warning.append(icon, text);
-      departmentTd.appendChild(warning);
+      body.appendChild(warning);
     }
 
     if (changeInfo?.type === "added") {
-      tr.classList.add("is-added");
+      card.classList.add("is-added");
     } else if (changeInfo?.type === "updated") {
-      tr.classList.add("is-updated");
+      card.classList.add("is-updated");
     }
 
     if (changeInfo) {
@@ -2200,12 +2227,15 @@ function renderParticipants() {
           .map(change => `${change.label}: ${formatChangeValue(change.previous)} → ${formatChangeValue(change.current)}`)
           .join("\n");
       }
-      nameTd.append(" ", chip);
+      nameWrapper.appendChild(chip);
     }
 
-    tr.append(noTd, nameTd, genderTd, departmentTd, teamTd, linkTd);
-    tbody.appendChild(tr);
+    body.appendChild(actions);
+    card.append(header, body);
+    fragment.appendChild(card);
   });
+
+  list.appendChild(fragment);
 
   if (dom.adminSummary) {
     const total = state.participants.length;
@@ -2742,7 +2772,7 @@ function updateParticipantContext(options = {}) {
     if (!shouldPreserveStatus) setUploadStatus(getMissingSelectionStatusMessage());
     if (dom.fileLabel) dom.fileLabel.textContent = "参加者CSVをアップロード";
     if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVをアップロード";
-    if (dom.mappingTbody) dom.mappingTbody.innerHTML = "";
+    if (dom.participantCardList) dom.participantCardList.innerHTML = "";
     if (dom.adminSummary) dom.adminSummary.textContent = "";
     syncTemplateButtons();
     syncClearButtonState();
@@ -4933,8 +4963,8 @@ function attachEventHandlers() {
     updateParticipantActionPanelState();
   }
 
-  if (dom.mappingTbody) {
-    dom.mappingTbody.addEventListener("click", handleMappingTableClick);
+  if (dom.participantCardList) {
+    dom.participantCardList.addEventListener("click", handleMappingTableClick);
   }
 
   if (dom.addScheduleButton) {
