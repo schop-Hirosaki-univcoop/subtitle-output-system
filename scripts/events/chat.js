@@ -806,6 +806,9 @@ export class EventChat {
     if (chatUnreadCount) {
       chatUnreadCount.textContent = count > 99 ? "99+" : String(count);
     }
+    if (typeof this.app.handleChatUnreadCountChange === "function") {
+      this.app.handleChatUnreadCountChange(count);
+    }
   }
 
   dispose() {

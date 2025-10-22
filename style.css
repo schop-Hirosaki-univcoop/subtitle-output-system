@@ -2352,6 +2352,40 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   line-height:1;
 }
 
+.events-mobile-button__badge{
+  position:absolute;
+  top:-.45rem;
+  right:-.5rem;
+  min-width:1.5rem;
+  height:1.5rem;
+  padding:0 .45rem;
+  border-radius:999px;
+  background:linear-gradient(145deg, rgba(252,96,120,.95), rgba(224,40,96,.92));
+  color:#fff;
+  font-weight:700;
+  font-size:.75rem;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  letter-spacing:.02em;
+  line-height:1;
+  box-shadow:0 14px 28px rgba(6,14,28,.45), 0 0 0 2px rgba(6,14,28,.65);
+}
+
+.events-mobile-button[data-has-updates="true"]{
+  color:#f7fbff;
+  background:rgba(56,104,196,.24);
+  box-shadow:0 14px 34px rgba(8,22,44,.4);
+}
+
+.events-mobile-button[data-has-updates="true"] .events-mobile-button__icon{
+  color:inherit;
+}
+
+.events-mobile-button[data-has-updates="true"] .events-mobile-button__badge{
+  display:inline-flex;
+}
+
 .events-mobile-close{
   display:none;
   width:2.25rem;
