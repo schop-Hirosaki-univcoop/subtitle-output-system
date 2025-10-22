@@ -2574,6 +2574,35 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   padding-inline:0.35rem;
 }
 
+.chat-info{
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:.75rem;
+  color:rgba(194,214,244,.75);
+  font-size:.78rem;
+  letter-spacing:.02em;
+  text-align:center;
+}
+
+.chat-info::before,
+.chat-info::after{
+  content:"";
+  flex:1 1 auto;
+  border-top:1px solid rgba(110,140,190,.35);
+  opacity:.85;
+}
+
+.chat-info time{
+  flex:0 0 auto;
+  padding:.35rem .85rem;
+  border-radius:999px;
+  border:1px solid rgba(110,150,210,.35);
+  background:rgba(14,28,46,.65);
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+
 .chat-empty{
   margin:0 0 1rem;
   padding:.85rem 1rem;
