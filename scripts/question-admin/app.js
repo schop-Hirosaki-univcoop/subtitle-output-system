@@ -113,6 +113,7 @@ const PARTICIPANT_DESCRIPTION_DEFAULT =
 
 const CANCEL_LABEL = "キャンセル";
 const RELOCATE_LABEL = "別日";
+const NO_TEAM_GROUP_KEY = "__no_team__";
 
 function getMissingSelectionStatusMessage() {
   return isEmbeddedMode()
@@ -2002,13 +2003,344 @@ async function copyShareLink(token) {
   }
 }
 
+function getParticipantGroupKey(entry) {
+  const raw = entry && (entry.teamNumber ?? entry.groupNumber);
+  const value = raw != null ? String(raw).trim() : "";
+  return value ? value : NO_TEAM_GROUP_KEY;
+}
+
+function describeParticipantGroup(groupKey) {
+  const normalized = String(groupKey || "").trim();
+  if (!normalized || normalized === NO_TEAM_GROUP_KEY) {
+    return { label: "班番号", value: "未設定" };
+  }
+  if (normalized === CANCEL_LABEL) {
+    return { label: "ステータス", value: CANCEL_LABEL };
+  }
+  if (normalized === RELOCATE_LABEL) {
+    return { label: "ステータス", value: RELOCATE_LABEL };
+  }
+  return { label: "班番号", value: normalized };
+}
+
+function createParticipantGroupElements(groupKey) {
+  const { label, value } = describeParticipantGroup(groupKey);
+  const section = document.createElement("section");
+  section.className = "participant-card-group";
+  section.setAttribute("role", "group");
+  if (groupKey && groupKey !== NO_TEAM_GROUP_KEY) {
+    section.dataset.team = groupKey;
+  }
+  if (label || value) {
+    section.setAttribute("aria-label", `${label} ${value}`.trim());
+  }
+
+  const header = document.createElement("header");
+  header.className = "participant-card-group__header";
+
+  const badge = document.createElement("span");
+  badge.className = "participant-card-group__badge";
+  const badgeLabel = document.createElement("span");
+  badgeLabel.className = "participant-card-group__badge-label";
+  badgeLabel.textContent = label;
+  const badgeValue = document.createElement("span");
+  badgeValue.className = "participant-card-group__badge-value";
+  badgeValue.textContent = value;
+  badge.append(badgeLabel, badgeValue);
+
+  const countElement = document.createElement("span");
+  countElement.className = "participant-card-group__count";
+
+  const cardsContainer = document.createElement("div");
+  cardsContainer.className = "participant-card-group__cards";
+
+  header.append(badge, countElement);
+  section.append(header, cardsContainer);
+
+  return { section, cardsContainer, countElement };
+}
+
+function createParticipantBadge(label, value) {
+  const badge = document.createElement("span");
+  badge.className = "participant-badge";
+  const labelSpan = document.createElement("span");
+  labelSpan.className = "participant-badge__label";
+  labelSpan.textContent = label;
+  const valueSpan = document.createElement("span");
+  valueSpan.className = "participant-badge__value";
+  valueSpan.textContent = value ? String(value) : "—";
+  badge.append(labelSpan, valueSpan);
+  return badge;
+}
+
+function getEntryIdentifiers(entry) {
+  const rowKey = entry && entry.rowKey != null ? String(entry.rowKey) : "";
+  const participantId = entry && entry.participantId != null ? String(entry.participantId) : "";
+  const uidValue = resolveParticipantUid(entry);
+  const uid = uidValue != null ? String(uidValue) : "";
+  return { rowKey, participantId, uid };
+}
+
+function isEntryCurrentlySelected(entry) {
+  if (!entry) {
+    return false;
+  }
+  const identifiers = getEntryIdentifiers(entry);
+  const selectedRowKey = String(state.selectedParticipantRowKey || "");
+  if (selectedRowKey) {
+    return identifiers.rowKey && identifiers.rowKey === selectedRowKey;
+  }
+  const selectedId = String(state.selectedParticipantId || "");
+  if (!selectedId) {
+    return false;
+  }
+  return (
+    (identifiers.participantId && identifiers.participantId === selectedId) ||
+    (identifiers.uid && identifiers.uid === selectedId)
+  );
+}
+
+function getSelectedParticipantTarget() {
+  const selectedRowKey = String(state.selectedParticipantRowKey || "");
+  const selectedId = String(state.selectedParticipantId || "");
+  if (!selectedRowKey && !selectedId) {
+    return { entry: null, index: -1 };
+  }
+  const target = resolveParticipantActionTarget({ rowKey: selectedRowKey, participantId: selectedId });
+  if (!target.entry) {
+    clearParticipantSelection({ silent: true });
+    applyParticipantSelectionStyles();
+    return { entry: null, index: -1 };
+  }
+  return target;
+}
+
+function applyParticipantSelectionStyles({ focusCard = null } = {}) {
+  const list = dom.participantCardList;
+  if (!list) {
+    return;
+  }
+  const cards = list.querySelectorAll(".participant-card");
+  const selectedRowKey = String(state.selectedParticipantRowKey || "");
+  const selectedId = String(state.selectedParticipantId || "");
+  const shouldFocus = Boolean(focusCard);
+  let focusTarget = focusCard || null;
+  cards.forEach(card => {
+    const rowKey = card.dataset.rowKey ? String(card.dataset.rowKey) : "";
+    const participantId = card.dataset.participantId ? String(card.dataset.participantId) : "";
+    const uid = card.dataset.uid ? String(card.dataset.uid) : "";
+    const matches = selectedRowKey
+      ? rowKey && rowKey === selectedRowKey
+      : selectedId && (participantId === selectedId || uid === selectedId);
+    card.classList.toggle("is-selected", matches);
+    card.setAttribute("aria-selected", matches ? "true" : "false");
+    if (shouldFocus && matches && !focusTarget) {
+      focusTarget = card;
+    }
+  });
+  if (shouldFocus && focusTarget) {
+    focusTarget.focus();
+  }
+}
+
+function clearParticipantSelection({ silent = false } = {}) {
+  state.selectedParticipantRowKey = "";
+  state.selectedParticipantId = "";
+  if (!silent) {
+    applyParticipantSelectionStyles();
+    updateParticipantActionPanelState();
+  }
+}
+
+function selectParticipantFromCardElement(card, { focus = false } = {}) {
+  if (!card) {
+    return;
+  }
+  const rowKey = card.dataset.rowKey ? String(card.dataset.rowKey) : "";
+  const participantId = card.dataset.participantId ? String(card.dataset.participantId) : "";
+  const uid = card.dataset.uid ? String(card.dataset.uid) : "";
+  const currentRowKey = String(state.selectedParticipantRowKey || "");
+  const currentId = String(state.selectedParticipantId || "");
+  const nextId = participantId || uid || "";
+  if (currentRowKey === rowKey && currentId === nextId) {
+    if (focus) {
+      card.focus();
+    }
+    return;
+  }
+  state.selectedParticipantRowKey = rowKey;
+  state.selectedParticipantId = nextId;
+  applyParticipantSelectionStyles({ focusCard: focus ? card : null });
+  updateParticipantActionPanelState();
+}
+
+function buildParticipantCard(entry, index, { changeInfo, duplicateMap, eventId, scheduleId }) {
+  const card = document.createElement("article");
+  card.className = "participant-card";
+  card.setAttribute("role", "listitem");
+
+  const identifiers = getEntryIdentifiers(entry);
+  if (identifiers.rowKey) {
+    card.dataset.rowKey = identifiers.rowKey;
+  }
+  if (identifiers.participantId) {
+    card.dataset.participantId = identifiers.participantId;
+  }
+  if (identifiers.uid) {
+    card.dataset.uid = identifiers.uid;
+  }
+  card.dataset.rowIndex = String(index);
+
+  const isSelected = isEntryCurrentlySelected(entry);
+  card.classList.toggle("is-selected", isSelected);
+  card.setAttribute("aria-selected", isSelected ? "true" : "false");
+  card.tabIndex = 0;
+
+  const header = document.createElement("header");
+  header.className = "participant-card__header";
+
+  const numberBadge = document.createElement("span");
+  numberBadge.className = "participant-card__no";
+  applyParticipantNoText(numberBadge, index + 1);
+  header.appendChild(numberBadge);
+
+  const headerMain = document.createElement("div");
+  headerMain.className = "participant-card__header-main";
+
+  const nameWrapper = document.createElement("span");
+  nameWrapper.className = "participant-card__name participant-name";
+  const phoneticText = entry.phonetic || entry.furigana || "";
+  if (phoneticText) {
+    const phoneticSpan = document.createElement("span");
+    phoneticSpan.className = "participant-name__phonetic";
+    phoneticSpan.textContent = phoneticText;
+    nameWrapper.appendChild(phoneticSpan);
+  }
+  const fullNameSpan = document.createElement("span");
+  fullNameSpan.className = "participant-name__text";
+  fullNameSpan.textContent = entry.name || "";
+  nameWrapper.appendChild(fullNameSpan);
+
+  headerMain.appendChild(nameWrapper);
+
+  const badges = document.createElement("div");
+  badges.className = "participant-card__badges";
+  badges.appendChild(createParticipantBadge("性別", entry.gender || ""));
+  badges.appendChild(createParticipantBadge("学部学科", entry.department || entry.groupNumber || ""));
+  headerMain.appendChild(badges);
+
+  header.appendChild(headerMain);
+
+  const body = document.createElement("div");
+  body.className = "participant-card__body";
+
+  const actions = document.createElement("div");
+  actions.className = "participant-card__actions";
+  const linkActions = document.createElement("div");
+  linkActions.className = "link-action-row participant-card__buttons";
+
+  let shareUrl = "";
+  if (entry.token) {
+    shareUrl = createShareUrl(entry.token);
+    const copyButton = document.createElement("button");
+    copyButton.type = "button";
+    copyButton.className = "link-action-btn copy-link-btn";
+    copyButton.dataset.token = entry.token;
+    copyButton.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M6.25 1.75A2.25 2.25 0 0 0 4 4v7A2.25 2.25 0 0 0 6.25 13.25h4A2.25 2.25 0 0 0 12.5 11V4A2.25 2.25 0 0 0 10.25 1.75h-4Zm0 1.5h4c.414 0 .75.336.75.75v7c0 .414-.336.75-.75.75h-4a.75.75 0 0 1-.75-.75V4c0-.414.336-.75.75-.75ZM3 4.75A.75.75 0 0 0 2.25 5.5v7A2.25 2.25 0 0 0 4.5 14.75h4a.75.75 0 0 0 0-1.5h-4a.75.75 0 0 1-.75-.75v-7A.75.75 0 0 0 3 4.75Z\" fill=\"currentColor\"/></svg><span>コピー</span>";
+    linkActions.appendChild(copyButton);
+  } else {
+    const placeholder = document.createElement("span");
+    placeholder.className = "link-placeholder";
+    placeholder.textContent = "リンク未発行";
+    linkActions.appendChild(placeholder);
+  }
+
+  actions.appendChild(linkActions);
+
+  if (shareUrl) {
+    const previewLink = document.createElement("a");
+    previewLink.href = shareUrl;
+    previewLink.target = "_blank";
+    previewLink.rel = "noopener noreferrer";
+    previewLink.className = "share-link-preview";
+    previewLink.textContent = shareUrl;
+    actions.appendChild(previewLink);
+  }
+
+  body.appendChild(actions);
+
+  const duplicateKey = entry.rowKey
+    ? String(entry.rowKey)
+    : entry.participantId
+      ? String(entry.participantId)
+      : `__row${index}`;
+  const duplicateInfo = duplicateMap.get(duplicateKey);
+  const matches = duplicateInfo?.others || [];
+  const duplicateCount = duplicateInfo?.totalCount || (matches.length ? matches.length + 1 : 0);
+  if (matches.length) {
+    card.classList.add("is-duplicate");
+    const warning = document.createElement("div");
+    warning.className = "duplicate-warning participant-card__warning";
+    warning.setAttribute("role", "text");
+
+    const icon = document.createElement("span");
+    icon.className = "duplicate-warning__icon";
+    icon.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M8 1.333a6.667 6.667 0 1 0 0 13.334A6.667 6.667 0 0 0 8 1.333Zm0 2a.833.833 0 0 1 .833.834v3.75a.833.833 0 1 1-1.666 0v-3.75A.833.833 0 0 1 8 3.333Zm0 7a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z\"/></svg>";
+
+    const text = document.createElement("span");
+    text.className = "duplicate-warning__text";
+    const detail = matches
+      .map(match => describeDuplicateMatch(match, eventId, scheduleId))
+      .filter(Boolean)
+      .join("、");
+    if (duplicateCount > 1) {
+      text.textContent = detail
+        ? `重複候補 (${duplicateCount}件): ${detail}`
+        : `重複候補 (${duplicateCount}件)`;
+    } else {
+      text.textContent = detail ? `重複候補: ${detail}` : "重複候補があります";
+    }
+
+    warning.append(icon, text);
+    body.appendChild(warning);
+  }
+
+  if (entry.isCancelled) {
+    card.classList.add("is-cancelled-origin");
+  }
+  if (entry.isRelocated) {
+    card.classList.add("is-relocated-destination");
+  }
+
+  if (changeInfo?.type === "added") {
+    card.classList.add("is-added");
+  } else if (changeInfo?.type === "updated") {
+    card.classList.add("is-updated");
+  }
+
+  if (changeInfo) {
+    const chip = document.createElement("span");
+    chip.className = `change-chip change-chip--${changeInfo.type}`;
+    chip.textContent = changeInfo.type === "added" ? "新規" : "更新";
+    if (changeInfo.type === "updated" && Array.isArray(changeInfo.changes) && changeInfo.changes.length) {
+      chip.title = changeInfo.changes
+        .map(change => `${change.label}: ${formatChangeValue(change.previous)} → ${formatChangeValue(change.current)}`)
+        .join("\n");
+    }
+    nameWrapper.appendChild(chip);
+  }
+
+  card.append(header, body);
+  return { card, isSelected };
+}
+
 function renderParticipants() {
-  const tbody = dom.mappingTbody;
-  if (!tbody) {
+  const list = dom.participantCardList;
+  if (!list) {
     syncSelectedEventSummary();
     return;
   }
-  tbody.innerHTML = "";
+  list.innerHTML = "";
 
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
@@ -2033,185 +2365,52 @@ function renderParticipants() {
     });
   });
 
+  list.setAttribute("data-count", String(participants.length));
+
+  const fragment = document.createDocumentFragment();
+  const groupMap = new Map();
+  let selectionFound = false;
+
   participants.forEach((entry, index) => {
-    const tr = document.createElement("tr");
     const changeKey = participantChangeKey(entry, index);
     const changeInfo = changeInfoByKey.get(changeKey);
-    const noTd = document.createElement("td");
-    noTd.className = "participant-no-cell numeric-cell";
-    applyParticipantNoText(noTd, index + 1);
-    const nameTd = document.createElement("td");
-    nameTd.className = "participant-name-cell";
-    const nameWrapper = document.createElement("span");
-    nameWrapper.className = "participant-name";
-    const phoneticText = entry.phonetic || entry.furigana || "";
-    if (phoneticText) {
-      const phoneticSpan = document.createElement("span");
-      phoneticSpan.className = "participant-name__phonetic";
-      phoneticSpan.textContent = phoneticText;
-      nameWrapper.appendChild(phoneticSpan);
+    const { card, isSelected } = buildParticipantCard(entry, index, {
+      changeInfo,
+      duplicateMap,
+      eventId,
+      scheduleId
+    });
+    if (isSelected) {
+      selectionFound = true;
     }
-    const fullNameSpan = document.createElement("span");
-    fullNameSpan.className = "participant-name__text";
-    fullNameSpan.textContent = entry.name || "";
-    nameWrapper.appendChild(fullNameSpan);
-    nameTd.appendChild(nameWrapper);
-    const genderTd = document.createElement("td");
-    genderTd.textContent = entry.gender || "";
-    const departmentTd = document.createElement("td");
-    departmentTd.textContent = entry.department || entry.groupNumber || "";
-    const teamTd = document.createElement("td");
-    teamTd.className = "team-cell numeric-cell";
-    teamTd.textContent = entry.teamNumber || entry.groupNumber || "";
-    const linkTd = document.createElement("td");
-    linkTd.className = "link-cell";
-    const linkActions = document.createElement("div");
-    linkActions.className = "link-action-row";
-
-    const editButton = document.createElement("button");
-    editButton.type = "button";
-    editButton.className = "link-action-btn edit-link-btn";
-    editButton.dataset.participantId = entry.participantId;
-    if (entry.rowKey) {
-      editButton.dataset.rowKey = entry.rowKey;
+    const groupKey = getParticipantGroupKey(entry);
+    let group = groupMap.get(groupKey);
+    if (!group) {
+      const elements = createParticipantGroupElements(groupKey);
+      group = { ...elements, count: 0 };
+      groupMap.set(groupKey, group);
+      fragment.appendChild(elements.section);
     }
-    editButton.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z\" fill=\"currentColor\"/></svg><span>編集</span>";
-
-    let shareUrl = "";
-    if (entry.token) {
-      shareUrl = createShareUrl(entry.token);
-      const copyButton = document.createElement("button");
-      copyButton.type = "button";
-      copyButton.className = "link-action-btn copy-link-btn";
-      copyButton.dataset.token = entry.token;
-      copyButton.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M6.25 1.75A2.25 2.25 0 0 0 4 4v7A2.25 2.25 0 0 0 6.25 13.25h4A2.25 2.25 0 0 0 12.5 11V4A2.25 2.25 0 0 0 10.25 1.75h-4Zm0 1.5h4c.414 0 .75.336.75.75v7c0 .414-.336.75-.75.75h-4a.75.75 0 0 1-.75-.75V4c0-.414.336-.75.75-.75ZM3 4.75A.75.75 0 0 0 2.25 5.5v7A2.25 2.25 0 0 0 4.5 14.75h4a.75.75 0 0 0 0-1.5h-4a.75.75 0 0 1-.75-.75v-7A.75.75 0 0 0 3 4.75Z\" fill=\"currentColor\"/></svg><span>コピー</span>";
-      linkActions.appendChild(copyButton);
-    } else {
-      const placeholder = document.createElement("span");
-      placeholder.className = "link-placeholder";
-      placeholder.textContent = "リンク未発行";
-      linkActions.appendChild(placeholder);
-    }
-
-    linkActions.appendChild(editButton);
-    const cancelButton = document.createElement("button");
-    cancelButton.type = "button";
-    cancelButton.className = "link-action-btn cancel-link-btn";
-    cancelButton.dataset.participantId = entry.participantId || "";
-    if (entry.rowKey) {
-      cancelButton.dataset.rowKey = entry.rowKey;
-    }
-    cancelButton.dataset.rowIndex = String(index);
-    cancelButton.innerHTML =
-      "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm2.146 3.354a.5.5 0 0 1 .708.708L8.707 8.708l2.147 2.146a.5.5 0 0 1-.708.708L8 9.415l-2.146 2.147a.5.5 0 0 1-.708-.708L7.293 8.708 5.146 6.562a.5.5 0 1 1 .708-.708L8 7.999l2.146-2.145Z\"/></svg><span>キャンセル</span>";
-    linkActions.appendChild(cancelButton);
-
-    const relocateButton = document.createElement("button");
-    relocateButton.type = "button";
-    relocateButton.className = "link-action-btn relocate-link-btn";
-    relocateButton.dataset.participantId = entry.participantId || "";
-    if (entry.rowKey) {
-      relocateButton.dataset.rowKey = entry.rowKey;
-    }
-    relocateButton.dataset.rowIndex = String(index);
-    relocateButton.innerHTML =
-      "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M2.5 8a.5.5 0 0 1 .5-.5h6.793L7.146 4.354a.5.5 0 1 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 1 1-.708-.708L9.793 8.5H3a.5.5 0 0 1-.5-.5Z\"/><path fill=\"currentColor\" d=\"M12 3.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-9Z\"/></svg><span>別日</span>";
-    linkActions.appendChild(relocateButton);
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.className = "link-action-btn delete-link-btn";
-    deleteButton.dataset.participantId = entry.participantId || "";
-    if (entry.rowKey) {
-      deleteButton.dataset.rowKey = entry.rowKey;
-    }
-    deleteButton.dataset.rowIndex = String(index);
-    deleteButton.title = "参加者を削除";
-    deleteButton.innerHTML =
-      "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z\"/></svg><span>削除</span>";
-    linkActions.appendChild(deleteButton);
-    linkTd.appendChild(linkActions);
-
-    if (shareUrl) {
-      const previewLink = document.createElement("a");
-      previewLink.href = shareUrl;
-      previewLink.target = "_blank";
-      previewLink.rel = "noopener noreferrer";
-      previewLink.className = "share-link-preview";
-      previewLink.textContent = shareUrl;
-      linkTd.appendChild(previewLink);
-    }
-
-    if (entry.isCancelled) {
-      tr.classList.add("is-cancelled-origin");
-    }
-    if (entry.isRelocated) {
-      tr.classList.add("is-relocated-destination");
-    }
-
-    const duplicateKey = entry.rowKey
-      ? String(entry.rowKey)
-      : entry.participantId
-        ? String(entry.participantId)
-        : `__row${index}`;
-    const duplicateInfo = duplicateMap.get(duplicateKey);
-    const matches = duplicateInfo?.others || [];
-    const duplicateCount = duplicateInfo?.totalCount || (matches.length ? matches.length + 1 : 0);
-    if (matches.length) {
-      tr.classList.add("is-duplicate");
-      const warning = document.createElement("div");
-      warning.className = "duplicate-warning";
-      warning.setAttribute("role", "text");
-
-      const icon = document.createElement("span");
-      icon.className = "duplicate-warning__icon";
-      icon.innerHTML =
-        "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M8 1.333a6.667 6.667 0 1 0 0 13.334A6.667 6.667 0 0 0 8 1.333Zm0 2a.833.833 0 0 1 .833.834v3.75a.833.833 0 1 1-1.666 0v-3.75A.833.833 0 0 1 8 3.333Zm0 7a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z\"/></svg>";
-
-      const text = document.createElement("span");
-      text.className = "duplicate-warning__text";
-      const detail = matches
-        .map(match => describeDuplicateMatch(match, eventId, scheduleId))
-        .filter(Boolean)
-        .join("、");
-      if (duplicateCount > 1) {
-        text.textContent = detail
-          ? `重複候補 (${duplicateCount}件): ${detail}`
-          : `重複候補 (${duplicateCount}件)`;
-      } else {
-        text.textContent = detail ? `重複候補: ${detail}` : "重複候補があります";
-      }
-
-      warning.append(icon, text);
-      departmentTd.appendChild(warning);
-    }
-
-    if (changeInfo?.type === "added") {
-      tr.classList.add("is-added");
-    } else if (changeInfo?.type === "updated") {
-      tr.classList.add("is-updated");
-    }
-
-    if (changeInfo) {
-      const chip = document.createElement("span");
-      chip.className = `change-chip change-chip--${changeInfo.type}`;
-      chip.textContent = changeInfo.type === "added" ? "新規" : "更新";
-      if (changeInfo.type === "updated" && Array.isArray(changeInfo.changes) && changeInfo.changes.length) {
-        chip.title = changeInfo.changes
-          .map(change => `${change.label}: ${formatChangeValue(change.previous)} → ${formatChangeValue(change.current)}`)
-          .join("\n");
-      }
-      nameTd.append(" ", chip);
-    }
-
-    tr.append(noTd, nameTd, genderTd, departmentTd, teamTd, linkTd);
-    tbody.appendChild(tr);
+    group.cardsContainer.appendChild(card);
+    group.count += 1;
   });
+
+  groupMap.forEach(group => {
+    group.countElement.textContent = `${group.count}名`;
+  });
+
+  list.appendChild(fragment);
+  list.setAttribute("data-group-count", String(groupMap.size));
+
+  if ((state.selectedParticipantRowKey || state.selectedParticipantId) && !selectionFound) {
+    clearParticipantSelection({ silent: true });
+  }
 
   if (dom.adminSummary) {
     const total = state.participants.length;
     const summaryEntries = [];
-    const groupMap = state.duplicateGroups instanceof Map ? state.duplicateGroups : new Map();
-    groupMap.forEach(group => {
+    const duplicateGroups = state.duplicateGroups instanceof Map ? state.duplicateGroups : new Map();
+    duplicateGroups.forEach(group => {
       if (!group || !Array.isArray(group.records) || !group.records.length) return;
       const hasCurrent = group.records.some(record => record.isCurrent && String(record.scheduleId) === String(scheduleId));
       if (!hasCurrent) return;
@@ -2246,6 +2445,8 @@ function renderParticipants() {
   syncTemplateButtons();
   renderRelocationPrompt();
   syncSelectedEventSummary();
+  applyParticipantSelectionStyles();
+  updateParticipantActionPanelState();
 }
 
 function participantChangeKey(entry, fallbackIndex = 0) {
@@ -2595,6 +2796,7 @@ function syncSaveButtonState() {
       dom.discardButton.removeAttribute("aria-disabled");
     }
   }
+  updateParticipantActionPanelState();
 }
 
 function syncClearButtonState() {
@@ -2602,6 +2804,7 @@ function syncClearButtonState() {
   const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
   const hasParticipants = hasSelection && state.participants.length > 0;
   dom.clearParticipantsButton.disabled = !hasSelection || !hasParticipants || state.saving;
+  updateParticipantActionPanelState();
 }
 
 function syncTemplateButtons() {
@@ -2629,6 +2832,133 @@ function syncTemplateButtons() {
   }
 }
 
+function setActionButtonState(button, disabled) {
+  if (!button) {
+    return;
+  }
+  button.disabled = disabled;
+  if (disabled) {
+    button.setAttribute("aria-disabled", "true");
+  } else {
+    button.removeAttribute("aria-disabled");
+  }
+}
+
+function updateParticipantActionPanelState() {
+  const panel = dom.participantActionPanel;
+  const info = dom.participantActionInfo;
+  const editButton = dom.editSelectedParticipantButton;
+  const cancelButton = dom.cancelSelectedParticipantButton;
+  const relocateButton = dom.relocateSelectedParticipantButton;
+  const deleteButton = dom.deleteSelectedParticipantButton;
+
+  const target = getSelectedParticipantTarget();
+  const entry = target.entry;
+  const hasSelection = Boolean(entry);
+  const disableIndividual = state.saving || !hasSelection;
+
+  setActionButtonState(editButton, disableIndividual);
+  setActionButtonState(cancelButton, disableIndividual);
+  setActionButtonState(relocateButton, disableIndividual);
+  setActionButtonState(deleteButton, disableIndividual);
+
+  const actionable = Boolean(
+    (dom.saveButton && !dom.saveButton.disabled) ||
+    (dom.discardButton && !dom.discardButton.disabled) ||
+    (dom.clearParticipantsButton && !dom.clearParticipantsButton.disabled) ||
+    (editButton && !editButton.disabled) ||
+    (cancelButton && !cancelButton.disabled) ||
+    (relocateButton && !relocateButton.disabled) ||
+    (deleteButton && !deleteButton.disabled)
+  );
+
+  if (panel) {
+    panel.classList.toggle("is-idle", !actionable);
+  }
+
+  if (info) {
+    if (entry) {
+      info.textContent = `${formatParticipantIdentifier(entry)}を選択中`;
+    } else if (actionable) {
+      info.textContent = "参加者を選択すると個別操作ができます。";
+    } else {
+      info.textContent = "操作可能なボタンはありません。";
+    }
+  }
+}
+
+function setParticipantTab(tabKey = "manage") {
+  const target = tabKey === "csv" ? "csv" : "manage";
+  state.activeParticipantTab = target;
+  const entries = [
+    { key: "manage", tab: dom.participantManageTab, panel: dom.participantManagePanel },
+    { key: "csv", tab: dom.participantCsvTab, panel: dom.participantCsvPanel }
+  ];
+  entries.forEach(({ key, tab, panel }) => {
+    const isActive = key === target;
+    if (tab) {
+      tab.classList.toggle("is-active", isActive);
+      tab.setAttribute("aria-selected", isActive ? "true" : "false");
+      tab.setAttribute("tabindex", isActive ? "0" : "-1");
+    }
+    if (panel) {
+      panel.hidden = !isActive;
+      if (isActive) {
+        panel.removeAttribute("aria-hidden");
+      } else {
+        panel.setAttribute("aria-hidden", "true");
+      }
+    }
+  });
+}
+
+function focusParticipantTab(tabKey) {
+  if (tabKey === "csv" && dom.participantCsvTab) {
+    dom.participantCsvTab.focus();
+    return;
+  }
+  if (dom.participantManageTab) {
+    dom.participantManageTab.focus();
+  }
+}
+
+function setupParticipantTabs() {
+  const entries = [
+    { key: "manage", tab: dom.participantManageTab },
+    { key: "csv", tab: dom.participantCsvTab }
+  ].filter(entry => entry.tab instanceof HTMLElement);
+
+  if (!entries.length) {
+    return;
+  }
+
+  entries.forEach(({ key, tab }, index) => {
+    tab.addEventListener("click", () => setParticipantTab(key));
+    tab.addEventListener("keydown", event => {
+      if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        const nextIndex = (index + direction + entries.length) % entries.length;
+        const next = entries[nextIndex];
+        setParticipantTab(next.key);
+        focusParticipantTab(next.key);
+      } else if (event.key === "Home" || event.key === "PageUp") {
+        event.preventDefault();
+        const first = entries[0];
+        setParticipantTab(first.key);
+        focusParticipantTab(first.key);
+      } else if (event.key === "End" || event.key === "PageDown") {
+        event.preventDefault();
+        const last = entries[entries.length - 1];
+        setParticipantTab(last.key);
+        focusParticipantTab(last.key);
+      }
+    });
+  });
+
+  setParticipantTab(state.activeParticipantTab || "manage");
+}
+
 function updateParticipantContext(options = {}) {
   const { preserveStatus = false } = options;
   const eventId = state.selectedEventId;
@@ -2651,7 +2981,7 @@ function updateParticipantContext(options = {}) {
     if (!shouldPreserveStatus) setUploadStatus(getMissingSelectionStatusMessage());
     if (dom.fileLabel) dom.fileLabel.textContent = "参加者CSVをアップロード";
     if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVをアップロード";
-    if (dom.mappingTbody) dom.mappingTbody.innerHTML = "";
+    if (dom.participantCardList) dom.participantCardList.innerHTML = "";
     if (dom.adminSummary) dom.adminSummary.textContent = "";
     syncTemplateButtons();
     syncClearButtonState();
@@ -3559,6 +3889,7 @@ async function handleCsvChange(event) {
       if (dom.saveButton) dom.saveButton.disabled = false;
       setUploadStatus(`読み込み成功: ${state.participants.length}名`, "success");
     }
+    updateParticipantActionPanelState();
   } catch (error) {
     console.error(error);
     setUploadStatus(error.message || "CSVの読み込みに失敗しました。", "error");
@@ -4140,6 +4471,8 @@ function setAuthUi(signedIn) {
     if (dom.csvInput) dom.csvInput.disabled = true;
     if (dom.saveButton) dom.saveButton.disabled = true;
   }
+
+  updateParticipantActionPanelState();
 }
 
 function resolveFocusTargetElement(target) {
@@ -4205,6 +4538,8 @@ function resetState() {
   state.scheduleContextOverrides = new Map();
   state.editingParticipantId = null;
   state.editingRowKey = null;
+  state.selectedParticipantId = "";
+  state.selectedParticipantRowKey = "";
   state.pendingRelocations = new Map();
   state.relocationDraftOriginals = new Map();
   state.relocationPromptTargets = [];
@@ -4226,38 +4561,10 @@ function resetState() {
   syncSaveButtonState();
 }
 
-function handleMappingTableClick(event) {
-  const cancelButton = event.target.closest(".cancel-link-btn");
-  if (cancelButton) {
-    event.preventDefault();
-    const participantId = cancelButton.dataset.participantId || "";
-    const rowKey = cancelButton.dataset.rowKey || "";
-    const rowIndexValue = Number.parseInt(cancelButton.dataset.rowIndex || "", 10);
-    handleQuickCancelAction(participantId, Number.isInteger(rowIndexValue) ? rowIndexValue : null, rowKey);
-    return;
-  }
-
-  const relocateButton = event.target.closest(".relocate-link-btn");
-  if (relocateButton) {
-    event.preventDefault();
-    const participantId = relocateButton.dataset.participantId || "";
-    const rowKey = relocateButton.dataset.rowKey || "";
-    const rowIndexValue = Number.parseInt(relocateButton.dataset.rowIndex || "", 10);
-    handleQuickRelocateAction(participantId, Number.isInteger(rowIndexValue) ? rowIndexValue : null, rowKey);
-    return;
-  }
-
-  const deleteButton = event.target.closest(".delete-link-btn");
-  if (deleteButton) {
-    event.preventDefault();
-    const participantId = deleteButton.dataset.participantId || "";
-    const rowIndex = Number.parseInt(deleteButton.dataset.rowIndex || "", 10);
-    const rowKey = deleteButton.dataset.rowKey || "";
-    handleDeleteParticipant(participantId, Number.isFinite(rowIndex) ? rowIndex : null, rowKey).catch(err => {
-      console.error(err);
-      setUploadStatus(err.message || "参加者の削除に失敗しました。", "error");
-    });
-    return;
+function handleParticipantCardListClick(event) {
+  const card = event.target.closest(".participant-card");
+  if (card) {
+    selectParticipantFromCardElement(card);
   }
 
   const copyButton = event.target.closest(".copy-link-btn");
@@ -4265,16 +4572,87 @@ function handleMappingTableClick(event) {
     event.preventDefault();
     const token = copyButton.dataset.token;
     copyShareLink(token).catch(err => console.error(err));
+  }
+}
+
+function handleParticipantCardListKeydown(event) {
+  const card = event.target.closest(".participant-card");
+  if (!card) {
     return;
   }
-
-  const editButton = event.target.closest(".edit-link-btn");
-  if (editButton) {
+  if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
-    const participantId = editButton.dataset.participantId;
-    const rowKey = editButton.dataset.rowKey || "";
-    openParticipantEditor(participantId, rowKey);
+    selectParticipantFromCardElement(card, { focus: true });
+    return;
   }
+  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+    event.preventDefault();
+    const list = dom.participantCardList;
+    if (!list) return;
+    const cards = Array.from(list.querySelectorAll(".participant-card"));
+    const currentIndex = cards.indexOf(card);
+    if (currentIndex === -1) return;
+    const delta = event.key === "ArrowUp" ? -1 : 1;
+    const nextCard = cards[currentIndex + delta];
+    if (nextCard) {
+      selectParticipantFromCardElement(nextCard, { focus: true });
+    }
+  }
+}
+
+function handleParticipantListFocus(event) {
+  const card = event.target.closest(".participant-card");
+  if (!card) {
+    return;
+  }
+  selectParticipantFromCardElement(card);
+}
+
+function handleEditSelectedParticipant() {
+  const target = getSelectedParticipantTarget();
+  if (!target.entry) {
+    setUploadStatus("参加者が選択されていません。", "error");
+    return;
+  }
+  const participantId = target.entry.participantId != null ? String(target.entry.participantId) : "";
+  const rowKey = target.entry.rowKey != null ? String(target.entry.rowKey) : "";
+  openParticipantEditor(participantId, rowKey);
+}
+
+function handleCancelSelectedParticipant() {
+  const target = getSelectedParticipantTarget();
+  if (!target.entry) {
+    setUploadStatus("キャンセル対象の参加者が見つかりません。", "error");
+    return;
+  }
+  const participantId = target.entry.participantId != null ? String(target.entry.participantId) : "";
+  const rowKey = target.entry.rowKey != null ? String(target.entry.rowKey) : "";
+  handleQuickCancelAction(participantId, null, rowKey);
+}
+
+function handleRelocateSelectedParticipant() {
+  const target = getSelectedParticipantTarget();
+  if (!target.entry) {
+    setUploadStatus("別日に移動する対象の参加者が見つかりません。", "error");
+    return;
+  }
+  const participantId = target.entry.participantId != null ? String(target.entry.participantId) : "";
+  const rowKey = target.entry.rowKey != null ? String(target.entry.rowKey) : "";
+  handleQuickRelocateAction(participantId, null, rowKey);
+}
+
+function handleDeleteSelectedParticipant() {
+  const target = getSelectedParticipantTarget();
+  if (!target.entry) {
+    setUploadStatus("削除対象の参加者が見つかりません。", "error");
+    return;
+  }
+  const participantId = target.entry.participantId != null ? String(target.entry.participantId) : "";
+  const rowKey = target.entry.rowKey != null ? String(target.entry.rowKey) : "";
+  handleDeleteParticipant(participantId, null, rowKey).catch(err => {
+    console.error(err);
+    setUploadStatus(err.message || "参加者の削除に失敗しました。", "error");
+  });
 }
 
 async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
@@ -4631,6 +5009,9 @@ async function ensureAdminAccess() {
 }
 
 function attachEventHandlers() {
+  setupParticipantTabs();
+  updateParticipantActionPanelState();
+
   if (dom.loginButton) {
     dom.loginButton.addEventListener("click", async () => {
       if (dom.loginButton.disabled) return;
@@ -4822,6 +5203,7 @@ function attachEventHandlers() {
       });
     });
     dom.saveButton.disabled = true;
+    updateParticipantActionPanelState();
   }
 
   if (dom.discardButton) {
@@ -4832,10 +5214,29 @@ function attachEventHandlers() {
       });
     });
     dom.discardButton.disabled = true;
+    updateParticipantActionPanelState();
   }
 
-  if (dom.mappingTbody) {
-    dom.mappingTbody.addEventListener("click", handleMappingTableClick);
+  if (dom.participantCardList) {
+    dom.participantCardList.addEventListener("click", handleParticipantCardListClick);
+    dom.participantCardList.addEventListener("keydown", handleParticipantCardListKeydown);
+    dom.participantCardList.addEventListener("focusin", handleParticipantListFocus);
+  }
+
+  if (dom.editSelectedParticipantButton) {
+    dom.editSelectedParticipantButton.addEventListener("click", handleEditSelectedParticipant);
+  }
+
+  if (dom.cancelSelectedParticipantButton) {
+    dom.cancelSelectedParticipantButton.addEventListener("click", handleCancelSelectedParticipant);
+  }
+
+  if (dom.relocateSelectedParticipantButton) {
+    dom.relocateSelectedParticipantButton.addEventListener("click", handleRelocateSelectedParticipant);
+  }
+
+  if (dom.deleteSelectedParticipantButton) {
+    dom.deleteSelectedParticipantButton.addEventListener("click", handleDeleteSelectedParticipant);
   }
 
   if (dom.addScheduleButton) {
@@ -4849,6 +5250,7 @@ function attachEventHandlers() {
         setUploadStatus(err.message || "参加者リストの削除に失敗しました。", "error");
       });
     });
+    updateParticipantActionPanelState();
   }
 
   if (dom.eventEmpty) dom.eventEmpty.hidden = true;

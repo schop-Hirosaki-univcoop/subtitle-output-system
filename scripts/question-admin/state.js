@@ -20,13 +20,16 @@ const state = {
   tokenSnapshotFetchedAt: 0,
   editingParticipantId: null,
   editingRowKey: null,
+  selectedParticipantId: "",
+  selectedParticipantRowKey: "",
   pendingRelocations: new Map(),
   relocationDraftOriginals: new Map(),
   relocationPromptTargets: [],
   initialSelection: null,
   initialSelectionApplied: false,
   initialSelectionNotice: null,
-  initialFocusTarget: ""
+  initialFocusTarget: "",
+  activeParticipantTab: "manage"
 };
 
 const calendarState = {
