@@ -81,6 +81,9 @@ export class EventAdminApp {
     this.chatLayoutResizeObserver = null;
     this.chatLayoutRaf = 0;
     this.visualViewportResize = null;
+    this.activeMobilePanel = "";
+    this.lastMobileFocus = null;
+    this.handleMobileKeydown = this.handleMobileKeydown.bind(this);
   }
 
   logParticipantAction(message, detail = null) {
@@ -113,6 +116,7 @@ export class EventAdminApp {
     this.chat.init();
     this.setupChatLayoutObservers();
     this.observeAuthState();
+    this.syncMobilePanelAccessibility();
     if (typeof document !== "undefined") {
       document.addEventListener("qa:participants-synced", this.tools.handleParticipantSyncEvent);
       document.addEventListener("qa:selection-changed", this.tools.handleParticipantSelectionBroadcast);
@@ -255,6 +259,37 @@ export class EventAdminApp {
           this.showAlert(error.message || "日程の再読み込みに失敗しました。");
         } finally {
           this.dom.scheduleRefreshButton.disabled = false;
+        }
+      });
+    }
+
+    (this.dom.mobileToggleButtons || []).forEach((button) => {
+      if (!button) {
+        return;
+      }
+      button.addEventListener("click", () => {
+        const target = button.dataset.mobileTarget || "";
+        this.toggleMobilePanel(target);
+      });
+    });
+
+    (this.dom.mobileCloseButtons || []).forEach((button) => {
+      if (!button) {
+        return;
+      }
+      button.addEventListener("click", () => {
+        this.closeMobilePanel();
+      });
+    });
+
+    if (this.dom.mobileOverlay) {
+      this.dom.mobileOverlay.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        if (target === this.dom.mobileOverlay || target.closest("[data-mobile-overlay-dismiss]")) {
+          this.closeMobilePanel();
         }
       });
     }
@@ -1339,6 +1374,7 @@ export class EventAdminApp {
     if (typeof window !== "undefined") {
       window.removeEventListener("beforeunload", this.cleanup);
     }
+    this.closeMobilePanel({ restoreFocus: false });
     this.selectionListeners.clear();
     this.eventListeners.clear();
     this.teardownChatLayoutObservers();
@@ -1419,7 +1455,166 @@ export class EventAdminApp {
     this.chatLayoutRaf = window.requestAnimationFrame(() => {
       this.chatLayoutRaf = 0;
       this.updateChatLayoutMetrics();
+      if (!this.isMobileLayout() && this.activeMobilePanel) {
+        this.closeMobilePanel({ restoreFocus: false });
+      }
+      this.syncMobilePanelAccessibility();
     });
+  }
+
+  isMobileLayout() {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return false;
+    }
+    return window.matchMedia("(max-width: 960px)").matches;
+  }
+
+  getMobilePanel(target) {
+    if (!target) {
+      return null;
+    }
+    if (target === "sidebar") {
+      return this.dom.sidebarContainer || (typeof document !== "undefined" ? document.getElementById("events-sidebar") : null);
+    }
+    if (target === "chat") {
+      return this.dom.chatContainer || (typeof document !== "undefined" ? document.getElementById("events-chat") : null);
+    }
+    return null;
+  }
+
+  syncMobilePanelAccessibility() {
+    const isMobile = this.isMobileLayout();
+    ["sidebar", "chat"].forEach((target) => {
+      const panel = this.getMobilePanel(target);
+      if (!(panel instanceof HTMLElement)) {
+        return;
+      }
+      if (isMobile) {
+        const isOpen = panel.classList.contains("is-mobile-open");
+        panel.setAttribute("aria-hidden", isOpen ? "false" : "true");
+      } else {
+        panel.removeAttribute("aria-hidden");
+      }
+    });
+  }
+
+  toggleMobilePanel(target) {
+    if (!target) {
+      return;
+    }
+    if (!this.isMobileLayout()) {
+      const panel = this.getMobilePanel(target);
+      if (panel && typeof panel.scrollIntoView === "function") {
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      if (panel instanceof HTMLElement) {
+        panel.removeAttribute("aria-hidden");
+      }
+      return;
+    }
+    if (this.activeMobilePanel === target) {
+      this.closeMobilePanel();
+    } else {
+      this.openMobilePanel(target);
+    }
+  }
+
+  openMobilePanel(target) {
+    if (!this.isMobileLayout()) {
+      return;
+    }
+    const panel = this.getMobilePanel(target);
+    if (!panel) {
+      return;
+    }
+    if (this.activeMobilePanel && this.activeMobilePanel !== target) {
+      this.closeMobilePanel({ restoreFocus: false });
+    }
+    this.activeMobilePanel = target;
+    if (panel instanceof HTMLElement) {
+      panel.classList.add("is-mobile-open");
+      panel.setAttribute("data-mobile-open", "true");
+      panel.setAttribute("aria-hidden", "false");
+    }
+    const body = typeof document !== "undefined" ? document.body : null;
+    if (body) {
+      body.classList.add("events-mobile-locked");
+    }
+    if (this.dom.mobileOverlay) {
+      this.dom.mobileOverlay.removeAttribute("hidden");
+    }
+    (this.dom.mobileToggleButtons || []).forEach((button) => {
+      if (!button) {
+        return;
+      }
+      const matches = (button.dataset.mobileTarget || "") === target;
+      button.setAttribute("aria-expanded", matches ? "true" : "false");
+    });
+    this.lastMobileFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const closeButton = panel.querySelector("[data-mobile-close]");
+    requestAnimationFrame(() => {
+      if (closeButton instanceof HTMLElement) {
+        closeButton.focus();
+      } else if (panel instanceof HTMLElement && typeof panel.focus === "function") {
+        panel.focus();
+      }
+    });
+    if (typeof document !== "undefined") {
+      document.addEventListener("keydown", this.handleMobileKeydown, true);
+    }
+    this.syncMobilePanelAccessibility();
+  }
+
+  closeMobilePanel({ restoreFocus = true } = {}) {
+    if (!this.activeMobilePanel) {
+      (this.dom.mobileToggleButtons || []).forEach((button) => {
+        if (button) {
+          button.setAttribute("aria-expanded", "false");
+        }
+      });
+      this.syncMobilePanelAccessibility();
+      return;
+    }
+    const target = this.activeMobilePanel;
+    const panel = this.getMobilePanel(target);
+    if (panel instanceof HTMLElement) {
+      panel.classList.remove("is-mobile-open");
+      panel.removeAttribute("data-mobile-open");
+      if (this.isMobileLayout()) {
+        panel.setAttribute("aria-hidden", "true");
+      } else {
+        panel.removeAttribute("aria-hidden");
+      }
+    }
+    if (this.dom.mobileOverlay && !this.dom.mobileOverlay.hasAttribute("hidden")) {
+      this.dom.mobileOverlay.setAttribute("hidden", "");
+    }
+    const body = typeof document !== "undefined" ? document.body : null;
+    if (body) {
+      body.classList.remove("events-mobile-locked");
+    }
+    (this.dom.mobileToggleButtons || []).forEach((button) => {
+      if (button) {
+        button.setAttribute("aria-expanded", "false");
+      }
+    });
+    if (typeof document !== "undefined") {
+      document.removeEventListener("keydown", this.handleMobileKeydown, true);
+    }
+    const focusTarget = restoreFocus ? this.lastMobileFocus : null;
+    this.activeMobilePanel = "";
+    this.lastMobileFocus = null;
+    this.syncMobilePanelAccessibility();
+    if (focusTarget && typeof focusTarget.focus === "function") {
+      focusTarget.focus();
+    }
+  }
+
+  handleMobileKeydown(event) {
+    if (event.key === "Escape" && this.activeMobilePanel) {
+      event.preventDefault();
+      this.closeMobilePanel();
+    }
   }
 
   updateChatLayoutMetrics() {
