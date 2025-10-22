@@ -27,6 +27,26 @@ function formatTime(date) {
   }
 }
 
+function formatDate(date) {
+  try {
+    return new Intl.DateTimeFormat("ja-JP", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      weekday: "short"
+    }).format(date);
+  } catch (error) {
+    return date.toLocaleDateString();
+  }
+}
+
+function formatDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function normalizeMessage(id, value) {
   if (!value || typeof value !== "object") {
     return null;
@@ -360,7 +380,16 @@ export class EventChat {
     if (chatEmpty) {
       chatEmpty.hidden = messages.length > 0;
     }
+    let lastDateKey = "";
     messages.forEach((message) => {
+      if (Number.isFinite(message.timestamp) && message.timestamp > 0) {
+        const date = new Date(message.timestamp);
+        const dateKey = formatDateKey(date);
+        if (dateKey !== lastDateKey) {
+          chatMessages.appendChild(this.renderDateInfo(date));
+          lastDateKey = dateKey;
+        }
+      }
       const item = this.renderMessage(message);
       chatMessages.appendChild(item);
     });
@@ -471,6 +500,18 @@ export class EventChat {
 
     article.append(author, bubbleWrap);
     return article;
+  }
+
+  renderDateInfo(date) {
+    const container = document.createElement("div");
+    container.className = "chat-info";
+
+    const time = document.createElement("time");
+    time.dateTime = date.toISOString();
+    time.textContent = formatDate(date);
+
+    container.append(time);
+    return container;
   }
 
   async handleSubmit() {
