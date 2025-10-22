@@ -2406,6 +2406,8 @@ function renderParticipants() {
     clearParticipantSelection({ silent: true });
   }
 
+  list.appendChild(fragment);
+
   if (dom.adminSummary) {
     const total = state.participants.length;
     const summaryEntries = [];
