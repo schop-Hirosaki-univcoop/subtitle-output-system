@@ -4358,8 +4358,9 @@ body.sidebar-overlay-open{
 }
 
 :is(#flow-panel-participants .qa-embedded, .question-admin-page) .participant-card__link-row .share-link-preview{
-  flex:1 1 auto;
+  flex:1 1 0%;
   min-width:0;
+  max-width:max(0px, calc(100% - 6.5rem));
   margin-top:0;
 }
 
