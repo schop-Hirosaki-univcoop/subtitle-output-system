@@ -2649,8 +2649,8 @@ function updateParticipantContext(options = {}) {
       dom.teamCsvInput.value = "";
     }
     if (!shouldPreserveStatus) setUploadStatus(getMissingSelectionStatusMessage());
-    if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
-    if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
+    if (dom.fileLabel) dom.fileLabel.textContent = "参加者CSVをアップロード";
+    if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVをアップロード";
     if (dom.mappingTbody) dom.mappingTbody.innerHTML = "";
     if (dom.adminSummary) dom.adminSummary.textContent = "";
     syncTemplateButtons();
@@ -2929,8 +2929,8 @@ async function loadParticipants(options = {}) {
       selectedSchedule.participantCount = participants.length;
     }
     syncCurrentScheduleCache();
-    if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
-    if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
+    if (dom.fileLabel) dom.fileLabel.textContent = "参加者CSVをアップロード";
+    if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVをアップロード";
     if (dom.csvInput) dom.csvInput.value = "";
     if (!suppressStatus) {
       const defaultMessage = hydratedFromSheet
@@ -4218,7 +4218,7 @@ function resetState() {
   renderParticipants();
   updateParticipantContext();
   setUploadStatus(getMissingSelectionStatusMessage());
-  if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
+  if (dom.fileLabel) dom.fileLabel.textContent = "参加者CSVをアップロード";
   if (dom.teamCsvInput) dom.teamCsvInput.value = "";
   if (dom.csvInput) dom.csvInput.value = "";
   renderUserSummary(null);
@@ -4858,8 +4858,8 @@ function attachEventHandlers() {
     setUploadStatus(getMissingSelectionStatusMessage());
   }
 
-  if (dom.fileLabel) dom.fileLabel.textContent = "CSVファイルを選択";
-  if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVを選択";
+  if (dom.fileLabel) dom.fileLabel.textContent = "参加者CSVをアップロード";
+  if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVをアップロード";
 
   if (dom.copyrightYear) {
     dom.copyrightYear.textContent = String(new Date().getFullYear());
