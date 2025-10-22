@@ -7,7 +7,9 @@ import {
   update,
   auth,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  onValue,
+  serverTimestamp
 } from "../operator/firebase.js";
 import { createApiClient } from "../operator/api-client.js";
 import { generateShortId, normalizeKey, toMillis } from "../question-admin/utils.js";
@@ -85,6 +87,12 @@ export class EventAdminApp {
     this.chatUnreadCount = 0;
     this.chatScrollUnreadCount = 0;
     this.chatAcknowledged = true;
+    this.chatMessages = [];
+    this.chatLatestMessageId = "";
+    this.chatLatestMessageTimestamp = 0;
+    this.chatLastReadMessageId = "";
+    this.chatLastReadMessageTimestamp = 0;
+    this.chatReadUnsubscribe = null;
     this.lastMobileFocus = null;
     this.handleMobileKeydown = this.handleMobileKeydown.bind(this);
     this.handleChatInteraction = this.handleChatInteraction.bind(this);
@@ -147,6 +155,11 @@ export class EventAdminApp {
     this.chatUnreadCount = 0;
     this.chatScrollUnreadCount = 0;
     this.chatAcknowledged = true;
+    this.chatMessages = [];
+    this.chatLatestMessageId = "";
+    this.chatLatestMessageTimestamp = 0;
+    this.chatLastReadMessageId = "";
+    this.chatLastReadMessageTimestamp = 0;
     this.applyMetaNote();
     this.applyEventsLoadingState();
     this.applyScheduleLoadingState();
@@ -398,6 +411,7 @@ export class EventAdminApp {
   async handleAuthState(user) {
     this.currentUser = user;
     this.chat.handleAuthChange(user);
+    this.startChatReadListener(user);
     this.updateUserLabel();
     if (!user) {
       this.events = [];
@@ -1396,6 +1410,7 @@ export class EventAdminApp {
     this.selectionListeners.clear();
     this.eventListeners.clear();
     this.teardownChatLayoutObservers();
+    this.stopChatReadListener();
     this.chat.dispose();
   }
 
@@ -1517,6 +1532,25 @@ export class EventAdminApp {
     });
   }
 
+  handleChatMessagesChange({ messages, latestMessage, latestMessageId } = {}) {
+    this.chatMessages = Array.isArray(messages) ? messages : [];
+    const resolvedLatest = latestMessage && typeof latestMessage === "object"
+      ? latestMessage
+      : this.chatMessages.length > 0
+        ? this.chatMessages[this.chatMessages.length - 1]
+        : null;
+    const resolvedId = typeof latestMessageId === "string" && latestMessageId
+      ? latestMessageId
+      : resolvedLatest && typeof resolvedLatest.id === "string"
+        ? resolvedLatest.id
+        : "";
+    this.chatLatestMessageId = resolvedId;
+    this.chatLatestMessageTimestamp = resolvedLatest && Number.isFinite(resolvedLatest.timestamp)
+      ? resolvedLatest.timestamp
+      : 0;
+    this.syncChatUnreadCount();
+  }
+
   handleChatUnreadCountChange(count) {
     const numeric = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
     this.chatScrollUnreadCount = numeric;
@@ -1530,13 +1564,10 @@ export class EventAdminApp {
     const external = Number.isFinite(activity.externalCount)
       ? Math.max(0, Math.trunc(activity.externalCount))
       : 0;
-    if (external <= 0) {
-      return;
+    if (external > 0) {
+      this.chatAcknowledged = false;
     }
-    const next = Math.min(999, this.chatUnreadCount + external);
-    this.chatUnreadCount = next;
-    this.chatAcknowledged = false;
-    this.refreshChatIndicators();
+    this.syncChatUnreadCount();
   }
 
   hasChatAttention() {
@@ -1545,19 +1576,149 @@ export class EventAdminApp {
 
   handleChatInteraction() {
     if (!this.hasChatAttention()) {
-      this.chatAcknowledged = true;
-      this.refreshChatIndicators();
       return;
     }
     this.acknowledgeChatActivity();
   }
 
   acknowledgeChatActivity() {
-    this.chatAcknowledged = true;
-    if (this.chatUnreadCount !== 0) {
-      this.chatUnreadCount = 0;
+    const latestId = typeof this.chatLatestMessageId === "string" ? this.chatLatestMessageId : "";
+    if (!latestId) {
+      this.chatLastReadMessageId = "";
+      this.chatLastReadMessageTimestamp = 0;
+      this.syncChatUnreadCount();
+      return;
     }
+    const hasChanged = latestId !== this.chatLastReadMessageId;
+    this.chatLastReadMessageId = latestId;
+    this.chatLastReadMessageTimestamp = Number.isFinite(this.chatLatestMessageTimestamp)
+      ? this.chatLatestMessageTimestamp
+      : 0;
+    this.syncChatUnreadCount();
+    if (hasChanged) {
+      void this.persistChatReadState(latestId).catch((error) => {
+        logError("Failed to record chat read marker", error);
+      });
+    }
+  }
+
+  syncChatUnreadCount() {
+    if (!this.currentUser) {
+      this.chatUnreadCount = 0;
+      this.chatAcknowledged = true;
+      this.refreshChatIndicators();
+      return;
+    }
+    const messages = Array.isArray(this.chatMessages) ? this.chatMessages : [];
+    const lastReadId = typeof this.chatLastReadMessageId === "string" ? this.chatLastReadMessageId : "";
+    const matchIndex = lastReadId
+      ? messages.findIndex((message) => message && message.id === lastReadId)
+      : -1;
+    const fallbackTimestamp = matchIndex < 0 && Number.isFinite(this.chatLastReadMessageTimestamp)
+      ? this.chatLastReadMessageTimestamp
+      : 0;
+    let unread = 0;
+    for (let index = 0; index < messages.length; index += 1) {
+      if (matchIndex >= 0 && index <= matchIndex) {
+        continue;
+      }
+      const message = messages[index];
+      if (!message) {
+        continue;
+      }
+      if (matchIndex < 0 && fallbackTimestamp > 0) {
+        const timestamp = Number.isFinite(message.timestamp) ? message.timestamp : 0;
+        if (timestamp > 0 && timestamp <= fallbackTimestamp) {
+          continue;
+        }
+      }
+      if (this.chat && typeof this.chat.isMessageFromCurrentUser === "function" && this.chat.isMessageFromCurrentUser(message)) {
+        continue;
+      }
+      unread += 1;
+    }
+    this.chatUnreadCount = unread;
+    this.chatAcknowledged = unread <= 0;
     this.refreshChatIndicators();
+  }
+
+  startChatReadListener(user) {
+    this.stopChatReadListener();
+    if (!user || !user.uid) {
+      this.chatLastReadMessageId = "";
+      this.chatLastReadMessageTimestamp = 0;
+      this.syncChatUnreadCount();
+      return;
+    }
+    const readRef = this.getChatReadRef(user.uid);
+    if (!readRef) {
+      return;
+    }
+    this.chatReadUnsubscribe = onValue(
+      readRef,
+      (snapshot) => {
+        const value = snapshot.val();
+        const lastReadId = value && typeof value.lastReadMessageId === "string" ? value.lastReadMessageId : "";
+        this.chatLastReadMessageId = lastReadId;
+        const timestampValue = value && Object.prototype.hasOwnProperty.call(value, "lastReadMessageTimestamp")
+          ? Number(value.lastReadMessageTimestamp)
+          : NaN;
+        this.chatLastReadMessageTimestamp = Number.isFinite(timestampValue) ? timestampValue : 0;
+        this.syncChatUnreadCount();
+      },
+      (error) => {
+        logError("Failed to observe chat read marker", error);
+      }
+    );
+  }
+
+  stopChatReadListener() {
+    if (typeof this.chatReadUnsubscribe === "function") {
+      try {
+        this.chatReadUnsubscribe();
+      } catch (error) {
+        logError("Failed to dispose chat read listener", error);
+      }
+    }
+    this.chatReadUnsubscribe = null;
+  }
+
+  getChatReadRef(uid) {
+    if (!uid) {
+      return null;
+    }
+    try {
+      return ref(database, `operatorChat/reads/${uid}`);
+    } catch (error) {
+      logError("Failed to build chat read ref", error);
+      return null;
+    }
+  }
+
+  async persistChatReadState(messageId) {
+    const user = this.currentUser;
+    if (!user || !user.uid) {
+      return;
+    }
+    const normalizedId = typeof messageId === "string" ? messageId : "";
+    if (!normalizedId) {
+      return;
+    }
+    const readRef = this.getChatReadRef(user.uid);
+    if (!readRef) {
+      return;
+    }
+    const payload = {
+      lastReadMessageId: normalizedId,
+      updatedAt: serverTimestamp()
+    };
+    const readTimestamp = Number.isFinite(this.chatLastReadMessageTimestamp)
+      ? this.chatLastReadMessageTimestamp
+      : 0;
+    if (readTimestamp > 0) {
+      payload.lastReadMessageTimestamp = readTimestamp;
+    }
+    await set(readRef, payload);
   }
 
   refreshChatIndicators() {

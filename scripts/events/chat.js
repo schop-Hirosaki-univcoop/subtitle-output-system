@@ -364,6 +364,14 @@ export class EventChat {
       const item = this.renderMessage(message);
       chatMessages.appendChild(item);
     });
+    if (typeof this.app.handleChatMessagesChange === "function") {
+      const latestMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+      this.app.handleChatMessagesChange({
+        messages,
+        latestMessage,
+        latestMessageId: latestMessage && typeof latestMessage.id === "string" ? latestMessage.id : ""
+      });
+    }
     if (messages.length === 0) {
       this.state.unreadCount = 0;
       this.updateUnreadIndicator();
