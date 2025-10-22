@@ -52,6 +52,7 @@ export const telopRef = renderNowShowingRef;
 export const updateTriggerRef = ref(database, "signals/logs");
 export const dictionaryRef = ref(database, "dictionary");
 export const operatorChatMessagesRef = ref(database, "operatorChat/messages");
+export const operatorChatReadsRef = ref(database, "operatorChat/reads");
 
 export {
   ref,

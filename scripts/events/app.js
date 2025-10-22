@@ -7,7 +7,9 @@ import {
   update,
   auth,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  onValue,
+  serverTimestamp
 } from "../operator/firebase.js";
 import { createApiClient } from "../operator/api-client.js";
 import { generateShortId, normalizeKey, toMillis } from "../question-admin/utils.js";
@@ -81,6 +83,19 @@ export class EventAdminApp {
     this.chatLayoutResizeObserver = null;
     this.chatLayoutRaf = 0;
     this.visualViewportResize = null;
+    this.activeMobilePanel = "";
+    this.chatUnreadCount = 0;
+    this.chatScrollUnreadCount = 0;
+    this.chatAcknowledged = true;
+    this.chatMessages = [];
+    this.chatLatestMessageId = "";
+    this.chatLatestMessageTimestamp = 0;
+    this.chatLastReadMessageId = "";
+    this.chatLastReadMessageTimestamp = 0;
+    this.chatReadUnsubscribe = null;
+    this.lastMobileFocus = null;
+    this.handleMobileKeydown = this.handleMobileKeydown.bind(this);
+    this.handleChatInteraction = this.handleChatInteraction.bind(this);
   }
 
   logParticipantAction(message, detail = null) {
@@ -111,8 +126,10 @@ export class EventAdminApp {
     this.updateSelectionNotes();
     this.applyMetaNote();
     this.chat.init();
+    this.refreshChatIndicators();
     this.setupChatLayoutObservers();
     this.observeAuthState();
+    this.syncMobilePanelAccessibility();
     if (typeof document !== "undefined") {
       document.addEventListener("qa:participants-synced", this.tools.handleParticipantSyncEvent);
       document.addEventListener("qa:selection-changed", this.tools.handleParticipantSelectionBroadcast);
@@ -135,6 +152,14 @@ export class EventAdminApp {
     this.stageNote = "";
     this.forceSelectionBroadcast = true;
     this.tools.resetFlowState();
+    this.chatUnreadCount = 0;
+    this.chatScrollUnreadCount = 0;
+    this.chatAcknowledged = true;
+    this.chatMessages = [];
+    this.chatLatestMessageId = "";
+    this.chatLatestMessageTimestamp = 0;
+    this.chatLastReadMessageId = "";
+    this.chatLastReadMessageTimestamp = 0;
     this.applyMetaNote();
     this.applyEventsLoadingState();
     this.applyScheduleLoadingState();
@@ -148,6 +173,7 @@ export class EventAdminApp {
     this.updatePanelVisibility();
     this.updatePanelNavigation();
     this.updateSelectionNotes();
+    this.refreshChatIndicators();
   }
 
   bindEvents() {
@@ -258,6 +284,42 @@ export class EventAdminApp {
         }
       });
     }
+
+    (this.dom.mobileToggleButtons || []).forEach((button) => {
+      if (!button) {
+        return;
+      }
+      button.addEventListener("click", () => {
+        const target = button.dataset.mobileTarget || "";
+        this.toggleMobilePanel(target);
+      });
+    });
+
+    (this.dom.mobileCloseButtons || []).forEach((button) => {
+      if (!button) {
+        return;
+      }
+      button.addEventListener("click", () => {
+        this.closeMobilePanel();
+      });
+    });
+
+    if (this.dom.mobileOverlay) {
+      this.dom.mobileOverlay.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        if (target === this.dom.mobileOverlay || target.closest("[data-mobile-overlay-dismiss]")) {
+          this.closeMobilePanel();
+        }
+      });
+    }
+
+    if (this.dom.chatContainer) {
+      this.dom.chatContainer.addEventListener("pointerdown", this.handleChatInteraction);
+      this.dom.chatContainer.addEventListener("focusin", this.handleChatInteraction);
+    }
   }
 
   async handleLogoutClick() {
@@ -349,6 +411,7 @@ export class EventAdminApp {
   async handleAuthState(user) {
     this.currentUser = user;
     this.chat.handleAuthChange(user);
+    this.startChatReadListener(user);
     this.updateUserLabel();
     if (!user) {
       this.events = [];
@@ -1339,9 +1402,15 @@ export class EventAdminApp {
     if (typeof window !== "undefined") {
       window.removeEventListener("beforeunload", this.cleanup);
     }
+    if (this.dom.chatContainer) {
+      this.dom.chatContainer.removeEventListener("pointerdown", this.handleChatInteraction);
+      this.dom.chatContainer.removeEventListener("focusin", this.handleChatInteraction);
+    }
+    this.closeMobilePanel({ restoreFocus: false });
     this.selectionListeners.clear();
     this.eventListeners.clear();
     this.teardownChatLayoutObservers();
+    this.stopChatReadListener();
     this.chat.dispose();
   }
 
@@ -1419,7 +1488,444 @@ export class EventAdminApp {
     this.chatLayoutRaf = window.requestAnimationFrame(() => {
       this.chatLayoutRaf = 0;
       this.updateChatLayoutMetrics();
+      if (!this.isMobileLayout() && this.activeMobilePanel) {
+        this.closeMobilePanel({ restoreFocus: false });
+      }
+      this.syncMobilePanelAccessibility();
+      this.refreshChatIndicators();
     });
+  }
+
+  isMobileLayout() {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return false;
+    }
+    return window.matchMedia("(max-width: 960px)").matches;
+  }
+
+  getMobilePanel(target) {
+    if (!target) {
+      return null;
+    }
+    if (target === "sidebar") {
+      return this.dom.sidebarContainer || (typeof document !== "undefined" ? document.getElementById("events-sidebar") : null);
+    }
+    if (target === "chat") {
+      return this.dom.chatContainer || (typeof document !== "undefined" ? document.getElementById("events-chat") : null);
+    }
+    return null;
+  }
+
+  syncMobilePanelAccessibility() {
+    const isMobile = this.isMobileLayout();
+    ["sidebar", "chat"].forEach((target) => {
+      const panel = this.getMobilePanel(target);
+      if (!(panel instanceof HTMLElement)) {
+        return;
+      }
+      if (isMobile) {
+        const isOpen = panel.classList.contains("is-mobile-open");
+        panel.setAttribute("aria-hidden", isOpen ? "false" : "true");
+      } else {
+        panel.removeAttribute("aria-hidden");
+      }
+    });
+  }
+
+  handleChatMessagesChange({ messages, latestMessage, latestMessageId } = {}) {
+    this.chatMessages = Array.isArray(messages) ? messages : [];
+    const resolvedLatest = latestMessage && typeof latestMessage === "object"
+      ? latestMessage
+      : this.chatMessages.length > 0
+        ? this.chatMessages[this.chatMessages.length - 1]
+        : null;
+    const resolvedId = typeof latestMessageId === "string" && latestMessageId
+      ? latestMessageId
+      : resolvedLatest && typeof resolvedLatest.id === "string"
+        ? resolvedLatest.id
+        : "";
+    this.chatLatestMessageId = resolvedId;
+    this.chatLatestMessageTimestamp = resolvedLatest && Number.isFinite(resolvedLatest.timestamp)
+      ? resolvedLatest.timestamp
+      : 0;
+    this.syncChatUnreadCount();
+  }
+
+  handleChatUnreadCountChange(count) {
+    const numeric = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
+    this.chatScrollUnreadCount = numeric;
+    this.refreshChatIndicators();
+  }
+
+  handleChatActivity(activity = {}) {
+    if (!activity || typeof activity !== "object") {
+      return;
+    }
+    const external = Number.isFinite(activity.externalCount)
+      ? Math.max(0, Math.trunc(activity.externalCount))
+      : 0;
+    if (external > 0) {
+      this.chatAcknowledged = false;
+    }
+    this.syncChatUnreadCount();
+  }
+
+  hasChatAttention() {
+    return !this.chatAcknowledged && this.chatUnreadCount > 0;
+  }
+
+  handleChatInteraction() {
+    if (!this.hasChatAttention()) {
+      return;
+    }
+    this.acknowledgeChatActivity();
+  }
+
+  acknowledgeChatActivity() {
+    const latestId = typeof this.chatLatestMessageId === "string" ? this.chatLatestMessageId : "";
+    if (!latestId) {
+      this.chatLastReadMessageId = "";
+      this.chatLastReadMessageTimestamp = 0;
+      this.syncChatUnreadCount();
+      return;
+    }
+    const hasChanged = latestId !== this.chatLastReadMessageId;
+    this.chatLastReadMessageId = latestId;
+    this.chatLastReadMessageTimestamp = Number.isFinite(this.chatLatestMessageTimestamp)
+      ? this.chatLatestMessageTimestamp
+      : 0;
+    this.syncChatUnreadCount();
+    if (hasChanged) {
+      void this.persistChatReadState(latestId).catch((error) => {
+        logError("Failed to record chat read marker", error);
+      });
+    }
+  }
+
+  syncChatUnreadCount() {
+    if (!this.currentUser) {
+      this.chatUnreadCount = 0;
+      this.chatAcknowledged = true;
+      this.refreshChatIndicators();
+      return;
+    }
+    const messages = Array.isArray(this.chatMessages) ? this.chatMessages : [];
+    const lastReadId = typeof this.chatLastReadMessageId === "string" ? this.chatLastReadMessageId : "";
+    const matchIndex = lastReadId
+      ? messages.findIndex((message) => message && message.id === lastReadId)
+      : -1;
+    const fallbackTimestamp = matchIndex < 0 && Number.isFinite(this.chatLastReadMessageTimestamp)
+      ? this.chatLastReadMessageTimestamp
+      : 0;
+    let unread = 0;
+    for (let index = 0; index < messages.length; index += 1) {
+      if (matchIndex >= 0 && index <= matchIndex) {
+        continue;
+      }
+      const message = messages[index];
+      if (!message) {
+        continue;
+      }
+      if (matchIndex < 0 && fallbackTimestamp > 0) {
+        const timestamp = Number.isFinite(message.timestamp) ? message.timestamp : 0;
+        if (timestamp > 0 && timestamp <= fallbackTimestamp) {
+          continue;
+        }
+      }
+      if (this.chat && typeof this.chat.isMessageFromCurrentUser === "function" && this.chat.isMessageFromCurrentUser(message)) {
+        continue;
+      }
+      unread += 1;
+    }
+    this.chatUnreadCount = unread;
+    this.chatAcknowledged = unread <= 0;
+    this.refreshChatIndicators();
+  }
+
+  startChatReadListener(user) {
+    this.stopChatReadListener();
+    if (!user || !user.uid) {
+      this.chatLastReadMessageId = "";
+      this.chatLastReadMessageTimestamp = 0;
+      this.syncChatUnreadCount();
+      return;
+    }
+    const readRef = this.getChatReadRef(user.uid);
+    if (!readRef) {
+      return;
+    }
+    this.chatReadUnsubscribe = onValue(
+      readRef,
+      (snapshot) => {
+        const value = snapshot.val();
+        const lastReadId = value && typeof value.lastReadMessageId === "string" ? value.lastReadMessageId : "";
+        this.chatLastReadMessageId = lastReadId;
+        const timestampValue = value && Object.prototype.hasOwnProperty.call(value, "lastReadMessageTimestamp")
+          ? Number(value.lastReadMessageTimestamp)
+          : NaN;
+        this.chatLastReadMessageTimestamp = Number.isFinite(timestampValue) ? timestampValue : 0;
+        this.syncChatUnreadCount();
+      },
+      (error) => {
+        logError("Failed to observe chat read marker", error);
+      }
+    );
+  }
+
+  stopChatReadListener() {
+    if (typeof this.chatReadUnsubscribe === "function") {
+      try {
+        this.chatReadUnsubscribe();
+      } catch (error) {
+        logError("Failed to dispose chat read listener", error);
+      }
+    }
+    this.chatReadUnsubscribe = null;
+  }
+
+  getChatReadRef(uid) {
+    if (!uid) {
+      return null;
+    }
+    try {
+      return ref(database, `operatorChat/reads/${uid}`);
+    } catch (error) {
+      logError("Failed to build chat read ref", error);
+      return null;
+    }
+  }
+
+  async persistChatReadState(messageId) {
+    const user = this.currentUser;
+    if (!user || !user.uid) {
+      return;
+    }
+    const normalizedId = typeof messageId === "string" ? messageId : "";
+    if (!normalizedId) {
+      return;
+    }
+    const readRef = this.getChatReadRef(user.uid);
+    if (!readRef) {
+      return;
+    }
+    const payload = {
+      lastReadMessageId: normalizedId,
+      updatedAt: serverTimestamp()
+    };
+    const readTimestamp = Number.isFinite(this.chatLastReadMessageTimestamp)
+      ? this.chatLastReadMessageTimestamp
+      : 0;
+    if (readTimestamp > 0) {
+      payload.lastReadMessageTimestamp = readTimestamp;
+    }
+    await set(readRef, payload);
+  }
+
+  refreshChatIndicators() {
+    this.refreshMobileChatIndicator();
+    this.refreshDesktopChatIndicator();
+  }
+
+  refreshDesktopChatIndicator() {
+    const container = this.dom.chatContainer;
+    const indicator = this.dom.chatAttention;
+    const countNode = this.dom.chatAttentionCount;
+    const textNode = this.dom.chatAttentionText;
+    const hasAttention = this.hasChatAttention();
+    const count = this.chatUnreadCount || 0;
+
+    if (container) {
+      if (hasAttention) {
+        container.setAttribute("data-has-updates", "true");
+      } else {
+        container.removeAttribute("data-has-updates");
+      }
+    }
+
+    if (indicator) {
+      if (hasAttention) {
+        indicator.hidden = false;
+      } else {
+        indicator.hidden = true;
+      }
+    }
+
+    if (countNode) {
+      countNode.textContent = hasAttention ? (count > 99 ? "99+" : String(count)) : "";
+    }
+
+    if (textNode) {
+      if (hasAttention) {
+        const announce = count > 99 ? "99件以上" : `${count}件`;
+        textNode.textContent = `新着メッセージが${announce}あります`;
+      } else {
+        textNode.textContent = "";
+      }
+    }
+  }
+
+  refreshMobileChatIndicator() {
+    const button = this.dom.chatMobileToggle;
+    const badge = this.dom.chatMobileBadge;
+    const srText = this.dom.chatMobileBadgeText;
+    const count = this.chatUnreadCount || 0;
+    const hasAttention = this.hasChatAttention();
+    const isMobile = this.isMobileLayout();
+    const isChatOpen = this.activeMobilePanel === "chat";
+    const shouldShow = isMobile && !isChatOpen && hasAttention;
+
+    if (button) {
+      if (shouldShow) {
+        button.setAttribute("data-has-updates", "true");
+      } else {
+        button.removeAttribute("data-has-updates");
+      }
+    }
+
+    if (badge) {
+      if (shouldShow) {
+        badge.textContent = count > 99 ? "99+" : String(count);
+        badge.removeAttribute("hidden");
+      } else {
+        badge.textContent = "";
+        badge.setAttribute("hidden", "");
+      }
+    }
+
+    if (srText) {
+      if (hasAttention) {
+        const announce = count > 99 ? "99件以上" : `${count}件`;
+        srText.textContent = `新着メッセージが${announce}あります`;
+      } else {
+        srText.textContent = "";
+      }
+    }
+  }
+
+  toggleMobilePanel(target) {
+    if (!target) {
+      return;
+    }
+    if (!this.isMobileLayout()) {
+      const panel = this.getMobilePanel(target);
+      if (panel && typeof panel.scrollIntoView === "function") {
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      if (panel instanceof HTMLElement) {
+        panel.removeAttribute("aria-hidden");
+      }
+      return;
+    }
+    if (this.activeMobilePanel === target) {
+      this.closeMobilePanel();
+    } else {
+      this.openMobilePanel(target);
+    }
+  }
+
+  openMobilePanel(target) {
+    if (!this.isMobileLayout()) {
+      return;
+    }
+    const panel = this.getMobilePanel(target);
+    if (!panel) {
+      return;
+    }
+    if (this.activeMobilePanel && this.activeMobilePanel !== target) {
+      this.closeMobilePanel({ restoreFocus: false });
+    }
+    this.activeMobilePanel = target;
+    if (panel instanceof HTMLElement) {
+      panel.classList.add("is-mobile-open");
+      panel.setAttribute("data-mobile-open", "true");
+      panel.setAttribute("aria-hidden", "false");
+    }
+    const body = typeof document !== "undefined" ? document.body : null;
+    if (body) {
+      body.classList.add("events-mobile-locked");
+    }
+    if (this.dom.mobileOverlay) {
+      this.dom.mobileOverlay.removeAttribute("hidden");
+    }
+    (this.dom.mobileToggleButtons || []).forEach((button) => {
+      if (!button) {
+        return;
+      }
+      const matches = (button.dataset.mobileTarget || "") === target;
+      button.setAttribute("aria-expanded", matches ? "true" : "false");
+    });
+    this.lastMobileFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const closeButton = panel.querySelector("[data-mobile-close]");
+    requestAnimationFrame(() => {
+      if (closeButton instanceof HTMLElement) {
+        closeButton.focus();
+      } else if (panel instanceof HTMLElement && typeof panel.focus === "function") {
+        panel.focus();
+      }
+    });
+    if (typeof document !== "undefined") {
+      document.addEventListener("keydown", this.handleMobileKeydown, true);
+    }
+    if (target === "chat") {
+      this.acknowledgeChatActivity();
+    } else {
+      this.refreshChatIndicators();
+    }
+    this.syncMobilePanelAccessibility();
+  }
+
+  closeMobilePanel({ restoreFocus = true } = {}) {
+    if (!this.activeMobilePanel) {
+      (this.dom.mobileToggleButtons || []).forEach((button) => {
+        if (button) {
+          button.setAttribute("aria-expanded", "false");
+        }
+      });
+      this.syncMobilePanelAccessibility();
+      this.refreshChatIndicators();
+      return;
+    }
+    const target = this.activeMobilePanel;
+    const panel = this.getMobilePanel(target);
+    if (panel instanceof HTMLElement) {
+      panel.classList.remove("is-mobile-open");
+      panel.removeAttribute("data-mobile-open");
+      if (this.isMobileLayout()) {
+        panel.setAttribute("aria-hidden", "true");
+      } else {
+        panel.removeAttribute("aria-hidden");
+      }
+    }
+    if (this.dom.mobileOverlay && !this.dom.mobileOverlay.hasAttribute("hidden")) {
+      this.dom.mobileOverlay.setAttribute("hidden", "");
+    }
+    const body = typeof document !== "undefined" ? document.body : null;
+    if (body) {
+      body.classList.remove("events-mobile-locked");
+    }
+    (this.dom.mobileToggleButtons || []).forEach((button) => {
+      if (button) {
+        button.setAttribute("aria-expanded", "false");
+      }
+    });
+    if (typeof document !== "undefined") {
+      document.removeEventListener("keydown", this.handleMobileKeydown, true);
+    }
+    const focusTarget = restoreFocus ? this.lastMobileFocus : null;
+    this.activeMobilePanel = "";
+    this.lastMobileFocus = null;
+    this.syncMobilePanelAccessibility();
+    this.refreshChatIndicators();
+    if (focusTarget && typeof focusTarget.focus === "function") {
+      focusTarget.focus();
+    }
+  }
+
+  handleMobileKeydown(event) {
+    if (event.key === "Escape" && this.activeMobilePanel) {
+      event.preventDefault();
+      this.closeMobilePanel();
+    }
   }
 
   updateChatLayoutMetrics() {
