@@ -44,7 +44,48 @@
     </section>
 
     <div class="events-layout">
-      <aside class="events-sidebar">
+      <div class="events-mobile-controls" aria-label="サイドメニューの開閉">
+        <button
+          id="events-sidebar-toggle"
+          class="btn btn-ghost events-mobile-button"
+          type="button"
+          aria-controls="events-sidebar"
+          aria-expanded="false"
+          data-mobile-target="sidebar"
+        >
+          <svg class="events-mobile-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z" />
+          </svg>
+          <span class="events-mobile-button__label">メニュー</span>
+        </button>
+        <button
+          id="events-chat-toggle"
+          class="btn btn-ghost events-mobile-button"
+          type="button"
+          aria-controls="events-chat"
+          aria-expanded="false"
+          data-mobile-target="chat"
+        >
+          <svg class="events-mobile-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H7.17L4 19.17V5a1 1 0 0 1 1-1zm3 4v2h10V8H7zm0 4v2h6v-2H7z" />
+          </svg>
+          <span class="events-mobile-button__label">チャット</span>
+          <span id="events-chat-badge" class="events-mobile-button__badge" aria-hidden="true" hidden></span>
+          <span id="events-chat-badge-text" class="visually-hidden" aria-live="polite"></span>
+        </button>
+      </div>
+
+      <aside id="events-sidebar" class="events-sidebar">
+        <button
+          type="button"
+          class="events-mobile-close"
+          aria-label="サイドメニューを閉じる"
+          data-mobile-close="sidebar"
+        >
+          <svg class="events-mobile-close__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M6.7 5.3 5.3 6.7 10.6 12l-5.3 5.3 1.4 1.4L12 13.4l5.3 5.3 1.4-1.4L13.4 12l5.3-5.3-1.4-1.4L12 10.6z" />
+          </svg>
+        </button>
         <button id="flow-event-summary-pane" class="sidebar-card sidebar-card--action" type="button" data-panel-target="events">
           <span class="sidebar-card__title">選択中のイベント</span>
           <span id="flow-event-summary-name" class="sidebar-card__name">—</span>
@@ -631,7 +672,17 @@
           </div>
         </section>
       </div>
-      <aside class="events-chat" aria-label="オペレーターチャット">
+      <aside id="events-chat" class="events-chat" aria-label="オペレーターチャット">
+        <button
+          type="button"
+          class="events-mobile-close"
+          aria-label="チャットを閉じる"
+          data-mobile-close="chat"
+        >
+          <svg class="events-mobile-close__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M6.7 5.3 5.3 6.7 10.6 12l-5.3 5.3 1.4 1.4L12 13.4l5.3 5.3 1.4-1.4L13.4 12l5.3-5.3-1.4-1.4L12 10.6z" />
+          </svg>
+        </button>
         <section id="flow-chat-panel" class="chat-panel" aria-labelledby="flow-chat-title">
           <div class="chat-panel__header">
             <h2 id="flow-chat-title">オペレーターチャット</h2>
@@ -712,6 +763,15 @@
       </aside>
     </div>
   </main>
+
+  <div
+    id="events-mobile-overlay"
+    class="events-mobile-overlay"
+    data-mobile-overlay
+    hidden
+  >
+    <div class="events-mobile-overlay__backdrop" data-mobile-overlay-dismiss aria-hidden="true"></div>
+  </div>
 
   <div id="flow-event-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="flow-event-dialog-title" hidden>
     <div class="modal-backdrop" data-dialog-dismiss="true"></div>

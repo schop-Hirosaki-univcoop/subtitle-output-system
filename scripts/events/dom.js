@@ -3,6 +3,7 @@ export function queryDom() {
     main: document.getElementById("events-main"),
     flowStage: document.querySelector(".flow-stage"),
     chatContainer: document.querySelector(".events-chat"),
+    sidebarContainer: document.getElementById("events-sidebar"),
     eventsModule: document.querySelector('[data-panel="events"]'),
     schedulesModule: document.querySelector('[data-panel="schedules"]'),
     stageIndicators: Array.from(document.querySelectorAll("[data-stage-indicator]")),
@@ -60,6 +61,9 @@ export function queryDom() {
     participantsTool: document.getElementById("participants-tool"),
     operatorTool: document.getElementById("operator-tool"),
     chatPanel: document.getElementById("flow-chat-panel"),
+    chatMobileToggle: document.getElementById("events-chat-toggle"),
+    chatMobileBadge: document.getElementById("events-chat-badge"),
+    chatMobileBadgeText: document.getElementById("events-chat-badge-text"),
     chatStatus: document.getElementById("flow-chat-status"),
     chatScroll: document.getElementById("flow-chat-scroll"),
     chatMessages: document.getElementById("flow-chat-messages"),
@@ -78,6 +82,9 @@ export function queryDom() {
     chatContextCancelButton: document.getElementById("flow-chat-menu-cancel"),
     panelButtons: Array.from(document.querySelectorAll("[data-panel-target]")),
     navigationButtons: Array.from(document.querySelectorAll("[data-flow-nav-target]")),
-    flowNavigations: Array.from(document.querySelectorAll(".flow-navigation"))
+    flowNavigations: Array.from(document.querySelectorAll(".flow-navigation")),
+    mobileToggleButtons: Array.from(document.querySelectorAll("[data-mobile-target]")),
+    mobileCloseButtons: Array.from(document.querySelectorAll("[data-mobile-close]")),
+    mobileOverlay: document.getElementById("events-mobile-overlay")
   };
 }
