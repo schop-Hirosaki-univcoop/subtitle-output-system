@@ -368,22 +368,48 @@ export class EventChat {
       this.state.unreadCount = 0;
       this.updateUnreadIndicator();
     }
+    const previousCount = this.lastMessageCount;
+    const hasNewMessages = messages.length > previousCount;
+    if (hasNewMessages) {
+      const delta = messages.length - previousCount;
+      const newMessages = messages.slice(-delta);
+      const externalCount = newMessages.reduce((total, entry) => {
+        return total + (this.isMessageFromCurrentUser(entry) ? 0 : 1);
+      }, 0);
+      if (externalCount > 0 && typeof this.app.handleChatActivity === "function") {
+        this.app.handleChatActivity({
+          delta,
+          total: messages.length,
+          externalCount
+        });
+      }
+      if (!this.state.autoScroll) {
+        this.state.unreadCount += delta;
+        this.updateUnreadIndicator();
+      }
+    }
     if (this.state.autoScroll) {
       this.scrollToLatest(false);
-    } else if (messages.length > this.lastMessageCount) {
-      const delta = messages.length - this.lastMessageCount;
-      this.state.unreadCount += delta;
-      this.updateUnreadIndicator();
     }
     this.lastMessageCount = messages.length;
+  }
+
+  isMessageFromCurrentUser(message) {
+    if (!message || typeof message !== "object") {
+      return false;
+    }
+    const user = this.app.currentUser;
+    if (!user || !user.uid) {
+      return false;
+    }
+    return typeof message.uid === "string" && message.uid === user.uid;
   }
 
   renderMessage(message) {
     const article = document.createElement("article");
     article.className = "chat-message";
     article.dataset.messageId = message.id;
-    const currentUser = this.app.currentUser;
-    if (currentUser && message.uid && message.uid === currentUser.uid) {
+    if (this.isMessageFromCurrentUser(message)) {
       article.classList.add("chat-message--self");
     }
 

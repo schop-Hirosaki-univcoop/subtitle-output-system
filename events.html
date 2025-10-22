@@ -685,8 +685,21 @@
         </button>
         <section id="flow-chat-panel" class="chat-panel" aria-labelledby="flow-chat-title">
           <div class="chat-panel__header">
-            <h2 id="flow-chat-title">オペレーターチャット</h2>
-            <span id="flow-chat-status" class="chat-status" aria-live="polite">未接続</span>
+            <div class="chat-panel__heading">
+              <h2 id="flow-chat-title">オペレーターチャット</h2>
+              <span id="flow-chat-status" class="chat-status" aria-live="polite">未接続</span>
+            </div>
+            <div
+              id="flow-chat-attention"
+              class="chat-attention"
+              role="status"
+              aria-live="polite"
+              hidden
+            >
+              <span class="chat-attention__label">新着</span>
+              <span id="flow-chat-attention-count" class="chat-attention__count"></span>
+              <span id="flow-chat-attention-text" class="visually-hidden"></span>
+            </div>
           </div>
           <div class="chat-panel__body">
             <div

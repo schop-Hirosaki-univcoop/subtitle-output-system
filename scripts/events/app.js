@@ -82,9 +82,12 @@ export class EventAdminApp {
     this.chatLayoutRaf = 0;
     this.visualViewportResize = null;
     this.activeMobilePanel = "";
-    this.mobileChatUnreadCount = 0;
+    this.chatUnreadCount = 0;
+    this.chatScrollUnreadCount = 0;
+    this.chatAcknowledged = true;
     this.lastMobileFocus = null;
     this.handleMobileKeydown = this.handleMobileKeydown.bind(this);
+    this.handleChatInteraction = this.handleChatInteraction.bind(this);
   }
 
   logParticipantAction(message, detail = null) {
@@ -115,10 +118,10 @@ export class EventAdminApp {
     this.updateSelectionNotes();
     this.applyMetaNote();
     this.chat.init();
+    this.refreshChatIndicators();
     this.setupChatLayoutObservers();
     this.observeAuthState();
     this.syncMobilePanelAccessibility();
-    this.refreshMobileChatIndicator();
     if (typeof document !== "undefined") {
       document.addEventListener("qa:participants-synced", this.tools.handleParticipantSyncEvent);
       document.addEventListener("qa:selection-changed", this.tools.handleParticipantSelectionBroadcast);
@@ -141,7 +144,9 @@ export class EventAdminApp {
     this.stageNote = "";
     this.forceSelectionBroadcast = true;
     this.tools.resetFlowState();
-    this.mobileChatUnreadCount = 0;
+    this.chatUnreadCount = 0;
+    this.chatScrollUnreadCount = 0;
+    this.chatAcknowledged = true;
     this.applyMetaNote();
     this.applyEventsLoadingState();
     this.applyScheduleLoadingState();
@@ -155,6 +160,7 @@ export class EventAdminApp {
     this.updatePanelVisibility();
     this.updatePanelNavigation();
     this.updateSelectionNotes();
+    this.refreshChatIndicators();
   }
 
   bindEvents() {
@@ -295,6 +301,11 @@ export class EventAdminApp {
           this.closeMobilePanel();
         }
       });
+    }
+
+    if (this.dom.chatContainer) {
+      this.dom.chatContainer.addEventListener("pointerdown", this.handleChatInteraction);
+      this.dom.chatContainer.addEventListener("focusin", this.handleChatInteraction);
     }
   }
 
@@ -1377,6 +1388,10 @@ export class EventAdminApp {
     if (typeof window !== "undefined") {
       window.removeEventListener("beforeunload", this.cleanup);
     }
+    if (this.dom.chatContainer) {
+      this.dom.chatContainer.removeEventListener("pointerdown", this.handleChatInteraction);
+      this.dom.chatContainer.removeEventListener("focusin", this.handleChatInteraction);
+    }
     this.closeMobilePanel({ restoreFocus: false });
     this.selectionListeners.clear();
     this.eventListeners.clear();
@@ -1462,7 +1477,7 @@ export class EventAdminApp {
         this.closeMobilePanel({ restoreFocus: false });
       }
       this.syncMobilePanelAccessibility();
-      this.refreshMobileChatIndicator();
+      this.refreshChatIndicators();
     });
   }
 
@@ -1504,18 +1519,99 @@ export class EventAdminApp {
 
   handleChatUnreadCountChange(count) {
     const numeric = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
-    this.mobileChatUnreadCount = numeric;
+    this.chatScrollUnreadCount = numeric;
+    this.refreshChatIndicators();
+  }
+
+  handleChatActivity(activity = {}) {
+    if (!activity || typeof activity !== "object") {
+      return;
+    }
+    const external = Number.isFinite(activity.externalCount)
+      ? Math.max(0, Math.trunc(activity.externalCount))
+      : 0;
+    if (external <= 0) {
+      return;
+    }
+    const next = Math.min(999, this.chatUnreadCount + external);
+    this.chatUnreadCount = next;
+    this.chatAcknowledged = false;
+    this.refreshChatIndicators();
+  }
+
+  hasChatAttention() {
+    return !this.chatAcknowledged && this.chatUnreadCount > 0;
+  }
+
+  handleChatInteraction() {
+    if (!this.hasChatAttention()) {
+      this.chatAcknowledged = true;
+      this.refreshChatIndicators();
+      return;
+    }
+    this.acknowledgeChatActivity();
+  }
+
+  acknowledgeChatActivity() {
+    this.chatAcknowledged = true;
+    if (this.chatUnreadCount !== 0) {
+      this.chatUnreadCount = 0;
+    }
+    this.refreshChatIndicators();
+  }
+
+  refreshChatIndicators() {
     this.refreshMobileChatIndicator();
+    this.refreshDesktopChatIndicator();
+  }
+
+  refreshDesktopChatIndicator() {
+    const container = this.dom.chatContainer;
+    const indicator = this.dom.chatAttention;
+    const countNode = this.dom.chatAttentionCount;
+    const textNode = this.dom.chatAttentionText;
+    const hasAttention = this.hasChatAttention();
+    const count = this.chatUnreadCount || 0;
+
+    if (container) {
+      if (hasAttention) {
+        container.setAttribute("data-has-updates", "true");
+      } else {
+        container.removeAttribute("data-has-updates");
+      }
+    }
+
+    if (indicator) {
+      if (hasAttention) {
+        indicator.hidden = false;
+      } else {
+        indicator.hidden = true;
+      }
+    }
+
+    if (countNode) {
+      countNode.textContent = hasAttention ? (count > 99 ? "99+" : String(count)) : "";
+    }
+
+    if (textNode) {
+      if (hasAttention) {
+        const announce = count > 99 ? "99件以上" : `${count}件`;
+        textNode.textContent = `新着メッセージが${announce}あります`;
+      } else {
+        textNode.textContent = "";
+      }
+    }
   }
 
   refreshMobileChatIndicator() {
     const button = this.dom.chatMobileToggle;
     const badge = this.dom.chatMobileBadge;
     const srText = this.dom.chatMobileBadgeText;
-    const count = this.mobileChatUnreadCount || 0;
+    const count = this.chatUnreadCount || 0;
+    const hasAttention = this.hasChatAttention();
     const isMobile = this.isMobileLayout();
     const isChatOpen = this.activeMobilePanel === "chat";
-    const shouldShow = isMobile && !isChatOpen && count > 0;
+    const shouldShow = isMobile && !isChatOpen && hasAttention;
 
     if (button) {
       if (shouldShow) {
@@ -1536,7 +1632,7 @@ export class EventAdminApp {
     }
 
     if (srText) {
-      if (shouldShow) {
+      if (hasAttention) {
         const announce = count > 99 ? "99件以上" : `${count}件`;
         srText.textContent = `新着メッセージが${announce}あります`;
       } else {
@@ -1609,7 +1705,11 @@ export class EventAdminApp {
     if (typeof document !== "undefined") {
       document.addEventListener("keydown", this.handleMobileKeydown, true);
     }
-    this.refreshMobileChatIndicator();
+    if (target === "chat") {
+      this.acknowledgeChatActivity();
+    } else {
+      this.refreshChatIndicators();
+    }
     this.syncMobilePanelAccessibility();
   }
 
@@ -1621,7 +1721,7 @@ export class EventAdminApp {
         }
       });
       this.syncMobilePanelAccessibility();
-      this.refreshMobileChatIndicator();
+      this.refreshChatIndicators();
       return;
     }
     const target = this.activeMobilePanel;
@@ -1654,7 +1754,7 @@ export class EventAdminApp {
     this.activeMobilePanel = "";
     this.lastMobileFocus = null;
     this.syncMobilePanelAccessibility();
-    this.refreshMobileChatIndicator();
+    this.refreshChatIndicators();
     if (focusTarget && typeof focusTarget.focus === "function") {
       focusTarget.focus();
     }
