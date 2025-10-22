@@ -2060,16 +2060,23 @@ function createParticipantGroupElements(groupKey) {
   return { section, cardsContainer, countElement };
 }
 
-function createParticipantBadge(label, value) {
+function createParticipantBadge(label, value, { hideLabel = false } = {}) {
   const badge = document.createElement("span");
   badge.className = "participant-badge";
-  const labelSpan = document.createElement("span");
-  labelSpan.className = "participant-badge__label";
-  labelSpan.textContent = label;
+  const textValue = value ? String(value) : "—";
+  if (!hideLabel && label) {
+    const labelSpan = document.createElement("span");
+    labelSpan.className = "participant-badge__label";
+    labelSpan.textContent = label;
+    badge.appendChild(labelSpan);
+  }
   const valueSpan = document.createElement("span");
   valueSpan.className = "participant-badge__value";
-  valueSpan.textContent = value ? String(value) : "—";
-  badge.append(labelSpan, valueSpan);
+  valueSpan.textContent = textValue;
+  if (label) {
+    badge.title = `${label}: ${textValue}`;
+  }
+  badge.appendChild(valueSpan);
   return badge;
 }
 
@@ -2199,13 +2206,26 @@ function buildParticipantCard(entry, index, { changeInfo, duplicateMap, eventId,
   const header = document.createElement("header");
   header.className = "participant-card__header";
 
+  const headerMain = document.createElement("div");
+  headerMain.className = "participant-card__header-main";
+
+  const badgeRow = document.createElement("div");
+  badgeRow.className = "participant-card__badges";
+
   const numberBadge = document.createElement("span");
   numberBadge.className = "participant-card__no";
   applyParticipantNoText(numberBadge, index + 1);
-  header.appendChild(numberBadge);
+  badgeRow.appendChild(numberBadge);
 
-  const headerMain = document.createElement("div");
-  headerMain.className = "participant-card__header-main";
+  const departmentText = entry.department || entry.groupNumber || "";
+  const departmentBadge = createParticipantBadge("学部学科", departmentText, { hideLabel: true });
+  badgeRow.appendChild(departmentBadge);
+
+  const genderText = entry.gender || "";
+  const genderBadge = createParticipantBadge("性別", genderText, { hideLabel: true });
+  badgeRow.appendChild(genderBadge);
+
+  headerMain.appendChild(badgeRow);
 
   const nameWrapper = document.createElement("span");
   nameWrapper.className = "participant-card__name participant-name";
@@ -2223,12 +2243,6 @@ function buildParticipantCard(entry, index, { changeInfo, duplicateMap, eventId,
 
   headerMain.appendChild(nameWrapper);
 
-  const badges = document.createElement("div");
-  badges.className = "participant-card__badges";
-  badges.appendChild(createParticipantBadge("性別", entry.gender || ""));
-  badges.appendChild(createParticipantBadge("学部学科", entry.department || entry.groupNumber || ""));
-  headerMain.appendChild(badges);
-
   header.appendChild(headerMain);
 
   const body = document.createElement("div");
@@ -2236,36 +2250,33 @@ function buildParticipantCard(entry, index, { changeInfo, duplicateMap, eventId,
 
   const actions = document.createElement("div");
   actions.className = "participant-card__actions";
-  const linkActions = document.createElement("div");
-  linkActions.className = "link-action-row participant-card__buttons";
+  const linkRow = document.createElement("div");
+  linkRow.className = "link-action-row participant-card__buttons participant-card__link-row";
 
-  let shareUrl = "";
   if (entry.token) {
-    shareUrl = createShareUrl(entry.token);
-    const copyButton = document.createElement("button");
-    copyButton.type = "button";
-    copyButton.className = "link-action-btn copy-link-btn";
-    copyButton.dataset.token = entry.token;
-    copyButton.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M6.25 1.75A2.25 2.25 0 0 0 4 4v7A2.25 2.25 0 0 0 6.25 13.25h4A2.25 2.25 0 0 0 12.5 11V4A2.25 2.25 0 0 0 10.25 1.75h-4Zm0 1.5h4c.414 0 .75.336.75.75v7c0 .414-.336.75-.75.75h-4a.75.75 0 0 1-.75-.75V4c0-.414.336-.75.75-.75ZM3 4.75A.75.75 0 0 0 2.25 5.5v7A2.25 2.25 0 0 0 4.5 14.75h4a.75.75 0 0 0 0-1.5h-4a.75.75 0 0 1-.75-.75v-7A.75.75 0 0 0 3 4.75Z\" fill=\"currentColor\"/></svg><span>コピー</span>";
-    linkActions.appendChild(copyButton);
-  } else {
-    const placeholder = document.createElement("span");
-    placeholder.className = "link-placeholder";
-    placeholder.textContent = "リンク未発行";
-    linkActions.appendChild(placeholder);
-  }
-
-  actions.appendChild(linkActions);
-
-  if (shareUrl) {
+    const shareUrl = createShareUrl(entry.token);
     const previewLink = document.createElement("a");
     previewLink.href = shareUrl;
     previewLink.target = "_blank";
     previewLink.rel = "noopener noreferrer";
     previewLink.className = "share-link-preview";
     previewLink.textContent = shareUrl;
-    actions.appendChild(previewLink);
+    linkRow.appendChild(previewLink);
+
+    const copyButton = document.createElement("button");
+    copyButton.type = "button";
+    copyButton.className = "link-action-btn copy-link-btn";
+    copyButton.dataset.token = entry.token;
+    copyButton.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M6.25 1.75A2.25 2.25 0 0 0 4 4v7A2.25 2.25 0 0 0 6.25 13.25h4A2.25 2.25 0 0 0 12.5 11V4A2.25 2.25 0 0 0 10.25 1.75h-4Zm0 1.5h4c.414 0 .75.336.75.75v7c0 .414-.336.75-.75.75h-4a.75.75 0 0 1-.75-.75V4c0-.414.336-.75.75-.75ZM3 4.75A.75.75 0 0 0 2.25 5.5v7A2.25 2.25 0 0 0 4.5 14.75h4a.75.75 0 0 0 0-1.5h-4a.75.75 0 0 1-.75-.75v-7A.75.75 0 0 0 3 4.75Z\" fill=\"currentColor\"/></svg><span>コピー</span>";
+    linkRow.appendChild(copyButton);
+  } else {
+    const placeholder = document.createElement("span");
+    placeholder.className = "link-placeholder";
+    placeholder.textContent = "リンク未発行";
+    linkRow.appendChild(placeholder);
   }
+
+  actions.appendChild(linkRow);
 
   body.appendChild(actions);
 
