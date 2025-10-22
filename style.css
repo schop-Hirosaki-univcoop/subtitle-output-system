@@ -3160,27 +3160,40 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   }
   .events-sidebar,
   .events-chat{
-    display:none;
-    position:static;
-    top:auto;
-  }
-  .events-sidebar.is-mobile-open,
-  .events-chat.is-mobile-open{
     display:flex;
     position:fixed;
     z-index:140;
     flex-direction:column;
     gap:clamp(1rem, 4vw, 1.4rem);
-    left:50%;
-    transform:translateX(-50%);
+    top:calc(var(--header-height, 64px) + clamp(.75rem, 4vw, 1.5rem));
     width:min(92vw, 420px);
-    max-height:calc(100vh - var(--header-height, 64px) - 3rem);
+    max-height:calc(100vh - var(--header-height, 64px) - clamp(1.5rem, 8vw, 3rem));
     padding:clamp(1rem, 4vw, 1.5rem);
     border-radius:1.2rem;
     border:1px solid rgba(74,116,178,.6);
     background:linear-gradient(180deg, rgba(12,24,42,.94), rgba(6,14,28,.9));
     box-shadow:0 28px 70px rgba(4,12,28,.5);
     overflow:auto;
+    opacity:0;
+    pointer-events:none;
+    transition:transform .42s cubic-bezier(.24,.74,.3,1), opacity .28s ease;
+    will-change:transform;
+  }
+  .events-sidebar{
+    left:clamp(.75rem, 3vw, 2.25rem);
+    transform:translateX(-116%);
+  }
+  .events-chat{
+    right:clamp(.75rem, 3vw, 2.25rem);
+    transform:translateX(116%);
+    order:3;
+    height:auto;
+  }
+  .events-sidebar.is-mobile-open,
+  .events-chat.is-mobile-open{
+    opacity:1;
+    pointer-events:auto;
+    transform:translateX(0);
   }
   .events-mobile-close{
     display:inline-flex;
@@ -3191,17 +3204,6 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   body.events-mobile-locked{
     overflow:hidden;
   }
-  .events-sidebar{
-    position:static;
-    top:auto;
-  }
-  .events-chat{
-    order:3;
-    position:static;
-    top:auto;
-    height:auto;
-    max-height:none;
-  }
   .chat-scroll{
     flex:initial;
     height:auto;
@@ -3211,6 +3213,13 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   }
   .chat-panel__body{
     flex:initial;
+  }
+}
+
+@media (max-width: 960px) and (prefers-reduced-motion: reduce){
+  .events-sidebar,
+  .events-chat{
+    transition:none;
   }
 }
 

@@ -116,6 +116,7 @@ export class EventAdminApp {
     this.chat.init();
     this.setupChatLayoutObservers();
     this.observeAuthState();
+    this.syncMobilePanelAccessibility();
     if (typeof document !== "undefined") {
       document.addEventListener("qa:participants-synced", this.tools.handleParticipantSyncEvent);
       document.addEventListener("qa:selection-changed", this.tools.handleParticipantSelectionBroadcast);
@@ -1457,6 +1458,7 @@ export class EventAdminApp {
       if (!this.isMobileLayout() && this.activeMobilePanel) {
         this.closeMobilePanel({ restoreFocus: false });
       }
+      this.syncMobilePanelAccessibility();
     });
   }
 
@@ -1480,6 +1482,22 @@ export class EventAdminApp {
     return null;
   }
 
+  syncMobilePanelAccessibility() {
+    const isMobile = this.isMobileLayout();
+    ["sidebar", "chat"].forEach((target) => {
+      const panel = this.getMobilePanel(target);
+      if (!(panel instanceof HTMLElement)) {
+        return;
+      }
+      if (isMobile) {
+        const isOpen = panel.classList.contains("is-mobile-open");
+        panel.setAttribute("aria-hidden", isOpen ? "false" : "true");
+      } else {
+        panel.removeAttribute("aria-hidden");
+      }
+    });
+  }
+
   toggleMobilePanel(target) {
     if (!target) {
       return;
@@ -1488,6 +1506,9 @@ export class EventAdminApp {
       const panel = this.getMobilePanel(target);
       if (panel && typeof panel.scrollIntoView === "function") {
         panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      if (panel instanceof HTMLElement) {
+        panel.removeAttribute("aria-hidden");
       }
       return;
     }
@@ -1513,6 +1534,7 @@ export class EventAdminApp {
     if (panel instanceof HTMLElement) {
       panel.classList.add("is-mobile-open");
       panel.setAttribute("data-mobile-open", "true");
+      panel.setAttribute("aria-hidden", "false");
     }
     const body = typeof document !== "undefined" ? document.body : null;
     if (body) {
@@ -1540,6 +1562,7 @@ export class EventAdminApp {
     if (typeof document !== "undefined") {
       document.addEventListener("keydown", this.handleMobileKeydown, true);
     }
+    this.syncMobilePanelAccessibility();
   }
 
   closeMobilePanel({ restoreFocus = true } = {}) {
@@ -1549,6 +1572,7 @@ export class EventAdminApp {
           button.setAttribute("aria-expanded", "false");
         }
       });
+      this.syncMobilePanelAccessibility();
       return;
     }
     const target = this.activeMobilePanel;
@@ -1556,6 +1580,11 @@ export class EventAdminApp {
     if (panel instanceof HTMLElement) {
       panel.classList.remove("is-mobile-open");
       panel.removeAttribute("data-mobile-open");
+      if (this.isMobileLayout()) {
+        panel.setAttribute("aria-hidden", "true");
+      } else {
+        panel.removeAttribute("aria-hidden");
+      }
     }
     if (this.dom.mobileOverlay && !this.dom.mobileOverlay.hasAttribute("hidden")) {
       this.dom.mobileOverlay.setAttribute("hidden", "");
@@ -1575,6 +1604,7 @@ export class EventAdminApp {
     const focusTarget = restoreFocus ? this.lastMobileFocus : null;
     this.activeMobilePanel = "";
     this.lastMobileFocus = null;
+    this.syncMobilePanelAccessibility();
     if (focusTarget && typeof focusTarget.focus === "function") {
       focusTarget.focus();
     }
