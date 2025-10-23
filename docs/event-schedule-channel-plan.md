@@ -17,6 +17,13 @@ The goal is to isolate display/operation channels per event (and per schedule wh
 3. **Shared awareness UI** – When multiple operators within the same event pick different schedules, they need a coordinated UI (modal + chat) to decide which schedule should stay active, and the system must enforce that decision.
 4. **Backward compatibility** – Minimise disruption for single-event operations; default flows should continue to work with sensible fallbacks.
 
+## Progress
+- [x] Added shared channel path helpers to compute per-event/per-schedule RTDB locations with legacy fallbacks.
+- [x] Updated `display.html` to honour `?evt=`/`?sch=` parameters, resubscribe dynamically, and adopt session-provided assignments.
+- [x] Updated operator client Firebase bindings to resolve render/nowShowing references per active `{eventId, scheduleId}` and block send/clear when assignment is missing.
+- [ ] Persist operator schedule selections to presence nodes (UI modal still pending).
+- [ ] Enforce schedule locks and rotation/ACL behaviours at the Apps Script layer.
+
 ## Scope Overview
 - Rework Firebase schema for telop state and sessions.
 - Update operator app (`events.html` + `scripts/operator/*`) to target event/schedule-specific references.

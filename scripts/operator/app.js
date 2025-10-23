@@ -11,8 +11,9 @@ import {
   questionIntakeEventsRef,
   questionIntakeSchedulesRef,
   displaySessionRef,
-  renderRef
+  getRenderRef
 } from "./firebase.js";
+import { getRenderStatePath, parseChannelParams } from "../shared/channel-paths.js";
 import { queryDom } from "./dom.js";
 import { createInitialState } from "./state.js";
 import { createApiClient } from "./api-client.js";
@@ -246,6 +247,7 @@ export class OperatorApp {
     this.displaySessionUnsubscribe = null;
     this.updateTriggerUnsubscribe = null;
     this.renderUnsubscribe = null;
+    this.currentRenderPath = null;
     this.logsUpdateTimer = null;
     this.eventsUnsubscribe = null;
     this.schedulesUnsubscribe = null;
@@ -319,8 +321,9 @@ export class OperatorApp {
     }
     try {
       const params = new URLSearchParams(window.location.search || "");
-      context.eventId = String(params.get("eventId") ?? params.get("event") ?? "").trim();
-      context.scheduleId = String(params.get("scheduleId") ?? params.get("schedule") ?? "").trim();
+      const channel = parseChannelParams(params);
+      context.eventId = channel.eventId || "";
+      context.scheduleId = channel.scheduleId || "";
       context.eventName = String(params.get("eventName") ?? "").trim();
       context.scheduleLabel = String(params.get("scheduleLabel") ?? params.get("scheduleName") ?? "").trim();
       context.startAt = String(params.get("startAt") ?? params.get("scheduleStart") ?? params.get("start") ?? "").trim();
@@ -347,6 +350,34 @@ export class OperatorApp {
       this.state.currentSchedule = scheduleKey;
       this.state.lastNormalSchedule = scheduleKey;
     }
+  }
+
+  getActiveChannel() {
+    const ensure = (value) => String(value ?? "").trim();
+    const eventId = ensure(this.state?.activeEventId || this.pageContext?.eventId || "");
+    const scheduleId = ensure(this.state?.activeScheduleId || this.pageContext?.scheduleId || "");
+    return { eventId, scheduleId };
+  }
+
+  refreshChannelSubscriptions() {
+    const { eventId, scheduleId } = this.getActiveChannel();
+    const path = getRenderStatePath(eventId, scheduleId);
+    if (this.currentRenderPath === path && this.renderUnsubscribe) {
+      return;
+    }
+    if (this.renderUnsubscribe) {
+      this.renderUnsubscribe();
+      this.renderUnsubscribe = null;
+    }
+    this.currentRenderPath = path;
+    const channelRef = getRenderRef(eventId, scheduleId);
+    this.renderUnsubscribe = onValue(
+      channelRef,
+      (snapshot) => this.handleRenderUpdate(snapshot),
+      (error) => {
+        console.error("Failed to monitor render state:", error);
+      }
+    );
   }
 
   setExternalContext(context = {}) {
@@ -400,6 +431,7 @@ export class OperatorApp {
     }
 
     this.updateScheduleContext();
+    this.refreshChannelSubscriptions();
     this.renderQuestions();
     this.updateActionAvailability();
     this.updateBatchButtonVisibility();
@@ -485,6 +517,7 @@ export class OperatorApp {
       this.switchSubTab(preferredSubTab);
     } else {
       this.updateScheduleContext();
+      this.refreshChannelSubscriptions();
       this.renderQuestions();
     }
   }
@@ -588,12 +621,8 @@ export class OperatorApp {
   }
 
   attachRenderMonitor() {
-    if (this.renderUnsubscribe) {
-      this.renderUnsubscribe();
-    }
-    this.renderUnsubscribe = onValue(renderRef, (snapshot) => this.handleRenderUpdate(snapshot), (error) => {
-      console.error("Failed to monitor render state:", error);
-    });
+    this.currentRenderPath = null;
+    this.refreshChannelSubscriptions();
   }
 
   async login() {
@@ -1045,6 +1074,7 @@ export class OperatorApp {
     });
     this.state.allQuestions = list;
     this.updateScheduleContext();
+    this.refreshChannelSubscriptions();
     this.renderQuestions();
   }
 

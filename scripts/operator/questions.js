@@ -1,5 +1,6 @@
 import { QUESTIONS_SUBTAB_KEY, GENRE_ALL_VALUE } from "./constants.js";
-import { database, ref, update, set, remove, get, telopRef, serverTimestamp } from "./firebase.js";
+import { database, ref, update, set, remove, get, getNowShowingRef, serverTimestamp } from "./firebase.js";
+import { normalizeScheduleId } from "../shared/channel-paths.js";
 import { escapeHtml, formatOperatorName, resolveGenreLabel, formatScheduleRange } from "./utils.js";
 
 const SUB_TAB_OPTIONS = new Set(["all", "normal", "puq"]);
@@ -7,6 +8,14 @@ const SUB_TAB_OPTIONS = new Set(["all", "normal", "puq"]);
 function normalizeSubTab(value) {
   const candidate = String(value || "").trim();
   return SUB_TAB_OPTIONS.has(candidate) ? candidate : "all";
+}
+
+function resolveTelopRef(app) {
+  const hasChannelAccessor = app && typeof app.getActiveChannel === "function";
+  const { eventId = "", scheduleId = "" } = hasChannelAccessor ? app.getActiveChannel() || {} : {};
+  const normalizedSchedule = scheduleId ? normalizeScheduleId(scheduleId) : "";
+  const refInstance = getNowShowingRef(eventId, scheduleId);
+  return { ref: refInstance, eventId: eventId || "", scheduleId: normalizedSchedule };
 }
 
 export function loadPreferredSubTab() {
@@ -258,6 +267,10 @@ export function updateScheduleContext(app) {
     endAt: endText,
     scheduleKey: scheduleKey || ""
   };
+
+  if (typeof app.refreshChannelSubscriptions === "function") {
+    app.refreshChannelSubscriptions();
+  }
 }
 
 export function switchSubTab(app, tabName) {
@@ -281,6 +294,9 @@ export function switchSubTab(app, tabName) {
     app.state.currentSchedule = "";
   }
   updateScheduleContext(app);
+  if (typeof app.refreshChannelSubscriptions === "function") {
+    app.refreshChannelSubscriptions();
+  }
   renderQuestions(app);
   persistSubTabPreference(tabName);
 }
@@ -306,6 +322,9 @@ export function switchGenre(app, genreKey) {
     app.state.currentSchedule = app.state.lastNormalSchedule;
   }
   updateScheduleContext(app);
+  if (typeof app.refreshChannelSubscriptions === "function") {
+    app.refreshChannelSubscriptions();
+  }
   renderQuestions(app);
 }
 
@@ -315,6 +334,11 @@ export async function handleDisplay(app) {
     return;
   }
   if (!app.state.selectedRowData || app.state.selectedRowData.isAnswered) return;
+  const { ref: telopRef, eventId, scheduleId } = resolveTelopRef(app);
+  if (!eventId || !scheduleId) {
+    app.toast("イベントまたは日程が割り当てられていないため送出できません。", "error");
+    return;
+  }
   const snapshot = await get(telopRef);
   const previousTelop = snapshot.val();
   const previousUid = previousTelop && typeof previousTelop.uid !== "undefined" ? String(previousTelop.uid || "") : "";
@@ -441,6 +465,11 @@ export async function handleBatchUnanswer(app) {
 export async function clearTelop(app) {
   if (!app.state.displaySessionActive) {
     app.toast("送出端末が接続されていません。", "error");
+    return;
+  }
+  const { ref: telopRef, eventId, scheduleId } = resolveTelopRef(app);
+  if (!eventId || !scheduleId) {
+    app.toast("イベントまたは日程が割り当てられていないため送出をクリアできません。", "error");
     return;
   }
   const snapshot = await get(telopRef);

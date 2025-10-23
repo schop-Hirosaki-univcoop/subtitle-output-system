@@ -395,6 +395,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getDatabase, ref, onValue, update, serverTimestamp, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
         import { getAuth, onAuthStateChanged, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getRenderStatePath, getNowShowingPath, parseChannelParams } from "./scripts/shared/channel-paths.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
@@ -413,6 +414,37 @@
         }
         const database = getDatabase(app);
         const auth = getAuth(app);
+
+        const initialChannel = parseChannelParams(new URLSearchParams(location.search || ""));
+        let channelEventId = initialChannel.eventId || "";
+        let channelScheduleId = initialChannel.scheduleId || "";
+        let renderRef = ref(database, getRenderStatePath(channelEventId, channelScheduleId));
+        let nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
+        let nowShowingUnsubscribe = null;
+
+        function setChannel(eventId, scheduleId) {
+          const normalizedEvent = typeof eventId === 'string' ? eventId.trim() : '';
+          const normalizedSchedule = typeof scheduleId === 'string' ? scheduleId.trim() : '';
+          if (normalizedEvent === channelEventId && normalizedSchedule === channelScheduleId) {
+            return;
+          }
+          channelEventId = normalizedEvent;
+          channelScheduleId = normalizedSchedule;
+          renderRef = ref(database, getRenderStatePath(channelEventId, channelScheduleId));
+          nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
+          subscribeNowShowing();
+        }
+
+        function applyChannelFromSession(session) {
+          if (!session || typeof session !== 'object') {
+            return;
+          }
+          const assignedEvent = typeof session.eventId === 'string' ? session.eventId.trim() : '';
+          const assignedSchedule = typeof session.scheduleId === 'string' ? session.scheduleId.trim() : '';
+          if (assignedEvent) {
+            setChannel(assignedEvent, assignedSchedule);
+          }
+        }
 
         const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec';
 
@@ -549,6 +581,7 @@
                 throw new Error('Invalid session payload');
               }
               sessionInfo = result.session;
+              applyChannelFromSession(sessionInfo);
               console.info('Display anonymous UID:', user.uid, 'sessionId:', sessionInfo.sessionId);
               setSessionActive(true);
               startHeartbeat();
@@ -579,6 +612,7 @@
             }
             if (result.session && result.session.sessionId === sessionInfo.sessionId) {
               sessionInfo = result.session;
+              applyChannelFromSession(sessionInfo);
             }
             setSessionActive(true);
           } catch (err) {
@@ -651,8 +685,7 @@
           }
         });
 
-        const nowShowingRef = ref(database, 'render/state/nowShowing');
-        const renderRef = ref(database, 'render/state');
+        subscribeNowShowing();
 
         function flushPendingRender(reason) {
           if (!pendingRenderUpdate) return;
@@ -1043,8 +1076,7 @@
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }
 
-        // Firebaseの nowShowing の変更を監視する
-        onValue(nowShowingRef, (snapshot) => {
+        function handleNowShowingSnapshot(snapshot) {
           const telopData  = snapshot.val() || null;
           const name       = telopData?.name ?? '';
           const question   = telopData?.question ?? '';
@@ -1133,7 +1165,14 @@
             }
           }
           prevName = name; prevQuestion = question; prevGenre = genre;
-        });
+        }
+
+        function subscribeNowShowing() {
+          if (typeof nowShowingUnsubscribe === 'function') {
+            nowShowingUnsubscribe();
+          }
+          nowShowingUnsubscribe = onValue(nowShowingRef, handleNowShowingSnapshot);
+        }
   </script>
 </body>
 </html>
