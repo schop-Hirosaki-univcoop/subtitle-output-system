@@ -96,6 +96,8 @@ export class EventAdminApp {
     this.lastMobileFocus = null;
     this.handleMobileKeydown = this.handleMobileKeydown.bind(this);
     this.handleChatInteraction = this.handleChatInteraction.bind(this);
+    this.handleFullscreenChange = this.handleFullscreenChange.bind(this);
+    this.handleFullscreenError = this.handleFullscreenError.bind(this);
   }
 
   logParticipantAction(message, detail = null) {
@@ -198,6 +200,23 @@ export class EventAdminApp {
           this.dom.refreshButton.disabled = false;
         }
       });
+    }
+
+    if (this.dom.fullscreenButton) {
+      this.dom.fullscreenButton.addEventListener("click", () => {
+        this.toggleFullscreen().catch((error) => {
+          logError("Failed to toggle fullscreen", error);
+          this.updateFullscreenButton();
+        });
+      });
+      this.updateFullscreenButton();
+    }
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("fullscreenchange", this.handleFullscreenChange);
+      document.addEventListener("webkitfullscreenchange", this.handleFullscreenChange);
+      document.addEventListener("fullscreenerror", this.handleFullscreenError);
+      document.addEventListener("webkitfullscreenerror", this.handleFullscreenError);
     }
 
     if (this.dom.logoutButton) {
@@ -1212,6 +1231,111 @@ export class EventAdminApp {
     });
   }
 
+  isFullscreenSupported() {
+    if (typeof document === "undefined") {
+      return false;
+    }
+    const doc = document;
+    const element = doc.documentElement || doc.body;
+    return Boolean(
+      doc.fullscreenEnabled ||
+        doc.webkitFullscreenEnabled ||
+        doc.msFullscreenEnabled ||
+        element?.requestFullscreen ||
+        element?.webkitRequestFullscreen ||
+        element?.msRequestFullscreen
+    );
+  }
+
+  isFullscreenActive() {
+    if (typeof document === "undefined") {
+      return false;
+    }
+    return Boolean(
+      document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.msFullscreenElement
+    );
+  }
+
+  updateFullscreenButton() {
+    const button = this.dom.fullscreenButton;
+    if (!button) {
+      return;
+    }
+    const supported = this.isFullscreenSupported();
+    const isActive = supported && this.isFullscreenActive();
+    button.disabled = !supported;
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    if (supported) {
+      button.textContent = isActive ? "フルスクリーン解除" : "フルスクリーン";
+      button.dataset.state = isActive ? "active" : "inactive";
+      button.title = isActive ? "フルスクリーンを終了します" : "画面をフルスクリーン表示します";
+    } else {
+      button.textContent = "フルスクリーン";
+      button.dataset.state = "unsupported";
+      button.title = "このブラウザではフルスクリーン表示に対応していません";
+    }
+  }
+
+  async toggleFullscreen() {
+    if (!this.isFullscreenSupported()) {
+      this.updateFullscreenButton();
+      return;
+    }
+    const isActive = this.isFullscreenActive();
+    try {
+      if (isActive) {
+        await this.exitFullscreen();
+      } else {
+        await this.enterFullscreen();
+      }
+    } catch (error) {
+      this.updateFullscreenButton();
+      throw error;
+    }
+    this.updateFullscreenButton();
+  }
+
+  async enterFullscreen() {
+    if (typeof document === "undefined") {
+      return;
+    }
+    const element = document.documentElement || document.body;
+    if (!element) {
+      return;
+    }
+    if (element.requestFullscreen) {
+      await element.requestFullscreen();
+    } else if (element.webkitRequestFullscreen) {
+      element.webkitRequestFullscreen();
+    } else if (element.msRequestFullscreen) {
+      element.msRequestFullscreen();
+    }
+  }
+
+  async exitFullscreen() {
+    if (typeof document === "undefined") {
+      return;
+    }
+    if (document.exitFullscreen) {
+      await document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    } else if (document.msExitFullscreen) {
+      document.msExitFullscreen();
+    }
+  }
+
+  handleFullscreenChange() {
+    this.updateFullscreenButton();
+  }
+
+  handleFullscreenError(event) {
+    this.updateFullscreenButton();
+    logError("Fullscreen operation failed", event);
+  }
+
   updateFlowButtons() {
     const signedIn = Boolean(this.currentUser);
     const hasEvent = Boolean(this.selectedEventId);
@@ -1398,6 +1522,10 @@ export class EventAdminApp {
     if (typeof document !== "undefined") {
       document.removeEventListener("qa:participants-synced", this.tools.handleParticipantSyncEvent);
       document.removeEventListener("qa:selection-changed", this.tools.handleParticipantSelectionBroadcast);
+      document.removeEventListener("fullscreenchange", this.handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", this.handleFullscreenChange);
+      document.removeEventListener("fullscreenerror", this.handleFullscreenError);
+      document.removeEventListener("webkitfullscreenerror", this.handleFullscreenError);
     }
     if (typeof window !== "undefined") {
       window.removeEventListener("beforeunload", this.cleanup);
