@@ -3932,6 +3932,8 @@ body.sidebar-overlay-open{
 
 #flow-panel-participants .embedded-tool{
   position:relative;
+  height:100%;
+  min-height:0;
 }
 
 #flow-panel-participants .embedded-tool__surface{
@@ -4094,6 +4096,55 @@ body.sidebar-overlay-open{
 
 #flow-panel-participants .qa-embedded .module + .module{
   margin-top:clamp(.75rem, 1.5vw, 1.2rem);
+}
+
+#qa-participant-module{
+  overflow:visible;
+  flex:1 1 auto;
+  min-height:0;
+}
+
+#qa-participant-module .module-body{
+  display:flex;
+  flex-direction:column;
+  gap:clamp(.75rem, 1.8vw, 1.2rem);
+  overflow:hidden;
+}
+
+#qa-participant-module .qa-participant-card-switcher,
+#qa-participant-module .qa-participant-tabpanels,
+#qa-participant-module .qa-participant-tabpanel,
+#qa-participant-module .qa-participant-card,
+#qa-participant-module .qa-participant-card__body{
+  flex:1 1 auto;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+
+#qa-participant-module .participant-card-shell{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+  scrollbar-gutter:stable;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(108,132,168,.6) rgba(18,24,38,.7);
+}
+
+#qa-participant-module .participant-card-shell::-webkit-scrollbar{ width:10px; }
+#qa-participant-module .participant-card-shell::-webkit-scrollbar-track{
+  background:rgba(10,16,26,.7);
+  border-radius:999px;
+}
+
+#qa-participant-module .participant-card-shell::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg, rgba(46,141,255,.5), rgba(30,200,255,.35));
+  border-radius:999px;
+  border:2px solid rgba(9,14,24,.9);
+}
+
+#qa-participant-module .participant-card-shell::-webkit-scrollbar-thumb:hover{
+  background:linear-gradient(180deg, rgba(46,141,255,.7), rgba(30,200,255,.5));
 }
 
 #flow-panel-participants .qa-embedded .qa-participant-card-switcher{
@@ -4858,6 +4909,11 @@ body.sidebar-overlay-open{
 
 .qa-embedded .qa-admin-primary{
   position:relative;
+  display:flex;
+  flex-direction:column;
+  gap:clamp(.9rem, 1.8vw, 1.3rem);
+  flex:1 1 auto;
+  min-height:0;
 }
 
 .qa-embedded .admin-main{
@@ -4901,19 +4957,58 @@ body.sidebar-overlay-open{
   min-height:0;
 }
 
+#op-questions-panel{
+  overflow:visible;
+  flex:1 1 auto;
+  min-height:0;
+}
+
+#op-questions-content{
+  display:flex;
+  flex-direction:column;
+  gap:0;
+  overflow:hidden;
+  padding:0;
+}
+
+#op-questions-content .cards-scroll{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+  padding:0 clamp(.25rem, 1vw, .75rem);
+  scrollbar-gutter:stable;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(108,132,168,.6) rgba(18,24,38,.7);
+}
+
+#op-questions-content .cards-scroll::-webkit-scrollbar{ width:10px; }
+#op-questions-content .cards-scroll::-webkit-scrollbar-track{
+  background:rgba(10,16,26,.7);
+  border-radius:999px;
+}
+
+#op-questions-content .cards-scroll::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg, rgba(46,141,255,.5), rgba(30,200,255,.35));
+  border-radius:999px;
+  border:2px solid rgba(9,14,24,.9);
+}
+
+#op-questions-content .cards-scroll::-webkit-scrollbar-thumb:hover{
+  background:linear-gradient(180deg, rgba(46,141,255,.7), rgba(30,200,255,.5));
+}
+
 .operator-embedded #op-action-panel{
-  position:sticky;
-  bottom:clamp(.85rem, 2.4vh, 1.6rem);
-  margin-top:auto;
+  position:static;
+  margin-top:clamp(.75rem, 1.6vw, 1.1rem);
   display:grid;
   grid-template-columns:repeat(auto-fit, minmax(9.5rem, 1fr));
   align-items:center;
   gap:clamp(.55rem, 1.4vw, .85rem);
-  padding:clamp(.8rem, 1.8vw, 1.1rem) clamp(1rem, 2.4vw, 1.35rem);
-  border-radius:clamp(.9rem, 1.9vw, 1.25rem);
+  padding:clamp(.7rem, 1.6vw, 1rem) clamp(.85rem, 2vw, 1.2rem);
+  border-radius:clamp(.9rem, 1.9vw, 1.2rem);
   background:linear-gradient(182deg, rgba(18,30,52,.9), rgba(10,18,34,.92));
   border:1px solid rgba(58,104,168,.45);
-  box-shadow:0 22px 40px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.04);
+  box-shadow:0 18px 32px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.04);
   backdrop-filter:blur(12px);
 }
 
@@ -5033,6 +5128,8 @@ body.sidebar-overlay-open{
   border-radius:0;
   min-height:0;
   gap:clamp(.75rem, 1.6vw, 1.15rem);
+  overflow:visible;
+  height:100%;
 }
 
 .events-layout{
