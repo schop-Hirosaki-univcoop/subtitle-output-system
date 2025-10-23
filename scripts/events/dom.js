@@ -15,6 +15,7 @@ export function queryDom() {
     eventSelectionNote: document.getElementById("flow-event-selection-note"),
     addEventButton: document.getElementById("flow-add-event-button"),
     refreshButton: document.getElementById("flow-events-refresh-button"),
+    fullscreenButton: document.getElementById("events-fullscreen-button"),
     metaNote: document.getElementById("events-meta"),
     logoutButton: document.getElementById("flow-logout-button"),
     userLabel: document.getElementById("flow-user-label"),
