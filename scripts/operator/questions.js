@@ -469,27 +469,53 @@ export async function clearTelop(app) {
   }
 }
 
+function getBatchSelectionCount(app) {
+  const container = app.dom.cardsContainer;
+  if (!container) {
+    return 0;
+  }
+  return container.querySelectorAll(".row-checkbox:checked").length || 0;
+}
+
+function setActionPanelMode(app, mode) {
+  if (!app.dom.actionPanel) return;
+  const normalized = mode || "idle";
+  app.dom.actionPanel.dataset.selection = normalized;
+}
+
 export function updateActionAvailability(app) {
   const active = !!app.state.displaySessionActive;
   const selection = app.state.selectedRowData;
+  const checkedCount = getBatchSelectionCount(app);
+  const hasBatchSelection = active && checkedCount > 0;
+  const mode = !active ? "inactive" : hasBatchSelection ? "multi" : selection ? "single" : "idle";
+
+  setActionPanelMode(app, mode);
+
   app.dom.actionButtons.forEach((button) => {
     if (button) button.disabled = true;
   });
   if (app.dom.clearButton) app.dom.clearButton.disabled = !active;
   if (!app.dom.selectedInfo) {
-    updateBatchButtonVisibility(app);
+    updateBatchButtonVisibility(app, checkedCount);
     return;
   }
   if (!active) {
     app.dom.selectedInfo.textContent = "送出端末が接続されていません";
-    updateBatchButtonVisibility(app);
+    updateBatchButtonVisibility(app, checkedCount);
+    return;
+  }
+  if (hasBatchSelection) {
+    app.dom.selectedInfo.textContent = `${checkedCount}件の質問を選択中`;
+    updateBatchButtonVisibility(app, checkedCount);
     return;
   }
   if (!selection) {
     app.dom.selectedInfo.textContent = "行を選択してください";
-    updateBatchButtonVisibility(app);
+    updateBatchButtonVisibility(app, checkedCount);
     return;
   }
+
   app.dom.actionButtons.forEach((button) => {
     if (button) button.disabled = false;
   });
@@ -497,14 +523,13 @@ export function updateActionAvailability(app) {
   if (app.dom.actionButtons[1]) app.dom.actionButtons[1].disabled = !selection.isAnswered;
   const safeName = formatOperatorName(selection.name) || "—";
   app.dom.selectedInfo.textContent = `選択中: ${safeName}`;
-  updateBatchButtonVisibility(app);
+  updateBatchButtonVisibility(app, checkedCount);
 }
 
-export function updateBatchButtonVisibility(app) {
+export function updateBatchButtonVisibility(app, providedCount) {
   if (!app.dom.batchUnanswerBtn) return;
   const active = !!app.state.displaySessionActive;
-  const checkedCount = active ? app.dom.cardsContainer?.querySelectorAll(".row-checkbox:checked").length || 0 : 0;
-  app.dom.batchUnanswerBtn.style.display = active && checkedCount > 0 ? "inline-block" : "none";
+  const checkedCount = active ? providedCount ?? getBatchSelectionCount(app) : 0;
   app.dom.batchUnanswerBtn.disabled = !active || checkedCount === 0;
 }
 

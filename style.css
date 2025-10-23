@@ -1332,7 +1332,8 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   bottom:0;
   margin-top:clamp(.8rem, 1.6vw, 1.2rem);
   display:flex;
-  align-items:center;
+  flex-wrap:wrap;
+  align-items:flex-start;
   gap:clamp(.55rem, 1.25vw, .85rem);
   padding:clamp(.65rem, 1.4vw, .95rem) clamp(.9rem, 2vw, 1.25rem);
   border-radius:clamp(1rem, 1.9vw, 1.35rem);
@@ -1341,6 +1342,9 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   box-shadow:0 14px 36px rgba(0,0,0,.32);
   backdrop-filter:blur(10px);
   transition:opacity .2s ease;
+  width:100%;
+  max-width:100%;
+  box-sizing:border-box;
 }
 #op-dictionary-action-panel[hidden],
 #dictionary-action-panel[hidden],
@@ -1353,11 +1357,51 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 #op-dictionary-action-panel #op-dictionary-selected-info,
 #dictionary-action-panel #dictionary-selected-info,
 #op-pickup-action-panel #op-pickup-selected-info,
-#qa-participant-action-panel #qa-participant-action-info{ font-size:.9rem; color:var(--muted); }
+#qa-participant-action-panel #qa-participant-action-info{
+  font-size:.9rem;
+  color:var(--muted);
+  flex:1 1 100%;
+  order:5;
+}
+#op-dictionary-action-panel .action-panel-right,
+#dictionary-action-panel .action-panel-right,
+#op-pickup-action-panel .action-panel-right,
+#qa-participant-action-panel .action-panel-right{
+  margin-left:0;
+  width:100%;
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:clamp(.45rem, 1vw, .75rem);
+  order:10;
+}
 #op-dictionary-action-panel.is-idle,
 #dictionary-action-panel.is-idle,
 #op-pickup-action-panel.is-idle,
 #qa-participant-action-panel.is-idle{ opacity:.82; }
+#op-action-panel{
+  flex-wrap:wrap;
+  align-items:flex-start;
+  gap:clamp(.55rem, 1.25vw, .85rem);
+}
+#op-action-panel #op-selected-info{
+  flex:1 1 100%;
+  order:10;
+  color:var(--muted);
+}
+#op-action-panel .action-panel-right{
+  order:15;
+  width:100%;
+  margin-left:0;
+  display:none;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:clamp(.45rem, 1vw, .75rem);
+}
+#op-action-panel [data-mode="multi"]{ display:none; }
+#op-action-panel[data-selection="multi"] .action-panel-right{ display:flex; }
+#op-action-panel[data-selection="multi"] [data-mode="multi"]{ display:flex; }
+#op-action-panel[data-selection="multi"] [data-mode="single"]{ display:none; }
 #action-panel .btn{ padding:clamp(.45rem, 1vw, .55rem) clamp(.85rem, 2vw, 1rem); }
 
 @media (max-width: 720px){
@@ -5000,8 +5044,8 @@ body.sidebar-overlay-open{
 .operator-embedded #op-action-panel{
   position:static;
   margin-top:clamp(.75rem, 1.6vw, 1.1rem);
-  display:grid;
-  grid-template-columns:repeat(auto-fit, minmax(9.5rem, 1fr));
+  display:flex;
+  flex-wrap:wrap;
   align-items:center;
   gap:clamp(.55rem, 1.4vw, .85rem);
   padding:clamp(.7rem, 1.6vw, 1rem) clamp(.85rem, 2vw, 1.2rem);
@@ -5017,20 +5061,60 @@ body.sidebar-overlay-open{
 }
 
 .operator-embedded #op-action-panel .btn{
-  width:100%;
+  width:auto;
+  flex:0 0 auto;
+  min-width:clamp(9rem, 13vw, 11rem);
 }
 
 .operator-embedded #op-action-panel #op-selected-info{
-  grid-column:1 / -1;
+  order:40;
+  margin-left:auto;
+  padding-left:clamp(.5rem, 1.2vw, .85rem);
   color:#c6d7f0;
   font-size:.85rem;
+  line-height:1.25;
 }
 
 .operator-embedded #op-action-panel .action-panel-right{
-  margin-left:0;
+  order:50;
+  margin-left:clamp(.6rem, 1.6vw, 1rem);
+  width:auto;
+  display:none;
+  align-items:center;
   justify-content:flex-end;
-  grid-column:1 / -1;
-  gap:.5rem;
+  gap:clamp(.5rem, 1.2vw, .85rem);
+}
+
+.operator-embedded #op-action-panel[data-selection="multi"] .action-panel-right{
+  display:flex;
+}
+
+.operator-embedded #op-action-panel .action-panel-right .btn{
+  min-width:clamp(10rem, 14vw, 12.5rem);
+}
+
+@media (max-width: 860px){
+  .operator-embedded #op-action-panel{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .operator-embedded #op-action-panel .btn{
+    width:100%;
+    min-width:0;
+  }
+
+  .operator-embedded #op-action-panel #op-selected-info{
+    order:60;
+    margin-left:0;
+    padding-left:0;
+  }
+
+  .operator-embedded #op-action-panel .action-panel-right{
+    width:100%;
+    margin-left:0;
+    justify-content:flex-start;
+  }
 }
 
 .operator-embedded #op-dictionary-action-panel,
