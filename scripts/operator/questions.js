@@ -83,6 +83,10 @@ export function renderQuestions(app) {
     const participantId = String(item["参加者ID"] ?? "").trim();
     const rawGenre = String(item["ジャンル"] ?? "").trim();
     const normalizedGenre = rawGenre || "その他";
+    const resolvedGenre = resolveGenreLabel(normalizedGenre);
+    const genreBadge = viewingAllGenres
+      ? `<span class="q-genre" aria-label="ジャンル ${escapeHtml(resolvedGenre)}">${escapeHtml(resolvedGenre)}</span>`
+      : "";
     const isLiveMatch = liveUid
       ? liveUid === uid
       : (liveParticipantId && participantId && liveParticipantId === participantId && liveQuestion === item["質問・お悩み"]) ||
@@ -129,6 +133,7 @@ export function renderQuestions(app) {
       <header class="q-head">
         <div class="q-title">
           <span class="q-name">${escapeHtml(displayName)}</span>
+          ${genreBadge}
         </div>
       </header>
       <div class="q-text">${escapeHtml(item["質問・お悩み"])}</div>
