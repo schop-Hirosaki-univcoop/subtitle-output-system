@@ -2082,6 +2082,7 @@ export class EventAdminApp {
     const safeAreaTop = parseCssPixels(docStyles.getPropertyValue("--safe-area-top"));
     const safeAreaBottom = parseCssPixels(docStyles.getPropertyValue("--safe-area-bottom"));
     const bodyPaddingTop = parseCssPixels(bodyStyles.paddingTop);
+    const bodyPaddingBottom = parseCssPixels(bodyStyles.paddingBottom);
     const bodyGap = parseCssPixels(bodyStyles.gap);
     const mainGap = mainStyles ? parseCssPixels(mainStyles.gap) : 0;
     const layoutPaddingTop = layoutStyles ? parseCssPixels(layoutStyles.paddingTop) : 0;
@@ -2096,7 +2097,7 @@ export class EventAdminApp {
     const stickyTop = cssStickyTop > 0 ? cssStickyTop : fallbackStickyTop;
     const chatOffset = stickyTop + flowStageHeight + mainGap + layoutPaddingTop;
     const viewportHeight = window.innerHeight || docEl.clientHeight;
-    const availableHeight = viewportHeight - chatOffset - layoutPaddingBottom - safeAreaBottom;
+    const availableHeight = viewportHeight - chatOffset - layoutPaddingBottom - bodyPaddingBottom - safeAreaBottom;
 
     const heightValue = Math.max(0, Math.round(availableHeight));
     if (heightValue > 0) {
