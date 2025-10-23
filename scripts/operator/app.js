@@ -461,6 +461,7 @@ export class OperatorApp {
       if (event.target instanceof HTMLInputElement && event.target.classList.contains("row-checkbox")) {
         this.syncSelectAllState();
         this.updateBatchButtonVisibility();
+        this.updateActionAvailability();
       }
     });
     this.setupConfirmDialog();
