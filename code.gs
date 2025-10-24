@@ -3065,17 +3065,86 @@ function normalizeKey_(value) {
   return String(value || '').trim();
 }
 
+function normalizeEventId_(eventId) {
+  return normalizeKey_(eventId);
+}
+
 function normalizeScheduleId_(scheduleId) {
   const normalized = normalizeKey_(scheduleId);
   return normalized || DEFAULT_SCHEDULE_KEY;
 }
 
 function buildScheduleKey_(eventId, scheduleId) {
-  const eventKey = normalizeKey_(eventId);
+  const eventKey = normalizeEventId_(eventId);
   if (!eventKey) {
     return '';
   }
   return eventKey + '::' + normalizeScheduleId_(scheduleId);
+}
+
+function buildRenderEventBasePath_(eventId, scheduleId) {
+  const eventKey = normalizeEventId_(eventId);
+  if (!eventKey) {
+    return '';
+  }
+  const scheduleKey = normalizeScheduleId_(scheduleId);
+  return `render/events/${eventKey}/${scheduleKey}`;
+}
+
+function getRenderStatePath_(eventId, scheduleId) {
+  const basePath = buildRenderEventBasePath_(eventId, scheduleId);
+  return basePath ? `${basePath}/state` : 'render/state';
+}
+
+function getNowShowingPath_(eventId, scheduleId) {
+  const basePath = buildRenderEventBasePath_(eventId, scheduleId);
+  return basePath ? `${basePath}/nowShowing` : 'render/state/nowShowing';
+}
+
+function getEventActiveSchedulePath_(eventId) {
+  const eventKey = normalizeEventId_(eventId);
+  return eventKey ? `render/events/${eventKey}/activeSchedule` : '';
+}
+
+function getActiveSchedulePathForSession_(session) {
+  if (!session || typeof session !== 'object') {
+    return '';
+  }
+  const assignment = session.assignment && typeof session.assignment === 'object' ? session.assignment : null;
+  if (assignment && normalizeEventId_(assignment.eventId)) {
+    return getEventActiveSchedulePath_(assignment.eventId);
+  }
+  if (normalizeEventId_(session.eventId)) {
+    return getEventActiveSchedulePath_(session.eventId);
+  }
+  return '';
+}
+
+function buildActiveScheduleRecord_(assignment, session, operatorUid) {
+  if (!assignment || typeof assignment !== 'object') {
+    return null;
+  }
+  const eventId = normalizeEventId_(assignment.eventId);
+  if (!eventId) {
+    return null;
+  }
+  const scheduleId = normalizeScheduleId_(assignment.scheduleId);
+  const scheduleKey = buildScheduleKey_(eventId, scheduleId);
+  const sessionUid = normalizeKey_(session && session.uid);
+  const sessionId = normalizeKey_(session && session.sessionId);
+  return {
+    eventId,
+    scheduleId,
+    scheduleKey,
+    scheduleLabel: String(assignment.scheduleLabel || '').trim(),
+    lockedAt: Number(assignment.lockedAt || Date.now()),
+    lockedByUid: normalizeKey_(assignment.lockedByUid || operatorUid),
+    lockedByEmail: String(assignment.lockedByEmail || '').trim(),
+    lockedByName: String(assignment.lockedByName || '').trim(),
+    sessionUid,
+    sessionId,
+    expiresAt: Number(session && session.expiresAt || 0) || null
+  };
 }
 
 function getRequestOrigin_(event, body) {
@@ -3202,6 +3271,10 @@ function beginDisplaySession_(principal) {
         lastSeenAt: Number(current.lastSeenAt || now)
       });
     }
+    const previousActivePath = getActiveSchedulePathForSession_(current);
+    if (previousActivePath) {
+      updates[previousActivePath] = null;
+    }
   }
 
   const sessionId = Utilities.getUuid();
@@ -3243,6 +3316,11 @@ function beginDisplaySession_(principal) {
   updates[`screens/approved/${principal.uid}`] = true;
   updates[`screens/sessions/${principal.uid}`] = session;
   updates['render/session'] = session;
+  const activeSchedulePath = getActiveSchedulePathForSession_(session);
+  const activeRecord = buildActiveScheduleRecord_(session.assignment, session, principal.uid);
+  if (activeSchedulePath && activeRecord) {
+    updates[activeSchedulePath] = activeRecord;
+  }
   patchRtdb_(updates, token);
   return { session };
 }
@@ -3266,6 +3344,10 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
           lastSeenAt: Number(current.lastSeenAt || now)
         });
       }
+      const activePath = getActiveSchedulePathForSession_(current);
+      if (activePath) {
+        updates[activePath] = null;
+      }
       patchRtdb_(updates, token);
     }
     return { active: false };
@@ -3281,6 +3363,10 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
       expiresAt: now,
       lastSeenAt: Number(current.lastSeenAt || now)
     });
+    const activePath = getActiveSchedulePathForSession_(current);
+    if (activePath) {
+      updates[activePath] = null;
+    }
     patchRtdb_(updates, token);
     return { active: false };
   }
@@ -3319,6 +3405,10 @@ function endDisplaySession_(principal, rawSessionId, reason) {
   updates[`screens/approved/${principal.uid}`] = null;
   updates[`screens/sessions/${principal.uid}`] = session;
   updates['render/session'] = null;
+  const activePath = getActiveSchedulePathForSession_(current);
+  if (activePath) {
+    updates[activePath] = null;
+  }
   patchRtdb_(updates, token);
   return { ended: true };
 }
@@ -3381,9 +3471,21 @@ function lockDisplaySchedule_(principal, rawEventId, rawScheduleId, rawScheduleL
     assignment
   });
   const updates = {};
+  if (existingAssignment) {
+    const previousActivePath = getEventActiveSchedulePath_(existingAssignment.eventId);
+    const nextActivePath = getEventActiveSchedulePath_(eventId);
+    if (previousActivePath && previousActivePath !== nextActivePath) {
+      updates[previousActivePath] = null;
+    }
+  }
   updates[`screens/approved/${sessionUid}`] = true;
   updates[`screens/sessions/${sessionUid}`] = nextSession;
   updates['render/session'] = nextSession;
+  const activeSchedulePath = getEventActiveSchedulePath_(eventId);
+  const activeRecord = buildActiveScheduleRecord_(assignment, nextSession, operatorUid);
+  if (activeSchedulePath && activeRecord) {
+    updates[activeSchedulePath] = activeRecord;
+  }
   patchRtdb_(updates, token);
   return { assignment };
 }
