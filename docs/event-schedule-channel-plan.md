@@ -27,7 +27,7 @@ The goal is to isolate display/operation channels per event (and per schedule wh
 - [x] Connected the schedule conflict modal and presence roster to the locking workflow so operators can coordinate and resolve mismatches in real time.
 - [x] Synced operator presence writes with context updates and drafted Firebase rule coverage for `render/events/*` and `operatorPresence` collections.
 - [x] Mirror display schedule locks into `render/events/{eventId}/activeSchedule` so Apps Script sessions expose the active channel state alongside legacy paths.
-- [ ] Define rotation handling and ACL follow-ups at the Apps Script layer.
+- [x] Define rotation handling and ACL follow-ups at the Apps Script layer (Apps Script rotation APIs + event-scoped ACL enforcement).
 
 ## Scope Overview
 - Rework Firebase schema for telop state and sessions.
@@ -97,7 +97,11 @@ These restrictions clarify the original question's intent—ensuring that exposi
 
 ## Current Focus
 
-- Define rotation assignment persistence/API shape on the Apps Script side so displays can opt into multi-schedule mode.
-- Harden operator/event ACL checks around schedule locking and upcoming rotation updates.
 - Document the operator presence data contract and embed responsibilities ahead of rollout.
+
+## Rotation assignment APIs & ACL hardening progress
+
+- Added Apps Script endpoints `saveScheduleRotation` / `clearScheduleRotation` to persist `render/events/{eventId}/rotationAssignments` lists and publish a rotation-mode `activeSchedule` record. Rotation entries capture schedule IDs, resolved keys, and optional dwell durations for future display polling logic.
+- Enforced event-scoped ACL lookups (`EVENT_OPERATOR_ACL` script property) before allowing schedule locks or rotation mutations, ensuring only authorised operators can alter a display channel for the associated event.
+- Clearing or overriding a rotation now removes stale `rotationAssignments` metadata and replaces it with the operator-driven lock state, keeping legacy `render/session` mirrors consistent.
 
