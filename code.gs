@@ -30,6 +30,7 @@ function getSheetData(sheetName) {
 }
 
 const DISPLAY_SESSION_TTL_MS = 60 * 1000;
+const DEFAULT_SCHEDULE_KEY = '__default_schedule__';
 const ALLOWED_ORIGINS = [
   'https://schop-hirosaki-univcoop.github.io',
   'https://schop-hirosaki-univcoop.github.io/'
@@ -702,6 +703,9 @@ function doPost(e) {
       case 'clearSelectingStatus':
         assertOperator_(principal);
         return ok(clearSelectingStatus(principal));
+      case 'lockDisplaySchedule':
+        assertOperator_(principal);
+        return ok(lockDisplaySchedule_(principal, req.eventId, req.scheduleId, req.scheduleLabel, req.operatorName));
       case 'logAction':
         assertOperator_(principal);
         return ok(logAction_(principal, req.action_type, req.details));
@@ -3057,6 +3061,92 @@ function normalizeAllowedOrigin_(requestOrigin) {
   return ALLOWED_ORIGINS[0] || '*';
 }
 
+function normalizeKey_(value) {
+  return String(value || '').trim();
+}
+
+function normalizeEventId_(eventId) {
+  return normalizeKey_(eventId);
+}
+
+function normalizeScheduleId_(scheduleId) {
+  const normalized = normalizeKey_(scheduleId);
+  return normalized || DEFAULT_SCHEDULE_KEY;
+}
+
+function buildScheduleKey_(eventId, scheduleId) {
+  const eventKey = normalizeEventId_(eventId);
+  if (!eventKey) {
+    return '';
+  }
+  return eventKey + '::' + normalizeScheduleId_(scheduleId);
+}
+
+function buildRenderEventBasePath_(eventId, scheduleId) {
+  const eventKey = normalizeEventId_(eventId);
+  if (!eventKey) {
+    return '';
+  }
+  const scheduleKey = normalizeScheduleId_(scheduleId);
+  return `render/events/${eventKey}/${scheduleKey}`;
+}
+
+function getRenderStatePath_(eventId, scheduleId) {
+  const basePath = buildRenderEventBasePath_(eventId, scheduleId);
+  return basePath ? `${basePath}/state` : 'render/state';
+}
+
+function getNowShowingPath_(eventId, scheduleId) {
+  const basePath = buildRenderEventBasePath_(eventId, scheduleId);
+  return basePath ? `${basePath}/nowShowing` : 'render/state/nowShowing';
+}
+
+function getEventActiveSchedulePath_(eventId) {
+  const eventKey = normalizeEventId_(eventId);
+  return eventKey ? `render/events/${eventKey}/activeSchedule` : '';
+}
+
+function getActiveSchedulePathForSession_(session) {
+  if (!session || typeof session !== 'object') {
+    return '';
+  }
+  const assignment = session.assignment && typeof session.assignment === 'object' ? session.assignment : null;
+  if (assignment && normalizeEventId_(assignment.eventId)) {
+    return getEventActiveSchedulePath_(assignment.eventId);
+  }
+  if (normalizeEventId_(session.eventId)) {
+    return getEventActiveSchedulePath_(session.eventId);
+  }
+  return '';
+}
+
+function buildActiveScheduleRecord_(assignment, session, operatorUid) {
+  if (!assignment || typeof assignment !== 'object') {
+    return null;
+  }
+  const eventId = normalizeEventId_(assignment.eventId);
+  if (!eventId) {
+    return null;
+  }
+  const scheduleId = normalizeScheduleId_(assignment.scheduleId);
+  const scheduleKey = buildScheduleKey_(eventId, scheduleId);
+  const sessionUid = normalizeKey_(session && session.uid);
+  const sessionId = normalizeKey_(session && session.sessionId);
+  return {
+    eventId,
+    scheduleId,
+    scheduleKey,
+    scheduleLabel: String(assignment.scheduleLabel || '').trim(),
+    lockedAt: Number(assignment.lockedAt || Date.now()),
+    lockedByUid: normalizeKey_(assignment.lockedByUid || operatorUid),
+    lockedByEmail: String(assignment.lockedByEmail || '').trim(),
+    lockedByName: String(assignment.lockedByName || '').trim(),
+    sessionUid,
+    sessionId,
+    expiresAt: Number(session && session.expiresAt || 0) || null
+  };
+}
+
 function getRequestOrigin_(event, body) {
   const fallback = extractOriginFromBody_(body) || extractOriginFromParams_(event);
   if (fallback) {
@@ -3181,10 +3271,28 @@ function beginDisplaySession_(principal) {
         lastSeenAt: Number(current.lastSeenAt || now)
       });
     }
+    const previousActivePath = getActiveSchedulePathForSession_(current);
+    if (previousActivePath) {
+      updates[previousActivePath] = null;
+    }
   }
 
   const sessionId = Utilities.getUuid();
   const expiresAt = now + DISPLAY_SESSION_TTL_MS;
+  let preservedAssignment = null;
+  if (current && current.assignment && typeof current.assignment === 'object') {
+    const preservedEvent = normalizeKey_(current.assignment.eventId);
+    const preservedSchedule = normalizeScheduleId_(current.assignment.scheduleId);
+    preservedAssignment = Object.assign({}, current.assignment, {
+      eventId: preservedEvent,
+      scheduleId: preservedSchedule,
+      scheduleLabel: String(current.assignment.scheduleLabel || '').trim(),
+      scheduleKey: buildScheduleKey_(preservedEvent, preservedSchedule)
+    });
+    if (!preservedAssignment.scheduleLabel) {
+      preservedAssignment.scheduleLabel = preservedSchedule === DEFAULT_SCHEDULE_KEY ? '未選択' : preservedSchedule || preservedEvent;
+    }
+  }
   const session = {
     uid: principal.uid,
     sessionId,
@@ -3194,10 +3302,25 @@ function beginDisplaySession_(principal) {
     expiresAt,
     grantedBy: 'gas'
   };
+  if (preservedAssignment) {
+    session.assignment = preservedAssignment;
+    session.eventId = preservedAssignment.eventId;
+    session.scheduleId = preservedAssignment.scheduleId;
+    session.scheduleLabel = preservedAssignment.scheduleLabel;
+  } else if (current) {
+    if (current.eventId) session.eventId = normalizeKey_(current.eventId);
+    if (current.scheduleId) session.scheduleId = normalizeScheduleId_(current.scheduleId);
+    if (current.scheduleLabel) session.scheduleLabel = String(current.scheduleLabel || '').trim();
+  }
 
   updates[`screens/approved/${principal.uid}`] = true;
   updates[`screens/sessions/${principal.uid}`] = session;
   updates['render/session'] = session;
+  const activeSchedulePath = getActiveSchedulePathForSession_(session);
+  const activeRecord = buildActiveScheduleRecord_(session.assignment, session, principal.uid);
+  if (activeSchedulePath && activeRecord) {
+    updates[activeSchedulePath] = activeRecord;
+  }
   patchRtdb_(updates, token);
   return { session };
 }
@@ -3221,6 +3344,10 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
           lastSeenAt: Number(current.lastSeenAt || now)
         });
       }
+      const activePath = getActiveSchedulePathForSession_(current);
+      if (activePath) {
+        updates[activePath] = null;
+      }
       patchRtdb_(updates, token);
     }
     return { active: false };
@@ -3236,6 +3363,10 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
       expiresAt: now,
       lastSeenAt: Number(current.lastSeenAt || now)
     });
+    const activePath = getActiveSchedulePathForSession_(current);
+    if (activePath) {
+      updates[activePath] = null;
+    }
     patchRtdb_(updates, token);
     return { active: false };
   }
@@ -3274,8 +3405,89 @@ function endDisplaySession_(principal, rawSessionId, reason) {
   updates[`screens/approved/${principal.uid}`] = null;
   updates[`screens/sessions/${principal.uid}`] = session;
   updates['render/session'] = null;
+  const activePath = getActiveSchedulePathForSession_(current);
+  if (activePath) {
+    updates[activePath] = null;
+  }
   patchRtdb_(updates, token);
   return { ended: true };
+}
+
+function lockDisplaySchedule_(principal, rawEventId, rawScheduleId, rawScheduleLabel, rawOperatorName) {
+  const eventId = normalizeKey_(rawEventId);
+  if (!eventId) {
+    throw new Error('eventId is required.');
+  }
+  const scheduleId = normalizeKey_(rawScheduleId);
+  const scheduleLabel = String(rawScheduleLabel || '').trim();
+  const operatorName = String(rawOperatorName || '').trim();
+  const operatorUid = normalizeKey_(principal && principal.uid);
+  if (!operatorUid) {
+    throw new Error('操作アカウントを特定できませんでした。');
+  }
+  const token = getFirebaseAccessToken_();
+  const now = Date.now();
+  const session = fetchRtdb_('render/session', token);
+  if (!session || session.status !== 'active') {
+    throw new Error('ディスプレイのセッションが有効ではありません。');
+  }
+  if (Number(session.expiresAt || 0) <= now) {
+    throw new Error('ディスプレイのセッションが期限切れです。');
+  }
+  const sessionUid = normalizeKey_(session.uid);
+  if (!sessionUid) {
+    throw new Error('ディスプレイのセッション情報が不完全です。');
+  }
+  const normalizedScheduleId = normalizeScheduleId_(scheduleId);
+  const scheduleKey = buildScheduleKey_(eventId, normalizedScheduleId);
+  const existingAssignment = session.assignment && typeof session.assignment === 'object' ? session.assignment : null;
+  if (existingAssignment) {
+    const existingKey = buildScheduleKey_(existingAssignment.eventId, existingAssignment.scheduleId);
+    const lockedByUid = normalizeKey_(existingAssignment.lockedByUid);
+    if (existingKey === scheduleKey) {
+      return {
+        assignment: Object.assign({}, existingAssignment, { scheduleKey: existingKey })
+      };
+    }
+    if (lockedByUid && lockedByUid !== operatorUid) {
+      throw new Error('他のオペレーターがディスプレイを固定しています。');
+    }
+  }
+  const fallbackLabel = normalizedScheduleId === DEFAULT_SCHEDULE_KEY ? '未選択' : normalizedScheduleId || eventId;
+  const assignment = {
+    eventId,
+    scheduleId: normalizedScheduleId,
+    scheduleLabel: scheduleLabel || fallbackLabel,
+    scheduleKey,
+    lockedAt: now,
+    lockedByUid: operatorUid,
+    lockedByEmail: String(principal.email || '').trim(),
+    lockedByName: operatorName || String(principal.email || '').trim()
+  };
+  const nextSession = Object.assign({}, session, {
+    eventId,
+    scheduleId: normalizedScheduleId,
+    scheduleLabel: assignment.scheduleLabel,
+    assignment
+  });
+  const updates = {};
+  if (existingAssignment) {
+    const previousActivePath = getEventActiveSchedulePath_(existingAssignment.eventId);
+    const nextActivePath = getEventActiveSchedulePath_(eventId);
+    if (previousActivePath && previousActivePath !== nextActivePath) {
+      updates[previousActivePath] = null;
+    }
+  }
+  updates[`screens/approved/${sessionUid}`] = true;
+  updates[`screens/sessions/${sessionUid}`] = nextSession;
+  updates['render/session'] = nextSession;
+  const activeSchedulePath = getEventActiveSchedulePath_(eventId);
+  const activeRecord = buildActiveScheduleRecord_(assignment, nextSession, operatorUid);
+  if (activeSchedulePath && activeRecord) {
+    updates[activeSchedulePath] = activeRecord;
+  }
+  patchRtdb_(updates, token);
+  return { assignment };
 }
 
 function updateSelectingStatus(uid) {
