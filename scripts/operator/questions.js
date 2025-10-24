@@ -268,6 +268,12 @@ export function updateScheduleContext(app) {
     scheduleKey: scheduleKey || ""
   };
 
+  if (typeof app.refreshOperatorPresenceSubscription === "function") {
+    app.refreshOperatorPresenceSubscription();
+  }
+  if (typeof app.syncOperatorPresence === "function") {
+    app.syncOperatorPresence();
+  }
   if (typeof app.refreshChannelSubscriptions === "function") {
     app.refreshChannelSubscriptions();
   }

@@ -21,7 +21,8 @@ The goal is to isolate display/operation channels per event (and per schedule wh
 - [x] Added shared channel path helpers to compute per-event/per-schedule RTDB locations with legacy fallbacks.
 - [x] Updated `display.html` to honour `?evt=`/`?sch=` parameters, resubscribe dynamically, and adopt session-provided assignments.
 - [x] Updated operator client Firebase bindings to resolve render/nowShowing references per active `{eventId, scheduleId}` and block send/clear when assignment is missing.
-- [ ] Persist operator schedule selections to presence nodes (UI modal still pending).
+- [x] Persist operator schedule selections to presence nodes (UI modal still pending). Presence writes now land under `operatorPresence/{eventId}/{uid}` with heartbeat refreshes; modal/locking UX remains outstanding.
+- [x] Synced operator presence subscriptions with schedule context changes and ensured heartbeat/disconnect cleanup on sign-out.
 - [ ] Enforce schedule locks and rotation/ACL behaviours at the Apps Script layer.
 
 ## Scope Overview
@@ -47,6 +48,9 @@ The goal is to isolate display/operation channels per event (and per schedule wh
 
 ### 3. Operator Application Update
 - Persist each operator's selected `{eventId, scheduleId}` to a shared RTDB location (e.g., `operatorPresence/{eventId}/{userId}`).
+  - ✅ Implemented: operator clients now update `operatorPresence/{eventId}/{uid}` with schedule label, key, and heartbeat timestamps; listeners hydrate local state for forthcoming modal work.
+- Ensure operator presence listeners follow event context changes and tear down on auth/session switches.
+  - ✅ Implemented: presence subscriptions are re-established whenever `activeEventId` changes, and sign-out clears all timers/disconnect hooks.
 - `handleDisplay` and related actions should write to the computed event/schedule path only.
 - Implement guard that compares operator-selected schedule with display assignment; block send and surface an error state if mismatched.
 - Provide UI indicators showing the display-assigned schedule and other operators' selections.
@@ -86,4 +90,10 @@ To show the conflict modal we will persist each operator's selected schedule in 
 - Gate the modal-triggering cloud functions (if any) behind the same checks to avoid leaking schedule selections to unrelated events.
 
 These restrictions clarify the original question's intent—ensuring that exposing presence data for coordination does not broaden data visibility beyond the current event team.
+
+## Current Focus
+
+- Finish wiring the conflict modal so that the first operator confirmation locks the schedule and updates the display assignment.
+- Feed the presence map into the modal/toolbar UI so operators can see who is attached to which schedule in real time.
+- Draft Firebase rule updates for `operatorPresence` and the new `render/events/*` structure before Apps Script changes ship, keeping the rollout path clear.
 

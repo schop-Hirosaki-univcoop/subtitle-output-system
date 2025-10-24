@@ -12,7 +12,8 @@ import {
   query,
   limitToLast,
   orderByChild,
-  child
+  child,
+  onDisconnect
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   initializeAuth,
@@ -53,6 +54,31 @@ export const updateTriggerRef = ref(database, "signals/logs");
 export const dictionaryRef = ref(database, "dictionary");
 export const operatorChatMessagesRef = ref(database, "operatorChat/messages");
 export const operatorChatReadsRef = ref(database, "operatorChat/reads");
+const operatorPresenceRootRef = ref(database, "operatorPresence");
+
+export function getRenderRef(eventId = "", scheduleId = "") {
+  const path = getRenderStatePath(eventId, scheduleId);
+  return path === "render/state" ? LEGACY_RENDER_REF : ref(database, path);
+}
+
+export function getNowShowingRef(eventId = "", scheduleId = "") {
+  const path = getNowShowingPath(eventId, scheduleId);
+  return path === "render/state/nowShowing" ? LEGACY_NOW_SHOWING_REF : ref(database, path);
+}
+
+export function getOperatorPresenceEventRef(eventId = "") {
+  const key = String(eventId || "").trim();
+  return key ? ref(database, `operatorPresence/${key}`) : operatorPresenceRootRef;
+}
+
+export function getOperatorPresenceEntryRef(eventId = "", operatorId = "") {
+  const eventKey = String(eventId || "").trim();
+  const userKey = String(operatorId || "").trim();
+  if (!eventKey || !userKey) {
+    return operatorPresenceRootRef;
+  }
+  return ref(database, `operatorPresence/${eventKey}/${userKey}`);
+}
 
 export function getRenderRef(eventId = "", scheduleId = "") {
   const path = getRenderStatePath(eventId, scheduleId);
@@ -77,6 +103,7 @@ export {
   limitToLast,
   orderByChild,
   child,
+  onDisconnect,
   signInWithPopup,
   signOut,
   onAuthStateChanged
