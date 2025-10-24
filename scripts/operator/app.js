@@ -11,8 +11,16 @@ import {
   questionIntakeEventsRef,
   questionIntakeSchedulesRef,
   displaySessionRef,
-  renderRef
+  getRenderRef,
+  getOperatorPresenceEventRef,
+  getOperatorPresenceEntryRef,
+  set,
+  update,
+  remove,
+  serverTimestamp,
+  onDisconnect
 } from "./firebase.js";
+import { getRenderStatePath, parseChannelParams } from "../shared/channel-paths.js";
 import { queryDom } from "./dom.js";
 import { createInitialState } from "./state.js";
 import { createApiClient } from "./api-client.js";
@@ -77,6 +85,8 @@ const ACTION_BUTTON_BINDINGS = [
   { index: 1, handler: "handleUnanswer" },
   { index: 2, handler: "handleEdit" }
 ];
+
+const OPERATOR_PRESENCE_HEARTBEAT_MS = 60_000;
 
 const MODULE_METHOD_GROUPS = [
   {
@@ -246,6 +256,7 @@ export class OperatorApp {
     this.displaySessionUnsubscribe = null;
     this.updateTriggerUnsubscribe = null;
     this.renderUnsubscribe = null;
+    this.currentRenderPath = null;
     this.logsUpdateTimer = null;
     this.eventsUnsubscribe = null;
     this.schedulesUnsubscribe = null;
@@ -283,6 +294,14 @@ export class OperatorApp {
     this.pendingEditOriginal = "";
     this.editSubmitting = false;
     this.confirmState = { resolver: null, keydownHandler: null, lastFocused: null, initialized: false };
+    this.operatorIdentity = { uid: "", email: "", displayName: "" };
+    this.operatorPresenceEntryKey = "";
+    this.operatorPresenceEntryRef = null;
+    this.operatorPresenceDisconnect = null;
+    this.operatorPresenceHeartbeat = null;
+    this.operatorPresenceSubscribedEventId = "";
+    this.operatorPresenceUnsubscribe = null;
+    this.operatorPresenceLastSignature = "";
 
     this.toast = showToast;
     bindModuleMethods(this);
@@ -319,8 +338,9 @@ export class OperatorApp {
     }
     try {
       const params = new URLSearchParams(window.location.search || "");
-      context.eventId = String(params.get("eventId") ?? params.get("event") ?? "").trim();
-      context.scheduleId = String(params.get("scheduleId") ?? params.get("schedule") ?? "").trim();
+      const channel = parseChannelParams(params);
+      context.eventId = channel.eventId || "";
+      context.scheduleId = channel.scheduleId || "";
       context.eventName = String(params.get("eventName") ?? "").trim();
       context.scheduleLabel = String(params.get("scheduleLabel") ?? params.get("scheduleName") ?? "").trim();
       context.startAt = String(params.get("startAt") ?? params.get("scheduleStart") ?? params.get("start") ?? "").trim();
@@ -347,6 +367,200 @@ export class OperatorApp {
       this.state.currentSchedule = scheduleKey;
       this.state.lastNormalSchedule = scheduleKey;
     }
+  }
+
+  getActiveChannel() {
+    const ensure = (value) => String(value ?? "").trim();
+    const eventId = ensure(this.state?.activeEventId || this.pageContext?.eventId || "");
+    const scheduleId = ensure(this.state?.activeScheduleId || this.pageContext?.scheduleId || "");
+    return { eventId, scheduleId };
+  }
+
+  refreshChannelSubscriptions() {
+    const { eventId, scheduleId } = this.getActiveChannel();
+    const path = getRenderStatePath(eventId, scheduleId);
+    if (this.currentRenderPath === path && this.renderUnsubscribe) {
+      return;
+    }
+    if (this.renderUnsubscribe) {
+      this.renderUnsubscribe();
+      this.renderUnsubscribe = null;
+    }
+    this.currentRenderPath = path;
+    const channelRef = getRenderRef(eventId, scheduleId);
+    this.renderUnsubscribe = onValue(
+      channelRef,
+      (snapshot) => this.handleRenderUpdate(snapshot),
+      (error) => {
+        console.error("Failed to monitor render state:", error);
+      }
+    );
+    this.refreshOperatorPresenceSubscription();
+  }
+
+  refreshOperatorPresenceSubscription() {
+    const { eventId } = this.getActiveChannel();
+    const nextEventId = String(eventId || "").trim();
+    if (this.operatorPresenceSubscribedEventId === nextEventId) {
+      return;
+    }
+    if (this.operatorPresenceUnsubscribe) {
+      this.operatorPresenceUnsubscribe();
+      this.operatorPresenceUnsubscribe = null;
+    }
+    this.operatorPresenceSubscribedEventId = nextEventId;
+    this.state.operatorPresenceEventId = nextEventId;
+    this.state.operatorPresenceByUser = new Map();
+    if (!nextEventId) {
+      this.state.operatorPresenceSelf = null;
+      return;
+    }
+
+    const eventRef = getOperatorPresenceEventRef(nextEventId);
+    this.operatorPresenceUnsubscribe = onValue(
+      eventRef,
+      (snapshot) => {
+        const raw = snapshot.val() || {};
+        const presenceMap = new Map();
+        Object.entries(raw).forEach(([uid, payload]) => {
+          presenceMap.set(String(uid), payload || {});
+        });
+        this.state.operatorPresenceEventId = nextEventId;
+        this.state.operatorPresenceByUser = presenceMap;
+        const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
+        this.state.operatorPresenceSelf = selfUid ? presenceMap.get(selfUid) || null : null;
+      },
+      (error) => {
+        console.error("Failed to monitor operator presence:", error);
+      }
+    );
+  }
+
+  syncOperatorPresence(reason = "state-change") {
+    const user = this.operatorIdentity?.uid ? this.operatorIdentity : auth.currentUser || null;
+    const uid = String(user?.uid || "").trim();
+    if (!uid || !this.isAuthorized) {
+      this.clearOperatorPresence();
+      return;
+    }
+
+    const eventId = String(this.state?.activeEventId || "").trim();
+    if (!eventId) {
+      this.clearOperatorPresence();
+      return;
+    }
+
+    const scheduleId = String(this.state?.activeScheduleId || "").trim();
+    const scheduleKey = String(this.state?.currentSchedule || "").trim();
+    const eventName = String(this.state?.activeEventName || "").trim();
+    const scheduleLabel = String(this.state?.activeScheduleLabel || "").trim();
+    const nextKey = `${eventId}/${uid}`;
+
+    if (this.operatorPresenceEntryKey && this.operatorPresenceEntryKey !== nextKey) {
+      this.clearOperatorPresence();
+    }
+
+    const signature = JSON.stringify({ eventId, scheduleId, scheduleKey, scheduleLabel });
+    if (reason !== "heartbeat" && signature === this.operatorPresenceLastSignature) {
+      this.scheduleOperatorPresenceHeartbeat();
+      return;
+    }
+    this.operatorPresenceLastSignature = signature;
+
+    const entryRef = getOperatorPresenceEntryRef(eventId, uid);
+    this.operatorPresenceEntryKey = nextKey;
+    this.operatorPresenceEntryRef = entryRef;
+
+    const payload = {
+      uid,
+      email: String(user?.email || "").trim(),
+      displayName: String(user?.displayName || "").trim(),
+      eventId,
+      eventName,
+      scheduleId,
+      scheduleKey,
+      scheduleLabel,
+      updatedAt: serverTimestamp(),
+      clientTimestamp: Date.now(),
+      reason
+    };
+
+    set(entryRef, payload).catch((error) => {
+      console.error("Failed to persist operator presence:", error);
+    });
+
+    try {
+      if (this.operatorPresenceDisconnect) {
+        this.operatorPresenceDisconnect.cancel().catch(() => {});
+      }
+      const disconnectHandle = onDisconnect(entryRef);
+      this.operatorPresenceDisconnect = disconnectHandle;
+      disconnectHandle.remove().catch(() => {});
+    } catch (error) {
+      console.debug("Failed to register onDisconnect cleanup:", error);
+    }
+
+    this.state.operatorPresenceSelf = {
+      ...payload,
+      updatedAt: Date.now()
+    };
+
+    this.scheduleOperatorPresenceHeartbeat();
+  }
+
+  scheduleOperatorPresenceHeartbeat() {
+    if (this.operatorPresenceHeartbeat) {
+      return;
+    }
+    this.operatorPresenceHeartbeat = setInterval(() => this.touchOperatorPresence(), OPERATOR_PRESENCE_HEARTBEAT_MS);
+  }
+
+  touchOperatorPresence() {
+    if (!this.operatorPresenceEntryRef || !this.operatorPresenceEntryKey) {
+      this.stopOperatorPresenceHeartbeat();
+      return;
+    }
+    const now = Date.now();
+    update(this.operatorPresenceEntryRef, {
+      updatedAt: serverTimestamp(),
+      clientTimestamp: now
+    }).catch((error) => {
+      console.debug("Operator presence heartbeat failed:", error);
+    });
+    if (this.state.operatorPresenceSelf) {
+      this.state.operatorPresenceSelf = {
+        ...this.state.operatorPresenceSelf,
+        updatedAt: now,
+        clientTimestamp: now
+      };
+    }
+  }
+
+  stopOperatorPresenceHeartbeat() {
+    if (this.operatorPresenceHeartbeat) {
+      clearInterval(this.operatorPresenceHeartbeat);
+      this.operatorPresenceHeartbeat = null;
+    }
+  }
+
+  clearOperatorPresence() {
+    this.stopOperatorPresenceHeartbeat();
+    this.operatorPresenceLastSignature = "";
+    const disconnectHandle = this.operatorPresenceDisconnect;
+    this.operatorPresenceDisconnect = null;
+    if (disconnectHandle && typeof disconnectHandle.cancel === "function") {
+      disconnectHandle.cancel().catch(() => {});
+    }
+    const entryRef = this.operatorPresenceEntryRef;
+    this.operatorPresenceEntryRef = null;
+    const hadKey = !!this.operatorPresenceEntryKey;
+    this.operatorPresenceEntryKey = "";
+    if (entryRef && hadKey) {
+      remove(entryRef).catch((error) => {
+        console.debug("Failed to clear operator presence:", error);
+      });
+    }
+    this.state.operatorPresenceSelf = null;
   }
 
   setExternalContext(context = {}) {
@@ -400,6 +614,7 @@ export class OperatorApp {
     }
 
     this.updateScheduleContext();
+    this.refreshChannelSubscriptions();
     this.renderQuestions();
     this.updateActionAvailability();
     this.updateBatchButtonVisibility();
@@ -485,6 +700,7 @@ export class OperatorApp {
       this.switchSubTab(preferredSubTab);
     } else {
       this.updateScheduleContext();
+      this.refreshChannelSubscriptions();
       this.renderQuestions();
     }
   }
@@ -588,12 +804,8 @@ export class OperatorApp {
   }
 
   attachRenderMonitor() {
-    if (this.renderUnsubscribe) {
-      this.renderUnsubscribe();
-    }
-    this.renderUnsubscribe = onValue(renderRef, (snapshot) => this.handleRenderUpdate(snapshot), (error) => {
-      console.error("Failed to monitor render state:", error);
-    });
+    this.currentRenderPath = null;
+    this.refreshChannelSubscriptions();
   }
 
   async login() {
@@ -731,6 +943,11 @@ export class OperatorApp {
 
   renderLoggedInUi(user) {
     this.redirectingToIndex = false;
+    this.operatorIdentity = {
+      uid: String(user?.uid || "").trim(),
+      email: String(user?.email || "").trim(),
+      displayName: String(user?.displayName || "").trim()
+    };
     if (this.dom.loginContainer) this.dom.loginContainer.style.display = "none";
     if (this.dom.mainContainer) {
       this.dom.mainContainer.style.display = "";
@@ -758,6 +975,8 @@ export class OperatorApp {
       this.dom.userInfo.hidden = false;
     }
     this.applyPreferredSubTab();
+    this.syncOperatorPresence();
+    this.refreshOperatorPresenceSubscription();
   }
 
   showLoggedOutState() {
@@ -765,6 +984,7 @@ export class OperatorApp {
       return;
     }
     this.isAuthorized = false;
+    this.operatorIdentity = { uid: "", email: "", displayName: "" };
     this.dictionaryLoaded = false;
     this.toggleDictionaryDrawer(false, false);
     this.toggleLogsDrawer(false, false);
@@ -799,6 +1019,7 @@ export class OperatorApp {
   }
 
   cleanupRealtime() {
+    this.clearOperatorPresence();
     if (this.questionsUnsubscribe) {
       this.questionsUnsubscribe();
       this.questionsUnsubscribe = null;
@@ -837,6 +1058,14 @@ export class OperatorApp {
       clearTimeout(this.logsUpdateTimer);
       this.logsUpdateTimer = null;
     }
+    if (this.operatorPresenceUnsubscribe) {
+      this.operatorPresenceUnsubscribe();
+      this.operatorPresenceUnsubscribe = null;
+    }
+    this.operatorPresenceSubscribedEventId = "";
+    this.state.operatorPresenceEventId = "";
+    this.state.operatorPresenceByUser = new Map();
+    this.state.operatorPresenceSelf = null;
     const autoScroll = this.dom.logAutoscroll ? this.dom.logAutoscroll.checked : true;
     this.state = createInitialState(autoScroll);
     this.applyContextToState();
@@ -1045,6 +1274,7 @@ export class OperatorApp {
     });
     this.state.allQuestions = list;
     this.updateScheduleContext();
+    this.refreshChannelSubscriptions();
     this.renderQuestions();
   }
 

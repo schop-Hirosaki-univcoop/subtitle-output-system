@@ -22,6 +22,9 @@ export function createInitialState(autoScroll = true) {
     renderState: null,
     displaySession: null,
     displaySessionActive: false,
-    displaySessionLastActive: null
+    displaySessionLastActive: null,
+    operatorPresenceEventId: "",
+    operatorPresenceByUser: new Map(),
+    operatorPresenceSelf: null
   };
 }
