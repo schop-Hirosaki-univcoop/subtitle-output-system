@@ -30,6 +30,7 @@ function getSheetData(sheetName) {
 }
 
 const DISPLAY_SESSION_TTL_MS = 60 * 1000;
+const DEFAULT_SCHEDULE_KEY = '__default_schedule__';
 const ALLOWED_ORIGINS = [
   'https://schop-hirosaki-univcoop.github.io',
   'https://schop-hirosaki-univcoop.github.io/'
@@ -702,6 +703,25 @@ function doPost(e) {
       case 'clearSelectingStatus':
         assertOperator_(principal);
         return ok(clearSelectingStatus(principal));
+      case 'lockDisplaySchedule':
+        assertOperator_(principal);
+        return ok(lockDisplaySchedule_(principal, req.eventId, req.scheduleId, req.scheduleLabel, req.operatorName));
+      case 'saveScheduleRotation':
+        assertOperator_(principal);
+        return ok(saveScheduleRotation_(
+          principal,
+          req.eventId,
+          req.entries != null ? req.entries : (req.rotation && req.rotation.entries) || req.rotation,
+          {
+            operatorName: req.operatorName,
+            defaultDwellMs: req.defaultDwellMs,
+            defaultDurationMs: req.defaultDurationMs,
+            entries: req.rotation && req.rotation.entries
+          }
+        ));
+      case 'clearScheduleRotation':
+        assertOperator_(principal);
+        return ok(clearScheduleRotation_(principal, req.eventId));
       case 'logAction':
         assertOperator_(principal);
         return ok(logAction_(principal, req.action_type, req.details));
@@ -3057,6 +3077,113 @@ function normalizeAllowedOrigin_(requestOrigin) {
   return ALLOWED_ORIGINS[0] || '*';
 }
 
+function normalizeKey_(value) {
+  return String(value || '').trim();
+}
+
+function normalizeEmail_(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeEventId_(eventId) {
+  return normalizeKey_(eventId);
+}
+
+function normalizeScheduleId_(scheduleId) {
+  const normalized = normalizeKey_(scheduleId);
+  return normalized || DEFAULT_SCHEDULE_KEY;
+}
+
+function toPositiveInteger_(value) {
+  if (value == null || value === '') {
+    return null;
+  }
+  const number = Number(value);
+  if (!isFinite(number) || number <= 0) {
+    return null;
+  }
+  return Math.round(number);
+}
+
+function buildScheduleKey_(eventId, scheduleId) {
+  const eventKey = normalizeEventId_(eventId);
+  if (!eventKey) {
+    return '';
+  }
+  return eventKey + '::' + normalizeScheduleId_(scheduleId);
+}
+
+function buildRenderEventBasePath_(eventId, scheduleId) {
+  const eventKey = normalizeEventId_(eventId);
+  if (!eventKey) {
+    return '';
+  }
+  const scheduleKey = normalizeScheduleId_(scheduleId);
+  return `render/events/${eventKey}/${scheduleKey}`;
+}
+
+function getRenderStatePath_(eventId, scheduleId) {
+  const basePath = buildRenderEventBasePath_(eventId, scheduleId);
+  return basePath ? `${basePath}/state` : 'render/state';
+}
+
+function getNowShowingPath_(eventId, scheduleId) {
+  const basePath = buildRenderEventBasePath_(eventId, scheduleId);
+  return basePath ? `${basePath}/nowShowing` : 'render/state/nowShowing';
+}
+
+function getEventActiveSchedulePath_(eventId) {
+  const eventKey = normalizeEventId_(eventId);
+  return eventKey ? `render/events/${eventKey}/activeSchedule` : '';
+}
+
+function getEventRotationPath_(eventId) {
+  const eventKey = normalizeEventId_(eventId);
+  return eventKey ? `render/events/${eventKey}/rotationAssignments` : '';
+}
+
+function getActiveSchedulePathForSession_(session) {
+  if (!session || typeof session !== 'object') {
+    return '';
+  }
+  const assignment = session.assignment && typeof session.assignment === 'object' ? session.assignment : null;
+  if (assignment && normalizeEventId_(assignment.eventId)) {
+    return getEventActiveSchedulePath_(assignment.eventId);
+  }
+  if (normalizeEventId_(session.eventId)) {
+    return getEventActiveSchedulePath_(session.eventId);
+  }
+  return '';
+}
+
+function buildActiveScheduleRecord_(assignment, session, operatorUid) {
+  if (!assignment || typeof assignment !== 'object') {
+    return null;
+  }
+  const eventId = normalizeEventId_(assignment.eventId);
+  if (!eventId) {
+    return null;
+  }
+  const scheduleId = normalizeScheduleId_(assignment.scheduleId);
+  const scheduleKey = buildScheduleKey_(eventId, scheduleId);
+  const sessionUid = normalizeKey_(session && session.uid);
+  const sessionId = normalizeKey_(session && session.sessionId);
+  return {
+    eventId,
+    scheduleId,
+    scheduleKey,
+    scheduleLabel: String(assignment.scheduleLabel || '').trim(),
+    mode: 'locked',
+    lockedAt: Number(assignment.lockedAt || Date.now()),
+    lockedByUid: normalizeKey_(assignment.lockedByUid || operatorUid),
+    lockedByEmail: String(assignment.lockedByEmail || '').trim(),
+    lockedByName: String(assignment.lockedByName || '').trim(),
+    sessionUid,
+    sessionId,
+    expiresAt: Number(session && session.expiresAt || 0) || null
+  };
+}
+
 function getRequestOrigin_(event, body) {
   const fallback = extractOriginFromBody_(body) || extractOriginFromParams_(event);
   if (fallback) {
@@ -3181,10 +3308,28 @@ function beginDisplaySession_(principal) {
         lastSeenAt: Number(current.lastSeenAt || now)
       });
     }
+    const previousActivePath = getActiveSchedulePathForSession_(current);
+    if (previousActivePath) {
+      updates[previousActivePath] = null;
+    }
   }
 
   const sessionId = Utilities.getUuid();
   const expiresAt = now + DISPLAY_SESSION_TTL_MS;
+  let preservedAssignment = null;
+  if (current && current.assignment && typeof current.assignment === 'object') {
+    const preservedEvent = normalizeKey_(current.assignment.eventId);
+    const preservedSchedule = normalizeScheduleId_(current.assignment.scheduleId);
+    preservedAssignment = Object.assign({}, current.assignment, {
+      eventId: preservedEvent,
+      scheduleId: preservedSchedule,
+      scheduleLabel: String(current.assignment.scheduleLabel || '').trim(),
+      scheduleKey: buildScheduleKey_(preservedEvent, preservedSchedule)
+    });
+    if (!preservedAssignment.scheduleLabel) {
+      preservedAssignment.scheduleLabel = preservedSchedule === DEFAULT_SCHEDULE_KEY ? '未選択' : preservedSchedule || preservedEvent;
+    }
+  }
   const session = {
     uid: principal.uid,
     sessionId,
@@ -3194,10 +3339,25 @@ function beginDisplaySession_(principal) {
     expiresAt,
     grantedBy: 'gas'
   };
+  if (preservedAssignment) {
+    session.assignment = preservedAssignment;
+    session.eventId = preservedAssignment.eventId;
+    session.scheduleId = preservedAssignment.scheduleId;
+    session.scheduleLabel = preservedAssignment.scheduleLabel;
+  } else if (current) {
+    if (current.eventId) session.eventId = normalizeKey_(current.eventId);
+    if (current.scheduleId) session.scheduleId = normalizeScheduleId_(current.scheduleId);
+    if (current.scheduleLabel) session.scheduleLabel = String(current.scheduleLabel || '').trim();
+  }
 
   updates[`screens/approved/${principal.uid}`] = true;
   updates[`screens/sessions/${principal.uid}`] = session;
   updates['render/session'] = session;
+  const activeSchedulePath = getActiveSchedulePathForSession_(session);
+  const activeRecord = buildActiveScheduleRecord_(session.assignment, session, principal.uid);
+  if (activeSchedulePath && activeRecord) {
+    updates[activeSchedulePath] = activeRecord;
+  }
   patchRtdb_(updates, token);
   return { session };
 }
@@ -3221,6 +3381,10 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
           lastSeenAt: Number(current.lastSeenAt || now)
         });
       }
+      const activePath = getActiveSchedulePathForSession_(current);
+      if (activePath) {
+        updates[activePath] = null;
+      }
       patchRtdb_(updates, token);
     }
     return { active: false };
@@ -3236,6 +3400,10 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
       expiresAt: now,
       lastSeenAt: Number(current.lastSeenAt || now)
     });
+    const activePath = getActiveSchedulePathForSession_(current);
+    if (activePath) {
+      updates[activePath] = null;
+    }
     patchRtdb_(updates, token);
     return { active: false };
   }
@@ -3274,8 +3442,379 @@ function endDisplaySession_(principal, rawSessionId, reason) {
   updates[`screens/approved/${principal.uid}`] = null;
   updates[`screens/sessions/${principal.uid}`] = session;
   updates['render/session'] = null;
+  const activePath = getActiveSchedulePathForSession_(current);
+  if (activePath) {
+    updates[activePath] = null;
+  }
   patchRtdb_(updates, token);
   return { ended: true };
+}
+
+function lockDisplaySchedule_(principal, rawEventId, rawScheduleId, rawScheduleLabel, rawOperatorName) {
+  const eventId = normalizeEventId_(rawEventId);
+  if (!eventId) {
+    throw new Error('eventId is required.');
+  }
+  const scheduleId = normalizeKey_(rawScheduleId);
+  const scheduleLabel = String(rawScheduleLabel || '').trim();
+  const operatorName = String(rawOperatorName || '').trim();
+  const operatorUid = normalizeKey_(principal && principal.uid);
+  if (!operatorUid) {
+    throw new Error('操作アカウントを特定できませんでした。');
+  }
+  assertOperatorForEvent_(principal, eventId);
+  const token = getFirebaseAccessToken_();
+  const now = Date.now();
+  const session = fetchRtdb_('render/session', token);
+  if (!session || session.status !== 'active') {
+    throw new Error('ディスプレイのセッションが有効ではありません。');
+  }
+  if (Number(session.expiresAt || 0) <= now) {
+    throw new Error('ディスプレイのセッションが期限切れです。');
+  }
+  const sessionUid = normalizeKey_(session.uid);
+  if (!sessionUid) {
+    throw new Error('ディスプレイのセッション情報が不完全です。');
+  }
+  const normalizedScheduleId = normalizeScheduleId_(scheduleId);
+  const scheduleKey = buildScheduleKey_(eventId, normalizedScheduleId);
+  const existingAssignment = session.assignment && typeof session.assignment === 'object' ? session.assignment : null;
+  if (existingAssignment) {
+    const existingKey = buildScheduleKey_(existingAssignment.eventId, existingAssignment.scheduleId);
+    const lockedByUid = normalizeKey_(existingAssignment.lockedByUid);
+    if (existingKey === scheduleKey) {
+      return {
+        assignment: Object.assign({}, existingAssignment, { scheduleKey: existingKey })
+      };
+    }
+    if (lockedByUid && lockedByUid !== operatorUid) {
+      throw new Error('他のオペレーターがディスプレイを固定しています。');
+    }
+  }
+  const fallbackLabel = normalizedScheduleId === DEFAULT_SCHEDULE_KEY ? '未選択' : normalizedScheduleId || eventId;
+  const assignment = {
+    eventId,
+    scheduleId: normalizedScheduleId,
+    scheduleLabel: scheduleLabel || fallbackLabel,
+    scheduleKey,
+    lockedAt: now,
+    lockedByUid: operatorUid,
+    lockedByEmail: String(principal.email || '').trim(),
+    lockedByName: operatorName || String(principal.email || '').trim()
+  };
+  const nextSession = Object.assign({}, session, {
+    eventId,
+    scheduleId: normalizedScheduleId,
+    scheduleLabel: assignment.scheduleLabel,
+    assignment
+  });
+  const updates = {};
+  if (existingAssignment) {
+    const previousActivePath = getEventActiveSchedulePath_(existingAssignment.eventId);
+    const nextActivePath = getEventActiveSchedulePath_(eventId);
+    if (previousActivePath && previousActivePath !== nextActivePath) {
+      updates[previousActivePath] = null;
+    }
+  }
+  updates[`screens/approved/${sessionUid}`] = true;
+  updates[`screens/sessions/${sessionUid}`] = nextSession;
+  updates['render/session'] = nextSession;
+  const activeSchedulePath = getEventActiveSchedulePath_(eventId);
+  const activeRecord = buildActiveScheduleRecord_(assignment, nextSession, operatorUid);
+  if (activeSchedulePath && activeRecord) {
+    updates[activeSchedulePath] = activeRecord;
+  }
+  const rotationPath = getEventRotationPath_(eventId);
+  if (rotationPath) {
+    updates[rotationPath] = null;
+  }
+  patchRtdb_(updates, token);
+  return { assignment };
+}
+
+function normalizeRotationEntries_(eventId, rawEntries) {
+  const list = Array.isArray(rawEntries) ? rawEntries : [];
+  const seenKeys = new Set();
+  const normalized = [];
+  list.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const scheduleId = normalizeScheduleId_(entry.scheduleId);
+    const scheduleKey = buildScheduleKey_(eventId, scheduleId);
+    if (!scheduleKey) {
+      return;
+    }
+    if (seenKeys.has(scheduleKey)) {
+      return;
+    }
+    seenKeys.add(scheduleKey);
+    const label = String(entry.scheduleLabel || entry.label || '').trim();
+    const dwellMs = toPositiveInteger_(entry.dwellMs)
+      || toPositiveInteger_(entry.durationMs)
+      || (toPositiveInteger_(entry.dwellSeconds) ? toPositiveInteger_(entry.dwellSeconds) * 1000 : null)
+      || (toPositiveInteger_(entry.durationSeconds) ? toPositiveInteger_(entry.durationSeconds) * 1000 : null);
+    const record = {
+      eventId,
+      scheduleId,
+      scheduleKey,
+      scheduleLabel: label,
+      dwellMs: dwellMs || null,
+      order: normalized.length
+    };
+    if (record.dwellMs != null) {
+      record.dwellSeconds = Math.round(record.dwellMs / 100) / 10;
+    }
+    normalized.push(record);
+  });
+  return normalized;
+}
+
+function buildRotationActiveScheduleRecord_(eventId, rotationRecord, timestamp) {
+  const eventKey = normalizeEventId_(eventId);
+  if (!eventKey) {
+    return null;
+  }
+  const now = Number(timestamp || (rotationRecord && rotationRecord.updatedAt)) || Date.now();
+  const updatedByUid = normalizeKey_(rotationRecord && rotationRecord.updatedByUid);
+  const updatedByEmail = String(rotationRecord && rotationRecord.updatedByEmail || '').trim();
+  let updatedByName = String(rotationRecord && rotationRecord.updatedByName || '').trim();
+  if (!updatedByName) {
+    updatedByName = updatedByEmail || updatedByUid || '';
+  }
+  const dwellDefault = toPositiveInteger_(rotationRecord && rotationRecord.dwellMsDefault) || null;
+  const entries = Array.isArray(rotationRecord && rotationRecord.entries) ? rotationRecord.entries : [];
+  return {
+    eventId: eventKey,
+    mode: 'rotation',
+    type: 'rotation',
+    scheduleId: null,
+    scheduleKey: null,
+    scheduleLabel: 'rotation',
+    lockedAt: now,
+    lockedByUid: updatedByUid,
+    lockedByEmail: updatedByEmail,
+    lockedByName: updatedByName,
+    sessionUid: null,
+    sessionId: null,
+    expiresAt: null,
+    rotation: {
+      entries,
+      dwellMsDefault: dwellDefault
+    },
+    updatedAt: now
+  };
+}
+
+function saveScheduleRotation_(principal, rawEventId, rawRotationEntries, rawOptions) {
+  const eventId = normalizeEventId_(rawEventId);
+  if (!eventId) {
+    throw new Error('eventId is required.');
+  }
+  assertOperatorForEvent_(principal, eventId);
+
+  let entriesSource = rawRotationEntries;
+  if (entriesSource && typeof entriesSource === 'object' && !Array.isArray(entriesSource)) {
+    entriesSource = entriesSource.entries;
+  }
+  if (!Array.isArray(entriesSource) && rawOptions && Array.isArray(rawOptions.entries)) {
+    entriesSource = rawOptions.entries;
+  }
+
+  const entries = normalizeRotationEntries_(eventId, entriesSource);
+  if (!entries.length) {
+    throw new Error('ローテーションに設定する日程を1件以上指定してください。');
+  }
+
+  const operatorUid = normalizeKey_(principal && principal.uid);
+  const operatorEmail = String(principal && principal.email || '').trim();
+  const operatorName = String(rawOptions && rawOptions.operatorName || '').trim();
+  const defaultDwell = toPositiveInteger_(rawOptions && (rawOptions.defaultDwellMs || rawOptions.defaultDurationMs)) || null;
+  const now = Date.now();
+  const rotationRecord = {
+    eventId,
+    entries,
+    dwellMsDefault: defaultDwell,
+    updatedAt: now,
+    updatedByUid: operatorUid,
+    updatedByEmail: operatorEmail,
+    updatedByName: operatorName || operatorEmail || operatorUid || ''
+  };
+
+  const token = getFirebaseAccessToken_();
+  const updates = {};
+  const rotationPath = getEventRotationPath_(eventId);
+  if (rotationPath) {
+    updates[rotationPath] = rotationRecord;
+  }
+  const activePath = getEventActiveSchedulePath_(eventId);
+  const activeRecord = buildRotationActiveScheduleRecord_(eventId, rotationRecord, now);
+  if (activePath && activeRecord) {
+    updates[activePath] = activeRecord;
+  }
+  patchRtdb_(updates, token);
+  return { rotation: rotationRecord, active: activeRecord };
+}
+
+function clearScheduleRotation_(principal, rawEventId) {
+  const eventId = normalizeEventId_(rawEventId);
+  if (!eventId) {
+    throw new Error('eventId is required.');
+  }
+  assertOperatorForEvent_(principal, eventId);
+  const token = getFirebaseAccessToken_();
+  const updates = {};
+  const rotationPath = getEventRotationPath_(eventId);
+  if (rotationPath) {
+    updates[rotationPath] = null;
+  }
+  const activePath = getEventActiveSchedulePath_(eventId);
+  if (activePath) {
+    let currentActive = null;
+    try {
+      currentActive = fetchRtdb_(activePath, token);
+    } catch (error) {
+      currentActive = null;
+    }
+    const mode = String(currentActive && (currentActive.mode || currentActive.type) || '').toLowerCase();
+    if (!currentActive || mode === 'rotation') {
+      updates[activePath] = null;
+    }
+  }
+  if (!Object.keys(updates).length) {
+    return { cleared: false };
+  }
+  patchRtdb_(updates, token);
+  return { cleared: true };
+}
+
+let eventOperatorAclCache_ = null;
+
+function parseEventOperatorAclRaw_(raw) {
+  if (!raw) {
+    return {};
+  }
+  if (typeof raw !== 'string') {
+    return {};
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return {};
+  }
+  if (trimmed[0] === '{') {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (error) {
+      // fall through to line parsing
+    }
+  }
+  const map = {};
+  const segments = trimmed.split(/[\n;]+/);
+  segments.forEach(segment => {
+    const value = String(segment || '').trim();
+    if (!value) {
+      return;
+    }
+    let separatorIndex = value.indexOf(':');
+    const equalsIndex = value.indexOf('=');
+    if (separatorIndex === -1 || (equalsIndex !== -1 && equalsIndex < separatorIndex)) {
+      separatorIndex = equalsIndex;
+    }
+    if (separatorIndex === -1) {
+      return;
+    }
+    const key = value.slice(0, separatorIndex).trim();
+    const rest = value.slice(separatorIndex + 1).trim();
+    if (!key || !rest) {
+      return;
+    }
+    map[key] = rest.split(',').map(item => String(item || '').trim()).filter(Boolean);
+  });
+  return map;
+}
+
+function getEventOperatorAcl_() {
+  if (eventOperatorAclCache_) {
+    return eventOperatorAclCache_;
+  }
+  const properties = PropertiesService.getScriptProperties();
+  const raw = properties.getProperty('EVENT_OPERATOR_ACL') || '';
+  const parsed = parseEventOperatorAclRaw_(raw);
+  const normalized = {};
+  Object.keys(parsed || {}).forEach(key => {
+    const trimmedKey = String(key || '').trim();
+    if (!trimmedKey) {
+      return;
+    }
+    const entries = Array.isArray(parsed[key]) ? parsed[key] : [];
+    const normalizedEntries = entries
+      .map(value => String(value || '').trim())
+      .filter(Boolean);
+    if (!normalizedEntries.length) {
+      normalized[trimmedKey === '*' ? '_default' : normalizeEventId_(trimmedKey) || trimmedKey] = [];
+      return;
+    }
+    if (trimmedKey === '*' || trimmedKey === '_default') {
+      normalized['_default'] = normalizedEntries;
+    } else {
+      const eventKey = normalizeEventId_(trimmedKey);
+      if (eventKey) {
+        normalized[eventKey] = normalizedEntries;
+      }
+    }
+  });
+  eventOperatorAclCache_ = normalized;
+  return normalized;
+}
+
+function isOperatorAllowedForEvent_(principal, eventId) {
+  const acl = getEventOperatorAcl_();
+  const eventKey = normalizeEventId_(eventId);
+  if (!eventKey) {
+    return false;
+  }
+  const email = normalizeEmail_(principal && principal.email);
+  if (!email) {
+    return false;
+  }
+  let list = [];
+  let explicit = false;
+  if (acl && Object.prototype.hasOwnProperty.call(acl, eventKey)) {
+    list = acl[eventKey];
+    explicit = true;
+  } else if (acl && Object.prototype.hasOwnProperty.call(acl, '_default')) {
+    list = acl['_default'];
+  }
+  if (!Array.isArray(list) || !list.length) {
+    return !explicit;
+  }
+  return list.some(entry => {
+    const raw = String(entry || '').trim();
+    if (!raw) {
+      return false;
+    }
+    if (raw === '*' || raw.toLowerCase() === 'all') {
+      return true;
+    }
+    if (raw[0] === '@') {
+      return email.endsWith(raw.toLowerCase());
+    }
+    return normalizeEmail_(raw) === email;
+  });
+}
+
+function assertOperatorForEvent_(principal, eventId) {
+  assertOperator_(principal);
+  const eventKey = normalizeEventId_(eventId);
+  if (!eventKey) {
+    throw new Error('eventId is required.');
+  }
+  if (!isOperatorAllowedForEvent_(principal, eventKey)) {
+    throw new Error('このイベントに対する操作権限がありません。');
+  }
 }
 
 function updateSelectingStatus(uid) {

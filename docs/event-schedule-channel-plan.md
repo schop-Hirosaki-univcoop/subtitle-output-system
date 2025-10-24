@@ -23,7 +23,12 @@ The goal is to isolate display/operation channels per event (and per schedule wh
 - [x] Updated operator client Firebase bindings to resolve render/nowShowing references per active `{eventId, scheduleId}` and block send/clear when assignment is missing.
 - [x] Persist operator schedule selections to presence nodes (UI modal still pending). Presence writes now land under `operatorPresence/{eventId}/{uid}` with heartbeat refreshes; modal/locking UX remains outstanding.
 - [x] Synced operator presence subscriptions with schedule context changes and ensured heartbeat/disconnect cleanup on sign-out.
-- [ ] Enforce schedule locks and rotation/ACL behaviours at the Apps Script layer.
+- [x] Enforce schedule locks at the Apps Script layer with `lockDisplaySchedule_` and assignment preservation.
+- [x] Connected the schedule conflict modal and presence roster to the locking workflow so operators can coordinate and resolve mismatches in real time.
+- [x] Synced operator presence writes with context updates and drafted Firebase rule coverage for `render/events/*` and `operatorPresence` collections.
+- [x] Mirror display schedule locks into `render/events/{eventId}/activeSchedule` so Apps Script sessions expose the active channel state alongside legacy paths.
+- [x] Define rotation handling and ACL follow-ups at the Apps Script layer (Apps Script rotation APIs + event-scoped ACL enforcement).
+- [x] Documented the operator presence data contract and embed responsibilities for embed integrations.
 
 ## Scope Overview
 - Rework Firebase schema for telop state and sessions.
@@ -91,9 +96,35 @@ To show the conflict modal we will persist each operator's selected schedule in 
 
 These restrictions clarify the original question's intent—ensuring that exposing presence data for coordination does not broaden data visibility beyond the current event team.
 
+## Operator presence data contract
+
+To align the embed responsibilities with the Firebase presence data that powers the
+schedule-conflict workflow, we defined the following contract:
+
+- Each operator session writes to `operatorPresence/{eventId}/{uid}` with:
+  - `displayName`: human-readable operator label for roster UI.
+  - `scheduleId`: the currently selected schedule key.
+  - `scheduleLabel`: schedule title shown in the modal.
+  - `heartbeatAt`: updated every 15 seconds so the roster can prune stale entries.
+- Presence writes are initiated whenever the embed context changes (event switch,
+  schedule confirmation, or operator sign-in) and cleared on disconnect via
+  `onDisconnect().remove()` hooks.
+- Embeds must ensure the operator only writes for the event they are currently
+  operating; switching events tears down the previous listener and removes the
+  prior presence entry.
+- Reads are limited by Firebase rules so operators only see their current event and
+  can update their own presence node.
+
+This shared contract keeps the operator modal, Apps Script checks, and Firebase
+rules aligned while preventing cross-event data leakage.
+
 ## Current Focus
 
-- Finish wiring the conflict modal so that the first operator confirmation locks the schedule and updates the display assignment.
-- Feed the presence map into the modal/toolbar UI so operators can see who is attached to which schedule in real time.
-- Draft Firebase rule updates for `operatorPresence` and the new `render/events/*` structure before Apps Script changes ship, keeping the rollout path clear.
+- None – event/schedule isolation milestones are complete pending rollout.
+
+## Rotation assignment APIs & ACL hardening progress
+
+- Added Apps Script endpoints `saveScheduleRotation` / `clearScheduleRotation` to persist `render/events/{eventId}/rotationAssignments` lists and publish a rotation-mode `activeSchedule` record. Rotation entries capture schedule IDs, resolved keys, and optional dwell durations for future display polling logic.
+- Enforced event-scoped ACL lookups (`EVENT_OPERATOR_ACL` script property) before allowing schedule locks or rotation mutations, ensuring only authorised operators can alter a display channel for the associated event.
+- Clearing or overriding a rotation now removes stale `rotationAssignments` metadata and replaces it with the operator-driven lock state, keeping legacy `render/session` mirrors consistent.
 
