@@ -416,8 +416,12 @@
         const auth = getAuth(app);
 
         const initialChannel = parseChannelParams(new URLSearchParams(location.search || ""));
-        let channelEventId = initialChannel.eventId || "";
-        let channelScheduleId = initialChannel.scheduleId || "";
+        const initialEventId = typeof initialChannel.eventId === 'string' ? initialChannel.eventId.trim() : '';
+        const initialScheduleId = typeof initialChannel.scheduleId === 'string' ? initialChannel.scheduleId.trim() : '';
+        const queryEventPinned = initialEventId.length > 0;
+        const querySchedulePinned = queryEventPinned && initialScheduleId.length > 0;
+        let channelEventId = queryEventPinned ? initialEventId : '';
+        let channelScheduleId = querySchedulePinned ? initialScheduleId : '';
         let renderRef = ref(database, getRenderStatePath(channelEventId, channelScheduleId));
         let nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
         let nowShowingUnsubscribe = null;
@@ -441,8 +445,21 @@
           }
           const assignedEvent = typeof session.eventId === 'string' ? session.eventId.trim() : '';
           const assignedSchedule = typeof session.scheduleId === 'string' ? session.scheduleId.trim() : '';
-          if (assignedEvent) {
-            setChannel(assignedEvent, assignedSchedule);
+
+          if (!queryEventPinned) {
+            if (assignedEvent) {
+              const nextSchedule = querySchedulePinned ? channelScheduleId : assignedSchedule;
+              setChannel(assignedEvent, nextSchedule);
+            }
+            return;
+          }
+
+          if (!assignedEvent || assignedEvent !== channelEventId) {
+            return;
+          }
+
+          if (!querySchedulePinned) {
+            setChannel(channelEventId, assignedSchedule);
           }
         }
 
