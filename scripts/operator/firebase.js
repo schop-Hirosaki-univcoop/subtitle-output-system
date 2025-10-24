@@ -80,6 +80,16 @@ export function getOperatorPresenceEntryRef(eventId = "", operatorId = "") {
   return ref(database, `operatorPresence/${eventKey}/${userKey}`);
 }
 
+export function getRenderRef(eventId = "", scheduleId = "") {
+  const path = getRenderStatePath(eventId, scheduleId);
+  return path === "render/state" ? LEGACY_RENDER_REF : ref(database, path);
+}
+
+export function getNowShowingRef(eventId = "", scheduleId = "") {
+  const path = getNowShowingPath(eventId, scheduleId);
+  return path === "render/state/nowShowing" ? LEGACY_NOW_SHOWING_REF : ref(database, path);
+}
+
 export {
   ref,
   update,
