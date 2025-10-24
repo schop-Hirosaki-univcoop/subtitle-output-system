@@ -25,6 +25,10 @@ export function createInitialState(autoScroll = true) {
     displaySessionLastActive: null,
     operatorPresenceEventId: "",
     operatorPresenceByUser: new Map(),
-    operatorPresenceSelf: null
+    operatorPresenceSelf: null,
+    channelAssignment: null,
+    channelLocking: false,
+    scheduleConflict: null,
+    conflictSelection: ""
   };
 }

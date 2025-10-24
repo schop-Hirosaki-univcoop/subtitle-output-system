@@ -23,7 +23,8 @@ The goal is to isolate display/operation channels per event (and per schedule wh
 - [x] Updated operator client Firebase bindings to resolve render/nowShowing references per active `{eventId, scheduleId}` and block send/clear when assignment is missing.
 - [x] Persist operator schedule selections to presence nodes (UI modal still pending). Presence writes now land under `operatorPresence/{eventId}/{uid}` with heartbeat refreshes; modal/locking UX remains outstanding.
 - [x] Synced operator presence subscriptions with schedule context changes and ensured heartbeat/disconnect cleanup on sign-out.
-- [ ] Enforce schedule locks and rotation/ACL behaviours at the Apps Script layer.
+- [x] Enforce schedule locks at the Apps Script layer with `lockDisplaySchedule_` and assignment preservation.
+- [ ] Define rotation handling and ACL follow-ups at the Apps Script layer.
 
 ## Scope Overview
 - Rework Firebase schema for telop state and sessions.

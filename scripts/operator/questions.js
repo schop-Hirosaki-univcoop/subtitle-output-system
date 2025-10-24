@@ -18,6 +18,18 @@ function resolveTelopRef(app) {
   return { ref: refInstance, eventId: eventId || "", scheduleId: normalizedSchedule };
 }
 
+function ensureChannelAligned(app) {
+  if (typeof app.hasChannelMismatch === "function" && app.hasChannelMismatch()) {
+    const summary = typeof app.describeChannelAssignment === "function" ? app.describeChannelAssignment() : "";
+    const message = summary
+      ? `ディスプレイは${summary}に固定されています。日程を合わせてから操作してください。`
+      : "ディスプレイのチャンネルが未設定です。先に日程を固定してください。";
+    app.toast(message, "error");
+    return false;
+  }
+  return true;
+}
+
 export function loadPreferredSubTab() {
   let stored = "";
   try {
@@ -339,6 +351,9 @@ export async function handleDisplay(app) {
     app.toast("送出端末が接続されていません。", "error");
     return;
   }
+  if (!ensureChannelAligned(app)) {
+    return;
+  }
   if (!app.state.selectedRowData || app.state.selectedRowData.isAnswered) return;
   const { ref: telopRef, eventId, scheduleId } = resolveTelopRef(app);
   if (!eventId || !scheduleId) {
@@ -402,6 +417,9 @@ export async function handleUnanswer(app) {
     app.toast("送出端末が接続されていません。", "error");
     return;
   }
+  if (!ensureChannelAligned(app)) {
+    return;
+  }
   if (!app.state.selectedRowData || !app.state.selectedRowData.isAnswered) return;
   const displayLabel = formatOperatorName(app.state.selectedRowData.name) || app.state.selectedRowData.name;
   const confirmed = await app.confirmAction({
@@ -432,6 +450,9 @@ export function handleSelectAll(app, event) {
 export async function handleBatchUnanswer(app) {
   if (!app.state.displaySessionActive) {
     app.toast("送出端末が接続されていません。", "error");
+    return;
+  }
+  if (!ensureChannelAligned(app)) {
     return;
   }
   const checkedBoxes = Array.from(app.dom.cardsContainer?.querySelectorAll(".row-checkbox:checked") || []);
@@ -471,6 +492,9 @@ export async function handleBatchUnanswer(app) {
 export async function clearTelop(app) {
   if (!app.state.displaySessionActive) {
     app.toast("送出端末が接続されていません。", "error");
+    return;
+  }
+  if (!ensureChannelAligned(app)) {
     return;
   }
   const { ref: telopRef, eventId, scheduleId } = resolveTelopRef(app);
@@ -528,6 +552,7 @@ export function updateActionAvailability(app) {
   const selection = app.state.selectedRowData;
   const checkedCount = getBatchSelectionCount(app);
   const hasBatchSelection = active && checkedCount > 0;
+  const channelAligned = typeof app.hasChannelMismatch === "function" ? !app.hasChannelMismatch() : true;
   const mode = !active ? "inactive" : hasBatchSelection ? "multi" : selection ? "single" : "idle";
 
   setActionPanelMode(app, mode);
@@ -543,6 +568,14 @@ export function updateActionAvailability(app) {
   if (!active) {
     app.dom.selectedInfo.textContent = "送出端末が接続されていません";
     updateBatchButtonVisibility(app, checkedCount);
+    return;
+  }
+  if (!channelAligned) {
+    const summary = typeof app.describeChannelAssignment === "function" ? app.describeChannelAssignment() : "";
+    app.dom.selectedInfo.textContent = summary
+      ? `ディスプレイは${summary}に固定されています。`
+      : "ディスプレイの日程が未確定です";
+    updateBatchButtonVisibility(app, 0);
     return;
   }
   if (hasBatchSelection) {
