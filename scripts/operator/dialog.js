@@ -14,11 +14,11 @@ export function openDialog(app, element, focusTarget) {
   }
 }
 
-export function closeEditDialog(app) {
-  const dialog = app.dom.editDialog;
-  const wasActive = app.activeDialog === dialog;
-  if (dialog && !dialog.hasAttribute("hidden")) {
-    dialog.setAttribute("hidden", "");
+export function closeDialog(app, element) {
+  if (!element) return;
+  const wasActive = app.activeDialog === element;
+  if (!element.hasAttribute("hidden")) {
+    element.setAttribute("hidden", "");
   }
   if (wasActive) {
     document.body.classList.remove("modal-open");
@@ -30,6 +30,11 @@ export function closeEditDialog(app) {
       toFocus.focus();
     }
   }
+}
+
+export function closeEditDialog(app) {
+  const dialog = app.dom.editDialog;
+  closeDialog(app, dialog);
   app.editSubmitting = false;
   app.pendingEditUid = null;
   app.pendingEditType = null;
@@ -42,7 +47,13 @@ export function closeEditDialog(app) {
 export function handleDialogKeydown(app, event) {
   if (event.key === "Escape" && app.activeDialog) {
     event.preventDefault();
-    closeEditDialog(app);
+    if (app.activeDialog === app.dom.editDialog) {
+      closeEditDialog(app);
+    } else if (typeof app.closeActiveDialog === "function") {
+      app.closeActiveDialog();
+    } else {
+      closeDialog(app, app.activeDialog);
+    }
   }
 }
 

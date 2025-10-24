@@ -20,7 +20,7 @@ import {
   serverTimestamp,
   onDisconnect
 } from "./firebase.js";
-import { getRenderStatePath, parseChannelParams } from "../shared/channel-paths.js";
+import { getRenderStatePath, parseChannelParams, normalizeScheduleId } from "../shared/channel-paths.js";
 import { queryDom } from "./dom.js";
 import { createInitialState } from "./state.js";
 import { createApiClient } from "./api-client.js";
@@ -302,6 +302,7 @@ export class OperatorApp {
     this.operatorPresenceSubscribedEventId = "";
     this.operatorPresenceUnsubscribe = null;
     this.operatorPresenceLastSignature = "";
+    this.conflictDialogOpen = false;
 
     this.toast = showToast;
     bindModuleMethods(this);
@@ -376,6 +377,106 @@ export class OperatorApp {
     return { eventId, scheduleId };
   }
 
+  getCurrentScheduleKey() {
+    const { eventId, scheduleId } = this.getActiveChannel();
+    const normalizedEvent = String(eventId || "").trim();
+    if (!normalizedEvent) {
+      return "";
+    }
+    return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
+  }
+
+  getDisplayAssignment() {
+    const session = this.state?.displaySession || null;
+    const rawAssignment = session && typeof session === "object" ? session.assignment || null : null;
+    const candidate = rawAssignment && typeof rawAssignment === "object" ? rawAssignment : null;
+    const eventId = String((candidate && candidate.eventId) || (session && session.eventId) || "").trim();
+    if (!eventId) {
+      return null;
+    }
+    const scheduleId = String((candidate && candidate.scheduleId) || (session && session.scheduleId) || "").trim();
+    const scheduleLabel = String((candidate && candidate.scheduleLabel) || (session && session.scheduleLabel) || "").trim();
+    const lockedByUid = String((candidate && candidate.lockedByUid) || (session && session.lockedByUid) || "").trim();
+    const lockedByName = String((candidate && candidate.lockedByName) || (session && session.lockedByName) || "").trim();
+    const lockedAt = Number((candidate && candidate.lockedAt) || (session && session.lockedAt) || 0);
+    const scheduleKey = `${eventId}::${normalizeScheduleId(scheduleId)}`;
+    return {
+      eventId,
+      scheduleId,
+      scheduleLabel,
+      scheduleKey,
+      lockedByUid,
+      lockedByName,
+      lockedAt
+    };
+  }
+
+  resolveScheduleLabel(scheduleKey, fallbackLabel = "", fallbackScheduleId = "") {
+    const metadataMap = this.state?.scheduleMetadata instanceof Map ? this.state.scheduleMetadata : null;
+    if (metadataMap && scheduleKey && metadataMap.has(scheduleKey)) {
+      const meta = metadataMap.get(scheduleKey);
+      const label = String(meta?.label || "").trim();
+      if (label) {
+        return label;
+      }
+    }
+    const directLabel = String(fallbackLabel || "").trim();
+    if (directLabel) {
+      return directLabel;
+    }
+    const scheduleId = String(fallbackScheduleId || "").trim();
+    if (scheduleId && scheduleId !== "__default_schedule__") {
+      return scheduleId;
+    }
+    return "未選択";
+  }
+
+  describeChannelAssignment() {
+    const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
+    if (!assignment || !assignment.eventId) {
+      return "";
+    }
+    const eventId = String(assignment.eventId || "").trim();
+    const scheduleId = String(assignment.scheduleId || "").trim();
+    const scheduleKey = `${eventId}::${normalizeScheduleId(scheduleId)}`;
+    const metadataMap = this.state?.scheduleMetadata instanceof Map ? this.state.scheduleMetadata : null;
+    const eventsMap = this.state?.eventsById instanceof Map ? this.state.eventsById : null;
+    let eventName = "";
+    if (metadataMap && metadataMap.has(scheduleKey)) {
+      eventName = String(metadataMap.get(scheduleKey)?.eventName || "").trim();
+    }
+    if (!eventName && eventsMap && eventsMap.has(eventId)) {
+      eventName = String(eventsMap.get(eventId)?.name || "").trim();
+    }
+    const label = this.resolveScheduleLabel(scheduleKey, assignment.scheduleLabel, scheduleId);
+    if (eventName && label) {
+      return `「${eventName} / ${label}」`;
+    }
+    if (label) {
+      return `「${label}」`;
+    }
+    if (eventName) {
+      return `「${eventName}」`;
+    }
+    return "「指定された日程」";
+  }
+
+  hasChannelMismatch() {
+    const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
+    const { eventId, scheduleId } = this.getActiveChannel();
+    const normalizedEvent = String(eventId || "").trim();
+    if (!assignment || !assignment.eventId) {
+      return true;
+    }
+    if (!normalizedEvent) {
+      return true;
+    }
+    const assignedEvent = String(assignment.eventId || "").trim();
+    const assignedSchedule = normalizeScheduleId(assignment.scheduleId || "");
+    const currentSchedule = normalizeScheduleId(scheduleId);
+    return assignedEvent !== normalizedEvent || assignedSchedule !== currentSchedule;
+  }
+
   refreshChannelSubscriptions() {
     const { eventId, scheduleId } = this.getActiveChannel();
     const path = getRenderStatePath(eventId, scheduleId);
@@ -396,6 +497,8 @@ export class OperatorApp {
       }
     );
     this.refreshOperatorPresenceSubscription();
+    this.renderChannelBanner();
+    this.evaluateScheduleConflict();
   }
 
   refreshOperatorPresenceSubscription() {
@@ -413,6 +516,8 @@ export class OperatorApp {
     this.state.operatorPresenceByUser = new Map();
     if (!nextEventId) {
       this.state.operatorPresenceSelf = null;
+      this.renderChannelBanner();
+      this.evaluateScheduleConflict();
       return;
     }
 
@@ -429,6 +534,8 @@ export class OperatorApp {
         this.state.operatorPresenceByUser = presenceMap;
         const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
         this.state.operatorPresenceSelf = selfUid ? presenceMap.get(selfUid) || null : null;
+        this.renderChannelBanner();
+        this.evaluateScheduleConflict();
       },
       (error) => {
         console.error("Failed to monitor operator presence:", error);
@@ -506,6 +613,8 @@ export class OperatorApp {
     };
 
     this.scheduleOperatorPresenceHeartbeat();
+    this.renderChannelBanner();
+    this.evaluateScheduleConflict();
   }
 
   scheduleOperatorPresenceHeartbeat() {
@@ -563,6 +672,452 @@ export class OperatorApp {
     this.state.operatorPresenceSelf = null;
   }
 
+  renderChannelBanner() {
+    const banner = this.dom.channelBanner;
+    if (!banner) {
+      return;
+    }
+    const eventId = String(this.state?.activeEventId || "").trim();
+    if (!eventId || !this.isAuthorized) {
+      banner.hidden = true;
+      return;
+    }
+    banner.hidden = false;
+    const statusEl = this.dom.channelStatus;
+    const assignmentEl = this.dom.channelAssignment;
+    const lockButton = this.dom.channelLockButton;
+    const displayActive = !!this.state.displaySessionActive;
+    const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
+    const channelAligned = !this.hasChannelMismatch();
+    let statusText = "";
+    let statusClass = "channel-banner__status";
+    if (!displayActive) {
+      statusText = "送出端末が接続されていません。";
+      statusClass += " is-alert";
+    } else if (!assignment || !assignment.eventId) {
+      statusText = "ディスプレイの日程が未確定です。";
+      statusClass += " is-alert";
+    } else if (!channelAligned) {
+      const summary = this.describeChannelAssignment();
+      statusText = summary ? `ディスプレイは${summary}に固定されています。` : "ディスプレイは別の日程に固定されています。";
+      statusClass += " is-alert";
+    } else {
+      statusText = "ディスプレイと日程が同期しています。";
+    }
+    if (statusEl) {
+      statusEl.className = statusClass;
+      statusEl.textContent = statusText;
+    }
+    if (assignmentEl) {
+      const summary = this.describeChannelAssignment();
+      assignmentEl.textContent = summary || "—";
+    }
+    if (lockButton) {
+      const { eventId: activeEventId, scheduleId } = this.getActiveChannel();
+      const canLock =
+        displayActive &&
+        !!String(activeEventId || "").trim() &&
+        !!String(scheduleId || "").trim() &&
+        !this.state.channelLocking;
+      if (displayActive && assignment && assignment.eventId && channelAligned) {
+        lockButton.textContent = "固定済み";
+        lockButton.disabled = true;
+      } else {
+        lockButton.textContent = assignment && assignment.eventId ? "この日程に切り替え" : "この日程に固定";
+        lockButton.disabled = !canLock;
+      }
+      if (!displayActive) {
+        lockButton.textContent = "この日程に固定";
+      }
+    }
+    this.renderChannelPresenceList();
+  }
+
+  renderChannelPresenceList() {
+    const list = this.dom.channelPresenceList;
+    const placeholder = this.dom.channelPresenceEmpty;
+    if (!list) {
+      return;
+    }
+    list.innerHTML = "";
+    const eventId = String(this.state?.activeEventId || "").trim();
+    if (!eventId) {
+      if (placeholder) {
+        placeholder.hidden = false;
+      }
+      return;
+    }
+    const presenceMap = this.state?.operatorPresenceByUser instanceof Map ? this.state.operatorPresenceByUser : new Map();
+    const groups = new Map();
+    const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
+    presenceMap.forEach((value, uid) => {
+      if (!value) return;
+      if (String(value.eventId || "").trim() !== eventId) return;
+      const rawKey = String(value.scheduleKey || "");
+      const scheduleKey = rawKey || `${eventId}::${normalizeScheduleId(value.scheduleId || "")}`;
+      const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
+      const entry = groups.get(scheduleKey) || {
+        key: scheduleKey,
+        scheduleId: String(value.scheduleId || ""),
+        label,
+        members: []
+      };
+      if (!groups.has(scheduleKey)) {
+        groups.set(scheduleKey, entry);
+      }
+      entry.label = entry.label || label;
+      entry.members.push({
+        uid: String(uid),
+        name: String(value.displayName || value.email || uid || "").trim() || String(uid),
+        isSelf: String(uid) === selfUid
+      });
+    });
+    const items = Array.from(groups.values());
+    if (!items.length) {
+      if (placeholder) {
+        placeholder.hidden = false;
+      }
+      return;
+    }
+    if (placeholder) {
+      placeholder.hidden = true;
+    }
+    items.sort((a, b) => (a.label || "").localeCompare(b.label || "", "ja"));
+    const currentKey = this.getCurrentScheduleKey();
+    items.forEach((group) => {
+      const item = document.createElement("li");
+      item.className = "channel-presence-group";
+      if (group.key && group.key === currentKey) {
+        item.classList.add("is-active");
+      }
+      const title = document.createElement("div");
+      title.className = "channel-presence-group__label";
+      title.textContent = group.label || "未選択";
+      item.appendChild(title);
+      const members = document.createElement("div");
+      members.className = "channel-presence-group__names";
+      if (group.members && group.members.length) {
+        group.members.forEach((member) => {
+          const entry = document.createElement("span");
+          entry.className = "channel-presence-group__name";
+          entry.textContent = member.name || member.uid || "—";
+          if (member.isSelf) {
+            const badge = document.createElement("span");
+            badge.className = "channel-presence-self";
+            badge.textContent = "自分";
+            entry.appendChild(badge);
+          }
+          members.appendChild(entry);
+        });
+      } else {
+        const empty = document.createElement("span");
+        empty.className = "channel-presence-group__name";
+        empty.textContent = "オペレーターなし";
+        members.appendChild(empty);
+      }
+      item.appendChild(members);
+      list.appendChild(item);
+    });
+  }
+
+  renderConflictDialog() {
+    const conflict = this.state?.scheduleConflict;
+    const optionsContainer = this.dom.conflictOptions;
+    if (!optionsContainer) {
+      return;
+    }
+    optionsContainer.innerHTML = "";
+    if (this.dom.conflictError) {
+      this.dom.conflictError.hidden = true;
+      this.dom.conflictError.textContent = "";
+    }
+    if (!conflict || !Array.isArray(conflict.options) || conflict.options.length === 0) {
+      return;
+    }
+    const radioName = "op-conflict-schedule";
+    conflict.options.forEach((option, index) => {
+      const optionKey = option.key || `${conflict.eventId}::${normalizeScheduleId(option.scheduleId || "")}`;
+      const optionId = `op-conflict-option-${index}`;
+      const labelEl = document.createElement("label");
+      labelEl.className = "conflict-option";
+      labelEl.setAttribute("for", optionId);
+
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = optionId;
+      radio.name = radioName;
+      radio.value = optionKey;
+      radio.checked = optionKey === this.state.conflictSelection;
+      radio.className = "visually-hidden";
+      labelEl.appendChild(radio);
+
+      const header = document.createElement("div");
+      header.className = "conflict-option__header";
+      const title = document.createElement("span");
+      title.className = "conflict-option__title";
+      title.textContent = this.resolveScheduleLabel(optionKey, option.label, option.scheduleId);
+      header.appendChild(title);
+      if (conflict.assignmentKey && conflict.assignmentKey === optionKey) {
+        const badge = document.createElement("span");
+        badge.className = "conflict-option__badge";
+        badge.textContent = "ディスプレイ";
+        header.appendChild(badge);
+      }
+      labelEl.appendChild(header);
+
+      const members = document.createElement("div");
+      members.className = "conflict-option__members";
+      if (option.members && option.members.length) {
+        members.textContent = option.members
+          .map((member) => {
+            const base = String(member.name || member.uid || "").trim() || member.uid;
+            return member.isSelf ? `${base}（自分）` : base;
+          })
+          .join("、");
+      } else {
+        members.textContent = "参加オペレーターなし";
+      }
+      labelEl.appendChild(members);
+
+      optionsContainer.appendChild(labelEl);
+    });
+  }
+
+  openConflictDialog() {
+    if (!this.dom.conflictDialog) {
+      return;
+    }
+    Dialog.openDialog(this, this.dom.conflictDialog, this.dom.conflictConfirmButton);
+    this.conflictDialogOpen = true;
+  }
+
+  closeConflictDialog() {
+    if (!this.dom.conflictDialog) {
+      return;
+    }
+    if (this.dom.conflictError) {
+      this.dom.conflictError.hidden = true;
+      this.dom.conflictError.textContent = "";
+    }
+    Dialog.closeDialog(this, this.dom.conflictDialog);
+    this.conflictDialogOpen = false;
+  }
+
+  submitConflictSelection() {
+    const conflict = this.state?.scheduleConflict;
+    if (!conflict || !Array.isArray(conflict.options) || conflict.options.length === 0) {
+      this.closeConflictDialog();
+      return;
+    }
+    const selectedKey = String(this.state.conflictSelection || "").trim();
+    const option = conflict.options.find((item) => item.key === selectedKey);
+    if (!option) {
+      if (this.dom.conflictError) {
+        this.dom.conflictError.textContent = "日程を選択してください。";
+        this.dom.conflictError.hidden = false;
+      }
+      return;
+    }
+    this.lockDisplayToSchedule(option.eventId || conflict.eventId, option.scheduleId, option.label, { fromModal: true });
+  }
+
+  lockDisplayToCurrentSchedule() {
+    const { eventId, scheduleId } = this.getActiveChannel();
+    const normalizedEvent = String(eventId || "").trim();
+    if (!normalizedEvent) {
+      this.toast("イベントが選択されていません。", "error");
+      return;
+    }
+    const scheduleKey = this.getCurrentScheduleKey();
+    const label = this.resolveScheduleLabel(scheduleKey, this.state?.activeScheduleLabel, scheduleId);
+    this.lockDisplayToSchedule(eventId, scheduleId, label);
+  }
+
+  async lockDisplayToSchedule(eventId, scheduleId, scheduleLabel, options = {}) {
+    const normalizedEvent = String(eventId || "").trim();
+    const normalizedSchedule = String(scheduleId || "").trim();
+    const label = String(scheduleLabel || "").trim();
+    const fromModal = options?.fromModal === true;
+    if (!normalizedEvent) {
+      const message = "イベントが選択されていないため固定できません。";
+      if (fromModal && this.dom.conflictError) {
+        this.dom.conflictError.textContent = message;
+        this.dom.conflictError.hidden = false;
+      } else {
+        this.toast(message, "error");
+      }
+      return;
+    }
+    if (this.state.channelLocking) {
+      return;
+    }
+    this.state.channelLocking = true;
+    this.renderChannelBanner();
+    if (fromModal && this.dom.conflictConfirmButton) {
+      this.dom.conflictConfirmButton.disabled = true;
+    }
+    if (fromModal && this.dom.conflictError) {
+      this.dom.conflictError.hidden = true;
+      this.dom.conflictError.textContent = "";
+    }
+    try {
+      const response = await this.api.apiPost({
+        action: "lockDisplaySchedule",
+        eventId: normalizedEvent,
+        scheduleId: normalizedSchedule,
+        scheduleLabel: label,
+        operatorName: String(this.operatorIdentity?.displayName || "").trim()
+      });
+      if (response && response.assignment) {
+        this.applyAssignmentLocally(response.assignment);
+      }
+      const summary = this.describeChannelAssignment();
+      this.toast(summary ? `${summary}に固定しました。` : "ディスプレイのチャンネルを固定しました。", "success");
+      if (fromModal) {
+        this.closeConflictDialog();
+      }
+    } catch (error) {
+      const message = error?.message || "日程の固定に失敗しました。";
+      if (fromModal && this.dom.conflictError) {
+        this.dom.conflictError.textContent = message;
+        this.dom.conflictError.hidden = false;
+      } else {
+        this.toast(message, "error");
+      }
+    } finally {
+      this.state.channelLocking = false;
+      if (fromModal && this.dom.conflictConfirmButton) {
+        this.dom.conflictConfirmButton.disabled = false;
+      }
+      this.renderChannelBanner();
+      this.evaluateScheduleConflict();
+    }
+  }
+
+  applyAssignmentLocally(assignment) {
+    if (!assignment || typeof assignment !== "object") {
+      return;
+    }
+    const eventId = String(assignment.eventId || "").trim();
+    const scheduleId = String(assignment.scheduleId || "").trim();
+    const scheduleLabel = String(assignment.scheduleLabel || "").trim();
+    const scheduleKey = eventId ? `${eventId}::${normalizeScheduleId(scheduleId)}` : "";
+    const enriched = {
+      ...assignment,
+      eventId,
+      scheduleId,
+      scheduleLabel,
+      scheduleKey
+    };
+    const nextSession = {
+      ...(this.state.displaySession || {}),
+      assignment: enriched,
+      eventId,
+      scheduleId,
+      scheduleLabel
+    };
+    this.state.displaySession = nextSession;
+    this.state.channelAssignment = enriched;
+  }
+
+  evaluateScheduleConflict() {
+    const eventId = String(this.state?.activeEventId || "").trim();
+    if (!eventId) {
+      this.state.scheduleConflict = null;
+      this.state.conflictSelection = "";
+      this.closeConflictDialog();
+      return;
+    }
+    const presenceMap = this.state?.operatorPresenceByUser instanceof Map ? this.state.operatorPresenceByUser : new Map();
+    const groups = new Map();
+    const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
+    presenceMap.forEach((value, uid) => {
+      if (!value) return;
+      if (String(value.eventId || "").trim() !== eventId) return;
+      const rawKey = String(value.scheduleKey || "");
+      const scheduleKey = rawKey || `${eventId}::${normalizeScheduleId(value.scheduleId || "")}`;
+      const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
+      const entry = groups.get(scheduleKey) || {
+        key: scheduleKey,
+        eventId,
+        scheduleId: String(value.scheduleId || ""),
+        label,
+        members: []
+      };
+      if (!groups.has(scheduleKey)) {
+        groups.set(scheduleKey, entry);
+      }
+      entry.label = entry.label || label;
+      entry.members.push({
+        uid: String(uid),
+        name: String(value.displayName || value.email || uid || "").trim() || String(uid),
+        isSelf: String(uid) === selfUid
+      });
+    });
+    const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
+    const assignmentKey = assignment && assignment.eventId ? `${assignment.eventId}::${normalizeScheduleId(assignment.scheduleId || "")}` : "";
+    if (assignment && assignment.eventId && assignmentKey && !groups.has(assignmentKey)) {
+      const label = this.resolveScheduleLabel(assignmentKey, assignment.scheduleLabel, assignment.scheduleId);
+      groups.set(assignmentKey, {
+        key: assignmentKey,
+        eventId: assignment.eventId,
+        scheduleId: String(assignment.scheduleId || ""),
+        label,
+        members: []
+      });
+    }
+    const options = Array.from(groups.values());
+    if (!options.length) {
+      this.state.scheduleConflict = null;
+      this.state.conflictSelection = "";
+      this.closeConflictDialog();
+      return;
+    }
+    options.sort((a, b) => (a.label || "").localeCompare(b.label || "", "ja"));
+    const uniqueKeys = new Set(options.map((opt) => opt.key));
+    const channelAligned = !this.hasChannelMismatch();
+    let shouldPrompt = uniqueKeys.size > 1 || (assignmentKey && (!uniqueKeys.has(assignmentKey) || !channelAligned));
+    if (!shouldPrompt && !channelAligned) {
+      shouldPrompt = true;
+    }
+    if (!shouldPrompt) {
+      this.state.scheduleConflict = null;
+      this.state.conflictSelection = "";
+      this.closeConflictDialog();
+      return;
+    }
+    this.state.scheduleConflict = { eventId, assignmentKey, options };
+    if (!this.state.conflictSelection || !uniqueKeys.has(this.state.conflictSelection)) {
+      const preferredKey = this.getCurrentScheduleKey();
+      if (uniqueKeys.has(preferredKey)) {
+        this.state.conflictSelection = preferredKey;
+      } else if (assignmentKey && uniqueKeys.has(assignmentKey)) {
+        this.state.conflictSelection = assignmentKey;
+      } else {
+        this.state.conflictSelection = options[0]?.key || "";
+      }
+    }
+    this.renderConflictDialog();
+    if (!this.conflictDialogOpen) {
+      this.openConflictDialog();
+    }
+  }
+
+  closeActiveDialog() {
+    if (!this.activeDialog) {
+      return;
+    }
+    if (this.activeDialog === this.dom.editDialog) {
+      this.closeEditDialog();
+      return;
+    }
+    if (this.activeDialog === this.dom.conflictDialog) {
+      this.closeConflictDialog();
+      return;
+    }
+    Dialog.closeDialog(this, this.activeDialog);
+  }
+
   setExternalContext(context = {}) {
     const ensure = (value) => String(value ?? "").trim();
     const eventId = ensure(context.eventId);
@@ -615,6 +1170,8 @@ export class OperatorApp {
 
     this.updateScheduleContext();
     this.refreshChannelSubscriptions();
+    this.syncOperatorPresence();
+    this.renderChannelBanner();
     this.renderQuestions();
     this.updateActionAvailability();
     this.updateBatchButtonVisibility();
@@ -669,6 +1226,33 @@ export class OperatorApp {
         if (event.target instanceof HTMLElement && event.target.dataset.dialogDismiss) {
           event.preventDefault();
           this.closeEditDialog();
+        }
+      });
+    }
+    if (this.dom.conflictDialog) {
+      this.dom.conflictDialog.addEventListener("click", (event) => {
+        if (event.target instanceof HTMLElement && event.target.dataset.dialogDismiss) {
+          event.preventDefault();
+          this.closeConflictDialog();
+        }
+      });
+    }
+    if (this.dom.channelLockButton) {
+      this.dom.channelLockButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        this.lockDisplayToCurrentSchedule();
+      });
+    }
+    if (this.dom.conflictForm) {
+      this.dom.conflictForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        this.submitConflictSelection();
+      });
+    }
+    if (this.dom.conflictOptions) {
+      this.dom.conflictOptions.addEventListener("change", (event) => {
+        if (event.target instanceof HTMLInputElement && event.target.type === "radio") {
+          this.state.conflictSelection = event.target.value;
         }
       });
     }
@@ -1020,6 +1604,7 @@ export class OperatorApp {
 
   cleanupRealtime() {
     this.clearOperatorPresence();
+    this.closeConflictDialog();
     if (this.questionsUnsubscribe) {
       this.questionsUnsubscribe();
       this.questionsUnsubscribe = null;
@@ -1066,6 +1651,11 @@ export class OperatorApp {
     this.state.operatorPresenceEventId = "";
     this.state.operatorPresenceByUser = new Map();
     this.state.operatorPresenceSelf = null;
+    this.state.channelAssignment = null;
+    this.state.channelLocking = false;
+    this.state.scheduleConflict = null;
+    this.state.conflictSelection = "";
+    this.conflictDialogOpen = false;
     const autoScroll = this.dom.logAutoscroll ? this.dom.logAutoscroll.checked : true;
     this.state = createInitialState(autoScroll);
     this.applyContextToState();
@@ -1093,6 +1683,7 @@ export class OperatorApp {
     if (this.dom.logStream) this.dom.logStream.innerHTML = "";
     if (this.dom.dictionaryCardsContainer) this.dom.dictionaryCardsContainer.innerHTML = "";
     if (this.dom.pickupList) this.dom.pickupList.innerHTML = "";
+    this.renderChannelBanner();
     this.eventsBranch = {};
     this.schedulesBranch = {};
     this.dictionaryData = [];
@@ -1317,6 +1908,8 @@ export class OperatorApp {
     this.state.eventsById = eventsMap;
     this.state.scheduleMetadata = scheduleMap;
     this.rebuildQuestions();
+    this.renderChannelBanner();
+    this.evaluateScheduleConflict();
   }
 
   startScheduleMetadataStreams() {
@@ -1344,6 +1937,7 @@ export class OperatorApp {
         const active = !!data && status === "active" && (!expiresAt || expiresAt > now);
         this.state.displaySession = data;
         this.state.displaySessionActive = active;
+        this.state.channelAssignment = this.getDisplayAssignment();
         if (this.state.displaySessionLastActive !== null && this.state.displaySessionLastActive !== active) {
           this.toast(active ? "送出端末とのセッションが確立されました。" : "送出端末の接続が確認できません。", active ? "success" : "error");
         }
@@ -1351,6 +1945,8 @@ export class OperatorApp {
         this.updateActionAvailability();
         this.updateBatchButtonVisibility();
         this.renderQuestions();
+        this.renderChannelBanner();
+        this.evaluateScheduleConflict();
       },
       (error) => {
         console.error("Failed to monitor display session:", error);

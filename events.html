@@ -446,6 +446,23 @@
                             </div>
                           </div>
                         </div>
+                        <div id="op-channel-banner" role="region" aria-live="polite" hidden>
+                          <div class="channel-banner__heading">
+                            <span id="op-channel-status" class="channel-banner__status">ディスプレイの状態を確認しています…</span>
+                            <button id="op-channel-lock-button" class="btn btn-primary btn-sm" type="button">この日程に固定</button>
+                          </div>
+                          <div class="channel-banner__body">
+                            <div class="channel-banner__assignment" role="status">
+                              <span class="channel-banner__assignment-label">ディスプレイ</span>
+                              <span id="op-channel-assignment" class="channel-banner__assignment-value">—</span>
+                            </div>
+                            <div>
+                              <div class="channel-banner__assignment-label">オペレーターの選択状況</div>
+                              <ul id="op-channel-presence-list" class="channel-presence-list" aria-live="polite"></ul>
+                              <p id="op-channel-presence-empty" hidden>このイベントで選択中のオペレーターはいません。</p>
+                            </div>
+                          </div>
+                        </div>
                         <div class="cards-scroll">
                           <div id="op-questions-cards" class="cards-list" aria-live="polite"></div>
                         </div>
@@ -496,6 +513,26 @@
                         <button type="button" class="btn btn-ghost" id="op-confirm-cancel-button" data-dialog-dismiss="true">キャンセル</button>
                         <button type="button" class="btn btn-primary" id="op-confirm-accept-button">実行する</button>
                       </div>
+                    </div>
+                  </div>
+
+                  <div id="op-conflict-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="op-conflict-dialog-title" hidden>
+                    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+                    <div class="modal-panel">
+                      <form id="op-conflict-form" class="modal-form">
+                        <div class="modal-header">
+                          <h2 id="op-conflict-dialog-title">日程の調整が必要です</h2>
+                        </div>
+                        <div class="modal-body">
+                          <p id="op-conflict-description" class="modal-helper">複数のオペレーターが異なる日程を選択しています。送出する日程を選んでください。</p>
+                          <fieldset id="op-conflict-options"></fieldset>
+                          <div id="op-conflict-error" class="hub-alert hub-alert--error" role="alert" hidden></div>
+                        </div>
+                        <div class="modal-footer">
+                          <button type="button" class="btn btn-ghost" id="op-conflict-cancel-button" data-dialog-dismiss="true">あとで決める</button>
+                          <button type="submit" class="btn btn-primary" id="op-conflict-confirm-button">この日程に固定</button>
+                        </div>
+                      </form>
                     </div>
                   </div>
                 </div>
