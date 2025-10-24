@@ -28,6 +28,7 @@ The goal is to isolate display/operation channels per event (and per schedule wh
 - [x] Synced operator presence writes with context updates and drafted Firebase rule coverage for `render/events/*` and `operatorPresence` collections.
 - [x] Mirror display schedule locks into `render/events/{eventId}/activeSchedule` so Apps Script sessions expose the active channel state alongside legacy paths.
 - [x] Define rotation handling and ACL follow-ups at the Apps Script layer (Apps Script rotation APIs + event-scoped ACL enforcement).
+- [x] Documented the operator presence data contract and embed responsibilities for embed integrations.
 
 ## Scope Overview
 - Rework Firebase schema for telop state and sessions.
@@ -95,9 +96,31 @@ To show the conflict modal we will persist each operator's selected schedule in 
 
 These restrictions clarify the original question's intent—ensuring that exposing presence data for coordination does not broaden data visibility beyond the current event team.
 
+## Operator presence data contract
+
+To align the embed responsibilities with the Firebase presence data that powers the
+schedule-conflict workflow, we defined the following contract:
+
+- Each operator session writes to `operatorPresence/{eventId}/{uid}` with:
+  - `displayName`: human-readable operator label for roster UI.
+  - `scheduleId`: the currently selected schedule key.
+  - `scheduleLabel`: schedule title shown in the modal.
+  - `heartbeatAt`: updated every 15 seconds so the roster can prune stale entries.
+- Presence writes are initiated whenever the embed context changes (event switch,
+  schedule confirmation, or operator sign-in) and cleared on disconnect via
+  `onDisconnect().remove()` hooks.
+- Embeds must ensure the operator only writes for the event they are currently
+  operating; switching events tears down the previous listener and removes the
+  prior presence entry.
+- Reads are limited by Firebase rules so operators only see their current event and
+  can update their own presence node.
+
+This shared contract keeps the operator modal, Apps Script checks, and Firebase
+rules aligned while preventing cross-event data leakage.
+
 ## Current Focus
 
-- Document the operator presence data contract and embed responsibilities ahead of rollout.
+- None – event/schedule isolation milestones are complete pending rollout.
 
 ## Rotation assignment APIs & ACL hardening progress
 
