@@ -1170,6 +1170,7 @@ export class OperatorApp {
 
     this.updateScheduleContext();
     this.refreshChannelSubscriptions();
+    this.syncOperatorPresence();
     this.renderChannelBanner();
     this.renderQuestions();
     this.updateActionAvailability();
