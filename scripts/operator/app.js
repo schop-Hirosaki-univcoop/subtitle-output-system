@@ -405,6 +405,36 @@ export class OperatorApp {
     return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
   }
 
+  derivePresenceScheduleKey(eventId, payload = {}, entryId = "") {
+    const ensure = (value) => String(value ?? "").trim();
+    const normalizedEvent = ensure(eventId);
+    const normalizedEntry = ensure(entryId);
+    const source = payload && typeof payload === "object" ? payload : {};
+    const rawKey = ensure(source.scheduleKey);
+    if (rawKey) {
+      return rawKey;
+    }
+    const scheduleId = ensure(source.scheduleId);
+    if (normalizedEvent && scheduleId) {
+      return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
+    }
+    if (scheduleId) {
+      return normalizeScheduleId(scheduleId);
+    }
+    const scheduleLabel = ensure(source.scheduleLabel);
+    if (scheduleLabel) {
+      const sanitizedLabel = scheduleLabel.replace(/\s+/g, " ").trim().replace(/::/g, "／");
+      if (normalizedEvent) {
+        return `${normalizedEvent}::label::${sanitizedLabel}`;
+      }
+      return `label::${sanitizedLabel}`;
+    }
+    if (normalizedEvent && normalizedEntry) {
+      return `${normalizedEvent}::session::${normalizedEntry}`;
+    }
+    return normalizedEntry || normalizedEvent || "";
+  }
+
   isTelopEnabled() {
     return isTelopMode(this.operatorMode);
   }
@@ -592,10 +622,16 @@ export class OperatorApp {
     }
 
     const scheduleId = String(this.state?.activeScheduleId || "").trim();
-    const scheduleKey = String(this.state?.currentSchedule || "").trim();
-    const eventName = String(this.state?.activeEventName || "").trim();
     const scheduleLabel = String(this.state?.activeScheduleLabel || "").trim();
     const sessionId = String(this.operatorPresenceSessionId || "").trim() || this.generatePresenceSessionId();
+    let scheduleKey = String(this.state?.currentSchedule || "").trim();
+    if (!scheduleKey && typeof this.getCurrentScheduleKey === "function") {
+      scheduleKey = String(this.getCurrentScheduleKey() || "").trim();
+    }
+    if (!scheduleKey) {
+      scheduleKey = this.derivePresenceScheduleKey(eventId, { scheduleId, scheduleLabel }, sessionId);
+    }
+    const eventName = String(this.state?.activeEventName || "").trim();
     const operatorMode = normalizeOperatorMode(this.operatorMode);
     this.operatorPresenceSessionId = sessionId;
     const nextKey = `${eventId}/${sessionId}`;
@@ -802,8 +838,7 @@ export class OperatorApp {
     presenceMap.forEach((value, entryId) => {
       if (!value) return;
       if (String(value.eventId || "").trim() !== eventId) return;
-      const rawKey = String(value.scheduleKey || "");
-      const scheduleKey = rawKey || `${eventId}::${normalizeScheduleId(value.scheduleId || "")}`;
+      const scheduleKey = this.derivePresenceScheduleKey(eventId, value, entryId);
       const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
       const normalizedMode = normalizeOperatorMode(value.mode);
       const entry = groups.get(scheduleKey) || {
@@ -932,7 +967,18 @@ export class OperatorApp {
         members.textContent = option.members
           .map((member) => {
             const base = String(member.name || member.uid || "").trim() || member.uid;
-            return member.isSelf ? `${base}（自分）` : base;
+            const normalizedMode = normalizeOperatorMode(member.mode);
+            const tags = [];
+            if (member.isSelf) {
+              tags.push("自分");
+            }
+            if (!isTelopMode(normalizedMode)) {
+              tags.push("参加者モード");
+            }
+            if (!tags.length) {
+              return base;
+            }
+            return `${base}（${tags.join("・")}）`;
           })
           .join("、");
       } else {
@@ -1016,6 +1062,16 @@ export class OperatorApp {
     }
     if (!normalizedEvent) {
       const message = "イベントが選択されていないため固定できません。";
+      if (fromModal && this.dom.conflictError) {
+        this.dom.conflictError.textContent = message;
+        this.dom.conflictError.hidden = false;
+      } else if (!silent) {
+        this.toast(message, "error");
+      }
+      return;
+    }
+    if (!normalizedSchedule) {
+      const message = "日程が選択されていないため固定できません。";
       if (fromModal && this.dom.conflictError) {
         this.dom.conflictError.textContent = message;
         this.dom.conflictError.hidden = false;
@@ -1123,9 +1179,7 @@ export class OperatorApp {
     presenceMap.forEach((value, entryId) => {
       if (!value) return;
       if (String(value.eventId || "").trim() !== eventId) return;
-      if (!isTelopMode(normalizeOperatorMode(value.mode))) return;
-      const rawKey = String(value.scheduleKey || "");
-      const scheduleKey = rawKey || `${eventId}::${normalizeScheduleId(value.scheduleId || "")}`;
+      const scheduleKey = this.derivePresenceScheduleKey(eventId, value, entryId);
       const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
       const entry = groups.get(scheduleKey) || {
         key: scheduleKey,
@@ -1145,7 +1199,8 @@ export class OperatorApp {
       entry.members.push({
         uid: memberUid || fallbackId,
         name: String(value.displayName || value.email || memberUid || fallbackId || "").trim() || memberUid || fallbackId,
-        isSelf: Boolean(isSelfSession || isSelfUid)
+        isSelf: Boolean(isSelfSession || isSelfUid),
+        mode: normalizeOperatorMode(value.mode)
       });
     });
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
@@ -1931,13 +1986,14 @@ export class OperatorApp {
   normalizeQuestionRecord(item) {
     const record = item && typeof item === "object" ? item : {};
     const eventId = String(record.eventId ?? "").trim();
-    const scheduleId = String(record.scheduleId ?? "").trim();
+    const rawScheduleId = String(record.scheduleId ?? "").trim();
     const fallbackLabel = String(record.scheduleLabel ?? record.schedule ?? "").trim();
+    const normalizedScheduleId = eventId ? normalizeScheduleId(rawScheduleId) : rawScheduleId;
     let scheduleKey = "";
-    if (eventId && scheduleId) {
-      scheduleKey = `${eventId}::${scheduleId}`;
-    } else if (scheduleId) {
-      scheduleKey = scheduleId;
+    if (eventId && normalizedScheduleId) {
+      scheduleKey = `${eventId}::${normalizedScheduleId}`;
+    } else if (rawScheduleId) {
+      scheduleKey = rawScheduleId;
     } else if (fallbackLabel) {
       scheduleKey = fallbackLabel;
     }
@@ -1951,7 +2007,7 @@ export class OperatorApp {
     const metaEnd = scheduleMeta ? String(scheduleMeta.endAt || "").trim() : "";
     const rawStart = String(record.scheduleStart ?? "").trim();
     const rawEnd = String(record.scheduleEnd ?? "").trim();
-    const label = metaLabel || fallbackLabel || scheduleId || "";
+    const label = metaLabel || fallbackLabel || rawScheduleId || "";
     const eventName = metaEventName || eventNameFromMap || String(record.eventName ?? "").trim();
     const startAt = metaStart || rawStart;
     const endAt = metaEnd || rawEnd;
@@ -1964,7 +2020,7 @@ export class OperatorApp {
       ジャンル: resolveGenreLabel(record.genre),
       イベントID: eventId,
       イベント名: eventName,
-      日程ID: scheduleId,
+      日程ID: rawScheduleId || (eventId ? normalizedScheduleId : ""),
       日程: scheduleKey || label,
       日程表示: label,
       開始日時: startAt,
