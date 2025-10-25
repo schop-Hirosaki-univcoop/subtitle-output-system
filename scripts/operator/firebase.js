@@ -13,7 +13,8 @@ import {
   limitToLast,
   orderByChild,
   child,
-  onDisconnect
+  onDisconnect,
+  runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   initializeAuth,
@@ -55,6 +56,7 @@ export const dictionaryRef = ref(database, "dictionary");
 export const operatorChatMessagesRef = ref(database, "operatorChat/messages");
 export const operatorChatReadsRef = ref(database, "operatorChat/reads");
 const operatorPresenceRootRef = ref(database, "operatorPresence");
+const operatorScheduleConsensusRootRef = ref(database, "operatorPresenceConsensus");
 
 export function getRenderRef(eventId = "", scheduleId = "") {
   const path = getRenderStatePath(eventId, scheduleId);
@@ -80,7 +82,12 @@ export function getOperatorPresenceEntryRef(eventId = "", operatorId = "") {
   return ref(database, `operatorPresence/${eventKey}/${userKey}`);
 }
 
-export { 
+export function getOperatorScheduleConsensusRef(eventId = "") {
+  const eventKey = String(eventId || "").trim();
+  return eventKey ? ref(database, `operatorPresenceConsensus/${eventKey}`) : operatorScheduleConsensusRootRef;
+}
+
+export {
   ref,
   update,
   remove,
@@ -94,6 +101,7 @@ export {
   orderByChild,
   child,
   onDisconnect,
+  runTransaction,
   signInWithPopup,
   signOut,
   onAuthStateChanged
