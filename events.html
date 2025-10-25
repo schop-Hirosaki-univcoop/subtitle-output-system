@@ -989,6 +989,50 @@
   </div>
 
   <div
+    id="flow-schedule-fallback-dialog"
+    class="modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="flow-schedule-fallback-title"
+    hidden
+  >
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <form id="flow-schedule-fallback-form" class="modal-form">
+        <div class="modal-header">
+          <h2 id="flow-schedule-fallback-title">テロップ操作の対応を選択</h2>
+        </div>
+        <div class="modal-body">
+          <p id="flow-schedule-fallback-summary" class="modal-helper"></p>
+          <p id="flow-schedule-fallback-current" class="modal-helper"></p>
+          <fieldset
+            id="flow-schedule-fallback-options"
+            class="modal-field"
+            aria-describedby="flow-schedule-fallback-summary"
+          >
+            <legend class="modal-label">対応方法</legend>
+          </fieldset>
+          <div id="flow-schedule-fallback-error" class="hub-alert hub-alert--error" role="alert" hidden></div>
+        </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-ghost"
+            id="flow-schedule-fallback-cancel-button"
+            data-dialog-dismiss="true"
+          >キャンセル</button>
+          <button
+            type="submit"
+            class="btn btn-primary"
+            id="flow-schedule-fallback-confirm-button"
+            data-autofocus="true"
+          >決定する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div
     id="flow-schedule-consensus-toast"
     class="flow-consensus-toast"
     role="status"

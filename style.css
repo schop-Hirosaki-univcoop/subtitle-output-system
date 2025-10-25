@@ -1531,13 +1531,28 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   color:var(--muted);
 }
 #op-conflict-options,
-#flow-schedule-conflict-options{
+#flow-schedule-conflict-options,
+#flow-schedule-fallback-options{
   margin:0;
   padding:0;
   border:0;
   display:flex;
   flex-direction:column;
   gap:.75rem;
+}
+
+#flow-schedule-fallback-summary,
+#flow-schedule-fallback-current{
+  color:var(--muted);
+  margin-bottom:clamp(.55rem, 1.6vw, .85rem);
+}
+
+#flow-schedule-fallback-current{
+  margin-top:-.35rem;
+}
+
+#flow-schedule-fallback-error{
+  margin-top:.5rem;
 }
 
 .flow-consensus-toast{

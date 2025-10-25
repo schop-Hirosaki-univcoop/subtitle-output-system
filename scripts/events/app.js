@@ -118,11 +118,14 @@ export class EventAdminApp {
     this.hostPresenceDisconnect = null;
     this.hostPresenceHeartbeat = null;
     this.hostPresenceLastSignature = "";
+    this.hostCommittedScheduleId = "";
+    this.hostCommittedScheduleLabel = "";
     this.scheduleConflictContext = null;
     this.scheduleConflictLastSignature = "";
     this.scheduleConflictPromptSignature = "";
     this.pendingNavigationTarget = "";
     this.scheduleConflictRadioName = generateShortId("flow-conflict-radio-");
+    this.scheduleFallbackRadioName = generateShortId("flow-fallback-radio-");
     this.flowDebugEnabled = true;
     this.scheduleConsensusEventId = "";
     this.scheduleConsensusUnsubscribe = null;
@@ -131,6 +134,7 @@ export class EventAdminApp {
     this.scheduleConsensusLastKey = "";
     this.scheduleConsensusToastTimer = 0;
     this.scheduleConsensusHideTimer = 0;
+    this.scheduleFallbackContext = null;
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.updateChatLayoutMetrics = this.updateChatLayoutMetrics.bind(this);
     this.chatLayoutResizeObserver = null;
@@ -153,6 +157,7 @@ export class EventAdminApp {
     this.handleFullscreenError = this.handleFullscreenError.bind(this);
     this.handleScheduleConflictSubmit = this.handleScheduleConflictSubmit.bind(this);
     this.handleScheduleConflictCancel = this.handleScheduleConflictCancel.bind(this);
+    this.handleScheduleFallbackSubmit = this.handleScheduleFallbackSubmit.bind(this);
   }
 
   logParticipantAction(message, detail = null) {
@@ -401,7 +406,7 @@ export class EventAdminApp {
         if (!target) {
           return;
         }
-        this.handleFlowNavigation(target, { sourceButton: button });
+        void this.handleFlowNavigation(target, { sourceButton: button });
       });
     });
 
@@ -454,10 +459,15 @@ export class EventAdminApp {
       this.dom.scheduleConflictCancelButton.addEventListener("click", this.handleScheduleConflictCancel);
     }
 
+    if (this.dom.scheduleFallbackForm) {
+      this.dom.scheduleFallbackForm.addEventListener("submit", this.handleScheduleFallbackSubmit);
+    }
+
     this.bindDialogDismiss(this.dom.eventDialog);
     this.bindDialogDismiss(this.dom.scheduleDialog);
     this.bindDialogDismiss(this.dom.confirmDialog);
     this.bindDialogDismiss(this.dom.scheduleConflictDialog);
+    this.bindDialogDismiss(this.dom.scheduleFallbackDialog);
 
     if (this.dom.confirmAcceptButton) {
       this.dom.confirmAcceptButton.addEventListener("click", () => {
@@ -931,6 +941,7 @@ export class EventAdminApp {
         previousEventId: previous || ""
       });
       this.tools.resetContext();
+      this.setHostCommittedSchedule("", { reason: "event-change", sync: false, updateContext: false, force: true });
     } else {
       this.logFlowState("イベント選択は既に最新の状態です", {
         eventId: normalized || ""
@@ -970,12 +981,27 @@ export class EventAdminApp {
         previousScheduleId: previousScheduleId || "",
         preferredScheduleId: preferredId || ""
       });
+      if (previousScheduleId && previousScheduleId === this.hostCommittedScheduleId) {
+        this.setHostCommittedSchedule("", {
+          reason: "schedule-unavailable",
+          sync: true,
+          updateContext: false,
+          force: true
+        });
+      }
     }
   }
 
   getSelectedSchedule() {
     if (!this.selectedScheduleId) return null;
     return this.schedules.find((schedule) => schedule.id === this.selectedScheduleId) || null;
+  }
+
+  getCommittedSchedule() {
+    if (!this.hostCommittedScheduleId) {
+      return null;
+    }
+    return this.schedules.find((schedule) => schedule.id === this.hostCommittedScheduleId) || null;
   }
 
   getCurrentSelectionContext() {
@@ -1933,7 +1959,7 @@ export class EventAdminApp {
     });
   }
 
-  handleFlowNavigation(target, { sourceButton = null } = {}) {
+  async handleFlowNavigation(target, { sourceButton = null } = {}) {
     const normalized = PANEL_CONFIG[target] ? target : "events";
     const originPanel = sourceButton?.closest("[data-panel]")?.dataset?.panel || "";
     const config = PANEL_CONFIG[normalized] || PANEL_CONFIG.events;
@@ -1947,6 +1973,12 @@ export class EventAdminApp {
       config.requireSchedule &&
       this.selectedEventId
     ) {
+      const committed = this.commitSelectedScheduleForTelop({ reason: "navigation" });
+      if (!committed) {
+        this.pendingNavigationTarget = "";
+        this.syncScheduleConflictPromptState();
+        return;
+      }
       const context = this.buildScheduleConflictContext();
       this.scheduleConflictContext = context;
       if (context.hasConflict) {
@@ -1957,8 +1989,12 @@ export class EventAdminApp {
           originPanel,
           target: normalized
         });
+        this.syncScheduleConflictPromptState(context);
         return;
       }
+      this.pendingNavigationTarget = "";
+      this.enforceScheduleConflictState(context);
+      this.syncScheduleConflictPromptState(context);
     }
     this.pendingNavigationTarget = "";
     this.showPanel(normalized);
@@ -2316,6 +2352,7 @@ export class EventAdminApp {
       hasOtherOperators: false,
       hostScheduleId: "",
       hostScheduleKey: "",
+      hostScheduleLabel: "",
       defaultKey: "",
       signature: ""
     };
@@ -2350,11 +2387,21 @@ export class EventAdminApp {
         updatedAt: entry.updatedAt || 0
       });
     });
-    const hostSchedule = this.getSelectedSchedule();
-    const hostScheduleId = hostSchedule?.id || "";
-    const hostScheduleKey = hostScheduleId ? `${eventId}::${normalizeScheduleId(hostScheduleId)}` : "";
+    const hostScheduleId = ensureString(this.hostCommittedScheduleId);
+    const hostSchedule = hostScheduleId ? scheduleMap.get(hostScheduleId) || null : null;
+    const hostScheduleLabel = hostScheduleId
+      ? this.hostCommittedScheduleLabel || hostSchedule?.label || hostScheduleId
+      : "";
+    const hostScheduleKey = hostScheduleId
+      ? this.derivePresenceScheduleKey(
+          eventId,
+          { scheduleId: hostScheduleId, scheduleLabel: hostScheduleLabel },
+          this.hostPresenceSessionId
+        )
+      : "";
     context.hostScheduleId = hostScheduleId;
     context.hostScheduleKey = hostScheduleKey;
+    context.hostScheduleLabel = hostScheduleLabel;
     if (!hasSelfPresence && hostScheduleKey) {
       entries.push({
         entryId: selfUid ? `self::${selfUid}` : "self",
@@ -2362,7 +2409,7 @@ export class EventAdminApp {
         displayName: selfLabel,
         scheduleId: hostScheduleId,
         scheduleKey: hostScheduleKey,
-        scheduleLabel: hostSchedule?.label || hostScheduleId || "未選択",
+        scheduleLabel: hostScheduleLabel || hostScheduleId || "未選択",
         scheduleRange: formatScheduleRange(hostSchedule?.startAt, hostSchedule?.endAt),
         isSelf: true,
         mode: this.operatorMode,
@@ -2706,6 +2753,7 @@ export class EventAdminApp {
       return;
     }
     const context = this.scheduleConflictContext || this.buildScheduleConflictContext();
+    this.scheduleConflictContext = context;
     if (!context?.hasConflict || ensureString(context.signature) !== signature) {
       return;
     }
@@ -2751,11 +2799,6 @@ export class EventAdminApp {
     if (!scheduleId && option && option.scheduleId) {
       scheduleId = option.scheduleId;
     }
-    if (scheduleId && scheduleId !== this.selectedScheduleId) {
-      if (this.schedules.some((schedule) => schedule.id === scheduleId)) {
-        this.selectSchedule(scheduleId);
-      }
-    }
     if (this.dom.scheduleConflictForm) {
       this.dom.scheduleConflictForm.reset();
     }
@@ -2786,6 +2829,55 @@ export class EventAdminApp {
       byline
     });
     this.showScheduleConsensusToast({ label, range, byline });
+    const selectedScheduleId = ensureString(this.selectedScheduleId);
+    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
+    const selectionMatches = Boolean(scheduleId) && scheduleId === selectedScheduleId;
+    const shouldFollow = Boolean(scheduleId) &&
+      (scheduleId === committedScheduleId || selectionMatches || (!selectedScheduleId && scheduleId));
+    if (shouldFollow) {
+      if (!selectionMatches && scheduleId && this.schedules.some((schedule) => schedule.id === scheduleId)) {
+        this.selectSchedule(scheduleId);
+      }
+      this.setHostCommittedSchedule(scheduleId, {
+        schedule: fallbackSchedule,
+        reason: "consensus-apply",
+        sync: true,
+        updateContext: true,
+        force: true
+      });
+    } else if (scheduleId && selectedScheduleId && scheduleId !== selectedScheduleId) {
+      const currentSchedule = this.schedules.find((schedule) => schedule.id === selectedScheduleId) || null;
+      const currentLabel = currentSchedule?.label || selectedScheduleId;
+      this.setHostCommittedSchedule("", {
+        reason: "consensus-pending",
+        sync: true,
+        updateContext: true,
+        force: true
+      });
+      this.openScheduleFallbackDialog({
+        consensusScheduleId: scheduleId,
+        consensusLabel: label,
+        consensusRange: range,
+        consensusByline: byline,
+        currentScheduleId: selectedScheduleId,
+        currentScheduleLabel: currentLabel
+      });
+    } else if (scheduleId) {
+      this.setHostCommittedSchedule(scheduleId, {
+        schedule: fallbackSchedule,
+        reason: "consensus-align",
+        sync: true,
+        updateContext: true,
+        force: true
+      });
+    } else {
+      this.setHostCommittedSchedule("", {
+        reason: "consensus-clear",
+        sync: true,
+        updateContext: true,
+        force: true
+      });
+    }
     this.syncScheduleConflictPromptState();
   }
 
@@ -2942,6 +3034,65 @@ export class EventAdminApp {
     }
   }
 
+  setHostCommittedSchedule(
+    scheduleId,
+    { schedule = null, reason = "state-change", sync = true, updateContext = true, force = false } = {}
+  ) {
+    const normalizedId = ensureString(scheduleId);
+    let resolvedSchedule = schedule;
+    if (normalizedId && (!resolvedSchedule || resolvedSchedule.id !== normalizedId)) {
+      resolvedSchedule = this.schedules.find((item) => item.id === normalizedId) || null;
+    }
+    const previousId = ensureString(this.hostCommittedScheduleId);
+    const previousLabel = ensureString(this.hostCommittedScheduleLabel);
+    const nextLabel = normalizedId ? ensureString(resolvedSchedule?.label) || normalizedId : "";
+    const changed = previousId !== normalizedId || previousLabel !== nextLabel;
+    this.hostCommittedScheduleId = normalizedId;
+    this.hostCommittedScheduleLabel = normalizedId ? nextLabel : "";
+    if (force) {
+      this.hostPresenceLastSignature = "";
+    }
+    if (sync) {
+      this.syncHostPresence(reason);
+    } else if (changed) {
+      this.hostPresenceLastSignature = "";
+    }
+    if (updateContext) {
+      this.updateScheduleConflictState();
+    }
+    if (changed) {
+      this.logFlowState("テロップ操作用のコミット済み日程を更新しました", {
+        scheduleId: normalizedId || "",
+        scheduleLabel: this.hostCommittedScheduleLabel || "",
+        reason
+      });
+    }
+    return changed;
+  }
+
+  commitSelectedScheduleForTelop({ reason = "schedule-commit" } = {}) {
+    const scheduleId = ensureString(this.selectedScheduleId);
+    if (!scheduleId) {
+      this.logFlowState("日程未選択のためテロップ操作の日程を確定できません", { reason });
+      return false;
+    }
+    const schedule = this.getSelectedSchedule();
+    const changed = this.setHostCommittedSchedule(scheduleId, {
+      schedule,
+      reason,
+      sync: true,
+      updateContext: false,
+      force: true
+    });
+    this.logFlowState("テロップ操作の日程の確定リクエストを処理しました", {
+      scheduleId,
+      scheduleLabel: schedule?.label || scheduleId,
+      reason,
+      changed
+    });
+    return true;
+  }
+
   syncHostPresence(reason = "state-change") {
     const user = this.currentUser || auth.currentUser || null;
     const uid = ensureString(user?.uid);
@@ -2967,18 +3118,22 @@ export class EventAdminApp {
     }
 
     const event = this.getSelectedEvent();
-    const schedule = this.getSelectedSchedule();
-    const scheduleId = ensureString(schedule?.id);
-    const scheduleLabel = ensureString(schedule?.label || schedule?.id);
+    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
+    const schedule = committedScheduleId
+      ? this.schedules.find((item) => item.id === committedScheduleId) || null
+      : null;
+    const scheduleLabel = committedScheduleId
+      ? ensureString(this.hostCommittedScheduleLabel) || ensureString(schedule?.label) || committedScheduleId
+      : "";
     const scheduleKey = this.derivePresenceScheduleKey(
       eventId,
-      { scheduleId, scheduleLabel },
+      { scheduleId: committedScheduleId, scheduleLabel },
       sessionId
     );
     const operatorMode = normalizeOperatorMode(this.operatorMode);
     const signature = JSON.stringify({
       eventId,
-      scheduleId,
+      scheduleId: committedScheduleId,
       scheduleKey,
       scheduleLabel,
       sessionId,
@@ -2989,7 +3144,7 @@ export class EventAdminApp {
       this.logFlowState("在席情報に変更はありません", {
         reason,
         eventId,
-        scheduleId,
+        scheduleId: committedScheduleId,
         scheduleKey,
         sessionId
       });
@@ -3037,7 +3192,7 @@ export class EventAdminApp {
     this.logFlowState("在席情報を更新しました", {
       reason,
       eventId,
-      scheduleId,
+      scheduleId: committedScheduleId,
       scheduleKey,
       sessionId
     });
@@ -3051,6 +3206,8 @@ export class EventAdminApp {
     this.clearHostPresence();
     this.operatorPresenceEventId = "";
     this.operatorPresenceEntries = [];
+    this.hostCommittedScheduleId = "";
+    this.hostCommittedScheduleLabel = "";
     this.scheduleConflictContext = null;
     this.scheduleConflictLastSignature = "";
     this.scheduleConflictPromptSignature = "";
@@ -3063,6 +3220,7 @@ export class EventAdminApp {
     if (this.dom.scheduleConflictDialog) {
       this.closeDialog(this.dom.scheduleConflictDialog);
     }
+    this.scheduleFallbackContext = null;
     this.clearScheduleConsensusState({ reason: "presence-reset" });
     this.hideScheduleConsensusToast();
     this.logFlowState("オペレーター選択状況をリセットしました");
@@ -3238,6 +3396,224 @@ export class EventAdminApp {
     this.clearScheduleConflictError();
     this.closeDialog(this.dom.scheduleConflictDialog);
     this.syncScheduleConflictPromptState();
+  }
+
+  clearScheduleFallbackError() {
+    if (this.dom.scheduleFallbackError) {
+      this.dom.scheduleFallbackError.hidden = true;
+      this.dom.scheduleFallbackError.textContent = "";
+    }
+  }
+
+  setScheduleFallbackError(message = "") {
+    if (!this.dom.scheduleFallbackError) {
+      return;
+    }
+    const trimmed = String(message || "").trim();
+    if (!trimmed) {
+      this.clearScheduleFallbackError();
+      return;
+    }
+    this.dom.scheduleFallbackError.hidden = false;
+    this.dom.scheduleFallbackError.textContent = trimmed;
+  }
+
+  renderScheduleFallbackDialog(context = null) {
+    if (!context) {
+      context = this.scheduleFallbackContext || {};
+    }
+    const summary = this.dom.scheduleFallbackSummary;
+    if (summary) {
+      if (!summary.dataset.defaultText) {
+        summary.dataset.defaultText = summary.textContent || "";
+      }
+      const label = ensureString(context?.consensusLabel) || ensureString(context?.consensusScheduleId);
+      const range = ensureString(context?.consensusRange);
+      if (label) {
+        summary.textContent = range
+          ? `テロップ操作では日程「${label}」（${range}）を使用します。`
+          : `テロップ操作では日程「${label}」を使用します。`;
+      } else {
+        summary.textContent = summary.dataset.defaultText || "テロップ操作に使用する日程が確定しました。";
+      }
+    }
+    const current = this.dom.scheduleFallbackCurrent;
+    if (current) {
+      if (!current.dataset.defaultText) {
+        current.dataset.defaultText = current.textContent || "";
+      }
+      const currentLabel = ensureString(context?.currentScheduleLabel) || ensureString(context?.currentScheduleId);
+      if (currentLabel) {
+        current.textContent = `現在あなたは日程「${currentLabel}」を選択しています。対応を選んでください。`;
+      } else {
+        current.textContent = current.dataset.defaultText || "対応方法を選択してください。";
+      }
+    }
+    const container = this.dom.scheduleFallbackOptions;
+    if (container) {
+      container.innerHTML = "";
+      const winnerLabel = ensureString(context?.consensusLabel) || ensureString(context?.consensusScheduleId);
+      const winnerRange = ensureString(context?.consensusRange);
+      const currentLabel = ensureString(context?.currentScheduleLabel) || ensureString(context?.currentScheduleId);
+      const options = [
+        {
+          value: "follow",
+          title: "選ばれた日程に移動する",
+          description: winnerLabel
+            ? winnerRange
+              ? `テロップ操作パネルを「${winnerLabel}」（${winnerRange}）で開きます。`
+              : `テロップ操作パネルを「${winnerLabel}」で開きます。`
+            : "確定した日程でテロップ操作を行います。"
+        },
+        {
+          value: "support",
+          title: "テロップ操作なしモードで続ける",
+          description: currentLabel
+            ? `日程「${currentLabel}」を参加者向けツールのみで確認します。`
+            : "テロップ操作を行わず、参加者向けツールのみ利用します。"
+        },
+        {
+          value: "reselect",
+          title: "別の日程を選び直す",
+          description: "日程一覧に戻り、テロップ操作で使用する日程を改めて選び直します。"
+        }
+      ];
+      const radioName = this.scheduleFallbackRadioName;
+      const updateSelectionState = () => {
+        const wrappers = container.querySelectorAll(".conflict-option");
+        wrappers.forEach((wrapperEl) => {
+          const input = wrapperEl.querySelector(`input[name="${radioName}"]`);
+          wrapperEl.classList.toggle("is-selected", Boolean(input?.checked));
+        });
+      };
+      options.forEach((option, index) => {
+        const optionId = `flow-schedule-fallback-option-${index}`;
+        const wrapper = document.createElement("label");
+        wrapper.className = "conflict-option";
+
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = radioName;
+        radio.id = optionId;
+        radio.value = option.value;
+        radio.className = "visually-hidden";
+        if (index === 0) {
+          radio.checked = true;
+          radio.setAttribute("data-autofocus", "true");
+          radio.required = true;
+        } else {
+          radio.required = false;
+        }
+        radio.addEventListener("change", updateSelectionState);
+        wrapper.appendChild(radio);
+
+        const header = document.createElement("div");
+        header.className = "conflict-option__header";
+        const title = document.createElement("span");
+        title.className = "conflict-option__title";
+        title.textContent = option.title;
+        header.appendChild(title);
+        wrapper.appendChild(header);
+
+        if (option.description) {
+          const meta = document.createElement("div");
+          meta.className = "conflict-option__meta";
+          meta.textContent = option.description;
+          wrapper.appendChild(meta);
+        }
+
+        container.appendChild(wrapper);
+      });
+      updateSelectionState();
+    }
+    this.clearScheduleFallbackError();
+  }
+
+  openScheduleFallbackDialog(context = null) {
+    if (!this.dom.scheduleFallbackDialog) {
+      return;
+    }
+    this.scheduleFallbackContext = context || {};
+    this.renderScheduleFallbackDialog(context);
+    this.openDialog(this.dom.scheduleFallbackDialog);
+    this.logFlowState("テロップ操作の対応選択モーダルを表示します", {
+      consensusScheduleId: ensureString(context?.consensusScheduleId) || "",
+      currentScheduleId: ensureString(context?.currentScheduleId) || ""
+    });
+  }
+
+  handleScheduleFallbackSubmit(event) {
+    if (event) {
+      event.preventDefault();
+    }
+    if (!this.dom.scheduleFallbackForm) {
+      return;
+    }
+    const formData = new FormData(this.dom.scheduleFallbackForm);
+    const action = ensureString(formData.get(this.scheduleFallbackRadioName || "fallbackAction")) || "";
+    if (!action) {
+      this.setScheduleFallbackError("対応方法を選択してください。");
+      return;
+    }
+    const context = this.scheduleFallbackContext || {};
+    const consensusScheduleId = ensureString(context.consensusScheduleId);
+    const schedule = consensusScheduleId
+      ? this.schedules.find((item) => item.id === consensusScheduleId) || null
+      : null;
+    this.clearScheduleFallbackError();
+    if (action === "follow") {
+      if (consensusScheduleId) {
+        this.selectSchedule(consensusScheduleId);
+      }
+      if (this.operatorMode !== OPERATOR_MODE_TELOP) {
+        this.setOperatorMode(OPERATOR_MODE_TELOP);
+      }
+      this.setHostCommittedSchedule(consensusScheduleId, {
+        schedule,
+        reason: "consensus-follow",
+        sync: true,
+        updateContext: true,
+        force: true
+      });
+      this.logFlowState("確定した日程に移動する対応を選択しました", {
+        scheduleId: consensusScheduleId || ""
+      });
+    } else if (action === "support") {
+      if (this.operatorMode !== OPERATOR_MODE_SUPPORT) {
+        this.setOperatorMode(OPERATOR_MODE_SUPPORT);
+      }
+      this.setHostCommittedSchedule("", {
+        reason: "consensus-support",
+        sync: true,
+        updateContext: true,
+        force: true
+      });
+      this.logFlowState("テロップ操作なしモードで続ける対応を選択しました", {
+        previousScheduleId: ensureString(context.currentScheduleId) || ""
+      });
+    } else if (action === "reselect") {
+      this.setHostCommittedSchedule("", {
+        reason: "consensus-reselect",
+        sync: true,
+        updateContext: true,
+        force: true
+      });
+      this.showPanel("schedules");
+      this.logFlowState("別の日程を選び直す対応を選択しました", {
+        previousScheduleId: ensureString(context.currentScheduleId) || ""
+      });
+    } else {
+      this.setScheduleFallbackError("対応方法を選択してください。");
+      return;
+    }
+    this.closeDialog(this.dom.scheduleFallbackDialog);
+    if (this.dom.scheduleFallbackForm) {
+      this.dom.scheduleFallbackForm.reset();
+    }
+    if (this.dom.scheduleFallbackOptions) {
+      this.dom.scheduleFallbackOptions.innerHTML = "";
+    }
+    this.scheduleFallbackContext = null;
   }
 
   async confirmScheduleConsensus(selection) {
@@ -4503,6 +4879,16 @@ export class EventAdminApp {
       }
       this.clearScheduleConflictError();
       this.pendingNavigationTarget = "";
+    }
+    if (element === this.dom.scheduleFallbackDialog) {
+      if (this.dom.scheduleFallbackForm) {
+        this.dom.scheduleFallbackForm.reset();
+      }
+      if (this.dom.scheduleFallbackOptions) {
+        this.dom.scheduleFallbackOptions.innerHTML = "";
+      }
+      this.clearScheduleFallbackError();
+      this.scheduleFallbackContext = null;
     }
   }
 
