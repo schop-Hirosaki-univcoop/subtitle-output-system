@@ -237,7 +237,8 @@ export class ParticipantToolManager {
         event.name || "",
         schedule.label || "",
         schedule.startAt || "",
-        schedule.endAt || ""
+        schedule.endAt || "",
+        this.app.operatorMode || ""
       ].join("::");
       if (this.lastContextSignature === contextKey && this.lastContextApplied) {
         this.pendingSync = false;
@@ -255,7 +256,8 @@ export class ParticipantToolManager {
         scheduleId: schedule.id,
         scheduleLabel: schedule.label || schedule.id,
         startAt: schedule.startAt || "",
-        endAt: schedule.endAt || ""
+        endAt: schedule.endAt || "",
+        operatorMode: this.app.operatorMode
       };
       this.updateDataset(context);
       this.logParticipantAction("参加者ツールとの同期を開始します", context);

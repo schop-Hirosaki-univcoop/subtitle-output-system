@@ -103,6 +103,12 @@
             <span class="sidebar-card__stat"><span class="sidebar-card__stat-label">参加者</span><span id="flow-event-summary-participants" class="sidebar-card__stat-value">—</span></span>
           </span>
         </button>
+        <div id="flow-event-summary-actions" class="sidebar-card-actions" hidden>
+          <button id="flow-event-summary-copy" class="sidebar-card-actions__button" type="button" disabled>
+            表示URLをコピー
+          </button>
+          <span id="flow-event-summary-copy-status" class="visually-hidden" aria-live="polite"></span>
+        </div>
         <button id="flow-schedule-summary-pane" class="sidebar-card sidebar-card--action" type="button" data-panel-target="schedules">
           <span class="sidebar-card__title">選択中の日程</span>
           <span id="flow-schedule-summary" class="flow-selection-summary" hidden>
@@ -171,6 +177,15 @@
             <ul id="flow-schedule-list" class="entity-list" aria-live="polite"></ul>
             <p id="flow-schedule-empty" class="entity-empty" hidden>このイベントにはまだ日程が登録されていません。まずは日程を追加してください。</p>
           </div>
+        </div>
+        <div id="flow-operator-mode-panel" class="flow-operator-mode" hidden>
+          <label class="flow-operator-mode__choice">
+            <input type="checkbox" id="flow-operator-mode-support-toggle" />
+            <span class="flow-operator-mode__label">テロップ操作なしモードで開く</span>
+          </label>
+          <p id="flow-operator-mode-description" class="flow-operator-mode__description">
+            テロップ操作を行わない場合に選択してください。参加者リストや辞書、ログは引き続き利用できます。
+          </p>
         </div>
         <div class="flow-navigation">
           <button class="btn btn-ghost btn-sm flow-nav-button flow-nav-button--prev" type="button" data-flow-nav-direction="prev" data-flow-nav-target="events">前へ</button>

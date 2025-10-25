@@ -553,16 +553,22 @@ export function updateActionAvailability(app) {
   const checkedCount = getBatchSelectionCount(app);
   const hasBatchSelection = active && checkedCount > 0;
   const channelAligned = typeof app.hasChannelMismatch === "function" ? !app.hasChannelMismatch() : true;
-  const mode = !active ? "inactive" : hasBatchSelection ? "multi" : selection ? "single" : "idle";
+  const telopEnabled = typeof app.isTelopEnabled === "function" ? app.isTelopEnabled() : true;
+  const mode = !active || !telopEnabled ? "inactive" : hasBatchSelection ? "multi" : selection ? "single" : "idle";
 
   setActionPanelMode(app, mode);
 
   app.dom.actionButtons.forEach((button) => {
     if (button) button.disabled = true;
   });
-  if (app.dom.clearButton) app.dom.clearButton.disabled = !active;
+  if (app.dom.clearButton) app.dom.clearButton.disabled = !active || !telopEnabled;
   if (!app.dom.selectedInfo) {
     updateBatchButtonVisibility(app, checkedCount);
+    return;
+  }
+  if (!telopEnabled) {
+    app.dom.selectedInfo.textContent = "テロップ操作なしモードです";
+    updateBatchButtonVisibility(app, 0);
     return;
   }
   if (!active) {
@@ -602,8 +608,9 @@ export function updateActionAvailability(app) {
 export function updateBatchButtonVisibility(app, providedCount) {
   if (!app.dom.batchUnanswerBtn) return;
   const active = !!app.state.displaySessionActive;
+  const telopEnabled = typeof app.isTelopEnabled === "function" ? app.isTelopEnabled() : true;
   const checkedCount = active ? providedCount ?? getBatchSelectionCount(app) : 0;
-  app.dom.batchUnanswerBtn.disabled = !active || checkedCount === 0;
+  app.dom.batchUnanswerBtn.disabled = !active || !telopEnabled || checkedCount === 0;
 }
 
 export function syncSelectAllState(app) {
