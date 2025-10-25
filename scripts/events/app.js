@@ -9,7 +9,8 @@ import {
   signOut,
   onAuthStateChanged,
   onValue,
-  serverTimestamp
+  serverTimestamp,
+  getOperatorPresenceEventRef
 } from "../operator/firebase.js";
 import { createApiClient } from "../operator/api-client.js";
 import { generateShortId, normalizeKey, toMillis } from "../question-admin/utils.js";
@@ -26,8 +27,10 @@ import {
 import {
   OPERATOR_MODE_TELOP,
   OPERATOR_MODE_SUPPORT,
-  normalizeOperatorMode
+  normalizeOperatorMode,
+  isTelopMode
 } from "../shared/operator-modes.js";
+import { normalizeScheduleId } from "../shared/channel-paths.js";
 import {
   STAGE_SEQUENCE,
   STAGE_INFO,
@@ -85,6 +88,12 @@ export class EventAdminApp {
     this.chat = new EventChat(this);
     this.operatorMode = OPERATOR_MODE_TELOP;
     this.displayUrlCopyTimer = 0;
+    this.operatorPresenceEntries = [];
+    this.operatorPresenceEventId = "";
+    this.operatorPresenceUnsubscribe = null;
+    this.scheduleConflictContext = null;
+    this.pendingNavigationTarget = "";
+    this.scheduleConflictRadioName = generateShortId("flow-conflict-radio-");
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.updateChatLayoutMetrics = this.updateChatLayoutMetrics.bind(this);
     this.chatLayoutResizeObserver = null;
@@ -105,6 +114,8 @@ export class EventAdminApp {
     this.handleChatInteraction = this.handleChatInteraction.bind(this);
     this.handleFullscreenChange = this.handleFullscreenChange.bind(this);
     this.handleFullscreenError = this.handleFullscreenError.bind(this);
+    this.handleScheduleConflictSubmit = this.handleScheduleConflictSubmit.bind(this);
+    this.handleScheduleConflictCancel = this.handleScheduleConflictCancel.bind(this);
   }
 
   logParticipantAction(message, detail = null) {
@@ -157,6 +168,7 @@ export class EventAdminApp {
     this.activePanel = "events";
     this.eventsLoadingTracker.reset();
     this.scheduleLoadingTracker.reset();
+    this.clearOperatorPresenceState();
     this.eventCountNote = "";
     this.stageNote = "";
     this.forceSelectionBroadcast = true;
@@ -250,7 +262,7 @@ export class EventAdminApp {
         if (!target) {
           return;
         }
-        this.showPanel(target);
+        this.handleFlowNavigation(target, { sourceButton: button });
       });
     });
 
@@ -295,9 +307,18 @@ export class EventAdminApp {
       });
     }
 
+    if (this.dom.scheduleConflictForm) {
+      this.dom.scheduleConflictForm.addEventListener("submit", this.handleScheduleConflictSubmit);
+    }
+
+    if (this.dom.scheduleConflictCancelButton) {
+      this.dom.scheduleConflictCancelButton.addEventListener("click", this.handleScheduleConflictCancel);
+    }
+
     this.bindDialogDismiss(this.dom.eventDialog);
     this.bindDialogDismiss(this.dom.scheduleDialog);
     this.bindDialogDismiss(this.dom.confirmDialog);
+    this.bindDialogDismiss(this.dom.scheduleConflictDialog);
 
     if (this.dom.confirmAcceptButton) {
       this.dom.confirmAcceptButton.addEventListener("click", () => {
@@ -610,6 +631,8 @@ export class EventAdminApp {
       this.notifySelectionListeners("host");
     }
     this.notifyEventListeners();
+    this.syncOperatorPresenceSubscription();
+    this.updateScheduleConflictState();
 
     return this.events;
   }
@@ -771,6 +794,7 @@ export class EventAdminApp {
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
     this.tools.prepareContextForSelection();
+    this.updateScheduleConflictState();
     if (changed) {
       this.notifySelectionListeners("host");
     }
@@ -1135,7 +1159,9 @@ export class EventAdminApp {
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
     this.tools.prepareContextForSelection();
+    this.updateScheduleConflictState();
     if (changed) {
+      this.syncOperatorPresenceSubscription();
       this.notifySelectionListeners("host");
     }
   }
@@ -1156,6 +1182,7 @@ export class EventAdminApp {
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
     this.tools.prepareContextForSelection();
+    this.updateScheduleConflictState();
   }
 
   renderScheduleList() {
@@ -1721,7 +1748,502 @@ export class EventAdminApp {
     });
   }
 
+  handleFlowNavigation(target, { sourceButton = null } = {}) {
+    const normalized = PANEL_CONFIG[target] ? target : "events";
+    const originPanel = sourceButton?.closest("[data-panel]")?.dataset?.panel || "";
+    const config = PANEL_CONFIG[normalized] || PANEL_CONFIG.events;
+    if (
+      normalized === "participants" &&
+      originPanel === "schedules" &&
+      config.requireSchedule &&
+      this.selectedEventId
+    ) {
+      const context = this.buildScheduleConflictContext();
+      this.scheduleConflictContext = context;
+      if (context.hasConflict && this.dom.scheduleConflictDialog) {
+        this.pendingNavigationTarget = normalized;
+        this.renderScheduleConflictDialog(context);
+        this.clearScheduleConflictError();
+        this.openDialog(this.dom.scheduleConflictDialog);
+        return;
+      }
+    }
+    this.pendingNavigationTarget = "";
+    this.showPanel(normalized);
+  }
+
+  isScheduleConflictDialogOpen() {
+    return Boolean(this.dom.scheduleConflictDialog && !this.dom.scheduleConflictDialog.hasAttribute("hidden"));
+  }
+
+  clearScheduleConflictError() {
+    if (this.dom.scheduleConflictError) {
+      this.dom.scheduleConflictError.hidden = true;
+      this.dom.scheduleConflictError.textContent = "";
+    }
+  }
+
+  setScheduleConflictError(message = "") {
+    if (!this.dom.scheduleConflictError) {
+      return;
+    }
+    const trimmed = String(message || "").trim();
+    if (!trimmed) {
+      this.clearScheduleConflictError();
+      return;
+    }
+    this.dom.scheduleConflictError.hidden = false;
+    this.dom.scheduleConflictError.textContent = trimmed;
+  }
+
+  renderScheduleConflictDialog(context = null) {
+    if (!context) {
+      context = this.buildScheduleConflictContext();
+    }
+    const description = this.dom.scheduleConflictDescription;
+    if (description) {
+      if (!description.dataset.defaultText) {
+        description.dataset.defaultText = description.textContent || "";
+      }
+      const event = this.getSelectedEvent();
+      const eventName = event?.name || event?.id || "";
+      if (eventName) {
+        description.textContent = `イベント「${eventName}」で複数の日程が選択されています。テロップ操作パネルで操作する日程を選んでください。`;
+      } else {
+        description.textContent = description.dataset.defaultText || description.textContent || "";
+      }
+    }
+    this.renderScheduleConflictPresence(context);
+    this.renderScheduleConflictOptions(context);
+  }
+
+  renderScheduleConflictPresence(context = null) {
+    const list = this.dom.scheduleConflictPresence;
+    const placeholder = this.dom.scheduleConflictPresenceEmpty;
+    if (!list) {
+      return;
+    }
+    list.innerHTML = "";
+    const options = Array.isArray(context?.options) ? context.options : [];
+    if (!options.length) {
+      list.hidden = true;
+      if (placeholder) {
+        placeholder.hidden = false;
+      }
+      return;
+    }
+    list.hidden = false;
+    if (placeholder) {
+      placeholder.hidden = true;
+    }
+    options.forEach((option) => {
+      const item = document.createElement("li");
+      item.className = "channel-presence-group";
+      if (option.containsSelf) {
+        item.classList.add("is-active");
+      }
+      const label = document.createElement("div");
+      label.className = "channel-presence-group__label";
+      const rangeText = option.scheduleRange ? `（${option.scheduleRange}）` : "";
+      label.textContent = option.scheduleLabel ? `${option.scheduleLabel}${rangeText}` : `未選択${rangeText}`;
+      item.appendChild(label);
+      const members = document.createElement("div");
+      members.className = "channel-presence-group__names";
+      if (Array.isArray(option.members) && option.members.length) {
+        option.members.forEach((member) => {
+          const entry = document.createElement("span");
+          entry.className = "channel-presence-group__name";
+          entry.textContent = member.displayName || member.uid || "—";
+          if (member.isSelf) {
+            const badge = document.createElement("span");
+            badge.className = "channel-presence-self";
+            badge.textContent = "自分";
+            entry.appendChild(badge);
+          }
+          if (!isTelopMode(member.mode)) {
+            const badge = document.createElement("span");
+            badge.className = "channel-presence-support";
+            badge.textContent = "参加者モード";
+            entry.appendChild(badge);
+          }
+          members.appendChild(entry);
+        });
+      } else {
+        const empty = document.createElement("span");
+        empty.className = "channel-presence-group__name";
+        empty.textContent = "オペレーターなし";
+        members.appendChild(empty);
+      }
+      item.appendChild(members);
+      list.appendChild(item);
+    });
+  }
+
+  renderScheduleConflictOptions(context = null) {
+    const container = this.dom.scheduleConflictOptions;
+    if (!container) {
+      return;
+    }
+    const legend = container.querySelector("legend");
+    container.innerHTML = "";
+    if (legend) {
+      container.appendChild(legend);
+    }
+    const options = Array.isArray(context?.options) ? context.options : [];
+    if (!options.length) {
+      return;
+    }
+    const defaultKey = context?.hostScheduleKey || context?.defaultKey || options[0]?.key || "";
+    options.forEach((option, index) => {
+      const optionId = `flow-schedule-conflict-option-${index}`;
+      const wrapper = document.createElement("label");
+      wrapper.className = "conflict-option";
+
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = optionId;
+      radio.name = this.scheduleConflictRadioName;
+      radio.value = option.key || "";
+      radio.className = "visually-hidden";
+      radio.required = true;
+      radio.dataset.scheduleId = option.scheduleId || "";
+      const shouldCheck = option.key === defaultKey || (!defaultKey && index === 0);
+      if (shouldCheck) {
+        radio.checked = true;
+      }
+      wrapper.appendChild(radio);
+
+      const header = document.createElement("div");
+      header.className = "conflict-option__header";
+      const title = document.createElement("span");
+      title.className = "conflict-option__title";
+      title.textContent = option.scheduleLabel || "未選択";
+      header.appendChild(title);
+      if (option.scheduleRange) {
+        const meta = document.createElement("span");
+        meta.className = "conflict-option__meta";
+        meta.textContent = option.scheduleRange;
+        header.appendChild(meta);
+      }
+      wrapper.appendChild(header);
+
+      const membersLine = document.createElement("div");
+      membersLine.className = "conflict-option__members";
+      if (Array.isArray(option.members) && option.members.length) {
+        const names = option.members.map((member) => {
+          let text = member.displayName || member.uid || "—";
+          const badges = [];
+          if (member.isSelf) {
+            badges.push("自分");
+          }
+          if (!isTelopMode(member.mode)) {
+            badges.push("参加者モード");
+          }
+          if (badges.length) {
+            text += `（${badges.join("・")}）`;
+          }
+          return text;
+        });
+        membersLine.textContent = names.join("、");
+      } else {
+        membersLine.textContent = "選択しているオペレーターはいません";
+      }
+      wrapper.appendChild(membersLine);
+
+      container.appendChild(wrapper);
+    });
+  }
+
+  buildPresenceScheduleKey(eventId, payload = {}, entryId = "") {
+    const ensure = (value) => String(value ?? "").trim();
+    const normalizedEvent = ensure(eventId);
+    const normalizedEntry = ensure(entryId);
+    const source = payload && typeof payload === "object" ? payload : {};
+    const rawKey = ensure(source.scheduleKey);
+    if (rawKey) {
+      return rawKey;
+    }
+    const scheduleId = ensure(source.scheduleId);
+    if (normalizedEvent && scheduleId) {
+      return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
+    }
+    if (scheduleId) {
+      return normalizeScheduleId(scheduleId);
+    }
+    const scheduleLabel = ensure(source.scheduleLabel);
+    if (scheduleLabel) {
+      const sanitized = scheduleLabel.replace(/\s+/g, " ").trim().replace(/::/g, "／");
+      if (normalizedEvent) {
+        return `${normalizedEvent}::label::${sanitized}`;
+      }
+      return `label::${sanitized}`;
+    }
+    if (normalizedEvent && normalizedEntry) {
+      return `${normalizedEvent}::session::${normalizedEntry}`;
+    }
+    return normalizedEntry || normalizedEvent || "";
+  }
+
+  normalizeOperatorPresenceEntries(raw = {}, eventId = "") {
+    const entries = [];
+    if (!raw || typeof raw !== "object") {
+      return entries;
+    }
+    const selfUid = ensureString(this.currentUser?.uid);
+    Object.entries(raw).forEach(([entryId, payload]) => {
+      if (!payload || typeof payload !== "object") {
+        return;
+      }
+      const normalizedId = ensureString(entryId) || generateShortId("presence-");
+      const scheduleKey = this.buildPresenceScheduleKey(eventId, payload, normalizedId);
+      const scheduleId = ensureString(payload.scheduleId);
+      const displayName = ensureString(payload.displayName) || ensureString(payload.email) || ensureString(payload.uid) || normalizedId;
+      const uid = ensureString(payload.uid);
+      const mode = normalizeOperatorMode(payload.mode);
+      const updatedAt = Number(payload.clientTimestamp || payload.updatedAt || 0) || 0;
+      entries.push({
+        entryId: normalizedId,
+        uid,
+        displayName,
+        scheduleId,
+        scheduleLabel: ensureString(payload.scheduleLabel),
+        scheduleKey,
+        mode,
+        updatedAt,
+        isSelf: Boolean(selfUid && uid && uid === selfUid)
+      });
+    });
+    entries.sort((a, b) => a.displayName.localeCompare(b.displayName, "ja"));
+    return entries;
+  }
+
+  buildScheduleConflictContext() {
+    const event = this.getSelectedEvent();
+    const eventId = event?.id || "";
+    const context = {
+      eventId,
+      entries: [],
+      options: [],
+      hasConflict: false,
+      hasOtherOperators: false,
+      hostScheduleId: "",
+      hostScheduleKey: "",
+      defaultKey: ""
+    };
+    if (!eventId) {
+      return context;
+    }
+    const scheduleMap = new Map(this.schedules.map((schedule) => [schedule.id, schedule]));
+    const entries = [];
+    const selfUid = ensureString(this.currentUser?.uid);
+    const selfLabel = ensureString(this.currentUser?.displayName) || ensureString(this.currentUser?.email) || "あなた";
+    let hasSelfPresence = false;
+    this.operatorPresenceEntries.forEach((entry) => {
+      const schedule = entry.scheduleId ? scheduleMap.get(entry.scheduleId) : null;
+      const scheduleLabel = schedule?.label || entry.scheduleLabel || entry.scheduleId || "未選択";
+      const scheduleRange = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
+      const scheduleKey = entry.scheduleKey || (entry.scheduleId ? `${eventId}::${normalizeScheduleId(entry.scheduleId)}` : "");
+      const normalizedMode = normalizeOperatorMode(entry.mode);
+      const isSelf = Boolean(entry.isSelf || (selfUid && entry.uid && entry.uid === selfUid));
+      if (isSelf) {
+        hasSelfPresence = true;
+      }
+      entries.push({
+        entryId: entry.entryId,
+        uid: entry.uid,
+        displayName: entry.displayName || entry.uid || entry.entryId,
+        scheduleId: schedule?.id || entry.scheduleId || "",
+        scheduleKey,
+        scheduleLabel,
+        scheduleRange,
+        isSelf,
+        mode: normalizedMode,
+        updatedAt: entry.updatedAt || 0
+      });
+    });
+    const hostSchedule = this.getSelectedSchedule();
+    const hostScheduleId = hostSchedule?.id || "";
+    const hostScheduleKey = hostScheduleId ? `${eventId}::${normalizeScheduleId(hostScheduleId)}` : "";
+    context.hostScheduleId = hostScheduleId;
+    context.hostScheduleKey = hostScheduleKey;
+    if (!hasSelfPresence && hostScheduleKey) {
+      entries.push({
+        entryId: selfUid ? `self::${selfUid}` : "self",
+        uid: selfUid,
+        displayName: selfLabel,
+        scheduleId: hostScheduleId,
+        scheduleKey: hostScheduleKey,
+        scheduleLabel: hostSchedule?.label || hostScheduleId || "未選択",
+        scheduleRange: formatScheduleRange(hostSchedule?.startAt, hostSchedule?.endAt),
+        isSelf: true,
+        mode: this.operatorMode,
+        updatedAt: Date.now()
+      });
+    }
+    entries.sort((a, b) => {
+      if (a.isSelf && !b.isSelf) return -1;
+      if (!a.isSelf && b.isSelf) return 1;
+      return (a.displayName || "").localeCompare(b.displayName || "", "ja");
+    });
+    context.entries = entries;
+    const groups = new Map();
+    entries.forEach((entry) => {
+      const key = entry.scheduleKey || "";
+      const existing = groups.get(key) || {
+        key,
+        scheduleId: entry.scheduleId || "",
+        scheduleLabel: entry.scheduleLabel || "未選択",
+        scheduleRange: entry.scheduleRange || "",
+        members: []
+      };
+      if (!groups.has(key)) {
+        groups.set(key, existing);
+      }
+      if (!existing.scheduleId && entry.scheduleId) {
+        existing.scheduleId = entry.scheduleId;
+      }
+      if (!existing.scheduleLabel && entry.scheduleLabel) {
+        existing.scheduleLabel = entry.scheduleLabel;
+      }
+      if (!existing.scheduleRange && entry.scheduleRange) {
+        existing.scheduleRange = entry.scheduleRange;
+      }
+      existing.members.push(entry);
+    });
+    const options = Array.from(groups.values()).map((group) => {
+      const schedule = group.scheduleId ? scheduleMap.get(group.scheduleId) : null;
+      const scheduleLabel = group.scheduleLabel || schedule?.label || group.scheduleId || "未選択";
+      const scheduleRange = group.scheduleRange || formatScheduleRange(schedule?.startAt, schedule?.endAt);
+      const containsSelf = group.members.some((member) => member.isSelf);
+      return {
+        key: group.key,
+        scheduleId: schedule?.id || group.scheduleId || "",
+        scheduleLabel,
+        scheduleRange,
+        members: group.members,
+        containsSelf
+      };
+    });
+    options.sort((a, b) => {
+      if (a.containsSelf && !b.containsSelf) return -1;
+      if (!a.containsSelf && b.containsSelf) return 1;
+      return (a.scheduleLabel || "").localeCompare(b.scheduleLabel || "", "ja");
+    });
+    context.options = options;
+    context.hasOtherOperators = entries.some((entry) => !entry.isSelf);
+    const uniqueKeys = new Set(options.map((option) => option.key || ""));
+    context.hasConflict = context.hasOtherOperators && uniqueKeys.size > 1;
+    const preferredOption = options.find((option) => option.containsSelf) || options[0] || null;
+    context.defaultKey = preferredOption?.key || "";
+    return context;
+  }
+
+  updateScheduleConflictState() {
+    const context = this.buildScheduleConflictContext();
+    this.scheduleConflictContext = context;
+    if (this.isScheduleConflictDialogOpen()) {
+      this.renderScheduleConflictDialog(context);
+    }
+  }
+
+  syncOperatorPresenceSubscription() {
+    const eventId = ensureString(this.selectedEventId);
+    if (this.operatorPresenceEventId === eventId) {
+      this.updateScheduleConflictState();
+      return;
+    }
+    if (this.operatorPresenceUnsubscribe) {
+      this.operatorPresenceUnsubscribe();
+      this.operatorPresenceUnsubscribe = null;
+    }
+    this.operatorPresenceEventId = eventId;
+    this.operatorPresenceEntries = [];
+    if (!eventId) {
+      this.updateScheduleConflictState();
+      return;
+    }
+    try {
+      const ref = getOperatorPresenceEventRef(eventId);
+      this.operatorPresenceUnsubscribe = onValue(
+        ref,
+        (snapshot) => {
+          const raw = snapshot.exists() ? snapshot.val() : {};
+          this.operatorPresenceEntries = this.normalizeOperatorPresenceEntries(raw, eventId);
+          this.updateScheduleConflictState();
+        },
+        (error) => {
+          console.error("Failed to monitor operator presence:", error);
+        }
+      );
+    } catch (error) {
+      console.error("Failed to subscribe operator presence:", error);
+      this.operatorPresenceUnsubscribe = null;
+    }
+    this.updateScheduleConflictState();
+  }
+
+  clearOperatorPresenceState() {
+    if (this.operatorPresenceUnsubscribe) {
+      this.operatorPresenceUnsubscribe();
+      this.operatorPresenceUnsubscribe = null;
+    }
+    this.operatorPresenceEventId = "";
+    this.operatorPresenceEntries = [];
+    this.scheduleConflictContext = null;
+    this.pendingNavigationTarget = "";
+    this.clearScheduleConflictError();
+    if (this.dom.scheduleConflictForm) {
+      this.dom.scheduleConflictForm.reset();
+    }
+    if (this.dom.scheduleConflictDialog) {
+      this.closeDialog(this.dom.scheduleConflictDialog);
+    }
+    this.updateScheduleConflictState();
+  }
+
+  handleScheduleConflictSubmit(event) {
+    event.preventDefault();
+    const options = Array.from(
+      this.dom.scheduleConflictOptions?.querySelectorAll(`input[name="${this.scheduleConflictRadioName}"]`) || []
+    );
+    const selected = options.find((input) => input.checked);
+    if (!selected) {
+      this.setScheduleConflictError("日程を選択してください。");
+      return;
+    }
+    const scheduleId = ensureString(selected.dataset.scheduleId);
+    if (!scheduleId) {
+      this.setScheduleConflictError("この日程の情報を取得できませんでした。もう一度選択してください。");
+      return;
+    }
+    if (!this.schedules.some((schedule) => schedule.id === scheduleId)) {
+      this.setScheduleConflictError("選択した日程が現在のイベントに存在しません。日程一覧を確認してください。");
+      return;
+    }
+    this.clearScheduleConflictError();
+    if (scheduleId && scheduleId !== this.selectedScheduleId) {
+      this.selectSchedule(scheduleId);
+    }
+    const targetPanel = this.pendingNavigationTarget || "participants";
+    this.pendingNavigationTarget = "";
+    if (this.dom.scheduleConflictForm) {
+      this.dom.scheduleConflictForm.reset();
+    }
+    this.closeDialog(this.dom.scheduleConflictDialog);
+    this.showPanel(targetPanel);
+  }
+
+  handleScheduleConflictCancel() {
+    this.pendingNavigationTarget = "";
+    if (this.dom.scheduleConflictForm) {
+      this.dom.scheduleConflictForm.reset();
+    }
+    this.clearScheduleConflictError();
+    this.closeDialog(this.dom.scheduleConflictDialog);
+  }
+
   cleanup() {
+    this.clearOperatorPresenceState();
     if (typeof document !== "undefined") {
       document.removeEventListener("qa:participants-synced", this.tools.handleParticipantSyncEvent);
       document.removeEventListener("qa:selection-changed", this.tools.handleParticipantSelectionBroadcast);
@@ -2816,6 +3338,8 @@ export class EventAdminApp {
         event.preventDefault();
         if (element === this.dom.confirmDialog) {
           this.resolveConfirm(false);
+        } else if (element === this.dom.scheduleConflictDialog) {
+          this.handleScheduleConflictCancel();
         } else {
           this.closeDialog(element);
         }
@@ -2857,6 +3381,13 @@ export class EventAdminApp {
     if (element === this.dom.eventDialog && this.dom.eventForm) {
       this.dom.eventForm.reset();
       this.setFormError(this.dom.eventError, "");
+    }
+    if (element === this.dom.scheduleConflictDialog) {
+      if (this.dom.scheduleConflictForm) {
+        this.dom.scheduleConflictForm.reset();
+      }
+      this.clearScheduleConflictError();
+      this.pendingNavigationTarget = "";
     }
   }
 
