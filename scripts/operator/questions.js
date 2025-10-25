@@ -56,7 +56,13 @@ export function renderQuestions(app) {
   const viewingNormalTab = currentTab === "normal";
   const selectedGenre = typeof app.state.currentGenre === "string" ? app.state.currentGenre.trim() : "";
   const viewingAllGenres = !selectedGenre || selectedGenre.toLowerCase() === GENRE_ALL_VALUE;
-  const selectedSchedule = viewingNormalTab ? app.state.currentSchedule || "" : "";
+  let selectedSchedule = "";
+  if (viewingNormalTab) {
+    selectedSchedule = String(app.state.currentSchedule || "").trim();
+    if (!selectedSchedule && typeof app.getCurrentScheduleKey === "function") {
+      selectedSchedule = String(app.getCurrentScheduleKey() || "").trim();
+    }
+  }
   let list = app.state.allQuestions.filter((item) => {
     const isPuq = item["ピックアップ"] === true || item["ラジオネーム"] === "Pick Up Question";
     if (viewingPuqTab && !isPuq) {

@@ -592,7 +592,10 @@ export class OperatorApp {
     }
 
     const scheduleId = String(this.state?.activeScheduleId || "").trim();
-    const scheduleKey = String(this.state?.currentSchedule || "").trim();
+    let scheduleKey = String(this.state?.currentSchedule || "").trim();
+    if (!scheduleKey && typeof this.getCurrentScheduleKey === "function") {
+      scheduleKey = String(this.getCurrentScheduleKey() || "").trim();
+    }
     const eventName = String(this.state?.activeEventName || "").trim();
     const scheduleLabel = String(this.state?.activeScheduleLabel || "").trim();
     const sessionId = String(this.operatorPresenceSessionId || "").trim() || this.generatePresenceSessionId();
@@ -932,7 +935,18 @@ export class OperatorApp {
         members.textContent = option.members
           .map((member) => {
             const base = String(member.name || member.uid || "").trim() || member.uid;
-            return member.isSelf ? `${base}（自分）` : base;
+            const normalizedMode = normalizeOperatorMode(member.mode);
+            const tags = [];
+            if (member.isSelf) {
+              tags.push("自分");
+            }
+            if (!isTelopMode(normalizedMode)) {
+              tags.push("参加者モード");
+            }
+            if (!tags.length) {
+              return base;
+            }
+            return `${base}（${tags.join("・")}）`;
           })
           .join("、");
       } else {
@@ -1123,7 +1137,6 @@ export class OperatorApp {
     presenceMap.forEach((value, entryId) => {
       if (!value) return;
       if (String(value.eventId || "").trim() !== eventId) return;
-      if (!isTelopMode(normalizeOperatorMode(value.mode))) return;
       const rawKey = String(value.scheduleKey || "");
       const scheduleKey = rawKey || `${eventId}::${normalizeScheduleId(value.scheduleId || "")}`;
       const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
@@ -1145,7 +1158,8 @@ export class OperatorApp {
       entry.members.push({
         uid: memberUid || fallbackId,
         name: String(value.displayName || value.email || memberUid || fallbackId || "").trim() || memberUid || fallbackId,
-        isSelf: Boolean(isSelfSession || isSelfUid)
+        isSelf: Boolean(isSelfSession || isSelfUid),
+        mode: normalizeOperatorMode(value.mode)
       });
     });
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
@@ -1931,13 +1945,14 @@ export class OperatorApp {
   normalizeQuestionRecord(item) {
     const record = item && typeof item === "object" ? item : {};
     const eventId = String(record.eventId ?? "").trim();
-    const scheduleId = String(record.scheduleId ?? "").trim();
+    const rawScheduleId = String(record.scheduleId ?? "").trim();
     const fallbackLabel = String(record.scheduleLabel ?? record.schedule ?? "").trim();
+    const normalizedScheduleId = eventId ? normalizeScheduleId(rawScheduleId) : rawScheduleId;
     let scheduleKey = "";
-    if (eventId && scheduleId) {
-      scheduleKey = `${eventId}::${scheduleId}`;
-    } else if (scheduleId) {
-      scheduleKey = scheduleId;
+    if (eventId && normalizedScheduleId) {
+      scheduleKey = `${eventId}::${normalizedScheduleId}`;
+    } else if (rawScheduleId) {
+      scheduleKey = rawScheduleId;
     } else if (fallbackLabel) {
       scheduleKey = fallbackLabel;
     }
@@ -1951,7 +1966,7 @@ export class OperatorApp {
     const metaEnd = scheduleMeta ? String(scheduleMeta.endAt || "").trim() : "";
     const rawStart = String(record.scheduleStart ?? "").trim();
     const rawEnd = String(record.scheduleEnd ?? "").trim();
-    const label = metaLabel || fallbackLabel || scheduleId || "";
+    const label = metaLabel || fallbackLabel || rawScheduleId || "";
     const eventName = metaEventName || eventNameFromMap || String(record.eventName ?? "").trim();
     const startAt = metaStart || rawStart;
     const endAt = metaEnd || rawEnd;
@@ -1964,7 +1979,7 @@ export class OperatorApp {
       ジャンル: resolveGenreLabel(record.genre),
       イベントID: eventId,
       イベント名: eventName,
-      日程ID: scheduleId,
+      日程ID: rawScheduleId || (eventId ? normalizedScheduleId : ""),
       日程: scheduleKey || label,
       日程表示: label,
       開始日時: startAt,
