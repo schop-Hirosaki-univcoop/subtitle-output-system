@@ -837,7 +837,8 @@ export class OperatorApp {
     const selfSessionId = String(this.operatorPresenceSessionId || "").trim();
     presenceMap.forEach((value, entryId) => {
       if (!value) return;
-      if (String(value.eventId || "").trim() !== eventId) return;
+      const valueEventId = String(value.eventId || "").trim();
+      if (valueEventId && valueEventId !== eventId) return;
       const scheduleKey = this.derivePresenceScheduleKey(eventId, value, entryId);
       const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
       const normalizedMode = normalizeOperatorMode(value.mode);

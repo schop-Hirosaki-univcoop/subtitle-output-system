@@ -59,6 +59,9 @@ export function renderQuestions(app) {
   let selectedSchedule = "";
   if (viewingNormalTab) {
     selectedSchedule = String(app.state.currentSchedule || "").trim();
+    if (!selectedSchedule) {
+      selectedSchedule = String(app.state.lastNormalSchedule || "").trim();
+    }
     if (!selectedSchedule && typeof app.getCurrentScheduleKey === "function") {
       selectedSchedule = String(app.getCurrentScheduleKey() || "").trim();
     }
