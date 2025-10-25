@@ -123,6 +123,26 @@
       }
     },
 
+    "operatorPresenceConsensus": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+      "$eventId": {
+        ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+        ".validate": "!newData.exists() || (newData.hasChildren(['conflictSignature','scheduleKey','scheduleId','resolvedByUid']) && newData.child('conflictSignature').isString() && newData.child('conflictSignature').val().length > 0 && newData.child('scheduleKey').isString() && newData.child('scheduleKey').val().length > 0 && newData.child('scheduleId').isString() && newData.child('scheduleId').val().length > 0 && newData.child('resolvedByUid').isString() && newData.child('resolvedByUid').val().length > 0 && (!newData.child('scheduleLabel').exists() || newData.child('scheduleLabel').isString()) && (!newData.child('scheduleRange').exists() || newData.child('scheduleRange').isString()) && (!newData.child('resolvedByDisplayName').exists() || newData.child('resolvedByDisplayName').isString()) && (!newData.child('resolvedBySessionId').exists() || newData.child('resolvedBySessionId').isString()) && (!newData.child('updatedAt').exists() || newData.child('updatedAt').isNumber() || newData.child('updatedAt').val() == now) && (!newData.child('resolvedAt').exists() || newData.child('resolvedAt').isNumber() || newData.child('resolvedAt').val() == now)))",
+        "conflictSignature": { ".validate": "newData.isString() && newData.val().length > 0" },
+        "scheduleKey": { ".validate": "newData.isString() && newData.val().length > 0" },
+        "scheduleId": { ".validate": "newData.isString() && newData.val().length > 0" },
+        "scheduleLabel": { ".validate": "newData.isString() || !newData.exists()" },
+        "scheduleRange": { ".validate": "newData.isString() || !newData.exists()" },
+        "resolvedByUid": { ".validate": "newData.isString() && newData.val().length > 0" },
+        "resolvedByDisplayName": { ".validate": "newData.isString() || !newData.exists()" },
+        "resolvedBySessionId": { ".validate": "newData.isString() || !newData.exists()" },
+        "resolvedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
+        "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
+        "$other": { ".validate": false }
+      }
+    },
+
     "questions": {
       ".read": "auth != null",
       "normal": {

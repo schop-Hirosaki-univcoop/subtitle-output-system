@@ -13,7 +13,9 @@ import {
   serverTimestamp,
   onDisconnect,
   getOperatorPresenceEventRef,
-  getOperatorPresenceEntryRef
+  getOperatorPresenceEntryRef,
+  getOperatorScheduleConsensusRef,
+  runTransaction
 } from "../operator/firebase.js";
 import { createApiClient } from "../operator/api-client.js";
 import { generateShortId, normalizeKey, toMillis } from "../question-admin/utils.js";
@@ -45,6 +47,20 @@ import { ToolCoordinator } from "./tool-coordinator.js";
 import { EventChat } from "./chat.js";
 
 const HOST_PRESENCE_HEARTBEAT_MS = 60_000;
+const SCHEDULE_CONSENSUS_TOAST_MS = 3_000;
+
+function getTimerHost() {
+  if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+    return window;
+  }
+  if (typeof globalThis !== "undefined" && typeof globalThis.setTimeout === "function") {
+    return globalThis;
+  }
+  return {
+    setTimeout,
+    clearTimeout
+  };
+}
 
 function parseCssPixels(value) {
   if (typeof value !== "string") {
@@ -103,9 +119,17 @@ export class EventAdminApp {
     this.hostPresenceHeartbeat = null;
     this.hostPresenceLastSignature = "";
     this.scheduleConflictContext = null;
+    this.scheduleConflictLastSignature = "";
     this.pendingNavigationTarget = "";
     this.scheduleConflictRadioName = generateShortId("flow-conflict-radio-");
     this.flowDebugEnabled = true;
+    this.scheduleConsensusEventId = "";
+    this.scheduleConsensusUnsubscribe = null;
+    this.scheduleConsensusState = null;
+    this.scheduleConsensusLastSignature = "";
+    this.scheduleConsensusLastKey = "";
+    this.scheduleConsensusToastTimer = 0;
+    this.scheduleConsensusHideTimer = 0;
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.updateChatLayoutMetrics = this.updateChatLayoutMetrics.bind(this);
     this.chatLayoutResizeObserver = null;
@@ -921,6 +945,7 @@ export class EventAdminApp {
     this.tools.prepareContextForSelection();
     this.updateScheduleConflictState();
     this.syncOperatorPresenceSubscription();
+    this.syncScheduleConsensusSubscription();
     this.syncHostPresence(changed ? "event-change" : "event-state");
     if (changed) {
       this.notifySelectionListeners("host");
@@ -1923,21 +1948,13 @@ export class EventAdminApp {
     ) {
       const context = this.buildScheduleConflictContext();
       this.scheduleConflictContext = context;
-      if (context.hasConflict && this.dom.scheduleConflictDialog) {
+      if (context.hasConflict) {
         this.pendingNavigationTarget = normalized;
-        this.renderScheduleConflictDialog(context);
-        this.clearScheduleConflictError();
-        this.logFlowState("スケジュール確認モーダルを表示します", {
-          target: normalized,
+        this.openScheduleConflictDialog(context, {
+          reason: "navigation",
           originPanel,
-          conflict: {
-            eventId: context.eventId,
-            hasConflict: context.hasConflict,
-            optionCount: context.options.length,
-            entryCount: context.entries.length
-          }
+          target: normalized
         });
-        this.openDialog(this.dom.scheduleConflictDialog);
         return;
       }
     }
@@ -1992,6 +2009,35 @@ export class EventAdminApp {
     }
     this.renderScheduleConflictPresence(context);
     this.renderScheduleConflictOptions(context);
+  }
+
+  openScheduleConflictDialog(context = null, meta = {}) {
+    if (!this.dom.scheduleConflictDialog) {
+      return;
+    }
+    if (!context) {
+      context = this.buildScheduleConflictContext();
+      this.scheduleConflictContext = context;
+    }
+    const { reason = "unspecified", originPanel = "", target = "" } = meta || {};
+    this.renderScheduleConflictDialog(context);
+    this.clearScheduleConflictError();
+    const wasOpen = this.isScheduleConflictDialogOpen();
+    if (!wasOpen) {
+      this.openDialog(this.dom.scheduleConflictDialog);
+      this.logFlowState("スケジュール確認モーダルを表示します", {
+        reason,
+        target,
+        originPanel,
+        conflict: {
+          eventId: context?.eventId || "",
+          hasConflict: Boolean(context?.hasConflict),
+          optionCount: Array.isArray(context?.options) ? context.options.length : 0,
+          entryCount: Array.isArray(context?.entries) ? context.entries.length : 0
+        }
+      });
+    }
+    this.scheduleConflictLastSignature = context?.signature || this.scheduleConflictLastSignature;
   }
 
   renderScheduleConflictPresence(context = null) {
@@ -2205,7 +2251,8 @@ export class EventAdminApp {
       hasOtherOperators: false,
       hostScheduleId: "",
       hostScheduleKey: "",
-      defaultKey: ""
+      defaultKey: "",
+      signature: ""
     };
     if (!eventId) {
       return context;
@@ -2312,6 +2359,14 @@ export class EventAdminApp {
     context.hasConflict = context.hasOtherOperators && uniqueKeys.size > 1;
     const preferredOption = options.find((option) => option.containsSelf) || options[0] || null;
     context.defaultKey = preferredOption?.key || "";
+    const signatureParts = entries.map((entry) => {
+      const entryId = entry.uid || entry.entryId || "anon";
+      const scheduleKey = entry.scheduleKey || "none";
+      return `${entryId}::${scheduleKey}`;
+    });
+    signatureParts.sort();
+    const baseSignature = signatureParts.join("|") || "none";
+    context.signature = `${eventId || "event"}::${baseSignature}`;
     return context;
   }
 
@@ -2320,6 +2375,30 @@ export class EventAdminApp {
     this.scheduleConflictContext = context;
     if (this.isScheduleConflictDialogOpen()) {
       this.renderScheduleConflictDialog(context);
+    }
+    this.enforceScheduleConflictState(context);
+  }
+
+  enforceScheduleConflictState(context = null) {
+    const hasConflict = Boolean(context?.hasConflict);
+    if (!hasConflict) {
+      if (this.isScheduleConflictDialogOpen()) {
+        if (this.dom.scheduleConflictForm) {
+          this.dom.scheduleConflictForm.reset();
+        }
+        this.closeDialog(this.dom.scheduleConflictDialog);
+      }
+      this.scheduleConflictLastSignature = "";
+      this.maybeClearScheduleConsensus(context);
+      return;
+    }
+    this.scheduleConflictLastSignature = context?.signature || "";
+    if (!this.isScheduleConflictDialogOpen()) {
+      this.openScheduleConflictDialog(context, {
+        reason: "presence",
+        originPanel: this.activePanel,
+        target: this.pendingNavigationTarget || this.activePanel
+      });
     }
   }
 
@@ -2371,6 +2450,280 @@ export class EventAdminApp {
       this.operatorPresenceUnsubscribe = null;
     }
     this.updateScheduleConflictState();
+  }
+
+  syncScheduleConsensusSubscription() {
+    const eventId = ensureString(this.selectedEventId);
+    if (this.scheduleConsensusEventId === eventId) {
+      return;
+    }
+    if (this.scheduleConsensusUnsubscribe) {
+      this.scheduleConsensusUnsubscribe();
+      this.scheduleConsensusUnsubscribe = null;
+    }
+    this.scheduleConsensusEventId = eventId;
+    this.scheduleConsensusState = null;
+    this.scheduleConsensusLastSignature = "";
+    this.scheduleConsensusLastKey = "";
+    this.hideScheduleConsensusToast();
+    if (!eventId) {
+      return;
+    }
+    try {
+      const ref = getOperatorScheduleConsensusRef(eventId);
+      this.scheduleConsensusUnsubscribe = onValue(
+        ref,
+        (snapshot) => {
+          const raw = snapshot.exists() ? snapshot.val() : null;
+          const consensus = this.normalizeScheduleConsensus(raw);
+          this.scheduleConsensusState = consensus;
+          this.handleScheduleConsensusUpdate(eventId, consensus);
+        },
+        (error) => {
+          console.error("Failed to monitor schedule consensus:", error);
+        }
+      );
+    } catch (error) {
+      console.error("Failed to subscribe schedule consensus:", error);
+      this.scheduleConsensusUnsubscribe = null;
+    }
+  }
+
+  clearScheduleConsensusState({ reason = "" } = {}) {
+    if (this.scheduleConsensusUnsubscribe) {
+      this.scheduleConsensusUnsubscribe();
+      this.scheduleConsensusUnsubscribe = null;
+    }
+    this.scheduleConsensusEventId = "";
+    this.scheduleConsensusState = null;
+    this.scheduleConsensusLastSignature = "";
+    this.scheduleConsensusLastKey = "";
+    this.hideScheduleConsensusToast();
+    if (reason) {
+      this.logFlowState("スケジュール合意情報をリセットしました", { reason });
+    }
+  }
+
+  normalizeScheduleConsensus(raw = null) {
+    if (!raw || typeof raw !== "object") {
+      return null;
+    }
+    return {
+      conflictSignature: ensureString(raw.conflictSignature),
+      scheduleKey: ensureString(raw.scheduleKey),
+      scheduleId: ensureString(raw.scheduleId),
+      scheduleLabel: ensureString(raw.scheduleLabel),
+      scheduleRange: ensureString(raw.scheduleRange),
+      resolvedByUid: ensureString(raw.resolvedByUid),
+      resolvedByDisplayName: ensureString(raw.resolvedByDisplayName),
+      resolvedBySessionId: ensureString(raw.resolvedBySessionId),
+      resolvedAt: Number(raw.resolvedAt || raw.updatedAt || 0) || 0
+    };
+  }
+
+  handleScheduleConsensusUpdate(eventId, consensus) {
+    if (!eventId || eventId !== ensureString(this.selectedEventId)) {
+      if (!consensus) {
+        this.hideScheduleConsensusToast();
+      }
+      return;
+    }
+    this.scheduleConsensusState = consensus || null;
+    if (!consensus) {
+      if (this.scheduleConsensusLastSignature || this.scheduleConsensusLastKey) {
+        this.logFlowState("スケジュール合意情報をクリアしました", {
+          eventId
+        });
+      }
+      this.scheduleConsensusLastSignature = "";
+      this.scheduleConsensusLastKey = "";
+      this.hideScheduleConsensusToast();
+      return;
+    }
+    const signature = consensus.conflictSignature || "";
+    const key = consensus.scheduleKey || "";
+    const changed =
+      this.scheduleConsensusLastSignature !== signature ||
+      this.scheduleConsensusLastKey !== key;
+    if (changed) {
+      this.logFlowState("スケジュール合意情報を受信しました", {
+        eventId,
+        conflictSignature: signature,
+        scheduleKey: key,
+        scheduleId: consensus.scheduleId || "",
+        resolvedByUid: consensus.resolvedByUid || ""
+      });
+      this.scheduleConsensusLastSignature = signature;
+      this.scheduleConsensusLastKey = key;
+      if (signature && key) {
+        this.applyScheduleConsensus(consensus);
+      } else {
+        this.hideScheduleConsensusToast();
+      }
+    }
+  }
+
+  applyScheduleConsensus(consensus) {
+    if (!consensus) {
+      return;
+    }
+    const eventId = ensureString(this.selectedEventId);
+    if (!eventId) {
+      return;
+    }
+    this.setScheduleConflictSubmitting(false);
+    const scheduleKey = ensureString(consensus.scheduleKey);
+    let scheduleId = ensureString(consensus.scheduleId);
+    const context = this.scheduleConflictContext || this.buildScheduleConflictContext();
+    const options = Array.isArray(context?.options) ? context.options : [];
+    let option = null;
+    if (options.length) {
+      option =
+        options.find((item) => {
+          if (scheduleKey && item.key === scheduleKey) return true;
+          if (scheduleId && item.scheduleId === scheduleId) return true;
+          return false;
+        }) || null;
+    }
+    if (!scheduleId && option && option.scheduleId) {
+      scheduleId = option.scheduleId;
+    }
+    if (scheduleId && scheduleId !== this.selectedScheduleId) {
+      if (this.schedules.some((schedule) => schedule.id === scheduleId)) {
+        this.selectSchedule(scheduleId);
+      }
+    }
+    if (this.dom.scheduleConflictForm) {
+      this.dom.scheduleConflictForm.reset();
+    }
+    if (this.dom.scheduleConflictDialog) {
+      this.closeDialog(this.dom.scheduleConflictDialog);
+    }
+    this.clearScheduleConflictError();
+    const target = this.pendingNavigationTarget;
+    this.pendingNavigationTarget = "";
+    if (target) {
+      this.showPanel(target);
+    }
+    const fallbackSchedule = scheduleId
+      ? this.schedules.find((schedule) => schedule.id === scheduleId) || null
+      : null;
+    const label = option?.scheduleLabel || ensureString(consensus.scheduleLabel) || fallbackSchedule?.label || scheduleId || "";
+    let range = option?.scheduleRange || ensureString(consensus.scheduleRange);
+    if (!range && fallbackSchedule) {
+      range = formatScheduleRange(fallbackSchedule.startAt, fallbackSchedule.endAt);
+    }
+    const byline = ensureString(consensus.resolvedByDisplayName) || ensureString(consensus.resolvedByUid);
+    this.logFlowState("スケジュール合意を適用しました", {
+      eventId,
+      scheduleId: scheduleId || "",
+      scheduleKey,
+      label,
+      range,
+      byline
+    });
+    this.showScheduleConsensusToast({ label, range, byline });
+  }
+
+  showScheduleConsensusToast({ label = "", range = "", byline = "" } = {}) {
+    const toast = this.dom.scheduleConsensusToast;
+    if (!toast) {
+      return;
+    }
+    const timerHost = getTimerHost();
+    this.hideScheduleConsensusToast();
+    if (this.scheduleConsensusHideTimer) {
+      timerHost.clearTimeout(this.scheduleConsensusHideTimer);
+      this.scheduleConsensusHideTimer = 0;
+    }
+    toast.innerHTML = "";
+    const title = document.createElement("div");
+    if (label) {
+      title.textContent = `テロップ操作は「${label}」で進行します`;
+    } else {
+      title.textContent = "テロップ操作の日程が確定しました";
+    }
+    toast.appendChild(title);
+    if (range) {
+      const rangeLine = document.createElement("div");
+      rangeLine.className = "flow-consensus-toast__range";
+      rangeLine.textContent = range;
+      toast.appendChild(rangeLine);
+    }
+    if (byline) {
+      const bylineLine = document.createElement("div");
+      bylineLine.className = "flow-consensus-toast__byline";
+      bylineLine.textContent = `確定: ${byline}`;
+      toast.appendChild(bylineLine);
+    }
+    toast.hidden = false;
+    // force reflow for transition
+    void toast.offsetWidth;
+    toast.classList.add("is-visible");
+    this.scheduleConsensusToastTimer = timerHost.setTimeout(() => {
+      this.scheduleConsensusToastTimer = 0;
+      this.hideScheduleConsensusToast();
+    }, SCHEDULE_CONSENSUS_TOAST_MS);
+  }
+
+  hideScheduleConsensusToast() {
+    const toast = this.dom.scheduleConsensusToast;
+    if (!toast) {
+      return;
+    }
+    const timerHost = getTimerHost();
+    if (this.scheduleConsensusToastTimer) {
+      timerHost.clearTimeout(this.scheduleConsensusToastTimer);
+      this.scheduleConsensusToastTimer = 0;
+    }
+    if (this.scheduleConsensusHideTimer) {
+      timerHost.clearTimeout(this.scheduleConsensusHideTimer);
+      this.scheduleConsensusHideTimer = 0;
+    }
+    if (toast.hidden) {
+      toast.textContent = "";
+      toast.classList.remove("is-visible");
+      return;
+    }
+    toast.classList.remove("is-visible");
+    this.scheduleConsensusHideTimer = timerHost.setTimeout(() => {
+      toast.hidden = true;
+      toast.textContent = "";
+      this.scheduleConsensusHideTimer = 0;
+    }, 220);
+  }
+
+  maybeClearScheduleConsensus(context = null) {
+    const consensus = this.scheduleConsensusState;
+    if (!consensus || !consensus.conflictSignature) {
+      return;
+    }
+    const eventId = ensureString(this.selectedEventId);
+    if (!eventId) {
+      return;
+    }
+    if (context?.hasConflict) {
+      return;
+    }
+    try {
+      const ref = getOperatorScheduleConsensusRef(eventId);
+      const signature = consensus.conflictSignature;
+      this.scheduleConsensusState = null;
+      this.scheduleConsensusLastSignature = "";
+      this.scheduleConsensusLastKey = "";
+      remove(ref)
+        .then(() => {
+          this.logFlowState("スケジュール合意情報を削除しました", {
+            eventId,
+            conflictSignature: signature
+          });
+        })
+        .catch((error) => {
+          console.debug("Failed to clear schedule consensus:", error);
+        });
+    } catch (error) {
+      console.debug("Failed to clear schedule consensus:", error);
+    }
   }
 
   scheduleHostPresenceHeartbeat() {
@@ -2533,7 +2886,9 @@ export class EventAdminApp {
     this.operatorPresenceEventId = "";
     this.operatorPresenceEntries = [];
     this.scheduleConflictContext = null;
+    this.scheduleConflictLastSignature = "";
     this.pendingNavigationTarget = "";
+    this.setScheduleConflictSubmitting(false);
     this.clearScheduleConflictError();
     if (this.dom.scheduleConflictForm) {
       this.dom.scheduleConflictForm.reset();
@@ -2541,8 +2896,26 @@ export class EventAdminApp {
     if (this.dom.scheduleConflictDialog) {
       this.closeDialog(this.dom.scheduleConflictDialog);
     }
+    this.clearScheduleConsensusState({ reason: "presence-reset" });
+    this.hideScheduleConsensusToast();
     this.logFlowState("オペレーター選択状況をリセットしました");
     this.updateScheduleConflictState();
+  }
+
+  setScheduleConflictSubmitting(isSubmitting) {
+    const confirmButton = this.dom.scheduleConflictConfirmButton;
+    const cancelButton = this.dom.scheduleConflictCancelButton;
+    if (confirmButton) {
+      confirmButton.disabled = Boolean(isSubmitting);
+      if (isSubmitting) {
+        confirmButton.setAttribute("aria-busy", "true");
+      } else {
+        confirmButton.removeAttribute("aria-busy");
+      }
+    }
+    if (cancelButton) {
+      cancelButton.disabled = Boolean(isSubmitting);
+    }
   }
 
   handleScheduleConflictSubmit(event) {
@@ -2556,7 +2929,8 @@ export class EventAdminApp {
       return;
     }
     const scheduleId = ensureString(selected.dataset.scheduleId);
-    if (!scheduleId) {
+    const scheduleKey = ensureString(selected.value);
+    if (!scheduleId || !scheduleKey) {
       this.setScheduleConflictError("この日程の情報を取得できませんでした。もう一度選択してください。");
       return;
     }
@@ -2564,26 +2938,107 @@ export class EventAdminApp {
       this.setScheduleConflictError("選択した日程が現在のイベントに存在しません。日程一覧を確認してください。");
       return;
     }
+    const context = this.scheduleConflictContext || this.buildScheduleConflictContext();
+    const optionsContext = Array.isArray(context?.options) ? context.options : [];
+    const option = optionsContext.find((item) => item.key === scheduleKey || item.scheduleId === scheduleId) || null;
+    this.scheduleConflictContext = context;
     this.clearScheduleConflictError();
-    if (scheduleId && scheduleId !== this.selectedScheduleId) {
-      this.selectSchedule(scheduleId);
-    }
-    const targetPanel = this.pendingNavigationTarget || "participants";
-    this.pendingNavigationTarget = "";
-    if (this.dom.scheduleConflictForm) {
-      this.dom.scheduleConflictForm.reset();
-    }
-    this.closeDialog(this.dom.scheduleConflictDialog);
-    this.showPanel(targetPanel);
+    this.setScheduleConflictSubmitting(true);
+    this.confirmScheduleConsensus({ scheduleId, scheduleKey, option, context })
+      .catch((error) => {
+        console.error("Failed to resolve schedule conflict:", error);
+        this.setScheduleConflictError("日程の確定に失敗しました。ネットワーク接続を確認して再度お試しください。");
+      })
+      .finally(() => {
+        this.setScheduleConflictSubmitting(false);
+      });
   }
 
   handleScheduleConflictCancel() {
+    this.setScheduleConflictSubmitting(false);
     this.pendingNavigationTarget = "";
     if (this.dom.scheduleConflictForm) {
       this.dom.scheduleConflictForm.reset();
     }
     this.clearScheduleConflictError();
     this.closeDialog(this.dom.scheduleConflictDialog);
+  }
+
+  async confirmScheduleConsensus(selection) {
+    const eventId = ensureString(this.selectedEventId);
+    if (!eventId) {
+      this.setScheduleConflictError("イベントが選択されていません。イベントを選択し直してください。");
+      return false;
+    }
+    const context = selection?.context || this.scheduleConflictContext || this.buildScheduleConflictContext();
+    const signature = ensureString(context?.signature);
+    if (!signature) {
+      this.setScheduleConflictError("現在の選択状況を確認できませんでした。再度お試しください。");
+      return false;
+    }
+    const scheduleId = ensureString(selection?.scheduleId);
+    const scheduleKey = ensureString(selection?.scheduleKey);
+    if (!scheduleId || !scheduleKey) {
+      this.setScheduleConflictError("日程情報を取得できませんでした。もう一度選択してください。");
+      return false;
+    }
+    const user = this.currentUser || auth.currentUser || null;
+    const resolvedByUid = ensureString(user?.uid);
+    if (!resolvedByUid) {
+      this.setScheduleConflictError("ログイン状態を確認できませんでした。ページを再読み込みしてください。");
+      return false;
+    }
+    const resolvedByDisplayName =
+      ensureString(user?.displayName) || ensureString(user?.email) || resolvedByUid;
+    const resolvedBySessionId = ensureString(this.hostPresenceSessionId);
+    const option = selection?.option || null;
+    const fallbackSchedule = this.schedules.find((schedule) => schedule.id === scheduleId) || null;
+    const scheduleLabel =
+      ensureString(option?.scheduleLabel) || ensureString(fallbackSchedule?.label) || scheduleId;
+    let scheduleRange = ensureString(option?.scheduleRange);
+    if (!scheduleRange && fallbackSchedule) {
+      scheduleRange = formatScheduleRange(fallbackSchedule.startAt, fallbackSchedule.endAt);
+    }
+    const consensusRef = getOperatorScheduleConsensusRef(eventId);
+    try {
+      const result = await runTransaction(consensusRef, (current) => {
+        if (current && typeof current === "object") {
+          const currentSignature = ensureString(current.conflictSignature);
+          const currentKey = ensureString(current.scheduleKey);
+          if (currentSignature === signature && currentKey) {
+            return;
+          }
+        }
+        return {
+          conflictSignature: signature,
+          scheduleKey,
+          scheduleId,
+          scheduleLabel,
+          scheduleRange,
+          resolvedByUid,
+          resolvedByDisplayName,
+          resolvedBySessionId,
+          resolvedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        };
+      });
+      if (!result.committed) {
+        this.setScheduleConflictError("別のオペレーターが日程を確定しました。最新の状態に更新しています…");
+        return false;
+      }
+      this.clearScheduleConflictError();
+      this.logFlowState("スケジュール合意の書き込みが完了しました", {
+        eventId,
+        scheduleId,
+        scheduleKey,
+        conflictSignature: signature
+      });
+      return true;
+    } catch (error) {
+      console.error("Failed to confirm schedule consensus:", error);
+      this.setScheduleConflictError("日程の確定に失敗しました。通信環境を確認して再度お試しください。");
+      return false;
+    }
   }
 
   cleanup() {

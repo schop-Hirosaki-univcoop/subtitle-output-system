@@ -64,6 +64,7 @@ export function queryDom() {
     scheduleConflictConfirmButton: document.getElementById("flow-schedule-conflict-confirm-button"),
     scheduleConflictCancelButton: document.getElementById("flow-schedule-conflict-cancel-button"),
     scheduleConflictDescription: document.getElementById("flow-schedule-conflict-description"),
+    scheduleConsensusToast: document.getElementById("flow-schedule-consensus-toast"),
     confirmDialog: document.getElementById("flow-confirm-dialog"),
     confirmDialogTitle: document.getElementById("flow-confirm-dialog-title"),
     confirmDialogMessage: document.getElementById("flow-confirm-dialog-message"),
