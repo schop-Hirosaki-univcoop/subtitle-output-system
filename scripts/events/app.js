@@ -2112,8 +2112,16 @@ export class EventAdminApp {
     if (legend) {
       container.appendChild(legend);
     }
-    const options = Array.isArray(context?.options) ? context.options : [];
+    const options = Array.isArray(context?.selectableOptions) && context.selectableOptions.length
+      ? context.selectableOptions
+      : Array.isArray(context?.options)
+        ? context.options.filter((option) => option.isSelectable)
+        : [];
     if (!options.length) {
+      const helper = document.createElement("p");
+      helper.className = "modal-helper";
+      helper.textContent = "選択できる日程がありません。いずれかのオペレーターが日程を選択するまでお待ちください。";
+      container.appendChild(helper);
       return;
     }
     const defaultKey = context?.hostScheduleKey || context?.defaultKey || options[0]?.key || "";
@@ -2247,6 +2255,7 @@ export class EventAdminApp {
       eventId,
       entries: [],
       options: [],
+      selectableOptions: [],
       hasConflict: false,
       hasOtherOperators: false,
       hostScheduleId: "",
@@ -2339,13 +2348,15 @@ export class EventAdminApp {
       const scheduleLabel = group.scheduleLabel || schedule?.label || group.scheduleId || "未選択";
       const scheduleRange = group.scheduleRange || formatScheduleRange(schedule?.startAt, schedule?.endAt);
       const containsSelf = group.members.some((member) => member.isSelf);
+      const hasScheduleSelection = Boolean(schedule?.id || group.scheduleId);
       return {
         key: group.key,
         scheduleId: schedule?.id || group.scheduleId || "",
         scheduleLabel,
         scheduleRange,
         members: group.members,
-        containsSelf
+        containsSelf,
+        isSelectable: hasScheduleSelection
       };
     });
     options.sort((a, b) => {
@@ -2355,9 +2366,18 @@ export class EventAdminApp {
     });
     context.options = options;
     context.hasOtherOperators = entries.some((entry) => !entry.isSelf);
-    const uniqueKeys = new Set(options.map((option) => option.key || ""));
-    context.hasConflict = context.hasOtherOperators && uniqueKeys.size > 1;
-    const preferredOption = options.find((option) => option.containsSelf) || options[0] || null;
+    const selectableOptions = options.filter((option) => option.isSelectable);
+    context.selectableOptions = selectableOptions;
+    const uniqueSelectableKeys = new Set(
+      selectableOptions.map((option) => option.key || option.scheduleId || "")
+    );
+    context.hasConflict =
+      Boolean(context.hostScheduleId) &&
+      context.hasOtherOperators &&
+      selectableOptions.length > 1 &&
+      uniqueSelectableKeys.size > 1;
+    const preferredOption =
+      selectableOptions.find((option) => option.containsSelf) || selectableOptions[0] || null;
     context.defaultKey = preferredOption?.key || "";
     const signatureParts = entries.map((entry) => {
       const entryId = entry.uid || entry.entryId || "anon";
@@ -2575,7 +2595,11 @@ export class EventAdminApp {
     const scheduleKey = ensureString(consensus.scheduleKey);
     let scheduleId = ensureString(consensus.scheduleId);
     const context = this.scheduleConflictContext || this.buildScheduleConflictContext();
-    const options = Array.isArray(context?.options) ? context.options : [];
+    const options = Array.isArray(context?.selectableOptions) && context.selectableOptions.length
+      ? context.selectableOptions
+      : Array.isArray(context?.options)
+        ? context.options
+        : [];
     let option = null;
     if (options.length) {
       option =
@@ -2939,7 +2963,11 @@ export class EventAdminApp {
       return;
     }
     const context = this.scheduleConflictContext || this.buildScheduleConflictContext();
-    const optionsContext = Array.isArray(context?.options) ? context.options : [];
+    const optionsContext = Array.isArray(context?.selectableOptions) && context.selectableOptions.length
+      ? context.selectableOptions
+      : Array.isArray(context?.options)
+        ? context.options
+        : [];
     const option = optionsContext.find((item) => item.key === scheduleKey || item.scheduleId === scheduleId) || null;
     this.scheduleConflictContext = context;
     this.clearScheduleConflictError();
