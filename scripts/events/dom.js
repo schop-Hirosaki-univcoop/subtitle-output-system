@@ -31,6 +31,7 @@ export function queryDom() {
     scheduleSelectionNote: document.getElementById("flow-schedule-selection-note"),
     addScheduleButton: document.getElementById("flow-add-schedule-button"),
     scheduleRefreshButton: document.getElementById("flow-schedule-refresh-button"),
+    scheduleNextButton: document.querySelector('[data-panel="schedules"] [data-flow-nav-target="participants"]'),
     scheduleSummary: document.getElementById("flow-schedule-summary"),
     scheduleSummaryEmpty: document.getElementById("flow-schedule-summary-empty"),
     scheduleSummaryEvent: document.getElementById("flow-schedule-summary-event"),

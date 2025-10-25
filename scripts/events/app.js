@@ -2040,6 +2040,7 @@ export class EventAdminApp {
       });
     }
     this.scheduleConflictLastSignature = context?.signature || this.scheduleConflictLastSignature;
+    this.syncScheduleConflictPromptState(context);
   }
 
   renderScheduleConflictPresence(context = null) {
@@ -2126,6 +2127,14 @@ export class EventAdminApp {
       container.appendChild(helper);
       return;
     }
+    const eventId = ensureString(context?.eventId || this.selectedEventId);
+    const updateSelectionState = () => {
+      const wrappers = container.querySelectorAll(".conflict-option");
+      wrappers.forEach((wrapperEl) => {
+        const input = wrapperEl.querySelector(`input[name="${this.scheduleConflictRadioName}"]`);
+        wrapperEl.classList.toggle("is-selected", Boolean(input?.checked));
+      });
+    };
     const defaultKey = context?.hostScheduleKey || context?.defaultKey || options[0]?.key || "";
     options.forEach((option, index) => {
       const optionId = `flow-schedule-conflict-option-${index}`;
@@ -2136,14 +2145,23 @@ export class EventAdminApp {
       radio.type = "radio";
       radio.id = optionId;
       radio.name = this.scheduleConflictRadioName;
-      radio.value = option.key || "";
+      const scheduleId = option.scheduleId || this.extractScheduleIdFromKey(option.key, eventId);
+      const radioValue = option.key || this.derivePresenceScheduleKey(eventId, {
+        scheduleId,
+        scheduleLabel: option.scheduleLabel
+      });
+      radio.value = radioValue || "";
       radio.className = "visually-hidden";
       radio.required = true;
-      radio.dataset.scheduleId = option.scheduleId || "";
+      radio.dataset.scheduleId = scheduleId || "";
+      wrapper.dataset.scheduleId = scheduleId || "";
+      wrapper.dataset.scheduleKey = radioValue || "";
+      wrapper.dataset.containsSelf = option.containsSelf ? "true" : "false";
       const shouldCheck = option.key === defaultKey || (!defaultKey && index === 0);
       if (shouldCheck) {
         radio.checked = true;
       }
+      radio.addEventListener("change", updateSelectionState);
       wrapper.appendChild(radio);
 
       const header = document.createElement("div");
@@ -2185,6 +2203,7 @@ export class EventAdminApp {
 
       container.appendChild(wrapper);
     });
+    updateSelectionState();
   }
 
   buildPresenceScheduleKey(eventId, payload = {}, entryId = "") {
@@ -2215,6 +2234,41 @@ export class EventAdminApp {
       return `${normalizedEvent}::session::${normalizedEntry}`;
     }
     return normalizedEntry || normalizedEvent || "";
+  }
+
+  extractScheduleIdFromKey(scheduleKey, eventId = "") {
+    const key = ensureString(scheduleKey);
+    if (!key) {
+      return "";
+    }
+    const normalizedEvent = ensureString(eventId) || ensureString(this.selectedEventId);
+    let working = key;
+    if (normalizedEvent && working.startsWith(`${normalizedEvent}::`)) {
+      working = working.slice(normalizedEvent.length + 2);
+    }
+    if (!working) {
+      return "";
+    }
+    const [firstPart] = working.split("::");
+    if (!firstPart || firstPart === "label" || firstPart === "session") {
+      return "";
+    }
+    const normalizedCandidate = normalizeScheduleId(firstPart);
+    const candidates = [firstPart];
+    if (normalizedCandidate && normalizedCandidate !== firstPart) {
+      candidates.push(normalizedCandidate);
+    }
+    const match = this.schedules.find((schedule) => {
+      if (!schedule || !schedule.id) {
+        return false;
+      }
+      if (candidates.includes(schedule.id)) {
+        return true;
+      }
+      const normalizedId = normalizeScheduleId(schedule.id);
+      return Boolean(normalizedId) && candidates.includes(normalizedId);
+    });
+    return match ? match.id : "";
   }
 
   normalizeOperatorPresenceEntries(raw = {}, eventId = "") {
@@ -2346,14 +2400,16 @@ export class EventAdminApp {
       existing.members.push(entry);
     });
     const options = Array.from(groups.values()).map((group) => {
-      const schedule = group.scheduleId ? scheduleMap.get(group.scheduleId) : null;
-      const scheduleLabel = group.scheduleLabel || schedule?.label || group.scheduleId || "未選択";
+      const derivedScheduleId = group.scheduleId || this.extractScheduleIdFromKey(group.key, eventId) || "";
+      const schedule = derivedScheduleId ? scheduleMap.get(derivedScheduleId) : null;
+      const scheduleId = schedule?.id || derivedScheduleId || "";
+      const scheduleLabel = group.scheduleLabel || schedule?.label || scheduleId || "未選択";
       const scheduleRange = group.scheduleRange || formatScheduleRange(schedule?.startAt, schedule?.endAt);
       const containsSelf = group.members.some((member) => member.isSelf);
-      const hasScheduleSelection = Boolean(schedule?.id || group.scheduleId);
+      const hasScheduleSelection = Boolean(scheduleId);
       return {
         key: group.key,
-        scheduleId: schedule?.id || group.scheduleId || "",
+        scheduleId,
         scheduleLabel,
         scheduleRange,
         members: group.members,
@@ -2392,6 +2448,45 @@ export class EventAdminApp {
     return context;
   }
 
+  syncScheduleConflictPromptState(context = null) {
+    const button = this.dom.scheduleNextButton;
+    if (!button) {
+      return;
+    }
+    const resolvedContext = context || this.scheduleConflictContext || this.buildScheduleConflictContext();
+    const contextSignature = ensureString(resolvedContext?.signature);
+    const pendingSignature = ensureString(this.scheduleConflictPromptSignature);
+    const hasConflict = Boolean(resolvedContext?.hasConflict);
+    const hasResolvedKey = Boolean(this.scheduleConsensusLastKey);
+    const shouldIndicate =
+      hasConflict &&
+      pendingSignature &&
+      contextSignature &&
+      contextSignature === pendingSignature &&
+      !hasResolvedKey;
+    if (shouldIndicate) {
+      if (!Object.prototype.hasOwnProperty.call(button.dataset, "conflictOriginalTitle")) {
+        button.dataset.conflictOriginalTitle = button.getAttribute("title") || "";
+      }
+      button.setAttribute("data-conflict-pending", "true");
+      button.setAttribute(
+        "title",
+        "他のオペレーターと日程の調整が必要です。「次へ」で日程を確定してください。"
+      );
+    } else {
+      button.removeAttribute("data-conflict-pending");
+      if (Object.prototype.hasOwnProperty.call(button.dataset, "conflictOriginalTitle")) {
+        const original = button.dataset.conflictOriginalTitle || "";
+        if (original) {
+          button.setAttribute("title", original);
+        } else {
+          button.removeAttribute("title");
+        }
+        delete button.dataset.conflictOriginalTitle;
+      }
+    }
+  }
+
   updateScheduleConflictState() {
     const context = this.buildScheduleConflictContext();
     this.scheduleConflictContext = context;
@@ -2399,6 +2494,7 @@ export class EventAdminApp {
       this.renderScheduleConflictDialog(context);
     }
     this.enforceScheduleConflictState(context);
+    this.syncScheduleConflictPromptState(context);
   }
 
   enforceScheduleConflictState(context = null) {
@@ -2416,8 +2512,7 @@ export class EventAdminApp {
       return;
     }
     this.scheduleConflictLastSignature = context?.signature || "";
-    const shouldPrompt =
-      Boolean(this.pendingNavigationTarget) || this.shouldPromptFromConsensus(context);
+    const shouldPrompt = Boolean(this.pendingNavigationTarget);
     const hasSelection = Boolean(this.selectedScheduleId);
     if (shouldPrompt && hasSelection && !this.isScheduleConflictDialogOpen()) {
       this.openScheduleConflictDialog(context, {
@@ -2426,23 +2521,6 @@ export class EventAdminApp {
         target: this.pendingNavigationTarget || this.activePanel
       });
     }
-  }
-
-  shouldPromptFromConsensus(context = null) {
-    const consensus = this.scheduleConsensusState;
-    if (!consensus) {
-      return false;
-    }
-    const signature = ensureString(context?.signature);
-    if (!signature) {
-      return false;
-    }
-    const consensusSignature = ensureString(consensus.conflictSignature);
-    if (!consensusSignature || consensusSignature !== signature) {
-      return false;
-    }
-    const scheduleKey = ensureString(consensus.scheduleKey);
-    return !scheduleKey;
   }
 
   syncOperatorPresenceSubscription() {
@@ -2631,16 +2709,16 @@ export class EventAdminApp {
     if (!context?.hasConflict || ensureString(context.signature) !== signature) {
       return;
     }
-    if (!this.selectedScheduleId) {
-      return;
+    this.scheduleConflictContext = context;
+    if (context?.signature) {
+      this.scheduleConflictLastSignature = context.signature;
     }
-    if (this.isScheduleConflictDialogOpen()) {
-      return;
-    }
-    this.openScheduleConflictDialog(context, {
-      reason: "consensus-pending",
+    this.syncScheduleConflictPromptState(context);
+    this.logFlowState("スケジュール合意の確認が保留中です", {
+      eventId: context?.eventId || "",
+      conflictSignature: signature,
       originPanel: this.activePanel,
-      target: this.pendingNavigationTarget || this.activePanel
+      pendingNavigationTarget: this.pendingNavigationTarget || ""
     });
   }
 
@@ -2708,6 +2786,7 @@ export class EventAdminApp {
       byline
     });
     this.showScheduleConsensusToast({ label, range, byline });
+    this.syncScheduleConflictPromptState();
   }
 
   showScheduleConsensusToast({ label = "", range = "", byline = "" } = {}) {
@@ -2807,6 +2886,7 @@ export class EventAdminApp {
         .catch((error) => {
           console.debug("Failed to clear schedule consensus:", error);
         });
+      this.syncScheduleConflictPromptState(context);
     } catch (error) {
       console.debug("Failed to clear schedule consensus:", error);
     }
@@ -3079,6 +3159,7 @@ export class EventAdminApp {
           requestedByUid,
           requestedBySessionId
         });
+        this.syncScheduleConflictPromptState(resolvedContext);
       }
       return result.committed;
     } catch (error) {
@@ -3097,16 +3178,37 @@ export class EventAdminApp {
       this.setScheduleConflictError("日程を選択してください。");
       return;
     }
-    const scheduleId = ensureString(selected.dataset.scheduleId);
+    let scheduleId = ensureString(selected.dataset.scheduleId);
     const scheduleKey = ensureString(selected.value);
-    if (!scheduleId || !scheduleKey) {
+    if (!scheduleKey) {
       this.setScheduleConflictError("この日程の情報を取得できませんでした。もう一度選択してください。");
       return;
     }
-    if (!this.schedules.some((schedule) => schedule.id === scheduleId)) {
+    if (!scheduleId) {
+      scheduleId = this.extractScheduleIdFromKey(scheduleKey) || "";
+      if (scheduleId) {
+        selected.dataset.scheduleId = scheduleId;
+      }
+    }
+    if (!scheduleId) {
+      this.setScheduleConflictError("この日程の情報を取得できませんでした。もう一度選択してください。");
+      return;
+    }
+    const scheduleMatch = this.schedules.find((schedule) => {
+      if (!schedule?.id) {
+        return false;
+      }
+      if (schedule.id === scheduleId) {
+        return true;
+      }
+      return normalizeScheduleId(schedule.id) === normalizeScheduleId(scheduleId);
+    });
+    if (!scheduleMatch) {
       this.setScheduleConflictError("選択した日程が現在のイベントに存在しません。日程一覧を確認してください。");
       return;
     }
+    scheduleId = scheduleMatch.id;
+    selected.dataset.scheduleId = scheduleId;
     const context = this.scheduleConflictContext || this.buildScheduleConflictContext();
     const optionsContext = Array.isArray(context?.selectableOptions) && context.selectableOptions.length
       ? context.selectableOptions
@@ -3135,6 +3237,7 @@ export class EventAdminApp {
     }
     this.clearScheduleConflictError();
     this.closeDialog(this.dom.scheduleConflictDialog);
+    this.syncScheduleConflictPromptState();
   }
 
   async confirmScheduleConsensus(selection) {
@@ -3149,12 +3252,33 @@ export class EventAdminApp {
       this.setScheduleConflictError("現在の選択状況を確認できませんでした。再度お試しください。");
       return false;
     }
-    const scheduleId = ensureString(selection?.scheduleId);
+    let scheduleId = ensureString(selection?.scheduleId);
     const scheduleKey = ensureString(selection?.scheduleKey);
-    if (!scheduleId || !scheduleKey) {
+    if (!scheduleKey) {
       this.setScheduleConflictError("日程情報を取得できませんでした。もう一度選択してください。");
       return false;
     }
+    if (!scheduleId) {
+      scheduleId = this.extractScheduleIdFromKey(scheduleKey, eventId);
+    }
+    if (!scheduleId) {
+      this.setScheduleConflictError("日程情報を取得できませんでした。もう一度選択してください。");
+      return false;
+    }
+    const scheduleMatch = this.schedules.find((schedule) => {
+      if (!schedule?.id) {
+        return false;
+      }
+      if (schedule.id === scheduleId) {
+        return true;
+      }
+      return normalizeScheduleId(schedule.id) === normalizeScheduleId(scheduleId);
+    });
+    if (!scheduleMatch) {
+      this.setScheduleConflictError("選択した日程が現在のイベントに存在しません。日程一覧を確認してください。");
+      return false;
+    }
+    scheduleId = scheduleMatch.id;
     const user = this.currentUser || auth.currentUser || null;
     const resolvedByUid = ensureString(user?.uid);
     if (!resolvedByUid) {

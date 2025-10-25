@@ -1589,6 +1589,18 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   display:flex;
   flex-direction:column;
   gap:.35rem;
+  cursor:pointer;
+  transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.conflict-option:hover,
+.conflict-option:focus-within{
+  border-color:rgba(93,208,255,.6);
+  box-shadow:0 0 0 2px rgba(93,208,255,.18);
+}
+.conflict-option.is-selected{
+  border-color:rgba(93,208,255,.85);
+  background:rgba(24,38,68,.82);
+  box-shadow:0 0 0 2px rgba(93,208,255,.32);
 }
 .conflict-option__header{
   display:flex;
@@ -1616,6 +1628,9 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 .conflict-option__members{
   font-size:.9rem;
   color:var(--muted);
+}
+#flow-stage-panels .flow-nav-button[data-conflict-pending="true"]{
+  box-shadow:0 0 0 2px rgba(93,208,255,.45);
 }
 #op-conflict-description,
 #flow-schedule-conflict-description{
