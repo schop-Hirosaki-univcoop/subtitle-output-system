@@ -24,6 +24,11 @@ import {
   collectParticipantTokens
 } from "./helpers.js";
 import {
+  OPERATOR_MODE_TELOP,
+  OPERATOR_MODE_SUPPORT,
+  normalizeOperatorMode
+} from "../shared/operator-modes.js";
+import {
   STAGE_SEQUENCE,
   STAGE_INFO,
   PANEL_CONFIG,
@@ -78,6 +83,8 @@ export class EventAdminApp {
     this.stageNote = "";
     this.applyMetaNote();
     this.chat = new EventChat(this);
+    this.operatorMode = OPERATOR_MODE_TELOP;
+    this.displayUrlCopyTimer = 0;
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.updateChatLayoutMetrics = this.updateChatLayoutMetrics.bind(this);
     this.chatLayoutResizeObserver = null;
@@ -246,6 +253,27 @@ export class EventAdminApp {
         this.showPanel(target);
       });
     });
+
+    if (this.dom.eventSummaryCopyButton) {
+      const button = this.dom.eventSummaryCopyButton;
+      if (!button.dataset.defaultLabel) {
+        button.dataset.defaultLabel = button.textContent?.trim() || "表示URLをコピー";
+      }
+      this.dom.eventSummaryCopyButton.addEventListener("click", () => {
+        this.handleDisplayUrlCopy().catch((error) => {
+          logError("Failed to copy display URL", error);
+          this.announceDisplayUrlCopy(false);
+        });
+      });
+    }
+
+    if (this.dom.operatorModeToggle) {
+      this.dom.operatorModeToggle.addEventListener("change", (event) => {
+        const checked = event.target instanceof HTMLInputElement ? event.target.checked : this.dom.operatorModeToggle.checked;
+        const mode = checked ? OPERATOR_MODE_SUPPORT : OPERATOR_MODE_TELOP;
+        this.setOperatorMode(mode, { fromControl: true });
+      });
+    }
 
     if (this.dom.eventForm) {
       this.dom.eventForm.addEventListener("submit", (event) => {
@@ -782,8 +810,181 @@ export class EventAdminApp {
       scheduleId: schedule?.id || "",
       scheduleLabel: schedule?.label || schedule?.id || "",
       startAt: schedule?.startAt || "",
-      endAt: schedule?.endAt || ""
+      endAt: schedule?.endAt || "",
+      operatorMode: this.operatorMode
     };
+  }
+
+  getDisplayUrlForEvent(eventId) {
+    const normalized = ensureString(eventId);
+    if (!normalized) {
+      return "";
+    }
+    if (typeof window === "undefined") {
+      return `display.html?evt=${encodeURIComponent(normalized)}`;
+    }
+    const base = new URL("display.html", window.location.href);
+    base.searchParams.set("evt", normalized);
+    return base.toString();
+  }
+
+  async handleDisplayUrlCopy() {
+    if (!this.dom.eventSummaryCopyButton) {
+      return;
+    }
+    const button = this.dom.eventSummaryCopyButton;
+    if (button.disabled) {
+      return;
+    }
+    const eventId = ensureString(this.selectedEventId);
+    if (!eventId) {
+      this.announceDisplayUrlCopy(false);
+      return;
+    }
+    const url = this.getDisplayUrlForEvent(eventId);
+    if (!url) {
+      this.announceDisplayUrlCopy(false);
+      return;
+    }
+    button.disabled = true;
+    let success = false;
+    try {
+      if (navigator?.clipboard && typeof navigator.clipboard.writeText === "function") {
+        await navigator.clipboard.writeText(url);
+        success = true;
+      }
+    } catch (error) {
+      console.warn("navigator.clipboard.writeText failed", error);
+    }
+    if (!success) {
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = url;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        success = document.execCommand("copy");
+        document.body.removeChild(textarea);
+      } catch (error) {
+        console.warn("Fallback clipboard copy failed", error);
+        success = false;
+      }
+    }
+    this.announceDisplayUrlCopy(success, url);
+    button.disabled = false;
+  }
+
+  announceDisplayUrlCopy(success, url = "") {
+    const button = this.dom.eventSummaryCopyButton;
+    if (!button) {
+      return;
+    }
+    const status = this.dom.eventSummaryCopyStatus;
+    const defaultLabel = button.dataset.defaultLabel || "表示URLをコピー";
+    if (this.displayUrlCopyTimer) {
+      clearTimeout(this.displayUrlCopyTimer);
+      this.displayUrlCopyTimer = 0;
+    }
+    if (success) {
+      button.classList.remove("is-error");
+      button.classList.add("is-success");
+      button.textContent = "コピーしました";
+      if (status) {
+        status.textContent = "ディスプレイURLをコピーしました。";
+      }
+    } else {
+      button.classList.remove("is-success");
+      button.classList.add("is-error");
+      button.textContent = "コピーできません";
+      if (status) {
+        status.textContent = url ? `コピーに失敗しました。URL: ${url}` : "コピーに失敗しました。";
+      }
+    }
+    if (typeof window !== "undefined") {
+      this.displayUrlCopyTimer = window.setTimeout(() => {
+        button.classList.remove("is-success", "is-error");
+        button.textContent = defaultLabel;
+        if (status) {
+          status.textContent = "";
+        }
+        this.displayUrlCopyTimer = 0;
+      }, 3200);
+    }
+  }
+
+  setOperatorMode(mode, { fromControl = false } = {}) {
+    const normalized = normalizeOperatorMode(mode);
+    const previous = this.operatorMode;
+    this.operatorMode = normalized;
+    this.syncOperatorModeUi();
+    if (previous === normalized) {
+      return;
+    }
+    this.tools
+      .syncOperatorContext({ force: true })
+      .catch((error) => logError("Failed to apply operator mode to embed", error));
+    if (!fromControl && this.dom.operatorModeToggle) {
+      this.dom.operatorModeToggle.checked = normalized === OPERATOR_MODE_SUPPORT;
+    }
+    const hasSelection = Boolean(this.selectedEventId && this.selectedScheduleId);
+    if (!hasSelection) {
+      return;
+    }
+    const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
+    if (activeConfig.stage === "tabs") {
+      this.tools.syncEmbeddedTools().catch((error) => logError("Failed to resync tools after mode change", error));
+    } else {
+      this.tools.setPendingSync(true);
+    }
+  }
+
+  syncOperatorModeUi() {
+    const panel = this.dom.operatorModePanel;
+    const toggle = this.dom.operatorModeToggle;
+    const description = this.dom.operatorModeDescription;
+    const hasEvent = Boolean(this.selectedEventId);
+    const hasSchedule = Boolean(this.selectedScheduleId);
+    if (panel) {
+      panel.hidden = !hasEvent;
+    }
+    if (this.dom.eventSummaryActions) {
+      this.dom.eventSummaryActions.hidden = !hasEvent;
+    }
+    if (toggle) {
+      toggle.checked = this.operatorMode === OPERATOR_MODE_SUPPORT;
+      toggle.disabled = !hasSchedule;
+      if (description) {
+        if (!hasSchedule) {
+          description.textContent = "日程を選択するとモードを切り替えられます。";
+        } else if (this.operatorMode === OPERATOR_MODE_SUPPORT) {
+          description.textContent = "参加者リストなどのツールのみ利用するモードです。テロップ操作は無効になります。";
+        } else {
+          description.textContent = "テロップ操作を含む全機能を利用できます。";
+        }
+      }
+      if (description) {
+        toggle.setAttribute("aria-describedby", description.id);
+      }
+    }
+    const copyButton = this.dom.eventSummaryCopyButton;
+    if (copyButton) {
+      const hasEventSelection = Boolean(this.selectedEventId);
+      copyButton.disabled = !hasEventSelection;
+      if (!hasEventSelection) {
+        copyButton.classList.remove("is-success", "is-error");
+        const defaultLabel = copyButton.dataset.defaultLabel || "表示URLをコピー";
+        copyButton.textContent = defaultLabel;
+        if (this.displayUrlCopyTimer) {
+          clearTimeout(this.displayUrlCopyTimer);
+          this.displayUrlCopyTimer = 0;
+        }
+        if (this.dom.eventSummaryCopyStatus) {
+          this.dom.eventSummaryCopyStatus.textContent = "";
+        }
+      }
+    }
   }
 
   getParticipantEventsSnapshot() {
@@ -1086,6 +1287,7 @@ export class EventAdminApp {
         : "—";
     }
     this.updateStageHeader();
+    this.syncOperatorModeUi();
   }
 
   updateScheduleSummary() {
@@ -1126,6 +1328,7 @@ export class EventAdminApp {
         this.dom.scheduleSummaryRange.textContent = "";
       }
     }
+    this.syncOperatorModeUi();
   }
 
   clearLoadingIndicators() {
