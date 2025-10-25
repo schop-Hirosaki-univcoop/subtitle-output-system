@@ -405,6 +405,36 @@ export class OperatorApp {
     return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
   }
 
+  derivePresenceScheduleKey(eventId, payload = {}, entryId = "") {
+    const ensure = (value) => String(value ?? "").trim();
+    const normalizedEvent = ensure(eventId);
+    const normalizedEntry = ensure(entryId);
+    const source = payload && typeof payload === "object" ? payload : {};
+    const rawKey = ensure(source.scheduleKey);
+    if (rawKey) {
+      return rawKey;
+    }
+    const scheduleId = ensure(source.scheduleId);
+    if (normalizedEvent && scheduleId) {
+      return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
+    }
+    if (scheduleId) {
+      return normalizeScheduleId(scheduleId);
+    }
+    const scheduleLabel = ensure(source.scheduleLabel);
+    if (scheduleLabel) {
+      const sanitizedLabel = scheduleLabel.replace(/\s+/g, " ").trim().replace(/::/g, "／");
+      if (normalizedEvent) {
+        return `${normalizedEvent}::label::${sanitizedLabel}`;
+      }
+      return `label::${sanitizedLabel}`;
+    }
+    if (normalizedEvent && normalizedEntry) {
+      return `${normalizedEvent}::session::${normalizedEntry}`;
+    }
+    return normalizedEntry || normalizedEvent || "";
+  }
+
   isTelopEnabled() {
     return isTelopMode(this.operatorMode);
   }
@@ -592,13 +622,16 @@ export class OperatorApp {
     }
 
     const scheduleId = String(this.state?.activeScheduleId || "").trim();
+    const scheduleLabel = String(this.state?.activeScheduleLabel || "").trim();
+    const sessionId = String(this.operatorPresenceSessionId || "").trim() || this.generatePresenceSessionId();
     let scheduleKey = String(this.state?.currentSchedule || "").trim();
     if (!scheduleKey && typeof this.getCurrentScheduleKey === "function") {
       scheduleKey = String(this.getCurrentScheduleKey() || "").trim();
     }
+    if (!scheduleKey) {
+      scheduleKey = this.derivePresenceScheduleKey(eventId, { scheduleId, scheduleLabel }, sessionId);
+    }
     const eventName = String(this.state?.activeEventName || "").trim();
-    const scheduleLabel = String(this.state?.activeScheduleLabel || "").trim();
-    const sessionId = String(this.operatorPresenceSessionId || "").trim() || this.generatePresenceSessionId();
     const operatorMode = normalizeOperatorMode(this.operatorMode);
     this.operatorPresenceSessionId = sessionId;
     const nextKey = `${eventId}/${sessionId}`;
@@ -805,8 +838,7 @@ export class OperatorApp {
     presenceMap.forEach((value, entryId) => {
       if (!value) return;
       if (String(value.eventId || "").trim() !== eventId) return;
-      const rawKey = String(value.scheduleKey || "");
-      const scheduleKey = rawKey || `${eventId}::${normalizeScheduleId(value.scheduleId || "")}`;
+      const scheduleKey = this.derivePresenceScheduleKey(eventId, value, entryId);
       const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
       const normalizedMode = normalizeOperatorMode(value.mode);
       const entry = groups.get(scheduleKey) || {
@@ -1038,6 +1070,16 @@ export class OperatorApp {
       }
       return;
     }
+    if (!normalizedSchedule) {
+      const message = "日程が選択されていないため固定できません。";
+      if (fromModal && this.dom.conflictError) {
+        this.dom.conflictError.textContent = message;
+        this.dom.conflictError.hidden = false;
+      } else if (!silent) {
+        this.toast(message, "error");
+      }
+      return;
+    }
     if (this.state.channelLocking) {
       return;
     }
@@ -1137,8 +1179,7 @@ export class OperatorApp {
     presenceMap.forEach((value, entryId) => {
       if (!value) return;
       if (String(value.eventId || "").trim() !== eventId) return;
-      const rawKey = String(value.scheduleKey || "");
-      const scheduleKey = rawKey || `${eventId}::${normalizeScheduleId(value.scheduleId || "")}`;
+      const scheduleKey = this.derivePresenceScheduleKey(eventId, value, entryId);
       const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
       const entry = groups.get(scheduleKey) || {
         key: scheduleKey,
