@@ -1179,12 +1179,14 @@ export class OperatorApp {
     const selfSessionId = String(this.operatorPresenceSessionId || "").trim();
     presenceMap.forEach((value, entryId) => {
       if (!value) return;
-      if (String(value.eventId || "").trim() !== eventId) return;
-      const scheduleKey = this.derivePresenceScheduleKey(eventId, value, entryId);
+      const valueEventId = String(value.eventId || "").trim();
+      if (valueEventId && valueEventId !== eventId) return;
+      const resolvedEventId = valueEventId || eventId;
+      const scheduleKey = this.derivePresenceScheduleKey(resolvedEventId, value, entryId);
       const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
       const entry = groups.get(scheduleKey) || {
         key: scheduleKey,
-        eventId,
+        eventId: resolvedEventId || eventId,
         scheduleId: String(value.scheduleId || ""),
         label,
         members: []
@@ -1429,8 +1431,19 @@ export class OperatorApp {
     }
     if (this.dom.conflictOptions) {
       this.dom.conflictOptions.addEventListener("change", (event) => {
-        if (event.target instanceof HTMLInputElement && event.target.type === "radio") {
-          this.state.conflictSelection = event.target.value;
+        if (!(event.target instanceof HTMLInputElement) || event.target.type !== "radio") {
+          return;
+        }
+        const nextValue = String(event.target.value || "").trim();
+        if (this.state.conflictSelection === nextValue) {
+          return;
+        }
+        this.state.conflictSelection = nextValue;
+        if (nextValue) {
+          this.state.currentSchedule = nextValue;
+          this.state.lastNormalSchedule = nextValue;
+          this.updateScheduleContext();
+          this.renderQuestions();
         }
       });
     }

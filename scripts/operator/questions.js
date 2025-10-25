@@ -58,9 +58,17 @@ export function renderQuestions(app) {
   const viewingAllGenres = !selectedGenre || selectedGenre.toLowerCase() === GENRE_ALL_VALUE;
   let selectedSchedule = "";
   if (viewingNormalTab) {
-    selectedSchedule = String(app.state.currentSchedule || "").trim();
-    if (!selectedSchedule) {
-      selectedSchedule = String(app.state.lastNormalSchedule || "").trim();
+    const candidates = [
+      app.state.currentSchedule,
+      app.state.conflictSelection,
+      app.state.lastNormalSchedule
+    ];
+    for (const candidate of candidates) {
+      const trimmed = String(candidate || "").trim();
+      if (trimmed) {
+        selectedSchedule = trimmed;
+        break;
+      }
     }
     if (!selectedSchedule && typeof app.getCurrentScheduleKey === "function") {
       selectedSchedule = String(app.getCurrentScheduleKey() || "").trim();
