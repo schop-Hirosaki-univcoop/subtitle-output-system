@@ -1003,12 +1003,13 @@ export class OperatorApp {
     const normalizedSchedule = String(scheduleId || "").trim();
     const label = String(scheduleLabel || "").trim();
     const fromModal = options?.fromModal === true;
+    const silent = options?.silent === true;
     if (!this.isTelopEnabled()) {
       const message = "テロップ操作なしモードでは固定できません。";
       if (fromModal && this.dom.conflictError) {
         this.dom.conflictError.textContent = message;
         this.dom.conflictError.hidden = false;
-      } else {
+      } else if (!silent) {
         this.toast(message, "error");
       }
       return;
@@ -1018,7 +1019,7 @@ export class OperatorApp {
       if (fromModal && this.dom.conflictError) {
         this.dom.conflictError.textContent = message;
         this.dom.conflictError.hidden = false;
-      } else {
+      } else if (!silent) {
         this.toast(message, "error");
       }
       return;
@@ -1047,7 +1048,11 @@ export class OperatorApp {
         this.applyAssignmentLocally(response.assignment);
       }
       const summary = this.describeChannelAssignment();
-      this.toast(summary ? `${summary}に固定しました。` : "ディスプレイのチャンネルを固定しました。", "success");
+      if (!silent) {
+        this.toast(summary ? `${summary}に固定しました。` : "ディスプレイのチャンネルを固定しました。", "success");
+      }
+      this.state.autoLockAttemptKey = "";
+      this.state.autoLockAttemptAt = 0;
       if (fromModal) {
         this.closeConflictDialog();
       }
@@ -1056,7 +1061,7 @@ export class OperatorApp {
       if (fromModal && this.dom.conflictError) {
         this.dom.conflictError.textContent = message;
         this.dom.conflictError.hidden = false;
-      } else {
+      } else if (!silent) {
         this.toast(message, "error");
       }
     } finally {
@@ -1093,6 +1098,8 @@ export class OperatorApp {
     };
     this.state.displaySession = nextSession;
     this.state.channelAssignment = enriched;
+    this.state.autoLockAttemptKey = "";
+    this.state.autoLockAttemptAt = 0;
   }
 
   evaluateScheduleConflict() {
@@ -1155,6 +1162,8 @@ export class OperatorApp {
     }
     const options = Array.from(groups.values());
     if (!options.length) {
+      this.state.autoLockAttemptKey = "";
+      this.state.autoLockAttemptAt = 0;
       this.state.scheduleConflict = null;
       this.state.conflictSelection = "";
       this.closeConflictDialog();
@@ -1163,9 +1172,31 @@ export class OperatorApp {
     options.sort((a, b) => (a.label || "").localeCompare(b.label || "", "ja"));
     const uniqueKeys = new Set(options.map((opt) => opt.key));
     const channelAligned = !this.hasChannelMismatch();
+    const now = Date.now();
     let shouldPrompt = uniqueKeys.size > 1 || (assignmentKey && (!uniqueKeys.has(assignmentKey) || !channelAligned));
     if (!shouldPrompt && !channelAligned) {
       shouldPrompt = true;
+    }
+    if (uniqueKeys.size === 1) {
+      const soleOption = options[0] || null;
+      const soleKey = soleOption?.key || "";
+      const attemptKey = String(this.state?.autoLockAttemptKey || "").trim();
+      const attemptAt = Number(this.state?.autoLockAttemptAt || 0);
+      const recentlyAttempted = soleKey && attemptKey === soleKey && attemptAt && now - attemptAt < 15000;
+      const targetEventId = String((soleOption?.eventId || eventId) || "").trim();
+      const targetScheduleId = String(soleOption?.scheduleId || "").trim();
+      const assignmentMatches = Boolean(assignmentKey && assignmentKey === soleKey && channelAligned);
+      if (assignmentMatches) {
+        this.state.autoLockAttemptKey = "";
+        this.state.autoLockAttemptAt = 0;
+      }
+      const canLock = Boolean(targetEventId && targetScheduleId && soleKey);
+      if (!assignmentMatches && canLock && !recentlyAttempted && !this.state.channelLocking) {
+        this.state.autoLockAttemptKey = soleKey;
+        this.state.autoLockAttemptAt = now;
+        this.lockDisplayToSchedule(targetEventId, targetScheduleId, soleOption?.label || "", { silent: true, autoLock: true });
+        return;
+      }
     }
     if (!shouldPrompt) {
       this.state.scheduleConflict = null;
