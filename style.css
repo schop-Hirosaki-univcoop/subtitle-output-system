@@ -1530,7 +1530,8 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   font-size:.9rem;
   color:var(--muted);
 }
-#op-conflict-options{
+#op-conflict-options,
+#flow-schedule-conflict-options{
   margin:0;
   padding:0;
   border:0;
@@ -1575,11 +1576,13 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   font-size:.9rem;
   color:var(--muted);
 }
-#op-conflict-description{
+#op-conflict-description,
+#flow-schedule-conflict-description{
   margin-bottom:clamp(.6rem, 1.2vw, .85rem);
   color:var(--muted);
 }
-#op-conflict-error{
+#op-conflict-error,
+#flow-schedule-conflict-error{
   margin-top:.5rem;
 }
 #action-panel .btn{ padding:clamp(.45rem, 1vw, .55rem) clamp(.85rem, 2vw, 1rem); }
