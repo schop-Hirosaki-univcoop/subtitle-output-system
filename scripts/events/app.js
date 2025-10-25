@@ -120,6 +120,7 @@ export class EventAdminApp {
     this.hostPresenceLastSignature = "";
     this.scheduleConflictContext = null;
     this.scheduleConflictLastSignature = "";
+    this.scheduleConflictPromptSignature = "";
     this.pendingNavigationTarget = "";
     this.scheduleConflictRadioName = generateShortId("flow-conflict-radio-");
     this.flowDebugEnabled = true;
@@ -1950,6 +1951,7 @@ export class EventAdminApp {
       this.scheduleConflictContext = context;
       if (context.hasConflict) {
         this.pendingNavigationTarget = normalized;
+        void this.requestScheduleConflictPrompt(context);
         this.openScheduleConflictDialog(context, {
           reason: "navigation",
           originPanel,
@@ -2409,17 +2411,38 @@ export class EventAdminApp {
         this.closeDialog(this.dom.scheduleConflictDialog);
       }
       this.scheduleConflictLastSignature = "";
+      this.scheduleConflictPromptSignature = "";
       this.maybeClearScheduleConsensus(context);
       return;
     }
     this.scheduleConflictLastSignature = context?.signature || "";
-    if (!this.isScheduleConflictDialogOpen()) {
+    const shouldPrompt =
+      Boolean(this.pendingNavigationTarget) || this.shouldPromptFromConsensus(context);
+    const hasSelection = Boolean(this.selectedScheduleId);
+    if (shouldPrompt && hasSelection && !this.isScheduleConflictDialogOpen()) {
       this.openScheduleConflictDialog(context, {
         reason: "presence",
         originPanel: this.activePanel,
         target: this.pendingNavigationTarget || this.activePanel
       });
     }
+  }
+
+  shouldPromptFromConsensus(context = null) {
+    const consensus = this.scheduleConsensusState;
+    if (!consensus) {
+      return false;
+    }
+    const signature = ensureString(context?.signature);
+    if (!signature) {
+      return false;
+    }
+    const consensusSignature = ensureString(consensus.conflictSignature);
+    if (!consensusSignature || consensusSignature !== signature) {
+      return false;
+    }
+    const scheduleKey = ensureString(consensus.scheduleKey);
+    return !scheduleKey;
   }
 
   syncOperatorPresenceSubscription() {
@@ -2518,6 +2541,7 @@ export class EventAdminApp {
     this.scheduleConsensusState = null;
     this.scheduleConsensusLastSignature = "";
     this.scheduleConsensusLastKey = "";
+    this.scheduleConflictPromptSignature = "";
     this.hideScheduleConsensusToast();
     if (reason) {
       this.logFlowState("スケジュール合意情報をリセットしました", { reason });
@@ -2534,10 +2558,16 @@ export class EventAdminApp {
       scheduleId: ensureString(raw.scheduleId),
       scheduleLabel: ensureString(raw.scheduleLabel),
       scheduleRange: ensureString(raw.scheduleRange),
+      status: ensureString(raw.status),
+      requestedByUid: ensureString(raw.requestedByUid),
+      requestedByDisplayName: ensureString(raw.requestedByDisplayName),
+      requestedBySessionId: ensureString(raw.requestedBySessionId),
+      requestedAt: Number(raw.requestedAt || raw.updatedAt || 0) || 0,
       resolvedByUid: ensureString(raw.resolvedByUid),
       resolvedByDisplayName: ensureString(raw.resolvedByDisplayName),
       resolvedBySessionId: ensureString(raw.resolvedBySessionId),
-      resolvedAt: Number(raw.resolvedAt || raw.updatedAt || 0) || 0
+      resolvedAt: Number(raw.resolvedAt || 0) || 0,
+      updatedAt: Number(raw.updatedAt || 0) || 0
     };
   }
 
@@ -2557,6 +2587,7 @@ export class EventAdminApp {
       }
       this.scheduleConsensusLastSignature = "";
       this.scheduleConsensusLastKey = "";
+      this.scheduleConflictPromptSignature = "";
       this.hideScheduleConsensusToast();
       return;
     }
@@ -2576,11 +2607,41 @@ export class EventAdminApp {
       this.scheduleConsensusLastSignature = signature;
       this.scheduleConsensusLastKey = key;
       if (signature && key) {
+        this.scheduleConflictPromptSignature = "";
         this.applyScheduleConsensus(consensus);
+      } else if (signature && !key) {
+        this.scheduleConflictPromptSignature = signature;
+        this.hideScheduleConsensusToast();
+        this.handleScheduleConsensusPrompt(consensus);
       } else {
         this.hideScheduleConsensusToast();
       }
     }
+  }
+
+  handleScheduleConsensusPrompt(consensus) {
+    if (!consensus) {
+      return;
+    }
+    const signature = ensureString(consensus.conflictSignature);
+    if (!signature) {
+      return;
+    }
+    const context = this.scheduleConflictContext || this.buildScheduleConflictContext();
+    if (!context?.hasConflict || ensureString(context.signature) !== signature) {
+      return;
+    }
+    if (!this.selectedScheduleId) {
+      return;
+    }
+    if (this.isScheduleConflictDialogOpen()) {
+      return;
+    }
+    this.openScheduleConflictDialog(context, {
+      reason: "consensus-pending",
+      originPanel: this.activePanel,
+      target: this.pendingNavigationTarget || this.activePanel
+    });
   }
 
   applyScheduleConsensus(consensus) {
@@ -2735,6 +2796,7 @@ export class EventAdminApp {
       this.scheduleConsensusState = null;
       this.scheduleConsensusLastSignature = "";
       this.scheduleConsensusLastKey = "";
+      this.scheduleConflictPromptSignature = "";
       remove(ref)
         .then(() => {
           this.logFlowState("スケジュール合意情報を削除しました", {
@@ -2911,6 +2973,7 @@ export class EventAdminApp {
     this.operatorPresenceEntries = [];
     this.scheduleConflictContext = null;
     this.scheduleConflictLastSignature = "";
+    this.scheduleConflictPromptSignature = "";
     this.pendingNavigationTarget = "";
     this.setScheduleConflictSubmitting(false);
     this.clearScheduleConflictError();
@@ -2939,6 +3002,88 @@ export class EventAdminApp {
     }
     if (cancelButton) {
       cancelButton.disabled = Boolean(isSubmitting);
+    }
+  }
+
+  async requestScheduleConflictPrompt(context = null) {
+    const eventId = ensureString(this.selectedEventId);
+    if (!eventId) {
+      return false;
+    }
+    const resolvedContext = context || this.scheduleConflictContext || this.buildScheduleConflictContext();
+    const signature = ensureString(resolvedContext?.signature);
+    if (!resolvedContext?.hasConflict || !signature) {
+      return false;
+    }
+    if (this.scheduleConflictPromptSignature === signature) {
+      return true;
+    }
+    const consensus = this.scheduleConsensusState;
+    if (consensus && ensureString(consensus.conflictSignature) === signature) {
+      const existingKey = ensureString(consensus.scheduleKey);
+      if (!existingKey) {
+        this.scheduleConflictPromptSignature = signature;
+      }
+      return true;
+    }
+    const user = this.currentUser || auth.currentUser || null;
+    const requestedByUid = ensureString(user?.uid);
+    if (!requestedByUid) {
+      return false;
+    }
+    const requestedByDisplayName =
+      ensureString(user?.displayName) || ensureString(user?.email) || requestedByUid;
+    const requestedBySessionId = ensureString(this.hostPresenceSessionId);
+    const consensusRef = getOperatorScheduleConsensusRef(eventId);
+    try {
+      const result = await runTransaction(consensusRef, (current) => {
+        if (current && typeof current === "object") {
+          const currentSignature = ensureString(current.conflictSignature);
+          const currentKey = ensureString(current.scheduleKey);
+          if (currentSignature === signature) {
+            if (!currentKey) {
+              return {
+                ...current,
+                requestedByUid: requestedByUid || current.requestedByUid || "",
+                requestedByDisplayName:
+                  requestedByDisplayName || current.requestedByDisplayName || "",
+                requestedBySessionId:
+                  requestedBySessionId || current.requestedBySessionId || "",
+                requestedAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+                status: ensureString(current.status) || "pending"
+              };
+            }
+            return current;
+          }
+        }
+        return {
+          conflictSignature: signature,
+          scheduleKey: "",
+          scheduleId: "",
+          scheduleLabel: "",
+          scheduleRange: "",
+          requestedByUid,
+          requestedByDisplayName,
+          requestedBySessionId,
+          requestedAt: serverTimestamp(),
+          status: "pending",
+          updatedAt: serverTimestamp()
+        };
+      });
+      if (result.committed) {
+        this.scheduleConflictPromptSignature = signature;
+        this.logFlowState("スケジュール合意の確認を要求しました", {
+          eventId,
+          conflictSignature: signature,
+          requestedByUid,
+          requestedBySessionId
+        });
+      }
+      return result.committed;
+    } catch (error) {
+      console.debug("Failed to request schedule consensus prompt:", error);
+      return false;
     }
   }
 
@@ -3033,9 +3178,27 @@ export class EventAdminApp {
         if (current && typeof current === "object") {
           const currentSignature = ensureString(current.conflictSignature);
           const currentKey = ensureString(current.scheduleKey);
-          if (currentSignature === signature && currentKey) {
-            return;
+          if (currentSignature && currentSignature !== signature) {
+            return current;
           }
+          if (currentSignature === signature && currentKey) {
+            return current;
+          }
+          const next = {
+            ...current,
+            conflictSignature: signature,
+            scheduleKey,
+            scheduleId,
+            scheduleLabel,
+            scheduleRange,
+            resolvedByUid,
+            resolvedByDisplayName,
+            resolvedBySessionId,
+            resolvedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            status: "resolved"
+          };
+          return next;
         }
         return {
           conflictSignature: signature,
@@ -3047,7 +3210,8 @@ export class EventAdminApp {
           resolvedByDisplayName,
           resolvedBySessionId,
           resolvedAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
+          status: "resolved"
         };
       });
       if (!result.committed) {
