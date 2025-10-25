@@ -1,3 +1,5 @@
+import { OPERATOR_MODE_TELOP } from "../shared/operator-modes.js";
+
 export function createInitialState(autoScroll = true) {
   return {
     questionsByUid: new Map(),
@@ -29,6 +31,7 @@ export function createInitialState(autoScroll = true) {
     channelAssignment: null,
     channelLocking: false,
     scheduleConflict: null,
-    conflictSelection: ""
+    conflictSelection: "",
+    operatorMode: OPERATOR_MODE_TELOP
   };
 }

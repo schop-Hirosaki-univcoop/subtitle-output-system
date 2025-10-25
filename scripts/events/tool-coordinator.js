@@ -21,6 +21,15 @@ export class ToolCoordinator {
 
   resetContext(options) {
     this.participants.resetContext(options);
+    this.operator.applyContext({
+      eventId: "",
+      scheduleId: "",
+      eventName: "",
+      scheduleLabel: "",
+      startAt: "",
+      endAt: "",
+      operatorMode: this.app.operatorMode
+    }).catch((error) => logError("Failed to reset operator context", error));
   }
 
   prepareFrames() {
