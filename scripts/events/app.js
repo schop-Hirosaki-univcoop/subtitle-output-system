@@ -922,6 +922,9 @@ export class EventAdminApp {
     if (previous === normalized) {
       return;
     }
+    this.tools
+      .syncOperatorContext({ force: true })
+      .catch((error) => logError("Failed to apply operator mode to embed", error));
     if (!fromControl && this.dom.operatorModeToggle) {
       this.dom.operatorModeToggle.checked = normalized === OPERATOR_MODE_SUPPORT;
     }
