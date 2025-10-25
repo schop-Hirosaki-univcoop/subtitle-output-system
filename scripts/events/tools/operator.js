@@ -66,12 +66,20 @@ export class OperatorToolManager {
   }
 
   async applyContext(context) {
-    if (!context) {
+    const payload = context && typeof context === "object" ? context : {};
+    const hasSelection = Boolean(
+      (payload.eventId && String(payload.eventId).trim()) ||
+        (payload.scheduleId && String(payload.scheduleId).trim()) ||
+        (payload.eventName && String(payload.eventName).trim()) ||
+        (payload.scheduleLabel && String(payload.scheduleLabel).trim())
+    );
+    const hasEmbed = typeof window !== "undefined" && window.operatorEmbed?.app;
+    if (!hasSelection && !hasEmbed) {
       return;
     }
     try {
       const app = await this.ensureReady();
-      app?.setContext?.(context);
+      app?.setContext?.(payload);
     } catch (error) {
       logError("Failed to sync operator tool", error);
     }

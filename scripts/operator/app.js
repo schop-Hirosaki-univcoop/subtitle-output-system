@@ -21,6 +21,7 @@ import {
   onDisconnect
 } from "./firebase.js";
 import { getRenderStatePath, parseChannelParams, normalizeScheduleId } from "../shared/channel-paths.js";
+import { OPERATOR_MODE_TELOP, normalizeOperatorMode, isTelopMode } from "../shared/operator-modes.js";
 import { queryDom } from "./dom.js";
 import { createInitialState } from "./state.js";
 import { createApiClient } from "./api-client.js";
@@ -302,7 +303,9 @@ export class OperatorApp {
     this.operatorPresenceSubscribedEventId = "";
     this.operatorPresenceUnsubscribe = null;
     this.operatorPresenceLastSignature = "";
+    this.operatorPresenceSessionId = this.generatePresenceSessionId();
     this.conflictDialogOpen = false;
+    this.operatorMode = OPERATOR_MODE_TELOP;
 
     this.toast = showToast;
     bindModuleMethods(this);
@@ -324,6 +327,20 @@ export class OperatorApp {
     return document.documentElement?.dataset?.operatorEmbedPrefix || "";
   }
 
+  generatePresenceSessionId() {
+    if (typeof crypto !== "undefined") {
+      if (typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+      }
+      if (typeof crypto.getRandomValues === "function") {
+        const array = new Uint8Array(16);
+        crypto.getRandomValues(array);
+        return Array.from(array, (value) => value.toString(16).padStart(2, "0")).join("");
+      }
+    }
+    return `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
   extractPageContext() {
     const context = {
       eventId: "",
@@ -332,7 +349,8 @@ export class OperatorApp {
       scheduleLabel: "",
       startAt: "",
       endAt: "",
-      scheduleKey: ""
+      scheduleKey: "",
+      operatorMode: OPERATOR_MODE_TELOP
     };
     if (typeof window === "undefined") {
       return context;
@@ -368,6 +386,7 @@ export class OperatorApp {
       this.state.currentSchedule = scheduleKey;
       this.state.lastNormalSchedule = scheduleKey;
     }
+    this.state.operatorMode = this.operatorMode;
   }
 
   getActiveChannel() {
@@ -384,6 +403,10 @@ export class OperatorApp {
       return "";
     }
     return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
+  }
+
+  isTelopEnabled() {
+    return isTelopMode(this.operatorMode);
   }
 
   getDisplayAssignment() {
@@ -527,13 +550,24 @@ export class OperatorApp {
       (snapshot) => {
         const raw = snapshot.val() || {};
         const presenceMap = new Map();
-        Object.entries(raw).forEach(([uid, payload]) => {
-          presenceMap.set(String(uid), payload || {});
+        Object.entries(raw).forEach(([entryId, payload]) => {
+          presenceMap.set(String(entryId), payload || {});
         });
         this.state.operatorPresenceEventId = nextEventId;
         this.state.operatorPresenceByUser = presenceMap;
-        const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
-        this.state.operatorPresenceSelf = selfUid ? presenceMap.get(selfUid) || null : null;
+        const sessionId = String(this.operatorPresenceSessionId || "").trim();
+        let selfEntry = sessionId ? presenceMap.get(sessionId) || null : null;
+        if (!selfEntry) {
+          const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
+          for (const value of presenceMap.values()) {
+            if (!value) continue;
+            if (String(value.uid || "").trim() === selfUid) {
+              selfEntry = value;
+              break;
+            }
+          }
+        }
+        this.state.operatorPresenceSelf = selfEntry || null;
         this.renderChannelBanner();
         this.evaluateScheduleConflict();
       },
@@ -561,24 +595,28 @@ export class OperatorApp {
     const scheduleKey = String(this.state?.currentSchedule || "").trim();
     const eventName = String(this.state?.activeEventName || "").trim();
     const scheduleLabel = String(this.state?.activeScheduleLabel || "").trim();
-    const nextKey = `${eventId}/${uid}`;
+    const sessionId = String(this.operatorPresenceSessionId || "").trim() || this.generatePresenceSessionId();
+    const operatorMode = normalizeOperatorMode(this.operatorMode);
+    this.operatorPresenceSessionId = sessionId;
+    const nextKey = `${eventId}/${sessionId}`;
 
     if (this.operatorPresenceEntryKey && this.operatorPresenceEntryKey !== nextKey) {
       this.clearOperatorPresence();
     }
 
-    const signature = JSON.stringify({ eventId, scheduleId, scheduleKey, scheduleLabel });
+    const signature = JSON.stringify({ eventId, scheduleId, scheduleKey, scheduleLabel, sessionId, operatorMode });
     if (reason !== "heartbeat" && signature === this.operatorPresenceLastSignature) {
       this.scheduleOperatorPresenceHeartbeat();
       return;
     }
     this.operatorPresenceLastSignature = signature;
 
-    const entryRef = getOperatorPresenceEntryRef(eventId, uid);
+    const entryRef = getOperatorPresenceEntryRef(eventId, sessionId);
     this.operatorPresenceEntryKey = nextKey;
     this.operatorPresenceEntryRef = entryRef;
 
     const payload = {
+      sessionId,
       uid,
       email: String(user?.email || "").trim(),
       displayName: String(user?.displayName || "").trim(),
@@ -587,6 +625,7 @@ export class OperatorApp {
       scheduleId,
       scheduleKey,
       scheduleLabel,
+      mode: operatorMode,
       updatedAt: serverTimestamp(),
       clientTimestamp: Date.now(),
       reason
@@ -689,9 +728,13 @@ export class OperatorApp {
     const displayActive = !!this.state.displaySessionActive;
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
     const channelAligned = !this.hasChannelMismatch();
+    const telopEnabled = this.isTelopEnabled();
     let statusText = "";
     let statusClass = "channel-banner__status";
-    if (!displayActive) {
+    if (!telopEnabled) {
+      statusText = "テロップ操作なしモードです。送出・固定は行えません。";
+      statusClass += " is-muted";
+    } else if (!displayActive) {
       statusText = "送出端末が接続されていません。";
       statusClass += " is-alert";
     } else if (!assignment || !assignment.eventId) {
@@ -713,21 +756,26 @@ export class OperatorApp {
       assignmentEl.textContent = summary || "—";
     }
     if (lockButton) {
-      const { eventId: activeEventId, scheduleId } = this.getActiveChannel();
-      const canLock =
-        displayActive &&
-        !!String(activeEventId || "").trim() &&
-        !!String(scheduleId || "").trim() &&
-        !this.state.channelLocking;
-      if (displayActive && assignment && assignment.eventId && channelAligned) {
-        lockButton.textContent = "固定済み";
+      if (!telopEnabled) {
+        lockButton.textContent = "テロップ操作なし";
         lockButton.disabled = true;
       } else {
-        lockButton.textContent = assignment && assignment.eventId ? "この日程に切り替え" : "この日程に固定";
-        lockButton.disabled = !canLock;
-      }
-      if (!displayActive) {
-        lockButton.textContent = "この日程に固定";
+        const { eventId: activeEventId, scheduleId } = this.getActiveChannel();
+        const canLock =
+          displayActive &&
+          !!String(activeEventId || "").trim() &&
+          !!String(scheduleId || "").trim() &&
+          !this.state.channelLocking;
+        if (displayActive && assignment && assignment.eventId && channelAligned) {
+          lockButton.textContent = "固定済み";
+          lockButton.disabled = true;
+        } else {
+          lockButton.textContent = assignment && assignment.eventId ? "この日程に切り替え" : "この日程に固定";
+          lockButton.disabled = !canLock;
+        }
+        if (!displayActive) {
+          lockButton.textContent = "この日程に固定";
+        }
       }
     }
     this.renderChannelPresenceList();
@@ -750,12 +798,14 @@ export class OperatorApp {
     const presenceMap = this.state?.operatorPresenceByUser instanceof Map ? this.state.operatorPresenceByUser : new Map();
     const groups = new Map();
     const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
-    presenceMap.forEach((value, uid) => {
+    const selfSessionId = String(this.operatorPresenceSessionId || "").trim();
+    presenceMap.forEach((value, entryId) => {
       if (!value) return;
       if (String(value.eventId || "").trim() !== eventId) return;
       const rawKey = String(value.scheduleKey || "");
       const scheduleKey = rawKey || `${eventId}::${normalizeScheduleId(value.scheduleId || "")}`;
       const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
+      const normalizedMode = normalizeOperatorMode(value.mode);
       const entry = groups.get(scheduleKey) || {
         key: scheduleKey,
         scheduleId: String(value.scheduleId || ""),
@@ -766,10 +816,15 @@ export class OperatorApp {
         groups.set(scheduleKey, entry);
       }
       entry.label = entry.label || label;
+      const memberUid = String(value.uid || "").trim();
+      const fallbackId = String(entryId);
+      const isSelfSession = selfSessionId && fallbackId === selfSessionId;
+      const isSelfUid = memberUid && memberUid === selfUid;
       entry.members.push({
-        uid: String(uid),
-        name: String(value.displayName || value.email || uid || "").trim() || String(uid),
-        isSelf: String(uid) === selfUid
+        uid: memberUid || fallbackId,
+        name: String(value.displayName || value.email || memberUid || fallbackId || "").trim() || memberUid || fallbackId,
+        isSelf: Boolean(isSelfSession || isSelfUid),
+        mode: normalizedMode
       });
     });
     const items = Array.from(groups.values());
@@ -805,6 +860,12 @@ export class OperatorApp {
             const badge = document.createElement("span");
             badge.className = "channel-presence-self";
             badge.textContent = "自分";
+            entry.appendChild(badge);
+          }
+          if (!isTelopMode(member.mode)) {
+            const badge = document.createElement("span");
+            badge.className = "channel-presence-support";
+            badge.textContent = "参加者モード";
             entry.appendChild(badge);
           }
           members.appendChild(entry);
@@ -922,6 +983,10 @@ export class OperatorApp {
   }
 
   lockDisplayToCurrentSchedule() {
+    if (!this.isTelopEnabled()) {
+      this.toast("テロップ操作なしモードでは固定できません。", "error");
+      return;
+    }
     const { eventId, scheduleId } = this.getActiveChannel();
     const normalizedEvent = String(eventId || "").trim();
     if (!normalizedEvent) {
@@ -938,6 +1003,16 @@ export class OperatorApp {
     const normalizedSchedule = String(scheduleId || "").trim();
     const label = String(scheduleLabel || "").trim();
     const fromModal = options?.fromModal === true;
+    if (!this.isTelopEnabled()) {
+      const message = "テロップ操作なしモードでは固定できません。";
+      if (fromModal && this.dom.conflictError) {
+        this.dom.conflictError.textContent = message;
+        this.dom.conflictError.hidden = false;
+      } else {
+        this.toast(message, "error");
+      }
+      return;
+    }
     if (!normalizedEvent) {
       const message = "イベントが選択されていないため固定できません。";
       if (fromModal && this.dom.conflictError) {
@@ -1021,6 +1096,12 @@ export class OperatorApp {
   }
 
   evaluateScheduleConflict() {
+    if (!this.isTelopEnabled()) {
+      this.state.scheduleConflict = null;
+      this.state.conflictSelection = "";
+      this.closeConflictDialog();
+      return;
+    }
     const eventId = String(this.state?.activeEventId || "").trim();
     if (!eventId) {
       this.state.scheduleConflict = null;
@@ -1031,9 +1112,11 @@ export class OperatorApp {
     const presenceMap = this.state?.operatorPresenceByUser instanceof Map ? this.state.operatorPresenceByUser : new Map();
     const groups = new Map();
     const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
-    presenceMap.forEach((value, uid) => {
+    const selfSessionId = String(this.operatorPresenceSessionId || "").trim();
+    presenceMap.forEach((value, entryId) => {
       if (!value) return;
       if (String(value.eventId || "").trim() !== eventId) return;
+      if (!isTelopMode(normalizeOperatorMode(value.mode))) return;
       const rawKey = String(value.scheduleKey || "");
       const scheduleKey = rawKey || `${eventId}::${normalizeScheduleId(value.scheduleId || "")}`;
       const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
@@ -1048,10 +1131,14 @@ export class OperatorApp {
         groups.set(scheduleKey, entry);
       }
       entry.label = entry.label || label;
+      const memberUid = String(value.uid || "").trim();
+      const isSelfSession = selfSessionId && String(entryId) === selfSessionId;
+      const isSelfUid = memberUid && memberUid === selfUid;
+      const fallbackId = String(entryId);
       entry.members.push({
-        uid: String(uid),
-        name: String(value.displayName || value.email || uid || "").trim() || String(uid),
-        isSelf: String(uid) === selfUid
+        uid: memberUid || fallbackId,
+        name: String(value.displayName || value.email || memberUid || fallbackId || "").trim() || memberUid || fallbackId,
+        isSelf: Boolean(isSelfSession || isSelfUid)
       });
     });
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
@@ -1127,6 +1214,7 @@ export class OperatorApp {
     const startAt = ensure(context.startAt);
     const endAt = ensure(context.endAt);
     const scheduleKey = eventId && scheduleId ? `${eventId}::${scheduleId}` : "";
+    const operatorMode = normalizeOperatorMode(context.operatorMode ?? context.mode);
 
     this.pageContext = {
       ...this.pageContext,
@@ -1136,8 +1224,11 @@ export class OperatorApp {
       scheduleLabel,
       startAt,
       endAt,
-      scheduleKey
+      scheduleKey,
+      operatorMode
     };
+
+    this.operatorMode = operatorMode;
 
     this.applyContextToState();
 
@@ -1658,6 +1749,10 @@ export class OperatorApp {
     this.conflictDialogOpen = false;
     const autoScroll = this.dom.logAutoscroll ? this.dom.logAutoscroll.checked : true;
     this.state = createInitialState(autoScroll);
+    this.operatorMode = OPERATOR_MODE_TELOP;
+    if (this.pageContext && typeof this.pageContext === "object") {
+      this.pageContext.operatorMode = OPERATOR_MODE_TELOP;
+    }
     this.applyContextToState();
     if (this.dom.selectAllCheckbox) {
       this.dom.selectAllCheckbox.checked = false;
