@@ -3163,7 +3163,7 @@ export class EventAdminApp {
       displayName: ensureString(user?.displayName),
       eventId,
       eventName: ensureString(event?.name || eventId),
-      scheduleId,
+      scheduleId: committedScheduleId,
       scheduleKey,
       scheduleLabel,
       mode: operatorMode,
