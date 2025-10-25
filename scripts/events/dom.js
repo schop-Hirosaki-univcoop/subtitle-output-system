@@ -63,7 +63,6 @@ export function queryDom() {
     scheduleConflictPresence: document.getElementById("flow-schedule-conflict-presence"),
     scheduleConflictPresenceEmpty: document.getElementById("flow-schedule-conflict-presence-empty"),
     scheduleConflictConfirmButton: document.getElementById("flow-schedule-conflict-confirm-button"),
-    scheduleConflictCancelButton: document.getElementById("flow-schedule-conflict-cancel-button"),
     scheduleConflictDescription: document.getElementById("flow-schedule-conflict-description"),
     scheduleFallbackDialog: document.getElementById("flow-schedule-fallback-dialog"),
     scheduleFallbackForm: document.getElementById("flow-schedule-fallback-form"),
