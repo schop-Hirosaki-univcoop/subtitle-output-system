@@ -5,12 +5,15 @@ import {
   get,
   set,
   update,
+  remove,
   auth,
   signOut,
   onAuthStateChanged,
   onValue,
   serverTimestamp,
-  getOperatorPresenceEventRef
+  onDisconnect,
+  getOperatorPresenceEventRef,
+  getOperatorPresenceEntryRef
 } from "../operator/firebase.js";
 import { createApiClient } from "../operator/api-client.js";
 import { generateShortId, normalizeKey, toMillis } from "../question-admin/utils.js";
@@ -40,6 +43,8 @@ import {
 } from "./config.js";
 import { ToolCoordinator } from "./tool-coordinator.js";
 import { EventChat } from "./chat.js";
+
+const HOST_PRESENCE_HEARTBEAT_MS = 60_000;
 
 function parseCssPixels(value) {
   if (typeof value !== "string") {
@@ -91,6 +96,12 @@ export class EventAdminApp {
     this.operatorPresenceEntries = [];
     this.operatorPresenceEventId = "";
     this.operatorPresenceUnsubscribe = null;
+    this.hostPresenceSessionId = this.generatePresenceSessionId();
+    this.hostPresenceEntryKey = "";
+    this.hostPresenceEntryRef = null;
+    this.hostPresenceDisconnect = null;
+    this.hostPresenceHeartbeat = null;
+    this.hostPresenceLastSignature = "";
     this.scheduleConflictContext = null;
     this.pendingNavigationTarget = "";
     this.scheduleConflictRadioName = generateShortId("flow-conflict-radio-");
@@ -138,6 +149,20 @@ export class EventAdminApp {
     } else {
       console.info(prefix);
     }
+  }
+
+  generatePresenceSessionId() {
+    if (typeof crypto !== "undefined") {
+      if (typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+      }
+      if (typeof crypto.getRandomValues === "function") {
+        const array = new Uint8Array(16);
+        crypto.getRandomValues(array);
+        return Array.from(array, (value) => value.toString(16).padStart(2, "0")).join("");
+      }
+    }
+    return `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 
   buildFlowState() {
@@ -571,6 +596,7 @@ export class EventAdminApp {
     this.startChatReadListener(user);
     this.updateUserLabel();
     if (!user) {
+      this.clearHostPresence();
       this.events = [];
       this.renderEvents();
       this.notifyEventListeners();
@@ -609,6 +635,9 @@ export class EventAdminApp {
     } finally {
       this.endEventsLoading();
       this.clearLoadingIndicators();
+      if (user) {
+        this.syncHostPresence("auth-refresh");
+      }
     }
   }
 
@@ -726,6 +755,9 @@ export class EventAdminApp {
       eventCount: this.events.length,
       scheduleCount: this.schedules.length
     });
+    this.syncHostPresence(
+      eventChanged ? "event-change" : scheduleChanged ? "schedule-change" : "events-sync"
+    );
 
     return this.events;
   }
@@ -889,6 +921,7 @@ export class EventAdminApp {
     this.tools.prepareContextForSelection();
     this.updateScheduleConflictState();
     this.syncOperatorPresenceSubscription();
+    this.syncHostPresence(changed ? "event-change" : "event-state");
     if (changed) {
       this.notifySelectionListeners("host");
     }
@@ -931,6 +964,36 @@ export class EventAdminApp {
       endAt: schedule?.endAt || "",
       operatorMode: this.operatorMode
     };
+  }
+
+  derivePresenceScheduleKey(eventId, payload = {}, entryId = "") {
+    const ensure = (value) => String(value ?? "").trim();
+    const normalizedEvent = ensure(eventId);
+    const normalizedEntry = ensure(entryId);
+    const source = payload && typeof payload === "object" ? payload : {};
+    const rawKey = ensure(source.scheduleKey);
+    if (rawKey) {
+      return rawKey;
+    }
+    const scheduleId = ensure(source.scheduleId);
+    if (normalizedEvent && scheduleId) {
+      return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
+    }
+    if (scheduleId) {
+      return normalizeScheduleId(scheduleId);
+    }
+    const scheduleLabel = ensure(source.scheduleLabel);
+    if (scheduleLabel) {
+      const sanitizedLabel = scheduleLabel.replace(/\s+/g, " ").trim().replace(/::/g, "／");
+      if (normalizedEvent) {
+        return `${normalizedEvent}::label::${sanitizedLabel}`;
+      }
+      return `label::${sanitizedLabel}`;
+    }
+    if (normalizedEvent && normalizedEntry) {
+      return `${normalizedEvent}::session::${normalizedEntry}`;
+    }
+    return normalizedEntry || normalizedEvent || "";
   }
 
   getDisplayUrlForEvent(eventId) {
@@ -1254,6 +1317,7 @@ export class EventAdminApp {
     this.showPanel(this.activePanel);
     this.tools.prepareContextForSelection();
     this.updateScheduleConflictState();
+    this.syncHostPresence(changed ? "schedule-change" : "schedule-state");
     if (changed) {
       this.syncOperatorPresenceSubscription();
       this.notifySelectionListeners("host");
@@ -1277,6 +1341,7 @@ export class EventAdminApp {
     this.showPanel(this.activePanel);
     this.tools.prepareContextForSelection();
     this.updateScheduleConflictState();
+    this.syncHostPresence("schedule-sync");
   }
 
   renderScheduleList() {
@@ -2308,11 +2373,163 @@ export class EventAdminApp {
     this.updateScheduleConflictState();
   }
 
+  scheduleHostPresenceHeartbeat() {
+    if (this.hostPresenceHeartbeat) {
+      return;
+    }
+    this.hostPresenceHeartbeat = setInterval(
+      () => this.touchHostPresence(),
+      HOST_PRESENCE_HEARTBEAT_MS
+    );
+  }
+
+  touchHostPresence() {
+    if (!this.hostPresenceEntryRef || !this.hostPresenceEntryKey) {
+      this.stopHostPresenceHeartbeat();
+      return;
+    }
+    const now = Date.now();
+    update(this.hostPresenceEntryRef, {
+      updatedAt: serverTimestamp(),
+      clientTimestamp: now
+    }).catch((error) => {
+      console.debug("Host presence heartbeat failed:", error);
+    });
+  }
+
+  stopHostPresenceHeartbeat() {
+    if (this.hostPresenceHeartbeat) {
+      clearInterval(this.hostPresenceHeartbeat);
+      this.hostPresenceHeartbeat = null;
+    }
+  }
+
+  clearHostPresence() {
+    this.stopHostPresenceHeartbeat();
+    this.hostPresenceLastSignature = "";
+    const disconnectHandle = this.hostPresenceDisconnect;
+    this.hostPresenceDisconnect = null;
+    if (disconnectHandle && typeof disconnectHandle.cancel === "function") {
+      disconnectHandle.cancel().catch(() => {});
+    }
+    const entryRef = this.hostPresenceEntryRef;
+    this.hostPresenceEntryRef = null;
+    const hadKey = !!this.hostPresenceEntryKey;
+    this.hostPresenceEntryKey = "";
+    if (entryRef && hadKey) {
+      remove(entryRef).catch((error) => {
+        console.debug("Failed to clear host presence:", error);
+      });
+    }
+  }
+
+  syncHostPresence(reason = "state-change") {
+    const user = this.currentUser || auth.currentUser || null;
+    const uid = ensureString(user?.uid);
+    if (!uid) {
+      this.clearHostPresence();
+      this.logFlowState("在席情報をクリアしました (未ログイン)", { reason });
+      return;
+    }
+
+    const eventId = ensureString(this.selectedEventId);
+    if (!eventId) {
+      this.clearHostPresence();
+      this.logFlowState("在席情報をクリアしました (イベント未選択)", { reason });
+      return;
+    }
+
+    const sessionId = ensureString(this.hostPresenceSessionId) || this.generatePresenceSessionId();
+    this.hostPresenceSessionId = sessionId;
+    const nextKey = `${eventId}/${sessionId}`;
+    if (this.hostPresenceEntryKey && this.hostPresenceEntryKey !== nextKey) {
+      this.clearHostPresence();
+      this.hostPresenceSessionId = sessionId;
+    }
+
+    const event = this.getSelectedEvent();
+    const schedule = this.getSelectedSchedule();
+    const scheduleId = ensureString(schedule?.id);
+    const scheduleLabel = ensureString(schedule?.label || schedule?.id);
+    const scheduleKey = this.derivePresenceScheduleKey(
+      eventId,
+      { scheduleId, scheduleLabel },
+      sessionId
+    );
+    const operatorMode = normalizeOperatorMode(this.operatorMode);
+    const signature = JSON.stringify({
+      eventId,
+      scheduleId,
+      scheduleKey,
+      scheduleLabel,
+      sessionId,
+      operatorMode
+    });
+    if (reason !== "heartbeat" && signature === this.hostPresenceLastSignature) {
+      this.scheduleHostPresenceHeartbeat();
+      this.logFlowState("在席情報に変更はありません", {
+        reason,
+        eventId,
+        scheduleId,
+        scheduleKey,
+        sessionId
+      });
+      return;
+    }
+    this.hostPresenceLastSignature = signature;
+
+    const entryRef = getOperatorPresenceEntryRef(eventId, sessionId);
+    this.hostPresenceEntryKey = nextKey;
+    this.hostPresenceEntryRef = entryRef;
+
+    const payload = {
+      sessionId,
+      uid,
+      email: ensureString(user?.email),
+      displayName: ensureString(user?.displayName),
+      eventId,
+      eventName: ensureString(event?.name || eventId),
+      scheduleId,
+      scheduleKey,
+      scheduleLabel,
+      mode: operatorMode,
+      updatedAt: serverTimestamp(),
+      clientTimestamp: Date.now(),
+      reason,
+      source: "events"
+    };
+
+    set(entryRef, payload).catch((error) => {
+      console.error("Failed to persist host presence:", error);
+    });
+
+    try {
+      if (this.hostPresenceDisconnect) {
+        this.hostPresenceDisconnect.cancel().catch(() => {});
+      }
+      const disconnectHandle = onDisconnect(entryRef);
+      this.hostPresenceDisconnect = disconnectHandle;
+      disconnectHandle.remove().catch(() => {});
+    } catch (error) {
+      console.debug("Failed to register host presence cleanup:", error);
+    }
+
+    this.scheduleHostPresenceHeartbeat();
+    this.logFlowState("在席情報を更新しました", {
+      reason,
+      eventId,
+      scheduleId,
+      scheduleKey,
+      sessionId
+    });
+  }
+
   clearOperatorPresenceState() {
     if (this.operatorPresenceUnsubscribe) {
       this.operatorPresenceUnsubscribe();
       this.operatorPresenceUnsubscribe = null;
     }
+    this.clearHostPresence();
     this.operatorPresenceEventId = "";
     this.operatorPresenceEntries = [];
     this.scheduleConflictContext = null;
