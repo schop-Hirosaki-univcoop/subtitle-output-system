@@ -929,6 +929,111 @@
     </div>
   </div>
 
+  <div
+    id="flow-schedule-conflict-dialog"
+    class="modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="flow-schedule-conflict-title"
+    hidden
+  >
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <form id="flow-schedule-conflict-form" class="modal-form">
+        <div class="modal-header">
+          <h2 id="flow-schedule-conflict-title">テロップ操作の日程を選択</h2>
+        </div>
+        <div class="modal-body">
+          <p id="flow-schedule-conflict-description" class="modal-helper">
+            同じイベントで複数の日程が選択されています。テロップ操作パネルで操作する日程を選んでください。
+          </p>
+          <div class="modal-field">
+            <h3 id="flow-schedule-conflict-presence-heading" class="modal-label">現在の選択状況</h3>
+            <ul
+              id="flow-schedule-conflict-presence"
+              class="channel-presence-list"
+              aria-labelledby="flow-schedule-conflict-presence-heading"
+            ></ul>
+            <p
+              id="flow-schedule-conflict-presence-empty"
+              class="modal-helper"
+              aria-live="polite"
+              hidden
+            >他のオペレーターの選択情報はありません。</p>
+          </div>
+          <fieldset
+            id="flow-schedule-conflict-options"
+            class="modal-field"
+            aria-describedby="flow-schedule-conflict-description"
+          >
+            <legend class="modal-label">テロップ操作で使用する日程</legend>
+          </fieldset>
+          <div id="flow-schedule-conflict-error" class="hub-alert hub-alert--error" role="alert" hidden></div>
+        </div>
+        <div class="modal-footer">
+          <button
+            type="submit"
+            class="btn btn-primary"
+            id="flow-schedule-conflict-confirm-button"
+            data-autofocus="true"
+          >この日程で確定する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div
+    id="flow-schedule-fallback-dialog"
+    class="modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="flow-schedule-fallback-title"
+    hidden
+  >
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <form id="flow-schedule-fallback-form" class="modal-form">
+        <div class="modal-header">
+          <h2 id="flow-schedule-fallback-title">テロップ操作の対応を選択</h2>
+        </div>
+        <div class="modal-body">
+          <p id="flow-schedule-fallback-summary" class="modal-helper"></p>
+          <p id="flow-schedule-fallback-current" class="modal-helper"></p>
+          <fieldset
+            id="flow-schedule-fallback-options"
+            class="modal-field"
+            aria-describedby="flow-schedule-fallback-summary"
+          >
+            <legend class="modal-label">対応方法</legend>
+          </fieldset>
+          <div id="flow-schedule-fallback-error" class="hub-alert hub-alert--error" role="alert" hidden></div>
+        </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-ghost"
+            id="flow-schedule-fallback-cancel-button"
+            data-dialog-dismiss="true"
+          >キャンセル</button>
+          <button
+            type="submit"
+            class="btn btn-primary"
+            id="flow-schedule-fallback-confirm-button"
+            data-autofocus="true"
+          >決定する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div
+    id="flow-schedule-consensus-toast"
+    class="flow-consensus-toast"
+    role="status"
+    aria-live="assertive"
+    hidden
+  ></div>
+
   <div id="flow-confirm-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="flow-confirm-dialog-title" hidden>
     <div class="modal-backdrop" data-dialog-dismiss="true"></div>
     <div class="modal-panel">
