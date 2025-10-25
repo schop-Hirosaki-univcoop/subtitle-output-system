@@ -100,11 +100,11 @@
       ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
       "$eventId": {
         ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
-        "$uid": {
+        "$sessionId": {
           ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
-          ".write": "auth != null && auth.uid == $uid && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
-          ".validate": "!newData.exists() || (newData.hasChildren(['uid','eventId']) && newData.child('uid').isString() && newData.child('uid').val() == $uid && newData.child('eventId').isString() && newData.child('eventId').val() == $eventId && (!newData.child('eventName').exists() || newData.child('eventName').isString()) && (!newData.child('scheduleId').exists() || newData.child('scheduleId').isString()) && (!newData.child('scheduleKey').exists() || newData.child('scheduleKey').isString()) && (!newData.child('scheduleLabel').exists() || newData.child('scheduleLabel').isString()) && (!newData.child('displayName').exists() || newData.child('displayName').isString()) && (!newData.child('email').exists() || newData.child('email').isString()) && (!newData.child('clientTimestamp').exists() || newData.child('clientTimestamp').isNumber()) && (!newData.child('updatedAt').exists() || newData.child('updatedAt').isNumber() || newData.child('updatedAt').val() == now) && (!newData.child('reason').exists() || newData.child('reason').isString()))",
-          "uid": { ".validate": "newData.isString() && newData.val() == $uid" },
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true) && ((newData.exists() && newData.child('uid').val() == auth.uid) || (!newData.exists() && (!data.exists() || data.child('uid').val() == auth.uid)))",
+          ".validate": "!newData.exists() || (newData.hasChildren(['uid','eventId']) && newData.child('uid').isString() && newData.child('uid').val() == auth.uid && newData.child('eventId').isString() && newData.child('eventId').val() == $eventId && (!newData.child('eventName').exists() || newData.child('eventName').isString()) && (!newData.child('scheduleId').exists() || newData.child('scheduleId').isString()) && (!newData.child('scheduleKey').exists() || newData.child('scheduleKey').isString()) && (!newData.child('scheduleLabel').exists() || newData.child('scheduleLabel').isString()) && (!newData.child('displayName').exists() || newData.child('displayName').isString()) && (!newData.child('email').exists() || newData.child('email').isString()) && (!newData.child('clientTimestamp').exists() || newData.child('clientTimestamp').isNumber()) && (!newData.child('updatedAt').exists() || newData.child('updatedAt').isNumber() || newData.child('updatedAt').val() == now) && (!newData.child('reason').exists() || newData.child('reason').isString()) && (!newData.child('sessionId').exists() || (newData.child('sessionId').isString() && newData.child('sessionId').val() == $sessionId)) && (!newData.child('mode').exists() || (newData.child('mode').isString() && newData.child('mode').val().matches(/^(telop|support)$/))) && (!newData.child('source').exists() || newData.child('source').isString()))",
+          "uid": { ".validate": "newData.isString() && newData.val() == auth.uid" },
           "eventId": { ".validate": "newData.isString() && newData.val() == $eventId" },
           "eventName": { ".validate": "newData.isString() || !newData.exists()" },
           "scheduleId": { ".validate": "newData.isString() || !newData.exists()" },
@@ -115,8 +115,36 @@
           "clientTimestamp": { ".validate": "newData.isNumber() || !newData.exists()" },
           "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
           "reason": { ".validate": "newData.isString() || !newData.exists()" },
+          "sessionId": { ".validate": "newData.isString() && newData.val() == $sessionId" },
+          "mode": { ".validate": "newData.isString() && newData.val().matches(/^(telop|support)$/)" },
+          "source": { ".validate": "newData.isString() || !newData.exists()" },
           "$other": { ".validate": false }
         }
+      }
+    },
+
+    "operatorPresenceConsensus": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+      "$eventId": {
+        ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+        ".validate": "!newData.exists() || (newData.hasChildren(['conflictSignature']) && newData.child('conflictSignature').isString() && newData.child('conflictSignature').val().length > 0 && (!newData.child('scheduleKey').exists() || newData.child('scheduleKey').isString()) && (!newData.child('scheduleId').exists() || newData.child('scheduleId').isString()) && (!newData.child('scheduleLabel').exists() || newData.child('scheduleLabel').isString()) && (!newData.child('scheduleRange').exists() || newData.child('scheduleRange').isString()) && (!newData.child('status').exists() || (newData.child('status').isString() && newData.child('status').val().matches(/^(pending|resolved)$/))) && (!newData.child('requestedByUid').exists() || newData.child('requestedByUid').isString()) && (!newData.child('requestedByDisplayName').exists() || newData.child('requestedByDisplayName').isString()) && (!newData.child('requestedBySessionId').exists() || newData.child('requestedBySessionId').isString()) && (!newData.child('requestedAt').exists() || newData.child('requestedAt').isNumber() || newData.child('requestedAt').val() == now) && (!newData.child('resolvedByUid').exists() || newData.child('resolvedByUid').isString()) && (!newData.child('resolvedByDisplayName').exists() || newData.child('resolvedByDisplayName').isString()) && (!newData.child('resolvedBySessionId').exists() || newData.child('resolvedBySessionId').isString()) && (!newData.child('resolvedAt').exists() || newData.child('resolvedAt').isNumber() || newData.child('resolvedAt').val() == now) && (!newData.child('updatedAt').exists() || newData.child('updatedAt').isNumber() || newData.child('updatedAt').val() == now))",
+        "conflictSignature": { ".validate": "newData.isString() && newData.val().length > 0" },
+        "scheduleKey": { ".validate": "newData.isString() || !newData.exists()" },
+        "scheduleId": { ".validate": "newData.isString() || !newData.exists()" },
+        "scheduleLabel": { ".validate": "newData.isString() || !newData.exists()" },
+        "scheduleRange": { ".validate": "newData.isString() || !newData.exists()" },
+        "status": { ".validate": "(!newData.exists()) || (newData.isString() && newData.val().matches(/^(pending|resolved)$/))" },
+        "requestedByUid": { ".validate": "newData.isString() || !newData.exists()" },
+        "requestedByDisplayName": { ".validate": "newData.isString() || !newData.exists()" },
+        "requestedBySessionId": { ".validate": "newData.isString() || !newData.exists()" },
+        "requestedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
+        "resolvedByUid": { ".validate": "newData.isString() || !newData.exists()" },
+        "resolvedByDisplayName": { ".validate": "newData.isString() || !newData.exists()" },
+        "resolvedBySessionId": { ".validate": "newData.isString() || !newData.exists()" },
+        "resolvedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
+        "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
+        "$other": { ".validate": false }
       }
     },
 
