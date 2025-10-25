@@ -302,6 +302,7 @@ export class OperatorApp {
     this.operatorPresenceSubscribedEventId = "";
     this.operatorPresenceUnsubscribe = null;
     this.operatorPresenceLastSignature = "";
+    this.operatorPresenceSessionId = this.generatePresenceSessionId();
     this.conflictDialogOpen = false;
 
     this.toast = showToast;
@@ -322,6 +323,20 @@ export class OperatorApp {
       return "";
     }
     return document.documentElement?.dataset?.operatorEmbedPrefix || "";
+  }
+
+  generatePresenceSessionId() {
+    if (typeof crypto !== "undefined") {
+      if (typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+      }
+      if (typeof crypto.getRandomValues === "function") {
+        const array = new Uint8Array(16);
+        crypto.getRandomValues(array);
+        return Array.from(array, (value) => value.toString(16).padStart(2, "0")).join("");
+      }
+    }
+    return `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 
   extractPageContext() {
@@ -527,13 +542,24 @@ export class OperatorApp {
       (snapshot) => {
         const raw = snapshot.val() || {};
         const presenceMap = new Map();
-        Object.entries(raw).forEach(([uid, payload]) => {
-          presenceMap.set(String(uid), payload || {});
+        Object.entries(raw).forEach(([entryId, payload]) => {
+          presenceMap.set(String(entryId), payload || {});
         });
         this.state.operatorPresenceEventId = nextEventId;
         this.state.operatorPresenceByUser = presenceMap;
-        const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
-        this.state.operatorPresenceSelf = selfUid ? presenceMap.get(selfUid) || null : null;
+        const sessionId = String(this.operatorPresenceSessionId || "").trim();
+        let selfEntry = sessionId ? presenceMap.get(sessionId) || null : null;
+        if (!selfEntry) {
+          const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
+          for (const value of presenceMap.values()) {
+            if (!value) continue;
+            if (String(value.uid || "").trim() === selfUid) {
+              selfEntry = value;
+              break;
+            }
+          }
+        }
+        this.state.operatorPresenceSelf = selfEntry || null;
         this.renderChannelBanner();
         this.evaluateScheduleConflict();
       },
@@ -561,24 +587,27 @@ export class OperatorApp {
     const scheduleKey = String(this.state?.currentSchedule || "").trim();
     const eventName = String(this.state?.activeEventName || "").trim();
     const scheduleLabel = String(this.state?.activeScheduleLabel || "").trim();
-    const nextKey = `${eventId}/${uid}`;
+    const sessionId = String(this.operatorPresenceSessionId || "").trim() || this.generatePresenceSessionId();
+    this.operatorPresenceSessionId = sessionId;
+    const nextKey = `${eventId}/${sessionId}`;
 
     if (this.operatorPresenceEntryKey && this.operatorPresenceEntryKey !== nextKey) {
       this.clearOperatorPresence();
     }
 
-    const signature = JSON.stringify({ eventId, scheduleId, scheduleKey, scheduleLabel });
+    const signature = JSON.stringify({ eventId, scheduleId, scheduleKey, scheduleLabel, sessionId });
     if (reason !== "heartbeat" && signature === this.operatorPresenceLastSignature) {
       this.scheduleOperatorPresenceHeartbeat();
       return;
     }
     this.operatorPresenceLastSignature = signature;
 
-    const entryRef = getOperatorPresenceEntryRef(eventId, uid);
+    const entryRef = getOperatorPresenceEntryRef(eventId, sessionId);
     this.operatorPresenceEntryKey = nextKey;
     this.operatorPresenceEntryRef = entryRef;
 
     const payload = {
+      sessionId,
       uid,
       email: String(user?.email || "").trim(),
       displayName: String(user?.displayName || "").trim(),
@@ -750,7 +779,8 @@ export class OperatorApp {
     const presenceMap = this.state?.operatorPresenceByUser instanceof Map ? this.state.operatorPresenceByUser : new Map();
     const groups = new Map();
     const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
-    presenceMap.forEach((value, uid) => {
+    const selfSessionId = String(this.operatorPresenceSessionId || "").trim();
+    presenceMap.forEach((value, entryId) => {
       if (!value) return;
       if (String(value.eventId || "").trim() !== eventId) return;
       const rawKey = String(value.scheduleKey || "");
@@ -766,10 +796,14 @@ export class OperatorApp {
         groups.set(scheduleKey, entry);
       }
       entry.label = entry.label || label;
+      const memberUid = String(value.uid || "").trim();
+      const fallbackId = String(entryId);
+      const isSelfSession = selfSessionId && fallbackId === selfSessionId;
+      const isSelfUid = memberUid && memberUid === selfUid;
       entry.members.push({
-        uid: String(uid),
-        name: String(value.displayName || value.email || uid || "").trim() || String(uid),
-        isSelf: String(uid) === selfUid
+        uid: memberUid || fallbackId,
+        name: String(value.displayName || value.email || memberUid || fallbackId || "").trim() || memberUid || fallbackId,
+        isSelf: Boolean(isSelfSession || isSelfUid)
       });
     });
     const items = Array.from(groups.values());
@@ -1031,7 +1065,8 @@ export class OperatorApp {
     const presenceMap = this.state?.operatorPresenceByUser instanceof Map ? this.state.operatorPresenceByUser : new Map();
     const groups = new Map();
     const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
-    presenceMap.forEach((value, uid) => {
+    const selfSessionId = String(this.operatorPresenceSessionId || "").trim();
+    presenceMap.forEach((value, entryId) => {
       if (!value) return;
       if (String(value.eventId || "").trim() !== eventId) return;
       const rawKey = String(value.scheduleKey || "");
@@ -1048,10 +1083,14 @@ export class OperatorApp {
         groups.set(scheduleKey, entry);
       }
       entry.label = entry.label || label;
+      const memberUid = String(value.uid || "").trim();
+      const isSelfSession = selfSessionId && String(entryId) === selfSessionId;
+      const isSelfUid = memberUid && memberUid === selfUid;
+      const fallbackId = String(entryId);
       entry.members.push({
-        uid: String(uid),
-        name: String(value.displayName || value.email || uid || "").trim() || String(uid),
-        isSelf: String(uid) === selfUid
+        uid: memberUid || fallbackId,
+        name: String(value.displayName || value.email || memberUid || fallbackId || "").trim() || memberUid || fallbackId,
+        isSelf: Boolean(isSelfSession || isSelfUid)
       });
     });
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
