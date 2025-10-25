@@ -94,6 +94,7 @@ export class EventAdminApp {
     this.scheduleConflictContext = null;
     this.pendingNavigationTarget = "";
     this.scheduleConflictRadioName = generateShortId("flow-conflict-radio-");
+    this.flowDebugEnabled = true;
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.updateChatLayoutMetrics = this.updateChatLayoutMetrics.bind(this);
     this.chatLayoutResizeObserver = null;
@@ -119,13 +120,101 @@ export class EventAdminApp {
   }
 
   logParticipantAction(message, detail = null) {
+    // 参加者リスト管理パネル向けのデバッグ出力は無効化します。
+    void message;
+    void detail;
+  }
+
+  logFlowEvent(message, detail = null) {
+    if (!this.flowDebugEnabled) {
+      return;
+    }
     const timestamp = new Date().toISOString();
-    const prefix = `[Participants] ${timestamp} ${message}`;
+    const prefix = `[Flow] ${timestamp} ${message}`;
     if (detail && typeof detail === "object" && Object.keys(detail).length > 0) {
+      console.info(prefix, detail);
+    } else if (typeof detail !== "undefined" && detail !== null) {
       console.info(prefix, detail);
     } else {
       console.info(prefix);
     }
+  }
+
+  buildFlowState() {
+    const event = this.getSelectedEvent();
+    const schedule = this.getSelectedSchedule();
+    const presence = this.operatorPresenceEntries.map((entry) => ({
+      entryId: entry.entryId,
+      uid: entry.uid,
+      displayName: entry.displayName,
+      scheduleId: entry.scheduleId,
+      scheduleKey: entry.scheduleKey,
+      scheduleLabel: entry.scheduleLabel,
+      isSelf: Boolean(entry.isSelf),
+      mode: entry.mode,
+      updatedAt: entry.updatedAt
+    }));
+    const conflict = this.scheduleConflictContext
+      ? {
+          eventId: this.scheduleConflictContext.eventId,
+          hasConflict: this.scheduleConflictContext.hasConflict,
+          hasOtherOperators: this.scheduleConflictContext.hasOtherOperators,
+          hostScheduleId: this.scheduleConflictContext.hostScheduleId,
+          hostScheduleKey: this.scheduleConflictContext.hostScheduleKey,
+          defaultKey: this.scheduleConflictContext.defaultKey,
+          options: this.scheduleConflictContext.options.map((option) => ({
+            key: option.key,
+            scheduleId: option.scheduleId,
+            scheduleLabel: option.scheduleLabel,
+            scheduleRange: option.scheduleRange,
+            containsSelf: option.containsSelf,
+            memberCount: option.members?.length || 0
+          }))
+        }
+      : null;
+    return {
+      stage: this.stage,
+      activePanel: this.activePanel,
+      pendingNavigationTarget: this.pendingNavigationTarget || "",
+      operatorMode: this.operatorMode,
+      currentUser: this.currentUser
+        ? {
+            uid: this.currentUser.uid || "",
+            displayName: this.currentUser.displayName || "",
+            email: this.currentUser.email || ""
+          }
+        : null,
+      selectedEvent: event
+        ? {
+            id: event.id,
+            name: event.name || "",
+            scheduleCount: Array.isArray(event.schedules) ? event.schedules.length : 0
+          }
+        : null,
+      selectedSchedule: schedule
+        ? {
+            id: schedule.id,
+            label: schedule.label || "",
+            startAt: schedule.startAt || "",
+            endAt: schedule.endAt || ""
+          }
+        : null,
+      operatorPresenceEventId: this.operatorPresenceEventId || "",
+      operatorPresence: presence,
+      scheduleConflict: conflict
+    };
+  }
+
+  logFlowState(message, detail = null) {
+    const state = this.buildFlowState();
+    const payload = {};
+    if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+      Object.assign(payload, detail);
+    } else if (typeof detail !== "undefined" && detail !== null) {
+      payload.detail = detail;
+    }
+    payload.flowState = state;
+    this.logFlowEvent(message, payload);
   }
 
   init() {
@@ -633,6 +722,10 @@ export class EventAdminApp {
     this.notifyEventListeners();
     this.syncOperatorPresenceSubscription();
     this.updateScheduleConflictState();
+    this.logFlowState("イベントと日程のロードが完了しました", {
+      eventCount: this.events.length,
+      scheduleCount: this.schedules.length
+    });
 
     return this.events;
   }
@@ -761,13 +854,13 @@ export class EventAdminApp {
   selectEvent(eventId) {
     const previous = this.selectedEventId;
     const normalized = ensureString(eventId);
-    this.logParticipantAction("イベント選択リクエストを受信しました", {
+    this.logFlowEvent("イベント選択が要求されました", {
       requestedEventId: normalized || "",
       previousEventId: previous || "",
       totalEvents: this.events.length
     });
     if (normalized && !this.events.some((event) => event.id === normalized)) {
-      this.logParticipantAction("指定されたイベントが見つからないため選択を維持します", {
+      this.logFlowState("指定されたイベントが見つからないため選択を維持します", {
         requestedEventId: normalized
       });
       return;
@@ -776,13 +869,13 @@ export class EventAdminApp {
     this.selectedEventId = normalized;
     const changed = previous !== normalized;
     if (changed) {
-      this.logParticipantAction("イベント選択を更新しました", {
+      this.logFlowState("イベント選択を更新しました", {
         eventId: normalized || "",
         previousEventId: previous || ""
       });
       this.tools.resetContext();
     } else {
-      this.logParticipantAction("イベント選択は既に最新の状態です", {
+      this.logFlowState("イベント選択は既に最新の状態です", {
         eventId: normalized || ""
       });
     }
@@ -806,7 +899,7 @@ export class EventAdminApp {
     const desiredId = preferredId || this.selectedScheduleId;
     if (desiredId && availableIds.has(desiredId)) {
       this.selectedScheduleId = desiredId;
-      this.logParticipantAction("利用可能な日程選択を維持しました", {
+      this.logFlowState("利用可能な日程選択を維持しました", {
         scheduleId: this.selectedScheduleId,
         preferredScheduleId: preferredId || ""
       });
@@ -814,7 +907,7 @@ export class EventAdminApp {
       const previousScheduleId = this.selectedScheduleId;
       this.selectedScheduleId = "";
       this.tools.resetContext({ clearDataset: true });
-      this.logParticipantAction("利用可能な日程が見つからないため選択をクリアしました", {
+      this.logFlowState("利用可能な日程が見つからないため選択をクリアしました", {
         previousScheduleId: previousScheduleId || "",
         preferredScheduleId: preferredId || ""
       });
@@ -1128,13 +1221,13 @@ export class EventAdminApp {
   selectSchedule(scheduleId) {
     const previous = this.selectedScheduleId;
     const normalized = ensureString(scheduleId);
-    this.logParticipantAction("日程選択リクエストを受信しました", {
+    this.logFlowEvent("日程選択が要求されました", {
       requestedScheduleId: normalized || "",
       previousScheduleId: previous || "",
       totalSchedules: this.schedules.length
     });
     if (normalized && !this.schedules.some((schedule) => schedule.id === normalized)) {
-      this.logParticipantAction("指定された日程が見つからないため選択を維持します", {
+      this.logFlowState("指定された日程が見つからないため選択を維持します", {
         requestedScheduleId: normalized
       });
       return;
@@ -1143,13 +1236,13 @@ export class EventAdminApp {
     this.selectedScheduleId = normalized;
     const changed = previous !== normalized;
     if (changed) {
-      this.logParticipantAction("日程選択を更新しました", {
+      this.logFlowState("日程選択を更新しました", {
         scheduleId: normalized || "",
         previousScheduleId: previous || ""
       });
       this.tools.resetContext();
     } else {
-      this.logParticipantAction("日程選択は既に最新の状態です", {
+      this.logFlowState("日程選択は既に最新の状態です", {
         scheduleId: normalized || ""
       });
     }
@@ -1170,7 +1263,7 @@ export class EventAdminApp {
   updateScheduleStateFromSelection(preferredScheduleId = "") {
     const event = this.getSelectedEvent();
     this.schedules = event ? [...event.schedules] : [];
-    this.logParticipantAction("イベント選択に基づいて日程一覧を更新します", {
+    this.logFlowState("イベント選択に基づいて日程一覧を更新します", {
       selectedEventId: event?.id || "",
       scheduleCount: this.schedules.length,
       preferredScheduleId
@@ -1753,6 +1846,10 @@ export class EventAdminApp {
     const normalized = PANEL_CONFIG[target] ? target : "events";
     const originPanel = sourceButton?.closest("[data-panel]")?.dataset?.panel || "";
     const config = PANEL_CONFIG[normalized] || PANEL_CONFIG.events;
+    this.logFlowState("フローナビゲーションが要求されました", {
+      target: normalized,
+      originPanel
+    });
     if (
       normalized === "participants" &&
       originPanel === "schedules" &&
@@ -1765,12 +1862,26 @@ export class EventAdminApp {
         this.pendingNavigationTarget = normalized;
         this.renderScheduleConflictDialog(context);
         this.clearScheduleConflictError();
+        this.logFlowState("スケジュール確認モーダルを表示します", {
+          target: normalized,
+          originPanel,
+          conflict: {
+            eventId: context.eventId,
+            hasConflict: context.hasConflict,
+            optionCount: context.options.length,
+            entryCount: context.entries.length
+          }
+        });
         this.openDialog(this.dom.scheduleConflictDialog);
         return;
       }
     }
     this.pendingNavigationTarget = "";
     this.showPanel(normalized);
+    this.logFlowState("フローナビゲーションを実行しました", {
+      target: normalized,
+      originPanel
+    });
   }
 
   isScheduleConflictDialogOpen() {
@@ -2150,19 +2261,29 @@ export class EventAdminApp {
   syncOperatorPresenceSubscription() {
     const eventId = ensureString(this.selectedEventId);
     if (this.operatorPresenceEventId === eventId) {
+      this.logFlowState("オペレーター選択状況の購読は既に最新です", {
+        eventId
+      });
       this.updateScheduleConflictState();
       return;
     }
     if (this.operatorPresenceUnsubscribe) {
+      this.logFlowEvent("オペレーター選択状況の購読を解除します", {
+        previousEventId: this.operatorPresenceEventId
+      });
       this.operatorPresenceUnsubscribe();
       this.operatorPresenceUnsubscribe = null;
     }
     this.operatorPresenceEventId = eventId;
     this.operatorPresenceEntries = [];
     if (!eventId) {
+      this.logFlowState("イベント未選択のためオペレーター選択状況をクリアしました");
       this.updateScheduleConflictState();
       return;
     }
+    this.logFlowEvent("オペレーター選択状況の購読を開始します", {
+      eventId
+    });
     try {
       const ref = getOperatorPresenceEventRef(eventId);
       this.operatorPresenceUnsubscribe = onValue(
@@ -2171,6 +2292,10 @@ export class EventAdminApp {
           const raw = snapshot.exists() ? snapshot.val() : {};
           this.operatorPresenceEntries = this.normalizeOperatorPresenceEntries(raw, eventId);
           this.updateScheduleConflictState();
+          this.logFlowState("オペレーター選択状況を受信しました", {
+            eventId,
+            entryCount: this.operatorPresenceEntries.length
+          });
         },
         (error) => {
           console.error("Failed to monitor operator presence:", error);
@@ -2199,6 +2324,7 @@ export class EventAdminApp {
     if (this.dom.scheduleConflictDialog) {
       this.closeDialog(this.dom.scheduleConflictDialog);
     }
+    this.logFlowState("オペレーター選択状況をリセットしました");
     this.updateScheduleConflictState();
   }
 
