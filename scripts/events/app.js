@@ -795,6 +795,7 @@ export class EventAdminApp {
     this.showPanel(this.activePanel);
     this.tools.prepareContextForSelection();
     this.updateScheduleConflictState();
+    this.syncOperatorPresenceSubscription();
     if (changed) {
       this.notifySelectionListeners("host");
     }
