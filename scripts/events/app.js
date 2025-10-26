@@ -2345,8 +2345,12 @@ export class EventAdminApp {
       const uid = ensureString(payload.uid);
       const mode = normalizeOperatorMode(payload.mode);
       const updatedAt = Number(payload.clientTimestamp || payload.updatedAt || 0) || 0;
+      const sessionId = ensureString(payload.sessionId) || normalizedId;
+      const source = ensureString(payload.source);
       entries.push({
         entryId: normalizedId,
+        sessionId,
+        source,
         uid,
         displayName,
         scheduleId,
@@ -3234,7 +3238,27 @@ export class EventAdminApp {
       return;
     }
 
-    const sessionId = ensureString(this.hostPresenceSessionId) || this.generatePresenceSessionId();
+    const presenceEntries = Array.isArray(this.operatorPresenceEntries)
+      ? this.operatorPresenceEntries
+      : [];
+    const existingHostEntry = presenceEntries.find(
+      (entry) => ensureString(entry.uid) === uid && ensureString(entry.source) === "events"
+    );
+    const existingSessionId = ensureString(existingHostEntry?.sessionId || existingHostEntry?.entryId);
+    const previousSessionId = ensureString(this.hostPresenceSessionId);
+    let sessionId = previousSessionId;
+    if (existingSessionId && (!sessionId || sessionId !== existingSessionId)) {
+      sessionId = existingSessionId;
+      this.logFlowState("既存の在席セッションを引き継ぎます", {
+        reason,
+        eventId,
+        previousSessionId: previousSessionId || "",
+        sessionId
+      });
+    }
+    if (!sessionId) {
+      sessionId = this.generatePresenceSessionId();
+    }
     this.hostPresenceSessionId = sessionId;
     const nextKey = `${eventId}/${sessionId}`;
     if (this.hostPresenceEntryKey && this.hostPresenceEntryKey !== nextKey) {
@@ -3300,6 +3324,28 @@ export class EventAdminApp {
 
     set(entryRef, payload).catch((error) => {
       console.error("Failed to persist host presence:", error);
+    });
+
+    const staleHostEntries = presenceEntries.filter((entry) => {
+      if (ensureString(entry.uid) !== uid) {
+        return false;
+      }
+      if (ensureString(entry.source) !== "events") {
+        return false;
+      }
+      const entrySessionId = ensureString(entry.sessionId || entry.entryId);
+      return entrySessionId && entrySessionId !== sessionId;
+    });
+    staleHostEntries.forEach((entry) => {
+      const staleSessionId = ensureString(entry.sessionId || entry.entryId);
+      if (!staleSessionId) {
+        return;
+      }
+      try {
+        remove(getOperatorPresenceEntryRef(eventId, staleSessionId)).catch(() => {});
+      } catch (error) {
+        console.debug("Failed to remove stale host presence entry:", error);
+      }
     });
 
     try {
@@ -4934,7 +4980,27 @@ export class EventAdminApp {
       return;
     }
 
-    const sessionId = ensureString(this.hostPresenceSessionId) || this.generatePresenceSessionId();
+    const presenceEntries = Array.isArray(this.operatorPresenceEntries)
+      ? this.operatorPresenceEntries
+      : [];
+    const existingHostEntry = presenceEntries.find(
+      (entry) => ensureString(entry.uid) === uid && ensureString(entry.source) === "events"
+    );
+    const existingSessionId = ensureString(existingHostEntry?.sessionId || existingHostEntry?.entryId);
+    const previousSessionId = ensureString(this.hostPresenceSessionId);
+    let sessionId = previousSessionId;
+    if (existingSessionId && (!sessionId || sessionId !== existingSessionId)) {
+      sessionId = existingSessionId;
+      this.logFlowState("既存の在席セッションを引き継ぎます", {
+        reason,
+        eventId,
+        previousSessionId: previousSessionId || "",
+        sessionId
+      });
+    }
+    if (!sessionId) {
+      sessionId = this.generatePresenceSessionId();
+    }
     this.hostPresenceSessionId = sessionId;
     const nextKey = `${eventId}/${sessionId}`;
     if (this.hostPresenceEntryKey && this.hostPresenceEntryKey !== nextKey) {
@@ -5000,6 +5066,28 @@ export class EventAdminApp {
 
     set(entryRef, payload).catch((error) => {
       console.error("Failed to persist host presence:", error);
+    });
+
+    const staleHostEntries = presenceEntries.filter((entry) => {
+      if (ensureString(entry.uid) !== uid) {
+        return false;
+      }
+      if (ensureString(entry.source) !== "events") {
+        return false;
+      }
+      const entrySessionId = ensureString(entry.sessionId || entry.entryId);
+      return entrySessionId && entrySessionId !== sessionId;
+    });
+    staleHostEntries.forEach((entry) => {
+      const staleSessionId = ensureString(entry.sessionId || entry.entryId);
+      if (!staleSessionId) {
+        return;
+      }
+      try {
+        remove(getOperatorPresenceEntryRef(eventId, staleSessionId)).catch(() => {});
+      } catch (error) {
+        console.debug("Failed to remove stale host presence entry:", error);
+      }
     });
 
     try {
