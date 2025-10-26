@@ -48,6 +48,7 @@ import { EventChat } from "./chat.js";
 
 const HOST_PRESENCE_HEARTBEAT_MS = 60_000;
 const SCHEDULE_CONSENSUS_TOAST_MS = 3_000;
+const PENDING_NAVIGATION_CLEAR_DELAY_MS = 5_000;
 const DISPLAY_LOCK_REASONS = new Set([
   "schedule-commit",
   "navigation",
@@ -135,6 +136,8 @@ export class EventAdminApp {
     this.lastScheduleCommitChanged = false;
     this.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
+    this.pendingNavigationClearTimer = 0;
+    this.awaitingScheduleConflictPrompt = false;
     this.scheduleConflictRadioName = generateShortId("flow-conflict-radio-");
     this.scheduleFallbackRadioName = generateShortId("flow-fallback-radio-");
     this.flowDebugEnabled = true;
@@ -1985,10 +1988,34 @@ export class EventAdminApp {
     });
   }
 
+  clearPendingNavigationTimer() {
+    if (!this.pendingNavigationClearTimer) {
+      return;
+    }
+    const timerHost = getTimerHost();
+    timerHost.clearTimeout(this.pendingNavigationClearTimer);
+    this.pendingNavigationClearTimer = 0;
+  }
+
+  schedulePendingNavigationClear() {
+    const timerHost = getTimerHost();
+    this.clearPendingNavigationTimer();
+    this.pendingNavigationClearTimer = timerHost.setTimeout(() => {
+      this.pendingNavigationClearTimer = 0;
+      this.pendingNavigationTarget = "";
+      this.pendingNavigationMeta = null;
+      this.awaitingScheduleConflictPrompt = false;
+      this.syncScheduleConflictPromptState();
+    }, PENDING_NAVIGATION_CLEAR_DELAY_MS);
+  }
+
   async handleFlowNavigation(target, { sourceButton = null } = {}) {
     const normalized = PANEL_CONFIG[target] ? target : "events";
     const originPanel = sourceButton?.closest("[data-panel]")?.dataset?.panel || "";
     const config = PANEL_CONFIG[normalized] || PANEL_CONFIG.events;
+    this.clearPendingNavigationTimer();
+    this.pendingNavigationTarget = "";
+    this.awaitingScheduleConflictPrompt = false;
     this.pendingNavigationMeta = null;
     this.logFlowState("フローナビゲーションが要求されました", {
       target: normalized,
@@ -2000,10 +2027,18 @@ export class EventAdminApp {
       config.requireSchedule &&
       this.selectedEventId
     ) {
+      this.pendingNavigationTarget = normalized;
+      this.pendingNavigationMeta = {
+        target: normalized,
+        originPanel,
+        reason: "flow-navigation"
+      };
+      this.awaitingScheduleConflictPrompt = true;
       const committed = this.commitSelectedScheduleForTelop({ reason: "navigation" });
       if (!committed) {
         this.pendingNavigationTarget = "";
         this.pendingNavigationMeta = null;
+        this.awaitingScheduleConflictPrompt = false;
         this.syncScheduleConflictPromptState();
         this.lastScheduleCommitChanged = false;
         return;
@@ -2011,12 +2046,8 @@ export class EventAdminApp {
       const context = this.buildScheduleConflictContext();
       this.scheduleConflictContext = context;
       if (context.hasConflict) {
-        this.pendingNavigationTarget = normalized;
-        this.pendingNavigationMeta = {
-          target: normalized,
-          originPanel,
-          reason: "flow-navigation"
-        };
+        this.clearPendingNavigationTimer();
+        this.awaitingScheduleConflictPrompt = false;
         void this.requestScheduleConflictPrompt(context);
         this.openScheduleConflictDialog(context, {
           reason: "navigation",
@@ -2027,14 +2058,12 @@ export class EventAdminApp {
         this.lastScheduleCommitChanged = false;
         return;
       }
-      this.pendingNavigationTarget = "";
-      this.pendingNavigationMeta = null;
+      this.schedulePendingNavigationClear();
       this.enforceScheduleConflictState(context);
       this.syncScheduleConflictPromptState(context);
       this.lastScheduleCommitChanged = false;
     }
-    this.pendingNavigationTarget = "";
-    this.pendingNavigationMeta = null;
+    this.schedulePendingNavigationClear();
     this.showPanel(normalized);
     this.logFlowState("フローナビゲーションを実行しました", {
       target: normalized,
@@ -2866,6 +2895,8 @@ export class EventAdminApp {
     const pendingTarget = this.pendingNavigationTarget || "";
     this.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
+    this.awaitingScheduleConflictPrompt = false;
+    this.clearPendingNavigationTimer();
     let resolvedTarget = pendingTarget;
     let usedFallback = false;
     const metaOrigin = navMeta?.originPanel || "";
@@ -3616,6 +3647,8 @@ export class EventAdminApp {
     this.scheduleConflictPromptSignature = "";
     this.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
+    this.awaitingScheduleConflictPrompt = false;
+    this.clearPendingNavigationTimer();
     this.setScheduleConflictSubmitting(false);
     this.clearScheduleConflictError();
     if (this.dom.scheduleConflictForm) {
@@ -3794,6 +3827,8 @@ export class EventAdminApp {
         const navTarget = this.pendingNavigationTarget || "";
         this.pendingNavigationTarget = "";
         this.pendingNavigationMeta = null;
+        this.awaitingScheduleConflictPrompt = false;
+        this.clearPendingNavigationTimer();
         let resolvedTarget = navTarget;
         let usedFallback = false;
         const metaOrigin = navMeta?.originPanel || "";
@@ -4880,6 +4915,8 @@ export class EventAdminApp {
     const pendingTarget = this.pendingNavigationTarget || "";
     this.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
+    this.awaitingScheduleConflictPrompt = false;
+    this.clearPendingNavigationTimer();
     let resolvedTarget = pendingTarget;
     let usedFallback = false;
     const metaOrigin = navMeta?.originPanel || "";
@@ -5215,6 +5252,9 @@ export class EventAdminApp {
     this.scheduleConflictLastSignature = "";
     this.scheduleConflictPromptSignature = "";
     this.pendingNavigationTarget = "";
+    this.pendingNavigationMeta = null;
+    this.awaitingScheduleConflictPrompt = false;
+    this.clearPendingNavigationTimer();
     this.setScheduleConflictSubmitting(false);
     this.clearScheduleConflictError();
     if (this.dom.scheduleConflictForm) {
@@ -5397,6 +5437,8 @@ export class EventAdminApp {
         const navTarget = this.pendingNavigationTarget || "";
         this.pendingNavigationTarget = "";
         this.pendingNavigationMeta = null;
+        this.awaitingScheduleConflictPrompt = false;
+        this.clearPendingNavigationTimer();
         let resolvedTarget = navTarget;
         let usedFallback = false;
         const metaOrigin = navMeta?.originPanel || "";
@@ -5441,6 +5483,8 @@ export class EventAdminApp {
     this.setScheduleConflictSubmitting(false);
     this.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
+    this.awaitingScheduleConflictPrompt = false;
+    this.clearPendingNavigationTimer();
     if (this.dom.scheduleConflictForm) {
       this.dom.scheduleConflictForm.reset();
     }
@@ -6953,6 +6997,8 @@ export class EventAdminApp {
       this.clearScheduleConflictError();
       this.pendingNavigationTarget = "";
       this.pendingNavigationMeta = null;
+      this.awaitingScheduleConflictPrompt = false;
+      this.clearPendingNavigationTimer();
     }
     if (element === this.dom.scheduleFallbackDialog) {
       if (this.dom.scheduleFallbackForm) {
