@@ -3451,24 +3451,34 @@ export class EventAdminApp {
     }
     hostEntries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-    const previousSessionId = ensureString(this.hostPresenceSessionId);
-    const storedSessionId = this.loadStoredHostPresenceSessionId(uid, eventId);
-    const baselineSessionId = previousSessionId || storedSessionId || "";
+    const hostSessionIds = new Set(
+      hostEntries.map((entry) => ensureString(entry.sessionId || entry.entryId)).filter(Boolean)
+    );
+    const entryKey = ensureString(this.hostPresenceEntryKey);
+    const [entryKeyEventId = ""] = entryKey.split("/");
+    const previousSessionId = entryKeyEventId === eventId ? ensureString(this.hostPresenceSessionId) : "";
+    const storedSessionId = ensureString(this.loadStoredHostPresenceSessionId(uid, eventId));
     const preferredEntry = hostEntries.length > 0 ? hostEntries[0] : null;
     const preferredSessionId = ensureString(preferredEntry?.sessionId || preferredEntry?.entryId);
-    let sessionId = baselineSessionId;
+    const baselineSessionId = previousSessionId || storedSessionId || "";
+
+    let sessionId = "";
     let reusedSessionId = "";
 
-    if (sessionId) {
-      if (preferredSessionId && preferredSessionId === sessionId) {
-        reusedSessionId = sessionId;
-      }
+    if (previousSessionId && hostSessionIds.has(previousSessionId)) {
+      sessionId = previousSessionId;
+      reusedSessionId = previousSessionId;
+    } else if (storedSessionId && hostSessionIds.has(storedSessionId)) {
+      sessionId = storedSessionId;
+      reusedSessionId = storedSessionId;
     } else if (preferredSessionId) {
       sessionId = preferredSessionId;
       reusedSessionId = preferredSessionId;
-    }
-
-    if (!sessionId) {
+    } else if (storedSessionId) {
+      sessionId = storedSessionId;
+    } else if (previousSessionId) {
+      sessionId = previousSessionId;
+    } else {
       sessionId = this.generatePresenceSessionId();
     }
 
