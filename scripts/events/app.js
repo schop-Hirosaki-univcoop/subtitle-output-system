@@ -1015,6 +1015,15 @@ export class EventAdminApp {
   getCurrentSelectionContext() {
     const event = this.getSelectedEvent();
     const schedule = this.getSelectedSchedule();
+    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
+    const committedScheduleLabel = ensureString(this.hostCommittedScheduleLabel);
+    const committedScheduleKey = committedScheduleId
+      ? this.derivePresenceScheduleKey(
+          ensureString(event?.id || ""),
+          { scheduleId: committedScheduleId, scheduleLabel: committedScheduleLabel },
+          ensureString(this.hostPresenceSessionId)
+        )
+      : "";
     return {
       eventId: event?.id || "",
       eventName: event?.name || event?.id || "",
@@ -1022,7 +1031,10 @@ export class EventAdminApp {
       scheduleLabel: schedule?.label || schedule?.id || "",
       startAt: schedule?.startAt || "",
       endAt: schedule?.endAt || "",
-      operatorMode: this.operatorMode
+      operatorMode: this.operatorMode,
+      committedScheduleId,
+      committedScheduleLabel,
+      committedScheduleKey
     };
   }
 

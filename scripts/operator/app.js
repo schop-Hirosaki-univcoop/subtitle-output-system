@@ -378,12 +378,23 @@ export class OperatorApp {
   applyContextToState() {
     if (!this.state) return;
     const context = this.pageContext || {};
-    const scheduleKey = context.scheduleKey || (context.eventId && context.scheduleId ? `${context.eventId}::${context.scheduleId}` : "");
+    const scheduleKey = context.scheduleKey ||
+      (context.eventId && context.scheduleId ? `${context.eventId}::${context.scheduleId}` : "");
+    const committedScheduleKey = context.committedScheduleKey ||
+      (context.eventId && context.committedScheduleId
+        ? `${context.eventId}::${context.committedScheduleId}`
+        : "");
     this.state.activeEventId = context.eventId || "";
     this.state.activeScheduleId = context.scheduleId || "";
     this.state.activeEventName = context.eventName || "";
     this.state.activeScheduleLabel = context.scheduleLabel || "";
-    if (scheduleKey) {
+    this.state.committedScheduleId = context.committedScheduleId || "";
+    this.state.committedScheduleLabel = context.committedScheduleLabel || "";
+    this.state.committedScheduleKey = committedScheduleKey;
+    if (committedScheduleKey) {
+      this.state.currentSchedule = committedScheduleKey;
+      this.state.lastNormalSchedule = committedScheduleKey;
+    } else if (scheduleKey) {
       this.state.currentSchedule = scheduleKey;
       this.state.lastNormalSchedule = scheduleKey;
     }
@@ -631,7 +642,7 @@ export class OperatorApp {
     );
   }
 
-  syncOperatorPresence(reason = "state-change") {
+  syncOperatorPresence(reason = "context-sync") {
     const user = this.operatorIdentity?.uid ? this.operatorIdentity : auth.currentUser || null;
     const uid = String(user?.uid || "").trim();
     if (!uid || !this.isAuthorized) {
@@ -645,15 +656,29 @@ export class OperatorApp {
       return;
     }
 
-    const scheduleId = String(this.state?.activeScheduleId || "").trim();
-    const scheduleLabel = String(this.state?.activeScheduleLabel || "").trim();
+    const committedScheduleId = String(this.state?.committedScheduleId || "").trim();
+    const committedScheduleLabel = String(this.state?.committedScheduleLabel || "").trim();
     const sessionId = String(this.operatorPresenceSessionId || "").trim() || this.generatePresenceSessionId();
-    let scheduleKey = String(this.state?.currentSchedule || "").trim();
-    if (!scheduleKey && typeof this.getCurrentScheduleKey === "function") {
-      scheduleKey = String(this.getCurrentScheduleKey() || "").trim();
+    let scheduleId = committedScheduleId;
+    let scheduleLabel = committedScheduleLabel;
+    let scheduleKey = String(this.state?.committedScheduleKey || "").trim();
+    if (!scheduleId) {
+      scheduleId = "";
+      scheduleLabel = "";
+      scheduleKey = "";
+    }
+    if (!scheduleKey && scheduleId) {
+      scheduleKey = this.derivePresenceScheduleKey(eventId, { scheduleId, scheduleLabel }, sessionId);
     }
     if (!scheduleKey) {
-      scheduleKey = this.derivePresenceScheduleKey(eventId, { scheduleId, scheduleLabel }, sessionId);
+      scheduleKey = this.derivePresenceScheduleKey(
+        eventId,
+        {
+          scheduleId: "",
+          scheduleLabel: ""
+        },
+        sessionId
+      );
     }
     const eventName = String(this.state?.activeEventName || "").trim();
     const operatorMode = normalizeOperatorMode(this.operatorMode);
@@ -664,7 +689,14 @@ export class OperatorApp {
       this.clearOperatorPresence();
     }
 
-    const signature = JSON.stringify({ eventId, scheduleId, scheduleKey, scheduleLabel, sessionId, operatorMode });
+    const signature = JSON.stringify({
+      eventId,
+      scheduleId,
+      scheduleKey,
+      scheduleLabel,
+      sessionId,
+      operatorMode
+    });
     if (reason !== "heartbeat" && signature === this.operatorPresenceLastSignature) {
       this.scheduleOperatorPresenceHeartbeat();
       return;
@@ -1347,9 +1379,14 @@ export class OperatorApp {
     const scheduleId = ensure(context.scheduleId);
     const eventName = ensure(context.eventName);
     const scheduleLabel = ensure(context.scheduleLabel);
+    const committedScheduleId = ensure(context.committedScheduleId);
+    const committedScheduleLabel = ensure(context.committedScheduleLabel);
+    const committedScheduleKey = ensure(context.committedScheduleKey);
     const startAt = ensure(context.startAt);
     const endAt = ensure(context.endAt);
     const scheduleKey = eventId && scheduleId ? `${eventId}::${scheduleId}` : "";
+    const resolvedCommittedKey = committedScheduleKey ||
+      (eventId && committedScheduleId ? `${eventId}::${committedScheduleId}` : "");
     const operatorMode = normalizeOperatorMode(context.operatorMode ?? context.mode);
 
     this.pageContext = {
@@ -1358,6 +1395,9 @@ export class OperatorApp {
       scheduleId,
       eventName,
       scheduleLabel,
+      committedScheduleId,
+      committedScheduleLabel,
+      committedScheduleKey: resolvedCommittedKey,
       startAt,
       endAt,
       scheduleKey,
@@ -1379,6 +1419,17 @@ export class OperatorApp {
         scheduleId,
         eventName,
         label: scheduleLabel || scheduleId,
+        startAt,
+        endAt
+      });
+    }
+    if (resolvedCommittedKey) {
+      this.state.scheduleMetadata.set(resolvedCommittedKey, {
+        key: resolvedCommittedKey,
+        eventId,
+        scheduleId: committedScheduleId,
+        eventName,
+        label: committedScheduleLabel || committedScheduleId,
         startAt,
         endAt
       });
