@@ -424,6 +424,7 @@
         let channelScheduleId = querySchedulePinned ? initialScheduleId : '';
         let renderRef = ref(database, getRenderStatePath(channelEventId, channelScheduleId));
         let nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
+        const displaySessionRef = ref(database, "render/session");
         let nowShowingUnsubscribe = null;
 
         function setChannel(eventId, scheduleId) {
@@ -443,8 +444,15 @@
           if (!session || typeof session !== 'object') {
             return;
           }
-          const assignedEvent = typeof session.eventId === 'string' ? session.eventId.trim() : '';
-          const assignedSchedule = typeof session.scheduleId === 'string' ? session.scheduleId.trim() : '';
+          const assignment = session.assignment && typeof session.assignment === 'object' ? session.assignment : null;
+          const assignedEventRaw = typeof session.eventId === 'string' ? session.eventId.trim() : '';
+          const assignedScheduleRaw = typeof session.scheduleId === 'string' ? session.scheduleId.trim() : '';
+          const assignmentEvent = assignment && typeof assignment.eventId === 'string' ? assignment.eventId.trim() : '';
+          const assignmentSchedule = assignment && typeof assignment.scheduleId === 'string'
+            ? assignment.scheduleId.trim()
+            : '';
+          const assignedEvent = assignedEventRaw || assignmentEvent;
+          const assignedSchedule = assignedScheduleRaw || assignmentSchedule;
 
           if (!queryEventPinned) {
             if (assignedEvent) {
@@ -461,6 +469,47 @@
           if (!querySchedulePinned) {
             setChannel(channelEventId, assignedSchedule);
           }
+        }
+
+        let displaySessionUnsubscribe = null;
+
+        function handleDisplaySessionSnapshot(snapshot) {
+          const sessionValue = snapshot && typeof snapshot.val === 'function' ? snapshot.val() : null;
+          if (!sessionValue || typeof sessionValue !== 'object') {
+            return;
+          }
+          const currentUser = auth.currentUser || null;
+          const currentUid = typeof currentUser?.uid === 'string' ? currentUser.uid.trim() : '';
+          const sessionUid = typeof sessionValue.uid === 'string' ? sessionValue.uid.trim() : '';
+          if (currentUid && sessionUid && currentUid !== sessionUid) {
+            return;
+          }
+          const assignment = sessionValue.assignment && typeof sessionValue.assignment === 'object'
+            ? sessionValue.assignment
+            : null;
+          const assignmentEvent = typeof assignment?.eventId === 'string' ? assignment.eventId.trim() : '';
+          const assignmentSchedule = typeof assignment?.scheduleId === 'string' ? assignment.scheduleId.trim() : '';
+          const mergedEvent = typeof sessionValue.eventId === 'string' && sessionValue.eventId.trim()
+            ? sessionValue.eventId.trim()
+            : assignmentEvent;
+          const mergedSchedule = typeof sessionValue.scheduleId === 'string' && sessionValue.scheduleId.trim()
+            ? sessionValue.scheduleId.trim()
+            : assignmentSchedule;
+          sessionInfo = {
+            ...(sessionInfo || {}),
+            ...sessionValue,
+            assignment,
+            eventId: mergedEvent,
+            scheduleId: mergedSchedule
+          };
+          applyChannelFromSession(sessionInfo);
+        }
+
+        function subscribeDisplaySession() {
+          if (typeof displaySessionUnsubscribe === 'function') {
+            displaySessionUnsubscribe();
+          }
+          displaySessionUnsubscribe = onValue(displaySessionRef, handleDisplaySessionSnapshot);
         }
 
         const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec';
@@ -703,6 +752,7 @@
         });
 
         subscribeNowShowing();
+        subscribeDisplaySession();
 
         function flushPendingRender(reason) {
           if (!pendingRenderUpdate) return;
