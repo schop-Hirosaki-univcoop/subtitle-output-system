@@ -391,8 +391,24 @@ export class OperatorApp {
 
   getActiveChannel() {
     const ensure = (value) => String(value ?? "").trim();
-    const eventId = ensure(this.state?.activeEventId || this.pageContext?.eventId || "");
-    const scheduleId = ensure(this.state?.activeScheduleId || this.pageContext?.scheduleId || "");
+    let eventId = ensure(this.state?.activeEventId || this.pageContext?.eventId || "");
+    let scheduleId = ensure(this.state?.activeScheduleId || this.pageContext?.scheduleId || "");
+
+    if (!eventId || !scheduleId) {
+      const scheduleKey = ensure(
+        this.state?.currentSchedule || this.pageContext?.scheduleKey || ""
+      );
+      if (scheduleKey) {
+        const [eventPart = "", schedulePart = ""] = scheduleKey.split("::");
+        if (!eventId && eventPart) {
+          eventId = ensure(eventPart);
+        }
+        if (!scheduleId && schedulePart) {
+          scheduleId = ensure(schedulePart);
+        }
+      }
+    }
+
     return { eventId, scheduleId };
   }
 
@@ -1029,7 +1045,7 @@ export class OperatorApp {
     this.lockDisplayToSchedule(option.eventId || conflict.eventId, option.scheduleId, option.label, { fromModal: true });
   }
 
-  lockDisplayToCurrentSchedule() {
+  lockDisplayToCurrentSchedule(options = {}) {
     if (!this.isTelopEnabled()) {
       this.toast("テロップ操作なしモードでは固定できません。", "error");
       return;
@@ -1042,7 +1058,7 @@ export class OperatorApp {
     }
     const scheduleKey = this.getCurrentScheduleKey();
     const label = this.resolveScheduleLabel(scheduleKey, this.state?.activeScheduleLabel, scheduleId);
-    this.lockDisplayToSchedule(eventId, scheduleId, label);
+    return this.lockDisplayToSchedule(eventId, scheduleId, label, options);
   }
 
   async lockDisplayToSchedule(eventId, scheduleId, scheduleLabel, options = {}) {
@@ -1101,9 +1117,26 @@ export class OperatorApp {
         scheduleLabel: label,
         operatorName: String(this.operatorIdentity?.displayName || "").trim()
       });
-      if (response && response.assignment) {
-        this.applyAssignmentLocally(response.assignment);
-      }
+      const normalizedScheduleId = normalizeScheduleId(normalizedSchedule);
+      const fallbackLabel =
+        label ||
+        (normalizedScheduleId === "__default_schedule__"
+          ? "未選択"
+          : normalizedSchedule || normalizedScheduleId || normalizedEvent);
+      const fallbackAssignment = {
+        eventId: normalizedEvent,
+        scheduleId: normalizedScheduleId,
+        scheduleLabel: fallbackLabel,
+        scheduleKey: `${normalizedEvent}::${normalizedScheduleId}`,
+        lockedAt: Date.now(),
+        lockedByUid: String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim(),
+        lockedByEmail: String(this.operatorIdentity?.email || "").trim(),
+        lockedByName:
+          String(this.operatorIdentity?.displayName || "").trim() ||
+          String(this.operatorIdentity?.email || "").trim()
+      };
+      const appliedAssignment = response && response.assignment ? response.assignment : fallbackAssignment;
+      this.applyAssignmentLocally(appliedAssignment);
       const summary = this.describeChannelAssignment();
       if (!silent) {
         this.toast(summary ? `${summary}に固定しました。` : "ディスプレイのチャンネルを固定しました。", "success");
@@ -1113,6 +1146,7 @@ export class OperatorApp {
       if (fromModal) {
         this.closeConflictDialog();
       }
+      return appliedAssignment;
     } catch (error) {
       const message = error?.message || "日程の固定に失敗しました。";
       if (fromModal && this.dom.conflictError) {
