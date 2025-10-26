@@ -124,6 +124,7 @@ export class EventAdminApp {
     this.scheduleConflictLastSignature = "";
     this.scheduleConflictPromptSignature = "";
     this.pendingNavigationTarget = "";
+    this.pendingNavigationMeta = null;
     this.scheduleConflictRadioName = generateShortId("flow-conflict-radio-");
     this.scheduleFallbackRadioName = generateShortId("flow-fallback-radio-");
     this.flowDebugEnabled = true;
@@ -769,7 +770,9 @@ export class EventAdminApp {
     if (this.stage === "tabs") {
       const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
       if (activeConfig.requireSchedule && this.selectedEventId && this.selectedScheduleId) {
-        this.tools.syncEmbeddedTools().catch((error) => logError("Failed to sync tools after refresh", error));
+        this.tools
+          .syncEmbeddedTools({ reason: "events-refreshed" })
+          .catch((error) => logError("Failed to sync tools after refresh", error));
       }
     }
 
@@ -1162,7 +1165,9 @@ export class EventAdminApp {
     }
     const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
     if (activeConfig.stage === "tabs") {
-      this.tools.syncEmbeddedTools().catch((error) => logError("Failed to resync tools after mode change", error));
+      this.tools
+        .syncEmbeddedTools({ reason: "operator-mode-changed" })
+        .catch((error) => logError("Failed to resync tools after mode change", error));
     } else {
       this.tools.setPendingSync(true);
     }
@@ -1859,10 +1864,14 @@ export class EventAdminApp {
       const hasSelection = this.selectedEventId && this.selectedScheduleId;
       if (config.requireSchedule && hasSelection) {
         this.tools.setPendingSync(false);
-        this.tools.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
+        this.tools
+          .syncEmbeddedTools({ reason: "panel-activation" })
+          .catch((error) => logError("Failed to sync tools", error));
       } else if (this.tools.isPendingSync() && hasSelection) {
         this.tools.setPendingSync(false);
-        this.tools.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
+        this.tools
+          .syncEmbeddedTools({ reason: "pending-sync-flush" })
+          .catch((error) => logError("Failed to sync tools", error));
       }
     }
     this.handlePanelSetup(normalized, config).catch((error) => logError("Failed to prepare panel", error));
@@ -1958,6 +1967,7 @@ export class EventAdminApp {
     const normalized = PANEL_CONFIG[target] ? target : "events";
     const originPanel = sourceButton?.closest("[data-panel]")?.dataset?.panel || "";
     const config = PANEL_CONFIG[normalized] || PANEL_CONFIG.events;
+    this.pendingNavigationMeta = null;
     this.logFlowState("フローナビゲーションが要求されました", {
       target: normalized,
       originPanel
@@ -1971,6 +1981,7 @@ export class EventAdminApp {
       const committed = this.commitSelectedScheduleForTelop({ reason: "navigation" });
       if (!committed) {
         this.pendingNavigationTarget = "";
+        this.pendingNavigationMeta = null;
         this.syncScheduleConflictPromptState();
         return;
       }
@@ -1978,6 +1989,11 @@ export class EventAdminApp {
       this.scheduleConflictContext = context;
       if (context.hasConflict) {
         this.pendingNavigationTarget = normalized;
+        this.pendingNavigationMeta = {
+          target: normalized,
+          originPanel,
+          reason: "flow-navigation"
+        };
         void this.requestScheduleConflictPrompt(context);
         this.openScheduleConflictDialog(context, {
           reason: "navigation",
@@ -1988,10 +2004,12 @@ export class EventAdminApp {
         return;
       }
       this.pendingNavigationTarget = "";
+      this.pendingNavigationMeta = null;
       this.enforceScheduleConflictState(context);
       this.syncScheduleConflictPromptState(context);
     }
     this.pendingNavigationTarget = "";
+    this.pendingNavigationMeta = null;
     this.showPanel(normalized);
     this.logFlowState("フローナビゲーションを実行しました", {
       target: normalized,
@@ -2763,6 +2781,18 @@ export class EventAdminApp {
       originPanel: this.activePanel,
       pendingNavigationTarget: this.pendingNavigationTarget || ""
     });
+
+    const requestedBySessionId = ensureString(consensus.requestedBySessionId);
+    const hostSessionId = ensureString(this.hostPresenceSessionId);
+    const isRequester = requestedBySessionId && requestedBySessionId === hostSessionId;
+    const hasCommittedSchedule = Boolean(ensureString(this.hostCommittedScheduleId));
+    if (!isRequester && hasCommittedSchedule && !this.isScheduleConflictDialogOpen()) {
+      this.openScheduleConflictDialog(context, {
+        reason: "consensus-prompt",
+        originPanel: this.activePanel,
+        target: this.activePanel
+      });
+    }
   }
 
   applyScheduleConsensus(consensus) {
@@ -2801,10 +2831,40 @@ export class EventAdminApp {
       this.closeDialog(this.dom.scheduleConflictDialog);
     }
     this.clearScheduleConflictError();
-    const target = this.pendingNavigationTarget;
+    const navMeta = this.pendingNavigationMeta;
+    const pendingTarget = this.pendingNavigationTarget || "";
     this.pendingNavigationTarget = "";
-    if (target) {
-      this.showPanel(target);
+    this.pendingNavigationMeta = null;
+    let resolvedTarget = pendingTarget;
+    let usedFallback = false;
+    const metaOrigin = navMeta?.originPanel || "";
+    const metaTarget = navMeta?.target || "";
+    const isFlowFromSchedules =
+      navMeta?.reason === "flow-navigation" && metaOrigin === "schedules";
+    if (!resolvedTarget && metaTarget) {
+      resolvedTarget = metaTarget;
+      usedFallback = resolvedTarget !== pendingTarget;
+    }
+    if (isFlowFromSchedules) {
+      const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
+      if (!resolvedTarget || resolvedTarget === metaOrigin) {
+        const fallbackTarget = preferredTarget || "participants";
+        if (resolvedTarget !== fallbackTarget) {
+          resolvedTarget = fallbackTarget;
+          usedFallback = usedFallback || resolvedTarget !== pendingTarget;
+        }
+      }
+    }
+    if (resolvedTarget) {
+      this.showPanel(resolvedTarget);
+      const message = usedFallback
+        ? "スケジュール合意の適用により参加者パネルへ移動しました"
+        : "スケジュール合意の適用後に保留していたパネルを開きます";
+      this.logFlowState(message, {
+        target: resolvedTarget,
+        scheduleId: scheduleId || "",
+        scheduleKey
+      });
     }
     const fallbackSchedule = scheduleId
       ? this.schedules.find((schedule) => schedule.id === scheduleId) || null
@@ -3207,6 +3267,7 @@ export class EventAdminApp {
     this.scheduleConflictLastSignature = "";
     this.scheduleConflictPromptSignature = "";
     this.pendingNavigationTarget = "";
+    this.pendingNavigationMeta = null;
     this.setScheduleConflictSubmitting(false);
     this.clearScheduleConflictError();
     if (this.dom.scheduleConflictForm) {
@@ -3380,14 +3441,40 @@ export class EventAdminApp {
         if (this.dom.scheduleConflictDialog) {
           this.closeDialog(this.dom.scheduleConflictDialog);
         }
+        const navMeta = this.pendingNavigationMeta;
         const navTarget = this.pendingNavigationTarget || "";
-        if (navTarget) {
-          this.pendingNavigationTarget = "";
-          this.showPanel(navTarget);
-          this.logFlowState("スケジュール合意の確定後にナビゲーションを継続します", {
-            target: navTarget,
+        this.pendingNavigationTarget = "";
+        this.pendingNavigationMeta = null;
+        let resolvedTarget = navTarget;
+        let usedFallback = false;
+        const metaOrigin = navMeta?.originPanel || "";
+        const metaTarget = navMeta?.target || "";
+        const isFlowFromSchedules =
+          navMeta?.reason === "flow-navigation" && metaOrigin === "schedules";
+        if (!resolvedTarget && metaTarget) {
+          resolvedTarget = metaTarget;
+          usedFallback = resolvedTarget !== navTarget;
+        }
+        if (isFlowFromSchedules) {
+          const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
+          if (!resolvedTarget || resolvedTarget === metaOrigin) {
+            const fallbackTarget = preferredTarget || "participants";
+            if (resolvedTarget !== fallbackTarget) {
+              resolvedTarget = fallbackTarget;
+              usedFallback = usedFallback || resolvedTarget !== navTarget;
+            }
+          }
+        }
+        if (resolvedTarget) {
+          this.showPanel(resolvedTarget);
+          const message = usedFallback
+            ? "スケジュール合意の確定後に参加者リストへ移動しました"
+            : "スケジュール合意の確定後にナビゲーションを継続します";
+          this.logFlowState(message, {
+            target: resolvedTarget,
             scheduleId,
-            scheduleKey
+            scheduleKey,
+            fallback: usedFallback
           });
         }
       })
@@ -3727,6 +3814,28 @@ export class EventAdminApp {
         scheduleKey,
         conflictSignature: signature
       });
+      const scheduleForCommit = fallbackSchedule || scheduleMatch || null;
+      this.setHostCommittedSchedule(scheduleId, {
+        schedule: scheduleForCommit,
+        reason: "consensus-submit",
+        sync: true,
+        updateContext: true,
+        force: true
+      });
+      this.tools.prepareContextForSelection();
+      if (
+        this.tools.isPendingSync() ||
+        this.activePanel === "participants" ||
+        this.activePanel === "operator"
+      ) {
+        this.tools
+          .syncEmbeddedTools({ reason: "consensus-submit" })
+          .catch((error) => logError("Failed to sync tools after schedule consensus", error));
+      } else {
+        this.tools
+          .syncOperatorContext({ force: true })
+          .catch((error) => logError("Failed to sync operator context after schedule consensus", error));
+      }
       return true;
     } catch (error) {
       console.error("Failed to confirm schedule consensus:", error);
@@ -4369,6 +4478,17 @@ export class EventAdminApp {
       originPanel: this.activePanel,
       pendingNavigationTarget: this.pendingNavigationTarget || ""
     });
+    const requestedBySessionId = ensureString(consensus.requestedBySessionId);
+    const hostSessionId = ensureString(this.hostPresenceSessionId);
+    const isRequester = requestedBySessionId && requestedBySessionId === hostSessionId;
+    const hasCommittedSchedule = Boolean(ensureString(this.hostCommittedScheduleId));
+    if (!isRequester && hasCommittedSchedule && !this.isScheduleConflictDialogOpen()) {
+      this.openScheduleConflictDialog(context, {
+        reason: "consensus-prompt",
+        originPanel: this.activePanel,
+        target: this.activePanel
+      });
+    }
   }
 
   applyScheduleConsensus(consensus) {
@@ -4407,10 +4527,40 @@ export class EventAdminApp {
       this.closeDialog(this.dom.scheduleConflictDialog);
     }
     this.clearScheduleConflictError();
-    const target = this.pendingNavigationTarget;
+    const navMeta = this.pendingNavigationMeta;
+    const pendingTarget = this.pendingNavigationTarget || "";
     this.pendingNavigationTarget = "";
-    if (target) {
-      this.showPanel(target);
+    this.pendingNavigationMeta = null;
+    let resolvedTarget = pendingTarget;
+    let usedFallback = false;
+    const metaOrigin = navMeta?.originPanel || "";
+    const metaTarget = navMeta?.target || "";
+    const isFlowFromSchedules =
+      navMeta?.reason === "flow-navigation" && metaOrigin === "schedules";
+    if (!resolvedTarget && metaTarget) {
+      resolvedTarget = metaTarget;
+      usedFallback = resolvedTarget !== pendingTarget;
+    }
+    if (isFlowFromSchedules) {
+      const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
+      if (!resolvedTarget || resolvedTarget === metaOrigin) {
+        const fallbackTarget = preferredTarget || "participants";
+        if (resolvedTarget !== fallbackTarget) {
+          resolvedTarget = fallbackTarget;
+          usedFallback = usedFallback || resolvedTarget !== pendingTarget;
+        }
+      }
+    }
+    if (resolvedTarget) {
+      this.showPanel(resolvedTarget);
+      const message = usedFallback
+        ? "スケジュール合意の適用により参加者パネルへ移動しました"
+        : "スケジュール合意の適用後に保留していたパネルを開きます";
+      this.logFlowState(message, {
+        target: resolvedTarget,
+        scheduleId: scheduleId || "",
+        scheduleKey
+      });
     }
     const fallbackSchedule = scheduleId
       ? this.schedules.find((schedule) => schedule.id === scheduleId) || null
@@ -4979,6 +5129,54 @@ export class EventAdminApp {
     this.clearScheduleConflictError();
     this.setScheduleConflictSubmitting(true);
     this.confirmScheduleConsensus({ scheduleId, scheduleKey, option, context })
+      .then((confirmed) => {
+        if (!confirmed) {
+          return;
+        }
+        if (this.dom.scheduleConflictForm) {
+          this.dom.scheduleConflictForm.reset();
+        }
+        this.clearScheduleConflictError();
+        if (this.dom.scheduleConflictDialog) {
+          this.closeDialog(this.dom.scheduleConflictDialog);
+        }
+        const navMeta = this.pendingNavigationMeta;
+        const navTarget = this.pendingNavigationTarget || "";
+        this.pendingNavigationTarget = "";
+        this.pendingNavigationMeta = null;
+        let resolvedTarget = navTarget;
+        let usedFallback = false;
+        const metaOrigin = navMeta?.originPanel || "";
+        const metaTarget = navMeta?.target || "";
+        const isFlowFromSchedules =
+          navMeta?.reason === "flow-navigation" && metaOrigin === "schedules";
+        if (!resolvedTarget && metaTarget) {
+          resolvedTarget = metaTarget;
+          usedFallback = resolvedTarget !== navTarget;
+        }
+        if (isFlowFromSchedules) {
+          const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
+          if (!resolvedTarget || resolvedTarget === metaOrigin) {
+            const fallbackTarget = preferredTarget || "participants";
+            if (resolvedTarget !== fallbackTarget) {
+              resolvedTarget = fallbackTarget;
+              usedFallback = usedFallback || resolvedTarget !== navTarget;
+            }
+          }
+        }
+        if (resolvedTarget) {
+          this.showPanel(resolvedTarget);
+          const message = usedFallback
+            ? "スケジュール合意の確定後に参加者リストへ移動しました"
+            : "スケジュール合意の確定後にナビゲーションを継続します";
+          this.logFlowState(message, {
+            target: resolvedTarget,
+            scheduleId,
+            scheduleKey,
+            fallback: usedFallback
+          });
+        }
+      })
       .catch((error) => {
         console.error("Failed to resolve schedule conflict:", error);
         this.setScheduleConflictError("日程の確定に失敗しました。ネットワーク接続を確認して再度お試しください。");
@@ -4991,6 +5189,7 @@ export class EventAdminApp {
   handleScheduleConflictCancel() {
     this.setScheduleConflictSubmitting(false);
     this.pendingNavigationTarget = "";
+    this.pendingNavigationMeta = null;
     if (this.dom.scheduleConflictForm) {
       this.dom.scheduleConflictForm.reset();
     }
@@ -5326,6 +5525,28 @@ export class EventAdminApp {
         scheduleKey,
         conflictSignature: signature
       });
+      const scheduleForCommit = fallbackSchedule || scheduleMatch || null;
+      this.setHostCommittedSchedule(scheduleId, {
+        schedule: scheduleForCommit,
+        reason: "consensus-submit",
+        sync: true,
+        updateContext: true,
+        force: true
+      });
+      this.tools.prepareContextForSelection();
+      if (
+        this.tools.isPendingSync() ||
+        this.activePanel === "participants" ||
+        this.activePanel === "operator"
+      ) {
+        this.tools
+          .syncEmbeddedTools({ reason: "consensus-submit" })
+          .catch((error) => logError("Failed to sync tools after schedule consensus", error));
+      } else {
+        this.tools
+          .syncOperatorContext({ force: true })
+          .catch((error) => logError("Failed to sync operator context after schedule consensus", error));
+      }
       return true;
     } catch (error) {
       console.error("Failed to confirm schedule consensus:", error);
@@ -6480,6 +6701,7 @@ export class EventAdminApp {
       }
       this.clearScheduleConflictError();
       this.pendingNavigationTarget = "";
+      this.pendingNavigationMeta = null;
     }
     if (element === this.dom.scheduleFallbackDialog) {
       if (this.dom.scheduleFallbackForm) {
