@@ -2763,6 +2763,18 @@ export class EventAdminApp {
       originPanel: this.activePanel,
       pendingNavigationTarget: this.pendingNavigationTarget || ""
     });
+
+    const requestedBySessionId = ensureString(consensus.requestedBySessionId);
+    const hostSessionId = ensureString(this.hostPresenceSessionId);
+    const isRequester = requestedBySessionId && requestedBySessionId === hostSessionId;
+    const hasCommittedSchedule = Boolean(ensureString(this.hostCommittedScheduleId));
+    if (!isRequester && hasCommittedSchedule && !this.isScheduleConflictDialogOpen()) {
+      this.openScheduleConflictDialog(context, {
+        reason: "consensus-prompt",
+        originPanel: this.activePanel,
+        target: this.activePanel
+      });
+    }
   }
 
   applyScheduleConsensus(consensus) {
@@ -4369,6 +4381,17 @@ export class EventAdminApp {
       originPanel: this.activePanel,
       pendingNavigationTarget: this.pendingNavigationTarget || ""
     });
+    const requestedBySessionId = ensureString(consensus.requestedBySessionId);
+    const hostSessionId = ensureString(this.hostPresenceSessionId);
+    const isRequester = requestedBySessionId && requestedBySessionId === hostSessionId;
+    const hasCommittedSchedule = Boolean(ensureString(this.hostCommittedScheduleId));
+    if (!isRequester && hasCommittedSchedule && !this.isScheduleConflictDialogOpen()) {
+      this.openScheduleConflictDialog(context, {
+        reason: "consensus-prompt",
+        originPanel: this.activePanel,
+        target: this.activePanel
+      });
+    }
   }
 
   applyScheduleConsensus(consensus) {
@@ -4979,6 +5002,28 @@ export class EventAdminApp {
     this.clearScheduleConflictError();
     this.setScheduleConflictSubmitting(true);
     this.confirmScheduleConsensus({ scheduleId, scheduleKey, option, context })
+      .then((confirmed) => {
+        if (!confirmed) {
+          return;
+        }
+        if (this.dom.scheduleConflictForm) {
+          this.dom.scheduleConflictForm.reset();
+        }
+        this.clearScheduleConflictError();
+        if (this.dom.scheduleConflictDialog) {
+          this.closeDialog(this.dom.scheduleConflictDialog);
+        }
+        const navTarget = this.pendingNavigationTarget || "";
+        if (navTarget) {
+          this.pendingNavigationTarget = "";
+          this.showPanel(navTarget);
+          this.logFlowState("スケジュール合意の確定後にナビゲーションを継続します", {
+            target: navTarget,
+            scheduleId,
+            scheduleKey
+          });
+        }
+      })
       .catch((error) => {
         console.error("Failed to resolve schedule conflict:", error);
         this.setScheduleConflictError("日程の確定に失敗しました。ネットワーク接続を確認して再度お試しください。");
