@@ -268,9 +268,27 @@ export function updateScheduleContext(app) {
   let eventId = ensure(context.eventId);
   let scheduleId = ensure(context.scheduleId);
   let scheduleKey = ensure(app.state.currentSchedule);
+  let assignmentLabel = "";
 
   if (!scheduleKey && eventId && scheduleId) {
-    scheduleKey = `${eventId}::${scheduleId}`;
+    scheduleKey = `${eventId}::${normalizeScheduleId(scheduleId)}`;
+  }
+
+  if (!eventId || !scheduleId || !scheduleKey) {
+    const assignment =
+      app?.state?.channelAssignment || (typeof app.getDisplayAssignment === "function" ? app.getDisplayAssignment() : null);
+    const assignmentEvent = ensure(assignment?.eventId);
+    const assignmentSchedule = ensure(assignment?.scheduleId);
+    if (!eventId && assignmentEvent) {
+      eventId = assignmentEvent;
+    }
+    if (!scheduleId && assignmentSchedule) {
+      scheduleId = assignmentSchedule;
+    }
+    if (!scheduleKey && assignmentEvent && assignmentSchedule) {
+      scheduleKey = `${assignmentEvent}::${normalizeScheduleId(assignmentSchedule)}`;
+    }
+    assignmentLabel = ensure(assignment?.scheduleLabel);
   }
 
   let meta = null;
@@ -300,6 +318,9 @@ export function updateScheduleContext(app) {
   }
 
   let scheduleLabel = ensure(context.scheduleLabel);
+  if (!scheduleLabel && assignmentLabel) {
+    scheduleLabel = assignmentLabel;
+  }
   if (meta?.label) {
     scheduleLabel = ensure(meta.label);
   }

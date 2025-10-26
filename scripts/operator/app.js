@@ -2194,6 +2194,7 @@ export class OperatorApp {
         this.state.displaySession = data;
         this.state.displaySessionActive = active;
         this.state.channelAssignment = this.getDisplayAssignment();
+        this.updateScheduleContext();
         if (this.state.displaySessionLastActive !== null && this.state.displaySessionLastActive !== active) {
           logDisplayLinkInfo("Display session activity changed", { active });
           this.toast(active ? "送出端末とのセッションが確立されました。" : "送出端末の接続が確認できません。", active ? "success" : "error");
