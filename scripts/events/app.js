@@ -2464,9 +2464,10 @@ export class EventAdminApp {
       if (!a.isSelf && b.isSelf) return 1;
       return (a.displayName || "").localeCompare(b.displayName || "", "ja");
     });
-    context.entries = entries;
+    const committedEntries = entries.filter((entry) => ensureString(entry.scheduleId));
+    context.entries = committedEntries;
     const groups = new Map();
-    entries.forEach((entry) => {
+    committedEntries.forEach((entry) => {
       const key = entry.scheduleKey || "";
       const existing = groups.get(key) || {
         key,
@@ -2496,7 +2497,6 @@ export class EventAdminApp {
       const scheduleLabel = group.scheduleLabel || schedule?.label || scheduleId || "未選択";
       const scheduleRange = group.scheduleRange || formatScheduleRange(schedule?.startAt, schedule?.endAt);
       const containsSelf = group.members.some((member) => member.isSelf);
-      const hasScheduleSelection = Boolean(scheduleId);
       return {
         key: group.key,
         scheduleId,
@@ -2504,7 +2504,7 @@ export class EventAdminApp {
         scheduleRange,
         members: group.members,
         containsSelf,
-        isSelectable: hasScheduleSelection
+        isSelectable: Boolean(scheduleId)
       };
     });
     options.sort((a, b) => {
@@ -2512,9 +2512,9 @@ export class EventAdminApp {
       if (!a.containsSelf && b.containsSelf) return 1;
       return (a.scheduleLabel || "").localeCompare(b.scheduleLabel || "", "ja");
     });
-    context.options = options;
-    context.hasOtherOperators = entries.some((entry) => !entry.isSelf);
-    const selectableOptions = options.filter((option) => option.isSelectable);
+    const selectableOptions = options.filter((option) => option.scheduleId);
+    context.options = selectableOptions;
+    context.hasOtherOperators = committedEntries.some((entry) => !entry.isSelf);
     context.selectableOptions = selectableOptions;
     const uniqueSelectableKeys = new Set(
       selectableOptions.map((option) => option.key || option.scheduleId || "")
@@ -2527,7 +2527,8 @@ export class EventAdminApp {
     const preferredOption =
       selectableOptions.find((option) => option.containsSelf) || selectableOptions[0] || null;
     context.defaultKey = preferredOption?.key || "";
-    const signatureParts = entries.map((entry) => {
+    const signatureSource = committedEntries.length ? committedEntries : entries;
+    const signatureParts = signatureSource.map((entry) => {
       const entryId = entry.uid || entry.entryId || "anon";
       const scheduleKey = entry.scheduleKey || "none";
       return `${entryId}::${scheduleKey}`;
@@ -2816,7 +2817,8 @@ export class EventAdminApp {
     const hostSessionId = ensureString(this.hostPresenceSessionId);
     const isRequester = requestedBySessionId && requestedBySessionId === hostSessionId;
     const hasCommittedSchedule = Boolean(ensureString(this.hostCommittedScheduleId));
-    if (!isRequester && hasCommittedSchedule && !this.isScheduleConflictDialogOpen()) {
+    const hasSelection = Boolean(ensureString(this.selectedScheduleId));
+    if (!isRequester && hasCommittedSchedule && hasSelection && !this.isScheduleConflictDialogOpen()) {
       this.openScheduleConflictDialog(context, {
         reason: "consensus-prompt",
         originPanel: this.activePanel,
@@ -4477,9 +4479,10 @@ export class EventAdminApp {
       if (!a.isSelf && b.isSelf) return 1;
       return (a.displayName || "").localeCompare(b.displayName || "", "ja");
     });
-    context.entries = entries;
+    const committedEntries = entries.filter((entry) => ensureString(entry.scheduleId));
+    context.entries = committedEntries;
     const groups = new Map();
-    entries.forEach((entry) => {
+    committedEntries.forEach((entry) => {
       const key = entry.scheduleKey || "";
       const existing = groups.get(key) || {
         key,
@@ -4509,7 +4512,6 @@ export class EventAdminApp {
       const scheduleLabel = group.scheduleLabel || schedule?.label || scheduleId || "未選択";
       const scheduleRange = group.scheduleRange || formatScheduleRange(schedule?.startAt, schedule?.endAt);
       const containsSelf = group.members.some((member) => member.isSelf);
-      const hasScheduleSelection = Boolean(scheduleId);
       return {
         key: group.key,
         scheduleId,
@@ -4517,7 +4519,7 @@ export class EventAdminApp {
         scheduleRange,
         members: group.members,
         containsSelf,
-        isSelectable: hasScheduleSelection
+        isSelectable: Boolean(scheduleId)
       };
     });
     options.sort((a, b) => {
@@ -4525,9 +4527,9 @@ export class EventAdminApp {
       if (!a.containsSelf && b.containsSelf) return 1;
       return (a.scheduleLabel || "").localeCompare(b.scheduleLabel || "", "ja");
     });
-    context.options = options;
-    context.hasOtherOperators = entries.some((entry) => !entry.isSelf);
-    const selectableOptions = options.filter((option) => option.isSelectable);
+    const selectableOptions = options.filter((option) => option.scheduleId);
+    context.options = selectableOptions;
+    context.hasOtherOperators = committedEntries.some((entry) => !entry.isSelf);
     context.selectableOptions = selectableOptions;
     const uniqueSelectableKeys = new Set(
       selectableOptions.map((option) => option.key || option.scheduleId || "")
@@ -4540,7 +4542,8 @@ export class EventAdminApp {
     const preferredOption =
       selectableOptions.find((option) => option.containsSelf) || selectableOptions[0] || null;
     context.defaultKey = preferredOption?.key || "";
-    const signatureParts = entries.map((entry) => {
+    const signatureSource = committedEntries.length ? committedEntries : entries;
+    const signatureParts = signatureSource.map((entry) => {
       const entryId = entry.uid || entry.entryId || "anon";
       const scheduleKey = entry.scheduleKey || "none";
       return `${entryId}::${scheduleKey}`;
@@ -4828,7 +4831,8 @@ export class EventAdminApp {
     const hostSessionId = ensureString(this.hostPresenceSessionId);
     const isRequester = requestedBySessionId && requestedBySessionId === hostSessionId;
     const hasCommittedSchedule = Boolean(ensureString(this.hostCommittedScheduleId));
-    if (!isRequester && hasCommittedSchedule && !this.isScheduleConflictDialogOpen()) {
+    const hasSelection = Boolean(ensureString(this.selectedScheduleId));
+    if (!isRequester && hasCommittedSchedule && hasSelection && !this.isScheduleConflictDialogOpen()) {
       this.openScheduleConflictDialog(context, {
         reason: "consensus-prompt",
         originPanel: this.activePanel,
