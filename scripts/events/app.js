@@ -770,7 +770,9 @@ export class EventAdminApp {
     if (this.stage === "tabs") {
       const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
       if (activeConfig.requireSchedule && this.selectedEventId && this.selectedScheduleId) {
-        this.tools.syncEmbeddedTools().catch((error) => logError("Failed to sync tools after refresh", error));
+        this.tools
+          .syncEmbeddedTools({ reason: "events-refreshed" })
+          .catch((error) => logError("Failed to sync tools after refresh", error));
       }
     }
 
@@ -1163,7 +1165,9 @@ export class EventAdminApp {
     }
     const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
     if (activeConfig.stage === "tabs") {
-      this.tools.syncEmbeddedTools().catch((error) => logError("Failed to resync tools after mode change", error));
+      this.tools
+        .syncEmbeddedTools({ reason: "operator-mode-changed" })
+        .catch((error) => logError("Failed to resync tools after mode change", error));
     } else {
       this.tools.setPendingSync(true);
     }
@@ -1860,10 +1864,14 @@ export class EventAdminApp {
       const hasSelection = this.selectedEventId && this.selectedScheduleId;
       if (config.requireSchedule && hasSelection) {
         this.tools.setPendingSync(false);
-        this.tools.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
+        this.tools
+          .syncEmbeddedTools({ reason: "panel-activation" })
+          .catch((error) => logError("Failed to sync tools", error));
       } else if (this.tools.isPendingSync() && hasSelection) {
         this.tools.setPendingSync(false);
-        this.tools.syncEmbeddedTools().catch((error) => logError("Failed to sync tools", error));
+        this.tools
+          .syncEmbeddedTools({ reason: "pending-sync-flush" })
+          .catch((error) => logError("Failed to sync tools", error));
       }
     }
     this.handlePanelSetup(normalized, config).catch((error) => logError("Failed to prepare panel", error));
@@ -2829,9 +2837,23 @@ export class EventAdminApp {
     this.pendingNavigationMeta = null;
     let resolvedTarget = pendingTarget;
     let usedFallback = false;
-    if (!resolvedTarget && navMeta?.reason === "flow-navigation" && navMeta?.originPanel === "schedules") {
-      resolvedTarget = navMeta.target || "participants";
-      usedFallback = Boolean(resolvedTarget);
+    const metaOrigin = navMeta?.originPanel || "";
+    const metaTarget = navMeta?.target || "";
+    const isFlowFromSchedules =
+      navMeta?.reason === "flow-navigation" && metaOrigin === "schedules";
+    if (!resolvedTarget && metaTarget) {
+      resolvedTarget = metaTarget;
+      usedFallback = resolvedTarget !== pendingTarget;
+    }
+    if (isFlowFromSchedules) {
+      const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
+      if (!resolvedTarget || resolvedTarget === metaOrigin) {
+        const fallbackTarget = preferredTarget || "participants";
+        if (resolvedTarget !== fallbackTarget) {
+          resolvedTarget = fallbackTarget;
+          usedFallback = usedFallback || resolvedTarget !== pendingTarget;
+        }
+      }
     }
     if (resolvedTarget) {
       this.showPanel(resolvedTarget);
@@ -3425,9 +3447,23 @@ export class EventAdminApp {
         this.pendingNavigationMeta = null;
         let resolvedTarget = navTarget;
         let usedFallback = false;
-        if (!resolvedTarget && navMeta?.reason === "flow-navigation" && navMeta?.originPanel === "schedules") {
-          resolvedTarget = navMeta.target || "participants";
-          usedFallback = Boolean(resolvedTarget);
+        const metaOrigin = navMeta?.originPanel || "";
+        const metaTarget = navMeta?.target || "";
+        const isFlowFromSchedules =
+          navMeta?.reason === "flow-navigation" && metaOrigin === "schedules";
+        if (!resolvedTarget && metaTarget) {
+          resolvedTarget = metaTarget;
+          usedFallback = resolvedTarget !== navTarget;
+        }
+        if (isFlowFromSchedules) {
+          const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
+          if (!resolvedTarget || resolvedTarget === metaOrigin) {
+            const fallbackTarget = preferredTarget || "participants";
+            if (resolvedTarget !== fallbackTarget) {
+              resolvedTarget = fallbackTarget;
+              usedFallback = usedFallback || resolvedTarget !== navTarget;
+            }
+          }
         }
         if (resolvedTarget) {
           this.showPanel(resolvedTarget);
@@ -3793,7 +3829,7 @@ export class EventAdminApp {
         this.activePanel === "operator"
       ) {
         this.tools
-          .syncEmbeddedTools()
+          .syncEmbeddedTools({ reason: "consensus-submit" })
           .catch((error) => logError("Failed to sync tools after schedule consensus", error));
       } else {
         this.tools
@@ -4497,9 +4533,23 @@ export class EventAdminApp {
     this.pendingNavigationMeta = null;
     let resolvedTarget = pendingTarget;
     let usedFallback = false;
-    if (!resolvedTarget && navMeta?.reason === "flow-navigation" && navMeta?.originPanel === "schedules") {
-      resolvedTarget = navMeta.target || "participants";
-      usedFallback = Boolean(resolvedTarget);
+    const metaOrigin = navMeta?.originPanel || "";
+    const metaTarget = navMeta?.target || "";
+    const isFlowFromSchedules =
+      navMeta?.reason === "flow-navigation" && metaOrigin === "schedules";
+    if (!resolvedTarget && metaTarget) {
+      resolvedTarget = metaTarget;
+      usedFallback = resolvedTarget !== pendingTarget;
+    }
+    if (isFlowFromSchedules) {
+      const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
+      if (!resolvedTarget || resolvedTarget === metaOrigin) {
+        const fallbackTarget = preferredTarget || "participants";
+        if (resolvedTarget !== fallbackTarget) {
+          resolvedTarget = fallbackTarget;
+          usedFallback = usedFallback || resolvedTarget !== pendingTarget;
+        }
+      }
     }
     if (resolvedTarget) {
       this.showPanel(resolvedTarget);
@@ -5096,9 +5146,23 @@ export class EventAdminApp {
         this.pendingNavigationMeta = null;
         let resolvedTarget = navTarget;
         let usedFallback = false;
-        if (!resolvedTarget && navMeta?.reason === "flow-navigation" && navMeta?.originPanel === "schedules") {
-          resolvedTarget = navMeta.target || "participants";
-          usedFallback = Boolean(resolvedTarget);
+        const metaOrigin = navMeta?.originPanel || "";
+        const metaTarget = navMeta?.target || "";
+        const isFlowFromSchedules =
+          navMeta?.reason === "flow-navigation" && metaOrigin === "schedules";
+        if (!resolvedTarget && metaTarget) {
+          resolvedTarget = metaTarget;
+          usedFallback = resolvedTarget !== navTarget;
+        }
+        if (isFlowFromSchedules) {
+          const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
+          if (!resolvedTarget || resolvedTarget === metaOrigin) {
+            const fallbackTarget = preferredTarget || "participants";
+            if (resolvedTarget !== fallbackTarget) {
+              resolvedTarget = fallbackTarget;
+              usedFallback = usedFallback || resolvedTarget !== navTarget;
+            }
+          }
         }
         if (resolvedTarget) {
           this.showPanel(resolvedTarget);
@@ -5476,7 +5540,7 @@ export class EventAdminApp {
         this.activePanel === "operator"
       ) {
         this.tools
-          .syncEmbeddedTools()
+          .syncEmbeddedTools({ reason: "consensus-submit" })
           .catch((error) => logError("Failed to sync tools after schedule consensus", error));
       } else {
         this.tools
