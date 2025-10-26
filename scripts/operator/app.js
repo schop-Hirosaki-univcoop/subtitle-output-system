@@ -305,6 +305,11 @@ export class OperatorApp {
     this.operatorPresenceUnsubscribe = null;
     this.operatorPresenceLastSignature = "";
     this.operatorPresenceSessionId = this.generatePresenceSessionId();
+    this.operatorPresenceSyncQueued = false;
+    this.operatorPresencePrimePromise = null;
+    this.operatorPresencePrimedEventId = "";
+    this.operatorPresencePrimeRequestId = 0;
+    this.operatorPresencePrimeTargetEventId = "";
     this.conflictDialogOpen = false;
     this.operatorMode = OPERATOR_MODE_TELOP;
 
@@ -601,6 +606,9 @@ export class OperatorApp {
       this.operatorPresenceUnsubscribe();
       this.operatorPresenceUnsubscribe = null;
     }
+    if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== nextEventId) {
+      this.operatorPresencePrimedEventId = "";
+    }
     this.operatorPresenceSubscribedEventId = nextEventId;
     this.state.operatorPresenceEventId = nextEventId;
     this.state.operatorPresenceByUser = new Map();
@@ -622,16 +630,31 @@ export class OperatorApp {
         });
         this.state.operatorPresenceEventId = nextEventId;
         this.state.operatorPresenceByUser = presenceMap;
-        const sessionId = String(this.operatorPresenceSessionId || "").trim();
-        let selfEntry = sessionId ? presenceMap.get(sessionId) || null : null;
-        if (!selfEntry) {
-          const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
-          for (const value of presenceMap.values()) {
-            if (!value) continue;
-            if (String(value.uid || "").trim() === selfUid) {
-              selfEntry = value;
-              break;
-            }
+        const selfResolution = this.resolveSelfPresenceEntry(nextEventId, presenceMap);
+        let selfEntry = null;
+        if (selfResolution) {
+          const { payload, sessionId: resolvedSessionId, duplicates } = selfResolution;
+          selfEntry = payload ? { ...payload, sessionId: resolvedSessionId || String(payload.sessionId || "") } : null;
+          if (resolvedSessionId) {
+            this.adoptOperatorPresenceSession(nextEventId, resolvedSessionId);
+          }
+          if (Array.isArray(duplicates) && duplicates.length) {
+            duplicates.forEach((duplicate) => {
+              const duplicateSessionId = String(duplicate?.sessionId || duplicate?.entryId || "").trim();
+              if (!duplicateSessionId || duplicateSessionId === resolvedSessionId) {
+                return;
+              }
+              try {
+                remove(getOperatorPresenceEntryRef(nextEventId, duplicateSessionId)).catch(() => {});
+              } catch (error) {
+                // Ignore removal failures.
+              }
+            });
+          }
+        } else {
+          const sessionId = String(this.operatorPresenceSessionId || "").trim();
+          if (sessionId && presenceMap.has(sessionId)) {
+            selfEntry = presenceMap.get(sessionId) || null;
           }
         }
         this.state.operatorPresenceSelf = selfEntry || null;
@@ -642,7 +665,194 @@ export class OperatorApp {
     );
   }
 
+  primeOperatorPresenceSession(eventId = "") {
+    const ensure = (value) => String(value ?? "").trim();
+    const normalizedEventId = ensure(eventId);
+    const uid = ensure(this.operatorIdentity?.uid || auth.currentUser?.uid || "");
+    if (!normalizedEventId || !uid) {
+      this.operatorPresencePrimedEventId = normalizedEventId ? normalizedEventId : "";
+      return Promise.resolve();
+    }
+    if (this.operatorPresencePrimedEventId === normalizedEventId && !this.operatorPresencePrimePromise) {
+      return Promise.resolve();
+    }
+    const presenceMap = this.state?.operatorPresenceByUser instanceof Map ? this.state.operatorPresenceByUser : null;
+    if (presenceMap && presenceMap.size) {
+      const resolution = this.resolveSelfPresenceEntry(normalizedEventId, presenceMap);
+      const resolvedSessionId = ensure(resolution?.sessionId);
+      if (resolvedSessionId) {
+        this.operatorPresencePrimedEventId = normalizedEventId;
+        this.adoptOperatorPresenceSession(normalizedEventId, resolvedSessionId);
+        return Promise.resolve();
+      }
+    }
+    if (this.operatorPresencePrimePromise) {
+      if (this.operatorPresencePrimeTargetEventId === normalizedEventId) {
+        return this.operatorPresencePrimePromise;
+      }
+    }
+    const requestId = ++this.operatorPresencePrimeRequestId;
+    this.operatorPresencePrimeTargetEventId = normalizedEventId;
+    const primePromise = get(getOperatorPresenceEventRef(normalizedEventId))
+      .then((snapshot) => {
+        if (this.operatorPresencePrimeRequestId !== requestId) {
+          return;
+        }
+        if (!snapshot.exists()) {
+          return;
+        }
+        const raw = snapshot.val();
+        if (!raw || typeof raw !== "object") {
+          return;
+        }
+        let resolvedSessionId = "";
+        Object.entries(raw).some(([entryId, payload]) => {
+          if (resolvedSessionId) {
+            return true;
+          }
+          if (!payload || typeof payload !== "object") {
+            return false;
+          }
+          const entryUid = ensure(payload.uid);
+          if (!entryUid || entryUid !== uid) {
+            return false;
+          }
+          const sessionId = ensure(payload.sessionId) || ensure(entryId);
+          if (!sessionId) {
+            return false;
+          }
+          resolvedSessionId = sessionId;
+          return true;
+        });
+        if (resolvedSessionId) {
+          this.adoptOperatorPresenceSession(normalizedEventId, resolvedSessionId);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (this.operatorPresencePrimeRequestId === requestId) {
+          this.operatorPresencePrimePromise = null;
+          this.operatorPresencePrimedEventId = normalizedEventId;
+          this.operatorPresencePrimeTargetEventId = "";
+        }
+      });
+    this.operatorPresencePrimePromise = primePromise;
+    return primePromise;
+  }
+
+  resolveSelfPresenceEntry(eventId, presenceMap) {
+    const ensure = (value) => String(value ?? "").trim();
+    const normalizedEventId = ensure(eventId);
+    if (!normalizedEventId) {
+      return null;
+    }
+    const selfUid = ensure(this.operatorIdentity?.uid || auth.currentUser?.uid || "");
+    if (!selfUid) {
+      return null;
+    }
+    const map = presenceMap instanceof Map ? presenceMap : new Map();
+    const entries = [];
+    map.forEach((value, entryId) => {
+      if (!value) {
+        return;
+      }
+      const valueEventId = ensure(value.eventId);
+      if (valueEventId && valueEventId !== normalizedEventId) {
+        return;
+      }
+      const valueUid = ensure(value.uid);
+      if (!valueUid || valueUid !== selfUid) {
+        return;
+      }
+      const normalizedEntryId = ensure(entryId);
+      const sessionId = ensure(value.sessionId) || normalizedEntryId;
+      if (!sessionId) {
+        return;
+      }
+      const timestamp = Number(value.clientTimestamp || value.updatedAt || 0) || 0;
+      entries.push({
+        entryId: normalizedEntryId,
+        sessionId,
+        payload: value,
+        timestamp
+      });
+    });
+    if (!entries.length) {
+      return null;
+    }
+    const existingSessionId = ensure(this.operatorPresenceSessionId);
+    let canonical = null;
+    if (existingSessionId) {
+      canonical = entries.find((entry) => entry.sessionId === existingSessionId) || null;
+    }
+    if (!canonical) {
+      entries.sort((a, b) => {
+        if (b.timestamp !== a.timestamp) {
+          return (b.timestamp || 0) - (a.timestamp || 0);
+        }
+        return a.sessionId.localeCompare(b.sessionId);
+      });
+      canonical = entries[0];
+    }
+    const duplicates = entries.filter((entry) => entry !== canonical);
+    return {
+      eventId: normalizedEventId,
+      entryId: canonical.entryId,
+      sessionId: canonical.sessionId,
+      payload: canonical.payload,
+      duplicates
+    };
+  }
+
+  adoptOperatorPresenceSession(eventId, sessionId) {
+    const ensure = (value) => String(value ?? "").trim();
+    const normalizedEventId = ensure(eventId);
+    const normalizedSessionId = ensure(sessionId);
+    if (!normalizedEventId || !normalizedSessionId) {
+      return;
+    }
+    const currentSessionId = ensure(this.operatorPresenceSessionId);
+    if (currentSessionId === normalizedSessionId) {
+      const currentKey = ensure(this.operatorPresenceEntryKey);
+      if (currentKey !== `${normalizedEventId}/${normalizedSessionId}`) {
+        this.operatorPresenceEntryKey = "";
+        this.operatorPresenceEntryRef = null;
+        this.operatorPresenceLastSignature = "";
+        this.queueOperatorPresenceSync();
+      }
+      return;
+    }
+    this.stopOperatorPresenceHeartbeat();
+    if (this.operatorPresenceDisconnect && typeof this.operatorPresenceDisconnect.cancel === "function") {
+      try {
+        this.operatorPresenceDisconnect.cancel().catch(() => {});
+      } catch (error) {
+        // Ignore disconnect cancellation errors.
+      }
+    }
+    this.operatorPresenceDisconnect = null;
+    this.operatorPresenceEntryRef = null;
+    this.operatorPresenceEntryKey = "";
+    this.operatorPresenceLastSignature = "";
+    this.operatorPresenceSessionId = normalizedSessionId;
+    this.queueOperatorPresenceSync();
+  }
+
+  queueOperatorPresenceSync() {
+    if (this.operatorPresenceSyncQueued) {
+      return;
+    }
+    this.operatorPresenceSyncQueued = true;
+    Promise.resolve().then(() => {
+      this.operatorPresenceSyncQueued = false;
+      this.syncOperatorPresence();
+    });
+  }
+
   syncOperatorPresence(reason = "context-sync") {
+    if (this.operatorPresencePrimePromise) {
+      return;
+    }
     const user = this.operatorIdentity?.uid ? this.operatorIdentity : auth.currentUser || null;
     const uid = String(user?.uid || "").trim();
     if (!uid || !this.isAuthorized) {
@@ -720,7 +930,8 @@ export class OperatorApp {
       mode: operatorMode,
       updatedAt: serverTimestamp(),
       clientTimestamp: Date.now(),
-      reason
+      reason,
+      source: "operator"
     };
 
     set(entryRef, payload).catch(() => {});
@@ -781,7 +992,12 @@ export class OperatorApp {
 
   clearOperatorPresence() {
     this.stopOperatorPresenceHeartbeat();
+    this.operatorPresenceSyncQueued = false;
     this.operatorPresenceLastSignature = "";
+    this.operatorPresencePrimedEventId = "";
+    this.operatorPresencePrimePromise = null;
+    this.operatorPresencePrimeTargetEventId = "";
+    this.operatorPresencePrimeRequestId += 1;
     const disconnectHandle = this.operatorPresenceDisconnect;
     this.operatorPresenceDisconnect = null;
     if (disconnectHandle && typeof disconnectHandle.cancel === "function") {
@@ -1448,7 +1664,10 @@ export class OperatorApp {
 
     this.updateScheduleContext();
     this.refreshChannelSubscriptions();
-    this.syncOperatorPresence();
+    if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== eventId) {
+      this.operatorPresencePrimedEventId = "";
+    }
+    this.primeOperatorPresenceSession(eventId).finally(() => this.syncOperatorPresence());
     this.renderChannelBanner();
     this.renderQuestions();
     this.updateActionAvailability();
@@ -1846,7 +2065,11 @@ export class OperatorApp {
       this.dom.userInfo.hidden = false;
     }
     this.applyPreferredSubTab();
-    this.syncOperatorPresence();
+    const activeEventId = String(this.state?.activeEventId || this.pageContext?.eventId || "").trim();
+    if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== activeEventId) {
+      this.operatorPresencePrimedEventId = "";
+    }
+    this.primeOperatorPresenceSession(activeEventId).finally(() => this.syncOperatorPresence());
     this.refreshOperatorPresenceSubscription();
   }
 
