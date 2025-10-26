@@ -132,6 +132,7 @@ export class EventAdminApp {
     this.scheduleConflictContext = null;
     this.scheduleConflictLastSignature = "";
     this.scheduleConflictPromptSignature = "";
+    this.lastScheduleCommitChanged = false;
     this.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
     this.scheduleConflictRadioName = generateShortId("flow-conflict-radio-");
@@ -1988,15 +1989,17 @@ export class EventAdminApp {
       this.selectedEventId
     ) {
       const committed = this.commitSelectedScheduleForTelop({ reason: "navigation" });
+      const commitChanged = this.lastScheduleCommitChanged;
       if (!committed) {
         this.pendingNavigationTarget = "";
         this.pendingNavigationMeta = null;
         this.syncScheduleConflictPromptState();
+        this.lastScheduleCommitChanged = false;
         return;
       }
       const context = this.buildScheduleConflictContext();
       this.scheduleConflictContext = context;
-      if (context.hasConflict) {
+      if (context.hasConflict && commitChanged) {
         this.pendingNavigationTarget = normalized;
         this.pendingNavigationMeta = {
           target: normalized,
@@ -2010,12 +2013,14 @@ export class EventAdminApp {
           target: normalized
         });
         this.syncScheduleConflictPromptState(context);
+        this.lastScheduleCommitChanged = false;
         return;
       }
       this.pendingNavigationTarget = "";
       this.pendingNavigationMeta = null;
       this.enforceScheduleConflictState(context);
       this.syncScheduleConflictPromptState(context);
+      this.lastScheduleCommitChanged = false;
     }
     this.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
@@ -3146,6 +3151,7 @@ export class EventAdminApp {
 
   commitSelectedScheduleForTelop({ reason = "schedule-commit" } = {}) {
     const scheduleId = ensureString(this.selectedScheduleId);
+    this.lastScheduleCommitChanged = false;
     if (!scheduleId) {
       this.logFlowState("日程未選択のためテロップ操作の日程を確定できません", { reason });
       return false;
@@ -3158,6 +3164,7 @@ export class EventAdminApp {
       updateContext: false,
       force: true
     });
+    this.lastScheduleCommitChanged = changed;
     this.logFlowState("テロップ操作の日程の確定リクエストを処理しました", {
       scheduleId,
       scheduleLabel: schedule?.label || scheduleId,
@@ -3591,6 +3598,7 @@ export class EventAdminApp {
     this.scheduleFallbackContext = null;
     this.clearScheduleConsensusState({ reason: "presence-reset" });
     this.hideScheduleConsensusToast();
+    this.lastScheduleCommitChanged = false;
     this.logFlowState("オペレーター選択状況をリセットしました");
     this.updateScheduleConflictState();
   }
@@ -3857,7 +3865,7 @@ export class EventAdminApp {
       const options = [
         {
           value: "follow",
-          title: "選ばれた日程に移動する",
+          title: "テロップを操作する日程を選ぶ",
           description: winnerLabel
             ? winnerRange
               ? `テロップ操作パネルを「${winnerLabel}」（${winnerRange}）で開きます。`
@@ -3866,14 +3874,14 @@ export class EventAdminApp {
         },
         {
           value: "support",
-          title: "テロップ操作なしモードで続ける",
+          title: "自分が選んでいた日程をテロップ操作なしモードで開く",
           description: currentLabel
-            ? `日程「${currentLabel}」を参加者向けツールのみで確認します。`
+            ? `日程「${currentLabel}」をテロップ操作なしモードで開きます。`
             : "テロップ操作を行わず、参加者向けツールのみ利用します。"
         },
         {
           value: "reselect",
-          title: "別の日程を選び直す",
+          title: "もう一度日程を選び直す",
           description: "日程一覧に戻り、テロップ操作で使用する日程を改めて選び直します。"
         }
       ];
@@ -5139,6 +5147,7 @@ export class EventAdminApp {
 
   commitSelectedScheduleForTelop({ reason = "schedule-commit" } = {}) {
     const scheduleId = ensureString(this.selectedScheduleId);
+    this.lastScheduleCommitChanged = false;
     if (!scheduleId) {
       this.logFlowState("日程未選択のためテロップ操作の日程を確定できません", { reason });
       return false;
@@ -5151,6 +5160,7 @@ export class EventAdminApp {
       updateContext: false,
       force: true
     });
+    this.lastScheduleCommitChanged = changed;
     this.logFlowState("テロップ操作の日程の確定リクエストを処理しました", {
       scheduleId,
       scheduleLabel: schedule?.label || scheduleId,
@@ -5185,6 +5195,7 @@ export class EventAdminApp {
     this.scheduleFallbackContext = null;
     this.clearScheduleConsensusState({ reason: "presence-reset" });
     this.hideScheduleConsensusToast();
+    this.lastScheduleCommitChanged = false;
     this.logFlowState("オペレーター選択状況をリセットしました");
     this.updateScheduleConflictState();
   }
@@ -5467,7 +5478,7 @@ export class EventAdminApp {
       const options = [
         {
           value: "follow",
-          title: "選ばれた日程に移動する",
+          title: "テロップを操作する日程を選ぶ",
           description: winnerLabel
             ? winnerRange
               ? `テロップ操作パネルを「${winnerLabel}」（${winnerRange}）で開きます。`
@@ -5476,14 +5487,14 @@ export class EventAdminApp {
         },
         {
           value: "support",
-          title: "テロップ操作なしモードで続ける",
+          title: "自分が選んでいた日程をテロップ操作なしモードで開く",
           description: currentLabel
-            ? `日程「${currentLabel}」を参加者向けツールのみで確認します。`
+            ? `日程「${currentLabel}」をテロップ操作なしモードで開きます。`
             : "テロップ操作を行わず、参加者向けツールのみ利用します。"
         },
         {
           value: "reselect",
-          title: "別の日程を選び直す",
+          title: "もう一度日程を選び直す",
           description: "日程一覧に戻り、テロップ操作で使用する日程を改めて選び直します。"
         }
       ];
