@@ -2436,20 +2436,33 @@ export class EventAdminApp {
     const selfLabel = ensureString(this.currentUser?.displayName) || ensureString(this.currentUser?.email) || "あなた";
     let hasSelfPresence = false;
     this.operatorPresenceEntries.forEach((entry) => {
-      const schedule = entry.scheduleId ? scheduleMap.get(entry.scheduleId) : null;
-      const scheduleLabel = schedule?.label || entry.scheduleLabel || entry.scheduleId || "未選択";
-      const scheduleRange = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
-      const scheduleKey = entry.scheduleKey || (entry.scheduleId ? `${eventId}::${normalizeScheduleId(entry.scheduleId)}` : "");
+      const baseScheduleId = ensureString(entry.scheduleId);
+      const scheduleFromMap = baseScheduleId ? scheduleMap.get(baseScheduleId) : null;
+      const derivedFromKey = this.extractScheduleIdFromKey(entry.scheduleKey, eventId);
+      const resolvedScheduleId = ensureString(scheduleFromMap?.id || baseScheduleId || derivedFromKey);
+      const schedule = resolvedScheduleId ? scheduleMap.get(resolvedScheduleId) || scheduleFromMap : scheduleFromMap;
       const normalizedMode = normalizeOperatorMode(entry.mode);
       const isSelf = Boolean(entry.isSelf || (selfUid && entry.uid && entry.uid === selfUid));
       if (isSelf) {
         hasSelfPresence = true;
       }
+      const scheduleLabel = schedule?.label || entry.scheduleLabel || resolvedScheduleId || "未選択";
+      const scheduleRange = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
+      const scheduleKey = ensureString(
+        entry.scheduleKey ||
+          (resolvedScheduleId
+            ? this.derivePresenceScheduleKey(
+                eventId,
+                { scheduleId: resolvedScheduleId, scheduleLabel },
+                ensureString(entry.entryId)
+              )
+            : "")
+      );
       entries.push({
         entryId: entry.entryId,
         uid: entry.uid,
         displayName: entry.displayName || entry.uid || entry.entryId,
-        scheduleId: schedule?.id || entry.scheduleId || "",
+        scheduleId: resolvedScheduleId,
         scheduleKey,
         scheduleLabel,
         scheduleRange,
@@ -4457,20 +4470,33 @@ export class EventAdminApp {
     const selfLabel = ensureString(this.currentUser?.displayName) || ensureString(this.currentUser?.email) || "あなた";
     let hasSelfPresence = false;
     this.operatorPresenceEntries.forEach((entry) => {
-      const schedule = entry.scheduleId ? scheduleMap.get(entry.scheduleId) : null;
-      const scheduleLabel = schedule?.label || entry.scheduleLabel || entry.scheduleId || "未選択";
-      const scheduleRange = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
-      const scheduleKey = entry.scheduleKey || (entry.scheduleId ? `${eventId}::${normalizeScheduleId(entry.scheduleId)}` : "");
+      const baseScheduleId = ensureString(entry.scheduleId);
+      const scheduleFromMap = baseScheduleId ? scheduleMap.get(baseScheduleId) : null;
+      const derivedFromKey = this.extractScheduleIdFromKey(entry.scheduleKey, eventId);
+      const resolvedScheduleId = ensureString(scheduleFromMap?.id || baseScheduleId || derivedFromKey);
+      const schedule = resolvedScheduleId ? scheduleMap.get(resolvedScheduleId) || scheduleFromMap : scheduleFromMap;
       const normalizedMode = normalizeOperatorMode(entry.mode);
       const isSelf = Boolean(entry.isSelf || (selfUid && entry.uid && entry.uid === selfUid));
       if (isSelf) {
         hasSelfPresence = true;
       }
+      const scheduleLabel = schedule?.label || entry.scheduleLabel || resolvedScheduleId || "未選択";
+      const scheduleRange = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
+      const scheduleKey = ensureString(
+        entry.scheduleKey ||
+          (resolvedScheduleId
+            ? this.derivePresenceScheduleKey(
+                eventId,
+                { scheduleId: resolvedScheduleId, scheduleLabel },
+                ensureString(entry.entryId)
+              )
+            : "")
+      );
       entries.push({
         entryId: entry.entryId,
         uid: entry.uid,
         displayName: entry.displayName || entry.uid || entry.entryId,
-        scheduleId: schedule?.id || entry.scheduleId || "",
+        scheduleId: resolvedScheduleId,
         scheduleKey,
         scheduleLabel,
         scheduleRange,
