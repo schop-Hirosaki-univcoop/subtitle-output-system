@@ -126,11 +126,13 @@ export class EventAdminApp {
     this.hostPresenceDisconnect = null;
     this.hostPresenceHeartbeat = null;
     this.hostPresenceLastSignature = "";
+    this.cachedHostPresenceStorage = undefined;
     this.hostCommittedScheduleId = "";
     this.hostCommittedScheduleLabel = "";
     this.scheduleConflictContext = null;
     this.scheduleConflictLastSignature = "";
     this.scheduleConflictPromptSignature = "";
+    this.lastScheduleCommitChanged = false;
     this.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
     this.scheduleConflictRadioName = generateShortId("flow-conflict-radio-");
@@ -1013,6 +1015,15 @@ export class EventAdminApp {
   getCurrentSelectionContext() {
     const event = this.getSelectedEvent();
     const schedule = this.getSelectedSchedule();
+    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
+    const committedScheduleLabel = ensureString(this.hostCommittedScheduleLabel);
+    const committedScheduleKey = committedScheduleId
+      ? this.derivePresenceScheduleKey(
+          ensureString(event?.id || ""),
+          { scheduleId: committedScheduleId, scheduleLabel: committedScheduleLabel },
+          ensureString(this.hostPresenceSessionId)
+        )
+      : "";
     return {
       eventId: event?.id || "",
       eventName: event?.name || event?.id || "",
@@ -1020,7 +1031,10 @@ export class EventAdminApp {
       scheduleLabel: schedule?.label || schedule?.id || "",
       startAt: schedule?.startAt || "",
       endAt: schedule?.endAt || "",
-      operatorMode: this.operatorMode
+      operatorMode: this.operatorMode,
+      committedScheduleId,
+      committedScheduleLabel,
+      committedScheduleKey
     };
   }
 
@@ -1987,15 +2001,17 @@ export class EventAdminApp {
       this.selectedEventId
     ) {
       const committed = this.commitSelectedScheduleForTelop({ reason: "navigation" });
+      const commitChanged = this.lastScheduleCommitChanged;
       if (!committed) {
         this.pendingNavigationTarget = "";
         this.pendingNavigationMeta = null;
         this.syncScheduleConflictPromptState();
+        this.lastScheduleCommitChanged = false;
         return;
       }
       const context = this.buildScheduleConflictContext();
       this.scheduleConflictContext = context;
-      if (context.hasConflict) {
+      if (context.hasConflict && commitChanged) {
         this.pendingNavigationTarget = normalized;
         this.pendingNavigationMeta = {
           target: normalized,
@@ -2009,12 +2025,14 @@ export class EventAdminApp {
           target: normalized
         });
         this.syncScheduleConflictPromptState(context);
+        this.lastScheduleCommitChanged = false;
         return;
       }
       this.pendingNavigationTarget = "";
       this.pendingNavigationMeta = null;
       this.enforceScheduleConflictState(context);
       this.syncScheduleConflictPromptState(context);
+      this.lastScheduleCommitChanged = false;
     }
     this.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
@@ -2345,8 +2363,12 @@ export class EventAdminApp {
       const uid = ensureString(payload.uid);
       const mode = normalizeOperatorMode(payload.mode);
       const updatedAt = Number(payload.clientTimestamp || payload.updatedAt || 0) || 0;
+      const sessionId = ensureString(payload.sessionId) || normalizedId;
+      const source = ensureString(payload.source);
       entries.push({
         entryId: normalizedId,
+        sessionId,
+        source,
         uid,
         displayName,
         scheduleId,
@@ -3141,6 +3163,7 @@ export class EventAdminApp {
 
   commitSelectedScheduleForTelop({ reason = "schedule-commit" } = {}) {
     const scheduleId = ensureString(this.selectedScheduleId);
+    this.lastScheduleCommitChanged = false;
     if (!scheduleId) {
       this.logFlowState("日程未選択のためテロップ操作の日程を確定できません", { reason });
       return false;
@@ -3153,6 +3176,7 @@ export class EventAdminApp {
       updateContext: false,
       force: true
     });
+    this.lastScheduleCommitChanged = changed;
     this.logFlowState("テロップ操作の日程の確定リクエストを処理しました", {
       scheduleId,
       scheduleLabel: schedule?.label || scheduleId,
@@ -3218,7 +3242,202 @@ export class EventAdminApp {
     }
   }
 
-  syncHostPresence(reason = "state-change") {
+  getHostPresenceStorage() {
+    if (typeof this.cachedHostPresenceStorage !== "undefined") {
+      return this.cachedHostPresenceStorage;
+    }
+    if (typeof window === "undefined") {
+      this.cachedHostPresenceStorage = null;
+      return null;
+    }
+    const candidates = [window.sessionStorage, window.localStorage];
+    for (const storage of candidates) {
+      if (!storage) {
+        continue;
+      }
+      try {
+        const probeKey = "__events_host_presence_probe__";
+        storage.setItem(probeKey, "1");
+        storage.removeItem(probeKey);
+        this.cachedHostPresenceStorage = storage;
+        return storage;
+      } catch (error) {
+        // Ignore storage access errors and continue checking fallbacks.
+      }
+    }
+    this.cachedHostPresenceStorage = null;
+    return null;
+  }
+
+  getHostPresenceStorageKey(uid = "", eventId = "") {
+    const normalizedUid = ensureString(uid);
+    const normalizedEventId = ensureString(eventId);
+    if (!normalizedUid || !normalizedEventId) {
+      return "";
+    }
+    return `events:host-presence:${normalizedUid}:${normalizedEventId}`;
+  }
+
+  loadStoredHostPresenceSessionId(uid = "", eventId = "") {
+    const storage = this.getHostPresenceStorage();
+    const key = this.getHostPresenceStorageKey(uid, eventId);
+    if (!storage || !key) {
+      return "";
+    }
+    try {
+      return ensureString(storage.getItem(key));
+    } catch (error) {
+      return "";
+    }
+  }
+
+  persistHostPresenceSessionId(uid = "", eventId = "", sessionId = "") {
+    const storage = this.getHostPresenceStorage();
+    const key = this.getHostPresenceStorageKey(uid, eventId);
+    const normalizedSessionId = ensureString(sessionId);
+    if (!storage || !key || !normalizedSessionId) {
+      return;
+    }
+    try {
+      storage.setItem(key, normalizedSessionId);
+    } catch (error) {
+      // Ignore storage persistence failures.
+    }
+  }
+
+  collectLocalHostPresenceEntries(presenceEntries = [], uid = "") {
+    const normalizedUid = ensureString(uid);
+    if (!normalizedUid || !Array.isArray(presenceEntries)) {
+      return [];
+    }
+    return presenceEntries
+      .filter((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return false;
+        }
+        const entryUid = ensureString(entry.uid);
+        if (!entryUid || entryUid !== normalizedUid) {
+          return false;
+        }
+        const source = ensureString(entry.source);
+        return !source || source === "events";
+      })
+      .map((entry) => ({
+        entryId: ensureString(entry.entryId),
+        sessionId: ensureString(entry.sessionId || entry.entryId),
+        source: ensureString(entry.source),
+        updatedAt: Number(entry.updatedAt || 0) || 0
+      }));
+  }
+
+  async fetchHostPresenceEntries(eventId = "", uid = "") {
+    const normalizedEventId = ensureString(eventId);
+    const normalizedUid = ensureString(uid);
+    if (!normalizedEventId || !normalizedUid) {
+      return [];
+    }
+    try {
+      const snapshot = await get(getOperatorPresenceEventRef(normalizedEventId));
+      if (!snapshot.exists()) {
+        return [];
+      }
+      const raw = snapshot.val();
+      if (!raw || typeof raw !== "object") {
+        return [];
+      }
+      const entries = [];
+      Object.entries(raw).forEach(([entryId, payload]) => {
+        if (!payload || typeof payload !== "object") {
+          return;
+        }
+        const entryUid = ensureString(payload.uid);
+        if (!entryUid || entryUid !== normalizedUid) {
+          return;
+        }
+        const source = ensureString(payload.source);
+        if (source && source !== "events") {
+          return;
+        }
+        const normalizedEntryId = ensureString(entryId);
+        const sessionId = ensureString(payload.sessionId) || normalizedEntryId;
+        if (!sessionId) {
+          return;
+        }
+        const updatedAt = Number(payload.clientTimestamp || payload.updatedAt || 0) || 0;
+        entries.push({
+          entryId: normalizedEntryId,
+          sessionId,
+          source,
+          updatedAt
+        });
+      });
+      entries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      return entries;
+    } catch (error) {
+      console.debug("Failed to fetch host presence entries:", error);
+      return [];
+    }
+  }
+
+  pruneHostPresenceEntries(eventId = "", entries = [], sessionId = "") {
+    const normalizedEventId = ensureString(eventId);
+    if (!normalizedEventId || !Array.isArray(entries) || entries.length === 0) {
+      return;
+    }
+    const keepSessionId = ensureString(sessionId);
+    entries.forEach((entry) => {
+      const entrySessionId = ensureString(entry?.sessionId || entry?.entryId);
+      if (!entrySessionId || entrySessionId === keepSessionId) {
+        return;
+      }
+      try {
+        remove(getOperatorPresenceEntryRef(normalizedEventId, entrySessionId)).catch(() => {});
+      } catch (error) {
+        console.debug("Failed to remove stale host presence entry:", error);
+      }
+    });
+  }
+
+  async reconcileHostPresenceSessions(eventId = "", uid = "", sessionId = "", prefetchedEntries = null) {
+    const normalizedEventId = ensureString(eventId);
+    const normalizedUid = ensureString(uid);
+    if (!normalizedEventId || !normalizedUid) {
+      return;
+    }
+    let entries = Array.isArray(prefetchedEntries) ? prefetchedEntries.slice() : null;
+    if (!entries || entries.length === 0) {
+      entries = await this.fetchHostPresenceEntries(normalizedEventId, normalizedUid);
+    }
+    if (!entries || entries.length === 0) {
+      return;
+    }
+    const keepSessionId = ensureString(sessionId);
+    let preferredEntry = null;
+    if (keepSessionId) {
+      preferredEntry = entries.find((entry) => ensureString(entry.sessionId || entry.entryId) === keepSessionId) || null;
+    }
+    if (!preferredEntry) {
+      preferredEntry = entries[0] || null;
+    }
+    const preferredSessionId = ensureString(preferredEntry?.sessionId || preferredEntry?.entryId);
+    if (!preferredSessionId) {
+      return;
+    }
+    const targetSessionId = keepSessionId && preferredSessionId === keepSessionId ? keepSessionId : preferredSessionId;
+    if (ensureString(this.hostPresenceSessionId) !== targetSessionId) {
+      this.hostPresenceSessionId = targetSessionId;
+      this.persistHostPresenceSessionId(normalizedUid, normalizedEventId, targetSessionId);
+    }
+    this.hostPresenceEntryKey = `${normalizedEventId}/${targetSessionId}`;
+    this.hostPresenceEntryRef = getOperatorPresenceEntryRef(normalizedEventId, targetSessionId);
+    const staleEntries = entries.filter((entry) => {
+      const entrySessionId = ensureString(entry.sessionId || entry.entryId);
+      return entrySessionId && entrySessionId !== targetSessionId;
+    });
+    this.pruneHostPresenceEntries(normalizedEventId, staleEntries, targetSessionId);
+  }
+
+  async syncHostPresence(reason = "state-change") {
     const user = this.currentUser || auth.currentUser || null;
     const uid = ensureString(user?.uid);
     if (!uid) {
@@ -3234,12 +3453,62 @@ export class EventAdminApp {
       return;
     }
 
-    const sessionId = ensureString(this.hostPresenceSessionId) || this.generatePresenceSessionId();
+    const presenceEntries = Array.isArray(this.operatorPresenceEntries)
+      ? this.operatorPresenceEntries
+      : [];
+    let hostEntries = this.collectLocalHostPresenceEntries(presenceEntries, uid);
+    if (hostEntries.length === 0) {
+      const fetchedEntries = await this.fetchHostPresenceEntries(eventId, uid);
+      hostEntries = Array.isArray(fetchedEntries) ? fetchedEntries : [];
+    }
+    hostEntries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    const hostSessionIds = new Set(
+      hostEntries.map((entry) => ensureString(entry.sessionId || entry.entryId)).filter(Boolean)
+    );
+    const entryKey = ensureString(this.hostPresenceEntryKey);
+    const [entryKeyEventId = ""] = entryKey.split("/");
+    const previousSessionId = entryKeyEventId === eventId ? ensureString(this.hostPresenceSessionId) : "";
+    const storedSessionId = ensureString(this.loadStoredHostPresenceSessionId(uid, eventId));
+    const preferredEntry = hostEntries.length > 0 ? hostEntries[0] : null;
+    const preferredSessionId = ensureString(preferredEntry?.sessionId || preferredEntry?.entryId);
+    const baselineSessionId = previousSessionId || storedSessionId || "";
+
+    let sessionId = "";
+    let reusedSessionId = "";
+
+    if (previousSessionId && hostSessionIds.has(previousSessionId)) {
+      sessionId = previousSessionId;
+      reusedSessionId = previousSessionId;
+    } else if (storedSessionId && hostSessionIds.has(storedSessionId)) {
+      sessionId = storedSessionId;
+      reusedSessionId = storedSessionId;
+    } else if (preferredSessionId) {
+      sessionId = preferredSessionId;
+      reusedSessionId = preferredSessionId;
+    } else if (storedSessionId) {
+      sessionId = storedSessionId;
+    } else if (previousSessionId) {
+      sessionId = previousSessionId;
+    } else {
+      sessionId = this.generatePresenceSessionId();
+    }
+
     this.hostPresenceSessionId = sessionId;
+    this.persistHostPresenceSessionId(uid, eventId, sessionId);
     const nextKey = `${eventId}/${sessionId}`;
     if (this.hostPresenceEntryKey && this.hostPresenceEntryKey !== nextKey) {
       this.clearHostPresence();
       this.hostPresenceSessionId = sessionId;
+    }
+
+    if (reusedSessionId) {
+      this.logFlowState("既存の在席セッションを引き継ぎます", {
+        reason,
+        eventId,
+        previousSessionId: baselineSessionId || "",
+        sessionId
+      });
     }
 
     const event = this.getSelectedEvent();
@@ -3302,6 +3571,12 @@ export class EventAdminApp {
       console.error("Failed to persist host presence:", error);
     });
 
+    const staleEntries = hostEntries.filter((entry) => {
+      const entrySessionId = ensureString(entry.sessionId || entry.entryId);
+      return entrySessionId && entrySessionId !== sessionId;
+    });
+    this.pruneHostPresenceEntries(eventId, staleEntries, sessionId);
+
     try {
       if (this.hostPresenceDisconnect) {
         this.hostPresenceDisconnect.cancel().catch(() => {});
@@ -3321,6 +3596,8 @@ export class EventAdminApp {
       scheduleKey,
       sessionId
     });
+
+    this.reconcileHostPresenceSessions(eventId, uid, sessionId).catch(() => {});
   }
 
   clearOperatorPresenceState() {
@@ -3349,6 +3626,7 @@ export class EventAdminApp {
     this.scheduleFallbackContext = null;
     this.clearScheduleConsensusState({ reason: "presence-reset" });
     this.hideScheduleConsensusToast();
+    this.lastScheduleCommitChanged = false;
     this.logFlowState("オペレーター選択状況をリセットしました");
     this.updateScheduleConflictState();
   }
@@ -3615,7 +3893,7 @@ export class EventAdminApp {
       const options = [
         {
           value: "follow",
-          title: "選ばれた日程に移動する",
+          title: "テロップを操作する日程を選ぶ",
           description: winnerLabel
             ? winnerRange
               ? `テロップ操作パネルを「${winnerLabel}」（${winnerRange}）で開きます。`
@@ -3624,14 +3902,14 @@ export class EventAdminApp {
         },
         {
           value: "support",
-          title: "テロップ操作なしモードで続ける",
+          title: "自分が選んでいた日程をテロップ操作なしモードで開く",
           description: currentLabel
-            ? `日程「${currentLabel}」を参加者向けツールのみで確認します。`
+            ? `日程「${currentLabel}」をテロップ操作なしモードで開きます。`
             : "テロップ操作を行わず、参加者向けツールのみ利用します。"
         },
         {
           value: "reselect",
-          title: "別の日程を選び直す",
+          title: "もう一度日程を選び直す",
           description: "日程一覧に戻り、テロップ操作で使用する日程を改めて選び直します。"
         }
       ];
@@ -4897,6 +5175,7 @@ export class EventAdminApp {
 
   commitSelectedScheduleForTelop({ reason = "schedule-commit" } = {}) {
     const scheduleId = ensureString(this.selectedScheduleId);
+    this.lastScheduleCommitChanged = false;
     if (!scheduleId) {
       this.logFlowState("日程未選択のためテロップ操作の日程を確定できません", { reason });
       return false;
@@ -4909,6 +5188,7 @@ export class EventAdminApp {
       updateContext: false,
       force: true
     });
+    this.lastScheduleCommitChanged = changed;
     this.logFlowState("テロップ操作の日程の確定リクエストを処理しました", {
       scheduleId,
       scheduleLabel: schedule?.label || scheduleId,
@@ -4916,111 +5196,6 @@ export class EventAdminApp {
       changed
     });
     return true;
-  }
-
-  syncHostPresence(reason = "state-change") {
-    const user = this.currentUser || auth.currentUser || null;
-    const uid = ensureString(user?.uid);
-    if (!uid) {
-      this.clearHostPresence();
-      this.logFlowState("在席情報をクリアしました (未ログイン)", { reason });
-      return;
-    }
-
-    const eventId = ensureString(this.selectedEventId);
-    if (!eventId) {
-      this.clearHostPresence();
-      this.logFlowState("在席情報をクリアしました (イベント未選択)", { reason });
-      return;
-    }
-
-    const sessionId = ensureString(this.hostPresenceSessionId) || this.generatePresenceSessionId();
-    this.hostPresenceSessionId = sessionId;
-    const nextKey = `${eventId}/${sessionId}`;
-    if (this.hostPresenceEntryKey && this.hostPresenceEntryKey !== nextKey) {
-      this.clearHostPresence();
-      this.hostPresenceSessionId = sessionId;
-    }
-
-    const event = this.getSelectedEvent();
-    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
-    const schedule = committedScheduleId
-      ? this.schedules.find((item) => item.id === committedScheduleId) || null
-      : null;
-    const scheduleLabel = committedScheduleId
-      ? ensureString(this.hostCommittedScheduleLabel) || ensureString(schedule?.label) || committedScheduleId
-      : "";
-    const scheduleKey = this.derivePresenceScheduleKey(
-      eventId,
-      { scheduleId: committedScheduleId, scheduleLabel },
-      sessionId
-    );
-    const operatorMode = normalizeOperatorMode(this.operatorMode);
-    const signature = JSON.stringify({
-      eventId,
-      scheduleId: committedScheduleId,
-      scheduleKey,
-      scheduleLabel,
-      sessionId,
-      operatorMode
-    });
-    if (reason !== "heartbeat" && signature === this.hostPresenceLastSignature) {
-      this.scheduleHostPresenceHeartbeat();
-      this.logFlowState("在席情報に変更はありません", {
-        reason,
-        eventId,
-        scheduleId: committedScheduleId,
-        scheduleKey,
-        sessionId
-      });
-      return;
-    }
-    this.hostPresenceLastSignature = signature;
-
-    const entryRef = getOperatorPresenceEntryRef(eventId, sessionId);
-    this.hostPresenceEntryKey = nextKey;
-    this.hostPresenceEntryRef = entryRef;
-
-    const payload = {
-      sessionId,
-      uid,
-      email: ensureString(user?.email),
-      displayName: ensureString(user?.displayName),
-      eventId,
-      eventName: ensureString(event?.name || eventId),
-      scheduleId: committedScheduleId,
-      scheduleKey,
-      scheduleLabel,
-      mode: operatorMode,
-      updatedAt: serverTimestamp(),
-      clientTimestamp: Date.now(),
-      reason,
-      source: "events"
-    };
-
-    set(entryRef, payload).catch((error) => {
-      console.error("Failed to persist host presence:", error);
-    });
-
-    try {
-      if (this.hostPresenceDisconnect) {
-        this.hostPresenceDisconnect.cancel().catch(() => {});
-      }
-      const disconnectHandle = onDisconnect(entryRef);
-      this.hostPresenceDisconnect = disconnectHandle;
-      disconnectHandle.remove().catch(() => {});
-    } catch (error) {
-      console.debug("Failed to register host presence cleanup:", error);
-    }
-
-    this.scheduleHostPresenceHeartbeat();
-    this.logFlowState("在席情報を更新しました", {
-      reason,
-      eventId,
-      scheduleId: committedScheduleId,
-      scheduleKey,
-      sessionId
-    });
   }
 
   clearOperatorPresenceState() {
@@ -5048,6 +5223,7 @@ export class EventAdminApp {
     this.scheduleFallbackContext = null;
     this.clearScheduleConsensusState({ reason: "presence-reset" });
     this.hideScheduleConsensusToast();
+    this.lastScheduleCommitChanged = false;
     this.logFlowState("オペレーター選択状況をリセットしました");
     this.updateScheduleConflictState();
   }
@@ -5330,7 +5506,7 @@ export class EventAdminApp {
       const options = [
         {
           value: "follow",
-          title: "選ばれた日程に移動する",
+          title: "テロップを操作する日程を選ぶ",
           description: winnerLabel
             ? winnerRange
               ? `テロップ操作パネルを「${winnerLabel}」（${winnerRange}）で開きます。`
@@ -5339,14 +5515,14 @@ export class EventAdminApp {
         },
         {
           value: "support",
-          title: "テロップ操作なしモードで続ける",
+          title: "自分が選んでいた日程をテロップ操作なしモードで開く",
           description: currentLabel
-            ? `日程「${currentLabel}」を参加者向けツールのみで確認します。`
+            ? `日程「${currentLabel}」をテロップ操作なしモードで開きます。`
             : "テロップ操作を行わず、参加者向けツールのみ利用します。"
         },
         {
           value: "reselect",
-          title: "別の日程を選び直す",
+          title: "もう一度日程を選び直す",
           description: "日程一覧に戻り、テロップ操作で使用する日程を改めて選び直します。"
         }
       ];
