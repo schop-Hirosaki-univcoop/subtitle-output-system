@@ -50,11 +50,20 @@ async function ensureChannelAligned(app) {
         }
       }
       try {
-        await app.lockDisplayToSchedule(normalizedEvent, normalizedSchedule, scheduleLabel, { silent: true });
+        const appliedAssignment = await app.lockDisplayToSchedule(
+          normalizedEvent,
+          normalizedSchedule,
+          scheduleLabel,
+          { silent: true }
+        );
+        resolved = typeof app.hasChannelMismatch === "function" ? !app.hasChannelMismatch() : true;
+        if (!resolved && appliedAssignment && appliedAssignment.eventId) {
+          resolved = true;
+        }
       } catch (error) {
         console.warn("Failed to auto-align display schedule", error);
+        resolved = typeof app.hasChannelMismatch === "function" ? !app.hasChannelMismatch() : false;
       }
-      resolved = typeof app.hasChannelMismatch === "function" ? !app.hasChannelMismatch() : true;
     }
   }
 
