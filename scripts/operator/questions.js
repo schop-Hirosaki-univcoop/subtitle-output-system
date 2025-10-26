@@ -25,58 +25,76 @@ async function ensureChannelAligned(app) {
     return true;
   }
 
-  let resolved = false;
-  if (
-    app &&
-    typeof app.getActiveChannel === "function" &&
-    typeof app.lockDisplayToSchedule === "function"
-  ) {
-    const { eventId, scheduleId } = app.getActiveChannel();
-    const normalizedEvent = String(eventId || "").trim();
-    const normalizedSchedule = String(scheduleId || "").trim();
-    if (normalizedEvent && normalizedSchedule) {
-      const scheduleKey = `${normalizedEvent}::${normalizeScheduleId(normalizedSchedule)}`;
-      let scheduleLabel = normalizedSchedule;
-      if (typeof app.resolveScheduleLabel === "function") {
-        scheduleLabel =
-          app.resolveScheduleLabel(
-            scheduleKey,
-            app?.state?.activeScheduleLabel,
-            normalizedSchedule
-          ) || scheduleLabel;
-      } else if (typeof app?.state?.activeScheduleLabel === "string") {
-        const candidate = app.state.activeScheduleLabel.trim();
-        if (candidate) {
-          scheduleLabel = candidate;
-        }
-      }
-      try {
-        const appliedAssignment = await app.lockDisplayToSchedule(
-          normalizedEvent,
-          normalizedSchedule,
-          scheduleLabel,
-          { silent: true }
-        );
-        resolved = typeof app.hasChannelMismatch === "function" ? !app.hasChannelMismatch() : true;
-        if (!resolved && appliedAssignment && appliedAssignment.eventId) {
-          resolved = true;
-        }
-      } catch (error) {
-        logDisplayLinkWarn("Failed to auto-align display schedule", error);
-        resolved = typeof app.hasChannelMismatch === "function" ? !app.hasChannelMismatch() : false;
-      }
-    }
+  const showMismatchToast = () => {
+    const summary = typeof app.describeChannelAssignment === "function" ? app.describeChannelAssignment() : "";
+    const message = summary
+      ? `ディスプレイは${summary}に固定されています。日程を合わせてから操作してください。`
+      : "ディスプレイのチャンネルが未設定です。先に日程を固定してください。";
+    app.toast(message, "error");
+  };
+
+  const hasChannelAccess =
+    app && typeof app.getActiveChannel === "function" && typeof app.lockDisplayToSchedule === "function";
+  if (!hasChannelAccess) {
+    showMismatchToast();
+    return false;
   }
 
-  if (resolved) {
+  const { eventId, scheduleId } = app.getActiveChannel();
+  const normalizedEvent = String(eventId || "").trim();
+  const normalizedSchedule = normalizeScheduleId(scheduleId || "");
+  if (!normalizedEvent || !normalizedSchedule) {
+    showMismatchToast();
+    return false;
+  }
+
+  const session = app?.state?.displaySession || null;
+  const sessionEvent = String(session?.eventId || "").trim();
+  const sessionSchedule = normalizeScheduleId(session?.scheduleId || "");
+  if (sessionEvent && sessionSchedule && sessionEvent === normalizedEvent && sessionSchedule === normalizedSchedule) {
+    const assignment =
+      (session && typeof session.assignment === "object" && session.assignment) || {
+        eventId: sessionEvent,
+        scheduleId: sessionSchedule,
+        scheduleLabel: String(session?.scheduleLabel || "").trim(),
+        scheduleKey: `${sessionEvent}::${sessionSchedule}`
+      };
+    if (typeof app.applyAssignmentLocally === "function") {
+      app.applyAssignmentLocally(assignment);
+    } else if (app?.state) {
+      app.state.channelAssignment = assignment;
+    }
     return true;
   }
 
-  const summary = typeof app.describeChannelAssignment === "function" ? app.describeChannelAssignment() : "";
-  const message = summary
-    ? `ディスプレイは${summary}に固定されています。日程を合わせてから操作してください。`
-    : "ディスプレイのチャンネルが未設定です。先に日程を固定してください。";
-  app.toast(message, "error");
+  const scheduleKey = `${normalizedEvent}::${normalizedSchedule}`;
+  let scheduleLabel = normalizedSchedule;
+  if (typeof app.resolveScheduleLabel === "function") {
+    scheduleLabel =
+      app.resolveScheduleLabel(scheduleKey, app?.state?.activeScheduleLabel, normalizedSchedule) || scheduleLabel;
+  } else if (typeof app?.state?.activeScheduleLabel === "string") {
+    const candidate = app.state.activeScheduleLabel.trim();
+    if (candidate) {
+      scheduleLabel = candidate;
+    }
+  }
+
+  try {
+    const appliedAssignment = await app.lockDisplayToSchedule(normalizedEvent, normalizedSchedule, scheduleLabel, {
+      silent: true
+    });
+    let resolved = typeof app.hasChannelMismatch === "function" ? !app.hasChannelMismatch() : true;
+    if (!resolved && appliedAssignment && appliedAssignment.eventId) {
+      resolved = true;
+    }
+    if (resolved) {
+      return true;
+    }
+  } catch (error) {
+    logDisplayLinkWarn("Failed to auto-align display schedule", error);
+  }
+
+  showMismatchToast();
   return false;
 }
 
