@@ -2001,7 +2001,6 @@ export class EventAdminApp {
       this.selectedEventId
     ) {
       const committed = this.commitSelectedScheduleForTelop({ reason: "navigation" });
-      const commitChanged = this.lastScheduleCommitChanged;
       if (!committed) {
         this.pendingNavigationTarget = "";
         this.pendingNavigationMeta = null;
@@ -2011,7 +2010,7 @@ export class EventAdminApp {
       }
       const context = this.buildScheduleConflictContext();
       this.scheduleConflictContext = context;
-      if (context.hasConflict && commitChanged) {
+      if (context.hasConflict) {
         this.pendingNavigationTarget = normalized;
         this.pendingNavigationMeta = {
           target: normalized,
