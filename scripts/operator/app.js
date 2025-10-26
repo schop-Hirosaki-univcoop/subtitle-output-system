@@ -391,8 +391,24 @@ export class OperatorApp {
 
   getActiveChannel() {
     const ensure = (value) => String(value ?? "").trim();
-    const eventId = ensure(this.state?.activeEventId || this.pageContext?.eventId || "");
-    const scheduleId = ensure(this.state?.activeScheduleId || this.pageContext?.scheduleId || "");
+    let eventId = ensure(this.state?.activeEventId || this.pageContext?.eventId || "");
+    let scheduleId = ensure(this.state?.activeScheduleId || this.pageContext?.scheduleId || "");
+
+    if (!eventId || !scheduleId) {
+      const scheduleKey = ensure(
+        this.state?.currentSchedule || this.pageContext?.scheduleKey || ""
+      );
+      if (scheduleKey) {
+        const [eventPart = "", schedulePart = ""] = scheduleKey.split("::");
+        if (!eventId && eventPart) {
+          eventId = ensure(eventPart);
+        }
+        if (!scheduleId && schedulePart) {
+          scheduleId = ensure(schedulePart);
+        }
+      }
+    }
+
     return { eventId, scheduleId };
   }
 
