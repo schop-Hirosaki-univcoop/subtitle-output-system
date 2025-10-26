@@ -1029,7 +1029,7 @@ export class OperatorApp {
     this.lockDisplayToSchedule(option.eventId || conflict.eventId, option.scheduleId, option.label, { fromModal: true });
   }
 
-  lockDisplayToCurrentSchedule() {
+  lockDisplayToCurrentSchedule(options = {}) {
     if (!this.isTelopEnabled()) {
       this.toast("テロップ操作なしモードでは固定できません。", "error");
       return;
@@ -1042,7 +1042,7 @@ export class OperatorApp {
     }
     const scheduleKey = this.getCurrentScheduleKey();
     const label = this.resolveScheduleLabel(scheduleKey, this.state?.activeScheduleLabel, scheduleId);
-    this.lockDisplayToSchedule(eventId, scheduleId, label);
+    return this.lockDisplayToSchedule(eventId, scheduleId, label, options);
   }
 
   async lockDisplayToSchedule(eventId, scheduleId, scheduleLabel, options = {}) {

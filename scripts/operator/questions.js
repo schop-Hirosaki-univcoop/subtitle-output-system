@@ -18,16 +18,56 @@ function resolveTelopRef(app) {
   return { ref: refInstance, eventId: eventId || "", scheduleId: normalizedSchedule };
 }
 
-function ensureChannelAligned(app) {
-  if (typeof app.hasChannelMismatch === "function" && app.hasChannelMismatch()) {
-    const summary = typeof app.describeChannelAssignment === "function" ? app.describeChannelAssignment() : "";
-    const message = summary
-      ? `ディスプレイは${summary}に固定されています。日程を合わせてから操作してください。`
-      : "ディスプレイのチャンネルが未設定です。先に日程を固定してください。";
-    app.toast(message, "error");
-    return false;
+async function ensureChannelAligned(app) {
+  const hasMismatch = typeof app.hasChannelMismatch === "function" ? app.hasChannelMismatch() : false;
+  if (!hasMismatch) {
+    return true;
   }
-  return true;
+
+  let resolved = false;
+  if (
+    app &&
+    typeof app.getActiveChannel === "function" &&
+    typeof app.lockDisplayToSchedule === "function"
+  ) {
+    const { eventId, scheduleId } = app.getActiveChannel();
+    const normalizedEvent = String(eventId || "").trim();
+    const normalizedSchedule = String(scheduleId || "").trim();
+    if (normalizedEvent && normalizedSchedule) {
+      const scheduleKey = `${normalizedEvent}::${normalizeScheduleId(normalizedSchedule)}`;
+      let scheduleLabel = normalizedSchedule;
+      if (typeof app.resolveScheduleLabel === "function") {
+        scheduleLabel =
+          app.resolveScheduleLabel(
+            scheduleKey,
+            app?.state?.activeScheduleLabel,
+            normalizedSchedule
+          ) || scheduleLabel;
+      } else if (typeof app?.state?.activeScheduleLabel === "string") {
+        const candidate = app.state.activeScheduleLabel.trim();
+        if (candidate) {
+          scheduleLabel = candidate;
+        }
+      }
+      try {
+        await app.lockDisplayToSchedule(normalizedEvent, normalizedSchedule, scheduleLabel, { silent: true });
+      } catch (error) {
+        console.warn("Failed to auto-align display schedule", error);
+      }
+      resolved = typeof app.hasChannelMismatch === "function" ? !app.hasChannelMismatch() : true;
+    }
+  }
+
+  if (resolved) {
+    return true;
+  }
+
+  const summary = typeof app.describeChannelAssignment === "function" ? app.describeChannelAssignment() : "";
+  const message = summary
+    ? `ディスプレイは${summary}に固定されています。日程を合わせてから操作してください。`
+    : "ディスプレイのチャンネルが未設定です。先に日程を固定してください。";
+  app.toast(message, "error");
+  return false;
 }
 
 export function loadPreferredSubTab() {
@@ -368,7 +408,7 @@ export async function handleDisplay(app) {
     app.toast("送出端末が接続されていません。", "error");
     return;
   }
-  if (!ensureChannelAligned(app)) {
+  if (!(await ensureChannelAligned(app))) {
     return;
   }
   if (!app.state.selectedRowData || app.state.selectedRowData.isAnswered) return;
@@ -434,7 +474,7 @@ export async function handleUnanswer(app) {
     app.toast("送出端末が接続されていません。", "error");
     return;
   }
-  if (!ensureChannelAligned(app)) {
+  if (!(await ensureChannelAligned(app))) {
     return;
   }
   if (!app.state.selectedRowData || !app.state.selectedRowData.isAnswered) return;
@@ -469,7 +509,7 @@ export async function handleBatchUnanswer(app) {
     app.toast("送出端末が接続されていません。", "error");
     return;
   }
-  if (!ensureChannelAligned(app)) {
+  if (!(await ensureChannelAligned(app))) {
     return;
   }
   const checkedBoxes = Array.from(app.dom.cardsContainer?.querySelectorAll(".row-checkbox:checked") || []);
@@ -511,7 +551,7 @@ export async function clearTelop(app) {
     app.toast("送出端末が接続されていません。", "error");
     return;
   }
-  if (!ensureChannelAligned(app)) {
+  if (!(await ensureChannelAligned(app))) {
     return;
   }
   const { ref: telopRef, eventId, scheduleId } = resolveTelopRef(app);
