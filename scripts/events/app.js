@@ -3392,31 +3392,37 @@ export class EventAdminApp {
     if (!normalizedEventId || !normalizedUid) {
       return;
     }
-    let entries = Array.isArray(prefetchedEntries) ? prefetchedEntries : null;
-    if (!entries) {
+    let entries = Array.isArray(prefetchedEntries) ? prefetchedEntries.slice() : null;
+    if (!entries || entries.length === 0) {
       entries = await this.fetchHostPresenceEntries(normalizedEventId, normalizedUid);
     }
-    if (!entries || entries.length <= 1) {
+    if (!entries || entries.length === 0) {
       return;
     }
-    const normalizedSessionId = ensureString(sessionId);
-    const preferredEntry =
-      entries.find((entry) => ensureString(entry.sessionId || entry.entryId) === normalizedSessionId) || entries[0];
+    const keepSessionId = ensureString(sessionId);
+    let preferredEntry = null;
+    if (keepSessionId) {
+      preferredEntry = entries.find((entry) => ensureString(entry.sessionId || entry.entryId) === keepSessionId) || null;
+    }
+    if (!preferredEntry) {
+      preferredEntry = entries[0] || null;
+    }
     const preferredSessionId = ensureString(preferredEntry?.sessionId || preferredEntry?.entryId);
     if (!preferredSessionId) {
       return;
     }
-    if (ensureString(this.hostPresenceSessionId) !== preferredSessionId) {
-      this.hostPresenceSessionId = preferredSessionId;
-      this.hostPresenceEntryKey = `${normalizedEventId}/${preferredSessionId}`;
-      this.hostPresenceEntryRef = getOperatorPresenceEntryRef(normalizedEventId, preferredSessionId);
-      this.persistHostPresenceSessionId(normalizedUid, normalizedEventId, preferredSessionId);
+    const targetSessionId = keepSessionId && preferredSessionId === keepSessionId ? keepSessionId : preferredSessionId;
+    if (ensureString(this.hostPresenceSessionId) !== targetSessionId) {
+      this.hostPresenceSessionId = targetSessionId;
+      this.persistHostPresenceSessionId(normalizedUid, normalizedEventId, targetSessionId);
     }
+    this.hostPresenceEntryKey = `${normalizedEventId}/${targetSessionId}`;
+    this.hostPresenceEntryRef = getOperatorPresenceEntryRef(normalizedEventId, targetSessionId);
     const staleEntries = entries.filter((entry) => {
       const entrySessionId = ensureString(entry.sessionId || entry.entryId);
-      return entrySessionId && entrySessionId !== preferredSessionId;
+      return entrySessionId && entrySessionId !== targetSessionId;
     });
-    this.pruneHostPresenceEntries(normalizedEventId, staleEntries, preferredSessionId);
+    this.pruneHostPresenceEntries(normalizedEventId, staleEntries, targetSessionId);
   }
 
   async syncHostPresence(reason = "state-change") {
@@ -3439,9 +3445,8 @@ export class EventAdminApp {
       ? this.operatorPresenceEntries
       : [];
     let hostEntries = this.collectLocalHostPresenceEntries(presenceEntries, uid);
-    let fetchedEntries = null;
     if (hostEntries.length === 0) {
-      fetchedEntries = await this.fetchHostPresenceEntries(eventId, uid);
+      const fetchedEntries = await this.fetchHostPresenceEntries(eventId, uid);
       hostEntries = Array.isArray(fetchedEntries) ? fetchedEntries : [];
     }
     hostEntries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -3454,11 +3459,13 @@ export class EventAdminApp {
     let sessionId = baselineSessionId;
     let reusedSessionId = "";
 
-    if (preferredSessionId) {
-      if (!sessionId || sessionId !== preferredSessionId) {
-        sessionId = preferredSessionId;
-        reusedSessionId = preferredSessionId;
+    if (sessionId) {
+      if (preferredSessionId && preferredSessionId === sessionId) {
+        reusedSessionId = sessionId;
       }
+    } else if (preferredSessionId) {
+      sessionId = preferredSessionId;
+      reusedSessionId = preferredSessionId;
     }
 
     if (!sessionId) {
@@ -3568,8 +3575,7 @@ export class EventAdminApp {
       sessionId
     });
 
-    const reconciliationSource = Array.isArray(fetchedEntries) ? fetchedEntries : hostEntries;
-    this.reconcileHostPresenceSessions(eventId, uid, sessionId, reconciliationSource).catch(() => {});
+    this.reconcileHostPresenceSessions(eventId, uid, sessionId).catch(() => {});
   }
 
   clearOperatorPresenceState() {
