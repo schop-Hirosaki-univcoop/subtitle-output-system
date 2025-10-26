@@ -74,13 +74,39 @@ export class OperatorToolManager {
         (payload.scheduleLabel && String(payload.scheduleLabel).trim())
     );
     const hasEmbed = typeof window !== "undefined" && window.operatorEmbed?.app;
+    const summary = {
+      eventId: payload.eventId || "",
+      scheduleId: payload.scheduleId || "",
+      scheduleLabel: payload.scheduleLabel || "",
+      operatorMode: payload.operatorMode || ""
+    };
+    this.app?.logFlowEvent?.("テロップ操作パネルへのコンテキスト適用リクエストを受け付けました", {
+      hasSelection,
+      hasEmbed,
+      summary
+    });
     if (!hasSelection && !hasEmbed) {
+      this.app?.logFlowEvent?.("テロップ操作パネルへのコンテキスト適用をスキップします", {
+        reason: "no-selection",
+        summary
+      });
       return;
     }
     try {
       const app = await this.ensureReady();
+      this.app?.logFlowEvent?.("テロップ操作パネルにコンテキストを適用します", {
+        summary,
+        ready: Boolean(app)
+      });
       app?.setContext?.(payload);
+      this.app?.logFlowEvent?.("テロップ操作パネルへのコンテキスト適用が完了しました", {
+        summary
+      });
     } catch (error) {
+      this.app?.logFlowEvent?.("テロップ操作パネルへのコンテキスト適用に失敗しました", {
+        summary,
+        error: error instanceof Error ? error.message : String(error ?? "")
+      });
       logError("Failed to sync operator tool", error);
     }
   }
