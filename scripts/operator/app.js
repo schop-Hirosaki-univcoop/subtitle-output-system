@@ -22,6 +22,7 @@ import {
 } from "./firebase.js";
 import { getRenderStatePath, parseChannelParams, normalizeScheduleId } from "../shared/channel-paths.js";
 import { OPERATOR_MODE_TELOP, normalizeOperatorMode, isTelopMode } from "../shared/operator-modes.js";
+import { info as logDisplayLinkInfo, error as logDisplayLinkError } from "../shared/display-link-logger.js";
 import { queryDom } from "./dom.js";
 import { createInitialState } from "./state.js";
 import { createApiClient } from "./api-client.js";
@@ -312,9 +313,9 @@ export class OperatorApp {
     if (typeof this.applyInitialPickupState === "function") {
       try {
         this.applyInitialPickupState();
-      } catch (error) {
-        console.debug("failed to initialize pickup panel", error);
-      }
+    } catch (error) {
+      // Swallow errors from optional pickup panel initialisation.
+    }
     }
     this.redirectingToIndex = false;
     this.embedReadyDeferred = null;
@@ -369,7 +370,7 @@ export class OperatorApp {
         context.scheduleKey = `${context.eventId}::${context.scheduleId}`;
       }
     } catch (error) {
-      console.debug("failed to parse page context", error);
+      // Ignore malformed page context payloads.
     }
     return context;
   }
@@ -549,6 +550,15 @@ export class OperatorApp {
   refreshChannelSubscriptions() {
     const { eventId, scheduleId } = this.getActiveChannel();
     const path = getRenderStatePath(eventId, scheduleId);
+    if (this.currentRenderPath !== path) {
+      const normalizedEvent = String(eventId || "").trim();
+      const normalizedSchedule = normalizeScheduleId(scheduleId || "");
+      logDisplayLinkInfo("Switching render subscription", {
+        path,
+        eventId: normalizedEvent || null,
+        scheduleId: normalizedSchedule || null
+      });
+    }
     if (this.currentRenderPath === path && this.renderUnsubscribe) {
       return;
     }
@@ -562,7 +572,7 @@ export class OperatorApp {
       channelRef,
       (snapshot) => this.handleRenderUpdate(snapshot),
       (error) => {
-        console.error("Failed to monitor render state:", error);
+        logDisplayLinkError("Render state monitor error", error);
       }
     );
     this.refreshOperatorPresenceSubscription();
@@ -617,9 +627,7 @@ export class OperatorApp {
         this.renderChannelBanner();
         this.evaluateScheduleConflict();
       },
-      (error) => {
-        console.error("Failed to monitor operator presence:", error);
-      }
+      () => {}
     );
   }
 
@@ -683,9 +691,7 @@ export class OperatorApp {
       reason
     };
 
-    set(entryRef, payload).catch((error) => {
-      console.error("Failed to persist operator presence:", error);
-    });
+    set(entryRef, payload).catch(() => {});
 
     try {
       if (this.operatorPresenceDisconnect) {
@@ -695,7 +701,7 @@ export class OperatorApp {
       this.operatorPresenceDisconnect = disconnectHandle;
       disconnectHandle.remove().catch(() => {});
     } catch (error) {
-      console.debug("Failed to register onDisconnect cleanup:", error);
+      // Ignore disconnect cleanup errors.
     }
 
     this.state.operatorPresenceSelf = {
@@ -724,9 +730,7 @@ export class OperatorApp {
     update(this.operatorPresenceEntryRef, {
       updatedAt: serverTimestamp(),
       clientTimestamp: now
-    }).catch((error) => {
-      console.debug("Operator presence heartbeat failed:", error);
-    });
+    }).catch(() => {});
     if (this.state.operatorPresenceSelf) {
       this.state.operatorPresenceSelf = {
         ...this.state.operatorPresenceSelf,
@@ -756,9 +760,7 @@ export class OperatorApp {
     const hadKey = !!this.operatorPresenceEntryKey;
     this.operatorPresenceEntryKey = "";
     if (entryRef && hadKey) {
-      remove(entryRef).catch((error) => {
-        console.debug("Failed to clear operator presence:", error);
-      });
+      remove(entryRef).catch(() => {});
     }
     this.state.operatorPresenceSelf = null;
   }
@@ -1148,6 +1150,11 @@ export class OperatorApp {
       }
       return appliedAssignment;
     } catch (error) {
+      logDisplayLinkError("Failed to lock display schedule", {
+        eventId: normalizedEvent || null,
+        scheduleId: normalizeScheduleId(normalizedSchedule) || null,
+        error
+      });
       const message = error?.message || "日程の固定に失敗しました。";
       if (fromModal && this.dom.conflictError) {
         this.dom.conflictError.textContent = message;
@@ -1172,7 +1179,8 @@ export class OperatorApp {
     const eventId = String(assignment.eventId || "").trim();
     const scheduleId = String(assignment.scheduleId || "").trim();
     const scheduleLabel = String(assignment.scheduleLabel || "").trim();
-    const scheduleKey = eventId ? `${eventId}::${normalizeScheduleId(scheduleId)}` : "";
+    const normalizedScheduleId = normalizeScheduleId(scheduleId);
+    const scheduleKey = eventId ? `${eventId}::${normalizedScheduleId}` : "";
     const enriched = {
       ...assignment,
       eventId,
@@ -1187,6 +1195,11 @@ export class OperatorApp {
       scheduleId,
       scheduleLabel
     };
+    logDisplayLinkInfo("Applied display assignment", {
+      eventId: eventId || null,
+      scheduleId: normalizedScheduleId || null,
+      scheduleLabel: scheduleLabel || null
+    });
     this.state.displaySession = nextSession;
     this.state.channelAssignment = enriched;
     this.state.autoLockAttemptKey = "";
@@ -1630,7 +1643,6 @@ export class OperatorApp {
       }
       await signInWithPopup(auth, provider);
     } catch (error) {
-      console.error("Login failed:", error);
       this.toast("ログインに失敗しました。", "error");
       this.hideLoader();
     } finally {
@@ -1652,7 +1664,7 @@ export class OperatorApp {
     try {
       await signOut(auth);
     } catch (error) {
-      console.error("Logout failed:", error);
+      // Ignore logout errors; UI state will refresh on auth callbacks.
     }
     this.authFlow = "idle";
     this.pendingAuthUser = null;
@@ -1688,7 +1700,7 @@ export class OperatorApp {
       try {
         await this.api.apiPost({ action: "ensureAdmin" });
       } catch (error) {
-        console.warn("ensureAdmin non-fatal", error);
+        // Allow the operator to continue even if ensureAdmin fails.
       }
 
       this.renderLoggedInUi(user);
@@ -1700,7 +1712,7 @@ export class OperatorApp {
           await this.api.apiPost({ action: "mirrorSheet" });
         }
       } catch (error) {
-        console.warn("mirrorSheet skipped", error);
+        // Skip initial mirror if the dataset is already populated.
       }
 
       this.setLoaderStep(4, this.isEmbedded ? "リアルタイム購読を開始しています…" : "購読開始…");
@@ -1743,7 +1755,6 @@ export class OperatorApp {
       this.startLogsUpdateMonitor();
       this.resolveEmbedReady();
     } catch (error) {
-      console.error("Authorization check failed:", error);
       this.toast("ユーザー権限の確認中にエラーが発生しました。", "error");
       await this.logout();
       this.hideLoader();
@@ -1954,7 +1965,7 @@ export class OperatorApp {
       try {
         this.applyInitialPickupState();
       } catch (error) {
-        console.debug("failed to reset pickup panel", error);
+        // Ignore pickup reset issues while clearing operator state.
       }
     }
     this.updateScheduleContext();
@@ -2165,10 +2176,26 @@ export class OperatorApp {
         const expiresAt = Number(data && data.expiresAt) || 0;
         const status = String((data && data.status) || "");
         const active = !!data && status === "active" && (!expiresAt || expiresAt > now);
+        const assignment = data && typeof data.assignment === "object" ? data.assignment : null;
+        const normalizedEvent = String(data?.eventId || "").trim();
+        const normalizedSchedule = normalizeScheduleId(data?.scheduleId || "");
+        const assignmentEvent = assignment && typeof assignment.eventId === "string" ? assignment.eventId.trim() : "";
+        const assignmentSchedule =
+          assignment && typeof assignment.scheduleId === "string" ? normalizeScheduleId(assignment.scheduleId) : "";
+        logDisplayLinkInfo("Display session snapshot", {
+          active,
+          status,
+          sessionId: data?.sessionId || null,
+          eventId: normalizedEvent || null,
+          scheduleId: normalizedSchedule || null,
+          assignmentEvent: assignmentEvent || null,
+          assignmentSchedule: assignmentSchedule || null
+        });
         this.state.displaySession = data;
         this.state.displaySessionActive = active;
         this.state.channelAssignment = this.getDisplayAssignment();
         if (this.state.displaySessionLastActive !== null && this.state.displaySessionLastActive !== active) {
+          logDisplayLinkInfo("Display session activity changed", { active });
           this.toast(active ? "送出端末とのセッションが確立されました。" : "送出端末の接続が確認できません。", active ? "success" : "error");
         }
         this.state.displaySessionLastActive = active;
@@ -2179,7 +2206,7 @@ export class OperatorApp {
         this.evaluateScheduleConflict();
       },
       (error) => {
-        console.error("Failed to monitor display session:", error);
+        logDisplayLinkError("Display session monitor error", error);
       }
     );
   }

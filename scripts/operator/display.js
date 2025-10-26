@@ -1,3 +1,4 @@
+import { info as logDisplayLinkInfo } from "../shared/display-link-logger.js";
 import { escapeHtml, formatOperatorName, formatRelative, normalizeUpdatedAt, renderRubyHtml } from "./utils.js";
 
 export function handleRenderUpdate(app, snapshot) {
@@ -30,6 +31,11 @@ export function handleRenderUpdate(app, snapshot) {
 
   const previousNow = app.state.renderState?.nowShowing || null;
   const normalizedNow = normalizeNowShowing(now);
+  logDisplayLinkInfo("Render state updated", {
+    phase,
+    nowShowing: normalizedNow,
+    updatedAt: updatedAt || null
+  });
   app.state.renderState = { ...value, nowShowing: normalizedNow };
   if (!areNowShowingEqual(previousNow, normalizedNow) && typeof app.renderQuestions === "function") {
     app.renderQuestions();

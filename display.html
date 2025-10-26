@@ -396,6 +396,7 @@
         import { getDatabase, ref, onValue, update, serverTimestamp, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
         import { getAuth, onAuthStateChanged, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getRenderStatePath, getNowShowingPath, parseChannelParams } from "./scripts/shared/channel-paths.js";
+        import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn, error as logDisplayLinkError } from "./scripts/shared/display-link-logger.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
@@ -427,6 +428,13 @@
         const displaySessionRef = ref(database, "render/session");
         let nowShowingUnsubscribe = null;
 
+        logDisplayLinkInfo('Display initialized', {
+          eventId: channelEventId || null,
+          scheduleId: channelScheduleId || null,
+          queryEventPinned,
+          querySchedulePinned
+        });
+
         function setChannel(eventId, scheduleId) {
           const normalizedEvent = typeof eventId === 'string' ? eventId.trim() : '';
           const normalizedSchedule = typeof scheduleId === 'string' ? scheduleId.trim() : '';
@@ -435,6 +443,10 @@
           }
           channelEventId = normalizedEvent;
           channelScheduleId = normalizedSchedule;
+          logDisplayLinkInfo('Display channel updated', {
+            eventId: channelEventId || null,
+            scheduleId: channelScheduleId || null
+          });
           renderRef = ref(database, getRenderStatePath(channelEventId, channelScheduleId));
           nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
           subscribeNowShowing();
@@ -453,6 +465,15 @@
             : '';
           const assignedEvent = assignedEventRaw || assignmentEvent;
           const assignedSchedule = assignedScheduleRaw || assignmentSchedule;
+
+          logDisplayLinkInfo('Evaluating display assignment', {
+            sessionEvent: assignedEventRaw || null,
+            sessionSchedule: assignedScheduleRaw || null,
+            assignmentEvent: assignmentEvent || null,
+            assignmentSchedule: assignmentSchedule || null,
+            queryEventPinned,
+            querySchedulePinned
+          });
 
           if (!queryEventPinned) {
             if (assignedEvent) {
@@ -478,6 +499,13 @@
           if (!sessionValue || typeof sessionValue !== 'object') {
             return;
           }
+          logDisplayLinkInfo('Display session snapshot received', {
+            sessionId: typeof sessionValue.sessionId === 'string' ? sessionValue.sessionId : null,
+            status: typeof sessionValue.status === 'string' ? sessionValue.status : null,
+            expiresAt: typeof sessionValue.expiresAt !== 'undefined' ? sessionValue.expiresAt : null,
+            eventId: typeof sessionValue.eventId === 'string' ? sessionValue.eventId : null,
+            scheduleId: typeof sessionValue.scheduleId === 'string' ? sessionValue.scheduleId : null
+          });
           const currentUser = auth.currentUser || null;
           const currentUid = typeof currentUser?.uid === 'string' ? currentUser.uid.trim() : '';
           const sessionUid = typeof sessionValue.uid === 'string' ? sessionValue.uid.trim() : '';
@@ -509,6 +537,7 @@
           if (typeof displaySessionUnsubscribe === 'function') {
             displaySessionUnsubscribe();
           }
+          logDisplayLinkInfo('Subscribing display session stream');
           displaySessionUnsubscribe = onValue(displaySessionRef, handleDisplaySessionSnapshot);
         }
 
@@ -552,7 +581,7 @@
           stopHeartbeat();
           heartbeatTimer = setInterval(() => {
             heartbeatDisplaySession().catch(err => {
-              console.warn('Display heartbeat failed:', err);
+              logDisplayLinkWarn('Display heartbeat failed', err);
             });
           }, HEARTBEAT_INTERVAL_MS);
         }
@@ -563,7 +592,7 @@
             sessionRetryTimer = null;
             if (!auth.currentUser) return;
             beginDisplaySession().catch(err => {
-              console.error('Display session restart failed:', err);
+              logDisplayLinkError('Display session restart failed', err);
               scheduleSessionRetry(Math.min(delayMs * 1.5, 30000));
             });
           }, delayMs);
@@ -579,7 +608,7 @@
               scheduleSessionRetry();
               return;
             }
-            console.debug('Retrying deferred render_state update after session resume.');
+            logDisplayLinkInfo('Retrying deferred render_state update after session resume.');
             flushPendingRender('retry');
           }, delayMs);
         }
@@ -648,7 +677,10 @@
               }
               sessionInfo = result.session;
               applyChannelFromSession(sessionInfo);
-              console.info('Display anonymous UID:', user.uid, 'sessionId:', sessionInfo.sessionId);
+              logDisplayLinkInfo('Display session established', {
+                uid: user.uid,
+                sessionId: sessionInfo.sessionId
+              });
               setSessionActive(true);
               startHeartbeat();
               return sessionInfo;
@@ -671,7 +703,7 @@
           try {
             const result = await callGas('heartbeatDisplaySession', { sessionId: sessionInfo.sessionId });
             if (result.active === false) {
-              console.warn('Display session heartbeat rejected; restarting session.');
+              logDisplayLinkWarn('Display session heartbeat rejected; restarting session.');
               setSessionActive(false);
               scheduleSessionRetry(2000);
               return;
@@ -682,7 +714,7 @@
             }
             setSessionActive(true);
           } catch (err) {
-            console.warn('Display heartbeat error:', err);
+            logDisplayLinkWarn('Display heartbeat error', err);
           }
         }
 
@@ -691,7 +723,7 @@
           try {
             await callGas('endDisplaySession', { sessionId: sessionInfo.sessionId, reason });
           } catch (err) {
-            console.warn('Failed to end display session:', err);
+            logDisplayLinkWarn('Failed to end display session', err);
           }
         }
 
@@ -707,7 +739,7 @@
             const blob = new Blob([payload], { type: 'application/json' });
             return navigator.sendBeacon(GAS_API_URL, blob);
           } catch (err) {
-            console.warn('sendBeacon failed:', err);
+            logDisplayLinkWarn('sendBeacon failed', err);
             return false;
           }
         }
@@ -716,24 +748,24 @@
           if (!user) {
             resetSessionState();
             signInAnonymously(auth).catch(err => {
-              console.error('Anonymous sign-in failed:', err);
+              logDisplayLinkError('Anonymous sign-in failed', err);
             });
             return;
           }
 
           if (!user.isAnonymous) {
-            console.warn('Non-anonymous user detected on display; re-authenticating anonymously.');
+            logDisplayLinkWarn('Non-anonymous user detected on display; re-authenticating anonymously.');
             resetSessionState();
             try {
               await signOut(auth);
             } catch (err) {
-              console.error('Failed to sign out non-anonymous user:', err);
+              logDisplayLinkError('Failed to sign out non-anonymous user', err);
             }
             return;
           }
 
           beginDisplaySession().catch(err => {
-            console.error('Failed to establish display session:', err);
+            logDisplayLinkError('Failed to establish display session', err);
           });
         });
 
@@ -762,11 +794,11 @@
           }
           const pending = pendingRenderUpdate;
           if (reason === 'retry') {
-            console.debug('Flushing deferred render_state update (scheduled retry).');
+            logDisplayLinkInfo('Flushing deferred render_state update (scheduled retry).');
           } else if (reason) {
-            console.info(`Flushing deferred render_state update (${reason}).`);
+            logDisplayLinkInfo(`Flushing deferred render_state update (${reason}).`);
           } else {
-            console.info('Flushing deferred render_state update.');
+            logDisplayLinkInfo('Flushing deferred render_state update.');
           }
           pendingRenderUpdate = null;
           writeRenderState(pending.phase, pending.info, { force: true });
@@ -776,7 +808,7 @@
           if (!force && !sessionActive) {
             pendingRenderUpdate = { phase, info: cloneInfo(info) };
             if (!reportSuppressedLogged) {
-              console.debug('render_state update deferred until display session is active.');
+              logDisplayLinkInfo('render_state update deferred until display session is active.');
               reportSuppressedLogged = true;
             }
             schedulePendingFlush(2000);
@@ -799,12 +831,12 @@
             if (err && err.code === 'PERMISSION_DENIED') {
               pendingRenderUpdate = { phase, info: cloneInfo(info) };
               setSessionActive(false);
-              console.warn('render_state update denied; retrying after session renewal.');
+              logDisplayLinkWarn('render_state update denied; retrying after session renewal.', err);
               schedulePendingFlush();
               scheduleSessionRetry();
               return;
             }
-            console.error(err);
+            logDisplayLinkError('render_state update failed', err);
           });
         }
 
@@ -851,7 +883,7 @@
             if (next?.pickup) visiblePayload.pickup = true;
             await reportRender('visible');
           } catch(e){
-            console.error(e);
+            logDisplayLinkError('Failed to show telop', e);
             await reportRender('error', { error: String(e && e.message || e) });
             // ★ 自動復帰：5秒後に hidden へ
             setTimeout(async () => {
@@ -880,7 +912,7 @@
             // ビルドアウト完了時：中身もクリアしたいので nowShowing を null に
             await reportRender('hidden', { nowShowing: null });
           } catch(e){
-            console.error(e);
+            logDisplayLinkError('Failed to hide telop', e);
             await reportRender('error', { error: String(e && e.message || e) });
             setTimeout(async () => {
               if (__currentToken === token) {
@@ -1152,7 +1184,25 @@
           const participantId = telopData?.participantId ? String(telopData.participantId) : '';
           const pickup     = telopData?.pickup === true;
           const hasQuestion = !!(question && question.trim().length);
-    
+
+          if (!hasQuestion){
+            logDisplayLinkInfo('Received nowShowing clear request', {
+              eventId: channelEventId || null,
+              scheduleId: channelScheduleId || null,
+              previousName: prevName || null
+            });
+          } else {
+            logDisplayLinkInfo('Received nowShowing payload', {
+              eventId: channelEventId || null,
+              scheduleId: channelScheduleId || null,
+              uid: uid || null,
+              participantId: participantId || null,
+              pickup,
+              name,
+              hasGenre: !!genre
+            });
+          }
+
           if (!hasQuestion){
             // 非表示へ（座布団ごと退場）…中身は退場完了後に消す
             pendingClear = true;
@@ -1238,6 +1288,12 @@
           if (typeof nowShowingUnsubscribe === 'function') {
             nowShowingUnsubscribe();
           }
+          const path = getNowShowingPath(channelEventId, channelScheduleId);
+          logDisplayLinkInfo('Subscribing nowShowing stream', {
+            path,
+            eventId: channelEventId || null,
+            scheduleId: channelScheduleId || null
+          });
           nowShowingUnsubscribe = onValue(nowShowingRef, handleNowShowingSnapshot);
         }
   </script>

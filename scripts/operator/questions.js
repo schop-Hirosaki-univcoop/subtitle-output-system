@@ -1,5 +1,6 @@
 import { QUESTIONS_SUBTAB_KEY, GENRE_ALL_VALUE } from "./constants.js";
 import { database, ref, update, set, remove, get, getNowShowingRef, serverTimestamp } from "./firebase.js";
+import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn, error as logDisplayLinkError } from "../shared/display-link-logger.js";
 import { normalizeScheduleId } from "../shared/channel-paths.js";
 import { escapeHtml, formatOperatorName, resolveGenreLabel, formatScheduleRange } from "./utils.js";
 
@@ -61,7 +62,7 @@ async function ensureChannelAligned(app) {
           resolved = true;
         }
       } catch (error) {
-        console.warn("Failed to auto-align display schedule", error);
+        logDisplayLinkWarn("Failed to auto-align display schedule", error);
         resolved = typeof app.hasChannelMismatch === "function" ? !app.hasChannelMismatch() : false;
       }
     }
@@ -94,7 +95,7 @@ function persistSubTabPreference(tabName) {
   try {
     localStorage.setItem(QUESTIONS_SUBTAB_KEY, normalized);
   } catch (error) {
-    console.debug("sub-tab preference not persisted", error);
+    // Ignore preference persistence issues.
   }
 }
 
@@ -450,6 +451,13 @@ export async function handleDisplay(app) {
     updates[`questionStatus/${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
     await update(ref(database), updates);
     const genre = String(app.state.selectedRowData.genre ?? "").trim();
+    logDisplayLinkInfo("Sending nowShowing payload", {
+      eventId,
+      scheduleId,
+      uid: app.state.selectedRowData.uid,
+      participantId: app.state.selectedRowData.participantId || "",
+      name: app.state.selectedRowData.name
+    });
     await set(telopRef, {
       uid: app.state.selectedRowData.uid,
       participantId: app.state.selectedRowData.participantId || "",
@@ -457,6 +465,11 @@ export async function handleDisplay(app) {
       question: app.state.selectedRowData.question,
       genre,
       pickup: app.state.selectedRowData.isPickup === true
+    });
+    logDisplayLinkInfo("Display nowShowing updated", {
+      eventId,
+      scheduleId,
+      uid: app.state.selectedRowData.uid
     });
     app.api.fireAndForgetApi({ action: "updateSelectingStatus", uid: app.state.selectedRowData.uid });
     if (previousUid) {
@@ -474,6 +487,7 @@ export async function handleDisplay(app) {
     const displayLabel = formatOperatorName(app.state.selectedRowData.name) || app.state.selectedRowData.name;
     app.toast(`「${displayLabel}」の質問を送出しました。`, "success");
   } catch (error) {
+    logDisplayLinkError("Failed to send nowShowing payload", error);
     app.toast("送出処理中にエラーが発生しました: " + error.message, "error");
   }
 }
@@ -550,7 +564,6 @@ export async function handleBatchUnanswer(app) {
     syncSelectAllState(app);
     updateBatchButtonVisibility(app);
   } catch (error) {
-    console.error("Failed to batch unanswer", error);
     app.toast("未回答への戻し中にエラーが発生しました。", "error");
   }
 }
@@ -571,6 +584,7 @@ export async function clearTelop(app) {
   const snapshot = await get(telopRef);
   const previousTelop = snapshot.val();
   try {
+    logDisplayLinkInfo("Clearing nowShowing payload", { eventId, scheduleId });
     const updates = {};
     const selectingItems = app.state.allQuestions.filter((item) => item["選択中"] === true);
     selectingItems.forEach((item) => {
@@ -591,10 +605,12 @@ export async function clearTelop(app) {
       await update(ref(database), updates);
     }
     await remove(telopRef);
+    logDisplayLinkInfo("Display nowShowing cleared", { eventId, scheduleId });
     app.api.fireAndForgetApi({ action: "clearSelectingStatus" });
     app.api.logAction("CLEAR");
     app.toast("送出をクリアしました。", "success");
   } catch (error) {
+    logDisplayLinkError("Failed to clear nowShowing payload", error);
     app.toast("送出クリア中にエラーが発生しました: " + error.message, "error");
   }
 }
