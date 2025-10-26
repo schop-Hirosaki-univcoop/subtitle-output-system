@@ -48,6 +48,14 @@ import { EventChat } from "./chat.js";
 
 const HOST_PRESENCE_HEARTBEAT_MS = 60_000;
 const SCHEDULE_CONSENSUS_TOAST_MS = 3_000;
+const DISPLAY_LOCK_REASONS = new Set([
+  "schedule-commit",
+  "navigation",
+  "consensus-submit",
+  "consensus-apply",
+  "consensus-align",
+  "consensus-follow"
+]);
 
 function getTimerHost() {
   if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
@@ -2847,12 +2855,10 @@ export class EventAdminApp {
     }
     if (isFlowFromSchedules) {
       const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
-      if (!resolvedTarget || resolvedTarget === metaOrigin) {
-        const fallbackTarget = preferredTarget || "participants";
-        if (resolvedTarget !== fallbackTarget) {
-          resolvedTarget = fallbackTarget;
-          usedFallback = usedFallback || resolvedTarget !== pendingTarget;
-        }
+      const fallbackTarget = preferredTarget || "participants";
+      if (resolvedTarget !== fallbackTarget) {
+        usedFallback = usedFallback || resolvedTarget !== pendingTarget;
+        resolvedTarget = fallbackTarget;
       }
     }
     if (resolvedTarget) {
@@ -3122,6 +3128,14 @@ export class EventAdminApp {
         reason
       });
     }
+    if (normalizedId && this.shouldAutoLockDisplaySchedule(reason)) {
+      const scheduleForLock =
+        resolvedSchedule || this.schedules.find((item) => item.id === normalizedId) || null;
+      void this.requestDisplayScheduleLock(normalizedId, {
+        schedule: scheduleForLock,
+        reason
+      });
+    }
     return changed;
   }
 
@@ -3146,6 +3160,62 @@ export class EventAdminApp {
       changed
     });
     return true;
+  }
+
+  shouldAutoLockDisplaySchedule(reason = "") {
+    const normalized = ensureString(reason);
+    return DISPLAY_LOCK_REASONS.has(normalized);
+  }
+
+  async requestDisplayScheduleLock(scheduleId, { schedule = null, reason = "" } = {}) {
+    const eventId = ensureString(this.selectedEventId);
+    const normalizedScheduleId = ensureString(scheduleId);
+    if (!eventId || !normalizedScheduleId) {
+      this.logFlowState("ディスプレイ固定リクエストをスキップします", {
+        reason,
+        eventId,
+        scheduleId: normalizedScheduleId
+      });
+      return false;
+    }
+    if (!this.api) {
+      this.logFlowState("API未初期化のためディスプレイ固定リクエストをスキップします", {
+        reason,
+        eventId,
+        scheduleId: normalizedScheduleId
+      });
+      return false;
+    }
+    const scheduleLabel =
+      ensureString(schedule?.label) || ensureString(this.hostCommittedScheduleLabel) || normalizedScheduleId;
+    const operatorName =
+      ensureString(this.currentUser?.displayName) || ensureString(this.currentUser?.email) || "";
+    try {
+      await this.api.apiPost({
+        action: "lockDisplaySchedule",
+        eventId,
+        scheduleId: normalizedScheduleId,
+        scheduleLabel,
+        operatorName
+      });
+      this.logFlowState("ディスプレイのチャンネル固定を要求しました", {
+        eventId,
+        scheduleId: normalizedScheduleId,
+        scheduleLabel,
+        reason
+      });
+      return true;
+    } catch (error) {
+      this.logFlowState("ディスプレイのチャンネル固定に失敗しました", {
+        eventId,
+        scheduleId: normalizedScheduleId,
+        scheduleLabel,
+        reason,
+        error: error instanceof Error ? error.message : String(error ?? "")
+      });
+      logError("Failed to lock display schedule", error);
+      return false;
+    }
   }
 
   syncHostPresence(reason = "state-change") {
@@ -3457,12 +3527,10 @@ export class EventAdminApp {
         }
         if (isFlowFromSchedules) {
           const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
-          if (!resolvedTarget || resolvedTarget === metaOrigin) {
-            const fallbackTarget = preferredTarget || "participants";
-            if (resolvedTarget !== fallbackTarget) {
-              resolvedTarget = fallbackTarget;
-              usedFallback = usedFallback || resolvedTarget !== navTarget;
-            }
+          const fallbackTarget = preferredTarget || "participants";
+          if (resolvedTarget !== fallbackTarget) {
+            usedFallback = usedFallback || resolvedTarget !== navTarget;
+            resolvedTarget = fallbackTarget;
           }
         }
         if (resolvedTarget) {
@@ -4543,12 +4611,10 @@ export class EventAdminApp {
     }
     if (isFlowFromSchedules) {
       const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
-      if (!resolvedTarget || resolvedTarget === metaOrigin) {
-        const fallbackTarget = preferredTarget || "participants";
-        if (resolvedTarget !== fallbackTarget) {
-          resolvedTarget = fallbackTarget;
-          usedFallback = usedFallback || resolvedTarget !== pendingTarget;
-        }
+      const fallbackTarget = preferredTarget || "participants";
+      if (resolvedTarget !== fallbackTarget) {
+        usedFallback = usedFallback || resolvedTarget !== pendingTarget;
+        resolvedTarget = fallbackTarget;
       }
     }
     if (resolvedTarget) {
@@ -4815,6 +4881,14 @@ export class EventAdminApp {
       this.logFlowState("テロップ操作用のコミット済み日程を更新しました", {
         scheduleId: normalizedId || "",
         scheduleLabel: this.hostCommittedScheduleLabel || "",
+        reason
+      });
+    }
+    if (normalizedId && this.shouldAutoLockDisplaySchedule(reason)) {
+      const scheduleForLock =
+        resolvedSchedule || this.schedules.find((item) => item.id === normalizedId) || null;
+      void this.requestDisplayScheduleLock(normalizedId, {
+        schedule: scheduleForLock,
         reason
       });
     }
@@ -5156,12 +5230,10 @@ export class EventAdminApp {
         }
         if (isFlowFromSchedules) {
           const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
-          if (!resolvedTarget || resolvedTarget === metaOrigin) {
-            const fallbackTarget = preferredTarget || "participants";
-            if (resolvedTarget !== fallbackTarget) {
-              resolvedTarget = fallbackTarget;
-              usedFallback = usedFallback || resolvedTarget !== navTarget;
-            }
+          const fallbackTarget = preferredTarget || "participants";
+          if (resolvedTarget !== fallbackTarget) {
+            usedFallback = usedFallback || resolvedTarget !== navTarget;
+            resolvedTarget = fallbackTarget;
           }
         }
         if (resolvedTarget) {
