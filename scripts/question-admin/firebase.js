@@ -2,7 +2,7 @@ import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebase
 import {
   initializeAuth,
   getAuth,
-  browserSessionPersistence,
+  inMemoryPersistence,
   browserPopupRedirectResolver,
   GoogleAuthProvider,
   signInWithPopup,
@@ -20,7 +20,7 @@ const database = getDatabase(app);
 const auth = apps.length
   ? getAuth(app)
   : initializeAuth(app, {
-      persistence: browserSessionPersistence,
+      persistence: inMemoryPersistence,
       popupRedirectResolver: browserPopupRedirectResolver
     });
 const provider = new GoogleAuthProvider();

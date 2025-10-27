@@ -19,7 +19,7 @@ import {
 import {
   initializeAuth,
   getAuth,
-  browserSessionPersistence,
+  inMemoryPersistence,
   browserPopupRedirectResolver,
   GoogleAuthProvider,
   signInWithPopup,
@@ -37,7 +37,7 @@ export const database = getDatabase(app);
 export const auth = apps.length
   ? getAuth(app)
   : initializeAuth(app, {
-      persistence: browserSessionPersistence,
+      persistence: inMemoryPersistence,
       popupRedirectResolver: browserPopupRedirectResolver
     });
 export const provider = new GoogleAuthProvider();
