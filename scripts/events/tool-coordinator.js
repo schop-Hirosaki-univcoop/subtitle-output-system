@@ -140,6 +140,9 @@ export class ToolCoordinator {
       ensure(context.scheduleLabel),
       ensure(context.startAt),
       ensure(context.endAt),
+      ensure(context.committedScheduleId),
+      ensure(context.committedScheduleLabel),
+      ensure(context.committedScheduleKey),
       ensure(normalizeOperatorMode(context.operatorMode ?? this.app.operatorMode))
     ].join("::");
   }
