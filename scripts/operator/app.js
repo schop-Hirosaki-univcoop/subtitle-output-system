@@ -866,26 +866,45 @@ export class OperatorApp {
       return;
     }
 
-    const committedScheduleId = String(this.state?.committedScheduleId || "").trim();
-    const committedScheduleLabel = String(this.state?.committedScheduleLabel || "").trim();
-    const sessionId = String(this.operatorPresenceSessionId || "").trim() || this.generatePresenceSessionId();
-    let scheduleId = committedScheduleId;
-    let scheduleLabel = committedScheduleLabel;
-    let scheduleKey = String(this.state?.committedScheduleKey || "").trim();
-    if (!scheduleId) {
-      scheduleId = "";
-      scheduleLabel = "";
-      scheduleKey = "";
+    const ensure = (value) => String(value ?? "").trim();
+    const committedScheduleId = ensure(this.state?.committedScheduleId);
+    const committedScheduleLabel = ensure(this.state?.committedScheduleLabel);
+    const committedScheduleKey = ensure(this.state?.committedScheduleKey);
+    const activeScheduleId = ensure(this.state?.activeScheduleId || this.pageContext?.scheduleId);
+    const activeScheduleLabel = ensure(this.state?.activeScheduleLabel || this.pageContext?.scheduleLabel);
+    const activeScheduleKey = ensure(
+      this.state?.currentSchedule || this.state?.lastNormalSchedule || this.pageContext?.scheduleKey
+    );
+    const previousPresence = this.state?.operatorPresenceSelf || null;
+    const allowPresenceFallback = reason === "context-sync" || reason === "heartbeat";
+    const sessionId = ensure(this.operatorPresenceSessionId) || this.generatePresenceSessionId();
+
+    let scheduleId = committedScheduleId || activeScheduleId;
+    if (!scheduleId && allowPresenceFallback) {
+      scheduleId = ensure(previousPresence?.scheduleId);
+    }
+
+    let scheduleLabel = committedScheduleLabel || activeScheduleLabel;
+    if (!scheduleLabel && allowPresenceFallback) {
+      scheduleLabel = ensure(previousPresence?.scheduleLabel);
+    }
+    if (!scheduleLabel && scheduleId) {
+      scheduleLabel = scheduleId;
+    }
+
+    let scheduleKey = committedScheduleKey || activeScheduleKey;
+    if (!scheduleKey && allowPresenceFallback) {
+      scheduleKey = ensure(previousPresence?.scheduleKey);
     }
     if (!scheduleKey && scheduleId) {
       scheduleKey = this.derivePresenceScheduleKey(eventId, { scheduleId, scheduleLabel }, sessionId);
     }
-    if (!scheduleKey) {
+    if (!scheduleKey && scheduleLabel) {
       scheduleKey = this.derivePresenceScheduleKey(
         eventId,
         {
           scheduleId: "",
-          scheduleLabel: ""
+          scheduleLabel
         },
         sessionId
       );
