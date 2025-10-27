@@ -140,14 +140,51 @@ export class ToolCoordinator {
       ensure(context.scheduleLabel),
       ensure(context.startAt),
       ensure(context.endAt),
+      ensure(context.committedScheduleId),
+      ensure(context.committedScheduleLabel),
+      ensure(context.committedScheduleKey),
       ensure(normalizeOperatorMode(context.operatorMode ?? this.app.operatorMode))
     ].join("::");
   }
 
   async syncOperatorContext({ context: overrideContext = null, force = false, reason = "unspecified" } = {}) {
+    const selectionContext = this.app?.getCurrentSelectionContext?.() || {};
     const baseContext = overrideContext && typeof overrideContext === "object"
       ? { ...overrideContext }
-      : { ...this.app.getCurrentSelectionContext() };
+      : { ...selectionContext };
+    const ensure = (value) => String(value ?? "").trim();
+    const populateIfMissing = (key) => {
+      if (ensure(baseContext[key])) {
+        return;
+      }
+      const fallback = selectionContext[key];
+      if (ensure(fallback)) {
+        baseContext[key] = fallback;
+      }
+    };
+    populateIfMissing("eventId");
+    populateIfMissing("scheduleId");
+    populateIfMissing("scheduleLabel");
+    populateIfMissing("startAt");
+    populateIfMissing("endAt");
+    populateIfMissing("committedScheduleId");
+    populateIfMissing("committedScheduleLabel");
+    populateIfMissing("committedScheduleKey");
+    if (
+      !ensure(baseContext.committedScheduleKey) &&
+      ensure(baseContext.eventId) &&
+      ensure(baseContext.committedScheduleId) &&
+      typeof this.app?.derivePresenceScheduleKey === "function"
+    ) {
+      baseContext.committedScheduleKey = this.app.derivePresenceScheduleKey(
+        baseContext.eventId,
+        {
+          scheduleId: baseContext.committedScheduleId,
+          scheduleLabel: baseContext.committedScheduleLabel
+        },
+        ensure(this.app?.hostPresenceSessionId)
+      );
+    }
     baseContext.operatorMode = normalizeOperatorMode(
       baseContext.operatorMode ?? this.app.operatorMode
     );
