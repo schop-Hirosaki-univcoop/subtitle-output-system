@@ -170,16 +170,58 @@ export class ToolCoordinator {
     populateIfMissing("committedScheduleId");
     populateIfMissing("committedScheduleLabel");
     populateIfMissing("committedScheduleKey");
+    const committedScheduleId = ensure(baseContext.committedScheduleId);
+    const getScheduleDetail = (id) => {
+      if (!id || !this.app) {
+        return null;
+      }
+      if (Array.isArray(this.app.schedules)) {
+        return this.app.schedules.find((schedule) => ensure(schedule?.id) === id) || null;
+      }
+      if (typeof this.app.getSchedule === "function") {
+        try {
+          return this.app.getSchedule(id) || null;
+        } catch (error) {
+          // Ignore lookup errors and fall back to other strategies.
+        }
+      }
+      return null;
+    };
+
+    const committedSchedule = committedScheduleId ? getScheduleDetail(committedScheduleId) : null;
+
+    if (committedScheduleId) {
+      if (!ensure(baseContext.committedScheduleLabel)) {
+        const fallbackLabel = ensure(selectionContext.committedScheduleLabel) ||
+          ensure(this.app?.hostCommittedScheduleLabel);
+        baseContext.committedScheduleLabel = fallbackLabel || ensure(committedSchedule?.label) || committedScheduleId;
+      }
+      if (!ensure(baseContext.scheduleId)) {
+        baseContext.scheduleId = committedScheduleId;
+      }
+      if (!ensure(baseContext.scheduleLabel)) {
+        baseContext.scheduleLabel = ensure(baseContext.committedScheduleLabel) ||
+          ensure(committedSchedule?.label) ||
+          committedScheduleId;
+      }
+      if (!ensure(baseContext.startAt) && committedSchedule?.startAt) {
+        baseContext.startAt = committedSchedule.startAt;
+      }
+      if (!ensure(baseContext.endAt) && committedSchedule?.endAt) {
+        baseContext.endAt = committedSchedule.endAt;
+      }
+    }
+
     if (
       !ensure(baseContext.committedScheduleKey) &&
       ensure(baseContext.eventId) &&
-      ensure(baseContext.committedScheduleId) &&
+      committedScheduleId &&
       typeof this.app?.derivePresenceScheduleKey === "function"
     ) {
       baseContext.committedScheduleKey = this.app.derivePresenceScheduleKey(
         baseContext.eventId,
         {
-          scheduleId: baseContext.committedScheduleId,
+          scheduleId: committedScheduleId,
           scheduleLabel: baseContext.committedScheduleLabel
         },
         ensure(this.app?.hostPresenceSessionId)
