@@ -1017,9 +1017,16 @@ export class EventAdminApp {
 
   getCurrentSelectionContext() {
     const event = this.getSelectedEvent();
-    const schedule = this.getSelectedSchedule();
+    const selectedSchedule = this.getSelectedSchedule();
     const committedScheduleId = ensureString(this.hostCommittedScheduleId);
     const committedScheduleLabel = ensureString(this.hostCommittedScheduleLabel);
+    const committedSchedule = committedScheduleId ? this.getCommittedSchedule() : null;
+    const schedule = selectedSchedule || committedSchedule || null;
+    const fallbackScheduleId = ensureString(this.selectedScheduleId) || committedScheduleId;
+    const scheduleId = ensureString(schedule?.id) || fallbackScheduleId;
+    const scheduleLabel = ensureString(schedule?.label) || committedScheduleLabel || scheduleId;
+    const startAt = ensureString(schedule?.startAt) || ensureString(committedSchedule?.startAt);
+    const endAt = ensureString(schedule?.endAt) || ensureString(committedSchedule?.endAt);
     const committedScheduleKey = committedScheduleId
       ? this.derivePresenceScheduleKey(
           ensureString(event?.id || ""),
@@ -1030,10 +1037,10 @@ export class EventAdminApp {
     return {
       eventId: event?.id || "",
       eventName: event?.name || event?.id || "",
-      scheduleId: schedule?.id || "",
-      scheduleLabel: schedule?.label || schedule?.id || "",
-      startAt: schedule?.startAt || "",
-      endAt: schedule?.endAt || "",
+      scheduleId,
+      scheduleLabel,
+      startAt,
+      endAt,
       operatorMode: this.operatorMode,
       committedScheduleId,
       committedScheduleLabel,
@@ -3228,6 +3235,11 @@ export class EventAdminApp {
       reason,
       changed
     });
+    if (this.tools?.syncOperatorContext) {
+      this.tools
+        .syncOperatorContext({ force: true, reason: "schedule-commit" })
+        .catch((error) => logError("Failed to sync operator context after schedule commit", error));
+    }
     return true;
   }
 
@@ -5261,6 +5273,11 @@ export class EventAdminApp {
       reason,
       changed
     });
+    if (this.tools?.syncOperatorContext) {
+      this.tools
+        .syncOperatorContext({ force: true, reason: "schedule-commit" })
+        .catch((error) => logError("Failed to sync operator context after schedule commit", error));
+    }
     return true;
   }
 
