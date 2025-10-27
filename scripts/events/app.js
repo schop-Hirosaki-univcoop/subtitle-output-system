@@ -140,7 +140,8 @@ export class EventAdminApp {
     this.awaitingScheduleConflictPrompt = false;
     this.scheduleConflictRadioName = generateShortId("flow-conflict-radio-");
     this.scheduleFallbackRadioName = generateShortId("flow-fallback-radio-");
-    this.flowDebugEnabled = true;
+    this.flowDebugEnabled = false;
+    this.operatorPresenceDebugEnabled = true;
     this.scheduleConsensusEventId = "";
     this.scheduleConsensusUnsubscribe = null;
     this.scheduleConsensusState = null;
@@ -283,6 +284,60 @@ export class EventAdminApp {
     }
     payload.flowState = state;
     this.logFlowEvent(message, payload);
+  }
+
+  logOperatorPresenceDebug(message, detail = null) {
+    if (!this.operatorPresenceDebugEnabled) {
+      return;
+    }
+    const timestamp = new Date().toISOString();
+    const prefix = `[Presence] ${timestamp} ${message}`;
+    if (detail && typeof detail === "object" && Object.keys(detail).length > 0) {
+      console.info(prefix, detail);
+    } else if (typeof detail !== "undefined" && detail !== null) {
+      console.info(prefix, detail);
+    } else {
+      console.info(prefix);
+    }
+  }
+
+  describeOperatorPresenceEntries(entries = []) {
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return [];
+    }
+    return entries.map((entry) => ({
+      sessionId: ensureString(entry?.sessionId || entry?.entryId),
+      uid: ensureString(entry?.uid),
+      displayName: ensureString(entry?.displayName),
+      scheduleId: ensureString(entry?.scheduleId),
+      scheduleLabel: ensureString(entry?.scheduleLabel),
+      scheduleKey: ensureString(entry?.scheduleKey),
+      mode: normalizeOperatorMode(entry?.mode),
+      source: ensureString(entry?.source),
+      isSelf: Boolean(entry?.isSelf)
+    }));
+  }
+
+  describeOperatorPresencePayload(payload = null) {
+    if (!payload || typeof payload !== "object") {
+      return {};
+    }
+    return {
+      sessionId: ensureString(payload.sessionId),
+      uid: ensureString(payload.uid),
+      displayName:
+        ensureString(payload.displayName) ||
+        ensureString(payload.email) ||
+        ensureString(payload.uid),
+      eventId: ensureString(payload.eventId),
+      eventName: ensureString(payload.eventName),
+      scheduleId: ensureString(payload.scheduleId),
+      scheduleLabel: ensureString(payload.scheduleLabel),
+      scheduleKey: ensureString(payload.scheduleKey),
+      mode: normalizeOperatorMode(payload.mode),
+      reason: ensureString(payload.reason),
+      source: ensureString(payload.source)
+    };
   }
 
   init() {
@@ -1017,9 +1072,16 @@ export class EventAdminApp {
 
   getCurrentSelectionContext() {
     const event = this.getSelectedEvent();
-    const schedule = this.getSelectedSchedule();
+    const selectedSchedule = this.getSelectedSchedule();
     const committedScheduleId = ensureString(this.hostCommittedScheduleId);
     const committedScheduleLabel = ensureString(this.hostCommittedScheduleLabel);
+    const committedSchedule = committedScheduleId ? this.getCommittedSchedule() : null;
+    const schedule = selectedSchedule || committedSchedule || null;
+    const fallbackScheduleId = ensureString(this.selectedScheduleId) || committedScheduleId;
+    const scheduleId = ensureString(schedule?.id) || fallbackScheduleId;
+    const scheduleLabel = ensureString(schedule?.label) || committedScheduleLabel || scheduleId;
+    const startAt = ensureString(schedule?.startAt) || ensureString(committedSchedule?.startAt);
+    const endAt = ensureString(schedule?.endAt) || ensureString(committedSchedule?.endAt);
     const committedScheduleKey = committedScheduleId
       ? this.derivePresenceScheduleKey(
           ensureString(event?.id || ""),
@@ -1030,10 +1092,10 @@ export class EventAdminApp {
     return {
       eventId: event?.id || "",
       eventName: event?.name || event?.id || "",
-      scheduleId: schedule?.id || "",
-      scheduleLabel: schedule?.label || schedule?.id || "",
-      startAt: schedule?.startAt || "",
-      endAt: schedule?.endAt || "",
+      scheduleId,
+      scheduleLabel,
+      startAt,
+      endAt,
       operatorMode: this.operatorMode,
       committedScheduleId,
       committedScheduleLabel,
@@ -2377,6 +2439,11 @@ export class EventAdminApp {
   normalizeOperatorPresenceEntries(raw = {}, eventId = "") {
     const entries = [];
     if (!raw || typeof raw !== "object") {
+      this.logOperatorPresenceDebug("Read operator presence snapshot", {
+        eventId: ensureString(eventId),
+        entryCount: 0,
+        entries: []
+      });
       return entries;
     }
     const selfUid = ensureString(this.currentUser?.uid);
@@ -2408,6 +2475,12 @@ export class EventAdminApp {
       });
     });
     entries.sort((a, b) => a.displayName.localeCompare(b.displayName, "ja"));
+    const summary = this.describeOperatorPresenceEntries(entries);
+    this.logOperatorPresenceDebug("Read operator presence snapshot", {
+      eventId: ensureString(eventId),
+      entryCount: summary.length,
+      entries: summary
+    });
     return entries;
   }
 
@@ -3128,6 +3201,15 @@ export class EventAdminApp {
       return;
     }
     const now = Date.now();
+    const key = ensureString(this.hostPresenceEntryKey);
+    const [eventIdPart = "", sessionIdPart = ""] = key.split("/");
+    this.logOperatorPresenceDebug("Write operator presence heartbeat", {
+      eventId: ensureString(eventIdPart) || ensureString(this.selectedEventId),
+      sessionId: ensureString(sessionIdPart),
+      update: {
+        clientTimestamp: now
+      }
+    });
     update(this.hostPresenceEntryRef, {
       updatedAt: serverTimestamp(),
       clientTimestamp: now
@@ -3154,8 +3236,15 @@ export class EventAdminApp {
     const entryRef = this.hostPresenceEntryRef;
     this.hostPresenceEntryRef = null;
     const hadKey = !!this.hostPresenceEntryKey;
+    const entryKey = ensureString(this.hostPresenceEntryKey);
     this.hostPresenceEntryKey = "";
     if (entryRef && hadKey) {
+      const [eventIdPart = "", sessionIdPart = ""] = entryKey.split("/");
+      this.logOperatorPresenceDebug("Remove operator presence entry", {
+        eventId: ensureString(eventIdPart) || ensureString(this.selectedEventId),
+        sessionId: ensureString(sessionIdPart),
+        reason: "clear-host-presence"
+      });
       remove(entryRef).catch((error) => {
         console.debug("Failed to clear host presence:", error);
       });
@@ -3228,6 +3317,11 @@ export class EventAdminApp {
       reason,
       changed
     });
+    if (this.tools?.syncOperatorContext) {
+      this.tools
+        .syncOperatorContext({ force: true, reason: "schedule-commit" })
+        .catch((error) => logError("Failed to sync operator context after schedule commit", error));
+    }
     return true;
   }
 
@@ -3383,11 +3477,14 @@ export class EventAdminApp {
     }
     try {
       const snapshot = await get(getOperatorPresenceEventRef(normalizedEventId));
-      if (!snapshot.exists()) {
-        return [];
-      }
-      const raw = snapshot.val();
+      const raw = snapshot.exists() ? snapshot.val() : {};
       if (!raw || typeof raw !== "object") {
+        this.logOperatorPresenceDebug("Read operator presence (get)", {
+          eventId: normalizedEventId,
+          uid: normalizedUid,
+          entryCount: 0,
+          entries: []
+        });
         return [];
       }
       const entries = [];
@@ -3417,6 +3514,17 @@ export class EventAdminApp {
         });
       });
       entries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      this.logOperatorPresenceDebug("Read operator presence (get)", {
+        eventId: normalizedEventId,
+        uid: normalizedUid,
+        entryCount: entries.length,
+        entries: entries.map((entry) => ({
+          entryId: ensureString(entry.entryId),
+          sessionId: ensureString(entry.sessionId),
+          source: ensureString(entry.source),
+          updatedAt: Number(entry.updatedAt || 0) || 0
+        }))
+      });
       return entries;
     } catch (error) {
       console.debug("Failed to fetch host presence entries:", error);
@@ -3436,6 +3544,10 @@ export class EventAdminApp {
         return;
       }
       try {
+        this.logOperatorPresenceDebug("Remove stale operator presence entry", {
+          eventId: normalizedEventId,
+          sessionId: entrySessionId
+        });
         remove(getOperatorPresenceEntryRef(normalizedEventId, entrySessionId)).catch(() => {});
       } catch (error) {
         console.debug("Failed to remove stale host presence entry:", error);
@@ -3611,6 +3723,12 @@ export class EventAdminApp {
       reason,
       source: "events"
     };
+
+    this.logOperatorPresenceDebug("Write operator presence entry", {
+      eventId,
+      sessionId,
+      payload: this.describeOperatorPresencePayload(payload)
+    });
 
     set(entryRef, payload).catch((error) => {
       console.error("Failed to persist host presence:", error);
@@ -5261,6 +5379,11 @@ export class EventAdminApp {
       reason,
       changed
     });
+    if (this.tools?.syncOperatorContext) {
+      this.tools
+        .syncOperatorContext({ force: true, reason: "schedule-commit" })
+        .catch((error) => logError("Failed to sync operator context after schedule commit", error));
+    }
     return true;
   }
 
