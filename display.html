@@ -101,7 +101,6 @@
     #telop-canvas .name-tag{
       position: absolute;
       top:  calc(-1 * 5vw);
-      left: var(--radius);
       padding: 0.5vw 1vw 0vw;
       border-radius: 1vw 1vw 0 0;          /* 左上にくっつくインデックス形状 */
       background: rgba(20, 35, 45, 0.90);              /* 現行デザイン踏襲（透明・ガラス感） */
@@ -140,7 +139,7 @@
       width:100%;
       background: linear-gradient(180deg, var(--seat-bg1), var(--seat-bg2));
       border: 0.2vw solid var(--seat-border);
-      border-radius: var(--radius);
+      border-radius: 0 var(--radius) var(--radius);
       box-shadow: var(--shadow);
       backdrop-filter: blur(1vw) saturate(150%);
       -webkit-backdrop-filter: blur(1vw) saturate(150%);
