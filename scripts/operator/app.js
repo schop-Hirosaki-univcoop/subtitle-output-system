@@ -312,6 +312,8 @@ export class OperatorApp {
     this.operatorPresencePrimeTargetEventId = "";
     this.conflictDialogOpen = false;
     this.operatorMode = OPERATOR_MODE_TELOP;
+    this.currentConflictSignature = "";
+    this.conflictDialogSnoozedSignature = "";
 
     this.toast = showToast;
     bindModuleMethods(this);
@@ -1413,6 +1415,7 @@ export class OperatorApp {
       this.state.autoLockAttemptKey = "";
       this.state.autoLockAttemptAt = 0;
       if (fromModal) {
+        this.snoozeConflictDialog(this.currentConflictSignature);
         this.closeConflictDialog();
       }
       return appliedAssignment;
@@ -1437,6 +1440,72 @@ export class OperatorApp {
       this.renderChannelBanner();
       this.evaluateScheduleConflict();
     }
+  }
+
+  computeConflictSignature(options = []) {
+    if (!Array.isArray(options) || options.length === 0) {
+      return "";
+    }
+    const keys = options
+      .map((option) => {
+        if (!option || typeof option !== "object") {
+          return "";
+        }
+        const key = String(option.key || "").trim();
+        if (key) {
+          return key;
+        }
+        const eventId = String(option.eventId || "").trim();
+        const scheduleId = normalizeScheduleId(option.scheduleId || "");
+        if (eventId && scheduleId) {
+          return `${eventId}::${scheduleId}`;
+        }
+        return scheduleId || eventId;
+      })
+      .filter(Boolean)
+      .sort();
+    if (!keys.length) {
+      return "";
+    }
+    return keys.join("|");
+  }
+
+  snoozeConflictDialog(signature = "") {
+    if (!signature) {
+      return;
+    }
+    this.conflictDialogSnoozedSignature = signature;
+  }
+
+  isConflictDialogSnoozed(signature = "", options = [], { uniqueKeys = new Set(), channelAligned = false, assignmentAlignedKey = "" } = {}) {
+    if (!signature || !this.conflictDialogSnoozedSignature) {
+      return false;
+    }
+    if (signature !== this.conflictDialogSnoozedSignature) {
+      return false;
+    }
+    if (!channelAligned) {
+      return false;
+    }
+    const currentKey = this.getCurrentScheduleKey();
+    if (!currentKey) {
+      return false;
+    }
+    if (assignmentAlignedKey && assignmentAlignedKey !== currentKey) {
+      return false;
+    }
+    if (uniqueKeys && !uniqueKeys.has(currentKey)) {
+      return false;
+    }
+    const targetOption = Array.isArray(options) ? options.find((option) => option && option.key === currentKey) : null;
+    if (!targetOption) {
+      return false;
+    }
+    const members = Array.isArray(targetOption.members) ? targetOption.members : [];
+    if (!members.some((member) => member && member.isSelf)) {
+      return false;
+    }
+    return true;
   }
 
   applyAssignmentLocally(assignment) {
@@ -1539,9 +1608,16 @@ export class OperatorApp {
       this.state.scheduleConflict = null;
       this.state.conflictSelection = "";
       this.closeConflictDialog();
+      this.currentConflictSignature = "";
+      this.conflictDialogSnoozedSignature = "";
       return;
     }
     options.sort((a, b) => (a.label || "").localeCompare(b.label || "", "ja"));
+    const conflictSignature = this.computeConflictSignature(options);
+    if (conflictSignature && this.conflictDialogSnoozedSignature && conflictSignature !== this.conflictDialogSnoozedSignature) {
+      this.conflictDialogSnoozedSignature = "";
+    }
+    this.currentConflictSignature = conflictSignature;
     const uniqueKeys = new Set(options.map((opt) => opt.key));
     const channelAligned = !this.hasChannelMismatch();
     const now = Date.now();
@@ -1549,6 +1625,12 @@ export class OperatorApp {
     if (!shouldPrompt && !channelAligned) {
       shouldPrompt = true;
     }
+    const assignmentAlignedKey = assignmentKey && uniqueKeys.has(assignmentKey) ? assignmentKey : "";
+    const suppressed = this.isConflictDialogSnoozed(conflictSignature, options, {
+      uniqueKeys,
+      channelAligned,
+      assignmentAlignedKey
+    });
     if (uniqueKeys.size === 1) {
       const soleOption = options[0] || null;
       const soleKey = soleOption?.key || "";
@@ -1574,6 +1656,26 @@ export class OperatorApp {
       this.state.scheduleConflict = null;
       this.state.conflictSelection = "";
       this.closeConflictDialog();
+      if (!uniqueKeys.size) {
+        this.conflictDialogSnoozedSignature = "";
+      }
+      return;
+    }
+    if (suppressed) {
+      this.state.scheduleConflict = { eventId, assignmentKey, options };
+      if (!this.state.conflictSelection || !uniqueKeys.has(this.state.conflictSelection)) {
+        const preferredKey = this.getCurrentScheduleKey();
+        if (uniqueKeys.has(preferredKey)) {
+          this.state.conflictSelection = preferredKey;
+        } else if (assignmentKey && uniqueKeys.has(assignmentKey)) {
+          this.state.conflictSelection = assignmentKey;
+        } else {
+          this.state.conflictSelection = options[0]?.key || "";
+        }
+      }
+      if (this.conflictDialogOpen) {
+        this.closeConflictDialog();
+      }
       return;
     }
     this.state.scheduleConflict = { eventId, assignmentKey, options };
