@@ -8,7 +8,9 @@ import {
   remove,
   auth,
   signOut,
+  signInWithCredential,
   onAuthStateChanged,
+  GoogleAuthProvider,
   onValue,
   serverTimestamp,
   onDisconnect,
@@ -45,6 +47,7 @@ import {
 } from "./config.js";
 import { ToolCoordinator } from "./tool-coordinator.js";
 import { EventChat } from "./chat.js";
+import { consumeAuthTransfer } from "../shared/auth-transfer.js";
 
 const HOST_PRESENCE_HEARTBEAT_MS = 60_000;
 const SCHEDULE_CONSENSUS_TOAST_MS = 3_000;
@@ -158,6 +161,7 @@ export class EventAdminApp {
     this.activeMobilePanel = "";
     this.chatUnreadCount = 0;
     this.chatScrollUnreadCount = 0;
+    this.authTransferAttempted = false;
     this.chatAcknowledged = true;
     this.chatMessages = [];
     this.chatLatestMessageId = "";
@@ -689,12 +693,54 @@ export class EventAdminApp {
     }
   }
 
+  async tryResumeAuth() {
+    if (this.authTransferAttempted) {
+      return false;
+    }
+    this.authTransferAttempted = true;
+    const transfer = consumeAuthTransfer();
+    if (!transfer) {
+      return false;
+    }
+
+    const providerId = transfer.providerId || "";
+    if (providerId && providerId !== GoogleAuthProvider.PROVIDER_ID) {
+      logError("Unsupported auth transfer provider", new Error(providerId));
+      return false;
+    }
+
+    const idToken = transfer.idToken || "";
+    const accessToken = transfer.accessToken || "";
+    if (!idToken && !accessToken) {
+      return false;
+    }
+
+    const credential = GoogleAuthProvider.credential(
+      idToken || undefined,
+      accessToken || undefined
+    );
+    if (!credential) {
+      return false;
+    }
+
+    try {
+      await signInWithCredential(auth, credential);
+      return true;
+    } catch (error) {
+      logError("Failed to resume auth from transfer payload", error);
+      return false;
+    }
+  }
+
   async handleAuthState(user) {
     this.currentUser = user;
     this.chat.handleAuthChange(user);
     this.startChatReadListener(user);
     this.updateUserLabel();
     if (!user) {
+      if (await this.tryResumeAuth()) {
+        return;
+      }
       this.clearHostPresence();
       this.events = [];
       this.renderEvents();

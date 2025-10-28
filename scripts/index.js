@@ -1,4 +1,11 @@
-import { auth, provider, signInWithPopup, onAuthStateChanged } from "./operator/firebase.js";
+import {
+  auth,
+  provider,
+  GoogleAuthProvider,
+  signInWithPopup,
+  onAuthStateChanged
+} from "./operator/firebase.js";
+import { storeAuthTransfer, clearAuthTransfer } from "./shared/auth-transfer.js";
 
 const loginButton = document.getElementById("login-button");
 const loginError = document.getElementById("login-error");
@@ -43,9 +50,21 @@ async function login() {
   try {
     setBusy(true);
     setError("");
-    await signInWithPopup(auth, provider);
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential && (credential.idToken || credential.accessToken)) {
+      storeAuthTransfer({
+        providerId: credential.providerId || GoogleAuthProvider.PROVIDER_ID,
+        signInMethod: credential.signInMethod || "",
+        idToken: credential.idToken || "",
+        accessToken: credential.accessToken || ""
+      });
+    } else {
+      clearAuthTransfer();
+    }
   } catch (error) {
     console.error("Login failed:", error);
+    clearAuthTransfer();
     const code = error?.code || "";
     let message = "ログインに失敗しました。もう一度お試しください。";
     if (code === "auth/popup-closed-by-user") {
@@ -78,5 +97,6 @@ onAuthStateChanged(auth, (user) => {
     return;
   }
   redirecting = true;
+  clearAuthTransfer();
   window.location.replace("events.html");
 });
