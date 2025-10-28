@@ -26,6 +26,7 @@ export function queryDom() {
     eventSummaryActions: document.getElementById("flow-event-summary-actions"),
     eventSummaryCopyButton: document.getElementById("flow-event-summary-copy"),
     eventSummaryCopyStatus: document.getElementById("flow-event-summary-copy-status"),
+    eventSummaryGotoScheduleButton: document.getElementById("flow-event-summary-goto-schedule"),
     scheduleLoading: document.getElementById("flow-schedule-loading"),
     scheduleLoadingText: document.getElementById("flow-schedule-loading-text"),
     scheduleSelectionNote: document.getElementById("flow-schedule-selection-note"),

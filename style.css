@@ -4039,6 +4039,15 @@ body.sidebar-overlay-open{
   outline-offset:2px;
 }
 
+.entity-item.is-focus-flash{
+  animation:entityFocusFlash 1.2s ease-out;
+}
+
+@keyframes entityFocusFlash{
+  from{ box-shadow:0 0 0 0 rgba(0,155,255,.32); }
+  to{ box-shadow:0 0 0 28px rgba(0,155,255,0); }
+}
+
 .entity-label{
   display:flex;
   flex-direction:column;
