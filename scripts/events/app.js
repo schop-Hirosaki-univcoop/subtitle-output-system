@@ -134,6 +134,8 @@ export class EventAdminApp {
     this.cachedHostPresenceStorage = undefined;
     this.hostCommittedScheduleId = "";
     this.hostCommittedScheduleLabel = "";
+    this.eventSelectionCommitted = false;
+    this.scheduleSelectionCommitted = false;
     this.scheduleConflictContext = null;
     this.scheduleConflictLastSignature = "";
     this.scheduleConflictPromptSignature = "";
@@ -1058,6 +1060,11 @@ export class EventAdminApp {
     this.selectedEventId = normalized;
     const changed = previous !== normalized;
     if (changed) {
+      this.eventSelectionCommitted = false;
+      this.scheduleSelectionCommitted = false;
+      this.clearHostPresence();
+    }
+    if (changed) {
       this.logFlowState("イベント選択を更新しました", {
         eventId: normalized || "",
         previousEventId: previous || ""
@@ -1080,10 +1087,27 @@ export class EventAdminApp {
     this.updateScheduleConflictState();
     this.syncOperatorPresenceSubscription();
     this.syncScheduleConsensusSubscription();
-    this.syncHostPresence(changed ? "event-change" : "event-state");
     if (changed) {
       this.notifySelectionListeners("host");
     }
+  }
+
+  confirmEventSelection({ reason = "event-confirm" } = {}) {
+    const eventId = ensureString(this.selectedEventId);
+    if (!eventId) {
+      this.logFlowState("イベント未選択のため確定できません", { reason });
+      return false;
+    }
+    if (!this.eventSelectionCommitted) {
+      this.eventSelectionCommitted = true;
+      this.scheduleSelectionCommitted = false;
+      this.hostPresenceLastSignature = "";
+      this.logFlowState("イベント選択を確定しました", { eventId, reason });
+    } else {
+      this.logFlowState("イベント選択は既に確定済みです", { eventId, reason });
+    }
+    this.syncHostPresence(reason);
+    return true;
   }
 
   ensureSelectedSchedule(preferredId = "") {
@@ -1167,7 +1191,9 @@ export class EventAdminApp {
         : new Map(this.schedules.map((schedule) => [schedule.id, schedule]));
     const selectedScheduleId = ensureString(this.selectedScheduleId);
     const committedScheduleId = ensureString(this.hostCommittedScheduleId);
-    const resolvedScheduleId = selectedScheduleId || committedScheduleId;
+    const resolvedScheduleId = this.scheduleSelectionCommitted
+      ? selectedScheduleId || committedScheduleId
+      : "";
     const schedule = resolvedScheduleId ? map.get(resolvedScheduleId) || null : null;
     let scheduleLabel = "";
     if (resolvedScheduleId) {
@@ -1735,6 +1761,7 @@ export class EventAdminApp {
         previousScheduleId: previous || ""
       });
       this.tools.resetContext();
+      this.scheduleSelectionCommitted = false;
     } else {
       this.logFlowState("日程選択は既に最新の状態です", {
         scheduleId: normalized || ""
@@ -1748,7 +1775,6 @@ export class EventAdminApp {
     this.showPanel(this.activePanel);
     this.tools.prepareContextForSelection();
     this.updateScheduleConflictState();
-    this.syncHostPresence(changed ? "schedule-change" : "schedule-state");
     if (changed) {
       this.syncOperatorPresenceSubscription();
       this.notifySelectionListeners("host");
@@ -1772,7 +1798,9 @@ export class EventAdminApp {
     this.showPanel(this.activePanel);
     this.tools.prepareContextForSelection();
     this.updateScheduleConflictState();
-    this.syncHostPresence("schedule-sync");
+    if (this.eventSelectionCommitted) {
+      this.syncHostPresence("schedule-sync");
+    }
   }
 
   renderScheduleList() {
@@ -2476,6 +2504,13 @@ export class EventAdminApp {
       this.lastScheduleCommitChanged = false;
     }
     this.schedulePendingNavigationClear();
+    if (normalized === "schedules") {
+      const confirmed = this.confirmEventSelection({ reason: "event-confirm" });
+      if (!confirmed) {
+        this.lastScheduleCommitChanged = false;
+        return;
+      }
+    }
     this.showPanel(normalized);
     this.logFlowState("フローナビゲーションを実行しました", {
       target: normalized,
@@ -2908,6 +2943,12 @@ export class EventAdminApp {
     const hostScheduleLabel = ensureString(hostContext.scheduleLabel);
     const hostScheduleRange = ensureString(hostContext.scheduleRange);
     const hostSchedule = hostContext.schedule || (hostScheduleId ? scheduleMap.get(hostScheduleId) || null : null);
+    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
+    const committedSchedule = committedScheduleId ? scheduleMap.get(committedScheduleId) || null : null;
+    const committedScheduleLabel = ensureString(this.hostCommittedScheduleLabel) || committedSchedule?.label || committedScheduleId;
+    const committedScheduleRange = committedSchedule
+      ? formatScheduleRange(committedSchedule.startAt, committedSchedule.endAt)
+      : "";
 
     const selfEntry = entries.find((entry) => entry.isSelf);
     if (selfEntry) {
@@ -2925,6 +2966,9 @@ export class EventAdminApp {
     context.hostScheduleRange = hostScheduleRange;
     context.hostSelectedScheduleId = ensureString(hostContext.selectedScheduleId);
     context.hostCommittedScheduleId = ensureString(hostContext.committedScheduleId);
+    context.telopScheduleId = committedScheduleId;
+    context.telopScheduleLabel = committedScheduleLabel;
+    context.telopScheduleRange = committedScheduleRange;
 
     if (!hasSelfPresence && hostScheduleId) {
       entries.push({
@@ -3009,11 +3053,12 @@ export class EventAdminApp {
     const uniqueSelectableKeys = new Set(
       selectableOptions.map((option) => option.key || option.scheduleId || "")
     );
-    context.hasConflict =
-      Boolean(context.hostScheduleId) &&
-      context.hasOtherOperators &&
-      selectableOptions.length > 1 &&
-      uniqueSelectableKeys.size > 1;
+    const telopScheduleId = committedScheduleId;
+    const conflictingTelopEntries = telopEntries.filter((entry) => {
+      const entryScheduleId = ensureString(entry.scheduleId);
+      return Boolean(telopScheduleId && entryScheduleId && entryScheduleId !== telopScheduleId);
+    });
+    context.hasConflict = Boolean(telopScheduleId) && conflictingTelopEntries.length > 0;
     const preferredOption =
       selectableOptions.find((option) => option.containsSelf) || selectableOptions[0] || null;
     context.defaultKey = preferredOption?.key || "";
@@ -3052,7 +3097,7 @@ export class EventAdminApp {
       button.setAttribute("data-conflict-pending", "true");
       button.setAttribute(
         "title",
-        "他のオペレーターと日程の調整が必要です。「次へ」で日程を確定してください。"
+        "他のオペレーターと日程の調整が必要です。「確定」で日程を確定してください。"
       );
     } else {
       button.removeAttribute("data-conflict-pending");
@@ -3671,6 +3716,11 @@ export class EventAdminApp {
     const changed = previousId !== normalizedId || previousLabel !== nextLabel;
     this.hostCommittedScheduleId = normalizedId;
     this.hostCommittedScheduleLabel = normalizedId ? nextLabel : "";
+    if (normalizedId) {
+      this.scheduleSelectionCommitted = true;
+    } else {
+      this.scheduleSelectionCommitted = false;
+    }
     if (force) {
       this.hostPresenceLastSignature = "";
     }
@@ -3688,6 +3738,10 @@ export class EventAdminApp {
         scheduleLabel: this.hostCommittedScheduleLabel || "",
         reason
       });
+      this.renderScheduleList();
+      this.updateScheduleSummary();
+      this.updateStageHeader();
+      this.updateSelectionNotes();
     }
     if (normalizedId && this.shouldAutoLockDisplaySchedule(reason)) {
       const scheduleForLock =
@@ -3716,6 +3770,7 @@ export class EventAdminApp {
       force: true
     });
     this.lastScheduleCommitChanged = changed;
+    this.scheduleSelectionCommitted = true;
     this.logFlowState("テロップ操作の日程の確定リクエストを処理しました", {
       scheduleId,
       scheduleLabel: schedule?.label || scheduleId,
@@ -4015,6 +4070,15 @@ export class EventAdminApp {
       return;
     }
 
+    if (!this.eventSelectionCommitted) {
+      this.clearHostPresence();
+      this.logFlowState("イベント未確定のため在席情報の更新を保留します", {
+        reason,
+        eventId
+      });
+      return;
+    }
+
     const presenceEntries = Array.isArray(this.operatorPresenceEntries)
       ? this.operatorPresenceEntries
       : [];
@@ -4178,6 +4242,8 @@ export class EventAdminApp {
     this.operatorPresenceEntries = [];
     this.hostCommittedScheduleId = "";
     this.hostCommittedScheduleLabel = "";
+    this.eventSelectionCommitted = false;
+    this.scheduleSelectionCommitted = false;
     this.scheduleConflictContext = null;
     this.scheduleConflictLastSignature = "";
     this.scheduleConflictPromptSignature = "";
@@ -5037,6 +5103,12 @@ export class EventAdminApp {
     const hostScheduleLabel = ensureString(hostContext.scheduleLabel);
     const hostScheduleRange = ensureString(hostContext.scheduleRange);
     const hostSchedule = hostContext.schedule || (hostScheduleId ? scheduleMap.get(hostScheduleId) || null : null);
+    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
+    const committedSchedule = committedScheduleId ? scheduleMap.get(committedScheduleId) || null : null;
+    const committedScheduleLabel = ensureString(this.hostCommittedScheduleLabel) || committedSchedule?.label || committedScheduleId;
+    const committedScheduleRange = committedSchedule
+      ? formatScheduleRange(committedSchedule.startAt, committedSchedule.endAt)
+      : "";
 
     const selfEntry = entries.find((entry) => entry.isSelf);
     if (selfEntry) {
@@ -5054,6 +5126,9 @@ export class EventAdminApp {
     context.hostScheduleRange = hostScheduleRange;
     context.hostSelectedScheduleId = ensureString(hostContext.selectedScheduleId);
     context.hostCommittedScheduleId = ensureString(hostContext.committedScheduleId);
+    context.telopScheduleId = committedScheduleId;
+    context.telopScheduleLabel = committedScheduleLabel;
+    context.telopScheduleRange = committedScheduleRange;
 
     if (!hasSelfPresence && hostScheduleId) {
       entries.push({
@@ -5138,11 +5213,12 @@ export class EventAdminApp {
     const uniqueSelectableKeys = new Set(
       selectableOptions.map((option) => option.key || option.scheduleId || "")
     );
-    context.hasConflict =
-      Boolean(context.hostScheduleId) &&
-      context.hasOtherOperators &&
-      selectableOptions.length > 1 &&
-      uniqueSelectableKeys.size > 1;
+    const telopScheduleId = committedScheduleId;
+    const conflictingTelopEntries = committedEntries.filter((entry) => {
+      const entryScheduleId = ensureString(entry.scheduleId);
+      return Boolean(telopScheduleId && entryScheduleId && entryScheduleId !== telopScheduleId);
+    });
+    context.hasConflict = Boolean(telopScheduleId) && conflictingTelopEntries.length > 0;
     const preferredOption =
       selectableOptions.find((option) => option.containsSelf) || selectableOptions[0] || null;
     context.defaultKey = preferredOption?.key || "";
@@ -5181,7 +5257,7 @@ export class EventAdminApp {
       button.setAttribute("data-conflict-pending", "true");
       button.setAttribute(
         "title",
-        "他のオペレーターと日程の調整が必要です。「次へ」で日程を確定してください。"
+        "他のオペレーターと日程の調整が必要です。「確定」で日程を確定してください。"
       );
     } else {
       button.removeAttribute("data-conflict-pending");
@@ -5852,6 +5928,8 @@ export class EventAdminApp {
     this.operatorPresenceEntries = [];
     this.hostCommittedScheduleId = "";
     this.hostCommittedScheduleLabel = "";
+    this.eventSelectionCommitted = false;
+    this.scheduleSelectionCommitted = false;
     this.scheduleConflictContext = null;
     this.scheduleConflictLastSignature = "";
     this.scheduleConflictPromptSignature = "";
