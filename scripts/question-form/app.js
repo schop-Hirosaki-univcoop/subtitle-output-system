@@ -333,10 +333,21 @@ export class QuestionFormApp {
     this.state.dirty = true;
   }
 
-  resetFormForContext() {
-    this.view.setRadioNameValue("");
+  resetFormState({ preserveRadioName = false, focusQuestion = false } = {}) {
+    if (!preserveRadioName) {
+      this.view.setRadioNameValue("");
+    }
+    this.view.setQuestionValue("");
     this.view.resetGenreSelection();
     this.updateQuestionCounter();
+    if (focusQuestion) {
+      this.view.focusQuestion();
+    }
+    this.state.dirty = false;
+  }
+
+  resetFormForContext() {
+    this.resetFormState();
   }
 
   unlockFormForContext() {
@@ -348,9 +359,7 @@ export class QuestionFormApp {
 
   handleReset() {
     window.setTimeout(() => {
-      this.state.dirty = false;
-      this.view.resetGenreSelection();
-      this.updateQuestionCounter();
+      this.resetFormState();
       this.view.clearFeedback();
     }, 0);
   }
@@ -536,11 +545,7 @@ export class QuestionFormApp {
   }
 
   resetFormAfterSubmission() {
-    this.view.setQuestionValue("");
-    this.view.resetGenreSelection();
-    this.updateQuestionCounter();
-    this.view.focusQuestion();
-    this.state.dirty = false;
+    this.resetFormState({ preserveRadioName: true, focusQuestion: true });
   }
 
   createSubmissionData({ radioName, question, questionLength, genre }) {
