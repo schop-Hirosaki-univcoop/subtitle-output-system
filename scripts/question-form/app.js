@@ -127,15 +127,13 @@ function formatScheduleSummary({ label = "", date = "", start = "", end = "" } =
     }
   }
 
-  const needsLabelSuffix = trimmedLabel && trimmedLabel !== dateText;
   const rangeText = timeText ? `${dateText} ${timeText}` : dateText;
-  if (rangeText) {
-    return rangeText;
+  if (!rangeText) {
+    return fallback || "未設定";
   }
-  if (needsLabelSuffix) {
-    return trimmedLabel;
-  }
-  return fallback || "未設定";
+
+  const labelSuffix = trimmedLabel && trimmedLabel !== dateText ? `（${trimmedLabel}）` : "";
+  return `${rangeText}${labelSuffix}`;
 }
 
 function normalizeContextData(rawContext) {
