@@ -202,6 +202,19 @@ function sanitizeSubmissionPayload(values) {
   }, {});
 }
 
+function collectClientMetadata() {
+  const nav = typeof navigator === "object" && navigator ? navigator : null;
+  const doc = typeof document === "object" && document ? document : null;
+  const win = typeof window === "object" && window ? window : null;
+
+  const language = typeof nav?.language === "string" ? nav.language : "";
+  const userAgent = typeof nav?.userAgent === "string" ? nav.userAgent : "";
+  const referrer = typeof doc?.referrer === "string" ? doc.referrer : "";
+  const origin = typeof win?.location?.origin === "string" ? win.location.origin : "";
+
+  return { language, userAgent, referrer, origin };
+}
+
 export class QuestionFormApp {
   constructor({ view, database } = {}) {
     this.database = database ?? getDatabaseInstance(firebaseConfig);
@@ -539,6 +552,7 @@ export class QuestionFormApp {
     }
 
     const snapshot = this.captureSubmissionSnapshot();
+    const clientMetadata = collectClientMetadata();
     const submissionBase = {
       token,
       radioName,
@@ -557,12 +571,12 @@ export class QuestionFormApp {
       participantId: snapshot.participantId,
       participantName: snapshot.participantName,
       clientTimestamp: Date.now(),
-      language: navigator.language || "",
-      userAgent: navigator.userAgent || "",
-      referrer: document.referrer || "",
+      language: clientMetadata.language,
+      userAgent: clientMetadata.userAgent,
+      referrer: clientMetadata.referrer,
       formVersion: FORM_VERSION,
       guidance: snapshot.guidance,
-      origin: typeof window !== "undefined" && window.location ? window.location.origin : "",
+      origin: clientMetadata.origin,
       status: "pending"
     };
 
@@ -646,23 +660,31 @@ function formatUuidFromBytes(bytes) {
   ].join("-");
 }
 
+function prefixQuestionUid(rawValue) {
+  const value = String(rawValue ?? "").trim();
+  if (!value) {
+    return `q_${Date.now().toString(36)}`;
+  }
+  return value.startsWith("q_") ? value : `q_${value}`;
+}
+
 function generateQuestionUid() {
   const cryptoObj = getCrypto();
   if (cryptoObj) {
     if (typeof cryptoObj.randomUUID === "function") {
-      return cryptoObj.randomUUID();
+      return prefixQuestionUid(cryptoObj.randomUUID());
     }
     if (typeof cryptoObj.getRandomValues === "function") {
       const bytes = new Uint8Array(16);
       cryptoObj.getRandomValues(bytes);
       bytes[6] = (bytes[6] & 0x0f) | 0x40;
       bytes[8] = (bytes[8] & 0x3f) | 0x80;
-      return `q_${formatUuidFromBytes(bytes)}`;
+      return prefixQuestionUid(formatUuidFromBytes(bytes));
     }
   }
   const timestamp = Date.now().toString(36);
   const randomPart = Array.from({ length: 3 }, () => Math.random().toString(36).slice(2, 10)).join("");
-  return `q_${timestamp}_${randomPart.slice(0, 18)}`;
+  return prefixQuestionUid(`${timestamp}_${randomPart.slice(0, 18)}`);
 }
 
 function buildQuestionRecord({
