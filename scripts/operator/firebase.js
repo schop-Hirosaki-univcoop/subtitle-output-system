@@ -19,10 +19,11 @@ import {
 import {
   initializeAuth,
   getAuth,
-  browserSessionPersistence,
+  inMemoryPersistence,
   browserPopupRedirectResolver,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithCredential,
   signOut,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -37,7 +38,7 @@ export const database = getDatabase(app);
 export const auth = apps.length
   ? getAuth(app)
   : initializeAuth(app, {
-      persistence: browserSessionPersistence,
+      persistence: inMemoryPersistence,
       popupRedirectResolver: browserPopupRedirectResolver
     });
 export const provider = new GoogleAuthProvider();
@@ -102,7 +103,9 @@ export {
   child,
   onDisconnect,
   runTransaction,
+  GoogleAuthProvider,
   signInWithPopup,
+  signInWithCredential,
   signOut,
   onAuthStateChanged
 };
