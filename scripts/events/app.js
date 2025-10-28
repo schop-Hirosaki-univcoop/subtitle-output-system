@@ -1302,18 +1302,25 @@ export class EventAdminApp {
       this.revealScheduleSelectionCue();
       return;
     }
+    this.selectSchedule(scheduleId);
+    const appliedScheduleId = ensureString(this.selectedScheduleId);
+    if (!appliedScheduleId) {
+      this.revealScheduleSelectionCue();
+      return;
+    }
     const list = this.dom.scheduleList;
     if (!list) {
       return;
     }
     const escapeId = typeof CSS !== "undefined" && typeof CSS.escape === "function"
-      ? CSS.escape(scheduleId)
-      : scheduleId.replace(/"/g, '\\"');
+      ? CSS.escape(appliedScheduleId)
+      : appliedScheduleId.replace(/"/g, '\\"');
     const item = list.querySelector(`[data-schedule-id="${escapeId}"]`);
     if (!(item instanceof HTMLElement)) {
       this.revealScheduleSelectionCue();
       return;
     }
+    this.commitSelectedScheduleForTelop({ reason: "goto-schedule-button" });
     const highlight = () => {
       if (typeof item.scrollIntoView === "function") {
         item.scrollIntoView({ behavior: "smooth", block: "center" });
