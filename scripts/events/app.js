@@ -1325,11 +1325,138 @@ export class EventAdminApp {
     }
   }
 
+  findScheduleByIdOrAlias(scheduleId = "") {
+    const normalized = ensureString(scheduleId);
+    if (!normalized) {
+      return null;
+    }
+    const directMatch = this.schedules.find((schedule) => schedule.id === normalized) || null;
+    if (directMatch) {
+      return directMatch;
+    }
+    const normalizedCandidate = normalizeScheduleId(normalized);
+    if (!normalizedCandidate) {
+      return null;
+    }
+    return (
+      this.schedules.find((schedule) => normalizeScheduleId(schedule.id) === normalizedCandidate) || null
+    );
+  }
+
+  resolveScheduleFromPresenceEntry(entry = null) {
+    if (!entry || typeof entry !== "object") {
+      return { scheduleId: "", schedule: null };
+    }
+    const direct = this.findScheduleByIdOrAlias(entry.scheduleId);
+    if (direct) {
+      return { scheduleId: direct.id, schedule: direct };
+    }
+    const derivedId = this.extractScheduleIdFromKey(entry.scheduleKey, this.selectedEventId);
+    const derived = this.findScheduleByIdOrAlias(derivedId);
+    if (derived) {
+      return { scheduleId: derived.id, schedule: derived };
+    }
+    const label = ensureString(entry.scheduleLabel);
+    if (label) {
+      const labelMatch = this.schedules.find((schedule) => ensureString(schedule.label) === label) || null;
+      if (labelMatch) {
+        return { scheduleId: labelMatch.id, schedule: labelMatch };
+      }
+    }
+    const fallbackId = ensureString(entry.scheduleId) || ensureString(derivedId);
+    return { scheduleId: fallbackId, schedule: null };
+  }
+
+  getPresenceSourcePriority(entry = null) {
+    const source = ensureString(entry?.source).toLowerCase();
+    if (!source) {
+      return 0;
+    }
+    if (source.includes("operator")) {
+      return 3;
+    }
+    if (source === "events") {
+      return 2;
+    }
+    return 1;
+  }
+
+  getAssignedScheduleFromPresence() {
+    const uid = ensureString(this.currentUser?.uid);
+    if (!uid) {
+      return null;
+    }
+    const entries = Array.isArray(this.operatorPresenceEntries) ? this.operatorPresenceEntries : [];
+    if (!entries.length) {
+      return null;
+    }
+    const matches = entries.filter((entry) => ensureString(entry?.uid) === uid);
+    if (!matches.length) {
+      return null;
+    }
+    const evaluated = matches.map((entry) => {
+      const { scheduleId, schedule } = this.resolveScheduleFromPresenceEntry(entry);
+      return {
+        entry,
+        scheduleId,
+        schedule,
+        hasSchedule: Boolean(scheduleId),
+        priority: this.getPresenceSourcePriority(entry),
+        updatedAt: Number(entry?.updatedAt || 0) || 0
+      };
+    });
+    const pool = evaluated.some((item) => item.hasSchedule)
+      ? evaluated.filter((item) => item.hasSchedule)
+      : evaluated;
+    if (!pool.length) {
+      return null;
+    }
+    pool.sort((a, b) => {
+      if (b.updatedAt !== a.updatedAt) {
+        return b.updatedAt - a.updatedAt;
+      }
+      if (b.priority !== a.priority) {
+        return b.priority - a.priority;
+      }
+      const aId = ensureString(a.entry?.entryId);
+      const bId = ensureString(b.entry?.entryId);
+      return aId.localeCompare(bId, "ja");
+    });
+    const best = pool[0];
+    if (!best) {
+      return null;
+    }
+    return { entry: best.entry, scheduleId: best.scheduleId, schedule: best.schedule };
+  }
+
   navigateToTelopSchedule() {
     if (!this.selectedEventId) {
       this.showPanel("events");
       this.revealEventSelectionCue();
       return;
+    }
+    let scheduleId = ensureString(this.hostCommittedScheduleId) || ensureString(this.selectedScheduleId);
+    const assignment = this.getAssignedScheduleFromPresence();
+    if (assignment?.scheduleId) {
+      const assignedSchedule = assignment.schedule || this.findScheduleByIdOrAlias(assignment.scheduleId);
+      if (assignedSchedule) {
+        const assignedId = ensureString(assignedSchedule.id);
+        if (assignedId && assignedId !== ensureString(this.selectedScheduleId)) {
+          this.logFlowState("在席情報に基づきテロップ操作日程を選択します", {
+            scheduleId: assignedId,
+            scheduleLabel: ensureString(assignedSchedule.label) || ensureString(assignment.entry?.scheduleLabel) || "",
+            source: ensureString(assignment.entry?.source) || ""
+          });
+          this.selectSchedule(assignedId);
+        }
+        scheduleId = assignedId || scheduleId;
+      } else {
+        this.logFlowState("在席情報に一致する日程が現在のイベントに見つかりません", {
+          requestedScheduleId: ensureString(assignment.scheduleId),
+          scheduleLabel: ensureString(assignment.entry?.scheduleLabel) || "",
+          source: ensureString(assignment.entry?.source) || ""
+        });
+      }
     }
     const targetPanel = this.getOperatorPanelFallbackTarget({ preferSchedules: true });
     const normalizedTarget = targetPanel === "operator" ? "schedules" : targetPanel;
@@ -1337,12 +1464,14 @@ export class EventAdminApp {
     if (normalizedTarget !== "schedules") {
       return;
     }
-    const scheduleId = ensureString(this.hostCommittedScheduleId) || ensureString(this.selectedScheduleId);
-    if (!scheduleId) {
+    const resolvedScheduleId = ensureString(this.selectedScheduleId) || scheduleId;
+    if (!resolvedScheduleId) {
       this.revealScheduleSelectionCue();
       return;
     }
-    this.selectSchedule(scheduleId);
+    if (resolvedScheduleId && resolvedScheduleId !== ensureString(this.selectedScheduleId)) {
+      this.selectSchedule(resolvedScheduleId);
+    }
     const appliedScheduleId = ensureString(this.selectedScheduleId);
     if (!appliedScheduleId) {
       this.revealScheduleSelectionCue();
