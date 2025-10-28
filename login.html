@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="same-origin">
+  <title>イベントコントロールセンターにログイン</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="./scripts/shared/layout.js"></script>
+</head>
+<body class="op-theme login-page">
+  <noscript>
+    <div class="noscript-banner" role="alert">
+      このサービスを利用するにはブラウザの JavaScript を有効にしてください。
+    </div>
+  </noscript>
+  <telop-header tagline="Event Control" context-label="サインイン"></telop-header>
+
+  <main class="single-main">
+    <section class="module module--primary" aria-labelledby="login-title">
+      <div class="module-header">
+        <div class="module-heading">
+          <h1 id="login-title">イベントコントロールセンターへログイン</h1>
+          <p class="module-description">
+            イベントや日程の管理、テロップ操作ツールの利用には管理用 Google アカウントでのサインインが必要です。
+          </p>
+        </div>
+      </div>
+      <div class="module-body">
+        <div class="login-panel">
+          <p class="login-lead">
+            ログインするとイベント管理や参加者リスト、テロップ操作ツールへ進むことができます。
+          </p>
+          <button
+            id="login-button"
+            class="btn btn-primary"
+            type="button"
+            aria-describedby="login-error"
+            data-label-default="Googleアカウントでログイン"
+            data-label-busy="サインイン中…"
+          >
+            Googleアカウントでログイン
+          </button>
+          <p id="login-error" class="form-error" role="alert" aria-live="assertive" aria-atomic="true" hidden></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <telop-footer year="2025"></telop-footer>
+
+  <script type="module" src="./scripts/login.js"></script>
+</body>
+</html>

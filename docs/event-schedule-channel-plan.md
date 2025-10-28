@@ -32,7 +32,7 @@ The goal is to isolate display/operation channels per event (and per schedule wh
 
 ## Scope Overview
 - Rework Firebase schema for telop state and sessions.
-- Update operator app (`events.html` + `scripts/operator/*`) to target event/schedule-specific references.
+- Update operator app (`index.html` + `scripts/operator/*`) to target event/schedule-specific references.
 - Update display app (`display.html` + `scripts/display/*` if any) to read from the new paths and honour URL-assigned channels.
 - Implement shared schedule selection state and modal coordination logic.
 - Add server-side/session validation to prevent mismatched writes.

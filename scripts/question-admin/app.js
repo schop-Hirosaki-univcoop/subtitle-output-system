@@ -26,6 +26,7 @@ import {
   resetTokenState
 } from "./state.js";
 import { dom } from "./dom.js";
+import { goToLogin } from "../shared/routes.js";
 import {
   sleep,
   isPermissionDenied,
@@ -5301,7 +5302,7 @@ function initAuthWatcher() {
       resetState();
       if (!redirectingToIndex && typeof window !== "undefined" && !embedded) {
         redirectingToIndex = true;
-        window.location.replace("index.html");
+        goToLogin();
       }
       return;
     }
