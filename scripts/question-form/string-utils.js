@@ -3,16 +3,48 @@ if (typeof Intl !== "undefined" && typeof Intl.Segmenter === "function") {
   graphemeSegmenter = new Intl.Segmenter("ja", { granularity: "grapheme" });
 }
 
+function* iterateGraphemes(value) {
+  if (!value) {
+    return;
+  }
+  if (graphemeSegmenter) {
+    for (const segmentData of graphemeSegmenter.segment(value)) {
+      yield segmentData.segment;
+    }
+    return;
+  }
+  for (const char of Array.from(value)) {
+    yield char;
+  }
+}
+
 export function countGraphemes(value) {
   if (!value) return 0;
-  if (graphemeSegmenter) {
-    let count = 0;
-    for (const _ of graphemeSegmenter.segment(value)) {
-      count += 1;
-    }
-    return count;
+  let count = 0;
+  for (const _ of iterateGraphemes(value)) {
+    count += 1;
   }
-  return Array.from(value).length;
+  return count;
+}
+
+export function truncateGraphemes(value, maxLength) {
+  const stringValue = String(value ?? "");
+  if (!stringValue) {
+    return "";
+  }
+  if (typeof maxLength !== "number" || maxLength <= 0) {
+    return stringValue;
+  }
+  let count = 0;
+  let result = "";
+  for (const segment of iterateGraphemes(stringValue)) {
+    if (count >= maxLength) {
+      break;
+    }
+    result += segment;
+    count += 1;
+  }
+  return result;
 }
 
 export function normalizeKey(value) {
@@ -39,7 +71,7 @@ export function sanitizeRadioName(value, maxLength) {
     .replace(/[^\p{Letter}\p{Number}\p{Mark}・\-＿ー\s]/gu, "")
     .trim();
   if (typeof maxLength === "number" && maxLength > 0) {
-    return normalized.slice(0, maxLength);
+    return truncateGraphemes(normalized, maxLength);
   }
   return normalized;
 }

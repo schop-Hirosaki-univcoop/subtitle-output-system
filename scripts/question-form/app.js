@@ -12,7 +12,8 @@ import { ref, remove, set } from "https://www.gstatic.com/firebasejs/10.12.2/fir
 import {
   countGraphemes,
   normalizeMultiline,
-  sanitizeRadioName
+  sanitizeRadioName,
+  truncateGraphemes
 } from "./string-utils.js";
 
 const hasIntlDateTime = typeof Intl !== "undefined" && typeof Intl.DateTimeFormat === "function";
@@ -383,8 +384,9 @@ export class QuestionFormApp {
 
   handleRadioNameInput() {
     const value = this.view.getRadioNameValue();
-    if (value.length > MAX_RADIO_NAME_LENGTH) {
-      this.view.setRadioNameValue(value.slice(0, MAX_RADIO_NAME_LENGTH));
+    const truncated = truncateGraphemes(value, MAX_RADIO_NAME_LENGTH);
+    if (value !== truncated) {
+      this.view.setRadioNameValue(truncated);
     }
   }
 
