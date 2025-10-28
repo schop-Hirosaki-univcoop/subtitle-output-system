@@ -5,6 +5,21 @@ import { normalizeScheduleId } from "../shared/channel-paths.js";
 import { escapeHtml, formatOperatorName, resolveGenreLabel, formatScheduleRange } from "./utils.js";
 
 const SUB_TAB_OPTIONS = new Set(["all", "normal", "puq"]);
+const PICK_UP_NAME_CANONICAL = "pick up question";
+
+function isPickUpQuestion(record) {
+  if (!record || typeof record !== "object") {
+    return false;
+  }
+  if (record["ピックアップ"] === true) {
+    return true;
+  }
+  const radioName = String(record["ラジオネーム"] ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+  return radioName === PICK_UP_NAME_CANONICAL;
+}
 
 function normalizeSubTab(value) {
   const candidate = String(value || "").trim();
@@ -143,7 +158,7 @@ export function renderQuestions(app) {
     }
   }
   let list = app.state.allQuestions.filter((item) => {
-    const isPuq = item["ピックアップ"] === true || item["ラジオネーム"] === "Pick Up Question";
+    const isPuq = isPickUpQuestion(item);
     if (viewingPuqTab && !isPuq) {
       return false;
     }
@@ -180,7 +195,7 @@ export function renderQuestions(app) {
     const statusText = isSelecting ? "送出準備中" : isAnswered ? "送出済" : "未送出";
     if (isAnswered) card.classList.add("is-answered");
     if (isSelecting) card.classList.add("is-selecting");
-    const isPuq = item["ピックアップ"] === true || item["ラジオネーム"] === "Pick Up Question";
+    const isPuq = isPickUpQuestion(item);
     if (isPuq) {
       card.classList.add("is-puq");
     }
