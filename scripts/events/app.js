@@ -1157,6 +1157,45 @@ export class EventAdminApp {
     };
   }
 
+  resolveHostScheduleContext(eventId = "", { scheduleMap = null } = {}) {
+    const normalizedEventId = ensureString(eventId) || ensureString(this.selectedEventId);
+    const map =
+      scheduleMap instanceof Map
+        ? scheduleMap
+        : new Map(this.schedules.map((schedule) => [schedule.id, schedule]));
+    const selectedScheduleId = ensureString(this.selectedScheduleId);
+    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
+    const resolvedScheduleId = selectedScheduleId || committedScheduleId;
+    const schedule = resolvedScheduleId ? map.get(resolvedScheduleId) || null : null;
+    let scheduleLabel = "";
+    if (resolvedScheduleId) {
+      if (resolvedScheduleId === committedScheduleId) {
+        scheduleLabel = ensureString(this.hostCommittedScheduleLabel);
+      }
+      if (!scheduleLabel) {
+        scheduleLabel = ensureString(schedule?.label) || resolvedScheduleId;
+      }
+    }
+    const scheduleRange = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
+    const scheduleKey = resolvedScheduleId
+      ? this.derivePresenceScheduleKey(
+          normalizedEventId,
+          { scheduleId: resolvedScheduleId, scheduleLabel },
+          this.hostPresenceSessionId
+        )
+      : "";
+    return {
+      eventId: normalizedEventId,
+      scheduleId: resolvedScheduleId,
+      scheduleLabel,
+      scheduleRange,
+      scheduleKey,
+      schedule,
+      committedScheduleId,
+      selectedScheduleId
+    };
+  }
+
   derivePresenceScheduleKey(eventId, payload = {}, entryId = "") {
     const ensure = (value) => String(value ?? "").trim();
     const normalizedEvent = ensure(eventId);
@@ -2707,34 +2746,44 @@ export class EventAdminApp {
         updatedAt: entry.updatedAt || 0
       });
     });
-    const hostScheduleId = ensureString(this.hostCommittedScheduleId);
-    const hostSchedule = hostScheduleId ? scheduleMap.get(hostScheduleId) || null : null;
-    const hostScheduleLabel = hostScheduleId
-      ? this.hostCommittedScheduleLabel || hostSchedule?.label || hostScheduleId
-      : "";
-    const hostScheduleKey = hostScheduleId
-      ? this.derivePresenceScheduleKey(
-          eventId,
-          { scheduleId: hostScheduleId, scheduleLabel: hostScheduleLabel },
-          this.hostPresenceSessionId
-        )
-      : "";
+    const hostContext = this.resolveHostScheduleContext(eventId, { scheduleMap });
+    const hostScheduleId = ensureString(hostContext.scheduleId);
+    const hostScheduleKey = ensureString(hostContext.scheduleKey);
+    const hostScheduleLabel = ensureString(hostContext.scheduleLabel);
+    const hostScheduleRange = ensureString(hostContext.scheduleRange);
+    const hostSchedule = hostContext.schedule || (hostScheduleId ? scheduleMap.get(hostScheduleId) || null : null);
+
+    const selfEntry = entries.find((entry) => entry.isSelf);
+    if (selfEntry) {
+      selfEntry.scheduleId = hostScheduleId;
+      if (hostScheduleKey) {
+        selfEntry.scheduleKey = hostScheduleKey;
+      }
+      selfEntry.scheduleLabel = hostScheduleLabel || hostScheduleId || "未選択";
+      selfEntry.scheduleRange = hostScheduleRange || selfEntry.scheduleRange || "";
+    }
+
     context.hostScheduleId = hostScheduleId;
     context.hostScheduleKey = hostScheduleKey;
     context.hostScheduleLabel = hostScheduleLabel;
-    if (!hasSelfPresence && hostScheduleKey) {
+    context.hostScheduleRange = hostScheduleRange;
+    context.hostSelectedScheduleId = ensureString(hostContext.selectedScheduleId);
+    context.hostCommittedScheduleId = ensureString(hostContext.committedScheduleId);
+
+    if (!hasSelfPresence && hostScheduleId) {
       entries.push({
         entryId: selfUid ? `self::${selfUid}` : "self",
         uid: selfUid,
         displayName: selfLabel,
         scheduleId: hostScheduleId,
-        scheduleKey: hostScheduleKey,
+        scheduleKey: hostScheduleKey || hostScheduleId,
         scheduleLabel: hostScheduleLabel || hostScheduleId || "未選択",
-        scheduleRange: formatScheduleRange(hostSchedule?.startAt, hostSchedule?.endAt),
+        scheduleRange: hostScheduleRange || formatScheduleRange(hostSchedule?.startAt, hostSchedule?.endAt),
         isSelf: true,
         mode: this.operatorMode,
         updatedAt: Date.now()
       });
+      hasSelfPresence = true;
     }
     entries.sort((a, b) => {
       if (a.isSelf && !b.isSelf) return -1;
@@ -3862,33 +3911,31 @@ export class EventAdminApp {
     }
 
     const event = this.getSelectedEvent();
-    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
-    const schedule = committedScheduleId
-      ? this.schedules.find((item) => item.id === committedScheduleId) || null
-      : null;
-    const scheduleLabel = committedScheduleId
-      ? ensureString(this.hostCommittedScheduleLabel) || ensureString(schedule?.label) || committedScheduleId
-      : "";
-    const scheduleKey = this.derivePresenceScheduleKey(
-      eventId,
-      { scheduleId: committedScheduleId, scheduleLabel },
-      sessionId
-    );
+    const hostContext = this.resolveHostScheduleContext(eventId);
+    const presenceScheduleId = ensureString(hostContext.scheduleId);
+    const committedScheduleId = ensureString(hostContext.committedScheduleId);
+    const selectedScheduleId = ensureString(hostContext.selectedScheduleId);
+    const scheduleLabel = ensureString(hostContext.scheduleLabel);
+    const scheduleKey = ensureString(hostContext.scheduleKey);
     const operatorMode = normalizeOperatorMode(this.operatorMode);
     const signature = JSON.stringify({
       eventId,
-      scheduleId: committedScheduleId,
+      scheduleId: presenceScheduleId,
       scheduleKey,
       scheduleLabel,
       sessionId,
-      operatorMode
+      operatorMode,
+      committedScheduleId,
+      selectedScheduleId,
+      committedScheduleLabel: ensureString(this.hostCommittedScheduleLabel)
     });
     if (reason !== "heartbeat" && signature === this.hostPresenceLastSignature) {
       this.scheduleHostPresenceHeartbeat();
       this.logFlowState("在席情報に変更はありません", {
         reason,
         eventId,
-        scheduleId: committedScheduleId,
+        scheduleId: presenceScheduleId,
+        committedScheduleId,
         scheduleKey,
         sessionId
       });
@@ -3907,7 +3954,7 @@ export class EventAdminApp {
       displayName: ensureString(user?.displayName),
       eventId,
       eventName: ensureString(event?.name || eventId),
-      scheduleId: committedScheduleId,
+      scheduleId: presenceScheduleId,
       scheduleKey,
       scheduleLabel,
       mode: operatorMode,
@@ -3948,7 +3995,8 @@ export class EventAdminApp {
     this.logFlowState("在席情報を更新しました", {
       reason,
       eventId,
-      scheduleId: committedScheduleId,
+      scheduleId: presenceScheduleId,
+      committedScheduleId,
       scheduleKey,
       sessionId
     });
@@ -4817,34 +4865,44 @@ export class EventAdminApp {
         updatedAt: entry.updatedAt || 0
       });
     });
-    const hostScheduleId = ensureString(this.hostCommittedScheduleId);
-    const hostSchedule = hostScheduleId ? scheduleMap.get(hostScheduleId) || null : null;
-    const hostScheduleLabel = hostScheduleId
-      ? this.hostCommittedScheduleLabel || hostSchedule?.label || hostScheduleId
-      : "";
-    const hostScheduleKey = hostScheduleId
-      ? this.derivePresenceScheduleKey(
-          eventId,
-          { scheduleId: hostScheduleId, scheduleLabel: hostScheduleLabel },
-          this.hostPresenceSessionId
-        )
-      : "";
+    const hostContext = this.resolveHostScheduleContext(eventId, { scheduleMap });
+    const hostScheduleId = ensureString(hostContext.scheduleId);
+    const hostScheduleKey = ensureString(hostContext.scheduleKey);
+    const hostScheduleLabel = ensureString(hostContext.scheduleLabel);
+    const hostScheduleRange = ensureString(hostContext.scheduleRange);
+    const hostSchedule = hostContext.schedule || (hostScheduleId ? scheduleMap.get(hostScheduleId) || null : null);
+
+    const selfEntry = entries.find((entry) => entry.isSelf);
+    if (selfEntry) {
+      selfEntry.scheduleId = hostScheduleId;
+      if (hostScheduleKey) {
+        selfEntry.scheduleKey = hostScheduleKey;
+      }
+      selfEntry.scheduleLabel = hostScheduleLabel || hostScheduleId || "未選択";
+      selfEntry.scheduleRange = hostScheduleRange || selfEntry.scheduleRange || "";
+    }
+
     context.hostScheduleId = hostScheduleId;
     context.hostScheduleKey = hostScheduleKey;
     context.hostScheduleLabel = hostScheduleLabel;
-    if (!hasSelfPresence && hostScheduleKey) {
+    context.hostScheduleRange = hostScheduleRange;
+    context.hostSelectedScheduleId = ensureString(hostContext.selectedScheduleId);
+    context.hostCommittedScheduleId = ensureString(hostContext.committedScheduleId);
+
+    if (!hasSelfPresence && hostScheduleId) {
       entries.push({
         entryId: selfUid ? `self::${selfUid}` : "self",
         uid: selfUid,
         displayName: selfLabel,
         scheduleId: hostScheduleId,
-        scheduleKey: hostScheduleKey,
+        scheduleKey: hostScheduleKey || hostScheduleId,
         scheduleLabel: hostScheduleLabel || hostScheduleId || "未選択",
-        scheduleRange: formatScheduleRange(hostSchedule?.startAt, hostSchedule?.endAt),
+        scheduleRange: hostScheduleRange || formatScheduleRange(hostSchedule?.startAt, hostSchedule?.endAt),
         isSelf: true,
         mode: this.operatorMode,
         updatedAt: Date.now()
       });
+      hasSelfPresence = true;
     }
     entries.sort((a, b) => {
       if (a.isSelf && !b.isSelf) return -1;
