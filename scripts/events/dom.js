@@ -30,6 +30,8 @@ export function queryDom() {
     scheduleLoading: document.getElementById("flow-schedule-loading"),
     scheduleLoadingText: document.getElementById("flow-schedule-loading-text"),
     scheduleSelectionNote: document.getElementById("flow-schedule-selection-note"),
+    scheduleCommittedNote: document.getElementById("flow-schedule-committed-note"),
+    scheduleCommittedLabel: document.getElementById("flow-schedule-committed-label"),
     addScheduleButton: document.getElementById("flow-add-schedule-button"),
     scheduleRefreshButton: document.getElementById("flow-schedule-refresh-button"),
     scheduleNextButton: document.querySelector('[data-panel="schedules"] [data-flow-nav-target="participants"]'),

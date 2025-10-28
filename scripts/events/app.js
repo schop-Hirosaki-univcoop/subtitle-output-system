@@ -319,6 +319,7 @@ export class EventAdminApp {
       scheduleLabel: ensureString(entry?.scheduleLabel),
       scheduleKey: ensureString(entry?.scheduleKey),
       mode: normalizeOperatorMode(entry?.mode),
+      skipTelop: Boolean(entry?.skipTelop),
       source: ensureString(entry?.source),
       isSelf: Boolean(entry?.isSelf)
     }));
@@ -341,6 +342,7 @@ export class EventAdminApp {
       scheduleLabel: ensureString(payload.scheduleLabel),
       scheduleKey: ensureString(payload.scheduleKey),
       mode: normalizeOperatorMode(payload.mode),
+      skipTelop: Boolean(payload.skipTelop),
       reason: ensureString(payload.reason),
       source: ensureString(payload.source)
     };
@@ -1777,6 +1779,21 @@ export class EventAdminApp {
     const list = this.dom.scheduleList;
     if (!list) return;
 
+    const committedId = ensureString(this.hostCommittedScheduleId);
+    const committedLabel = ensureString(this.hostCommittedScheduleLabel);
+    const committedSchedule = committedId
+      ? this.schedules.find((schedule) => schedule.id === committedId) || null
+      : null;
+    const resolvedCommittedLabel = committedLabel || committedSchedule?.label || committedId;
+    if (this.dom.scheduleCommittedNote) {
+      const labelEl = this.dom.scheduleCommittedLabel;
+      const hasCommitted = Boolean(committedId);
+      this.dom.scheduleCommittedNote.hidden = !hasCommitted;
+      if (labelEl) {
+        labelEl.textContent = hasCommitted ? resolvedCommittedLabel || "未設定" : "未設定";
+      }
+    }
+
     list.innerHTML = "";
     if (!this.schedules.length) {
       list.hidden = true;
@@ -1822,6 +1839,12 @@ export class EventAdminApp {
       const nameEl = document.createElement("span");
       nameEl.className = "entity-name";
       nameEl.textContent = schedule.label || schedule.id;
+      if (committedId && schedule.id === committedId) {
+        const badge = document.createElement("span");
+        badge.className = "entity-badge entity-badge--active";
+        badge.textContent = "テロップ操作中";
+        nameEl.appendChild(badge);
+      }
 
       const metaEl = document.createElement("span");
       metaEl.className = "entity-meta";
@@ -2582,10 +2605,10 @@ export class EventAdminApp {
             badge.textContent = "自分";
             entry.appendChild(badge);
           }
-          if (!isTelopMode(member.mode)) {
+          if (member.skipTelop) {
             const badge = document.createElement("span");
             badge.className = "channel-presence-support";
-            badge.textContent = "参加者モード";
+            badge.textContent = "テロップ操作なし";
             entry.appendChild(badge);
           }
           members.appendChild(entry);
@@ -2677,20 +2700,20 @@ export class EventAdminApp {
       const membersLine = document.createElement("div");
       membersLine.className = "conflict-option__members";
       if (Array.isArray(option.members) && option.members.length) {
-        const names = option.members.map((member) => {
-          let text = member.displayName || member.uid || "—";
-          const badges = [];
-          if (member.isSelf) {
-            badges.push("自分");
-          }
-          if (!isTelopMode(member.mode)) {
-            badges.push("参加者モード");
-          }
-          if (badges.length) {
-            text += `（${badges.join("・")}）`;
-          }
-          return text;
-        });
+          const names = option.members.map((member) => {
+            let text = member.displayName || member.uid || "—";
+            const badges = [];
+            if (member.isSelf) {
+              badges.push("自分");
+            }
+            if (member.skipTelop) {
+              badges.push("テロップ操作なし");
+            }
+            if (badges.length) {
+              text += `（${badges.join("・")}）`;
+            }
+            return text;
+          });
         membersLine.textContent = names.join("、");
       } else {
         membersLine.textContent = "選択しているオペレーターはいません";
@@ -2788,6 +2811,7 @@ export class EventAdminApp {
       const displayName = ensureString(payload.displayName) || ensureString(payload.email) || ensureString(payload.uid) || normalizedId;
       const uid = ensureString(payload.uid);
       const mode = normalizeOperatorMode(payload.mode);
+      const skipTelop = payload.skipTelop === true || mode === OPERATOR_MODE_SUPPORT;
       const updatedAt = Number(payload.clientTimestamp || payload.updatedAt || 0) || 0;
       const sessionId = ensureString(payload.sessionId) || normalizedId;
       const source = ensureString(payload.source);
@@ -2801,6 +2825,7 @@ export class EventAdminApp {
         scheduleLabel: ensureString(payload.scheduleLabel),
         scheduleKey,
         mode,
+        skipTelop,
         updatedAt,
         isSelf: Boolean(selfUid && uid && uid === selfUid)
       });
@@ -2846,6 +2871,7 @@ export class EventAdminApp {
       const resolvedScheduleId = ensureString(scheduleFromMap?.id || baseScheduleId || derivedFromKey);
       const schedule = resolvedScheduleId ? scheduleMap.get(resolvedScheduleId) || scheduleFromMap : scheduleFromMap;
       const normalizedMode = normalizeOperatorMode(entry.mode);
+      const skipTelop = entry.skipTelop === true || normalizedMode === OPERATOR_MODE_SUPPORT;
       const isSelf = Boolean(entry.isSelf || (selfUid && entry.uid && entry.uid === selfUid));
       if (isSelf) {
         hasSelfPresence = true;
@@ -2872,6 +2898,7 @@ export class EventAdminApp {
         scheduleRange,
         isSelf,
         mode: normalizedMode,
+        skipTelop,
         updatedAt: entry.updatedAt || 0
       });
     });
@@ -2910,6 +2937,7 @@ export class EventAdminApp {
         scheduleRange: hostScheduleRange || formatScheduleRange(hostSchedule?.startAt, hostSchedule?.endAt),
         isSelf: true,
         mode: this.operatorMode,
+        skipTelop: this.operatorMode === OPERATOR_MODE_SUPPORT,
         updatedAt: Date.now()
       });
       hasSelfPresence = true;
@@ -2919,17 +2947,19 @@ export class EventAdminApp {
       if (!a.isSelf && b.isSelf) return 1;
       return (a.displayName || "").localeCompare(b.displayName || "", "ja");
     });
-    const committedEntries = entries.filter((entry) => ensureString(entry.scheduleId));
-    context.entries = committedEntries;
+    const telopEntries = entries.filter((entry) => ensureString(entry.scheduleId) && !entry.skipTelop);
+    context.entries = telopEntries;
+    context.allEntries = entries;
     const groups = new Map();
-    committedEntries.forEach((entry) => {
+    entries.forEach((entry) => {
       const key = entry.scheduleKey || "";
       const existing = groups.get(key) || {
         key,
         scheduleId: entry.scheduleId || "",
         scheduleLabel: entry.scheduleLabel || "未選択",
         scheduleRange: entry.scheduleRange || "",
-        members: []
+        members: [],
+        telopMembers: []
       };
       if (!groups.has(key)) {
         groups.set(key, existing);
@@ -2944,24 +2974,29 @@ export class EventAdminApp {
         existing.scheduleRange = entry.scheduleRange;
       }
       existing.members.push(entry);
+      if (!entry.skipTelop && ensureString(entry.scheduleId)) {
+        existing.telopMembers.push(entry);
+      }
     });
-    const options = Array.from(groups.values()).map((group) => {
-      const derivedScheduleId = group.scheduleId || this.extractScheduleIdFromKey(group.key, eventId) || "";
-      const schedule = derivedScheduleId ? scheduleMap.get(derivedScheduleId) : null;
-      const scheduleId = schedule?.id || derivedScheduleId || "";
-      const scheduleLabel = group.scheduleLabel || schedule?.label || scheduleId || "未選択";
-      const scheduleRange = group.scheduleRange || formatScheduleRange(schedule?.startAt, schedule?.endAt);
-      const containsSelf = group.members.some((member) => member.isSelf);
-      return {
-        key: group.key,
-        scheduleId,
-        scheduleLabel,
-        scheduleRange,
-        members: group.members,
-        containsSelf,
-        isSelectable: Boolean(scheduleId)
-      };
-    });
+    const options = Array.from(groups.values())
+      .filter((group) => group.telopMembers && group.telopMembers.length > 0)
+      .map((group) => {
+        const derivedScheduleId = group.scheduleId || this.extractScheduleIdFromKey(group.key, eventId) || "";
+        const schedule = derivedScheduleId ? scheduleMap.get(derivedScheduleId) : null;
+        const scheduleId = schedule?.id || derivedScheduleId || "";
+        const scheduleLabel = group.scheduleLabel || schedule?.label || scheduleId || "未選択";
+        const scheduleRange = group.scheduleRange || formatScheduleRange(schedule?.startAt, schedule?.endAt);
+        const containsSelf = group.telopMembers.some((member) => member.isSelf);
+        return {
+          key: group.key,
+          scheduleId,
+          scheduleLabel,
+          scheduleRange,
+          members: group.members,
+          containsSelf,
+          isSelectable: Boolean(scheduleId)
+        };
+      });
     options.sort((a, b) => {
       if (a.containsSelf && !b.containsSelf) return -1;
       if (!a.containsSelf && b.containsSelf) return 1;
@@ -2969,7 +3004,7 @@ export class EventAdminApp {
     });
     const selectableOptions = options.filter((option) => option.scheduleId);
     context.options = selectableOptions;
-    context.hasOtherOperators = committedEntries.some((entry) => !entry.isSelf);
+    context.hasOtherOperators = telopEntries.some((entry) => !entry.isSelf);
     context.selectableOptions = selectableOptions;
     const uniqueSelectableKeys = new Set(
       selectableOptions.map((option) => option.key || option.scheduleId || "")
@@ -2982,7 +3017,7 @@ export class EventAdminApp {
     const preferredOption =
       selectableOptions.find((option) => option.containsSelf) || selectableOptions[0] || null;
     context.defaultKey = preferredOption?.key || "";
-    const signatureSource = committedEntries.length ? committedEntries : entries;
+    const signatureSource = telopEntries.length ? telopEntries : entries;
     const signatureParts = signatureSource.map((entry) => {
       const entryId = entry.uid || entry.entryId || "anon";
       const scheduleKey = entry.scheduleKey || "none";
@@ -3582,7 +3617,6 @@ export class EventAdminApp {
       }
     });
     update(this.hostPresenceEntryRef, {
-      updatedAt: serverTimestamp(),
       clientTimestamp: now
     }).catch((error) => {
       console.debug("Host presence heartbeat failed:", error);
@@ -4047,13 +4081,14 @@ export class EventAdminApp {
     const scheduleLabel = ensureString(hostContext.scheduleLabel);
     const scheduleKey = ensureString(hostContext.scheduleKey);
     const operatorMode = normalizeOperatorMode(this.operatorMode);
+    const skipTelop = operatorMode === OPERATOR_MODE_SUPPORT;
     const signature = JSON.stringify({
       eventId,
       scheduleId: presenceScheduleId,
       scheduleKey,
       scheduleLabel,
       sessionId,
-      operatorMode,
+      skipTelop,
       committedScheduleId,
       selectedScheduleId,
       committedScheduleLabel: ensureString(this.hostCommittedScheduleLabel)
@@ -4086,7 +4121,7 @@ export class EventAdminApp {
       scheduleId: presenceScheduleId,
       scheduleKey,
       scheduleLabel,
-      mode: operatorMode,
+      skipTelop,
       updatedAt: serverTimestamp(),
       clientTimestamp: Date.now(),
       reason,
@@ -4965,6 +5000,7 @@ export class EventAdminApp {
       const resolvedScheduleId = ensureString(scheduleFromMap?.id || baseScheduleId || derivedFromKey);
       const schedule = resolvedScheduleId ? scheduleMap.get(resolvedScheduleId) || scheduleFromMap : scheduleFromMap;
       const normalizedMode = normalizeOperatorMode(entry.mode);
+      const skipTelop = entry.skipTelop === true || normalizedMode === OPERATOR_MODE_SUPPORT;
       const isSelf = Boolean(entry.isSelf || (selfUid && entry.uid && entry.uid === selfUid));
       if (isSelf) {
         hasSelfPresence = true;
@@ -4991,6 +5027,7 @@ export class EventAdminApp {
         scheduleRange,
         isSelf,
         mode: normalizedMode,
+        skipTelop,
         updatedAt: entry.updatedAt || 0
       });
     });
@@ -5029,6 +5066,7 @@ export class EventAdminApp {
         scheduleRange: hostScheduleRange || formatScheduleRange(hostSchedule?.startAt, hostSchedule?.endAt),
         isSelf: true,
         mode: this.operatorMode,
+        skipTelop: this.operatorMode === OPERATOR_MODE_SUPPORT,
         updatedAt: Date.now()
       });
       hasSelfPresence = true;
@@ -5038,17 +5076,19 @@ export class EventAdminApp {
       if (!a.isSelf && b.isSelf) return 1;
       return (a.displayName || "").localeCompare(b.displayName || "", "ja");
     });
-    const committedEntries = entries.filter((entry) => ensureString(entry.scheduleId));
+    const committedEntries = entries.filter((entry) => ensureString(entry.scheduleId) && !entry.skipTelop);
     context.entries = committedEntries;
+    context.allEntries = entries;
     const groups = new Map();
-    committedEntries.forEach((entry) => {
+    entries.forEach((entry) => {
       const key = entry.scheduleKey || "";
       const existing = groups.get(key) || {
         key,
         scheduleId: entry.scheduleId || "",
         scheduleLabel: entry.scheduleLabel || "未選択",
         scheduleRange: entry.scheduleRange || "",
-        members: []
+        members: [],
+        telopMembers: []
       };
       if (!groups.has(key)) {
         groups.set(key, existing);
@@ -5063,24 +5103,29 @@ export class EventAdminApp {
         existing.scheduleRange = entry.scheduleRange;
       }
       existing.members.push(entry);
+      if (!entry.skipTelop && ensureString(entry.scheduleId)) {
+        existing.telopMembers.push(entry);
+      }
     });
-    const options = Array.from(groups.values()).map((group) => {
-      const derivedScheduleId = group.scheduleId || this.extractScheduleIdFromKey(group.key, eventId) || "";
-      const schedule = derivedScheduleId ? scheduleMap.get(derivedScheduleId) : null;
-      const scheduleId = schedule?.id || derivedScheduleId || "";
-      const scheduleLabel = group.scheduleLabel || schedule?.label || scheduleId || "未選択";
-      const scheduleRange = group.scheduleRange || formatScheduleRange(schedule?.startAt, schedule?.endAt);
-      const containsSelf = group.members.some((member) => member.isSelf);
-      return {
-        key: group.key,
-        scheduleId,
-        scheduleLabel,
-        scheduleRange,
-        members: group.members,
-        containsSelf,
-        isSelectable: Boolean(scheduleId)
-      };
-    });
+    const options = Array.from(groups.values())
+      .filter((group) => group.telopMembers && group.telopMembers.length > 0)
+      .map((group) => {
+        const derivedScheduleId = group.scheduleId || this.extractScheduleIdFromKey(group.key, eventId) || "";
+        const schedule = derivedScheduleId ? scheduleMap.get(derivedScheduleId) : null;
+        const scheduleId = schedule?.id || derivedScheduleId || "";
+        const scheduleLabel = group.scheduleLabel || schedule?.label || scheduleId || "未選択";
+        const scheduleRange = group.scheduleRange || formatScheduleRange(schedule?.startAt, schedule?.endAt);
+        const containsSelf = group.telopMembers.some((member) => member.isSelf);
+        return {
+          key: group.key,
+          scheduleId,
+          scheduleLabel,
+          scheduleRange,
+          members: group.members,
+          containsSelf,
+          isSelectable: Boolean(scheduleId)
+        };
+      });
     options.sort((a, b) => {
       if (a.containsSelf && !b.containsSelf) return -1;
       if (!a.containsSelf && b.containsSelf) return 1;
@@ -5691,7 +5736,6 @@ export class EventAdminApp {
     }
     const now = Date.now();
     update(this.hostPresenceEntryRef, {
-      updatedAt: serverTimestamp(),
       clientTimestamp: now
     }).catch((error) => {
       console.debug("Host presence heartbeat failed:", error);
