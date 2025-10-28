@@ -22,10 +22,13 @@ export function normalizeKey(value) {
     .normalize("NFKC");
 }
 
+const CONTROL_CHAR_EXCEPT_LINE_BREAK = /[\u0000-\u0008\u000B-\u001F\u007F]/g;
+
 export function normalizeMultiline(value) {
   return String(value ?? "")
     .replace(/\r\n?/g, "\n")
-    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(CONTROL_CHAR_EXCEPT_LINE_BREAK, "")
+    .replace(/\t+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd();
 }
