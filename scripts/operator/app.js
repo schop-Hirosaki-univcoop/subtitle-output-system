@@ -22,6 +22,7 @@ import {
 } from "./firebase.js";
 import { getRenderStatePath, parseChannelParams, normalizeScheduleId } from "../shared/channel-paths.js";
 import { OPERATOR_MODE_TELOP, normalizeOperatorMode, isTelopMode } from "../shared/operator-modes.js";
+import { goToLogin } from "../shared/routes.js";
 import { info as logDisplayLinkInfo, error as logDisplayLinkError } from "../shared/display-link-logger.js";
 import { queryDom } from "./dom.js";
 import { createInitialState } from "./state.js";
@@ -2229,7 +2230,7 @@ export class OperatorApp {
     }
     if (typeof window !== "undefined" && !this.isEmbedded) {
       this.redirectingToIndex = true;
-      window.location.replace("index.html");
+      goToLogin();
     }
   }
 

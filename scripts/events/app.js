@@ -38,6 +38,7 @@ import {
   isTelopMode
 } from "../shared/operator-modes.js";
 import { normalizeScheduleId } from "../shared/channel-paths.js";
+import { goToLogin } from "../shared/routes.js";
 import {
   STAGE_SEQUENCE,
   STAGE_INFO,
@@ -651,7 +652,7 @@ export class EventAdminApp {
     this.updateUserLabel();
     if (typeof window !== "undefined") {
       this.redirectingToIndex = true;
-      window.location.replace("index.html");
+      goToLogin();
     }
   }
 
