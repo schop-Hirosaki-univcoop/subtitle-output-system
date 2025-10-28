@@ -496,6 +496,12 @@ export class EventAdminApp {
       });
     }
 
+    if (this.dom.eventSummaryGotoScheduleButton) {
+      this.dom.eventSummaryGotoScheduleButton.addEventListener("click", () => {
+        this.navigateToTelopSchedule();
+      });
+    }
+
     if (this.dom.operatorModeToggle) {
       this.dom.operatorModeToggle.addEventListener("change", (event) => {
         const checked = event.target instanceof HTMLInputElement ? event.target.checked : this.dom.operatorModeToggle.checked;
@@ -1279,6 +1285,60 @@ export class EventAdminApp {
     }
   }
 
+  navigateToTelopSchedule() {
+    if (!this.selectedEventId) {
+      this.showPanel("events");
+      this.revealEventSelectionCue();
+      return;
+    }
+    const targetPanel = this.getOperatorPanelFallbackTarget({ preferSchedules: true });
+    const normalizedTarget = targetPanel === "operator" ? "schedules" : targetPanel;
+    this.showPanel(normalizedTarget);
+    if (normalizedTarget !== "schedules") {
+      return;
+    }
+    const scheduleId = ensureString(this.hostCommittedScheduleId) || ensureString(this.selectedScheduleId);
+    if (!scheduleId) {
+      this.revealScheduleSelectionCue();
+      return;
+    }
+    const list = this.dom.scheduleList;
+    if (!list) {
+      return;
+    }
+    const escapeId = typeof CSS !== "undefined" && typeof CSS.escape === "function"
+      ? CSS.escape(scheduleId)
+      : scheduleId.replace(/"/g, '\\"');
+    const item = list.querySelector(`[data-schedule-id="${escapeId}"]`);
+    if (!(item instanceof HTMLElement)) {
+      this.revealScheduleSelectionCue();
+      return;
+    }
+    const highlight = () => {
+      if (typeof item.scrollIntoView === "function") {
+        item.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      if (typeof item.focus === "function") {
+        try {
+          item.focus({ preventScroll: true });
+        } catch (error) {
+          item.focus();
+        }
+      }
+      item.classList.add("is-focus-flash");
+      if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+        window.setTimeout(() => item.classList.remove("is-focus-flash"), 900);
+      } else {
+        item.classList.remove("is-focus-flash");
+      }
+    };
+    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(highlight));
+    } else {
+      highlight();
+    }
+  }
+
   setOperatorMode(mode, { fromControl = false } = {}) {
     const normalized = normalizeOperatorMode(mode);
     const previous = this.operatorMode;
@@ -1286,6 +1346,9 @@ export class EventAdminApp {
     this.syncOperatorModeUi();
     if (previous === normalized) {
       return;
+    }
+    if (normalized === OPERATOR_MODE_SUPPORT && this.activePanel === "operator") {
+      this.showPanel("operator");
     }
     this.tools
       .syncOperatorContext({ force: true })
@@ -1351,6 +1414,10 @@ export class EventAdminApp {
           this.dom.eventSummaryCopyStatus.textContent = "";
         }
       }
+    }
+    const gotoScheduleButton = this.dom.eventSummaryGotoScheduleButton;
+    if (gotoScheduleButton) {
+      gotoScheduleButton.disabled = !this.selectedEventId;
     }
   }
 
@@ -1961,6 +2028,9 @@ export class EventAdminApp {
 
   canActivatePanel(panel, config = PANEL_CONFIG[panel]) {
     const rules = config || PANEL_CONFIG.events;
+    if ((panel || "") === "operator" && this.operatorMode !== OPERATOR_MODE_TELOP) {
+      return false;
+    }
     if (rules.requireEvent && !this.selectedEventId) {
       return false;
     }
@@ -1971,7 +2041,19 @@ export class EventAdminApp {
   }
 
   showPanel(panel) {
-    const normalized = PANEL_CONFIG[panel] ? panel : "events";
+    let normalized = PANEL_CONFIG[panel] ? panel : "events";
+    if (normalized === "operator" && this.operatorMode !== OPERATOR_MODE_TELOP) {
+      const fallback = this.getOperatorPanelFallbackTarget();
+      if (fallback && fallback !== "operator") {
+        this.logFlowState("テロップ操作なしモードのためテロップ操作パネルを開けません", {
+          requestedPanel: panel || "",
+          fallbackPanel: fallback
+        });
+        normalized = fallback;
+      } else {
+        normalized = "events";
+      }
+    }
     const config = PANEL_CONFIG[normalized] || PANEL_CONFIG.events;
     if (config.requireEvent && !this.selectedEventId) {
       this.revealEventSelectionCue();
@@ -2027,6 +2109,16 @@ export class EventAdminApp {
     } else {
       await this.tools.setDrawerState({ dictionary: false, logs: false });
     }
+  }
+
+  getOperatorPanelFallbackTarget({ preferSchedules = false } = {}) {
+    if (!preferSchedules && this.canActivatePanel("participants", PANEL_CONFIG.participants)) {
+      return "participants";
+    }
+    if (this.canActivatePanel("schedules", PANEL_CONFIG.schedules)) {
+      return "schedules";
+    }
+    return "events";
   }
 
   getPanelModules() {
@@ -2119,9 +2211,9 @@ export class EventAdminApp {
   }
 
   async handleFlowNavigation(target, { sourceButton = null } = {}) {
-    const normalized = PANEL_CONFIG[target] ? target : "events";
+    let normalized = PANEL_CONFIG[target] ? target : "events";
     const originPanel = sourceButton?.closest("[data-panel]")?.dataset?.panel || "";
-    const config = PANEL_CONFIG[normalized] || PANEL_CONFIG.events;
+    let config = PANEL_CONFIG[normalized] || PANEL_CONFIG.events;
     this.clearPendingNavigationTimer();
     this.pendingNavigationTarget = "";
     this.awaitingScheduleConflictPrompt = false;
@@ -2130,6 +2222,18 @@ export class EventAdminApp {
       target: normalized,
       originPanel
     });
+    if (normalized === "operator" && this.operatorMode !== OPERATOR_MODE_TELOP) {
+      const fallbackTarget = this.getOperatorPanelFallbackTarget();
+      this.logFlowState("テロップ操作なしモードのためテロップ操作パネルへの移動をスキップします", {
+        requestedTarget: normalized,
+        fallbackTarget
+      });
+      if (!fallbackTarget || fallbackTarget === "operator") {
+        return;
+      }
+      normalized = fallbackTarget;
+      config = PANEL_CONFIG[normalized] || PANEL_CONFIG.events;
+    }
     if (
       normalized === "participants" &&
       originPanel === "schedules" &&
@@ -3126,14 +3230,23 @@ export class EventAdminApp {
         updateContext: true,
         force: true
       });
-      this.openScheduleFallbackDialog({
-        consensusScheduleId: scheduleId,
-        consensusLabel: label,
-        consensusRange: range,
-        consensusByline: byline,
-        currentScheduleId: selectedScheduleId,
-        currentScheduleLabel: currentLabel
-      });
+      if (this.operatorMode === OPERATOR_MODE_SUPPORT) {
+        this.logFlowState("テロップ操作なしモードのためスケジュール合意モーダルを表示しません", {
+          consensusScheduleId: scheduleId,
+          currentScheduleId: selectedScheduleId,
+          consensusLabel: label || "",
+          consensusRange: range || ""
+        });
+      } else {
+        this.openScheduleFallbackDialog({
+          consensusScheduleId: scheduleId,
+          consensusLabel: label,
+          consensusRange: range,
+          consensusByline: byline,
+          currentScheduleId: selectedScheduleId,
+          currentScheduleLabel: currentLabel
+        });
+      }
     } else if (scheduleId) {
       this.setHostCommittedSchedule(scheduleId, {
         schedule: fallbackSchedule,
@@ -5226,14 +5339,23 @@ export class EventAdminApp {
         updateContext: true,
         force: true
       });
-      this.openScheduleFallbackDialog({
-        consensusScheduleId: scheduleId,
-        consensusLabel: label,
-        consensusRange: range,
-        consensusByline: byline,
-        currentScheduleId: selectedScheduleId,
-        currentScheduleLabel: currentLabel
-      });
+      if (this.operatorMode === OPERATOR_MODE_SUPPORT) {
+        this.logFlowState("テロップ操作なしモードのためスケジュール合意モーダルを表示しません", {
+          consensusScheduleId: scheduleId,
+          currentScheduleId: selectedScheduleId,
+          consensusLabel: label || "",
+          consensusRange: range || ""
+        });
+      } else {
+        this.openScheduleFallbackDialog({
+          consensusScheduleId: scheduleId,
+          consensusLabel: label,
+          consensusRange: range,
+          consensusByline: byline,
+          currentScheduleId: selectedScheduleId,
+          currentScheduleLabel: currentLabel
+        });
+      }
     } else if (scheduleId) {
       this.setHostCommittedSchedule(scheduleId, {
         schedule: fallbackSchedule,
