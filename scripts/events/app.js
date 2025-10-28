@@ -136,6 +136,7 @@ export class EventAdminApp {
     this.scheduleConflictContext = null;
     this.scheduleConflictLastSignature = "";
     this.scheduleConflictPromptSignature = "";
+    this.scheduleConflictLastPromptSignature = "";
     this.lastScheduleCommitChanged = false;
     this.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
@@ -2235,6 +2236,10 @@ export class EventAdminApp {
     const { reason = "unspecified", originPanel = "", target = "" } = meta || {};
     this.renderScheduleConflictDialog(context);
     this.clearScheduleConflictError();
+    const signature = ensureString(context?.signature);
+    if (signature) {
+      this.scheduleConflictLastPromptSignature = signature;
+    }
     const wasOpen = this.isScheduleConflictDialogOpen();
     if (!wasOpen) {
       this.openDialog(this.dom.scheduleConflictDialog);
@@ -2759,18 +2764,35 @@ export class EventAdminApp {
       }
       this.scheduleConflictLastSignature = "";
       this.scheduleConflictPromptSignature = "";
+      this.scheduleConflictLastPromptSignature = "";
       this.maybeClearScheduleConsensus(context);
       return;
     }
-    this.scheduleConflictLastSignature = context?.signature || "";
-    const shouldPrompt = Boolean(this.pendingNavigationTarget);
+    const signature = ensureString(context?.signature);
+    this.scheduleConflictLastSignature = signature;
     const hasSelection = Boolean(this.selectedScheduleId);
-    if (shouldPrompt && hasSelection && !this.isScheduleConflictDialogOpen()) {
-      this.openScheduleConflictDialog(context, {
-        reason: "presence",
-        originPanel: this.activePanel,
-        target: this.pendingNavigationTarget || this.activePanel
-      });
+    const shouldPromptDueToNavigation = Boolean(this.pendingNavigationTarget);
+    const shouldPromptDueToConflict =
+      !shouldPromptDueToNavigation &&
+      hasSelection &&
+      signature &&
+      signature !== this.scheduleConflictLastPromptSignature;
+    if (!this.isScheduleConflictDialogOpen()) {
+      if (shouldPromptDueToNavigation && hasSelection) {
+        this.openScheduleConflictDialog(context, {
+          reason: "presence",
+          originPanel: this.activePanel,
+          target: this.pendingNavigationTarget || this.activePanel
+        });
+      } else if (shouldPromptDueToConflict) {
+        this.openScheduleConflictDialog(context, {
+          reason: "presence-auto",
+          originPanel: this.activePanel,
+          target: this.activePanel
+        });
+      }
+    } else if (shouldPromptDueToConflict && signature) {
+      this.scheduleConflictLastPromptSignature = signature;
     }
   }
 
@@ -2871,6 +2893,7 @@ export class EventAdminApp {
     this.scheduleConsensusLastSignature = "";
     this.scheduleConsensusLastKey = "";
     this.scheduleConflictPromptSignature = "";
+    this.scheduleConflictLastPromptSignature = "";
     this.hideScheduleConsensusToast();
     if (reason) {
       this.logFlowState("スケジュール合意情報をリセットしました", { reason });
@@ -2917,6 +2940,7 @@ export class EventAdminApp {
       this.scheduleConsensusLastSignature = "";
       this.scheduleConsensusLastKey = "";
       this.scheduleConflictPromptSignature = "";
+      this.scheduleConflictLastPromptSignature = "";
       this.hideScheduleConsensusToast();
       return;
     }
@@ -2937,6 +2961,7 @@ export class EventAdminApp {
       this.scheduleConsensusLastKey = key;
       if (signature && key) {
         this.scheduleConflictPromptSignature = "";
+        this.scheduleConflictLastPromptSignature = "";
         this.applyScheduleConsensus(consensus);
       } else if (signature && !key) {
         this.scheduleConflictPromptSignature = signature;
@@ -3215,6 +3240,7 @@ export class EventAdminApp {
       this.scheduleConsensusLastSignature = "";
       this.scheduleConsensusLastKey = "";
       this.scheduleConflictPromptSignature = "";
+      this.scheduleConflictLastPromptSignature = "";
       remove(ref)
         .then(() => {
           this.logFlowState("スケジュール合意情報を削除しました", {
@@ -3822,6 +3848,7 @@ export class EventAdminApp {
     this.scheduleConflictContext = null;
     this.scheduleConflictLastSignature = "";
     this.scheduleConflictPromptSignature = "";
+    this.scheduleConflictLastPromptSignature = "";
     this.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
     this.awaitingScheduleConflictPrompt = false;
@@ -4838,18 +4865,35 @@ export class EventAdminApp {
       }
       this.scheduleConflictLastSignature = "";
       this.scheduleConflictPromptSignature = "";
+      this.scheduleConflictLastPromptSignature = "";
       this.maybeClearScheduleConsensus(context);
       return;
     }
-    this.scheduleConflictLastSignature = context?.signature || "";
-    const shouldPrompt = Boolean(this.pendingNavigationTarget);
+    const signature = ensureString(context?.signature);
+    this.scheduleConflictLastSignature = signature;
     const hasSelection = Boolean(this.selectedScheduleId);
-    if (shouldPrompt && hasSelection && !this.isScheduleConflictDialogOpen()) {
-      this.openScheduleConflictDialog(context, {
-        reason: "presence",
-        originPanel: this.activePanel,
-        target: this.pendingNavigationTarget || this.activePanel
-      });
+    const shouldPromptDueToNavigation = Boolean(this.pendingNavigationTarget);
+    const shouldPromptDueToConflict =
+      !shouldPromptDueToNavigation &&
+      hasSelection &&
+      signature &&
+      signature !== this.scheduleConflictLastPromptSignature;
+    if (!this.isScheduleConflictDialogOpen()) {
+      if (shouldPromptDueToNavigation && hasSelection) {
+        this.openScheduleConflictDialog(context, {
+          reason: "presence",
+          originPanel: this.activePanel,
+          target: this.pendingNavigationTarget || this.activePanel
+        });
+      } else if (shouldPromptDueToConflict) {
+        this.openScheduleConflictDialog(context, {
+          reason: "presence-auto",
+          originPanel: this.activePanel,
+          target: this.activePanel
+        });
+      }
+    } else if (shouldPromptDueToConflict && signature) {
+      this.scheduleConflictLastPromptSignature = signature;
     }
   }
 
@@ -4950,6 +4994,7 @@ export class EventAdminApp {
     this.scheduleConsensusLastSignature = "";
     this.scheduleConsensusLastKey = "";
     this.scheduleConflictPromptSignature = "";
+    this.scheduleConflictLastPromptSignature = "";
     this.hideScheduleConsensusToast();
     if (reason) {
       this.logFlowState("スケジュール合意情報をリセットしました", { reason });
@@ -4996,6 +5041,7 @@ export class EventAdminApp {
       this.scheduleConsensusLastSignature = "";
       this.scheduleConsensusLastKey = "";
       this.scheduleConflictPromptSignature = "";
+      this.scheduleConflictLastPromptSignature = "";
       this.hideScheduleConsensusToast();
       return;
     }
@@ -5016,6 +5062,7 @@ export class EventAdminApp {
       this.scheduleConsensusLastKey = key;
       if (signature && key) {
         this.scheduleConflictPromptSignature = "";
+        this.scheduleConflictLastPromptSignature = "";
         this.applyScheduleConsensus(consensus);
       } else if (signature && !key) {
         this.scheduleConflictPromptSignature = signature;
@@ -5293,6 +5340,7 @@ export class EventAdminApp {
       this.scheduleConsensusLastSignature = "";
       this.scheduleConsensusLastKey = "";
       this.scheduleConflictPromptSignature = "";
+      this.scheduleConflictLastPromptSignature = "";
       remove(ref)
         .then(() => {
           this.logFlowState("スケジュール合意情報を削除しました", {
@@ -5446,6 +5494,7 @@ export class EventAdminApp {
     this.scheduleConflictContext = null;
     this.scheduleConflictLastSignature = "";
     this.scheduleConflictPromptSignature = "";
+    this.scheduleConflictLastPromptSignature = "";
     this.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
     this.awaitingScheduleConflictPrompt = false;
