@@ -1,3 +1,4 @@
+// api-client.js: バックエンドAPIとの通信ラッパーを実装し、REST呼び出しを標準化します。
 import { GAS_API_URL } from "./constants.js";
 
 export function createApiClient(authInstance, onAuthStateChanged) {

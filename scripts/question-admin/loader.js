@@ -1,3 +1,4 @@
+// loader.js: Firebaseからのデータロードや購読処理を集約したモジュールです。
 import { dom } from "./dom.js";
 import { loaderState } from "./state.js";
 

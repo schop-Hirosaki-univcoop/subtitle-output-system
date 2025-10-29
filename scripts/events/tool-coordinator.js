@@ -1,3 +1,4 @@
+// tool-coordinator.js: イベント向けツール同期のハブとなるコーディネーターモジュールです。
 import { logError } from "./helpers.js";
 import { normalizeOperatorMode } from "../shared/operator-modes.js";
 import { OperatorToolManager } from "./tools/operator.js";

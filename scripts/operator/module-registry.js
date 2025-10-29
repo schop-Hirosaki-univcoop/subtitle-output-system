@@ -1,3 +1,4 @@
+// module-registry.js: オペレーター画面のモジュール登録とライフサイクル管理を行います。
 import * as Dictionary from "./dictionary.js";
 import * as Logs from "./logs.js";
 import * as Questions from "./questions.js";

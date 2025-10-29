@@ -1,3 +1,4 @@
+// app.js: イベント管理フローの中核ロジックを担い、Firebaseとの同期と画面遷移制御をまとめます。
 import { queryDom } from "./dom.js";
 import {
   database,
@@ -62,6 +63,11 @@ const DISPLAY_LOCK_REASONS = new Set([
   "consensus-follow"
 ]);
 
+/**
+ * setTimeout/clearTimeout を持つホストオブジェクトを検出します。
+ * ブラウザ/Nodeの両環境で安全にタイマーを利用するためのフォールバックです。
+ * @returns {{ setTimeout: typeof setTimeout, clearTimeout: typeof clearTimeout }}
+ */
 function getTimerHost() {
   if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
     return window;
@@ -75,6 +81,12 @@ function getTimerHost() {
   };
 }
 
+/**
+ * CSSスタイル値を数値のピクセル値に変換します。
+ * パースできない場合は 0 を返し、例外を発生させません。
+ * @param {unknown} value
+ * @returns {number}
+ */
 function parseCssPixels(value) {
   if (typeof value !== "string") {
     return 0;
@@ -83,6 +95,11 @@ function parseCssPixels(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/**
+ * イベント管理画面全体を統括するアプリケーションクラスです。
+ * Firebaseの認証・Realtime Database・埋め込みツールを連携し
+ * 画面遷移、選択状態の同期、各種トースト/ダイアログ制御を提供します。
+ */
 export class EventAdminApp {
   constructor() {
     this.dom = queryDom();

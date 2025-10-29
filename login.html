@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- login.html: Firebase認証のログインUIを提供し、OAuth/匿名認証の導線をまとめています。 -->
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
@@ -17,7 +18,9 @@
   </noscript>
   <telop-header tagline="Event Control" context-label="サインイン"></telop-header>
 
+  <!-- メインモジュール: 認証導線とエラー表示を包含 -->
   <main class="single-main">
+    <!-- ログインカード: Google OAuth によるサインイン操作を提供 -->
     <section class="module module--primary" aria-labelledby="login-title">
       <div class="module-header">
         <div class="module-heading">
@@ -28,6 +31,7 @@
         </div>
       </div>
       <div class="module-body">
+        <!-- 認証ボタン群: 最低限の文言とエラーハンドリング領域 -->
         <div class="login-panel">
           <p class="login-lead">
             ログインするとイベント管理や参加者リスト、テロップ操作ツールへ進むことができます。

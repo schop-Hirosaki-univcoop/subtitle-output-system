@@ -1,3 +1,4 @@
+// app.js: 質問投稿フォームの起動処理と送信ハンドリングを統括するエントリースクリプトです。
 import { getDatabaseInstance } from "./firebase.js";
 import { fetchContextFromToken, extractToken } from "./context-service.js";
 import { FormView } from "./view.js";

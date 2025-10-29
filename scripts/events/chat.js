@@ -1,3 +1,4 @@
+// chat.js: 管理チャットの送受信とUI更新を制御するリアルタイム連携モジュールです。
 import {
   operatorChatMessagesRef,
   onValue,
@@ -16,6 +17,12 @@ const SCROLL_THRESHOLD = 48;
 const REPLY_PAYLOAD_LIMIT = 300;
 const REPLY_PREVIEW_LIMIT = 180;
 
+/**
+ * チャットUIに表示する時刻文字列を生成します。
+ * Intlが利用できない環境では toLocaleTimeString をフォールバックします。
+ * @param {Date} date
+ * @returns {string}
+ */
 function formatTime(date) {
   try {
     return new Intl.DateTimeFormat("ja-JP", {
@@ -27,6 +34,12 @@ function formatTime(date) {
   }
 }
 
+/**
+ * 日付見出し用にローカライズされた日付文字列を返します。
+ * Intlの失敗時には toLocaleDateString を使用します。
+ * @param {Date} date
+ * @returns {string}
+ */
 function formatDate(date) {
   try {
     return new Intl.DateTimeFormat("ja-JP", {
@@ -40,6 +53,11 @@ function formatDate(date) {
   }
 }
 
+/**
+ * 日付ごとのグルーピングキー(YYYY-MM-DD)を生成します。
+ * @param {Date} date
+ * @returns {string}
+ */
 function formatDateKey(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -47,6 +65,13 @@ function formatDateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Realtime Database から受け取ったメッセージを描画用に正規化します。
+ * 空白のみのメッセージは除外し、replyToの構造を安全に整えます。
+ * @param {string} id
+ * @param {unknown} value
+ * @returns {object|null} 正常化されたメッセージ。null の場合は描画対象外です。
+ */
 function normalizeMessage(id, value) {
   if (!value || typeof value !== "object") {
     return null;
@@ -82,6 +107,10 @@ function normalizeMessage(id, value) {
   };
 }
 
+/**
+ * 管理画面内のリアルタイムチャット機能を制御するコントローラです。
+ * メッセージ購読、入力フォーム制御、既読管理、返信プレビューを担います。
+ */
 export class EventChat {
   constructor(app) {
     this.app = app;

@@ -1,3 +1,4 @@
+// firebase.js: 質問管理機能向けのFirebaseクライアント初期化と参照生成を担当します。
 import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   initializeAuth,

@@ -1,3 +1,4 @@
+// dialog.js: ダイアログ表示や確認モーダルの生成ロジックをまとめています。
 import { state } from "./state.js";
 import { dom } from "./dom.js";
 

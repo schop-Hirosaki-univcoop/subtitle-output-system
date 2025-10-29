@@ -1,3 +1,9 @@
+// dom.js: イベント管理画面向けのDOMユーティリティとテンプレート生成を担当します。
+/**
+ * イベント管理画面で参照する主要なDOM要素を一括で収集します。
+ * null安全性を高め、呼び出し元でのクエリ重複を避けるために利用します。
+ * @returns {Record<string, HTMLElement|null|Element[]>}
+ */
 export function queryDom() {
   return {
     main: document.getElementById("events-main"),

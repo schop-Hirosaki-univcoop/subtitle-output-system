@@ -1,3 +1,4 @@
+// state.js: 質問管理画面のアプリケーションステートとデータ整形ロジックを定義します。
 const state = {
   events: [],
   selectedEventId: null,

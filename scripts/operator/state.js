@@ -1,3 +1,4 @@
+// state.js: オペレーター画面の状態管理と同期ロジックを提供します。
 import { OPERATOR_MODE_TELOP } from "../shared/operator-modes.js";
 
 export function createInitialState(autoScroll = true) {

@@ -1,3 +1,4 @@
+// loader.js: Firebaseデータの読込や購読処理を包括的に扱うモジュールです。
 import { STEP_LABELS } from "./constants.js";
 import { escapeHtml } from "./utils.js";
 

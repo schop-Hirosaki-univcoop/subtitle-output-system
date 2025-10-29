@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- question-form.html: 参加者の質問投稿フォームを構築し、コンテキスト情報の受け渡しを制御するエントリーページです。 -->
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
@@ -17,7 +18,9 @@
   </noscript>
   <telop-header tagline="Question Intake Desk" context-label="フォーム情報"></telop-header>
 
+  <!-- 本文: 受付フォーム本体と案内メッセージを保持 -->
   <main class="single-main" id="question-main">
+    <!-- 受付モジュール: 参加者への案内とフォーム要素をまとめる -->
     <section class="module module--primary intake-module" aria-labelledby="form-title">
       <div class="module-header">
         <div class="module-heading">
@@ -26,13 +29,16 @@
         </div>
       </div>
       <div class="module-body">
+        <!-- コンテキストバナー: 招待リンク由来の挨拶や日程情報を表示 -->
         <div id="context-banner" class="context-banner" hidden>
           <p id="welcome-line" class="context-text context-text--welcome"></p>
           <p id="intro-line" class="context-text context-text--intro" hidden></p>
           <p id="schedule-line" class="context-text context-text--schedule"></p>
         </div>
+        <!-- 利用制限表示: 認証エラーなどフォームを非表示にするガード -->
         <div id="context-guard" class="context-guard" role="alert" aria-live="assertive" hidden></div>
 
+        <!-- 質問フォーム: ラジオネームと質問本文をサーバーへ送信 -->
         <form id="question-form" class="intake-form" novalidate autocomplete="on" hidden>
           <input id="access-token" name="access-token" type="hidden">
           <input id="event-id" name="event-id" type="hidden">
@@ -44,6 +50,7 @@
           <input id="group-number" name="group-number" type="hidden">
 
           <div class="form-field">
+            <!-- ラジオネーム入力: 配信表示名を収集 -->
             <div class="field-header">
               <label for="radio-name">ラジオネーム</label>
               <span class="field-tag field-tag--required">必須</span>
@@ -55,6 +62,7 @@
           </div>
 
           <div class="form-field">
+            <!-- 質問本文入力: 60文字制限でテロップ化を想定 -->
             <div class="field-header">
               <label for="question-text">質問・お悩み</label>
               <span class="field-tag field-tag--required">必須</span>
@@ -67,6 +75,7 @@
           </div>
 
           <div class="form-field">
+            <!-- ジャンル選択: オンエア時の分類と運営側並び替えに利用 -->
             <div class="field-header">
               <label for="genre">ジャンル</label>
               <span class="field-tag field-tag--required">必須</span>
@@ -83,10 +92,12 @@
           </div>
 
           <div class="form-actions">
+            <!-- 送信ボタンと送信後フィードバック領域 -->
             <button type="submit" class="btn btn-primary" id="submit-button">送信する</button>
             <p class="form-feedback" id="form-feedback" role="alert" aria-live="polite"></p>
           </div>
         </form>
+        <!-- 利用案内: 送信後の連絡方法や運営向け案内のテキスト -->
         <div class="form-meta" id="form-meta" hidden>
           <p class="form-meta-line" id="form-guidance" hidden></p>
           <p class="form-meta-line">フォームの利用方法やリンクに関するお問い合わせは、運営からのご案内に従ってください。</p>

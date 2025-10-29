@@ -1,3 +1,4 @@
+// utils.js: 質問管理全体で共有するユーティリティ関数群です。
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }

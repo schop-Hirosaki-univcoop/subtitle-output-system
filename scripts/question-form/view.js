@@ -1,3 +1,4 @@
+// view.js: フォームのDOM操作とバリデーションUI更新を担うビュー層です。
 export class FormView {
   constructor({ document: doc = window.document, maxRadioNameLength = 40, maxQuestionLength = 400 } = {}) {
     this.document = doc;

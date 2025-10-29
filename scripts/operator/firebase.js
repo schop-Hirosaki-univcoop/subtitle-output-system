@@ -1,3 +1,4 @@
+// firebase.js: オペレーター向けのFirebase初期化と参照ユーティリティをまとめています。
 import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getDatabase,

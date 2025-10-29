@@ -1,3 +1,4 @@
+// dictionary.js: ルビ辞書のロードと検索、編集操作をまとめたモジュールです。
 import { database, dictionaryRef, onValue, ref, set, update } from "./firebase.js";
 import { DICTIONARY_STATE_KEY } from "./constants.js";
 

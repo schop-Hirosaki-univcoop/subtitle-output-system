@@ -1,5 +1,11 @@
+// auth-transfer.js: 認証情報の引き継ぎ用ストレージ操作をカプセル化し、画面間のサインイン状態を保持します。
 const STORAGE_KEY = "sos:operatorAuthTransfer";
 
+/**
+ * sessionStorage取得時のブラウザ依存例外を吸収するヘルパー。
+ * プライベートブラウジングやセキュリティ制限で例外が投げられるケースに備えています。
+ * @returns {Storage|null}
+ */
 function getSessionStorage() {
   try {
     if (typeof window !== "undefined" && window.sessionStorage) {
@@ -11,6 +17,11 @@ function getSessionStorage() {
   return null;
 }
 
+/**
+ * 認証資格情報をセッションストレージに保存し、次画面でのサインインに利用できるようにします。
+ * @param {object|null} payload Firebase OAuthCredentialから抽出した情報
+ * @returns {boolean}
+ */
 export function storeAuthTransfer(payload = null) {
   const storage = getSessionStorage();
   if (!storage) {
@@ -36,6 +47,10 @@ export function storeAuthTransfer(payload = null) {
   }
 }
 
+/**
+ * 保存されている認証引き継ぎ情報を取得し、同時にストレージから削除します。
+ * @returns {{ providerId: string, signInMethod: string, idToken: string, accessToken: string, timestamp: number }|null}
+ */
 export function consumeAuthTransfer() {
   const storage = getSessionStorage();
   if (!storage) {
@@ -65,6 +80,9 @@ export function consumeAuthTransfer() {
   }
 }
 
+/**
+ * ストレージに残っている認証情報を破棄します。
+ */
 export function clearAuthTransfer() {
   const storage = getSessionStorage();
   if (!storage) {

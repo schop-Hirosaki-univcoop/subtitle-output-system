@@ -1,9 +1,19 @@
+// tools/operator.js: オペレーター用ツールの状態管理と同期処理を提供します。
 import { logError } from "../helpers.js";
 
+/**
+ * ローダー状態の初期値を生成します。
+ * 非同期読み込み処理の重複実行を防ぐ目的で利用します。
+ * @returns {{ promise: Promise<unknown>|null, ready: boolean }}
+ */
 function createLoaderState() {
   return { promise: null, ready: false };
 }
 
+/**
+ * オペレーター埋め込みツールのライフサイクルを管理するマネージャです。
+ * 遅延ロード、事前ウォームアップ、状態同期、ドロワー制御を担当します。
+ */
 export class OperatorToolManager {
   constructor(app) {
     this.app = app;

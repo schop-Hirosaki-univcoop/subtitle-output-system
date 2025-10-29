@@ -1,3 +1,4 @@
+/* question-form.css: 質問投稿フォーム固有のレイアウトとコンポーネントスタイルをまとめた定義ファイルです。 */
 body.question-form-page,
 body.question-admin-page{
   height:auto;
@@ -26,6 +27,7 @@ body.question-admin-page{
   overflow:visible;
 }
 
+/* 招待リンクの案内文をまとめるバナー */
 .context-banner{
   display:flex;
   flex-direction:column;
@@ -59,6 +61,7 @@ body.question-admin-page{
   font-weight:500;
 }
 
+/* アクセス制御メッセージ: 権限不足時の差し替え表示 */
 .context-guard{
   margin:0 0 clamp(1.2rem, 2vw, 1.5rem);
   padding:1rem 1.2rem;
@@ -74,6 +77,7 @@ body.question-admin-page{
   outline-offset:4px;
 }
 
+/* 入力フォーム全体の縦並びを調整 */
 .intake-form{
   display:flex;
   flex-direction:column;
@@ -140,6 +144,7 @@ body.question-admin-page{
   color:var(--danger);
 }
 
+/* 送信ボタンとステータスメッセージの縦並び */
 .form-actions{
   display:flex;
   flex-direction:column;
@@ -162,6 +167,7 @@ body.question-admin-page{
   color:var(--danger);
 }
 
+/* 送信後の案内文章ブロック */
 .form-meta{
   margin-top:clamp(1.5rem, 3vw, 2.1rem);
   padding:1.1rem 1.3rem;

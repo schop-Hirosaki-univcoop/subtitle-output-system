@@ -1,3 +1,4 @@
+// code.gs: Google Apps Script上でSpreadsheetやFirebase連携を行うサーバー側スクリプトのエントリーです。
 // WebAppとしてアクセスされたときに実行されるメイン関数
 function doGet(e) {
   return withCors_(

@@ -1,3 +1,4 @@
+// config.js: イベント管理機能で利用する構成値と制御フラグを定義します。
 export const STAGE_SEQUENCE = ["events", "schedules", "tabs"];
 
 export const STAGE_INFO = {

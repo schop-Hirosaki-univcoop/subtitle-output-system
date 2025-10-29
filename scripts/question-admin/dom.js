@@ -1,3 +1,4 @@
+// dom.js: 質問管理UIで利用するDOMテンプレート生成とレンダリングヘルパーです。
 function getPrefix() {
   if (typeof document === "undefined") {
     return "";

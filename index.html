@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- index.html: 管理者向けのイベント制御フローUI全体を構築するメインエントリーポイントです。 -->
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
@@ -34,7 +35,9 @@
     </div>
   </telop-header>
 
+  <!-- メインステージ: 左の進行ガイドと右のパネル群で業務フローを構成 -->
   <main id="events-main" class="flow-main" data-stage="events">
+    <!-- ステップ進捗: 現在の作業段階を視覚的に示す -->
     <section class="flow-stage" aria-live="polite">
       <ol class="flow-progress" aria-label="進行ステップ">
         <li class="flow-progress__item is-active" data-stage-indicator="events" aria-current="step">
@@ -53,6 +56,7 @@
     </section>
 
     <div class="events-layout">
+      <!-- モバイル用トグル: スマホ表示でのサイドバー/チャット切替 -->
       <div class="events-mobile-controls" aria-label="サイドメニューの開閉">
         <button
           id="events-sidebar-toggle"
@@ -84,6 +88,7 @@
         </button>
       </div>
 
+      <!-- サイドバー: イベントとツールの選択操作を集約 -->
       <aside id="events-sidebar" class="events-sidebar">
         <button
           type="button"
@@ -134,7 +139,9 @@
           <button id="flow-tab-logs" class="sidebar-nav__button" type="button" data-panel-target="logs">操作ログ</button>
         </nav>
       </aside>
+      <!-- 右ペイン: 各種管理モジュールの本体 -->
       <div id="flow-stage-panels" class="flow-panels">
+        <!-- イベント一覧パネル: 運用前に対象イベントを確定させる -->
         <section class="module module--primary admin-module flow-card flow-card--events flow-stage-panel is-active" aria-labelledby="events-title" data-panel="events">
         <div class="module-header">
           <div class="module-heading">
@@ -164,6 +171,7 @@
         </div>
         </section>
 
+        <!-- 日程パネル: イベント決定後に担当日程を選択・整合 -->
         <section class="module module--primary admin-module flow-card flow-card--schedules flow-stage-panel" aria-labelledby="schedule-admin-title" data-panel="schedules">
         <div class="module-header">
           <div class="module-heading">
@@ -204,6 +212,7 @@
         </div>
         </section>
 
+        <!-- 参加者ツールパネル: CSV連携や専用リンク生成を担う埋め込み -->
         <section id="flow-panel-participants" class="flow-tool-panel flow-stage-panel" data-panel="participants" aria-labelledby="flow-panel-participants-title" hidden>
         <h2 id="flow-panel-participants-title" class="visually-hidden">参加者リスト</h2>
         <div id="participants-tool" class="embedded-tool" data-tool="participants">
@@ -405,6 +414,7 @@
                 </div>
               </div>
         </section>
+        <!-- テロップ操作ツール: 本番テロップの送出面を iframe で統合 -->
         <section id="flow-panel-operator" class="flow-tool-panel flow-stage-panel" data-panel="operator" aria-labelledby="flow-panel-operator-title" hidden>
               <h2 id="flow-panel-operator-title" class="visually-hidden">テロップ操作</h2>
               <div id="operator-tool" class="embedded-tool" data-tool="operator">
@@ -564,6 +574,7 @@
                 </div>
               </div>
         </section>
+        <!-- ルビ辞書ツール: テロップ読み上げ用の変換データを編集 -->
         <section id="op-dictionary-panel" class="module module--secondary flow-tool-panel flow-stage-panel" data-panel="dictionary" aria-labelledby="op-dictionary-title" hidden>
               <div class="module-header">
                 <div class="module-heading">
@@ -643,6 +654,7 @@
                 </div>
               </div>
         </section>
+        <!-- Pick Up Question: オンエア中の質問選出ワークスペース -->
         <section id="op-pickup-panel" class="module module--secondary flow-tool-panel flow-stage-panel" data-panel="pickup" aria-labelledby="op-pickup-title" hidden>
           <div class="module-header">
             <div class="module-heading">
@@ -722,6 +734,7 @@
             <span id="op-pickup-selected-info">質問を選択してください</span>
           </div>
         </section>
+        <!-- 操作ログ: 問題切り分け時に参照するトレースビュー -->
         <section id="op-logs-panel" class="module module--secondary flow-tool-panel flow-stage-panel" data-panel="logs" aria-labelledby="op-logs-title" hidden>
               <div class="module-header">
                 <div class="module-heading">

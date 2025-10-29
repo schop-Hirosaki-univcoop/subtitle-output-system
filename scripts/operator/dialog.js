@@ -1,3 +1,4 @@
+// dialog.js: 確認ダイアログやトーストの表示制御をカプセル化します。
 import { database, ref, update } from "./firebase.js";
 
 export function openDialog(app, element, focusTarget) {

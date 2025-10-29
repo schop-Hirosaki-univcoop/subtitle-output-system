@@ -1,3 +1,4 @@
+// app.js: 質問管理機能のエントリーで、画面初期化とユーザー操作制御をまとめます。
 import {
   GAS_API_URL,
   FORM_PAGE_PATH,

@@ -1,3 +1,4 @@
+// constants.js: 質問管理領域で使う定数・マッピング値を整理したモジュールです。
 export const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec";
 export const FORM_PAGE_PATH = "question-form.html";
 export const STEP_LABELS = [
