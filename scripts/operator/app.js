@@ -190,6 +190,12 @@ const MODULE_METHOD_GROUPS = [
   }
 ];
 
+/**
+ * 各ドメインモジュールから公開されているメソッドをOperatorAppインスタンスにバインドします。
+ * メソッド呼び出し時にアプリケーションコンテキストを暗黙的に先頭引数として渡すことで、
+ * 個別モジュールが状態にアクセスしやすくします。
+ * @param {OperatorApp} app
+ */
 function bindModuleMethods(app) {
   MODULE_METHOD_GROUPS.forEach(({ module, methods }) => {
     methods.forEach((methodName) => {
@@ -207,6 +213,11 @@ function bindModuleMethods(app) {
   });
 }
 
+/**
+ * DOMイベントの一覧定義を走査し、対応するハンドラをアプリケーションに紐付けます。
+ * Guard条件がある場合は評価し、利用不可のUI要素にはイベントを登録しません。
+ * @param {OperatorApp} app
+ */
 function bindDomEvents(app) {
   DOM_EVENT_BINDINGS.forEach(({ element, type, handler, guard }) => {
     if (typeof guard === "function" && !guard(app)) {
@@ -228,6 +239,11 @@ function bindDomEvents(app) {
   });
 }
 
+/**
+ * テーブル行の操作ボタンと対応するハンドラを結び付け、
+ * クリック時にOperatorAppコンテキストで処理が行われるように設定します。
+ * @param {OperatorApp} app
+ */
 function bindActionButtons(app) {
   const buttons = app.dom.actionButtons || [];
   ACTION_BUTTON_BINDINGS.forEach(({ index, handler }) => {
@@ -241,6 +257,10 @@ function bindActionButtons(app) {
 }
 
 export class OperatorApp {
+  /**
+   * 画面構築時にDOMキャッシュと初期状態を準備し、埋め込みモードなどの文脈情報を読み取ります。
+   * 重い初期化処理はinitで遅延実行するため、ここでは純粋な状態生成に留めます。
+   */
   constructor() {
     this.dom = queryDom();
     const autoScroll = this.dom.logAutoscroll ? this.dom.logAutoscroll.checked : true;
@@ -331,6 +351,10 @@ export class OperatorApp {
     this.embedReadyDeferred = null;
   }
 
+  /**
+   * 埋め込みモード時に使用されるURLプレフィックスを取得します。
+   * @returns {string}
+   */
   static get embedPrefix() {
     if (typeof document === "undefined") {
       return "";
@@ -338,6 +362,11 @@ export class OperatorApp {
     return document.documentElement?.dataset?.operatorEmbedPrefix || "";
   }
 
+  /**
+   * オペレーターpresence用のセッションIDを生成します。
+   * crypto APIの利用可否に応じて最適な乱数生成手段を選択します。
+   * @returns {string}
+   */
   generatePresenceSessionId() {
     if (typeof crypto !== "undefined") {
       if (typeof crypto.randomUUID === "function") {
@@ -352,6 +381,11 @@ export class OperatorApp {
     return `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 
+  /**
+   * URLクエリや埋め込み設定からイベント/日程情報を解析し、ページコンテキストとして返却します。
+   * エラーに強い実装とし、欠落値には空文字を設定します。
+   * @returns {{ eventId: string, scheduleId: string, eventName: string, scheduleLabel: string, startAt: string, endAt: string, scheduleKey: string, operatorMode: string }}
+   */
   extractPageContext() {
     const context = {
       eventId: "",
@@ -385,6 +419,10 @@ export class OperatorApp {
     return context;
   }
 
+  /**
+   * ページ読み込み時に抽出した文脈情報をアプリケーションのstateに反映します。
+   * URL指定のチャンネルが存在する場合にはローカルstateの選択肢として保持します。
+   */
   applyContextToState() {
     if (!this.state) return;
     const context = this.pageContext || {};
@@ -411,6 +449,11 @@ export class OperatorApp {
     this.state.operatorMode = this.operatorMode;
   }
 
+  /**
+   * stateとURLから現在操作対象となるイベント/日程を決定します。
+   * いずれかの値が欠落している場合はscheduleKeyから復元を試みます。
+   * @returns {{ eventId: string, scheduleId: string }}
+   */
   getActiveChannel() {
     const ensure = (value) => String(value ?? "").trim();
     let eventId = ensure(this.state?.activeEventId || this.pageContext?.eventId || "");
@@ -434,6 +477,10 @@ export class OperatorApp {
     return { eventId, scheduleId };
   }
 
+  /**
+   * 現在アクティブなイベントと日程IDを基に正規化されたチャンネルキーを生成します。
+   * @returns {string}
+   */
   getCurrentScheduleKey() {
     const { eventId, scheduleId } = this.getActiveChannel();
     const normalizedEvent = String(eventId || "").trim();
@@ -443,6 +490,14 @@ export class OperatorApp {
     return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
   }
 
+  /**
+   * presenceデータから比較・集計に利用する一意のキーを導出します。
+   * scheduleKey > scheduleId > label > entryIdの優先順位で構成します。
+   * @param {string} eventId
+   * @param {object} payload
+   * @param {string} entryId
+   * @returns {string}
+   */
   derivePresenceScheduleKey(eventId, payload = {}, entryId = "") {
     const ensure = (value) => String(value ?? "").trim();
     const normalizedEvent = ensure(eventId);
@@ -473,10 +528,18 @@ export class OperatorApp {
     return normalizedEntry || normalizedEvent || "";
   }
 
+  /**
+   * オペレーターモードがテロップ操作を許可する状態かどうかを判定します。
+   * @returns {boolean}
+   */
   isTelopEnabled() {
     return isTelopMode(this.operatorMode);
   }
 
+  /**
+   * 送出端末のセッション状態から現在の割当情報を抽出します。
+   * @returns {null|{ eventId: string, scheduleId: string, label: string, updatedAt?: number, lockedAt?: number }}
+   */
   getDisplayAssignment() {
     const session = this.state?.displaySession || null;
     const rawAssignment = session && typeof session === "object" ? session.assignment || null : null;
@@ -502,6 +565,14 @@ export class OperatorApp {
     };
   }
 
+  /**
+   * 日程キーから表示用ラベルを決定します。
+   * メタデータが存在しない場合はフォールバックのラベルや日程IDを使用します。
+   * @param {string} scheduleKey
+   * @param {string} fallbackLabel
+   * @param {string} fallbackScheduleId
+   * @returns {string}
+   */
   resolveScheduleLabel(scheduleKey, fallbackLabel = "", fallbackScheduleId = "") {
     const metadataMap = this.state?.scheduleMetadata instanceof Map ? this.state.scheduleMetadata : null;
     if (metadataMap && scheduleKey && metadataMap.has(scheduleKey)) {
@@ -522,6 +593,10 @@ export class OperatorApp {
     return "未選択";
   }
 
+  /**
+   * オペレーター視点での割当状況を判定し、UI表示用の説明文を組み立てます。
+   * @returns {{ label: string, type: "normal"|"conflict"|"missing"|"unassigned" }}
+   */
   describeChannelAssignment() {
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
     if (!assignment || !assignment.eventId) {
@@ -552,6 +627,10 @@ export class OperatorApp {
     return "「指定された日程」";
   }
 
+  /**
+   * 表示端末がロックしているチャンネルとオペレーターの選択が矛盾しているか判定します。
+   * @returns {boolean}
+   */
   hasChannelMismatch() {
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
     const { eventId, scheduleId } = this.getActiveChannel();
@@ -568,6 +647,10 @@ export class OperatorApp {
     return assignedEvent !== normalizedEvent || assignedSchedule !== currentSchedule;
   }
 
+  /**
+   * 現在のチャンネル選択に基づいてリアルタイム購読を再設定します。
+   * displayセッションが存在しない場合は安全に購読を解除します。
+   */
   refreshChannelSubscriptions() {
     const { eventId, scheduleId } = this.getActiveChannel();
     const path = getRenderStatePath(eventId, scheduleId);
@@ -601,6 +684,10 @@ export class OperatorApp {
     this.evaluateScheduleConflict();
   }
 
+  /**
+   * オペレーターpresenceの監視対象を切り替えます。
+   * イベントが変わった際には既存購読を解除し、新しいイベントのpresenceノードを監視します。
+   */
   refreshOperatorPresenceSubscription() {
     const { eventId } = this.getActiveChannel();
     const nextEventId = String(eventId || "").trim();
@@ -670,6 +757,12 @@ export class OperatorApp {
     );
   }
 
+  /**
+   * presenceに自身のセッションを登録する準備を行います。
+   * 書き込み競合を避けるため、既存のエントリを確認しながら初期データを投入します。
+   * @param {string} eventId
+   * @returns {Promise<void>}
+   */
   primeOperatorPresenceSession(eventId = "") {
     const ensure = (value) => String(value ?? "").trim();
     const normalizedEventId = ensure(eventId);
@@ -745,6 +838,13 @@ export class OperatorApp {
     return primePromise;
   }
 
+  /**
+   * presence一覧から自身に該当するエントリを特定します。
+   * セッションIDの競合や重複がある場合には整理された結果を返します。
+   * @param {string} eventId
+   * @param {Map<string, any>} presenceMap
+   * @returns {{ payload: any, sessionId: string, duplicates: any[] }|null}
+   */
   resolveSelfPresenceEntry(eventId, presenceMap) {
     const ensure = (value) => String(value ?? "").trim();
     const normalizedEventId = ensure(eventId);
@@ -809,6 +909,11 @@ export class OperatorApp {
     };
   }
 
+  /**
+   * 自身のセッションIDが変化した場合にローカル状態を更新し、新しいIDでpresence監視を継続します。
+   * @param {string} eventId
+   * @param {string} sessionId
+   */
   adoptOperatorPresenceSession(eventId, sessionId) {
     const ensure = (value) => String(value ?? "").trim();
     const normalizedEventId = ensure(eventId);
@@ -843,6 +948,9 @@ export class OperatorApp {
     this.queueOperatorPresenceSync();
   }
 
+  /**
+   * presence同期処理を次のマイクロタスクに遅延させ、短時間に複数回呼ばれた場合もまとめて実行します。
+   */
   queueOperatorPresenceSync() {
     if (this.operatorPresenceSyncQueued) {
       return;
@@ -854,6 +962,12 @@ export class OperatorApp {
     });
   }
 
+  /**
+   * 現在のオペレーター状態をpresenceツリーに反映します。
+   * 書き込みは必要な場合のみ行い、サーバータイムスタンプで同期性を確保します。
+   * @param {string} reason
+   * @returns {Promise<void>}
+   */
   syncOperatorPresence(reason = "context-sync") {
     if (this.operatorPresencePrimePromise) {
       return;
@@ -981,6 +1095,9 @@ export class OperatorApp {
     this.evaluateScheduleConflict();
   }
 
+  /**
+   * 定期的にpresenceを更新するハートビートタイマーを設定します。
+   */
   scheduleOperatorPresenceHeartbeat() {
     if (this.operatorPresenceHeartbeat) {
       return;
@@ -988,6 +1105,10 @@ export class OperatorApp {
     this.operatorPresenceHeartbeat = setInterval(() => this.touchOperatorPresence(), OPERATOR_PRESENCE_HEARTBEAT_MS);
   }
 
+  /**
+   * 現在のpresenceレコードにアクセスし、最終更新時刻をサーバータイムスタンプで更新します。
+   * @returns {Promise<void>}
+   */
   touchOperatorPresence() {
     if (!this.operatorPresenceEntryRef || !this.operatorPresenceEntryKey) {
       this.stopOperatorPresenceHeartbeat();
@@ -1005,6 +1126,9 @@ export class OperatorApp {
     }
   }
 
+  /**
+   * ハートビートタイマーを解除して、追加のpresence更新を停止します。
+   */
   stopOperatorPresenceHeartbeat() {
     if (this.operatorPresenceHeartbeat) {
       clearInterval(this.operatorPresenceHeartbeat);
@@ -1012,6 +1136,10 @@ export class OperatorApp {
     }
   }
 
+  /**
+   * presenceから自身のエントリを削除し、ローカルに保持している参照も破棄します。
+   * @returns {Promise<void>}
+   */
   clearOperatorPresence() {
     this.stopOperatorPresenceHeartbeat();
     this.operatorPresenceSyncQueued = false;
@@ -1035,6 +1163,10 @@ export class OperatorApp {
     this.state.operatorPresenceSelf = null;
   }
 
+  /**
+   * 現在のチャンネル割当状況をヘッダーバナーに描画します。
+   * 表示端末との整合性やconflictの有無によって表示を切り替えます。
+   */
   renderChannelBanner() {
     const banner = this.dom.channelBanner;
     if (!banner) {
@@ -1105,6 +1237,10 @@ export class OperatorApp {
     this.renderChannelPresenceList();
   }
 
+  /**
+   * 現在イベントに参加しているオペレーター一覧を描画します。
+   * 自身のpresenceやスキップ設定に応じて補足情報を加えます。
+   */
   renderChannelPresenceList() {
     const list = this.dom.channelPresenceList;
     const placeholder = this.dom.channelPresenceEmpty;
@@ -1205,6 +1341,10 @@ export class OperatorApp {
     });
   }
 
+  /**
+   * presence衝突情報を元にダイアログのUIを更新します。
+   * 選択肢の表示と操作ボタンの活性状態を整えます。
+   */
   renderConflictDialog() {
     const conflict = this.state?.scheduleConflict;
     const optionsContainer = this.dom.conflictOptions;
@@ -1278,6 +1418,9 @@ export class OperatorApp {
     });
   }
 
+  /**
+   * ダイアログ要素を開き、フォーカスマネジメントを開始します。
+   */
   openConflictDialog() {
     if (!this.dom.conflictDialog) {
       return;
@@ -1286,6 +1429,9 @@ export class OperatorApp {
     this.conflictDialogOpen = true;
   }
 
+  /**
+   * ダイアログを閉じてフォーカスを元の要素に戻します。
+   */
   closeConflictDialog() {
     if (!this.dom.conflictDialog) {
       return;
@@ -1298,6 +1444,10 @@ export class OperatorApp {
     this.conflictDialogOpen = false;
   }
 
+  /**
+   * 利用者が選択したスケジュールで表示端末のロックを試行します。
+   * 選択肢が無効な場合は操作をブロックします。
+   */
   submitConflictSelection() {
     const conflict = this.state?.scheduleConflict;
     if (!conflict || !Array.isArray(conflict.options) || conflict.options.length === 0) {
@@ -1316,6 +1466,11 @@ export class OperatorApp {
     this.lockDisplayToSchedule(option.eventId || conflict.eventId, option.scheduleId, option.label, { fromModal: true });
   }
 
+  /**
+   * 現在選択中のイベント/日程を送出端末にロックさせます。
+   * サイレントモードや自動ロック時の挙動をオプションで制御します。
+   * @param {{ silent?: boolean, autoLock?: boolean }} options
+   */
   lockDisplayToCurrentSchedule(options = {}) {
     if (!this.isTelopEnabled()) {
       this.toast("テロップ操作なしモードでは固定できません。", "error");
@@ -1442,6 +1597,12 @@ export class OperatorApp {
     }
   }
 
+  /**
+   * 現在のpresence状況から衝突状態を特定するシグネチャを生成します。
+   * シグネチャを使って前回の状態との差分を検出します。
+   * @param {Array<{ key: string }>} options
+   * @returns {string}
+   */
   computeConflictSignature(options = []) {
     if (!Array.isArray(options) || options.length === 0) {
       return "";
@@ -1470,6 +1631,10 @@ export class OperatorApp {
     return keys.join("|");
   }
 
+  /**
+   * 指定した衝突シグネチャを一時的にスヌーズし、同一状態の再通知を抑制します。
+   * @param {string} signature
+   */
   snoozeConflictDialog(signature = "") {
     if (!signature) {
       return;
@@ -1477,6 +1642,13 @@ export class OperatorApp {
     this.conflictDialogSnoozedSignature = signature;
   }
 
+  /**
+   * 衝突状態が既にスヌーズされているか、または再通知不要かを判定します。
+   * @param {string} signature
+   * @param {Array} options
+   * @param {{ uniqueKeys: Set<string>, channelAligned: boolean, assignmentAlignedKey: string }} meta
+   * @returns {boolean}
+   */
   isConflictDialogSnoozed(signature = "", options = [], { uniqueKeys = new Set(), channelAligned = false, assignmentAlignedKey = "" } = {}) {
     if (!signature || !this.conflictDialogSnoozedSignature) {
       return false;
@@ -1508,6 +1680,11 @@ export class OperatorApp {
     return true;
   }
 
+  /**
+   * displayセッションの割当変更をローカルstateに反映します。
+   * レンダリングの更新とpresence評価を適宜行います。
+   * @param {object|null} assignment
+   */
   applyAssignmentLocally(assignment) {
     if (!assignment || typeof assignment !== "object") {
       return;
@@ -1542,6 +1719,9 @@ export class OperatorApp {
     this.state.autoLockAttemptAt = 0;
   }
 
+  /**
+   * presence情報と割当を照合し、衝突ダイアログの表示や自動ロックを制御します。
+   */
   evaluateScheduleConflict() {
     if (!this.isTelopEnabled()) {
       this.state.scheduleConflict = null;
@@ -1725,6 +1905,9 @@ export class OperatorApp {
     }
   }
 
+  /**
+   * 現在開いている任意のダイアログを閉じ、関連する状態をクリアします。
+   */
   closeActiveDialog() {
     if (!this.activeDialog) {
       return;
@@ -1740,6 +1923,11 @@ export class OperatorApp {
     Dialog.closeDialog(this, this.activeDialog);
   }
 
+  /**
+   * 埋め込み環境などから渡された外部コンテキストをstateに適用します。
+   * 受領直後にpresence同期と表示の更新を実行します。
+   * @param {Record<string, any>} context
+   */
   setExternalContext(context = {}) {
     const ensure = (value) => String(value ?? "").trim();
     const ownerUid = ensure(context.ownerUid || context.operatorUid || context.uid);
@@ -1836,6 +2024,11 @@ export class OperatorApp {
     this.updateBatchButtonVisibility();
   }
 
+  /**
+   * 埋め込み利用時に外部ホストが完了通知を送るまで待機します。
+   * 通常利用では即座に解決します。
+   * @returns {Promise<void>}
+   */
   waitUntilReady() {
     if (this.isAuthorized) {
       return Promise.resolve();
@@ -1851,6 +2044,9 @@ export class OperatorApp {
     return promise;
   }
 
+  /**
+   * 埋め込み準備待機に使用しているDeferredを解決します。
+   */
   resolveEmbedReady() {
     if (this.embedReadyDeferred?.resolve) {
       this.embedReadyDeferred.resolve();
@@ -1858,6 +2054,10 @@ export class OperatorApp {
     this.embedReadyDeferred = null;
   }
 
+  /**
+   * アプリケーションの初期化エントリーポイント。
+   * 認証状態監視やUI初期化を開始します。
+   */
   init() {
     this.setupEventListeners();
     this.applyPreferredSubTab();
@@ -1875,6 +2075,9 @@ export class OperatorApp {
     });
   }
 
+  /**
+   * DOMイベントのバインディングと画面固有の初期描画をまとめて実行します。
+   */
   setupEventListeners() {
     bindDomEvents(this);
     bindActionButtons(this);
@@ -1936,6 +2139,12 @@ export class OperatorApp {
     this.setupConfirmDialog();
   }
 
+  /**
+   * 指定セレクタで取得したボタン群に対し、dataset属性から値を取り出してコールバックへ渡します。
+   * @param {string} selector
+   * @param {string} datasetKey
+   * @param {(value: string, element: HTMLElement) => void} callback
+   */
   bindDatasetButtons(selector, datasetKey, callback) {
     document.querySelectorAll(selector).forEach((element) => {
       if (!(element instanceof HTMLElement)) {
@@ -1948,6 +2157,9 @@ export class OperatorApp {
     });
   }
 
+  /**
+   * 直近操作したサブタブ情報をlocalStorageから復元し、UIへ反映します。
+   */
   applyPreferredSubTab() {
     const preferredSubTab = Questions.loadPreferredSubTab();
     if (preferredSubTab && preferredSubTab !== this.state.currentSubTab) {
@@ -1959,6 +2171,9 @@ export class OperatorApp {
     }
   }
 
+  /**
+   * 共通確認ダイアログのDOM参照とイベントを初期化します。
+   */
   setupConfirmDialog() {
     if (!this.dom.confirmDialog || this.confirmState.initialized) {
       return;
@@ -1980,6 +2195,9 @@ export class OperatorApp {
     });
   }
 
+  /**
+   * 確認ダイアログを開き、フォーカスを初期ボタンへ移動します。
+   */
   openConfirmDialog() {
     const dialog = this.dom.confirmDialog;
     if (!dialog) return;
@@ -2000,6 +2218,10 @@ export class OperatorApp {
     }
   }
 
+  /**
+   * 確認ダイアログを閉じて結果を呼び出し元へ返します。
+   * @param {boolean} result
+   */
   finishConfirm(result) {
     const dialog = this.dom.confirmDialog;
     if (!dialog) return;
@@ -2057,6 +2279,9 @@ export class OperatorApp {
     });
   }
 
+  /**
+   * テロップ送出状態のFirebaseノードを監視し、UI更新に必要なハンドラを登録します。
+   */
   attachRenderMonitor() {
     this.currentRenderPath = null;
     this.refreshChannelSubscriptions();
@@ -2193,6 +2418,10 @@ export class OperatorApp {
     }
   }
 
+  /**
+   * ログイン済みユーザー向けにUIを初期化し、必要な購読を開始します。
+   * @param {import("firebase/auth").User} user
+   */
   renderLoggedInUi(user) {
     this.redirectingToIndex = false;
     this.operatorIdentity = {
@@ -2240,6 +2469,9 @@ export class OperatorApp {
     this.refreshOperatorPresenceSubscription();
   }
 
+  /**
+   * 未ログイン時のUIを表示し、リアルタイム購読やpresenceを解放します。
+   */
   showLoggedOutState() {
     if (this.redirectingToIndex) {
       return;
@@ -2279,6 +2511,9 @@ export class OperatorApp {
     }
   }
 
+  /**
+   * すべてのリアルタイム購読とpresence関連のリソースを破棄します。
+   */
   cleanupRealtime() {
     this.clearOperatorPresence();
     this.closeConflictDialog();
@@ -2412,6 +2647,9 @@ export class OperatorApp {
     this.updateScheduleContext();
   }
 
+  /**
+   * 質問一覧のリアルタイム購読を開始します。
+   */
   startQuestionsStream() {
     if (this.questionsUnsubscribe) this.questionsUnsubscribe();
     this.questionsUnsubscribe = onValue(questionsRef, (snapshot) => {
@@ -2419,6 +2657,9 @@ export class OperatorApp {
     });
   }
 
+  /**
+   * 質問状態ノードの購読を開始し、ステータスの変化を反映します。
+   */
   startQuestionStatusStream() {
     if (this.questionStatusUnsubscribe) this.questionStatusUnsubscribe();
     this.questionStatusUnsubscribe = onValue(questionStatusRef, (snapshot) => {
@@ -2426,6 +2667,10 @@ export class OperatorApp {
     });
   }
 
+  /**
+   * Firebaseから取得した質問データをMap構造へ変換し、ローカルstateに取り込みます。
+   * @param {Record<string, any>} value
+   */
   applyQuestionsBranch(value) {
     const branch = value && typeof value === "object" ? value : {};
     const next = new Map();
@@ -2461,6 +2706,10 @@ export class OperatorApp {
     this.rebuildQuestions();
   }
 
+  /**
+   * 質問のステータス情報をMapへ変換し、既存リストにマージします。
+   * @param {Record<string, any>} value
+   */
   applyQuestionStatusSnapshot(value) {
     const branch = value && typeof value === "object" ? value : {};
     const next = new Map();
@@ -2483,6 +2732,11 @@ export class OperatorApp {
     this.rebuildQuestions();
   }
 
+  /**
+   * 生の質問データをUI表示用に整形します。
+   * @param {Record<string, any>} item
+   * @returns {import("./questions.js").QuestionRecord}
+   */
   normalizeQuestionRecord(item) {
     const record = item && typeof item === "object" ? item : {};
     const eventId = String(record.eventId ?? "").trim();
@@ -2537,6 +2791,9 @@ export class OperatorApp {
     };
   }
 
+  /**
+   * 質問とステータスのMapから一覧配列を再構築し、派生状態を更新します。
+   */
   rebuildQuestions() {
     const questionMap = this.state.questionsByUid instanceof Map ? this.state.questionsByUid : new Map();
     const statusMap = this.state.questionStatusByUid instanceof Map ? this.state.questionStatusByUid : new Map();
@@ -2551,6 +2808,9 @@ export class OperatorApp {
     this.renderQuestions();
   }
 
+  /**
+   * イベントおよび日程のメタデータをMapに整理し、派生する表示情報を更新します。
+   */
   rebuildScheduleMetadata() {
     const eventsValue = this.eventsBranch && typeof this.eventsBranch === "object" ? this.eventsBranch : {};
     const schedulesValue = this.schedulesBranch && typeof this.schedulesBranch === "object" ? this.schedulesBranch : {};
@@ -2594,6 +2854,9 @@ export class OperatorApp {
     this.evaluateScheduleConflict();
   }
 
+  /**
+   * イベントと日程のメタデータに対するリアルタイム購読を開始します。
+   */
   startScheduleMetadataStreams() {
     if (this.eventsUnsubscribe) this.eventsUnsubscribe();
     this.eventsUnsubscribe = onValue(questionIntakeEventsRef, (snapshot) => {
@@ -2607,6 +2870,9 @@ export class OperatorApp {
     });
   }
 
+  /**
+   * 送出端末とのセッション情報を監視し、リンク状態の変化をUIへ反映します。
+   */
   startDisplaySessionMonitor() {
     if (this.displaySessionUnsubscribe) this.displaySessionUnsubscribe();
     this.displaySessionUnsubscribe = onValue(
@@ -2653,6 +2919,9 @@ export class OperatorApp {
     );
   }
 
+  /**
+   * フッターに表示する著作権表記を現在の年に合わせて更新します。
+   */
   updateCopyrightYear() {
     if (!this.dom.copyrightYear) return;
     const currentYear = new Date().getFullYear();
