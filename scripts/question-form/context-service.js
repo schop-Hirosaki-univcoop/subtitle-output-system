@@ -1,5 +1,6 @@
 // context-service.js: トークンやイベント情報を取得しフォームへ供給するサービス層です。
 import { ref, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+// URLクエリで許可するトークンキーの一覧を共有定義から利用します。
 import { TOKEN_PARAM_KEYS } from "./constants.js";
 
 /**

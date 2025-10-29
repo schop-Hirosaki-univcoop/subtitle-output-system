@@ -187,6 +187,7 @@ class LoginPage {
   }
 }
 
+// 依存サービスを注入した LoginPage を作成し、ブラウザ起動時に即座に初期化します。
 const page = new LoginPage({
   authInstance: auth,
   authProvider: provider,
