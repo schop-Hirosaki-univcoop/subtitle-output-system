@@ -1571,9 +1571,6 @@ export class OperatorApp {
       const scheduleKey = this.derivePresenceScheduleKey(resolvedEventId, value, entryId);
       const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
       const skipTelop = Boolean(value.skipTelop);
-      if (skipTelop) {
-        return;
-      }
       const entry = groups.get(scheduleKey) || {
         key: scheduleKey,
         eventId: resolvedEventId || eventId,
@@ -1673,7 +1670,9 @@ export class OperatorApp {
         this.state.autoLockAttemptKey = "";
         this.state.autoLockAttemptAt = 0;
       }
-      const canLock = Boolean(targetEventId && targetScheduleId && soleKey);
+      const members = Array.isArray(soleOption?.members) ? soleOption.members : [];
+      const hasTelopOperators = members.some((member) => member && !member.skipTelop);
+      const canLock = Boolean(targetEventId && targetScheduleId && soleKey && hasTelopOperators);
       if (!assignmentMatches && canLock && !recentlyAttempted && !this.state.channelLocking) {
         this.state.autoLockAttemptKey = soleKey;
         this.state.autoLockAttemptAt = now;
