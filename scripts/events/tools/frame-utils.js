@@ -1,4 +1,9 @@
 // tools/frame-utils.js: iframe連携やウィンドウメッセージングの補助処理を提供します。
+/**
+ * 埋め込み用 iframe や外部ツール DOM を初期化し、ログイン画面を排除して運用モードに整えます。
+ * すでに初期化済みの場合は何もせず、SSR環境では副作用を避けます。
+ * @param {{ participantsTool?: Element|null, operatorTool?: Element|null }} dom
+ */
 export function prepareEmbeddedFrames(dom) {
   if (typeof document === "undefined") {
     return;
@@ -36,6 +41,10 @@ export function prepareEmbeddedFrames(dom) {
   }
 }
 
+/**
+ * 埋め込みツールへリセット命令を送り、次のイベントに備えて状態をクリーンアップします。
+ * window が無い環境では安全のため即座に終了します。
+ */
 export function resetEmbeddedFrames() {
   if (typeof window === "undefined") {
     return;

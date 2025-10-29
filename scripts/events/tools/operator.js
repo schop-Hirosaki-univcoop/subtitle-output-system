@@ -15,17 +15,29 @@ function createLoaderState() {
  * 遅延ロード、事前ウォームアップ、状態同期、ドロワー制御を担当します。
  */
 export class OperatorToolManager {
+  /**
+   * @param {import('../app.js').EventsApp} app - 親アプリケーションインスタンス
+   */
   constructor(app) {
     this.app = app;
     this.loaderState = createLoaderState();
     this.preloadPromise = null;
   }
 
+  /**
+   * 遅延ロードやプリロードの状態を初期化します。
+   * イベント切り替え時に再ロードを強制する目的で呼び出します。
+   */
   resetFlowState() {
     this.loaderState = createLoaderState();
     this.preloadPromise = null;
   }
 
+  /**
+   * オペレーター埋め込みのスクリプトを遅延ロードし、失敗時は状態を巻き戻します。
+   * 多重読み込みを避けるために Promise を共有します。
+   * @returns {Promise<void>}
+   */
   async load() {
     const state = this.loaderState;
     if (state.ready) {
@@ -50,6 +62,10 @@ export class OperatorToolManager {
     await state.promise;
   }
 
+  /**
+   * 埋め込みアプリが利用可能になるまで待機し、準備完了後に内部アプリケーションインスタンスを返します。
+   * @returns {Promise<import('../../operator/app.js').OperatorApp|null>}
+   */
   async ensureReady() {
     await this.load();
     if (window.operatorEmbed?.waitUntilReady) {
@@ -62,6 +78,10 @@ export class OperatorToolManager {
     return window.operatorEmbed?.app || null;
   }
 
+  /**
+   * 背景でオペレーターアプリの初期化を進めておき、ユーザー操作時の待ち時間を減らします。
+   * @returns {Promise<void>}
+   */
   preloadGlobals() {
     if (!this.preloadPromise) {
       this.preloadPromise = (async () => {
@@ -75,6 +95,12 @@ export class OperatorToolManager {
     return this.preloadPromise;
   }
 
+  /**
+   * 選択されたイベントコンテキストをオペレーターアプリへ通知します。
+   * 事前に状態を記録しておき、実際に同期が走ったかどうかをログにも残します。
+   * @param {Record<string, unknown>} context
+   * @returns {Promise<void>}
+   */
   async applyContext(context) {
     const payload = context && typeof context === "object" ? context : {};
     const hasSelection = Boolean(
@@ -121,6 +147,12 @@ export class OperatorToolManager {
     }
   }
 
+  /**
+   * ルビ辞書・操作ログのドロワー開閉状態を外部から制御します。
+   * 真偽値が指定されたものだけ適用し、アプリ未初期化時の呼び出しにも安全に対応します。
+   * @param {{ dictionary?: boolean, logs?: boolean }} param0
+   * @returns {Promise<void>}
+   */
   async setDrawerState({ dictionary, logs }) {
     const needsDictionary = typeof dictionary === "boolean";
     const needsLogs = typeof logs === "boolean";

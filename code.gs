@@ -1,5 +1,10 @@
 // code.gs: Google Apps Script上でSpreadsheetやFirebase連携を行うサーバー側スクリプトのエントリーです。
-// WebAppとしてアクセスされたときに実行されるメイン関数
+/**
+ * WebAppとしてアクセスされた際に応答を生成するエントリポイント。
+ * このAPIではGETをサポートしないため常に405相当のレスポンスを返します。
+ * @param {GoogleAppsScript.Events.DoGet} e - リクエストコンテキスト
+ * @returns {GoogleAppsScript.Content.TextOutput}
+ */
 function doGet(e) {
   return withCors_(
     ContentService
@@ -9,7 +14,11 @@ function doGet(e) {
   );
 }
 
-// 指定されたシートのデータを読み込んでオブジェクトの配列に変換するヘルパー関数
+/**
+ * 指定シートの全行を読み込み、ヘッダー行をキーとするオブジェクト配列へ変換します。
+ * @param {string} sheetName - 対象シート名
+ * @returns {Array<Record<string, any>>}
+ */
 function getSheetData(sheetName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
@@ -41,6 +50,11 @@ const QUESTION_SHEET_NAME = 'question';
 const PICKUP_QUESTION_SHEET_NAME = 'pick_up_question';
 const QUESTION_SHEET_NAMES = [QUESTION_SHEET_NAME, PICKUP_QUESTION_SHEET_NAME];
 
+/**
+ * ヘッダ名の比較用にNFKC正規化・空白除去・小文字化を行います。
+ * @param {unknown} value
+ * @returns {string}
+ */
 function normalizeHeaderKey_(value) {
   return String(value || '')
     .normalize('NFKC')
@@ -49,6 +63,12 @@ function normalizeHeaderKey_(value) {
     .toLowerCase();
 }
 
+/**
+ * 与えられた候補キーの中から最初に一致したヘッダのインデックスを返します。
+ * @param {Map<string, number>} headerMap
+ * @param {string|string[]} keys
+ * @returns {number|null}
+ */
 function getHeaderIndex_(headerMap, keys) {
   if (!headerMap) return null;
   const list = Array.isArray(keys) ? keys : [keys];
@@ -61,6 +81,11 @@ function getHeaderIndex_(headerMap, keys) {
   return null;
 }
 
+/**
+ * シートからヘッダ行とデータ行を抽出し、照合用マップと共に返します。
+ * @param {GoogleAppsScript.Spreadsheet.Sheet|null} sheet
+ * @returns {{ sheet: GoogleAppsScript.Spreadsheet.Sheet|null, headers: any[], headerMap: Map<string, number>, rows: any[][] }}
+ */
 function readSheetWithHeaders_(sheet) {
   if (!sheet) {
     return { sheet: null, headers: [], headerMap: new Map(), rows: [] };
@@ -83,6 +108,12 @@ function readSheetWithHeaders_(sheet) {
   return { sheet, headers, headerMap, rows: values };
 }
 
+/**
+ * 質問シートにイベントID/日程ID列が存在することを保証します。
+ * 不足している場合は列を追加してヘッダを更新します。
+ * @param {GoogleAppsScript.Spreadsheet.Sheet|null} sheet
+ * @returns {{ sheet: GoogleAppsScript.Spreadsheet.Sheet|null, headers: any[], headerMap: Map<string, number>, rows: any[][] }}
+ */
 function ensureQuestionSheetInfoWithEventColumns_(sheet) {
   if (!sheet) {
     return { sheet: null, headers: [], headerMap: new Map(), rows: [] };
@@ -114,6 +145,12 @@ function ensureQuestionSheetInfoWithEventColumns_(sheet) {
   return info;
 }
 
+/**
+ * Spreadsheetセルで表現された日時をUnixミリ秒に変換します。
+ * シリアル値・UNIX秒・ISO文字列など複数形式に対応します。
+ * @param {any} value
+ * @returns {number}
+ */
 function parseSpreadsheetTimestamp_(value) {
   if (value instanceof Date && !isNaN(value)) {
     return value.getTime();
@@ -139,6 +176,12 @@ function parseSpreadsheetTimestamp_(value) {
   return 0;
 }
 
+/**
+ * Spreadsheetセル値をDateオブジェクトに変換します。
+ * 数値シリアル値・UNIX秒・ISO文字列をサポートし、不正値はnullを返します。
+ * @param {any} value
+ * @returns {Date|null}
+ */
 function parseDateCell_(value) {
   if (!value && value !== 0) return null;
   if (value instanceof Date && !isNaN(value)) return value;
@@ -160,6 +203,12 @@ function parseDateCell_(value) {
   return null;
 }
 
+/**
+ * セル値を人が読みやすいyyyy/MM/dd HH:mm形式に整形します。
+ * 日付変換できない場合はトリムした文字列を返します。
+ * @param {any} value
+ * @returns {string}
+ */
 function formatDateLabel_(value) {
   const date = parseDateCell_(value);
   if (date) {
@@ -168,6 +217,11 @@ function formatDateLabel_(value) {
   return String(value || '').trim();
 }
 
+/**
+ * 値をISO 8601(JST)文字列に正規化するか、生値のトリム結果を返します。
+ * @param {any} value
+ * @returns {string}
+ */
 function toIsoStringOrValue_(value) {
   const date = parseDateCell_(value);
   if (date) {
@@ -176,6 +230,12 @@ function toIsoStringOrValue_(value) {
   return String(value || '').trim();
 }
 
+/**
+ * 開始・終了日時を結合したスケジュール表示ラベルを生成します。
+ * @param {any} startValue
+ * @param {any} endValue
+ * @returns {string}
+ */
 function formatScheduleLabel_(startValue, endValue) {
   const startLabel = formatDateLabel_(startValue);
   const endLabel = formatDateLabel_(endValue);
@@ -188,6 +248,11 @@ function formatScheduleLabel_(startValue, endValue) {
   return startLabel || endLabel || '';
 }
 
+/**
+ * セル値を真偽値に変換します。文字列や数値の一般的な truthy 記法にも対応します。
+ * @param {any} value
+ * @returns {boolean}
+ */
 function toBooleanCell_(value) {
   if (value === true) return true;
   if (value === false || value == null) return false;
