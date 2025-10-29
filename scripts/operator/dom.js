@@ -1,4 +1,8 @@
 // dom.js: オペレーター画面のDOM参照取得やテンプレート生成をまとめたユーティリティです。
+/**
+ * 埋め込みモードで付与されるIDプレフィックスを取得します。
+ * @returns {string}
+ */
 function getPrefix() {
   if (typeof document === "undefined") {
     return "";
@@ -6,6 +10,11 @@ function getPrefix() {
   return document.documentElement?.dataset?.operatorEmbedPrefix || "";
 }
 
+/**
+ * 指定IDに対して埋め込みプレフィックスを考慮したDOM要素検索を行います。
+ * @param {string} id
+ * @returns {HTMLElement|null}
+ */
 function resolve(id) {
   const prefix = getPrefix();
   if (prefix) {
@@ -17,6 +26,11 @@ function resolve(id) {
   return document.getElementById(id);
 }
 
+/**
+ * CSSセレクタに対して埋め込みプレフィックスを適用したquerySelectorを実行します。
+ * @param {string} selector
+ * @returns {Element|null}
+ */
 function resolveQuery(selector) {
   const prefix = getPrefix();
   if (prefix) {
@@ -29,6 +43,10 @@ function resolveQuery(selector) {
   return document.querySelector(selector);
 }
 
+/**
+ * オペレーター画面で利用するDOM要素を事前に取得し、アクセスを簡素化します。
+ * @returns {Record<string, any>}
+ */
 export function queryDom() {
   return {
     loginButton: resolve("login-button"),
