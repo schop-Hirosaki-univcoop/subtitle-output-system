@@ -4056,9 +4056,35 @@ body.sidebar-overlay-open{
 }
 
 .entity-name{
+  display:flex;
+  align-items:center;
+  gap:.4rem;
+  flex-wrap:wrap;
   font-size:1.05rem;
   font-weight:600;
   color:#f4f9ff;
+}
+
+.entity-badge{
+  display:inline-flex;
+  align-items:center;
+  padding:.1rem .5rem;
+  border-radius:999px;
+  font-size:.72rem;
+  font-weight:600;
+  line-height:1;
+  border:1px solid rgba(93,208,255,.35);
+  background:rgba(93,208,255,.18);
+  color:var(--accent, #5dd0ff);
+}
+
+.entity-badge--active{
+  border-color:rgba(93,208,255,.5);
+}
+
+.flow-selection-note--status{
+  margin-top:-.35rem;
+  color:var(--muted);
 }
 
 .entity-meta{
