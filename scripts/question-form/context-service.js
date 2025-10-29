@@ -2,6 +2,12 @@
 import { ref, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { TOKEN_PARAM_KEYS } from "./constants.js";
 
+/**
+ * URLクエリからフォームアクセス用トークンを抽出します。
+ * @param {string} [search]
+ * @param {string[]} [tokenKeys]
+ * @returns {string|null}
+ */
 export function extractToken(search = window.location.search, tokenKeys = TOKEN_PARAM_KEYS) {
   const params = new URLSearchParams(search);
   for (const key of tokenKeys) {
@@ -16,6 +22,12 @@ export function extractToken(search = window.location.search, tokenKeys = TOKEN_
   return null;
 }
 
+/**
+ * Firebase上のトークン情報を取得し、フォーム文脈データに整形します。
+ * @param {import("firebase/database").Database} database
+ * @param {string} token
+ * @returns {Promise<Record<string, string>>}
+ */
 export async function fetchContextFromToken(database, token) {
   const tokenRef = ref(database, `questionIntake/tokens/${token}`);
   let snapshot;
