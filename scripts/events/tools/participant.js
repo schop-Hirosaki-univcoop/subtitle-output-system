@@ -7,11 +7,18 @@ import {
 } from "../helpers.js";
 import { formatRelative, formatScheduleRange } from "../../operator/utils.js";
 
+/**
+ * 参加者ツールの遅延ロード状態を管理するための初期オブジェクトを生成します。
+ * @returns {{ promise: Promise<unknown>|null, ready: boolean }}
+ */
 function createLoaderState() {
   return { promise: null, ready: false };
 }
 
 export class ParticipantToolManager {
+  /**
+   * @param {import('../app.js').EventsApp} app - 親アプリケーションインスタンス
+   */
   constructor(app) {
     this.app = app;
     this.loaderState = createLoaderState();
@@ -26,14 +33,28 @@ export class ParticipantToolManager {
     this.handleSelectionBroadcast = this.handleSelectionBroadcast.bind(this);
   }
 
+  /**
+   * 埋め込みDOMへの参照を取得します。
+   * getter 経由にすることでテスト時に差し替えやすくしています。
+   * @returns {{ participantsTool?: HTMLElement|null }}
+   */
   get dom() {
     return this.app.dom;
   }
 
+  /**
+   * 参加者ツール関連の操作ログをアプリ共通のロガーに転送します。
+   * @param {string} message
+   * @param {any} [detail]
+   */
   logParticipantAction(message, detail = null) {
     this.app.logParticipantAction(message, detail);
   }
 
+  /**
+   * 進行中の同期状態やキャッシュをリセットします。
+   * イベント切り替えなどで完全に状態をクリアしたい場合に使用します。
+   */
   resetFlowState() {
     this.loaderState = createLoaderState();
     this.lastContextSignature = "";
@@ -46,6 +67,11 @@ export class ParticipantToolManager {
     this.updateDataset(null);
   }
 
+  /**
+   * コンテキスト関連のキャッシュのみをリセットします。
+   * 埋め込みのロード状態は維持しつつ、表示内容だけを初期化したいときに使います。
+   * @param {{ clearDataset?: boolean }} [options]
+   */
   resetContext({ clearDataset = false } = {}) {
     this.lastContextSignature = "";
     this.lastContextApplied = false;
@@ -56,14 +82,27 @@ export class ParticipantToolManager {
     }
   }
 
+  /**
+   * 参加者ツールに同期すべき処理が保留状態かどうかを判定します。
+   * @returns {boolean}
+   */
   isPendingSync() {
     return this.pendingSync;
   }
 
+  /**
+   * 保留状態フラグを設定し、真偽値以外が渡された場合も明示的に Boolean 化します。
+   * @param {unknown} flag
+   */
   setPendingSync(flag) {
     this.pendingSync = Boolean(flag);
   }
 
+  /**
+   * 現在の選択状況を確認し、参加者ツールへ即時同期するか保留にするかを決定します。
+   * 不足情報がある場合はユーザーへの案内文を更新します。
+   * @returns {boolean} 即時同期を実行すべき場合は true
+   */
   prepareContextForSelection() {
     const context = this.app.getCurrentSelectionContext();
     this.logParticipantAction("参加者ツールへのコンテキスト適用を確認します", context);
@@ -103,6 +142,11 @@ export class ParticipantToolManager {
     return false;
   }
 
+  /**
+   * 参加者ツールのスクリプトを遅延ロードし、attachHost まで含む初期化を行います。
+   * エラー時にはロガーへ記録し、状態を巻き戻します。
+   * @returns {Promise<void>}
+   */
   async load() {
     const state = this.loaderState;
     this.logParticipantAction("参加者ツールの読み込み処理を開始します", {
@@ -151,6 +195,10 @@ export class ParticipantToolManager {
     this.logParticipantAction("参加者ツールの読み込みを確認しました");
   }
 
+  /**
+   * 埋め込みが操作可能になるまで待機し、共有インターフェースを返します。
+   * @returns {Promise<typeof window.questionAdminEmbed|null>}
+   */
   async ensureReady() {
     await this.load();
     if (window.questionAdminEmbed?.waitUntilReady) {
@@ -160,6 +208,11 @@ export class ParticipantToolManager {
     return window.questionAdminEmbed || null;
   }
 
+  /**
+   * 埋め込み iframe の data-* 属性を更新し、期待する選択状態を通知します。
+   * 選択が不足している場合は属性をクリアして同期情報を破棄します。
+   * @param {Record<string, any>|null} context
+   */
   updateDataset(context) {
     const tool = this.dom.participantsTool;
     if (!tool) {
@@ -197,6 +250,10 @@ export class ParticipantToolManager {
     this.logParticipantAction("参加者ツールの期待コンテキストを更新しました", context);
   }
 
+  /**
+   * 参加者ステータスの表示を更新します。現状はロギングのみですが、将来のDOM更新に備えて抽象化しています。
+   * @param {{ text?: string, meta?: string, variant?: 'info'|'success'|'error'|'pending' }} [param0]
+   */
   setParticipantStatus({ text = "", meta = "", variant = "info" } = {}) {
     const allowed = new Set(["info", "success", "error", "pending"]);
     const normalizedVariant = allowed.has(variant) ? variant : "info";
@@ -207,6 +264,10 @@ export class ParticipantToolManager {
     });
   }
 
+  /**
+   * 参加者ツールとの同期処理を駆動し、必要な場合には attachHost を通じた初期化を行います。
+   * @returns {Promise<{ context: Record<string, any>|null }>}
+   */
   async sync() {
     if (this.syncPromise) {
       this.logParticipantAction("参加者ツールの同期処理が進行中のため既存のPromiseを再利用します");
@@ -214,6 +275,7 @@ export class ParticipantToolManager {
     }
 
     const run = (async () => {
+      // 非同期即時関数で同期処理を逐次実行し、try/catchを一箇所にまとめます。
       const schedule = this.app.getSelectedSchedule();
       const event = this.app.getSelectedEvent();
       if (!schedule || !event) {
@@ -357,6 +419,11 @@ export class ParticipantToolManager {
     return this.syncPromise;
   }
 
+  /**
+   * 参加者ツールから送出される同期イベント(detail.success など)を取り込み、
+   * 表示メッセージや内部状態を最新化します。
+   * @param {CustomEvent} event
+   */
   handleSyncEvent(event) {
     if (!event || !event.detail) {
       this.logParticipantAction("参加者ツールからの同期イベントに詳細が含まれていません");
@@ -529,6 +596,11 @@ export class ParticipantToolManager {
     this.lastParticipantSyncSignature = "";
   }
 
+  /**
+   * 参加者ツール側で行われた選択を受け取り、イベント・日程の選択状態をアプリ全体に反映します。
+   * @param {CustomEvent} event
+   * @returns {Promise<void>}
+   */
   async handleSelectionBroadcast(event) {
     if (!event || !event.detail) {
       this.logParticipantAction("参加者ツールからの選択イベントに詳細が含まれていません");
