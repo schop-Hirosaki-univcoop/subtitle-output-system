@@ -1,4 +1,5 @@
 {
+  "_comment": "Firebase Realtime Databaseルールの意図を示すメタ情報。デフォルト拒否の上で必要な経路のみ許可します。",
   "rules": {
     ".read": false,
     ".write": false,

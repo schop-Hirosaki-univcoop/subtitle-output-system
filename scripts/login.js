@@ -1,3 +1,4 @@
+// login.js: Firebase認証フローの初期化とログインUIのイベントを束ねるエントリースクリプトです。
 import {
   auth,
   provider,
@@ -14,7 +15,17 @@ const ERROR_MESSAGES = {
   "auth/popup-blocked": "ポップアップがブロックされました。ブラウザの設定を確認してから再試行してください。"
 };
 
+/**
+ * ログイン画面の状態とFirebase認証フローをまとめて制御するクラス。
+ * @param {{ authInstance: import("firebase/auth").Auth,
+ *          authProvider: import("firebase/auth").AuthProvider,
+ *          googleAuthProvider: typeof GoogleAuthProvider }} deps
+ *     依存関係を明示的に注入することでテスト容易性と実行時の柔軟性を確保します。
+ */
 class LoginPage {
+  /**
+   * コンストラクタではDOM要素のキャッシュやバインドを行い、イベント登録は別メソッドに分離して見通しを良くします。
+   */
   constructor({ authInstance, authProvider, googleAuthProvider }) {
     this.auth = authInstance;
     this.provider = authProvider;
@@ -29,11 +40,19 @@ class LoginPage {
     this.handleLoginClick = this.handleLoginClick.bind(this);
   }
 
+  /**
+   * 初期化処理のエントリーポイント。
+   * イベントハンドラ登録と認証状態の監視を開始し、UIを操作可能な状態にします。
+   */
   init() {
     this.bindEvents();
     this.observeAuthState();
   }
 
+  /**
+   * ログインボタンの存在を確認した上でクリックイベントを登録します。
+   * ボタンが存在しない環境では早期リターンし、想定外のDOM構造を把握しやすいよう警告を出します。
+   */
   bindEvents() {
     if (!this.loginButton) {
       console.warn("Login button not found; login flow is unavailable.");
@@ -43,12 +62,18 @@ class LoginPage {
     this.loginButton.addEventListener("click", this.handleLoginClick);
   }
 
+  /**
+   * Firebase Authの状態変化を監視し、既にサインイン済みの場合には自動で遷移させます。
+   */
   observeAuthState() {
     onAuthStateChanged(this.auth, (user) => {
       this.handleAuthStateChanged(user);
     });
   }
 
+  /**
+   * ログインボタンのクリック時に多重実行を避けつつログイン処理を起動します。
+   */
   handleLoginClick() {
     if (this.loginButton?.disabled) {
       return;
@@ -57,6 +82,9 @@ class LoginPage {
     this.performLogin();
   }
 
+  /**
+   * ポップアップを利用したGoogleログインを実行し、結果に応じて資格情報を保管またはエラー表示を行います。
+   */
   async performLogin() {
     this.setBusy(true);
     this.showError("");
@@ -74,6 +102,10 @@ class LoginPage {
     }
   }
 
+  /**
+   * 認証資格情報を次画面へ引き継ぐために安全な形式で保存します。
+   * @param {import("firebase/auth").OAuthCredential|null} credential
+   */
   storeCredential(credential) {
     if (credential && (credential.idToken || credential.accessToken)) {
       storeAuthTransfer({
@@ -87,6 +119,10 @@ class LoginPage {
     }
   }
 
+  /**
+   * ログイン処理中であることをUIに反映し、ユーザーの多重操作を防ぎます。
+   * @param {boolean} isBusy
+   */
   setBusy(isBusy) {
     if (!this.loginButton) return;
     this.loginButton.disabled = isBusy;
@@ -104,6 +140,10 @@ class LoginPage {
     }
   }
 
+  /**
+   * エラーメッセージの表示・非表示を管理し、アクセシビリティ属性も同期させます。
+   * @param {string} [message]
+   */
   showError(message = "") {
     if (!this.loginError) return;
     const text = String(message || "").trim();
@@ -118,6 +158,11 @@ class LoginPage {
     }
   }
 
+  /**
+   * Firebaseから返却されたエラーオブジェクトをユーザー向けメッセージに変換します。
+   * @param {Error & { code?: string }} error
+   * @returns {string}
+   */
   getErrorMessage(error) {
     const code = error?.code || "";
     if (code === "auth/network-request-failed") {
@@ -128,6 +173,10 @@ class LoginPage {
     return ERROR_MESSAGES[code] || "ログインに失敗しました。もう一度お試しください。";
   }
 
+  /**
+   * 認証状態がサインイン済みに変化した際に次画面への遷移を調整します。
+   * @param {import("firebase/auth").User|null} user
+   */
   handleAuthStateChanged(user) {
     if (!user || this.redirecting) {
       return;

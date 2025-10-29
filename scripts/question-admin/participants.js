@@ -1,3 +1,4 @@
+// participants.js: 参加者情報の取得と表示に関わるユーティリティを提供します。
 import { state } from "./state.js";
 import { normalizeKey, ensureCrypto } from "./utils.js";
 

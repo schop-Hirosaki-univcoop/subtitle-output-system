@@ -1,3 +1,4 @@
+// toast.js: トースト通知の表示管理とキュー制御を提供します。
 const STACK_ID = "app-toast-stack";
 const DEFAULT_DURATION = 4000;
 

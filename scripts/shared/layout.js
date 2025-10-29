@@ -1,4 +1,13 @@
+// layout.js: 共通ヘッダーWebComponentを定義し、ページごとのヘッダー構成要素を動的に組み立てます。
+/**
+ * telop-header 要素の実装。
+ * ページのヘッダー領域を動的に構築し、スロット化した要素を適切な配置に振り分けます。
+ */
 class TelopHeader extends HTMLElement {
+  /**
+   * DOMに接続された際に初期化処理を実行します。
+   * 二重初期化を避けながら属性からラベルを読み取り、ヘッダーDOMツリーを生成します。
+   */
   connectedCallback() {
     if (this.dataset.initialized === "true") {
       return;
@@ -51,6 +60,10 @@ class TelopHeader extends HTMLElement {
       controlsContainer.setAttribute("aria-label", actionsLabel);
     }
 
+    /**
+     * 指定されたコンテナが既にactions要素配下に存在しない場合に追加します。
+     * @param {HTMLElement} container
+     */
     const appendContainer = (container) => {
       if (!container.parentElement) {
         actions.appendChild(container);
@@ -81,7 +94,14 @@ class TelopHeader extends HTMLElement {
   }
 }
 
+/**
+ * telop-footer 要素の実装。
+ * カスタマイズ可能なクレジットラインを提供します。
+ */
 class TelopFooter extends HTMLElement {
+  /**
+   * 初回接続時にフッターDOMを構築し、著作権表記を最新年に保ちます。
+   */
   connectedCallback() {
     if (this.dataset.initialized === "true") {
       return;

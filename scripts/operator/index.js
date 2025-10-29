@@ -1,3 +1,4 @@
+// index.js: オペレーター画面の初期化とルーティング入口を定義します。
 import { OperatorApp } from "./app.js";
 
 const app = new OperatorApp();

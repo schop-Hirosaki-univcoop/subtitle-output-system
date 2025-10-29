@@ -1,3 +1,4 @@
+// calendar.js: イベント日程カレンダーの描画とインタラクションを制御します。
 import { dom } from "./dom.js";
 import { calendarState, dialogCalendarState } from "./state.js";
 import { parseDateTimeLocal } from "./utils.js";

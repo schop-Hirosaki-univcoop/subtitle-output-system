@@ -1,3 +1,4 @@
+// display.js: テロップ表示画面への状態配信やレンダリング制御を担います。
 import { info as logDisplayLinkInfo } from "../shared/display-link-logger.js";
 import { escapeHtml, formatOperatorName, formatRelative, normalizeUpdatedAt, renderRubyHtml } from "./utils.js";
 

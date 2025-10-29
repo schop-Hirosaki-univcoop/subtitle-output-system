@@ -1,3 +1,4 @@
+// tools/frame-utils.js: iframe連携やウィンドウメッセージングの補助処理を提供します。
 export function prepareEmbeddedFrames(dom) {
   if (typeof document === "undefined") {
     return;

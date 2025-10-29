@@ -1,3 +1,4 @@
+// pickup.js: Pick Up Question機能の抽選・管理ロジックをまとめています。
 import { GENRE_OPTIONS, GENRE_ALL_VALUE } from "./constants.js";
 import { pickupQuestionsRef, database, ref, update, onValue } from "./firebase.js";
 import { escapeHtml, resolveGenreLabel, formatRelative } from "./utils.js";

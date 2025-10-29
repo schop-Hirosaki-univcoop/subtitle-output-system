@@ -1,3 +1,4 @@
+// constants.js: オペレーター機能で共通利用する定数群を定義します。
 export const firebaseConfig = {
   apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
   authDomain: "subtitle-output-system-9bc14.firebaseapp.com",

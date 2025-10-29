@@ -1,3 +1,4 @@
+// questions.js: 質問キューの操作と選択ロジックを管理します。
 import { QUESTIONS_SUBTAB_KEY, GENRE_ALL_VALUE } from "./constants.js";
 import { database, ref, update, set, remove, get, getNowShowingRef, serverTimestamp } from "./firebase.js";
 import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn, error as logDisplayLinkError } from "../shared/display-link-logger.js";

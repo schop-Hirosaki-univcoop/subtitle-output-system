@@ -1,3 +1,4 @@
+// utils.js: 日付フォーマットや補助的なユーティリティ関数を提供します。
 import { GENRE_OPTIONS } from "./constants.js";
 
 const HAS_INTL = typeof Intl !== "undefined" && typeof Intl.DateTimeFormat === "function";
@@ -8,6 +9,11 @@ const SCHEDULE_TIME_FORMATTER = HAS_INTL
   ? new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false })
   : null;
 
+/**
+ * HTML特殊文字をエスケープしてXSSを防止します。
+ * @param {unknown} value
+ * @returns {string}
+ */
 export function escapeHtml(value) {
   const s = value == null ? "" : String(value);
   return s
@@ -18,6 +24,13 @@ export function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+/**
+ * 辞書エントリを参照してrubyタグ付きHTML文字列を生成します。
+ * DOM APIがない環境では純粋なテキストエスケープのみ行います。
+ * @param {unknown} text
+ * @param {Array<{ term?: string, ruby?: string }>} [dictionaryEntries]
+ * @returns {string}
+ */
 export function renderRubyHtml(text, dictionaryEntries = []) {
   const source = String(text ?? "");
   const normalized = source.replace(/\s+/g, " ").trim();
@@ -48,6 +61,12 @@ export function renderRubyHtml(text, dictionaryEntries = []) {
   return container.innerHTML;
 }
 
+/**
+ * 更新日時フィールドをミリ秒に正規化します。
+ * Firestore TimestampやRTDBの数値を考慮します。
+ * @param {unknown} value
+ * @returns {number}
+ */
 export function normalizeUpdatedAt(value) {
   if (!value) return 0;
   if (typeof value === "number") return value;
@@ -55,6 +74,11 @@ export function normalizeUpdatedAt(value) {
   return 0;
 }
 
+/**
+ * 現在時刻からの相対時間を日本語表記で返します。
+ * @param {number} ms - Unixミリ秒
+ * @returns {string}
+ */
 export function formatRelative(ms) {
   if (!ms) return "—";
   const diff = Math.max(0, Date.now() - ms);
@@ -68,10 +92,21 @@ export function formatRelative(ms) {
   return `${days}日前`;
 }
 
+/**
+ * オペレーター名をトリムし、未設定時は空文字を返します。
+ * @param {unknown} name
+ * @returns {string}
+ */
 export function formatOperatorName(name) {
   return String(name ?? "").trim();
 }
 
+/**
+ * ジャンル検索用のキーを正規化します。
+ * NFKC正規化・ゼロ幅スペース除去・小文字化を実施します。
+ * @param {unknown} key
+ * @returns {string}
+ */
 export function normKey(key) {
   return String(key || "")
     .normalize("NFKC")
@@ -82,6 +117,12 @@ export function normKey(key) {
 
 const GENRE_LOOKUP = new Map(GENRE_OPTIONS.map((label) => [normKey(label), label]));
 
+/**
+ * ジャンル選択値を既知の候補ラベルに変換します。
+ * 未知の値はそのまま返し、空の場合は「その他」を返します。
+ * @param {unknown} value
+ * @returns {string}
+ */
 export function resolveGenreLabel(value) {
   const raw = String(value ?? "").trim();
   if (!raw) return "その他";
@@ -89,6 +130,12 @@ export function resolveGenreLabel(value) {
   return mapped || raw;
 }
 
+/**
+ * 各種日付表現をDateに変換します。
+ * 文字列・数値いずれにも対応し、不正な値はnullを返します。
+ * @param {unknown} value
+ * @returns {Date|null}
+ */
 function parseDateTimeValue(value) {
   if (!value) return null;
   const trimmed = String(value).trim();
@@ -116,6 +163,12 @@ function parseDateTimeValue(value) {
   return parsed;
 }
 
+/**
+ * Dateを日付表示用(YYYY/MM/DD)の文字列に変換します。
+ * Intlが利用できない環境も考慮します。
+ * @param {Date} date
+ * @returns {string}
+ */
 function formatDateDisplay(date) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
   if (SCHEDULE_DATE_FORMATTER) return SCHEDULE_DATE_FORMATTER.format(date);
@@ -125,6 +178,11 @@ function formatDateDisplay(date) {
   return `${y}/${m}/${d}`;
 }
 
+/**
+ * Dateから時刻部分(HH:mm)の文字列を生成します。
+ * @param {Date} date
+ * @returns {string}
+ */
 function formatTimeDisplay(date) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
   if (SCHEDULE_TIME_FORMATTER) return SCHEDULE_TIME_FORMATTER.format(date);
@@ -133,6 +191,13 @@ function formatTimeDisplay(date) {
   return `${h}:${m}`;
 }
 
+/**
+ * 開始・終了日時から日本語の表示レンジ文字列を生成します。
+ * 片方のみ指定された場合も破綻しないようにフォールバックします。
+ * @param {unknown} startValue
+ * @param {unknown} endValue
+ * @returns {string}
+ */
 export function formatScheduleRange(startValue, endValue) {
   const start = parseDateTimeValue(startValue);
   const end = parseDateTimeValue(endValue);
@@ -173,6 +238,12 @@ export function formatScheduleRange(startValue, endValue) {
   return "";
 }
 
+/**
+ * 各種タイムスタンプ形式をDateに変換します。
+ * Excel系列値やUnix秒/ミリ秒を考慮します。
+ * @param {unknown} ts
+ * @returns {Date|null}
+ */
 export function parseLogTimestamp(ts) {
   if (ts == null) return null;
   if (ts instanceof Date && !isNaN(ts)) return ts;

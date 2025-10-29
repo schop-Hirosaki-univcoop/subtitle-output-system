@@ -1,3 +1,4 @@
+// logs.js: 操作ログの取得・整形・表示を司るモジュールです。
 import { LOGS_STATE_KEY } from "./constants.js";
 import { escapeHtml, getLogLevel, parseLogTimestamp } from "./utils.js";
 import { updateTriggerRef, onValue } from "./firebase.js";

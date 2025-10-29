@@ -1,3 +1,4 @@
+// dom.js: オペレーター画面のDOM参照取得やテンプレート生成をまとめたユーティリティです。
 function getPrefix() {
   if (typeof document === "undefined") {
     return "";

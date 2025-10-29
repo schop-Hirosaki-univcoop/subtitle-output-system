@@ -1,3 +1,4 @@
+/* style.css: 管理画面全体に共通するテーマカラーやレイアウトユーティリティを定義するスタイル集です。 */
 /* ===== Theme Tokens (Broadcast UI) ===== */
 :root{
   --ui-bg: #0d1117;
@@ -72,6 +73,7 @@ body.events-page{
   padding-block-end:var(--page-padding-top);
 }
 
+/* 背景全体にノイズ感のあるグラデーションを載せ、イベントUIに奥行きを付与 */
 body.op-theme::before{
   content:"";
   position:fixed;
@@ -2778,6 +2780,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   display:block;
 }
 
+/* イベント管理メインレイアウト: サイドバー/コンテンツ/チャットの3カラムを制御 */
 .events-layout{
   --events-layout-padding: clamp(1.25rem, 2.4vw, 2rem);
   --events-sticky-top: calc(var(--page-padding-top, 0px) + var(--safe-area-top, 0px) + var(--header-height, 64px) + var(--page-gap, 0px) + 1.5rem);
@@ -2821,6 +2824,7 @@ body.events-page .flow-stage-panel{
   min-height:0;
 }
 
+/* チャットパネル: モバイル/デスクトップ両対応の固定高さを提供 */
 .events-chat{
   display:flex;
   flex-direction:column;

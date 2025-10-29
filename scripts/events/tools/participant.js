@@ -1,3 +1,4 @@
+// tools/participant.js: 参加者データを扱うツール連携処理と状態同期を担当します。
 import { PANEL_CONFIG } from "../config.js";
 import {
   ensureString,
