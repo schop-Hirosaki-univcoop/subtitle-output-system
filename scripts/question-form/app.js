@@ -265,7 +265,7 @@ function isAbortError(error) {
  *   scheduleId: string,
  *   participantId: string
  * }} values
- * @returns {Record<string, string>}
+ * @returns {Record<string, string | number>}
  */
 function sanitizeSubmissionPayload(values) {
   return Object.entries(values).reduce((acc, [key, value]) => {
@@ -287,7 +287,7 @@ function sanitizeSubmissionPayload(values) {
 
 /**
  * 質問送信時に付与する端末メタデータを組み立てます。
- * @returns {{ userAgent: string, language: string, timestamp: number }}
+ * @returns {{ language: string, userAgent: string, referrer: string, origin: string, timestamp: number }}
  */
 function collectClientMetadata() {
   const nav = typeof navigator === "object" && navigator ? navigator : null;
@@ -298,8 +298,9 @@ function collectClientMetadata() {
   const userAgent = typeof nav?.userAgent === "string" ? nav.userAgent : "";
   const referrer = typeof doc?.referrer === "string" ? doc.referrer : "";
   const origin = typeof win?.location?.origin === "string" ? win.location.origin : "";
+  const timestamp = Date.now();
 
-  return { language, userAgent, referrer, origin };
+  return { language, userAgent, referrer, origin, timestamp };
 }
 
 /**
@@ -733,7 +734,7 @@ export class QuestionFormApp {
   /**
    * Firebaseに送信するレコードベースデータを構築します。
    * @param {{ radioName: string, question: string, questionLength: number, genre: string }} payload
-   * @returns {{ submission: Record<string, unknown>, context: Record<string, unknown> }}
+   * @returns {{ token: string, submission: Record<string, unknown> }}
    */
   createSubmissionData({ radioName, question, questionLength, genre }) {
     const token = this.state.token;
@@ -743,6 +744,10 @@ export class QuestionFormApp {
 
     const snapshot = this.captureSubmissionSnapshot();
     const clientMetadata = collectClientMetadata();
+    const clientTimestamp = Number.isFinite(clientMetadata.timestamp)
+      ? clientMetadata.timestamp
+      : Date.now();
+
     const submissionBase = {
       token,
       radioName,
@@ -760,7 +765,7 @@ export class QuestionFormApp {
       scheduleId: snapshot.scheduleId,
       participantId: snapshot.participantId,
       participantName: snapshot.participantName,
-      clientTimestamp: Date.now(),
+      clientTimestamp,
       language: clientMetadata.language,
       userAgent: clientMetadata.userAgent,
       referrer: clientMetadata.referrer,
