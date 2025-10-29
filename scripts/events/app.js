@@ -320,6 +320,8 @@ export class EventAdminApp {
       scheduleId: ensureString(entry?.scheduleId),
       scheduleLabel: ensureString(entry?.scheduleLabel),
       scheduleKey: ensureString(entry?.scheduleKey),
+      selectedScheduleId: ensureString(entry?.selectedScheduleId),
+      selectedScheduleLabel: ensureString(entry?.selectedScheduleLabel),
       mode: normalizeOperatorMode(entry?.mode),
       skipTelop: Boolean(entry?.skipTelop),
       source: ensureString(entry?.source),
@@ -343,6 +345,8 @@ export class EventAdminApp {
       scheduleId: ensureString(payload.scheduleId),
       scheduleLabel: ensureString(payload.scheduleLabel),
       scheduleKey: ensureString(payload.scheduleKey),
+      selectedScheduleId: ensureString(payload.selectedScheduleId),
+      selectedScheduleLabel: ensureString(payload.selectedScheduleLabel),
       mode: normalizeOperatorMode(payload.mode),
       skipTelop: Boolean(payload.skipTelop),
       reason: ensureString(payload.reason),
@@ -1191,9 +1195,16 @@ export class EventAdminApp {
         : new Map(this.schedules.map((schedule) => [schedule.id, schedule]));
     const selectedScheduleId = ensureString(this.selectedScheduleId);
     const committedScheduleId = ensureString(this.hostCommittedScheduleId);
-    const resolvedScheduleId = this.scheduleSelectionCommitted
-      ? selectedScheduleId || committedScheduleId
-      : "";
+    const pendingNavigationTarget = ensureString(this.pendingNavigationTarget);
+    let resolvedScheduleId = "";
+    if (this.scheduleSelectionCommitted) {
+      resolvedScheduleId = selectedScheduleId || committedScheduleId;
+    } else if (pendingNavigationTarget && selectedScheduleId) {
+      resolvedScheduleId = selectedScheduleId;
+    }
+    if (!resolvedScheduleId && committedScheduleId) {
+      resolvedScheduleId = committedScheduleId;
+    }
     const schedule = resolvedScheduleId ? map.get(resolvedScheduleId) || null : null;
     let scheduleLabel = "";
     if (resolvedScheduleId) {
@@ -1204,6 +1215,10 @@ export class EventAdminApp {
         scheduleLabel = ensureString(schedule?.label) || resolvedScheduleId;
       }
     }
+    const selectedSchedule = selectedScheduleId ? map.get(selectedScheduleId) || null : null;
+    const selectedScheduleLabel = selectedSchedule
+      ? ensureString(selectedSchedule.label) || selectedScheduleId
+      : selectedScheduleId;
     const scheduleRange = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
     const scheduleKey = resolvedScheduleId
       ? this.derivePresenceScheduleKey(
@@ -1220,7 +1235,8 @@ export class EventAdminApp {
       scheduleKey,
       schedule,
       committedScheduleId,
-      selectedScheduleId
+      selectedScheduleId,
+      selectedScheduleLabel
     };
   }
 
@@ -2842,7 +2858,8 @@ export class EventAdminApp {
       }
       const normalizedId = ensureString(entryId) || generateShortId("presence-");
       const scheduleKey = this.buildPresenceScheduleKey(eventId, payload, normalizedId);
-      const scheduleId = ensureString(payload.scheduleId);
+      const scheduleId = ensureString(payload.scheduleId) || ensureString(payload.selectedScheduleId);
+      const scheduleLabel = ensureString(payload.scheduleLabel) || ensureString(payload.selectedScheduleLabel);
       const displayName = ensureString(payload.displayName) || ensureString(payload.email) || ensureString(payload.uid) || normalizedId;
       const uid = ensureString(payload.uid);
       const mode = normalizeOperatorMode(payload.mode);
@@ -2857,8 +2874,10 @@ export class EventAdminApp {
         uid,
         displayName,
         scheduleId,
-        scheduleLabel: ensureString(payload.scheduleLabel),
+        scheduleLabel,
         scheduleKey,
+        selectedScheduleId: ensureString(payload.selectedScheduleId),
+        selectedScheduleLabel: ensureString(payload.selectedScheduleLabel),
         mode,
         skipTelop,
         updatedAt,
@@ -2958,6 +2977,8 @@ export class EventAdminApp {
       }
       selfEntry.scheduleLabel = hostScheduleLabel || hostScheduleId || "未選択";
       selfEntry.scheduleRange = hostScheduleRange || selfEntry.scheduleRange || "";
+      selfEntry.selectedScheduleId = ensureString(hostContext.selectedScheduleId);
+      selfEntry.selectedScheduleLabel = ensureString(hostContext.selectedScheduleLabel);
     }
 
     context.hostScheduleId = hostScheduleId;
@@ -2982,6 +3003,8 @@ export class EventAdminApp {
         isSelf: true,
         mode: this.operatorMode,
         skipTelop: this.operatorMode === OPERATOR_MODE_SUPPORT,
+        selectedScheduleId: ensureString(hostContext.selectedScheduleId),
+        selectedScheduleLabel: ensureString(hostContext.selectedScheduleLabel),
         updatedAt: Date.now()
       });
       hasSelfPresence = true;
@@ -4139,22 +4162,42 @@ export class EventAdminApp {
 
     const event = this.getSelectedEvent();
     const hostContext = this.resolveHostScheduleContext(eventId);
-    const presenceScheduleId = ensureString(hostContext.scheduleId);
+    let presenceScheduleId = ensureString(hostContext.scheduleId);
     const committedScheduleId = ensureString(hostContext.committedScheduleId);
     const selectedScheduleId = ensureString(hostContext.selectedScheduleId);
+    const selectedScheduleLabel = ensureString(hostContext.selectedScheduleLabel);
     const scheduleLabel = ensureString(hostContext.scheduleLabel);
     const scheduleKey = ensureString(hostContext.scheduleKey);
+    const pendingNavigationTarget = ensureString(this.pendingNavigationTarget);
+    if (!presenceScheduleId && selectedScheduleId && pendingNavigationTarget) {
+      presenceScheduleId = selectedScheduleId;
+    }
+    if (!presenceScheduleId && committedScheduleId) {
+      presenceScheduleId = committedScheduleId;
+    }
+    let effectiveScheduleLabel = scheduleLabel;
+    if (!effectiveScheduleLabel && presenceScheduleId) {
+      if (presenceScheduleId === committedScheduleId) {
+        effectiveScheduleLabel = ensureString(this.hostCommittedScheduleLabel) || presenceScheduleId;
+      } else if (selectedScheduleId === presenceScheduleId) {
+        effectiveScheduleLabel = selectedScheduleLabel || presenceScheduleId;
+      } else {
+        const fallbackSchedule = this.findScheduleByIdOrAlias(presenceScheduleId);
+        effectiveScheduleLabel = ensureString(fallbackSchedule?.label) || presenceScheduleId;
+      }
+    }
     const operatorMode = normalizeOperatorMode(this.operatorMode);
     const skipTelop = operatorMode === OPERATOR_MODE_SUPPORT;
     const signature = JSON.stringify({
       eventId,
       scheduleId: presenceScheduleId,
       scheduleKey,
-      scheduleLabel,
+      scheduleLabel: effectiveScheduleLabel,
       sessionId,
       skipTelop,
       committedScheduleId,
       selectedScheduleId,
+      selectedScheduleLabel,
       committedScheduleLabel: ensureString(this.hostCommittedScheduleLabel)
     });
     if (reason !== "heartbeat" && signature === this.hostPresenceLastSignature) {
@@ -4184,7 +4227,9 @@ export class EventAdminApp {
       eventName: ensureString(event?.name || eventId),
       scheduleId: presenceScheduleId,
       scheduleKey,
-      scheduleLabel,
+      scheduleLabel: effectiveScheduleLabel,
+      selectedScheduleId,
+      selectedScheduleLabel,
       skipTelop,
       updatedAt: serverTimestamp(),
       clientTimestamp: Date.now(),
