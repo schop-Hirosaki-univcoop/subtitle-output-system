@@ -3168,13 +3168,15 @@ function buildActiveScheduleRecord_(assignment, session, operatorUid) {
   const scheduleKey = buildScheduleKey_(eventId, scheduleId);
   const sessionUid = normalizeKey_(session && session.uid);
   const sessionId = normalizeKey_(session && session.sessionId);
+  const lockedAt = Number(assignment.lockedAt || Date.now());
   return {
     eventId,
     scheduleId,
     scheduleKey,
     scheduleLabel: String(assignment.scheduleLabel || '').trim(),
     mode: 'locked',
-    lockedAt: Number(assignment.lockedAt || Date.now()),
+    lockedAt,
+    updatedAt: lockedAt,
     lockedByUid: normalizeKey_(assignment.lockedByUid || operatorUid),
     lockedByEmail: String(assignment.lockedByEmail || '').trim(),
     lockedByName: String(assignment.lockedByName || '').trim(),

@@ -913,7 +913,7 @@ export class OperatorApp {
       );
     }
     const eventName = String(this.state?.activeEventName || "").trim();
-    const operatorMode = normalizeOperatorMode(this.operatorMode);
+    const skipTelop = !this.isTelopEnabled();
     this.operatorPresenceSessionId = sessionId;
     const nextKey = `${eventId}/${sessionId}`;
 
@@ -927,7 +927,7 @@ export class OperatorApp {
       scheduleKey,
       scheduleLabel,
       sessionId,
-      operatorMode
+      skipTelop
     });
     if (reason !== "heartbeat" && signature === this.operatorPresenceLastSignature) {
       this.scheduleOperatorPresenceHeartbeat();
@@ -949,7 +949,7 @@ export class OperatorApp {
       scheduleId,
       scheduleKey,
       scheduleLabel,
-      mode: operatorMode,
+      skipTelop,
       updatedAt: serverTimestamp(),
       clientTimestamp: Date.now(),
       reason,
@@ -993,13 +993,11 @@ export class OperatorApp {
     }
     const now = Date.now();
     update(this.operatorPresenceEntryRef, {
-      updatedAt: serverTimestamp(),
       clientTimestamp: now
     }).catch(() => {});
     if (this.state.operatorPresenceSelf) {
       this.state.operatorPresenceSelf = {
         ...this.state.operatorPresenceSelf,
-        updatedAt: now,
         clientTimestamp: now
       };
     }
@@ -1129,7 +1127,7 @@ export class OperatorApp {
       if (valueEventId && valueEventId !== eventId) return;
       const scheduleKey = this.derivePresenceScheduleKey(eventId, value, entryId);
       const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
-      const normalizedMode = normalizeOperatorMode(value.mode);
+      const skipTelop = Boolean(value.skipTelop);
       const entry = groups.get(scheduleKey) || {
         key: scheduleKey,
         scheduleId: String(value.scheduleId || ""),
@@ -1148,7 +1146,7 @@ export class OperatorApp {
         uid: memberUid || fallbackId,
         name: String(value.displayName || value.email || memberUid || fallbackId || "").trim() || memberUid || fallbackId,
         isSelf: Boolean(isSelfSession || isSelfUid),
-        mode: normalizedMode
+        skipTelop
       });
     });
     const items = Array.from(groups.values());
@@ -1186,10 +1184,10 @@ export class OperatorApp {
             badge.textContent = "自分";
             entry.appendChild(badge);
           }
-          if (!isTelopMode(member.mode)) {
+          if (member.skipTelop) {
             const badge = document.createElement("span");
             badge.className = "channel-presence-support";
-            badge.textContent = "参加者モード";
+            badge.textContent = "テロップ操作なし";
             entry.appendChild(badge);
           }
           members.appendChild(entry);
@@ -1256,13 +1254,12 @@ export class OperatorApp {
         members.textContent = option.members
           .map((member) => {
             const base = String(member.name || member.uid || "").trim() || member.uid;
-            const normalizedMode = normalizeOperatorMode(member.mode);
             const tags = [];
             if (member.isSelf) {
               tags.push("自分");
             }
-            if (!isTelopMode(normalizedMode)) {
-              tags.push("参加者モード");
+            if (member.skipTelop) {
+              tags.push("テロップ操作なし");
             }
             if (!tags.length) {
               return base;
@@ -1559,6 +1556,7 @@ export class OperatorApp {
     }
     const presenceMap = this.state?.operatorPresenceByUser instanceof Map ? this.state.operatorPresenceByUser : new Map();
     const groups = new Map();
+    let latestPresenceAt = 0;
     const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
     const selfSessionId = String(this.operatorPresenceSessionId || "").trim();
     presenceMap.forEach((value, entryId) => {
@@ -1566,12 +1564,20 @@ export class OperatorApp {
       const valueEventId = String(value.eventId || "").trim();
       if (valueEventId && valueEventId !== eventId) return;
       const resolvedEventId = valueEventId || eventId;
+      const scheduleId = String(value.scheduleId || "").trim();
+      if (!scheduleId) {
+        return;
+      }
       const scheduleKey = this.derivePresenceScheduleKey(resolvedEventId, value, entryId);
       const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
+      const skipTelop = Boolean(value.skipTelop);
+      if (skipTelop) {
+        return;
+      }
       const entry = groups.get(scheduleKey) || {
         key: scheduleKey,
         eventId: resolvedEventId || eventId,
-        scheduleId: String(value.scheduleId || ""),
+        scheduleId,
         label,
         members: []
       };
@@ -1583,11 +1589,16 @@ export class OperatorApp {
       const isSelfSession = selfSessionId && String(entryId) === selfSessionId;
       const isSelfUid = memberUid && memberUid === selfUid;
       const fallbackId = String(entryId);
+      const updatedAt = Number(value.updatedAt || value.clientTimestamp || 0);
+      if (updatedAt > latestPresenceAt) {
+        latestPresenceAt = updatedAt;
+      }
       entry.members.push({
         uid: memberUid || fallbackId,
         name: String(value.displayName || value.email || memberUid || fallbackId || "").trim() || memberUid || fallbackId,
         isSelf: Boolean(isSelfSession || isSelfUid),
-        mode: normalizeOperatorMode(value.mode)
+        skipTelop,
+        updatedAt
       });
     });
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
@@ -1619,12 +1630,29 @@ export class OperatorApp {
       this.conflictDialogSnoozedSignature = "";
     }
     this.currentConflictSignature = conflictSignature;
-    const uniqueKeys = new Set(options.map((opt) => opt.key));
+    const uniqueKeys = new Set(options.map((opt) => opt.key || opt.scheduleId || ""));
+    uniqueKeys.delete("");
+    const presenceHasMultipleSchedules = uniqueKeys.size > 1;
+    const hasPresence = options.length > 0;
     const channelAligned = !this.hasChannelMismatch();
+    const assignmentTimestamp = Number(
+      (this.state?.channelAssignment &&
+        (this.state.channelAssignment.updatedAt || this.state.channelAssignment.lockedAt)) ||
+        (assignment && (assignment.updatedAt || assignment.lockedAt)) ||
+        0
+    );
+    const presenceNewerThanAssignment =
+      latestPresenceAt > assignmentTimestamp || (assignmentTimestamp === 0 && hasPresence);
     const now = Date.now();
-    let shouldPrompt = uniqueKeys.size > 1 || (assignmentKey && (!uniqueKeys.has(assignmentKey) || !channelAligned));
-    if (!shouldPrompt && !channelAligned) {
-      shouldPrompt = true;
+    let shouldPrompt = false;
+    if (hasPresence && presenceNewerThanAssignment) {
+      if (presenceHasMultipleSchedules) {
+        shouldPrompt = true;
+      } else if (assignmentKey && (!uniqueKeys.has(assignmentKey) || !channelAligned)) {
+        shouldPrompt = true;
+      } else if (!channelAligned && assignmentKey) {
+        shouldPrompt = true;
+      }
     }
     const assignmentAlignedKey = assignmentKey && uniqueKeys.has(assignmentKey) ? assignmentKey : "";
     const suppressed = this.isConflictDialogSnoozed(conflictSignature, options, {
