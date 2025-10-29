@@ -1479,83 +1479,57 @@ export class EventAdminApp {
       this.revealEventSelectionCue();
       return;
     }
-    let scheduleId = ensureString(this.hostCommittedScheduleId) || ensureString(this.selectedScheduleId);
+
     const assignment = this.getAssignedScheduleFromPresence();
-    if (assignment?.scheduleId) {
+    const committedId = ensureString(this.hostCommittedScheduleId);
+    let targetScheduleId = committedId;
+
+    if (!targetScheduleId && assignment?.scheduleId) {
       const assignedSchedule = assignment.schedule || this.findScheduleByIdOrAlias(assignment.scheduleId);
       if (assignedSchedule) {
-        const assignedId = ensureString(assignedSchedule.id);
-        if (assignedId && assignedId !== ensureString(this.selectedScheduleId)) {
-          this.logFlowState("在席情報に基づきテロップ操作日程を選択します", {
-            scheduleId: assignedId,
-            scheduleLabel: ensureString(assignedSchedule.label) || ensureString(assignment.entry?.scheduleLabel) || "",
-            source: ensureString(assignment.entry?.source) || ""
-          });
-          this.selectSchedule(assignedId);
-        }
-        scheduleId = assignedId || scheduleId;
-      } else {
-        this.logFlowState("在席情報に一致する日程が現在のイベントに見つかりません", {
-          requestedScheduleId: ensureString(assignment.scheduleId),
-          scheduleLabel: ensureString(assignment.entry?.scheduleLabel) || "",
-          source: ensureString(assignment.entry?.source) || ""
-        });
+        targetScheduleId = ensureString(assignedSchedule.id);
       }
     }
-    const targetPanel = this.getOperatorPanelFallbackTarget({ preferSchedules: true });
-    const normalizedTarget = targetPanel === "operator" ? "schedules" : targetPanel;
-    this.showPanel(normalizedTarget);
-    if (normalizedTarget !== "schedules") {
-      return;
-    }
-    const resolvedScheduleId = ensureString(this.selectedScheduleId) || scheduleId;
-    if (!resolvedScheduleId) {
+
+    if (!targetScheduleId) {
+      this.logFlowState("テロップ操作用日程が未確定のため日程選択パネルを案内します", {});
+      const fallbackPanel = this.getOperatorPanelFallbackTarget({ preferSchedules: true });
+      const normalizedTarget = fallbackPanel === "operator" ? "schedules" : fallbackPanel;
+      this.showPanel(normalizedTarget);
       this.revealScheduleSelectionCue();
       return;
     }
-    if (resolvedScheduleId && resolvedScheduleId !== ensureString(this.selectedScheduleId)) {
-      this.selectSchedule(resolvedScheduleId);
-    }
-    const appliedScheduleId = ensureString(this.selectedScheduleId);
-    if (!appliedScheduleId) {
+
+    const schedule = this.findScheduleByIdOrAlias(targetScheduleId);
+    if (!schedule) {
+      this.logFlowState("テロップ操作有効日程が現在のイベントに見つかりません", {
+        scheduleId: targetScheduleId
+      });
+      const fallbackPanel = this.getOperatorPanelFallbackTarget({ preferSchedules: true });
+      const normalizedTarget = fallbackPanel === "operator" ? "schedules" : fallbackPanel;
+      this.showPanel(normalizedTarget);
       this.revealScheduleSelectionCue();
       return;
     }
-    const list = this.dom.scheduleList;
-    if (!list) {
-      return;
+
+    if (schedule.id !== ensureString(this.selectedScheduleId)) {
+      this.logFlowState("テロップ操作有効日程へ選択を切り替えます", {
+        scheduleId: schedule.id,
+        scheduleLabel: schedule.label || ""
+      });
+      this.selectSchedule(schedule.id);
     }
-    const escapeId = typeof CSS !== "undefined" && typeof CSS.escape === "function"
-      ? CSS.escape(appliedScheduleId)
-      : appliedScheduleId.replace(/"/g, '\\"');
-    const item = list.querySelector(`[data-schedule-id="${escapeId}"]`);
-    if (!(item instanceof HTMLElement)) {
-      this.revealScheduleSelectionCue();
-      return;
+
+    if (ensureString(this.selectedScheduleId) === ensureString(this.hostCommittedScheduleId)) {
+      this.scheduleSelectionCommitted = true;
     }
-    this.commitSelectedScheduleForTelop({ reason: "goto-schedule-button" });
-    const highlight = () => {
-      if (typeof item.scrollIntoView === "function") {
-        item.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-      if (typeof item.focus === "function") {
-        try {
-          item.focus({ preventScroll: true });
-        } catch (error) {
-          item.focus();
-        }
-      }
-      item.classList.add("is-focus-flash");
-      if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
-        window.setTimeout(() => item.classList.remove("is-focus-flash"), 900);
-      } else {
-        item.classList.remove("is-focus-flash");
-      }
-    };
-    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
-      window.requestAnimationFrame(() => window.requestAnimationFrame(highlight));
-    } else {
-      highlight();
+
+    if (this.operatorMode !== OPERATOR_MODE_TELOP) {
+      this.setOperatorMode(OPERATOR_MODE_TELOP);
+    }
+
+    if (this.canActivatePanel("operator", PANEL_CONFIG.operator)) {
+      this.showPanel("operator");
     }
   }
 
