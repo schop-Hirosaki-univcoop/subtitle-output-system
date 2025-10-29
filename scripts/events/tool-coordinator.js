@@ -143,7 +143,8 @@ export class ToolCoordinator {
       ensure(context.committedScheduleId),
       ensure(context.committedScheduleLabel),
       ensure(context.committedScheduleKey),
-      ensure(normalizeOperatorMode(context.operatorMode ?? this.app.operatorMode))
+      ensure(normalizeOperatorMode(context.operatorMode ?? this.app.operatorMode)),
+      ensure(context.ownerUid)
     ].join("::");
   }
 
@@ -153,6 +154,10 @@ export class ToolCoordinator {
       ? { ...overrideContext }
       : { ...selectionContext };
     const ensure = (value) => String(value ?? "").trim();
+    const ownerUid = ensure(this.app?.currentUser?.uid);
+    if (ownerUid) {
+      baseContext.ownerUid = ownerUid;
+    }
     const populateIfMissing = (key) => {
       if (ensure(baseContext[key])) {
         return;
