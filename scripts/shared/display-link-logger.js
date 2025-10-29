@@ -1,4 +1,5 @@
 // display-link-logger.js: テロップ表示画面のアクセスログを採取するヘルパーです。
+// テロップ表示画面からのログであることを識別する共通プレフィックス。
 const PREFIX = "[DisplayLink]";
 
 /**

@@ -15,6 +15,7 @@ function replaceLocation(target) {
   window.location.replace(target);
 }
 
+// 静的ホスティングでのページ構成に合わせたファイル名を定義します。
 export const LOGIN_PAGE = "login.html";
 export const EVENTS_PAGE = "index.html";
 
