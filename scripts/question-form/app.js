@@ -17,6 +17,7 @@ import {
   truncateGraphemes
 } from "./string-utils.js";
 
+// Intl.DateTimeFormat を利用可能か判定し、日付フォーマットに使用します。
 const hasIntlDateTime = typeof Intl !== "undefined" && typeof Intl.DateTimeFormat === "function";
 const DATE_FORMATTER = hasIntlDateTime
   ? new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" })
@@ -25,6 +26,12 @@ const TIME_FORMATTER = hasIntlDateTime
   ? new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false })
   : null;
 
+/**
+ * 値を文字列化して前後の空白を除去します。
+ * null/undefinedは空文字に揃えて扱いを簡素化します。
+ * @param {unknown} value
+ * @returns {string}
+ */
 function ensureTrimmedString(value) {
   if (value === undefined || value === null) {
     return "";
@@ -32,6 +39,11 @@ function ensureTrimmedString(value) {
   return typeof value === "string" ? value.trim() : String(value).trim();
 }
 
+/**
+ * 可変長引数から最初に非空となる文字列を返します。
+ * @param {...unknown} values
+ * @returns {string}
+ */
 function coalesceTrimmed(...values) {
   for (const value of values) {
     const trimmed = ensureTrimmedString(value);
@@ -42,6 +54,10 @@ function coalesceTrimmed(...values) {
   return "";
 }
 
+/**
+ * フォーム送信時のバリデーション失敗を表す独自エラー。
+ * フォーカス移動関数を保持し、UI側で適切に入力欄へ誘導できます。
+ */
 class FormValidationError extends Error {
   constructor(message, { focus } = {}) {
     super(message);
@@ -49,6 +65,9 @@ class FormValidationError extends Error {
     this.focus = typeof focus === "function" ? focus : null;
   }
 
+  /**
+   * 保持しているフォーカス移動処理があれば安全に実行します。
+   */
   invokeFocus() {
     if (!this.focus) return;
     try {
@@ -59,6 +78,12 @@ class FormValidationError extends Error {
   }
 }
 
+/**
+ * 文字列化された日時表現をDateオブジェクトに変換します。
+ * 日付のみ/日時/ISO形式など複数のフォーマットに対応します。
+ * @param {unknown} value
+ * @returns {Date|null}
+ */
 function parseDateTimeValue(value) {
   const trimmed = ensureTrimmedString(value);
   if (!trimmed) return null;
@@ -80,18 +105,35 @@ function parseDateTimeValue(value) {
   return parsed;
 }
 
+/**
+ * Dateオブジェクトをユーザー向けの年月日表示へ整形します。
+ * Intlが利用できない環境ではISOフォーマットを簡易利用します。
+ * @param {Date} date
+ * @returns {string}
+ */
 function formatDateDisplay(date) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
   if (DATE_FORMATTER) return DATE_FORMATTER.format(date);
   return date.toISOString().split("T")[0];
 }
 
+/**
+ * Dateオブジェクトから時刻部分を抽出し、24時間表記で返します。
+ * @param {Date} date
+ * @returns {string}
+ */
 function formatTimeDisplay(date) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
   if (TIME_FORMATTER) return TIME_FORMATTER.format(date);
   return date.toTimeString().slice(0, 5);
 }
 
+/**
+ * 質問フォームに表示する日程概要テキストを組み立てます。
+ * ラベルや開始/終了時刻を柔軟に扱い、可能な限り情報を含めます。
+ * @param {{ label?: string, date?: string, start?: string, end?: string }} [options]
+ * @returns {string}
+ */
 function formatScheduleSummary({ label = "", date = "", start = "", end = "" } = {}) {
   const trimmedLabel = ensureTrimmedString(label);
   const trimmedDate = ensureTrimmedString(date);
@@ -138,6 +180,11 @@ function formatScheduleSummary({ label = "", date = "", start = "", end = "" } =
   return `${rangeText}${labelSuffix}`;
 }
 
+/**
+ * トークンAPIから取得した文脈オブジェクトを整形し、空文字を排除します。
+ * @param {Record<string, unknown>|null|undefined} rawContext
+ * @returns {ReturnType<typeof normalizeContextData>}
+ */
 function normalizeContextData(rawContext) {
   if (!rawContext) {
     return null;
@@ -157,6 +204,11 @@ function normalizeContextData(rawContext) {
   };
 }
 
+/**
+ * 画面上部に表示する挨拶文の定型フレーズを生成します。
+ * @param {string} eventName
+ * @returns {string}
+ */
 function buildContextDescription(eventName) {
   const trimmedEventName = ensureTrimmedString(eventName);
   if (!trimmedEventName) {
@@ -165,6 +217,10 @@ function buildContextDescription(eventName) {
   return `こちらは「${trimmedEventName}」の中で行われる【なんでも相談ラジオ】の質問受付フォームです。気になることや相談したいことをお気軽にお寄せください。`;
 }
 
+/**
+ * 非同期処理の中断を明示するためのDOMException互換エラーを生成します。
+ * @returns {Error}
+ */
 function createAbortError() {
   if (typeof DOMException === "function") {
     return new DOMException("Aborted", "AbortError");
@@ -174,16 +230,43 @@ function createAbortError() {
   return error;
 }
 
+/**
+ * AbortController が既に中断済みでないか検証します。
+ * 中断済みの場合はAbortErrorを投げ、無駄な処理進行を止めます。
+ * @param {AbortController|null|undefined} controller
+ */
 function assertActiveController(controller) {
   if (controller?.signal?.aborted) {
     throw createAbortError();
   }
 }
 
+/**
+ * 渡されたエラーがAbortError由来かどうかを判定します。
+ * @param {unknown} error
+ * @returns {boolean}
+ */
 function isAbortError(error) {
   return error?.name === "AbortError";
 }
 
+/**
+ * フォームの入力値を送信形式へ整形し、不要な空白やゼロ幅文字を取り除きます。
+ * @param {{
+ *   radioName: string,
+ *   question: string,
+ *   genre: string,
+ *   groupNumber: string,
+ *   scheduleLabel: string,
+ *   scheduleDate: string,
+ *   token: string,
+ *   eventId: string,
+ *   eventName: string,
+ *   scheduleId: string,
+ *   participantId: string
+ * }} values
+ * @returns {Record<string, string>}
+ */
 function sanitizeSubmissionPayload(values) {
   return Object.entries(values).reduce((acc, [key, value]) => {
     if (value === undefined || value === null) {
@@ -202,6 +285,10 @@ function sanitizeSubmissionPayload(values) {
   }, {});
 }
 
+/**
+ * 質問送信時に付与する端末メタデータを組み立てます。
+ * @returns {{ userAgent: string, language: string, timestamp: number }}
+ */
 function collectClientMetadata() {
   const nav = typeof navigator === "object" && navigator ? navigator : null;
   const doc = typeof document === "object" && document ? document : null;
@@ -215,7 +302,15 @@ function collectClientMetadata() {
   return { language, userAgent, referrer, origin };
 }
 
+/**
+ * 質問フォーム全体の状態管理と送信フローを統括するアプリケーションクラス。
+ * ビュー層やFirebase依存を注入可能にし、テスト容易性を高めています。
+ */
 export class QuestionFormApp {
+  /**
+   * 依存するViewとDatabaseインスタンスを受け取り初期状態を確立します。
+   * @param {{ view?: FormView, database?: import("firebase/database").Database }} [options]
+   */
   constructor({ view, database } = {}) {
     this.database = database ?? getDatabaseInstance(firebaseConfig);
     this.view = view ?? new FormView({
@@ -231,6 +326,9 @@ export class QuestionFormApp {
     };
   }
 
+  /**
+   * イベントハンドラのバインドや初回コンテキスト取得を行う初期化エントリーポイント。
+   */
   init() {
     this.view.bindFormEvents({
       onSubmit: (event) => this.handleSubmit(event),
@@ -250,6 +348,9 @@ export class QuestionFormApp {
     });
   }
 
+  /**
+   * アクセストークンから参加者コンテキストを取得し、フォームを解錠します。
+   */
   async prepareContext() {
     const token = extractToken();
     if (!token) {
@@ -271,6 +372,10 @@ export class QuestionFormApp {
     }
   }
 
+  /**
+   * フォームを操作不可にしつつ、ユーザーに向けた理由メッセージを表示します。
+   * @param {string} message
+   */
   lockFormWithMessage(message) {
     this.abortPendingSubmission();
     this.state.locked = true;
@@ -280,6 +385,10 @@ export class QuestionFormApp {
     this.view.focusContextGuard();
   }
 
+  /**
+   * トークンAPIから取得した文脈情報をアプリへ反映し、フォームの文言を更新します。
+   * @param {Record<string, unknown>|null} rawContext
+   */
   applyContext(rawContext) {
     const context = normalizeContextData(rawContext);
     this.state.context = context;
@@ -322,19 +431,33 @@ export class QuestionFormApp {
     this.state.dirty = false;
   }
 
+  /**
+   * 現在の質問テキストからグラフェム長を算出し、カウンターを刷新します。
+   */
   updateQuestionCounter() {
     const length = countGraphemes(this.view.getQuestionValue());
     this.view.updateQuestionCounter(length);
   }
 
+  /**
+   * フォーム送信時のボタン活性状態を制御します。
+   * @param {boolean} isBusy
+   */
   setFormBusy(isBusy) {
     this.view.setSubmitBusy(isBusy, this.state.locked);
   }
 
+  /**
+   * フォームに未保存変更があることをフラグで記録します。
+   */
   markDirty() {
     this.state.dirty = true;
   }
 
+  /**
+   * 入力欄を既定値に戻し、必要に応じてフォーカスを移動させます。
+   * @param {{ preserveRadioName?: boolean, focusQuestion?: boolean }} [options]
+   */
   resetFormState({ preserveRadioName = false, focusQuestion = false } = {}) {
     if (!preserveRadioName) {
       this.view.setRadioNameValue("");
@@ -348,10 +471,16 @@ export class QuestionFormApp {
     this.state.dirty = false;
   }
 
+  /**
+   * 現在の文脈に合わせてフォームを初期化します。
+   */
   resetFormForContext() {
     this.resetFormState();
   }
 
+  /**
+   * 文脈が有効な状態のときにフォームを操作可能に切り替えます。
+   */
   unlockFormForContext() {
     this.view.setFormMetaVisible(true);
     this.view.unlockForm();
@@ -359,6 +488,9 @@ export class QuestionFormApp {
     this.state.locked = false;
   }
 
+  /**
+   * フォームのリセットイベントを遅延処理し、UIとステートを同期させます。
+   */
   handleReset() {
     window.setTimeout(() => {
       this.resetFormState();
@@ -366,10 +498,16 @@ export class QuestionFormApp {
     }, 0);
   }
 
+  /**
+   * 質問入力の都度カウンターを更新します。
+   */
   handleQuestionInput() {
     this.updateQuestionCounter();
   }
 
+  /**
+   * フォーカスが離れた際に改行やスペースを正規化します。
+   */
   handleQuestionBlur() {
     const sanitized = normalizeMultiline(this.view.getQuestionValue());
     if (sanitized !== this.view.getQuestionValue()) {
@@ -378,11 +516,17 @@ export class QuestionFormApp {
     }
   }
 
+  /**
+   * ラジオネーム入力を正規化し、制限長を強制します。
+   */
   handleRadioNameBlur() {
     const sanitized = sanitizeRadioName(this.view.getRadioNameValue(), MAX_RADIO_NAME_LENGTH);
     this.view.setRadioNameValue(sanitized);
   }
 
+  /**
+   * 入力中のラジオネームを逐次トリミングして制限内に保ちます。
+   */
   handleRadioNameInput() {
     const value = this.view.getRadioNameValue();
     const truncated = truncateGraphemes(value, MAX_RADIO_NAME_LENGTH);
@@ -391,6 +535,10 @@ export class QuestionFormApp {
     }
   }
 
+  /**
+   * 未送信の変更がある場合に離脱確認ダイアログを表示します。
+   * @param {BeforeUnloadEvent} event
+   */
   handleBeforeUnload(event) {
     if (this.state.dirty && !this.state.submittingController) {
       event.preventDefault();
@@ -398,6 +546,10 @@ export class QuestionFormApp {
     }
   }
 
+  /**
+   * フォーム送信処理のメインルーチン。バリデーション・Firebase書き込みを順に実行します。
+   * @param {SubmitEvent} event
+   */
   async handleSubmit(event) {
     event.preventDefault();
     this.view.clearFeedback();
@@ -445,10 +597,18 @@ export class QuestionFormApp {
     }
   }
 
+  /**
+   * コンテキストとトークンが揃っているかを判定します。
+   * @returns {boolean}
+   */
   hasValidContext() {
     return Boolean(this.state.context && this.state.token);
   }
 
+  /**
+   * 現在のフォーム入力とコンテキスト値を合成したスナップショットを返します。
+   * @returns {Record<string, string>}
+   */
   captureSubmissionSnapshot() {
     const context = this.state.context ?? {};
     const groupNumber = coalesceTrimmed(this.view.getGroupNumber(), context.groupNumber);
@@ -475,6 +635,11 @@ export class QuestionFormApp {
     };
   }
 
+  /**
+   * 入力内容を検証しつつ送信可能な形式に正規化します。
+   * 異常時はFormValidationErrorを投げ、呼び出し側でUI制御を行えます。
+   * @returns {{ radioName: string, question: string, questionLength: number, genre: string }}
+   */
   getSanitizedFormData() {
     const sanitizedName = sanitizeRadioName(this.view.getRadioNameValue(), MAX_RADIO_NAME_LENGTH);
     if (this.view.getRadioNameValue() !== sanitizedName) {
@@ -524,6 +689,9 @@ export class QuestionFormApp {
     return { radioName: sanitizedName, question: normalizedQuestion, questionLength, genre };
   }
 
+  /**
+   * 進行中の送信処理があればAbortControllerで中断します。
+   */
   abortPendingSubmission() {
     if (this.state.submittingController) {
       this.state.submittingController.abort();
@@ -531,6 +699,10 @@ export class QuestionFormApp {
     }
   }
 
+  /**
+   * 新しい送信制御用AbortControllerを生成し、既存処理を破棄します。
+   * @returns {AbortController}
+   */
   resetSubmissionController() {
     this.abortPendingSubmission();
     const controller = new AbortController();
@@ -538,6 +710,10 @@ export class QuestionFormApp {
     return controller;
   }
 
+  /**
+   * 送信後の後処理をまとめ、完了メッセージとステート更新を行います。
+   * @param {{ queueProcessed: boolean }} result
+   */
   handleSubmitSuccess(result) {
     if (result?.queueProcessed) {
       this.view.setFeedback("送信しました。ありがとうございました！", "success");
@@ -547,10 +723,18 @@ export class QuestionFormApp {
     this.resetFormAfterSubmission();
   }
 
+  /**
+   * 正常送信後にフォーム内容を初期化し、再入力しやすい状態へ戻します。
+   */
   resetFormAfterSubmission() {
     this.resetFormState({ preserveRadioName: true, focusQuestion: true });
   }
 
+  /**
+   * Firebaseに送信するレコードベースデータを構築します。
+   * @param {{ radioName: string, question: string, questionLength: number, genre: string }} payload
+   * @returns {{ submission: Record<string, unknown>, context: Record<string, unknown> }}
+   */
   createSubmissionData({ radioName, question, questionLength, genre }) {
     const token = this.state.token;
     if (!token) {
@@ -591,6 +775,13 @@ export class QuestionFormApp {
     return { token, submission };
   }
 
+  /**
+   * 実際にRealtime Databaseへ書き込みを行い、ステータスレコードを生成します。
+   * トランザクション失敗時には後片付けを行いユーザー向けエラーへ変換します。
+   * @param {AbortController} controller
+   * @param {{ radioName: string, question: string, questionLength: number, genre: string }} formData
+   * @returns {Promise<{ queueProcessed: boolean }>}
+   */
   async submitQuestion(controller, formData) {
     assertActiveController(controller);
 
@@ -642,6 +833,11 @@ export class QuestionFormApp {
   }
 }
 
+/**
+ * ブラウザに実装された暗号APIを取得します。
+ * 非対応環境ではnullを返し、代替処理へフォールバックさせます。
+ * @returns {Crypto|null}
+ */
 function getCrypto() {
   if (typeof globalThis !== "undefined" && globalThis.crypto) {
     return globalThis.crypto;
@@ -655,6 +851,11 @@ function getCrypto() {
   return undefined;
 }
 
+/**
+ * 16バイトのランダム値をUUID v4形式の文字列へ整形します。
+ * @param {Uint8Array} bytes
+ * @returns {string}
+ */
 function formatUuidFromBytes(bytes) {
   const toHex = (segment) => Array.from(segment, (b) => b.toString(16).padStart(2, "0")).join("");
   return [
@@ -666,6 +867,11 @@ function formatUuidFromBytes(bytes) {
   ].join("-");
 }
 
+/**
+ * 生成したUUIDにフォーム識別用の接頭辞を付与します。
+ * @param {string} rawValue
+ * @returns {string}
+ */
 function prefixQuestionUid(rawValue) {
   const value = String(rawValue ?? "").trim();
   if (!value) {
@@ -674,6 +880,11 @@ function prefixQuestionUid(rawValue) {
   return value.startsWith("q_") ? value : `q_${value}`;
 }
 
+/**
+ * 質問送信レコード用のユニークIDを生成します。
+ * 暗号APIが利用できない場合はUUID文字列を擬似生成します。
+ * @returns {string}
+ */
 function generateQuestionUid() {
   const cryptoObj = getCrypto();
   if (cryptoObj) {
@@ -693,6 +904,12 @@ function generateQuestionUid() {
   return prefixQuestionUid(`${timestamp}_${randomPart.slice(0, 18)}`);
 }
 
+/**
+ * Firebase Databaseへ保存する質問レコードの構造を組み立てます。
+ * フォーム送信内容とコンテキスト情報をマージし、欠損値の補完を行います。
+ * @param {{ uid: string, token: string, submission: Record<string, any>, context: Record<string, any>|null, timestamp: number }} params
+ * @returns {Record<string, unknown>}
+ */
 function buildQuestionRecord({
   uid,
   token,
