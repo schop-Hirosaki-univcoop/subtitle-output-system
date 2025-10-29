@@ -298,6 +298,7 @@ export class OperatorApp {
     this.editSubmitting = false;
     this.confirmState = { resolver: null, keydownHandler: null, lastFocused: null, initialized: false };
     this.operatorIdentity = { uid: "", email: "", displayName: "" };
+    this.pendingExternalContext = null;
     this.operatorPresenceEntryKey = "";
     this.operatorPresenceEntryRef = null;
     this.operatorPresenceDisconnect = null;
@@ -1740,6 +1741,17 @@ export class OperatorApp {
 
   setExternalContext(context = {}) {
     const ensure = (value) => String(value ?? "").trim();
+    const ownerUid = ensure(context.ownerUid || context.operatorUid || context.uid);
+    if (ownerUid) {
+      const currentUid = ensure(this.operatorIdentity?.uid || auth.currentUser?.uid || "");
+      if (!currentUid) {
+        this.pendingExternalContext = { ...context };
+        return;
+      }
+      if (ownerUid !== currentUid) {
+        return;
+      }
+    }
     const eventId = ensure(context.eventId);
     const scheduleId = ensure(context.scheduleId);
     const eventName = ensure(context.eventName);
@@ -2212,6 +2224,11 @@ export class OperatorApp {
       logoutButton.addEventListener("click", () => this.logout());
       this.dom.userInfo.append(label, logoutButton);
       this.dom.userInfo.hidden = false;
+    }
+    if (this.pendingExternalContext) {
+      const pendingContext = this.pendingExternalContext;
+      this.pendingExternalContext = null;
+      this.setExternalContext(pendingContext);
     }
     this.applyPreferredSubTab();
     const activeEventId = String(this.state?.activeEventId || this.pageContext?.eventId || "").trim();
