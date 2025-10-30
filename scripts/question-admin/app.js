@@ -28,6 +28,7 @@ import {
 } from "./state.js";
 import { dom } from "./dom.js";
 import { goToLogin } from "../shared/routes.js";
+import { collectParticipantTokens } from "../shared/participant-tokens.js";
 import {
   sleep,
   isPermissionDenied,
@@ -606,24 +607,6 @@ async function ensureTokenSnapshot(force = false) {
   state.knownTokens = new Set(Object.keys(tokens));
   state.tokenSnapshotFetchedAt = Date.now();
   return state.tokenRecords;
-}
-
-function collectParticipantTokens(branch) {
-  const tokens = new Set();
-  if (!branch || typeof branch !== "object") {
-    return tokens;
-  }
-
-  Object.values(branch).forEach(scheduleBranch => {
-    if (!scheduleBranch || typeof scheduleBranch !== "object") return;
-    Object.values(scheduleBranch).forEach(participant => {
-      const token = participant?.token;
-      if (token) {
-        tokens.add(String(token));
-      }
-    });
-  });
-  return tokens;
 }
 
 async function fetchAuthorizedEmails() {

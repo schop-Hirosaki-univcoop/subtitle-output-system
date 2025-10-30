@@ -1,5 +1,6 @@
 // helpers.js: イベント管理機能で共有するフォーマットやバリデーションの補助関数集です。
 import { formatScheduleRange } from "../operator/utils.js";
+export { collectParticipantTokens } from "../shared/participant-tokens.js";
 
 /**
  * 文字列化した値をトリムして返します。
@@ -76,29 +77,6 @@ export function formatParticipantCount(value) {
     return `${numberValue}名`;
   }
   return `${value}`;
-}
-
-/**
- * イベント>日程>参加者のネスト構造から重複排除したトークン集合を返します。
- * @param {Record<string, Record<string, { token?: string }>>|null|undefined} branch
- * @returns {Set<string>}
- */
-export function collectParticipantTokens(branch) {
-  const tokens = new Set();
-  if (!branch || typeof branch !== "object") {
-    return tokens;
-  }
-
-  Object.values(branch).forEach((scheduleBranch) => {
-    if (!scheduleBranch || typeof scheduleBranch !== "object") return;
-    Object.values(scheduleBranch).forEach((participant) => {
-      const token = participant?.token;
-      if (token) {
-        tokens.add(String(token));
-      }
-    });
-  });
-  return tokens;
 }
 
 const PARTICIPANT_SYNC_TIMEOUT_MS = 6000;
