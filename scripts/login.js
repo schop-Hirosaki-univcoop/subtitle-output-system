@@ -44,6 +44,7 @@ class LoginPage {
     this.redirecting = false;
 
     this.handleLoginClick = this.handleLoginClick.bind(this);
+    this.preflightPromise = null;
   }
 
   /**
@@ -98,8 +99,11 @@ class LoginPage {
     try {
       const result = await signInWithPopup(this.auth, this.provider);
       const credential = this.GoogleAuthProvider.credentialFromResult(result);
-      await runAuthPreflight({ auth: this.auth, credential });
-      this.storeCredential(credential);
+      this.preflightPromise = runAuthPreflight({ auth: this.auth, credential }).then((context) => {
+        this.storeCredential(credential);
+        return context;
+      });
+      await this.preflightPromise;
     } catch (error) {
       console.error("Login failed:", error);
       clearAuthTransfer();
@@ -109,6 +113,7 @@ class LoginPage {
       }
       this.showError(this.getErrorMessage(error));
     } finally {
+      this.preflightPromise = null;
       this.setBusy(false);
     }
   }
@@ -209,12 +214,31 @@ class LoginPage {
    * 認証状態がサインイン済みに変化した際に次画面への遷移を調整します。
    * @param {import("firebase/auth").User|null} user
    */
-  handleAuthStateChanged(user) {
-    if (!user || this.redirecting) {
+  async handleAuthStateChanged(user) {
+    if (!user) {
+      this.redirecting = false;
+      clearAuthTransfer();
+      clearAuthPreflightContext();
       return;
     }
+
+    if (this.redirecting) {
+      return;
+    }
+
+    if (this.preflightPromise) {
+      try {
+        await this.preflightPromise;
+      } catch (error) {
+        return;
+      }
+    }
+
+    if (this.redirecting) {
+      return;
+    }
+
     this.redirecting = true;
-    clearAuthTransfer();
     goToEvents();
   }
 }
