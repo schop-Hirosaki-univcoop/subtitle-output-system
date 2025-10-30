@@ -20,11 +20,11 @@ import { ensureTrimmedString, coalesceTrimmed } from "./value-utils.js";
 import { formatScheduleSummary } from "./schedule-format.js";
 import { buildContextDescription } from "./context-copy.js";
 import {
-  sanitizeSubmissionPayload,
-  collectClientMetadata,
-  generateQuestionUid,
-  buildQuestionRecord
-} from "./submission-utils.js";
+  createSubmissionController,
+  isSubmissionAbortError,
+  buildSubmissionPayload,
+  submitQuestionRecord
+} from "./submission-service.js";
 
 /**
  * フォーム送信時のバリデーション失敗を表す独自エラー。
@@ -76,56 +76,6 @@ function normalizeContextData(rawContext) {
 }
 
 
-
-/**
- * 非同期処理の中断を明示するためのDOMException互換エラーを生成します。
- * @returns {Error}
- */
-function createAbortError() {
-  if (typeof DOMException === "function") {
-    return new DOMException("Aborted", "AbortError");
-  }
-  const error = new Error("Aborted");
-  error.name = "AbortError";
-  return error;
-}
-
-/**
- * AbortController が利用できない環境向けに簡易的な代替を返します。
- * @returns {AbortController & { abort(): void }}
- */
-function createSubmissionAbortController() {
-  if (typeof AbortController === "function") {
-    return new AbortController();
-  }
-  const signal = { aborted: false };
-  return {
-    signal,
-    abort() {
-      signal.aborted = true;
-    }
-  };
-}
-
-/**
- * AbortController が既に中断済みでないか検証します。
- * 中断済みの場合はAbortErrorを投げ、無駄な処理進行を止めます。
- * @param {AbortController|null|undefined} controller
- */
-function assertActiveController(controller) {
-  if (controller?.signal?.aborted) {
-    throw createAbortError();
-  }
-}
-
-/**
- * 渡されたエラーがAbortError由来かどうかを判定します。
- * @param {unknown} error
- * @returns {boolean}
- */
-function isAbortError(error) {
-  return error?.name === "AbortError";
-}
 
 /**
  * フォームの入力値を送信形式へ整形し、不要な空白やゼロ幅文字を取り除きます。
@@ -418,15 +368,28 @@ export class QuestionFormApp {
       throw error;
     }
 
-    const controller = this.resetSubmissionController();
+    const controller = this.startSubmissionController();
     this.setFormBusy(true);
     this.view.setFeedback("送信中です…");
 
     try {
-      const result = await this.submitQuestion(controller, formData);
+      const snapshot = this.captureSubmissionSnapshot();
+      const { token, submission } = buildSubmissionPayload({
+        token: this.state.token,
+        formData,
+        snapshot
+      });
+      const result = await submitQuestionRecord({
+        database: this.database,
+        controller,
+        token,
+        submission,
+        context: this.state.context,
+        databaseOps: { ref, set, remove }
+      });
       this.handleSubmitSuccess(result);
     } catch (error) {
-      if (isAbortError(error)) {
+      if (isSubmissionAbortError(error)) {
         return;
       }
       console.error(error);
@@ -545,9 +508,9 @@ export class QuestionFormApp {
    * 新しい送信制御用AbortControllerを生成し、既存処理を破棄します。
    * @returns {AbortController}
    */
-  resetSubmissionController() {
+  startSubmissionController() {
     this.abortPendingSubmission();
-    const controller = createSubmissionAbortController();
+    const controller = createSubmissionController();
     this.state.submittingController = controller;
     return controller;
   }
@@ -572,111 +535,6 @@ export class QuestionFormApp {
     this.resetFormState({ preserveRadioName: true, focusQuestion: true });
   }
 
-  /**
-   * Firebaseに送信するレコードベースデータを構築します。
-   * @param {{ radioName: string, question: string, questionLength: number, genre: string }} payload
-   * @returns {{ token: string, submission: Record<string, unknown> }}
-   */
-  createSubmissionData({ radioName, question, questionLength, genre }) {
-    const token = this.state.token;
-    if (!token) {
-      throw new Error("アクセス情報が無効です。配布されたリンクからアクセスし直してください。");
-    }
-
-    const snapshot = this.captureSubmissionSnapshot();
-    const clientMetadata = collectClientMetadata();
-    const clientTimestamp = Number.isFinite(clientMetadata.timestamp)
-      ? clientMetadata.timestamp
-      : Date.now();
-
-    const submissionBase = {
-      token,
-      radioName,
-      question,
-      questionLength,
-      genre,
-      groupNumber: snapshot.groupNumber,
-      teamNumber: snapshot.teamNumber,
-      scheduleLabel: snapshot.scheduleLabel,
-      scheduleDate: snapshot.scheduleDate,
-      scheduleStart: snapshot.scheduleStart,
-      scheduleEnd: snapshot.scheduleEnd,
-      eventId: snapshot.eventId,
-      eventName: snapshot.eventName,
-      scheduleId: snapshot.scheduleId,
-      participantId: snapshot.participantId,
-      participantName: snapshot.participantName,
-      clientTimestamp,
-      language: clientMetadata.language,
-      userAgent: clientMetadata.userAgent,
-      referrer: clientMetadata.referrer,
-      formVersion: FORM_VERSION,
-      guidance: snapshot.guidance,
-      origin: clientMetadata.origin,
-      status: "pending"
-    };
-
-    const submission = sanitizeSubmissionPayload(submissionBase);
-
-    return { token, submission };
-  }
-
-  /**
-   * 実際にRealtime Databaseへ書き込みを行い、ステータスレコードを生成します。
-   * トランザクション失敗時には後片付けを行いユーザー向けエラーへ変換します。
-   * @param {AbortController} controller
-   * @param {{ radioName: string, question: string, questionLength: number, genre: string }} formData
-   * @returns {Promise<{ queueProcessed: boolean }>}
-   */
-  async submitQuestion(controller, formData) {
-    assertActiveController(controller);
-
-    const { token, submission } = this.createSubmissionData(formData);
-
-    assertActiveController(controller);
-
-    const questionUid = generateQuestionUid();
-    submission.uid = questionUid;
-
-    let queueProcessed = false;
-    const timestamp = Date.now();
-    const questionRecord = buildQuestionRecord({
-      uid: questionUid,
-      token,
-      submission,
-      context: this.state.context,
-      timestamp
-    });
-    const statusRecord = { answered: false, selecting: false, updatedAt: timestamp };
-
-    const questionRef = ref(this.database, `questions/normal/${questionUid}`);
-    const statusRef = ref(this.database, `questionStatus/${questionUid}`);
-    let questionCreated = false;
-
-    try {
-      await set(questionRef, questionRecord);
-      questionCreated = true;
-      await set(statusRef, statusRecord);
-      queueProcessed = true;
-    } catch (error) {
-      if (questionCreated) {
-        try {
-          await remove(questionRef);
-        } catch (cleanupError) {
-          console.warn("Failed to roll back question record after status write error", cleanupError);
-        }
-      }
-      const isPermissionError = error?.code === "PERMISSION_DENIED";
-      const message = isPermissionError
-        ? "フォームを送信できませんでした。リンクの有効期限が切れていないかご確認ください。"
-        : "フォームを送信できませんでした。通信状況を確認して再度お試しください。";
-      const clientError = new Error(message);
-      clientError.cause = error;
-      throw clientError;
-    }
-
-    return { queueProcessed };
-  }
 }
 
 /**
