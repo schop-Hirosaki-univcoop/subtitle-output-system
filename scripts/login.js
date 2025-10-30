@@ -43,6 +43,26 @@ class LoginPage {
     this.defaultLabel = this.loginButton?.dataset?.labelDefault || "Googleアカウントでログイン";
     this.busyLabel = this.loginButton?.dataset?.labelBusy || "サインイン中…";
     this.redirecting = false;
+    this.statusList = document.getElementById("login-status-list");
+    this.statusDetail = document.getElementById("login-status-detail");
+    this.defaultStatusDetail = this.statusDetail?.textContent?.trim() || "";
+    this.statusItems = new Map();
+    if (this.statusList) {
+      const items = Array.from(
+        this.statusList.querySelectorAll(".login-status__item[data-step]")
+      );
+      for (const item of items) {
+        const step = item.dataset.step;
+        if (!step || this.statusItems.has(step)) continue;
+        this.statusItems.set(step, {
+          element: item,
+          icon: item.querySelector(".login-status__icon")
+        });
+      }
+    }
+    this.statusSteps = Array.from(this.statusItems.keys());
+    this.activeStep = null;
+    this.statusFlowActive = false;
 
     this.handleLoginClick = this.handleLoginClick.bind(this);
     this.preflightPromise = null;
@@ -52,6 +72,8 @@ class LoginPage {
       hasLoginButton: Boolean(this.loginButton),
       hasCurrentUser: Boolean(this.auth?.currentUser)
     });
+
+    this.resetStatusFlow();
   }
 
   /**
@@ -117,22 +139,30 @@ class LoginPage {
     this.setBusy(true);
     this.showError("");
     this.preflightError = null;
+    this.startStatusFlow();
     appendAuthDebugLog("login:perform-login:start");
 
     const loginFlow = (async () => {
+      this.activateStep("popup", "Googleアカウントの認証を開始しています…");
       const result = await signInWithPopup(this.auth, this.provider);
       appendAuthDebugLog("login:popup-success", {
         uid: result?.user?.uid || null,
         email: result?.user?.email || null,
         providerId: result?.providerId || null
       });
+      this.completeStep("popup");
+      this.activateStep("preflight", "イベント情報を準備しています…");
       const credential = this.GoogleAuthProvider.credentialFromResult(result);
       const context = await runAuthPreflight({ auth: this.auth, credential });
       appendAuthDebugLog("login:preflight:success", {
         adminSheetHash: context?.admin?.sheetHash || null,
         questionCount: context?.mirror?.questionCount ?? null
       });
+      this.completeStep("preflight");
+      this.activateStep("transfer", "資格情報を保存しています…");
       this.storeCredential(credential);
+      this.completeStep("transfer");
+      this.setStatusDetail("ログイン情報を保存しました。アカウント状態を確認しています…");
       return context;
     })();
 
@@ -157,7 +187,9 @@ class LoginPage {
       if (error instanceof AuthPreflightError) {
         await this.handlePreflightFailure(error);
       }
-      this.showError(this.getErrorMessage(error));
+      const message = this.getErrorMessage(error);
+      this.markFlowError(error, message);
+      this.showError(message);
     } finally {
       this.preflightPromise = null;
       this.setBusy(false);
@@ -223,6 +255,157 @@ class LoginPage {
       this.loginError.setAttribute("aria-hidden", "true");
       this.loginError.textContent = "";
     }
+  }
+
+  /**
+   * ログイン進捗パネルを初期状態に戻し、案内メッセージを既定値にリセットします。
+   */
+  resetStatusFlow() {
+    if (!this.statusItems.size) {
+      return;
+    }
+    this.statusItems.forEach((_, step) => {
+      this.setStepState(step, "pending");
+    });
+    this.activeStep = null;
+    this.statusFlowActive = false;
+    if (this.statusDetail) {
+      this.statusDetail.classList.remove("is-error");
+      this.statusDetail.textContent = this.defaultStatusDetail;
+    }
+  }
+
+  /**
+   * ログイン処理の表示更新を開始します。既存の状態はクリアされます。
+   */
+  startStatusFlow() {
+    if (!this.statusItems.size) {
+      return;
+    }
+    this.resetStatusFlow();
+    this.statusFlowActive = true;
+  }
+
+  /**
+   * 進捗メッセージを更新し、必要に応じてエラースタイルを適用します。
+   * @param {string} message
+   * @param {{ isError?: boolean }} [options]
+   */
+  setStatusDetail(message, { isError = false } = {}) {
+    if (!this.statusDetail) {
+      return;
+    }
+    const base = this.defaultStatusDetail || "";
+    const text = String(message || base).trim();
+    this.statusDetail.textContent = text || base;
+    if (isError) {
+      this.statusDetail.classList.add("is-error");
+    } else {
+      this.statusDetail.classList.remove("is-error");
+    }
+  }
+
+  /**
+   * ステップの状態を更新し、アイコン表示と現在のアクティブステップを同期します。
+   * @param {string} step
+   * @param {"pending"|"active"|"complete"|"error"} state
+   */
+  setStepState(step, state) {
+    const entry = this.statusItems.get(step);
+    if (!entry) {
+      return;
+    }
+    const { element, icon } = entry;
+    element.classList.remove("is-active", "is-complete", "is-error");
+    element.dataset.state = state;
+    if (icon) {
+      icon.textContent = "•";
+    }
+
+    if (state === "active") {
+      element.classList.add("is-active");
+      if (icon) {
+        icon.textContent = "…";
+      }
+      this.activeStep = step;
+      return;
+    }
+
+    if (state === "complete") {
+      element.classList.add("is-complete");
+      if (icon) {
+        icon.textContent = "✔";
+      }
+      if (this.activeStep === step) {
+        this.activeStep = null;
+      }
+      return;
+    }
+
+    if (state === "error") {
+      element.classList.add("is-error");
+      if (icon) {
+        icon.textContent = "!";
+      }
+      this.activeStep = null;
+      return;
+    }
+
+    if (this.activeStep === step) {
+      this.activeStep = null;
+    }
+  }
+
+  /**
+   * 指定したステップをアクティブに切り替え、案内メッセージを上書きします。
+   * @param {string} step
+   * @param {string} [detailMessage]
+   */
+  activateStep(step, detailMessage) {
+    if (!this.statusItems.size) {
+      return;
+    }
+    this.setStepState(step, "active");
+    if (detailMessage) {
+      this.setStatusDetail(detailMessage);
+    }
+  }
+
+  /**
+   * 指定ステップを完了状態に更新します。
+   * @param {string} step
+   */
+  completeStep(step) {
+    if (!this.statusItems.size) {
+      return;
+    }
+    this.setStepState(step, "complete");
+  }
+
+  /**
+   * 現在の処理でエラーが発生した際にパネルへ反映します。
+   * @param {Error} error
+   * @param {string} [message]
+   */
+  markFlowError(error, message) {
+    if (!this.statusItems.size) {
+      return;
+    }
+    let fallbackStep = null;
+    for (const step of this.statusSteps) {
+      const entry = this.statusItems.get(step);
+      if (entry && !entry.element.classList.contains("is-complete")) {
+        fallbackStep = step;
+        break;
+      }
+    }
+    const targetStep = this.activeStep || fallbackStep || this.statusSteps[this.statusSteps.length - 1] || null;
+    if (targetStep) {
+      this.setStepState(targetStep, "error");
+    }
+    const detail = typeof message === "string" ? message : this.getErrorMessage(error);
+    this.setStatusDetail(detail, { isError: true });
+    this.statusFlowActive = false;
   }
 
   /**
@@ -326,6 +509,11 @@ class LoginPage {
     appendAuthDebugLog("login:redirect-to-events", {
       uid: user?.uid || null
     });
+    if (this.statusFlowActive) {
+      this.activateStep("redirect", "イベント管理画面へ移動しています…");
+      this.completeStep("redirect");
+      this.statusFlowActive = false;
+    }
     goToEvents();
   }
 }
