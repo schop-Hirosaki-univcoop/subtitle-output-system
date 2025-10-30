@@ -138,6 +138,18 @@ function normalizeEmail(email = "") {
   return String(email || "").trim().toLowerCase();
 }
 
+function isNotInUsersSheetError(error) {
+  if (!error) return false;
+  const message = typeof error.message === "string" ? error.message : String(error || "");
+  if (/not in users sheet/i.test(message) || /Forbidden: not in users sheet/i.test(message)) {
+    return true;
+  }
+  if (error.cause) {
+    return isNotInUsersSheetError(error.cause);
+  }
+  return false;
+}
+
 function countQuestions(data) {
   if (!data || typeof data !== "object") {
     return 0;
@@ -172,30 +184,43 @@ export async function runAuthPreflight({
 
   const api = apiClientFactory(auth, onAuthStateChanged);
   const normalizedEmail = normalizeEmail(user.email);
-  let userSheetResult;
-  try {
-    userSheetResult = await api.apiPost({ action: "fetchSheet", sheet: "users" });
-  } catch (error) {
-    throw new AuthPreflightError("ユーザー一覧の取得に失敗しました。", "FETCH_USERS_FAILED", error);
-  }
-
-  const authorizedUsers = Array.isArray(userSheetResult?.data)
-    ? userSheetResult.data
-        .map((row) => normalizeEmail(row?.["メールアドレス"] || row?.email))
-        .filter(Boolean)
-    : [];
-  if (authorizedUsers.length && normalizedEmail && !authorizedUsers.includes(normalizedEmail)) {
-    throw new AuthPreflightError(
-      "あなたのアカウントはこのシステムへのアクセスが許可されていません。",
-      "NOT_IN_USER_SHEET"
-    );
-  }
 
   let ensureAdminResponse = null;
   try {
     ensureAdminResponse = await api.apiPost({ action: "ensureAdmin" });
   } catch (error) {
+    if (isNotInUsersSheetError(error)) {
+      throw new AuthPreflightError(
+        "あなたのアカウントはこのシステムへのアクセスが許可されていません。",
+        "NOT_IN_USER_SHEET",
+        error
+      );
+    }
     throw new AuthPreflightError("管理者権限の同期に失敗しました。", "ENSURE_ADMIN_FAILED", error);
+  }
+
+  try {
+    const userSheetResult = await api.apiPost({ action: "fetchSheet", sheet: "users" });
+    const authorizedUsers = Array.isArray(userSheetResult?.data)
+      ? userSheetResult.data
+          .map((row) => normalizeEmail(row?.["メールアドレス"] || row?.email))
+          .filter(Boolean)
+      : [];
+    if (authorizedUsers.length && normalizedEmail && !authorizedUsers.includes(normalizedEmail)) {
+      throw new AuthPreflightError(
+        "あなたのアカウントはこのシステムへのアクセスが許可されていません。",
+        "NOT_IN_USER_SHEET"
+      );
+    }
+  } catch (error) {
+    if (isNotInUsersSheetError(error)) {
+      throw new AuthPreflightError(
+        "あなたのアカウントはこのシステムへのアクセスが許可されていません。",
+        "NOT_IN_USER_SHEET",
+        error
+      );
+    }
+    console.warn("Failed to fetch users sheet during auth preflight", error);
   }
 
   const now = getNow();

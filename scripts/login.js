@@ -46,6 +46,7 @@ class LoginPage {
 
     this.handleLoginClick = this.handleLoginClick.bind(this);
     this.preflightPromise = null;
+    this.preflightError = null;
 
     appendAuthDebugLog("login:page-constructed", {
       hasLoginButton: Boolean(this.loginButton),
@@ -115,6 +116,7 @@ class LoginPage {
   async performLogin() {
     this.setBusy(true);
     this.showError("");
+    this.preflightError = null;
     appendAuthDebugLog("login:perform-login:start");
 
     try {
@@ -125,15 +127,17 @@ class LoginPage {
         providerId: result?.providerId || null
       });
       const credential = this.GoogleAuthProvider.credentialFromResult(result);
-      this.preflightPromise = runAuthPreflight({ auth: this.auth, credential }).then((context) => {
+      const promise = (async () => {
+        const context = await runAuthPreflight({ auth: this.auth, credential });
         appendAuthDebugLog("login:preflight:success", {
           adminSheetHash: context?.admin?.sheetHash || null,
           questionCount: context?.mirror?.questionCount ?? null
         });
         this.storeCredential(credential);
         return context;
-      });
-      await this.preflightPromise;
+      })();
+      this.preflightPromise = promise;
+      await promise;
       appendAuthDebugLog("login:perform-login:completed");
     } catch (error) {
       console.error("Login failed:", error);
@@ -145,6 +149,7 @@ class LoginPage {
         },
         { level: "error" }
       );
+      this.preflightError = error;
       clearAuthTransfer();
       clearAuthPreflightContext();
       if (error instanceof AuthPreflightError) {
@@ -279,6 +284,7 @@ class LoginPage {
       this.redirecting = false;
       clearAuthTransfer();
       clearAuthPreflightContext();
+      this.preflightError = null;
       appendAuthDebugLog("login:handle-auth-state:cleared");
       return;
     }
@@ -299,6 +305,15 @@ class LoginPage {
         );
         return;
       }
+    }
+
+    if (this.preflightError) {
+      appendAuthDebugLog(
+        "login:handle-auth-state:preflight-error-pending",
+        { message: this.preflightError?.message || null },
+        { level: "error" }
+      );
+      return;
     }
 
     if (this.redirecting) {
