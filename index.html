@@ -586,6 +586,15 @@
                 </div>
               </div>
               <div class="module-body dictionary-body">
+                <div id="op-dictionary-loading-overlay" class="loading-overlay" aria-live="polite" hidden>
+                  <div class="loading-backdrop"></div>
+                  <div class="loading-panel" role="status" aria-label="読み込み中">
+                    <div class="spinner" aria-hidden="true"></div>
+                    <div class="loading-text"><span id="op-dictionary-loading-text">辞書パネルを初期化しています…</span></div>
+                    <div class="loading-sub">数秒かかる場合があります</div>
+                    <ol id="op-dictionary-loader-steps" class="loader-steps" aria-label="辞書の初期化ステップ"></ol>
+                  </div>
+                </div>
                 <form id="op-add-term-form" class="dictionary-form">
                   <input type="text" id="op-new-term" class="input" placeholder="単語" required>
                   <input type="text" id="op-new-ruby" class="input" placeholder="ルビ" required>
@@ -667,6 +676,15 @@
             </div>
           </div>
           <div class="module-body pickup-body">
+            <div id="op-pickup-loading-overlay" class="loading-overlay" aria-live="polite" hidden>
+              <div class="loading-backdrop"></div>
+              <div class="loading-panel" role="status" aria-label="読み込み中">
+                <div class="spinner" aria-hidden="true"></div>
+                <div class="loading-text"><span id="op-pickup-loading-text">Pick Upパネルを初期化しています…</span></div>
+                <div class="loading-sub">数秒かかる場合があります</div>
+                <ol id="op-pickup-loader-steps" class="loader-steps" aria-label="Pick Up 初期化ステップ"></ol>
+              </div>
+            </div>
             <div id="op-pickup-alert" class="hub-alert" role="alert" hidden></div>
             <div id="op-pickup-tabs" class="pickup-tabs" role="tablist" aria-label="ジャンルで絞り込む"></div>
             <div class="cards-scroll">
@@ -746,6 +764,15 @@
                 </div>
               </div>
               <div class="module-body logs-body">
+                <div id="op-logs-loading-overlay" class="loading-overlay" aria-live="polite" hidden>
+                  <div class="loading-backdrop"></div>
+                  <div class="loading-panel" role="status" aria-label="読み込み中">
+                    <div class="spinner" aria-hidden="true"></div>
+                    <div class="loading-text"><span id="op-logs-loading-text">操作ログパネルを初期化しています…</span></div>
+                    <div class="loading-sub">数秒かかる場合があります</div>
+                    <ol id="op-logs-loader-steps" class="loader-steps" aria-label="操作ログの初期化ステップ"></ol>
+                  </div>
+                </div>
                 <div id="op-logs-toolbar" class="logs-toolbar">
                   <input id="op-log-search" class="input" placeholder="検索 (user/action/details)">
                   <label class="chk"><input type="checkbox" id="op-log-autoscroll" checked> 自動スクロール</label>

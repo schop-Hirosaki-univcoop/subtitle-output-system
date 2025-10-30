@@ -5,6 +5,103 @@ import { escapeHtml, resolveGenreLabel, formatRelative } from "./utils.js";
 
 const ALL_FILTER_VALUE = GENRE_ALL_VALUE;
 
+const PICKUP_LOADER_STEPS = [
+  { label: "初期化", message: "Pick Upパネルを初期化しています…" },
+  { label: "取得", message: "Pick Up一覧を取得しています…" },
+  { label: "表示更新", message: "表示を更新しています…" },
+  { label: "監視開始", message: "リアルタイム監視を開始しています…" },
+  { label: "完了", message: "準備が整いました！" }
+];
+
+function ensurePickupLoader(app) {
+  if (!app) {
+    return;
+  }
+  if (typeof app.pickupLoaderCurrentStep !== "number") {
+    app.pickupLoaderCurrentStep = 0;
+  }
+  if (!app.pickupLoaderSetup && app.dom.pickupLoaderSteps) {
+    app.dom.pickupLoaderSteps.innerHTML = PICKUP_LOADER_STEPS.map(
+      ({ label }, index) => `<li data-step="${index}">${escapeHtml(label)}</li>`
+    ).join("");
+    app.pickupLoaderSetup = true;
+  }
+}
+
+function isPickupPanelVisible(app) {
+  const panel = app?.dom?.pickupPanel;
+  return !!(panel && !panel.hasAttribute("hidden"));
+}
+
+function showPickupLoader(app) {
+  if (app?.dom?.pickupLoadingOverlay) {
+    app.dom.pickupLoadingOverlay.removeAttribute("hidden");
+  }
+}
+
+function hidePickupLoader(app) {
+  if (app?.dom?.pickupLoadingOverlay) {
+    app.dom.pickupLoadingOverlay.setAttribute("hidden", "");
+  }
+}
+
+function maybeShowPickupLoader(app) {
+  if (!app || app.pickupLoaderCompleted) {
+    return;
+  }
+  if (isPickupPanelVisible(app)) {
+    showPickupLoader(app);
+  }
+}
+
+function setPickupLoaderStep(app, stepIndex, { force = false } = {}) {
+  if (!app) {
+    return;
+  }
+  ensurePickupLoader(app);
+  const steps = PICKUP_LOADER_STEPS;
+  const normalized = Math.max(0, Math.min(stepIndex, steps.length - 1));
+  const current = typeof app.pickupLoaderCurrentStep === "number" ? app.pickupLoaderCurrentStep : 0;
+  if (!force && normalized < current) {
+    return;
+  }
+  app.pickupLoaderCurrentStep = normalized;
+  const { message } = steps[normalized] || steps[0];
+  if (app.dom.pickupLoadingText) {
+    app.dom.pickupLoadingText.textContent = message;
+  }
+  const list = app.dom.pickupLoaderSteps;
+  if (list) {
+    list.querySelectorAll("li").forEach((item, index) => {
+      item.classList.toggle("current", index === normalized);
+      item.classList.toggle("done", index < normalized);
+    });
+  }
+  app.pickupLoaderCompleted = normalized >= steps.length - 1;
+  if (!app.pickupLoaderCompleted) {
+    maybeShowPickupLoader(app);
+  }
+}
+
+function completePickupLoader(app) {
+  if (!app) {
+    return;
+  }
+  setPickupLoaderStep(app, PICKUP_LOADER_STEPS.length - 1, { force: true });
+  app.pickupLoaderCompleted = true;
+  hidePickupLoader(app);
+}
+
+export function resetPickupLoader(app) {
+  if (!app) {
+    return;
+  }
+  ensurePickupLoader(app);
+  app.pickupLoaderCompleted = false;
+  setPickupLoaderStep(app, 0, { force: true });
+  hidePickupLoader(app);
+}
+
 const PICKUP_DEFAULT_FIELDS = {
   name: "Pick Up Question",
   pickup: true,
@@ -213,6 +310,10 @@ function normalizePickupEntry(uid, record) {
 }
 
 function applyPickupSnapshot(app, value) {
+  const wasLoaded = !!app.pickupLoaded;
+  if (!wasLoaded) {
+    setPickupLoaderStep(app, 2);
+  }
   const list = [];
   if (Array.isArray(value)) {
     value.forEach((item) => {
@@ -238,6 +339,10 @@ function applyPickupSnapshot(app, value) {
     renderPickupList(app);
   }
   app.pickupLoaded = true;
+  if (!wasLoaded) {
+    setPickupLoaderStep(app, 3);
+    completePickupLoader(app);
+  }
 }
 
 function renderEmptyState(app, isEmpty) {
@@ -572,6 +677,7 @@ export function startPickupListener(app) {
     app.pickupUnsubscribe();
     app.pickupUnsubscribe = null;
   }
+  setPickupLoaderStep(app, 1);
   setupPickupEditDialog(app);
   setupPickupConfirmDialog(app);
   app.pickupUnsubscribe = onValue(
@@ -582,6 +688,7 @@ export function startPickupListener(app) {
     (error) => {
       console.error("Failed to subscribe pickup questions", error);
       showPickupAlert(app, "Pick Up Question の取得に失敗しました。");
+      hidePickupLoader(app);
     }
   );
 }
