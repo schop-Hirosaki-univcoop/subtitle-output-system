@@ -54,10 +54,12 @@ import {
   loadAuthPreflightContext,
   preflightContextMatchesUser
 } from "../shared/auth-preflight.js";
+import { appendAuthDebugLog, replayAuthDebugLog } from "../shared/auth-debug-log.js";
 
 const HOST_PRESENCE_HEARTBEAT_MS = 60_000;
 const SCHEDULE_CONSENSUS_TOAST_MS = 3_000;
 const PENDING_NAVIGATION_CLEAR_DELAY_MS = 5_000;
+const AUTH_RESUME_FALLBACK_DELAY_MS = 4_000;
 const DISPLAY_LOCK_REASONS = new Set([
   "schedule-commit",
   "navigation",
@@ -129,6 +131,10 @@ export class EventAdminApp {
     this.lastFocused = null;
     this.confirmResolver = null;
     this.redirectingToIndex = false;
+    this.hasSeenAuthenticatedUser = Boolean(auth?.currentUser);
+    this.authResumeFallbackTimer = 0;
+    this.authResumeGracePeriodMs = AUTH_RESUME_FALLBACK_DELAY_MS;
+    this.authResumeTimerHost = getTimerHost();
     this.eventsLoadingTracker = new LoadingTracker({
       onChange: (state) => this.applyEventsLoadingState(state)
     });
@@ -202,6 +208,9 @@ export class EventAdminApp {
     this.handleFullscreenError = this.handleFullscreenError.bind(this);
     this.handleScheduleConflictSubmit = this.handleScheduleConflictSubmit.bind(this);
     this.handleScheduleFallbackSubmit = this.handleScheduleFallbackSubmit.bind(this);
+    appendAuthDebugLog("events:app-constructed", {
+      hasCurrentUser: Boolean(this.currentUser)
+    });
   }
 
   logParticipantAction(message, detail = null) {
@@ -377,6 +386,10 @@ export class EventAdminApp {
   }
 
   init() {
+    replayAuthDebugLog({ label: "[auth-debug] existing log (events)", clear: false });
+    appendAuthDebugLog("events:init", {
+      hasCurrentUser: Boolean(auth?.currentUser)
+    });
     if (auth && auth.currentUser) {
       this.currentUser = auth.currentUser;
       this.updateUserLabel();
@@ -677,6 +690,7 @@ export class EventAdminApp {
     if (this.redirectingToIndex) {
       return;
     }
+    appendAuthDebugLog("events:redirect:login");
     this.resetFlowState();
     this.endEventsLoading();
     this.updateUserLabel();
@@ -733,29 +747,47 @@ export class EventAdminApp {
 
   loadPreflightContextForUser(user) {
     if (!user) {
+      appendAuthDebugLog("events:preflight-context:skip", { reason: "no-user" }, { level: "debug" });
       return null;
     }
     const context = loadAuthPreflightContext();
     if (!context) {
+      appendAuthDebugLog("events:preflight-context:missing");
       return null;
     }
     if (!preflightContextMatchesUser(context, user)) {
+      appendAuthDebugLog("events:preflight-context:identity-mismatch", {
+        contextUid: context?.uid || null,
+        userUid: user?.uid || null
+      });
       return null;
     }
+    appendAuthDebugLog("events:preflight-context:loaded", {
+      questionCount: context?.mirror?.questionCount ?? null
+    });
     return context;
   }
 
   async tryResumeAuth() {
     if (this.authTransferAttempted) {
+      appendAuthDebugLog("events:auth-resume:skipped", { reason: "already-attempted" }, { level: "debug" });
       return false;
     }
     this.authTransferAttempted = true;
+    appendAuthDebugLog("events:auth-resume:start");
 
     let transfer = consumeAuthTransfer();
     if (!this.isValidTransferPayload(transfer)) {
       const fallbackContext = loadAuthPreflightContext();
+      appendAuthDebugLog("events:auth-resume:transfer-missing", {
+        hasFallbackContext: Boolean(fallbackContext)
+      });
       const fallbackCredential = fallbackContext?.credential;
       if (fallbackCredential && (fallbackCredential.idToken || fallbackCredential.accessToken)) {
+        appendAuthDebugLog("events:auth-resume:fallback-credential", {
+          hasIdToken: Boolean(fallbackCredential.idToken),
+          hasAccessToken: Boolean(fallbackCredential.accessToken)
+        });
         transfer = {
           providerId: fallbackCredential.providerId || GoogleAuthProvider.PROVIDER_ID,
           signInMethod: fallbackCredential.signInMethod || "",
@@ -767,12 +799,14 @@ export class EventAdminApp {
     }
 
     if (!this.isValidTransferPayload(transfer)) {
+      appendAuthDebugLog("events:auth-resume:invalid-payload", null, { level: "warn" });
       return false;
     }
 
     const providerId = transfer.providerId || "";
     if (providerId && providerId !== GoogleAuthProvider.PROVIDER_ID) {
       logError("Unsupported auth transfer provider", new Error(providerId));
+      appendAuthDebugLog("events:auth-resume:unsupported-provider", { providerId }, { level: "error" });
       return false;
     }
 
@@ -788,9 +822,15 @@ export class EventAdminApp {
 
     try {
       await signInWithCredential(auth, credential);
+      appendAuthDebugLog("events:auth-resume:success");
       return true;
     } catch (error) {
       logError("Failed to resume auth from transfer payload", error);
+      appendAuthDebugLog(
+        "events:auth-resume:error",
+        { code: error?.code || null, message: error?.message || null },
+        { level: "error" }
+      );
       return false;
     }
   }
@@ -803,26 +843,81 @@ export class EventAdminApp {
     return hasToken;
   }
 
+  scheduleAuthResumeFallback(reason = "unknown") {
+    if (this.authResumeFallbackTimer) {
+      appendAuthDebugLog("events:auth-resume:fallback-already-scheduled", { reason }, { level: "debug" });
+      return;
+    }
+    const host = this.authResumeTimerHost || getTimerHost();
+    const delayMs = Number.isFinite(this.authResumeGracePeriodMs)
+      ? Math.max(0, this.authResumeGracePeriodMs)
+      : 0;
+    this.authResumeFallbackTimer = host.setTimeout(() => {
+      this.authResumeFallbackTimer = 0;
+      if (auth?.currentUser) {
+        appendAuthDebugLog("events:auth-resume:fallback-aborted", {
+          reason,
+          uid: auth.currentUser.uid || null
+        });
+        return;
+      }
+      appendAuthDebugLog("events:auth-resume:fallback-trigger", { reason });
+      this.showLoggedOutState();
+    }, delayMs);
+    appendAuthDebugLog("events:auth-resume:fallback-scheduled", { reason, delayMs });
+  }
+
+  cancelAuthResumeFallback(reason = "unknown") {
+    if (!this.authResumeFallbackTimer) {
+      return;
+    }
+    const host = this.authResumeTimerHost || getTimerHost();
+    host.clearTimeout(this.authResumeFallbackTimer);
+    this.authResumeFallbackTimer = 0;
+    appendAuthDebugLog("events:auth-resume:fallback-cancelled", { reason }, { level: "debug" });
+  }
+
   async handleAuthState(user) {
+    appendAuthDebugLog("events:handle-auth-state", {
+      uid: user?.uid || null
+    });
     this.currentUser = user;
     this.chat.handleAuthChange(user);
     this.startChatReadListener(user);
     this.updateUserLabel();
     this.preflightContext = this.loadPreflightContextForUser(user);
     if (!user) {
-      if (await this.tryResumeAuth()) {
+      if (this.hasSeenAuthenticatedUser) {
+        appendAuthDebugLog("events:handle-auth-state:signed-out");
+        this.cancelAuthResumeFallback("signed-out");
+        this.clearHostPresence();
+        this.events = [];
+        this.renderEvents();
+        this.notifyEventListeners();
+        this.notifySelectionListeners("host");
+        this.clearAlert();
+        this.showLoggedOutState();
         return;
       }
+      if (await this.tryResumeAuth()) {
+        appendAuthDebugLog("events:handle-auth-state:resuming");
+        return;
+      }
+      this.scheduleAuthResumeFallback("initial-null-user");
       this.clearHostPresence();
       this.events = [];
       this.renderEvents();
       this.notifyEventListeners();
       this.notifySelectionListeners("host");
       this.clearAlert();
-      this.showLoggedOutState();
       return;
     }
 
+    this.hasSeenAuthenticatedUser = true;
+    this.cancelAuthResumeFallback("user-present");
+    appendAuthDebugLog("events:handle-auth-state:user-present", {
+      uid: user.uid || null
+    });
     this.showLoggedInState();
     this.clearAlert();
 
@@ -4908,6 +5003,7 @@ export class EventAdminApp {
   }
 
   cleanup() {
+    this.cancelAuthResumeFallback("cleanup");
     this.clearOperatorPresenceState();
     if (typeof document !== "undefined") {
       document.removeEventListener("qa:participants-synced", this.tools.handleParticipantSyncEvent);
@@ -6612,6 +6708,7 @@ export class EventAdminApp {
   }
 
   cleanup() {
+    this.cancelAuthResumeFallback("cleanup");
     this.clearOperatorPresenceState();
     if (typeof document !== "undefined") {
       document.removeEventListener("qa:participants-synced", this.tools.handleParticipantSyncEvent);
