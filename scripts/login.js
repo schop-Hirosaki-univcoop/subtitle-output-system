@@ -4,10 +4,17 @@ import {
   provider,
   GoogleAuthProvider,
   signInWithPopup,
-  onAuthStateChanged
+  onAuthStateChanged,
+  signOut
 } from "./operator/firebase.js";
 import { storeAuthTransfer, clearAuthTransfer } from "./shared/auth-transfer.js";
+import {
+  runAuthPreflight,
+  AuthPreflightError,
+  clearAuthPreflightContext
+} from "./shared/auth-preflight.js";
 import { goToEvents } from "./shared/routes.js";
+import { appendAuthDebugLog, replayAuthDebugLog } from "./shared/auth-debug-log.js";
 
 const ERROR_MESSAGES = {
   "auth/popup-closed-by-user": "ログインウィンドウが閉じられました。もう一度お試しください。",
@@ -38,6 +45,13 @@ class LoginPage {
     this.redirecting = false;
 
     this.handleLoginClick = this.handleLoginClick.bind(this);
+    this.preflightPromise = null;
+    this.preflightError = null;
+
+    appendAuthDebugLog("login:page-constructed", {
+      hasLoginButton: Boolean(this.loginButton),
+      hasCurrentUser: Boolean(this.auth?.currentUser)
+    });
   }
 
   /**
@@ -45,6 +59,11 @@ class LoginPage {
    * イベントハンドラ登録と認証状態の監視を開始し、UIを操作可能な状態にします。
    */
   init() {
+    replayAuthDebugLog({ label: "[auth-debug] existing log (login)", clear: false });
+    appendAuthDebugLog("login:init", {
+      hasLoginButton: Boolean(this.loginButton),
+      hasCurrentUser: Boolean(this.auth?.currentUser)
+    });
     this.bindEvents();
     this.observeAuthState();
   }
@@ -56,17 +75,24 @@ class LoginPage {
   bindEvents() {
     if (!this.loginButton) {
       console.warn("Login button not found; login flow is unavailable.");
+      appendAuthDebugLog("login:button-missing", null, { level: "warn" });
       return;
     }
 
     this.loginButton.addEventListener("click", this.handleLoginClick);
+    appendAuthDebugLog("login:button-bound");
   }
 
   /**
    * Firebase Authの状態変化を監視し、既にサインイン済みの場合には自動で遷移させます。
    */
   observeAuthState() {
+    appendAuthDebugLog("login:observe-auth-state");
     onAuthStateChanged(this.auth, (user) => {
+      appendAuthDebugLog("login:on-auth-state", {
+        uid: user?.uid || null,
+        email: user?.email || null
+      });
       this.handleAuthStateChanged(user);
     });
   }
@@ -76,9 +102,11 @@ class LoginPage {
    */
   handleLoginClick() {
     if (this.loginButton?.disabled) {
+      appendAuthDebugLog("login:click-ignored", { reason: "button-disabled" }, { level: "warn" });
       return;
     }
 
+    appendAuthDebugLog("login:click");
     this.performLogin();
   }
 
@@ -88,16 +116,48 @@ class LoginPage {
   async performLogin() {
     this.setBusy(true);
     this.showError("");
+    this.preflightError = null;
+    appendAuthDebugLog("login:perform-login:start");
 
     try {
       const result = await signInWithPopup(this.auth, this.provider);
+      appendAuthDebugLog("login:popup-success", {
+        uid: result?.user?.uid || null,
+        email: result?.user?.email || null,
+        providerId: result?.providerId || null
+      });
       const credential = this.GoogleAuthProvider.credentialFromResult(result);
-      this.storeCredential(credential);
+      const promise = (async () => {
+        const context = await runAuthPreflight({ auth: this.auth, credential });
+        appendAuthDebugLog("login:preflight:success", {
+          adminSheetHash: context?.admin?.sheetHash || null,
+          questionCount: context?.mirror?.questionCount ?? null
+        });
+        this.storeCredential(credential);
+        return context;
+      })();
+      this.preflightPromise = promise;
+      await promise;
+      appendAuthDebugLog("login:perform-login:completed");
     } catch (error) {
       console.error("Login failed:", error);
+      appendAuthDebugLog(
+        "login:perform-login:error",
+        {
+          code: error?.code || null,
+          message: error?.message || null
+        },
+        { level: "error" }
+      );
+      this.preflightError = error;
       clearAuthTransfer();
+      clearAuthPreflightContext();
+      if (error instanceof AuthPreflightError) {
+        await this.handlePreflightFailure(error);
+      }
       this.showError(this.getErrorMessage(error));
     } finally {
+      this.preflightPromise = null;
       this.setBusy(false);
     }
   }
@@ -108,6 +168,10 @@ class LoginPage {
    */
   storeCredential(credential) {
     if (credential && (credential.idToken || credential.accessToken)) {
+      appendAuthDebugLog("login:store-credential", {
+        hasIdToken: Boolean(credential.idToken),
+        hasAccessToken: Boolean(credential.accessToken)
+      });
       storeAuthTransfer({
         providerId: credential.providerId || this.GoogleAuthProvider.PROVIDER_ID,
         signInMethod: credential.signInMethod || "",
@@ -115,6 +179,7 @@ class LoginPage {
         accessToken: credential.accessToken || ""
       });
     } else {
+      appendAuthDebugLog("login:store-credential:missing-token", null, { level: "warn" });
       clearAuthTransfer();
     }
   }
@@ -164,6 +229,9 @@ class LoginPage {
    * @returns {string}
    */
   getErrorMessage(error) {
+    if (error instanceof AuthPreflightError) {
+      return error.message || "プリフライト処理に失敗しました。";
+    }
     const code = error?.code || "";
     if (code === "auth/network-request-failed") {
       return navigator.onLine
@@ -174,15 +242,88 @@ class LoginPage {
   }
 
   /**
+   * プリフライト処理の失敗時に必要な後片付けを行います。
+   * 未許可ユーザーなどのケースではサインアウトして状態を巻き戻します。
+   * @param {AuthPreflightError} error
+   */
+  async handlePreflightFailure(error) {
+    if (!error) {
+      return;
+    }
+    appendAuthDebugLog(
+      "login:preflight:failure",
+      {
+        code: error.code,
+        message: error.message
+      },
+      { level: "error" }
+    );
+    if (error.code === "NOT_IN_USER_SHEET" || error.code === "ENSURE_ADMIN_FAILED") {
+      try {
+        await signOut(this.auth);
+      } catch (signOutError) {
+        console.warn("Failed to sign out after preflight error", signOutError);
+        appendAuthDebugLog(
+          "login:preflight:signout-error",
+          { message: signOutError?.message || null },
+          { level: "warn" }
+        );
+      }
+    }
+  }
+
+  /**
    * 認証状態がサインイン済みに変化した際に次画面への遷移を調整します。
    * @param {import("firebase/auth").User|null} user
    */
-  handleAuthStateChanged(user) {
-    if (!user || this.redirecting) {
+  async handleAuthStateChanged(user) {
+    appendAuthDebugLog("login:handle-auth-state", {
+      uid: user?.uid || null
+    });
+    if (!user) {
+      this.redirecting = false;
+      clearAuthTransfer();
+      clearAuthPreflightContext();
+      this.preflightError = null;
+      appendAuthDebugLog("login:handle-auth-state:cleared");
       return;
     }
+
+    if (this.redirecting) {
+      appendAuthDebugLog("login:handle-auth-state:already-redirecting");
+      return;
+    }
+
+    if (this.preflightPromise) {
+      try {
+        await this.preflightPromise;
+      } catch (error) {
+        appendAuthDebugLog(
+          "login:handle-auth-state:preflight-error",
+          { message: error?.message || null },
+          { level: "error" }
+        );
+        return;
+      }
+    }
+
+    if (this.preflightError) {
+      appendAuthDebugLog(
+        "login:handle-auth-state:preflight-error-pending",
+        { message: this.preflightError?.message || null },
+        { level: "error" }
+      );
+      return;
+    }
+
+    if (this.redirecting) {
+      return;
+    }
+
     this.redirecting = true;
-    clearAuthTransfer();
+    appendAuthDebugLog("login:redirect-to-events", {
+      uid: user?.uid || null
+    });
     goToEvents();
   }
 }
