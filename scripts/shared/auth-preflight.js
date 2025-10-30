@@ -66,6 +66,19 @@ function readFromStorage(storage) {
   }
 }
 
+function createProgressReporter(onProgress) {
+  if (typeof onProgress !== "function") {
+    return () => {};
+  }
+  return (stage, phase, payload = null) => {
+    try {
+      onProgress({ stage, phase, payload });
+    } catch (error) {
+      console.warn("Auth preflight progress listener failed", error);
+    }
+  };
+}
+
 export function clearAuthPreflightContext() {
   ["session", "local"].forEach((kind) => {
     const storage = safeGetStorage(kind);
@@ -175,8 +188,10 @@ export async function runAuthPreflight({
   onAuthStateChanged = sharedOnAuthStateChanged,
   credential = null,
   apiClientFactory = createApiClient,
-  getNow = () => Date.now()
+  getNow = () => Date.now(),
+  onProgress = null
 } = {}) {
+  const report = createProgressReporter(onProgress);
   const user = await ensureUser(auth, onAuthStateChanged);
   if (!user) {
     throw new AuthPreflightError("サインイン状態を確認できませんでした。", "NOT_SIGNED_IN");
@@ -187,8 +202,15 @@ export async function runAuthPreflight({
 
   let ensureAdminResponse = null;
   try {
+    report("ensureAdmin", "start");
     ensureAdminResponse = await api.apiPost({ action: "ensureAdmin" });
+    const sheetHash =
+      typeof ensureAdminResponse?.sheetHash === "string"
+        ? ensureAdminResponse.sheetHash
+        : ensureAdminResponse?.data?.sheetHash || null;
+    report("ensureAdmin", "success", { sheetHash });
   } catch (error) {
+    report("ensureAdmin", "error", { code: "ENSURE_ADMIN_FAILED", message: error?.message || null });
     if (isNotInUsersSheetError(error)) {
       throw new AuthPreflightError(
         "あなたのアカウントはこのシステムへのアクセスが許可されていません。",
@@ -200,6 +222,7 @@ export async function runAuthPreflight({
   }
 
   try {
+    report("userSheet", "start");
     const userSheetResult = await api.apiPost({ action: "fetchSheet", sheet: "users" });
     const authorizedUsers = Array.isArray(userSheetResult?.data)
       ? userSheetResult.data
@@ -207,13 +230,16 @@ export async function runAuthPreflight({
           .filter(Boolean)
       : [];
     if (authorizedUsers.length && normalizedEmail && !authorizedUsers.includes(normalizedEmail)) {
+      report("userSheet", "error", { code: "NOT_IN_USER_SHEET", message: null });
       throw new AuthPreflightError(
         "あなたのアカウントはこのシステムへのアクセスが許可されていません。",
         "NOT_IN_USER_SHEET"
       );
     }
+    report("userSheet", "success", { totalUsers: authorizedUsers.length, fallback: false });
   } catch (error) {
     if (isNotInUsersSheetError(error)) {
+      report("userSheet", "error", { code: "NOT_IN_USER_SHEET", message: error?.message || null });
       throw new AuthPreflightError(
         "あなたのアカウントはこのシステムへのアクセスが許可されていません。",
         "NOT_IN_USER_SHEET",
@@ -221,11 +247,13 @@ export async function runAuthPreflight({
       );
     }
     console.warn("Failed to fetch users sheet during auth preflight", error);
+    report("userSheet", "success", { totalUsers: null, fallback: true });
   }
 
   const now = getNow();
   let mirrorInfo = null;
   try {
+    report("mirror", "start");
     let snapshot = null;
     try {
       snapshot = await get(questionsRef);
@@ -234,6 +262,7 @@ export async function runAuthPreflight({
     }
 
     if (!snapshot?.exists?.() || !snapshot.exists()) {
+      report("mirror", "refresh");
       try {
         await api.apiPost({ action: "mirrorSheet" });
         snapshot = await get(questionsRef);
@@ -245,9 +274,11 @@ export async function runAuthPreflight({
 
     const data = snapshot?.exists?.() && snapshot.exists() ? snapshot.val() || {} : {};
     mirrorInfo = { syncedAt: now, questionCount: countQuestions(data) };
+    report("mirror", "success", { questionCount: mirrorInfo.questionCount, fallback: false });
   } catch (error) {
     console.warn("Failed to determine mirror state during preflight", error);
     mirrorInfo = null;
+    report("mirror", "success", { questionCount: null, fallback: true });
   }
 
   const context = {

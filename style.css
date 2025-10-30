@@ -281,6 +281,110 @@ html.embedded-view .site-footer{ display:none !important; }
   line-height:1.65;
 }
 
+.login-status{
+  align-self:stretch;
+  display:flex;
+  flex-direction:column;
+  gap:0.65rem;
+  width:100%;
+  padding:1.05rem 1.1rem;
+  border-radius:0.95rem;
+  border:1px solid rgba(70,96,142,.48);
+  background:linear-gradient(180deg, rgba(18,26,42,.78), rgba(12,18,32,.82));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+}
+
+.login-status__title{
+  margin:0;
+  font-size:0.94rem;
+  letter-spacing:.02em;
+  font-weight:600;
+  color:var(--txt);
+}
+
+.login-status__list{
+  display:flex;
+  flex-direction:column;
+  gap:0.55rem;
+  margin:0;
+  padding:0;
+  list-style:none;
+}
+
+.login-status__item{
+  display:flex;
+  align-items:flex-start;
+  gap:0.55rem;
+  font-size:0.87rem;
+  line-height:1.6;
+  color:var(--muted);
+  transition:color .2s ease;
+}
+
+.login-status__label{
+  flex:1 1 auto;
+}
+
+.login-status__icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:1.45rem;
+  height:1.45rem;
+  border-radius:999px;
+  border:1px solid rgba(100,140,196,.5);
+  background:rgba(20,30,48,.6);
+  color:rgba(160,190,230,.85);
+  font-size:0.72rem;
+  line-height:1;
+  flex-shrink:0;
+  transition:all .2s ease;
+}
+
+.login-status__item.is-active{
+  color:var(--txt);
+}
+
+.login-status__item.is-active .login-status__icon{
+  border-color:var(--accent);
+  background:rgba(30,200,255,.16);
+  color:var(--accent);
+  box-shadow:0 0 0 1px rgba(30,200,255,.18);
+}
+
+.login-status__item.is-complete{
+  color:var(--txt);
+}
+
+.login-status__item.is-complete .login-status__icon{
+  border-color:var(--success);
+  background:rgba(24,209,143,.18);
+  color:var(--success);
+  box-shadow:0 0 0 1px rgba(24,209,143,.18);
+}
+
+.login-status__item.is-error{
+  color:var(--danger);
+}
+
+.login-status__item.is-error .login-status__icon{
+  border-color:var(--danger);
+  background:rgba(255,107,107,.22);
+  color:var(--danger);
+  box-shadow:0 0 0 1px rgba(255,107,107,.22);
+}
+
+.login-status__detail{
+  margin:0;
+  font-size:0.84rem;
+  line-height:1.6;
+  color:var(--muted);
+}
+
+.login-status__detail.is-error{
+  color:var(--danger);
+}
+
 .auth-error{
   margin:0 0 clamp(1rem, 2.5vw, 1.4rem);
   padding:.9rem 1rem;

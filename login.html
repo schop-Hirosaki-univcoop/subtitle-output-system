@@ -46,6 +46,43 @@
           >
             Googleアカウントでログイン
           </button>
+          <div class="login-status">
+            <p class="login-status__title">ログイン処理の進捗</p>
+            <ol id="login-status-list" class="login-status__list">
+              <li class="login-status__item" data-step="popup">
+                <span class="login-status__icon" aria-hidden="true"></span>
+                <span class="login-status__label">Googleアカウントを確認しています</span>
+              </li>
+              <li class="login-status__item" data-step="preflight-admin">
+                <span class="login-status__icon" aria-hidden="true"></span>
+                <span class="login-status__label">管理者権限を確認しています</span>
+              </li>
+              <li class="login-status__item" data-step="preflight-access">
+                <span class="login-status__icon" aria-hidden="true"></span>
+                <span class="login-status__label">アクセス権限を照合しています</span>
+              </li>
+              <li class="login-status__item" data-step="preflight-data">
+                <span class="login-status__icon" aria-hidden="true"></span>
+                <span class="login-status__label">イベント情報を取得しています</span>
+              </li>
+              <li class="login-status__item" data-step="transfer">
+                <span class="login-status__icon" aria-hidden="true"></span>
+                <span class="login-status__label">資格情報を保存しています</span>
+              </li>
+              <li class="login-status__item" data-step="redirect">
+                <span class="login-status__icon" aria-hidden="true"></span>
+                <span class="login-status__label">イベント管理画面へ移動しています</span>
+              </li>
+            </ol>
+            <p
+              id="login-status-detail"
+              class="login-status__detail"
+              role="status"
+              aria-live="polite"
+            >
+              Googleアカウントでログインを開始すると処理の進捗が表示されます。
+            </p>
+          </div>
           <p id="login-error" class="form-error" role="alert" aria-live="assertive" aria-atomic="true" hidden></p>
         </div>
       </div>

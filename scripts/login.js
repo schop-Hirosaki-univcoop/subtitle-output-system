@@ -43,8 +43,29 @@ class LoginPage {
     this.defaultLabel = this.loginButton?.dataset?.labelDefault || "Googleアカウントでログイン";
     this.busyLabel = this.loginButton?.dataset?.labelBusy || "サインイン中…";
     this.redirecting = false;
+    this.statusList = document.getElementById("login-status-list");
+    this.statusDetail = document.getElementById("login-status-detail");
+    this.defaultStatusDetail = this.statusDetail?.textContent?.trim() || "";
+    this.statusItems = new Map();
+    if (this.statusList) {
+      const items = Array.from(
+        this.statusList.querySelectorAll(".login-status__item[data-step]")
+      );
+      for (const item of items) {
+        const step = item.dataset.step;
+        if (!step || this.statusItems.has(step)) continue;
+        this.statusItems.set(step, {
+          element: item,
+          icon: item.querySelector(".login-status__icon")
+        });
+      }
+    }
+    this.statusSteps = Array.from(this.statusItems.keys());
+    this.activeStep = null;
+    this.statusFlowActive = false;
 
     this.handleLoginClick = this.handleLoginClick.bind(this);
+    this.handlePreflightProgress = this.handlePreflightProgress.bind(this);
     this.preflightPromise = null;
     this.preflightError = null;
 
@@ -52,6 +73,8 @@ class LoginPage {
       hasLoginButton: Boolean(this.loginButton),
       hasCurrentUser: Boolean(this.auth?.currentUser)
     });
+
+    this.resetStatusFlow();
   }
 
   /**
@@ -117,22 +140,34 @@ class LoginPage {
     this.setBusy(true);
     this.showError("");
     this.preflightError = null;
+    this.startStatusFlow();
     appendAuthDebugLog("login:perform-login:start");
 
     const loginFlow = (async () => {
+      this.activateStep("popup", "Googleアカウントの認証を開始しています…");
       const result = await signInWithPopup(this.auth, this.provider);
       appendAuthDebugLog("login:popup-success", {
         uid: result?.user?.uid || null,
         email: result?.user?.email || null,
         providerId: result?.providerId || null
       });
+      this.completeStep("popup");
       const credential = this.GoogleAuthProvider.credentialFromResult(result);
-      const context = await runAuthPreflight({ auth: this.auth, credential });
+      const context = await runAuthPreflight({
+        auth: this.auth,
+        credential,
+        onProgress: this.handlePreflightProgress
+      });
       appendAuthDebugLog("login:preflight:success", {
         adminSheetHash: context?.admin?.sheetHash || null,
         questionCount: context?.mirror?.questionCount ?? null
       });
+      this.activateStep("transfer", "資格情報を保存しています…");
+      await this.waitForVisualUpdate({ minimumDelay: 120 });
       this.storeCredential(credential);
+      this.completeStep("transfer");
+      await this.waitForVisualUpdate({ minimumDelay: 160 });
+      this.setStatusDetail("ログイン情報を保存しました。アカウント状態を確認しています…");
       return context;
     })();
 
@@ -157,7 +192,9 @@ class LoginPage {
       if (error instanceof AuthPreflightError) {
         await this.handlePreflightFailure(error);
       }
-      this.showError(this.getErrorMessage(error));
+      const message = this.getErrorMessage(error);
+      this.markFlowError(error, message);
+      this.showError(message);
     } finally {
       this.preflightPromise = null;
       this.setBusy(false);
@@ -223,6 +260,265 @@ class LoginPage {
       this.loginError.setAttribute("aria-hidden", "true");
       this.loginError.textContent = "";
     }
+  }
+
+  /**
+   * ログイン進捗パネルを初期状態に戻し、案内メッセージを既定値にリセットします。
+   */
+  resetStatusFlow() {
+    if (!this.statusItems.size) {
+      return;
+    }
+    this.statusItems.forEach((_, step) => {
+      this.setStepState(step, "pending");
+    });
+    this.activeStep = null;
+    this.statusFlowActive = false;
+    if (this.statusDetail) {
+      this.statusDetail.classList.remove("is-error");
+      this.statusDetail.textContent = this.defaultStatusDetail;
+    }
+  }
+
+  /**
+   * ログイン処理の表示更新を開始します。既存の状態はクリアされます。
+   */
+  startStatusFlow() {
+    if (!this.statusItems.size) {
+      return;
+    }
+    this.resetStatusFlow();
+    this.statusFlowActive = true;
+  }
+
+  /**
+   * 進捗メッセージを更新し、必要に応じてエラースタイルを適用します。
+   * @param {string} message
+   * @param {{ isError?: boolean }} [options]
+   */
+  setStatusDetail(message, { isError = false } = {}) {
+    if (!this.statusDetail) {
+      return;
+    }
+    const base = this.defaultStatusDetail || "";
+    const text = String(message || base).trim();
+    this.statusDetail.textContent = text || base;
+    if (isError) {
+      this.statusDetail.classList.add("is-error");
+    } else {
+      this.statusDetail.classList.remove("is-error");
+    }
+  }
+
+  /**
+   * プリフライト処理内の進捗イベントを受け取り、ステータスUIへ反映します。
+   * @param {{ stage?: string, phase?: string, payload?: any }} progress
+   */
+  handlePreflightProgress(progress) {
+    if (!progress || typeof progress !== "object") {
+      return;
+    }
+    const { stage, phase, payload } = progress;
+    const stepMap = {
+      ensureAdmin: "preflight-admin",
+      userSheet: "preflight-access",
+      mirror: "preflight-data"
+    };
+    const step = stage ? stepMap[stage] : null;
+    if (!step || !this.statusItems.has(step)) {
+      return;
+    }
+
+    if (phase === "start") {
+      const startMessages = {
+        ensureAdmin: "管理者権限を確認しています…",
+        userSheet: "アクセス権限を照合しています…",
+        mirror: "イベント情報を取得しています…"
+      };
+      const message = startMessages[stage] || null;
+      this.activateStep(step, message);
+      return;
+    }
+
+    if (stage === "mirror" && phase === "refresh") {
+      this.activateStep(step, "最新のイベント情報を同期しています…");
+      this.setStatusDetail("最新のイベント情報を同期しています…");
+      return;
+    }
+
+    if (phase === "success") {
+      this.completeStep(step);
+      let message = null;
+      if (stage === "ensureAdmin") {
+        message = "管理者権限を確認しました。アクセス権限を照合しています…";
+      } else if (stage === "userSheet") {
+        const useFallback = Boolean(payload && payload.fallback);
+        if (useFallback) {
+          message = "アクセス権限の最新情報を取得できなかったため、前回の情報で続行しています。イベント情報を取得しています…";
+        } else {
+          const totalUsers =
+            payload && typeof payload.totalUsers === "number" && Number.isFinite(payload.totalUsers)
+              ? payload.totalUsers
+              : null;
+          if (typeof totalUsers === "number" && totalUsers >= 0) {
+            message = `アクセス権限を確認しました（登録ユーザー ${totalUsers} 件）。イベント情報を取得しています…`;
+          } else {
+            message = "アクセス権限を確認しました。イベント情報を取得しています…";
+          }
+        }
+      } else if (stage === "mirror") {
+        const useFallback = Boolean(payload && payload.fallback);
+        if (useFallback) {
+          message = "イベント情報の最新状態を取得できた範囲で続行しています。資格情報を保存しています…";
+        } else {
+          const questionCount =
+            payload && typeof payload.questionCount === "number" && Number.isFinite(payload.questionCount)
+              ? payload.questionCount
+              : null;
+          if (typeof questionCount === "number" && questionCount >= 0) {
+            message = `イベント情報を取得しました（質問 ${questionCount} 件）。資格情報を保存しています…`;
+          } else {
+            message = "イベント情報を取得しました。資格情報を保存しています…";
+          }
+        }
+      }
+      if (message) {
+        this.setStatusDetail(message);
+      }
+      return;
+    }
+
+    if (phase === "error") {
+      const detail = payload && typeof payload.message === "string" ? payload.message : null;
+      if (detail) {
+        this.setStatusDetail(detail, { isError: true });
+      }
+      this.setStepState(step, "error");
+    }
+  }
+
+  /**
+   * DOMの状態更新をレンダリングへ反映させるために、小さな待機時間を挿入します。
+   * @param {{ minimumDelay?: number }} [options]
+   */
+  async waitForVisualUpdate({ minimumDelay = 0 } = {}) {
+    await new Promise((resolve) => {
+      const raf =
+        typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
+          ? window.requestAnimationFrame.bind(window)
+          : null;
+      if (raf) {
+        raf(() => resolve());
+      } else {
+        setTimeout(resolve, 16);
+      }
+    });
+    if (minimumDelay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, minimumDelay));
+    }
+  }
+
+  /**
+   * ステップの状態を更新し、アイコン表示と現在のアクティブステップを同期します。
+   * @param {string} step
+   * @param {"pending"|"active"|"complete"|"error"} state
+   */
+  setStepState(step, state) {
+    const entry = this.statusItems.get(step);
+    if (!entry) {
+      return;
+    }
+    const { element, icon } = entry;
+    element.classList.remove("is-active", "is-complete", "is-error");
+    element.dataset.state = state;
+    if (icon) {
+      icon.textContent = "•";
+    }
+
+    if (state === "active") {
+      element.classList.add("is-active");
+      if (icon) {
+        icon.textContent = "…";
+      }
+      this.activeStep = step;
+      return;
+    }
+
+    if (state === "complete") {
+      element.classList.add("is-complete");
+      if (icon) {
+        icon.textContent = "✔";
+      }
+      if (this.activeStep === step) {
+        this.activeStep = null;
+      }
+      return;
+    }
+
+    if (state === "error") {
+      element.classList.add("is-error");
+      if (icon) {
+        icon.textContent = "!";
+      }
+      this.activeStep = null;
+      return;
+    }
+
+    if (this.activeStep === step) {
+      this.activeStep = null;
+    }
+  }
+
+  /**
+   * 指定したステップをアクティブに切り替え、案内メッセージを上書きします。
+   * @param {string} step
+   * @param {string} [detailMessage]
+   */
+  activateStep(step, detailMessage) {
+    if (!this.statusItems.size) {
+      return;
+    }
+    this.setStepState(step, "active");
+    if (detailMessage) {
+      this.setStatusDetail(detailMessage);
+    }
+  }
+
+  /**
+   * 指定ステップを完了状態に更新します。
+   * @param {string} step
+   */
+  completeStep(step) {
+    if (!this.statusItems.size) {
+      return;
+    }
+    this.setStepState(step, "complete");
+  }
+
+  /**
+   * 現在の処理でエラーが発生した際にパネルへ反映します。
+   * @param {Error} error
+   * @param {string} [message]
+   */
+  markFlowError(error, message) {
+    if (!this.statusItems.size) {
+      return;
+    }
+    let fallbackStep = null;
+    for (const step of this.statusSteps) {
+      const entry = this.statusItems.get(step);
+      if (entry && !entry.element.classList.contains("is-complete")) {
+        fallbackStep = step;
+        break;
+      }
+    }
+    const targetStep = this.activeStep || fallbackStep || this.statusSteps[this.statusSteps.length - 1] || null;
+    if (targetStep) {
+      this.setStepState(targetStep, "error");
+    }
+    const detail = typeof message === "string" ? message : this.getErrorMessage(error);
+    this.setStatusDetail(detail, { isError: true });
+    this.statusFlowActive = false;
   }
 
   /**
@@ -326,6 +622,13 @@ class LoginPage {
     appendAuthDebugLog("login:redirect-to-events", {
       uid: user?.uid || null
     });
+    if (this.statusFlowActive) {
+      this.activateStep("redirect", "イベント管理画面へ移動しています…");
+      await this.waitForVisualUpdate({ minimumDelay: 200 });
+      this.completeStep("redirect");
+      await this.waitForVisualUpdate({ minimumDelay: 140 });
+      this.statusFlowActive = false;
+    }
     goToEvents();
   }
 }
