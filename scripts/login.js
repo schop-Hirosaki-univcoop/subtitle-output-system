@@ -4,9 +4,15 @@ import {
   provider,
   GoogleAuthProvider,
   signInWithPopup,
-  onAuthStateChanged
+  onAuthStateChanged,
+  signOut
 } from "./operator/firebase.js";
 import { storeAuthTransfer, clearAuthTransfer } from "./shared/auth-transfer.js";
+import {
+  runAuthPreflight,
+  AuthPreflightError,
+  clearAuthPreflightContext
+} from "./shared/auth-preflight.js";
 import { goToEvents } from "./shared/routes.js";
 
 const ERROR_MESSAGES = {
@@ -92,10 +98,15 @@ class LoginPage {
     try {
       const result = await signInWithPopup(this.auth, this.provider);
       const credential = this.GoogleAuthProvider.credentialFromResult(result);
+      await runAuthPreflight({ auth: this.auth, credential });
       this.storeCredential(credential);
     } catch (error) {
       console.error("Login failed:", error);
       clearAuthTransfer();
+      clearAuthPreflightContext();
+      if (error instanceof AuthPreflightError) {
+        await this.handlePreflightFailure(error);
+      }
       this.showError(this.getErrorMessage(error));
     } finally {
       this.setBusy(false);
@@ -164,6 +175,9 @@ class LoginPage {
    * @returns {string}
    */
   getErrorMessage(error) {
+    if (error instanceof AuthPreflightError) {
+      return error.message || "プリフライト処理に失敗しました。";
+    }
     const code = error?.code || "";
     if (code === "auth/network-request-failed") {
       return navigator.onLine
@@ -171,6 +185,24 @@ class LoginPage {
         : "ネットワークに接続できません。接続状況を確認してから再試行してください。";
     }
     return ERROR_MESSAGES[code] || "ログインに失敗しました。もう一度お試しください。";
+  }
+
+  /**
+   * プリフライト処理の失敗時に必要な後片付けを行います。
+   * 未許可ユーザーなどのケースではサインアウトして状態を巻き戻します。
+   * @param {AuthPreflightError} error
+   */
+  async handlePreflightFailure(error) {
+    if (!error) {
+      return;
+    }
+    if (error.code === "NOT_IN_USER_SHEET" || error.code === "ENSURE_ADMIN_FAILED") {
+      try {
+        await signOut(this.auth);
+      } catch (signOutError) {
+        console.warn("Failed to sign out after preflight error", signOutError);
+      }
+    }
   }
 
   /**

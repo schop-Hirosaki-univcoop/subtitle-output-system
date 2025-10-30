@@ -29,6 +29,10 @@ import { queryDom } from "./dom.js";
 import { createInitialState } from "./state.js";
 import { createApiClient } from "./api-client.js";
 import { showToast } from "./toast.js";
+import {
+  loadAuthPreflightContext,
+  preflightContextMatchesUser
+} from "../shared/auth-preflight.js";
 import * as Questions from "./questions.js";
 import { resolveGenreLabel } from "./utils.js";
 import * as Dictionary from "./dictionary.js";
@@ -337,6 +341,7 @@ export class OperatorApp {
     this.operatorMode = OPERATOR_MODE_TELOP;
     this.currentConflictSignature = "";
     this.conflictDialogSnoozedSignature = "";
+    this.preflightContext = null;
 
     this.toast = showToast;
     bindModuleMethods(this);
@@ -2325,39 +2330,67 @@ export class OperatorApp {
     }
     this.authFlow = "idle";
     this.pendingAuthUser = null;
+    this.preflightContext = null;
     this.hideLoader();
+  }
+
+  loadPreflightContextForUser(user) {
+    if (!user) {
+      return null;
+    }
+    const context = loadAuthPreflightContext();
+    if (!context) {
+      return null;
+    }
+    if (!preflightContextMatchesUser(context, user)) {
+      return null;
+    }
+    return context;
   }
 
   async handleAuthState(user) {
     if (!user) {
+      this.preflightContext = null;
       this.showLoggedOutState();
       return;
     }
+    this.preflightContext = this.loadPreflightContextForUser(user);
+    const preflight = this.preflightContext;
     try {
       this.showLoader(this.isEmbedded ? "利用準備を確認しています…" : "権限を確認しています…");
       this.initLoaderSteps();
-      this.setLoaderStep(0, this.isEmbedded ? "利用状態を確認しています…" : "認証OK。ユーザー情報を確認中…");
-      const result = await this.api.apiPost({ action: "fetchSheet", sheet: "users" });
-      this.setLoaderStep(1, this.isEmbedded ? "必要な設定を確認しています…" : "在籍チェック中…");
-      if (!result.success || !result.data) {
-        throw new Error("ユーザー権限の確認に失敗しました。");
-      }
-      const authorizedUsers = result.data
-        .map((item) => String(item["メールアドレス"] || "").trim().toLowerCase())
-        .filter(Boolean);
       const loginEmail = String(user.email || "").trim().toLowerCase();
-      if (!authorizedUsers.includes(loginEmail)) {
-        this.toast("あなたのアカウントはこのシステムへのアクセスが許可されていません。", "error");
-        await this.logout();
-        this.hideLoader();
-        return;
+      if (!preflight) {
+        this.setLoaderStep(0, this.isEmbedded ? "利用状態を確認しています…" : "認証OK。ユーザー情報を確認中…");
+        const result = await this.api.apiPost({ action: "fetchSheet", sheet: "users" });
+        this.setLoaderStep(1, this.isEmbedded ? "必要な設定を確認しています…" : "在籍チェック中…");
+        if (!result.success || !result.data) {
+          throw new Error("ユーザー権限の確認に失敗しました。");
+        }
+        const authorizedUsers = result.data
+          .map((item) => String(item["メールアドレス"] || "").trim().toLowerCase())
+          .filter(Boolean);
+        if (!authorizedUsers.includes(loginEmail)) {
+          this.toast("あなたのアカウントはこのシステムへのアクセスが許可されていません。", "error");
+          await this.logout();
+          this.hideLoader();
+          return;
+        }
+      } else {
+        this.setLoaderStep(0, this.isEmbedded ? "プリフライト結果を確認しています…" : "プリフライト結果を適用しています…");
+        this.setLoaderStep(1, this.isEmbedded ? "権限キャッシュを適用しています…" : "在籍チェックをスキップしました。");
       }
 
-      this.setLoaderStep(2, this.isEmbedded ? "必要な権限を同期しています…" : "管理者権限の確認/付与…");
-      try {
-        await this.api.apiPost({ action: "ensureAdmin" });
-      } catch (error) {
-        // Allow the operator to continue even if ensureAdmin fails.
+      const shouldEnsureAdmin = !preflight?.admin?.ensuredAt;
+      if (shouldEnsureAdmin) {
+        this.setLoaderStep(2, this.isEmbedded ? "必要な権限を同期しています…" : "管理者権限の確認/付与…");
+        try {
+          await this.api.apiPost({ action: "ensureAdmin" });
+        } catch (error) {
+          // Allow the operator to continue even if ensureAdmin fails.
+        }
+      } else {
+        this.setLoaderStep(2, this.isEmbedded ? "管理者権限を適用しています…" : "管理者権限はプリフライト済みです。");
       }
 
       this.renderLoggedInUi(user);
