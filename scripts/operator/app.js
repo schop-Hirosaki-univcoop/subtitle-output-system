@@ -2392,22 +2392,16 @@ export class OperatorApp {
       this.startDictionaryListener();
       this.startPickupListener();
       this.startDisplaySessionMonitor();
-      this.setLoaderStep(5, this.isEmbedded ? "辞書データを取得しています…" : "辞書取得…");
-      await this.fetchDictionary();
-      if (this.preferredDictionaryOpen) {
-        this.toggleDictionaryDrawer(true, false);
-      } else {
-        this.toggleDictionaryDrawer(false, false);
-      }
-      this.setLoaderStep(6, this.isEmbedded ? "操作ログを取得しています…" : "ログ取得…");
-      await this.fetchLogs();
-      if (this.preferredLogsOpen) {
-        this.toggleLogsDrawer(true, false);
-      } else {
-        this.toggleLogsDrawer(false, false);
-      }
+      this.fetchDictionary().catch((error) => {
+        console.error("辞書の取得に失敗しました", error);
+      });
+      this.fetchLogs().catch((error) => {
+        console.error("ログの取得に失敗しました", error);
+      });
       this.finishLoaderSteps("準備完了");
       this.hideLoader();
+      this.toggleDictionaryDrawer(!!this.preferredDictionaryOpen, false);
+      this.toggleLogsDrawer(!!this.preferredLogsOpen, false);
       this.toast(`ようこそ、${user.displayName || ""}さん`, "success");
       this.startLogsUpdateMonitor();
       this.resolveEmbedReady();
