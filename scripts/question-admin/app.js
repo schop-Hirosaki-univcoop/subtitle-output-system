@@ -3193,11 +3193,12 @@ async function loadParticipants(options = {}) {
 
   try {
     await ensureTokenSnapshot(false);
-    const eventBranchRaw = await fetchDbValue(`questionIntake/participants/${eventId}`);
-    let eventBranch = eventBranchRaw && typeof eventBranchRaw === "object" ? eventBranchRaw : {};
-    let scheduleBranch = eventBranch && typeof eventBranch[scheduleId] === "object"
-      ? eventBranch[scheduleId]
+    // --- FIX 1: Load current schedule participants ONLY ---
+    let scheduleBranch = await fetchDbValue(`questionIntake/participants/${eventId}/${scheduleId}`);
+    scheduleBranch = scheduleBranch && typeof scheduleBranch === "object"      ? eventBranch[scheduleId]
       : {};
+    // Temporarily set eventBranch to just this schedule's data
+    let eventBranch = { [scheduleId]: scheduleBranch };
     let normalized = Object.entries(scheduleBranch)
       .map(([participantKey, participantValue]) =>
         normalizeParticipantRecord(participantValue, participantKey)
@@ -3216,11 +3217,13 @@ async function loadParticipants(options = {}) {
         if (imported.length) {
           hydratedFromSheet = true;
           await ensureTokenSnapshot(true);
-          const refreshedBranchRaw = await fetchDbValue(`questionIntake/participants/${eventId}`);
-          eventBranch = refreshedBranchRaw && typeof refreshedBranchRaw === "object" ? refreshedBranchRaw : {};
-          scheduleBranch = eventBranch && typeof eventBranch[scheduleId] === "object"
+          
+          // Re-fetch scheduleBranch in case of sheet hydration
+          scheduleBranch = await fetchDbValue(`questionIntake/participants/${eventId}/${scheduleId}`);
+          scheduleBranch = scheduleBranch && typeof scheduleBranch === "object"
             ? eventBranch[scheduleId]
             : {};
+          eventBranch = { [scheduleId]: scheduleBranch };
           normalized = Object.entries(scheduleBranch)
             .map(([participantKey, participantValue]) =>
               normalizeParticipantRecord(participantValue, participantKey)
@@ -3231,7 +3234,9 @@ async function loadParticipants(options = {}) {
         console.warn("Failed to synchronize participants from sheet", error);
       }
     }
-
+    
+    // This cache is now incomplete, containing only the current schedule.
+    // We will populate it fully in the deferred step.
     if (!(state.eventParticipantCache instanceof Map)) {
       state.eventParticipantCache = new Map();
     }
@@ -3293,8 +3298,28 @@ async function loadParticipants(options = {}) {
         : "現在の参加者リストを読み込みました。";
       setUploadStatus(statusMessage || defaultMessage, statusVariant);
     }
-    updateDuplicateMatches();
+
+    // --- FIX 2: Defer duplicate check ---
+    // Render the participant list immediately
     renderParticipants();
+
+    // Now, load the full event data in the background for the duplicate check
+    setTimeout(() => {
+      if (state.selectedEventId !== eventId) return; // Abort if user navigated away
+      fetchDbValue(`questionIntake/participants/${eventId}`).then(eventBranchRaw => {
+        if (!eventBranchRaw || typeof eventBranchRaw !== "object" || state.selectedEventId !== eventId) {
+          return;
+        }
+        // Now populate the cache with the FULL event data
+        state.eventParticipantCache.set(eventId, normalizeEventParticipantCache(eventBranchRaw));
+        // And NOW run the expensive duplicate check
+        updateDuplicateMatches();
+        // Re-render to show duplicate icons
+        renderParticipants();
+      }).catch(err => {
+        console.warn("Background duplicate check failed:", err);
+      });
+    }, 100); // 100ms delay to ensure UI is responsive
     updateParticipantContext({ preserveStatus: true });
     syncSaveButtonState();
     emitParticipantSyncEvent({
@@ -5445,8 +5470,11 @@ function initAuthWatcher() {
       setLoaderStep(2, embedded ? "必要な権限を同期しています…" : "管理者権限を確認・同期しています…");
       await ensureAdminAccess();
       setLoaderStep(3, embedded ? "参加者データを準備しています…" : "初期データを取得しています…");
-      await ensureTokenSnapshot(true);
-      await loadEvents({ preserveSelection: false });
+      // --- FIX 3: Parallelize token and event loading ---
+      await Promise.all([
+        ensureTokenSnapshot(true),
+        loadEvents({ preserveSelection: false })
+      ]);
       await loadParticipants();
       if (state.initialSelectionNotice) {
         setUploadStatus(state.initialSelectionNotice, "error");
