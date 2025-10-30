@@ -90,6 +90,7 @@ test('sanitizeSubmissionPayload trims strings and strips zero-width characters',
     number: 42,
     truthy: true,
     nan: Number.NaN,
+    infinite: Number.POSITIVE_INFINITY,
     skip: null
   });
   assert.deepEqual(payload, {
@@ -97,7 +98,8 @@ test('sanitizeSubmissionPayload trims strings and strips zero-width characters',
     empty: '',
     number: 42,
     truthy: true,
-    nan: ''
+    nan: '',
+    infinite: ''
   });
 });
 
@@ -138,6 +140,16 @@ test('generateQuestionUid falls back to pseudo-random values', () => {
   const timestampPart = Number(987654321).toString(36);
   assert(uid.startsWith(`q_${timestampPart}_`));
   assert(uid.length > `q_${timestampPart}_`.length);
+});
+
+test('generateQuestionUid recovers from invalid random values with deterministic suffixes', () => {
+  const timestamp = 777777777;
+  const uid1 = generateQuestionUid({ crypto: {}, random: () => Number.NaN, now: () => timestamp });
+  const uid2 = generateQuestionUid({ crypto: {}, random: () => Number.POSITIVE_INFINITY, now: () => timestamp });
+  const prefix = `q_${Number(timestamp).toString(36)}`;
+  assert(uid1.startsWith(prefix));
+  assert(uid2.startsWith(prefix));
+  assert.notEqual(uid1, uid2);
 });
 
 test('buildQuestionRecord merges submission data with context defaults', () => {
