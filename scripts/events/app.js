@@ -50,6 +50,10 @@ import {
 import { ToolCoordinator } from "./tool-coordinator.js";
 import { EventChat } from "./chat.js";
 import { consumeAuthTransfer } from "../shared/auth-transfer.js";
+import {
+  loadAuthPreflightContext,
+  preflightContextMatchesUser
+} from "../shared/auth-preflight.js";
 
 const HOST_PRESENCE_HEARTBEAT_MS = 60_000;
 const SCHEDULE_CONSENSUS_TOAST_MS = 3_000;
@@ -118,6 +122,7 @@ export class EventAdminApp {
     this.lastSelectionSource = "";
     this.forceSelectionBroadcast = true;
     this.stage = "events";
+    this.preflightContext = null;
     this.stageHistory = new Set(["events"]);
     this.activePanel = "events";
     this.activeDialog = null;
@@ -726,13 +731,42 @@ export class EventAdminApp {
     }
   }
 
+  loadPreflightContextForUser(user) {
+    if (!user) {
+      return null;
+    }
+    const context = loadAuthPreflightContext();
+    if (!context) {
+      return null;
+    }
+    if (!preflightContextMatchesUser(context, user)) {
+      return null;
+    }
+    return context;
+  }
+
   async tryResumeAuth() {
     if (this.authTransferAttempted) {
       return false;
     }
     this.authTransferAttempted = true;
-    const transfer = consumeAuthTransfer();
-    if (!transfer) {
+
+    let transfer = consumeAuthTransfer();
+    if (!this.isValidTransferPayload(transfer)) {
+      const fallbackContext = loadAuthPreflightContext();
+      const fallbackCredential = fallbackContext?.credential;
+      if (fallbackCredential && (fallbackCredential.idToken || fallbackCredential.accessToken)) {
+        transfer = {
+          providerId: fallbackCredential.providerId || GoogleAuthProvider.PROVIDER_ID,
+          signInMethod: fallbackCredential.signInMethod || "",
+          idToken: fallbackCredential.idToken || "",
+          accessToken: fallbackCredential.accessToken || "",
+          timestamp: Date.now()
+        };
+      }
+    }
+
+    if (!this.isValidTransferPayload(transfer)) {
       return false;
     }
 
@@ -744,10 +778,6 @@ export class EventAdminApp {
 
     const idToken = transfer.idToken || "";
     const accessToken = transfer.accessToken || "";
-    if (!idToken && !accessToken) {
-      return false;
-    }
-
     const credential = GoogleAuthProvider.credential(
       idToken || undefined,
       accessToken || undefined
@@ -765,11 +795,20 @@ export class EventAdminApp {
     }
   }
 
+  isValidTransferPayload(payload) {
+    if (!payload || typeof payload !== "object") {
+      return false;
+    }
+    const hasToken = Boolean((payload.idToken || "").trim()) || Boolean((payload.accessToken || "").trim());
+    return hasToken;
+  }
+
   async handleAuthState(user) {
     this.currentUser = user;
     this.chat.handleAuthChange(user);
     this.startChatReadListener(user);
     this.updateUserLabel();
+    this.preflightContext = this.loadPreflightContextForUser(user);
     if (!user) {
       if (await this.tryResumeAuth()) {
         return;
@@ -821,6 +860,9 @@ export class EventAdminApp {
 
   async ensureAdminAccess() {
     if (!this.api) {
+      return;
+    }
+    if (this.preflightContext?.admin?.ensuredAt) {
       return;
     }
     try {

@@ -21,14 +21,16 @@ This document summarizes the current API client implementation used by the opera
   - Event administration features such as administrator detection, schedule locking, and sheet synchronization.
 
 ## Initialization Strategy Comparison
-| Aspect | Preflight-Layer Initialization | Per-Screen Initialization (Current) |
+| Aspect | Preflight-Layer Initialization | Per-Screen Initialization (Current Baseline) |
 | --- | --- | --- |
 | Configuration sharing | Centralizes setup but requires additional plumbing to distribute the client to each screen. | Each screen owns its client through `OperatorApp` / `EventAdminApp`, matching existing expectations. |
 | Dependency alignment | Shared initialization must manage handoffs between surfaces. | Each class encapsulates its own dependencies via `this.api`. |
 | Lifecycle compatibility | Establishing the client before authentication is finalized complicates auth-transfer recovery and embed detection. | Works with `handleAuthState` style flows that manage login transitions and retries. |
 | Fault isolation | A failure in the shared initializer affects all screens. | Failures surface per screen, allowing localized error handling and toasts. |
 
-**Adopted approach:** retain the per-screen initialization strategy because it aligns with current module expectations and supports the auth-transfer recovery logic relied upon by the event screen.
+**Current baseline:** We still instantiate the client per screen so the existing flows keep working, while the preflight cache lets each surface skip redundant permission checks when a fresh context is available.【F:scripts/events/app.js†L108-L138】【F:scripts/events/app.js†L861-L881】【F:scripts/operator/app.js†L2357-L2436】
+
+**Preflight integration:** `runAuthPreflight` runs immediately after login, warms an API client once, and persists the resulting credential, admin, and mirror metadata for later screens. Event and operator surfaces read this context first and fall back to their local constructors only when no cached data is present.【F:scripts/shared/auth-preflight.js†L161-L245】【F:scripts/events/app.js†L748-L881】【F:scripts/operator/app.js†L2357-L2436】
 
 ## Credential Storage and Retrieval (Per-Screen Strategy)
 1. **Storage format**

@@ -4,9 +4,15 @@ import {
   provider,
   GoogleAuthProvider,
   signInWithPopup,
-  onAuthStateChanged
+  onAuthStateChanged,
+  signOut
 } from "./operator/firebase.js";
 import { storeAuthTransfer, clearAuthTransfer } from "./shared/auth-transfer.js";
+import {
+  runAuthPreflight,
+  AuthPreflightError,
+  clearAuthPreflightContext
+} from "./shared/auth-preflight.js";
 import { goToEvents } from "./shared/routes.js";
 
 const ERROR_MESSAGES = {
@@ -38,6 +44,7 @@ class LoginPage {
     this.redirecting = false;
 
     this.handleLoginClick = this.handleLoginClick.bind(this);
+    this.preflightPromise = null;
   }
 
   /**
@@ -92,12 +99,21 @@ class LoginPage {
     try {
       const result = await signInWithPopup(this.auth, this.provider);
       const credential = this.GoogleAuthProvider.credentialFromResult(result);
-      this.storeCredential(credential);
+      this.preflightPromise = runAuthPreflight({ auth: this.auth, credential }).then((context) => {
+        this.storeCredential(credential);
+        return context;
+      });
+      await this.preflightPromise;
     } catch (error) {
       console.error("Login failed:", error);
       clearAuthTransfer();
+      clearAuthPreflightContext();
+      if (error instanceof AuthPreflightError) {
+        await this.handlePreflightFailure(error);
+      }
       this.showError(this.getErrorMessage(error));
     } finally {
+      this.preflightPromise = null;
       this.setBusy(false);
     }
   }
@@ -164,6 +180,9 @@ class LoginPage {
    * @returns {string}
    */
   getErrorMessage(error) {
+    if (error instanceof AuthPreflightError) {
+      return error.message || "プリフライト処理に失敗しました。";
+    }
     const code = error?.code || "";
     if (code === "auth/network-request-failed") {
       return navigator.onLine
@@ -174,15 +193,52 @@ class LoginPage {
   }
 
   /**
+   * プリフライト処理の失敗時に必要な後片付けを行います。
+   * 未許可ユーザーなどのケースではサインアウトして状態を巻き戻します。
+   * @param {AuthPreflightError} error
+   */
+  async handlePreflightFailure(error) {
+    if (!error) {
+      return;
+    }
+    if (error.code === "NOT_IN_USER_SHEET" || error.code === "ENSURE_ADMIN_FAILED") {
+      try {
+        await signOut(this.auth);
+      } catch (signOutError) {
+        console.warn("Failed to sign out after preflight error", signOutError);
+      }
+    }
+  }
+
+  /**
    * 認証状態がサインイン済みに変化した際に次画面への遷移を調整します。
    * @param {import("firebase/auth").User|null} user
    */
-  handleAuthStateChanged(user) {
-    if (!user || this.redirecting) {
+  async handleAuthStateChanged(user) {
+    if (!user) {
+      this.redirecting = false;
+      clearAuthTransfer();
+      clearAuthPreflightContext();
       return;
     }
+
+    if (this.redirecting) {
+      return;
+    }
+
+    if (this.preflightPromise) {
+      try {
+        await this.preflightPromise;
+      } catch (error) {
+        return;
+      }
+    }
+
+    if (this.redirecting) {
+      return;
+    }
+
     this.redirecting = true;
-    clearAuthTransfer();
     goToEvents();
   }
 }
