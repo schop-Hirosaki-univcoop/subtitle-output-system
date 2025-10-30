@@ -17,6 +17,12 @@ import {
   generateQuestionUid,
   buildQuestionRecord
 } from '../scripts/question-form/submission-utils.js';
+import {
+  buildSubmissionPayload,
+  createSubmissionController,
+  ensureControllerActive,
+  isSubmissionAbortError
+} from '../scripts/question-form/submission-service.js';
 
 test('ensureTrimmedString normalizes arbitrary values', () => {
   assert.equal(ensureTrimmedString(null), '');
@@ -216,4 +222,82 @@ test('buildQuestionRecord merges submission data with context defaults', () => {
   assert.equal(record.scheduleId, 'SCH-1');
   assert.equal(record.questionLength, 12);
   assert.equal(record.type, 'normal');
+});
+
+test('buildSubmissionPayload merges snapshot values and trims metadata', () => {
+  const { submission, token } = buildSubmissionPayload({
+    token: ' tok123 ',
+    formData: {
+      radioName: '  Listener  ',
+      question: '  How are you?  ',
+      questionLength: 6,
+      genre: '活動'
+    },
+    snapshot: {
+      groupNumber: ' G1 ',
+      teamNumber: ' T1 ',
+      scheduleLabel: ' 午前 ',
+      scheduleDate: '2025-01-01',
+      scheduleStart: '2025-01-01T09:00',
+      scheduleEnd: '2025-01-01T10:00',
+      eventId: ' event-1 ',
+      eventName: ' 朝会 ',
+      scheduleId: ' schedule-1 ',
+      participantId: ' participant-1 ',
+      participantName: ' 参加者 ',
+      guidance: ' ご自由に '
+    },
+    metadataCollector: () => ({
+      language: ' ja-JP ',
+      userAgent: ' CustomAgent/1.0 ',
+      referrer: ' https://ref.example/path ',
+      origin: ' https://origin.example ',
+      timestamp: 321654987
+    }),
+    formVersion: 'test@1'
+  });
+
+  assert.equal(token, 'tok123');
+  assert.equal(submission.radioName, 'Listener');
+  assert.equal(submission.question, 'How are you?');
+  assert.equal(submission.genre, '活動');
+  assert.equal(submission.groupNumber, 'G1');
+  assert.equal(submission.scheduleLabel, '午前');
+  assert.equal(submission.eventName, '朝会');
+  assert.equal(submission.formVersion, 'test@1');
+  assert.equal(submission.language, 'ja-JP');
+  assert.equal(submission.userAgent, 'CustomAgent/1.0');
+  assert.equal(submission.referrer, 'https://ref.example/path');
+  assert.equal(submission.origin, 'https://origin.example');
+  assert.equal(submission.clientTimestamp, 321654987);
+  assert.equal(submission.status, 'pending');
+});
+
+test('buildSubmissionPayload throws when token is missing', () => {
+  assert.throws(
+    () =>
+      buildSubmissionPayload({
+        token: '',
+        formData: { radioName: 'A', question: 'B', questionLength: 2, genre: '学び' },
+        snapshot: {},
+        metadataCollector: () => ({})
+      }),
+    /アクセス情報が無効です/
+  );
+});
+
+test('createSubmissionController exposes abort semantics', () => {
+  const controller = createSubmissionController();
+  assert.equal(controller.signal.aborted, false);
+  controller.abort();
+  assert.equal(controller.signal.aborted, true);
+});
+
+test('ensureControllerActive throws AbortError for aborted controller', () => {
+  const controller = createSubmissionController();
+  controller.abort();
+  assert.throws(() => ensureControllerActive(controller), (error) => {
+    assert(isSubmissionAbortError(error));
+    return true;
+  });
 });
