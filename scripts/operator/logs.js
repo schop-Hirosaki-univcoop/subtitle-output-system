@@ -3,21 +3,143 @@ import { LOGS_STATE_KEY } from "./constants.js";
 import { escapeHtml, getLogLevel, parseLogTimestamp } from "./utils.js";
 import { updateTriggerRef, onValue } from "./firebase.js";
 
+const LOGS_LOADER_STEPS = [
+  { label: "初期化", message: "操作ログパネルを初期化しています…" },
+  { label: "取得", message: "操作ログを取得しています…" },
+  { label: "検索適用", message: "検索条件を適用しています…" },
+  { label: "描画", message: "ログ一覧を描画しています…" },
+  { label: "監視開始", message: "更新通知を監視しています…" },
+  { label: "完了", message: "準備が整いました！" }
+];
+
+function ensureLogsLoader(app) {
+  if (!app) {
+    return;
+  }
+  if (typeof app.logsLoaderCurrentStep !== "number") {
+    app.logsLoaderCurrentStep = 0;
+  }
+  if (!app.logsLoaderSetup && app.dom.logsLoaderSteps) {
+    app.dom.logsLoaderSteps.innerHTML = LOGS_LOADER_STEPS.map(
+      ({ label }, index) => `<li data-step="${index}">${escapeHtml(label)}</li>`
+    ).join("");
+    app.logsLoaderSetup = true;
+  }
+}
+
+function isLogsPanelVisible(app) {
+  const panel = app?.dom?.logsPanel;
+  return !!(panel && !panel.hasAttribute("hidden"));
+}
+
+function showLogsLoader(app) {
+  if (app?.dom?.logsLoadingOverlay) {
+    app.dom.logsLoadingOverlay.removeAttribute("hidden");
+  }
+}
+
+function hideLogsLoader(app) {
+  if (app?.dom?.logsLoadingOverlay) {
+    app.dom.logsLoadingOverlay.setAttribute("hidden", "");
+  }
+}
+
+function maybeShowLogsLoader(app) {
+  if (!app || app.logsLoaderCompleted) {
+    return;
+  }
+  if (isLogsPanelVisible(app)) {
+    showLogsLoader(app);
+  }
+}
+
+function setLogsLoaderStep(app, stepIndex, { force = false } = {}) {
+  if (!app) {
+    return;
+  }
+  ensureLogsLoader(app);
+  const steps = LOGS_LOADER_STEPS;
+  const normalized = Math.max(0, Math.min(stepIndex, steps.length - 1));
+  const current = typeof app.logsLoaderCurrentStep === "number" ? app.logsLoaderCurrentStep : 0;
+  if (!force && normalized < current) {
+    return;
+  }
+  app.logsLoaderCurrentStep = normalized;
+  const { message } = steps[normalized] || steps[0];
+  if (app.dom.logsLoadingText) {
+    app.dom.logsLoadingText.textContent = message;
+  }
+  const list = app.dom.logsLoaderSteps;
+  if (list) {
+    list.querySelectorAll("li").forEach((item, index) => {
+      item.classList.toggle("current", index === normalized);
+      item.classList.toggle("done", index < normalized);
+    });
+  }
+  app.logsLoaderCompleted = normalized >= steps.length - 1;
+  if (!app.logsLoaderCompleted) {
+    maybeShowLogsLoader(app);
+  }
+}
+
+function completeLogsLoader(app) {
+  if (!app) {
+    return;
+  }
+  setLogsLoaderStep(app, LOGS_LOADER_STEPS.length - 1, { force: true });
+  app.logsLoaderCompleted = true;
+  app.logsLoaded = true;
+  hideLogsLoader(app);
+}
+
+function completeLogsLoaderIfReady(app) {
+  if (!app) {
+    return;
+  }
+  if (app.logsLoaderCompleted) {
+    return;
+  }
+  if (app.logsLoaderHasData && app.logsLoaderMonitorReady) {
+    completeLogsLoader(app);
+  }
+}
+
+export function resetLogsLoader(app) {
+  if (!app) {
+    return;
+  }
+  ensureLogsLoader(app);
+  app.logsLoaded = false;
+  app.logsLoaderHasData = false;
+  app.logsLoaderMonitorReady = false;
+  app.logsLoaderCompleted = false;
+  setLogsLoaderStep(app, 0, { force: true });
+  hideLogsLoader(app);
+}
+
 export async function fetchLogs(app) {
+  setLogsLoaderStep(app, 1);
   try {
     const result = await app.api.apiPost({ action: "fetchSheet", sheet: "logs" });
     if (result.success) {
+      setLogsLoaderStep(app, 2);
       app.state.allLogs = result.data || [];
       renderLogs(app);
     }
   } catch (error) {
     console.error("ログの取得に失敗:", error);
+    hideLogsLoader(app);
   }
 }
 
 export function renderLogs(app) {
+  if (!app.logsLoaderHasData) {
+    setLogsLoaderStep(app, 3);
+  }
   const rows = applyLogFilters(app, app.state.allLogs || []);
   renderLogsStream(app, rows);
+  app.logsLoaderHasData = true;
+  completeLogsLoaderIfReady(app);
 }
 
 export function applyLogFilters(app, logs) {
@@ -95,6 +217,11 @@ export function toggleLogsDrawer(app, force, persist = true) {
     app.dom.logsToggle.setAttribute("aria-label", nextOpen ? "操作ログを閉じる" : "操作ログを開く");
     app.dom.logsToggle.setAttribute("title", nextOpen ? "操作ログを閉じる" : "操作ログを開く");
   }
+  if (!nextOpen) {
+    hideLogsLoader(app);
+  } else if (!app.logsLoaded) {
+    maybeShowLogsLoader(app);
+  }
   if (persist) {
     try {
       localStorage.setItem(LOGS_STATE_KEY, nextOpen ? "1" : "0");
@@ -115,4 +242,7 @@ export function startLogsUpdateMonitor(app) {
     if (app.logsUpdateTimer) clearTimeout(app.logsUpdateTimer);
     app.logsUpdateTimer = setTimeout(() => fetchLogs(app), 150);
   });
+  app.logsLoaderMonitorReady = true;
+  setLogsLoaderStep(app, 4);
+  completeLogsLoaderIfReady(app);
 }

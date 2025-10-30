@@ -298,6 +298,9 @@ export class OperatorApp {
     this.dictionaryConfirmSetup = false;
     this.dictionaryEditState = { uid: "", originalTerm: "", originalRuby: "", submitting: false, lastFocused: null };
     this.dictionaryEditSetup = false;
+    this.dictionaryLoaderSetup = false;
+    this.dictionaryLoaderCurrentStep = 0;
+    this.dictionaryLoaderCompleted = false;
     this.pickupUnsubscribe = null;
     this.pickupEntries = [];
     this.pickupLoaded = false;
@@ -308,6 +311,9 @@ export class OperatorApp {
     this.pickupAddDialogSetup = false;
     this.pickupEditDialogSetup = false;
     this.pickupConfirmDialogSetup = false;
+    this.pickupLoaderSetup = false;
+    this.pickupLoaderCurrentStep = 0;
+    this.pickupLoaderCompleted = false;
     this.eventsBranch = {};
     this.schedulesBranch = {};
     this.authFlow = "idle";
@@ -316,6 +322,12 @@ export class OperatorApp {
     this.dictionaryLoaded = false;
     this.preferredDictionaryOpen = false;
     this.preferredLogsOpen = false;
+    this.logsLoaded = false;
+    this.logsLoaderSetup = false;
+    this.logsLoaderCurrentStep = 0;
+    this.logsLoaderCompleted = false;
+    this.logsLoaderHasData = false;
+    this.logsLoaderMonitorReady = false;
     this.activeDialog = null;
     this.dialogLastFocused = null;
     this.pendingEditUid = null;
@@ -348,9 +360,18 @@ export class OperatorApp {
     if (typeof this.applyInitialPickupState === "function") {
       try {
         this.applyInitialPickupState();
-    } catch (error) {
-      // Swallow errors from optional pickup panel initialisation.
+      } catch (error) {
+        // Swallow errors from optional pickup panel initialisation.
+      }
     }
+    if (typeof Dictionary.resetDictionaryLoader === "function") {
+      Dictionary.resetDictionaryLoader(this);
+    }
+    if (typeof Pickup.resetPickupLoader === "function") {
+      Pickup.resetPickupLoader(this);
+    }
+    if (typeof Logs.resetLogsLoader === "function") {
+      Logs.resetLogsLoader(this);
     }
     this.redirectingToIndex = false;
     this.embedReadyDeferred = null;
@@ -2439,12 +2460,12 @@ export class OperatorApp {
       this.startQuestionsStream();
       this.startQuestionStatusStream();
       this.startScheduleMetadataStreams();
-      this.startDictionaryListener();
-      this.startPickupListener();
-      this.startDisplaySessionMonitor();
       this.fetchDictionary().catch((error) => {
         console.error("辞書の取得に失敗しました", error);
       });
+      this.startDictionaryListener();
+      this.startPickupListener();
+      this.startDisplaySessionMonitor();
       this.fetchLogs().catch((error) => {
         console.error("ログの取得に失敗しました", error);
       });
@@ -2687,6 +2708,23 @@ export class OperatorApp {
       } catch (error) {
         // Ignore pickup reset issues while clearing operator state.
       }
+    }
+    this.dictionaryLoaderCurrentStep = 0;
+    this.dictionaryLoaderCompleted = false;
+    this.pickupLoaderCurrentStep = 0;
+    this.pickupLoaderCompleted = false;
+    this.logsLoaded = false;
+    this.logsLoaderHasData = false;
+    this.logsLoaderMonitorReady = false;
+    this.logsLoaderCompleted = false;
+    if (typeof Dictionary.resetDictionaryLoader === "function") {
+      Dictionary.resetDictionaryLoader(this);
+    }
+    if (typeof Pickup.resetPickupLoader === "function") {
+      Pickup.resetPickupLoader(this);
+    }
+    if (typeof Logs.resetLogsLoader === "function") {
+      Logs.resetLogsLoader(this);
     }
     this.updateScheduleContext();
   }

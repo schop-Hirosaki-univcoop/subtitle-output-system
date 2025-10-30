@@ -1,6 +1,106 @@
 // dictionary.js: ルビ辞書のロードと検索、編集操作をまとめたモジュールです。
 import { database, dictionaryRef, onValue, ref, set, update } from "./firebase.js";
 import { DICTIONARY_STATE_KEY } from "./constants.js";
+import { escapeHtml } from "./utils.js";
+
+const DICTIONARY_LOADER_STEPS = [
+  { label: "初期化", message: "辞書パネルを初期化しています…" },
+  { label: "シート取得", message: "辞書シートから最新データを取得しています…" },
+  { label: "更新待機", message: "リアルタイム更新を待機しています…" },
+  { label: "描画", message: "辞書一覧を描画しています…" },
+  { label: "完了", message: "準備が整いました！" }
+];
+
+function ensureDictionaryLoader(app) {
+  if (!app) {
+    return;
+  }
+  if (typeof app.dictionaryLoaderCurrentStep !== "number") {
+    app.dictionaryLoaderCurrentStep = 0;
+  }
+  if (!app.dictionaryLoaderSetup && app.dom.dictionaryLoaderSteps) {
+    app.dom.dictionaryLoaderSteps.innerHTML = DICTIONARY_LOADER_STEPS.map(
+      ({ label }, index) => `<li data-step="${index}">${escapeHtml(label)}</li>`
+    ).join("");
+    app.dictionaryLoaderSetup = true;
+  }
+}
+
+function isDictionaryPanelVisible(app) {
+  const panel = app?.dom?.dictionaryPanel;
+  return !!(panel && !panel.hasAttribute("hidden"));
+}
+
+function showDictionaryLoader(app) {
+  if (app?.dom?.dictionaryLoadingOverlay) {
+    app.dom.dictionaryLoadingOverlay.removeAttribute("hidden");
+  }
+}
+
+function hideDictionaryLoader(app) {
+  if (app?.dom?.dictionaryLoadingOverlay) {
+    app.dom.dictionaryLoadingOverlay.setAttribute("hidden", "");
+  }
+}
+
+function maybeShowDictionaryLoader(app) {
+  if (!app || app.dictionaryLoaderCompleted) {
+    return;
+  }
+  if (isDictionaryPanelVisible(app)) {
+    showDictionaryLoader(app);
+  }
+}
+
+function setDictionaryLoaderStep(app, stepIndex, { force = false } = {}) {
+  if (!app) {
+    return;
+  }
+  ensureDictionaryLoader(app);
+  const steps = DICTIONARY_LOADER_STEPS;
+  const normalized = Math.max(0, Math.min(stepIndex, steps.length - 1));
+  const current = typeof app.dictionaryLoaderCurrentStep === "number" ? app.dictionaryLoaderCurrentStep : 0;
+  if (!force && normalized < current) {
+    return;
+  }
+  app.dictionaryLoaderCurrentStep = normalized;
+  const { message } = steps[normalized] || steps[0];
+  if (app.dom.dictionaryLoadingText) {
+    app.dom.dictionaryLoadingText.textContent = message;
+  }
+  const list = app.dom.dictionaryLoaderSteps;
+  if (list) {
+    const items = list.querySelectorAll("li");
+    items.forEach((item, index) => {
+      item.classList.toggle("current", index === normalized);
+      item.classList.toggle("done", index < normalized);
+    });
+  }
+  app.dictionaryLoaderCompleted = normalized >= steps.length - 1;
+  if (!app.dictionaryLoaderCompleted) {
+    maybeShowDictionaryLoader(app);
+  }
+}
+
+function completeDictionaryLoader(app) {
+  if (!app) {
+    return;
+  }
+  setDictionaryLoaderStep(app, DICTIONARY_LOADER_STEPS.length - 1, { force: true });
+  app.dictionaryLoaderCompleted = true;
+  hideDictionaryLoader(app);
+}
+
+export function resetDictionaryLoader(app) {
+  if (!app) {
+    return;
+  }
+  app.dictionaryLoaderSetup = app.dictionaryLoaderSetup && !!app.dom.dictionaryLoaderSteps;
+  app.dictionaryLoaderCompleted = false;
+  ensureDictionaryLoader(app);
+  setDictionaryLoaderStep(app, 0, { force: true });
+  hideDictionaryLoader(app);
+}
 
 function generateDictionaryUid() {
   const cryptoObj = globalThis.crypto || globalThis.msCrypto;
@@ -738,6 +838,10 @@ function renderDictionaryCards(app, entries) {
 }
 
 function applyDictionarySnapshot(app, rawEntries, { render = true } = {}) {
+  const wasLoaded = !!app.dictionaryLoaded;
+  if (!wasLoaded) {
+    setDictionaryLoaderStep(app, 3);
+  }
   const normalized = normalizeDictionaryEntries(rawEntries);
   const sorted = sortDictionaryEntries(normalized);
   const availableIds = new Set(sorted.map((entry) => entry.uid));
@@ -769,10 +873,14 @@ function applyDictionarySnapshot(app, rawEntries, { render = true } = {}) {
   if (typeof app.refreshRenderSummary === "function") {
     app.refreshRenderSummary();
   }
+  if (!wasLoaded) {
+    completeDictionaryLoader(app);
+  }
   return sorted;
 }
 
 export async function fetchDictionary(app) {
+  setDictionaryLoaderStep(app, 1);
   try {
     const result = await app.api.apiPost({ action: "fetchSheet", sheet: "dictionary" });
     if (!result.success) return;
@@ -796,6 +904,7 @@ export function startDictionaryListener(app) {
     app.dictionaryUnsubscribe();
     app.dictionaryUnsubscribe = null;
   }
+  setDictionaryLoaderStep(app, 2);
   app.dictionaryUnsubscribe = onValue(
     dictionaryRef,
     (snapshot) => {
@@ -853,6 +962,13 @@ export function toggleDictionaryDrawer(app, force, persist = true) {
       console.debug("dictionary toggle state not persisted", error);
     }
     app.preferredDictionaryOpen = nextOpen;
+  }
+  if (!nextOpen) {
+    hideDictionaryLoader(app);
+  } else if (!app.dictionaryLoaded) {
+    maybeShowDictionaryLoader(app);
+  } else {
+    hideDictionaryLoader(app);
   }
   if (nextOpen && app.isAuthorized && !app.dictionaryLoaded) {
     fetchDictionary(app).catch((error) => console.error("辞書の読み込みに失敗しました", error));
