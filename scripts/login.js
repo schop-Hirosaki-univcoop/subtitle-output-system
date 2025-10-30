@@ -119,7 +119,7 @@ class LoginPage {
     this.preflightError = null;
     appendAuthDebugLog("login:perform-login:start");
 
-    try {
+    const loginFlow = (async () => {
       const result = await signInWithPopup(this.auth, this.provider);
       appendAuthDebugLog("login:popup-success", {
         uid: result?.user?.uid || null,
@@ -127,17 +127,19 @@ class LoginPage {
         providerId: result?.providerId || null
       });
       const credential = this.GoogleAuthProvider.credentialFromResult(result);
-      const promise = (async () => {
-        const context = await runAuthPreflight({ auth: this.auth, credential });
-        appendAuthDebugLog("login:preflight:success", {
-          adminSheetHash: context?.admin?.sheetHash || null,
-          questionCount: context?.mirror?.questionCount ?? null
-        });
-        this.storeCredential(credential);
-        return context;
-      })();
-      this.preflightPromise = promise;
-      await promise;
+      const context = await runAuthPreflight({ auth: this.auth, credential });
+      appendAuthDebugLog("login:preflight:success", {
+        adminSheetHash: context?.admin?.sheetHash || null,
+        questionCount: context?.mirror?.questionCount ?? null
+      });
+      this.storeCredential(credential);
+      return context;
+    })();
+
+    this.preflightPromise = loginFlow;
+
+    try {
+      await loginFlow;
       appendAuthDebugLog("login:perform-login:completed");
     } catch (error) {
       console.error("Login failed:", error);
