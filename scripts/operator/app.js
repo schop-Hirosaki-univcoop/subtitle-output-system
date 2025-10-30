@@ -2394,28 +2394,45 @@ export class OperatorApp {
       }
 
       this.renderLoggedInUi(user);
-      this.setLoaderStep(3, this.isEmbedded ? "初期データを準備しています…" : "初期ミラー実行中…");
+      this.setLoaderStep(3, this.isEmbedded ? "初期データを準備しています…" : "初期ミラーを確認しています…");
       this.updateLoader("初期データを準備しています…");
+      let questionsSnapshot = null;
       try {
-        const snapshot = await get(questionsRef);
-        if (!snapshot.exists()) {
-          await this.api.apiPost({ action: "mirrorSheet" });
-        }
+        questionsSnapshot = await get(questionsRef);
       } catch (error) {
-        // Skip initial mirror if the dataset is already populated.
+        console.warn("Failed to load questions before subscriptions", error);
+      }
+
+      const expectedQuestionCount = Number(this.preflightContext?.mirror?.questionCount);
+      const hasExpectedCount = Number.isFinite(expectedQuestionCount);
+      const shouldAttemptMirror =
+        !this.preflightContext || !hasExpectedCount || expectedQuestionCount > 0;
+
+      let hasQuestions = questionsSnapshot?.exists?.() && questionsSnapshot.exists();
+      if (!hasQuestions && shouldAttemptMirror) {
+        this.setLoaderStep(3, this.isEmbedded ? "初期データを同期しています…" : "初期ミラー実行中…");
+        try {
+          await this.api.apiPost({ action: "mirrorSheet" });
+          questionsSnapshot = await get(questionsRef);
+          hasQuestions = questionsSnapshot?.exists?.() && questionsSnapshot.exists();
+        } catch (error) {
+          console.warn("Failed to mirror questions during operator bootstrap", error);
+        }
+      } else if (!hasQuestions) {
+        this.setLoaderStep(3, this.isEmbedded ? "プリフライト済みの空データを適用しています…" : "プリフライトの結果を適用しています…");
       }
 
       this.setLoaderStep(4, this.isEmbedded ? "リアルタイム購読を開始しています…" : "購読開始…");
       this.updateLoader("データ同期中…");
-      const [questionsSnapshot, questionStatusSnapshot, eventsSnapshot, schedulesSnapshot] = await Promise.all([
-        get(questionsRef),
+      const [questionStatusSnapshot, eventsSnapshot, schedulesSnapshot] = await Promise.all([
         get(questionStatusRef),
         get(questionIntakeEventsRef),
         get(questionIntakeSchedulesRef)
       ]);
+      const questionsValue = hasQuestions && questionsSnapshot?.val ? questionsSnapshot.val() || {} : {};
       this.eventsBranch = eventsSnapshot.val() || {};
       this.schedulesBranch = schedulesSnapshot.val() || {};
-      this.applyQuestionsBranch(questionsSnapshot.val() || {});
+      this.applyQuestionsBranch(questionsValue);
       this.applyQuestionStatusSnapshot(questionStatusSnapshot.val() || {});
       this.rebuildScheduleMetadata();
       this.applyContextToState();

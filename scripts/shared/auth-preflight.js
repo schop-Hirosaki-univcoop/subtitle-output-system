@@ -201,14 +201,25 @@ export async function runAuthPreflight({
   const now = getNow();
   let mirrorInfo = null;
   try {
-    const snapshot = await get(questionsRef);
-    if (!snapshot.exists()) {
-      await api.apiPost({ action: "mirrorSheet" });
-      mirrorInfo = { syncedAt: now, questionCount: 0 };
-    } else {
-      const data = snapshot.val() || {};
-      mirrorInfo = { syncedAt: now, questionCount: countQuestions(data) };
+    let snapshot = null;
+    try {
+      snapshot = await get(questionsRef);
+    } catch (error) {
+      console.warn("Failed to read questions during preflight", error);
     }
+
+    if (!snapshot?.exists?.() || !snapshot.exists()) {
+      try {
+        await api.apiPost({ action: "mirrorSheet" });
+        snapshot = await get(questionsRef);
+      } catch (error) {
+        console.warn("Failed to mirror questions during preflight", error);
+        snapshot = null;
+      }
+    }
+
+    const data = snapshot?.exists?.() && snapshot.exists() ? snapshot.val() || {} : {};
+    mirrorInfo = { syncedAt: now, questionCount: countQuestions(data) };
   } catch (error) {
     console.warn("Failed to determine mirror state during preflight", error);
     mirrorInfo = null;
