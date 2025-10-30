@@ -27,7 +27,7 @@ function normalizeSubTab(value) {
   return SUB_TAB_OPTIONS.has(candidate) ? candidate : "all";
 }
 
-function resolveTelopRef(app) {
+function resolveNowShowingReference(app) {
   const hasChannelAccessor = app && typeof app.getActiveChannel === "function";
   const { eventId = "", scheduleId = "" } = hasChannelAccessor ? app.getActiveChannel() || {} : {};
   const normalizedSchedule = scheduleId ? normalizeScheduleId(scheduleId) : "";
@@ -477,23 +477,24 @@ export async function handleDisplay(app) {
     return;
   }
   if (!app.state.selectedRowData || app.state.selectedRowData.isAnswered) return;
-  const { ref: telopRef, eventId, scheduleId } = resolveTelopRef(app);
+  const { ref: nowShowingRef, eventId, scheduleId } = resolveNowShowingReference(app);
   if (!eventId || !scheduleId) {
     app.toast("イベントまたは日程が割り当てられていないため送出できません。", "error");
     return;
   }
-  const snapshot = await get(telopRef);
-  const previousTelop = snapshot.val();
-  const previousUid = previousTelop && typeof previousTelop.uid !== "undefined" ? String(previousTelop.uid || "") : "";
+  const snapshot = await get(nowShowingRef);
+  const previousNowShowing = snapshot.val();
+  const previousUid =
+    previousNowShowing && typeof previousNowShowing.uid !== "undefined" ? String(previousNowShowing.uid || "") : "";
   try {
     const updates = {};
     if (previousUid) {
       updates[`questionStatus/${previousUid}/selecting`] = false;
       updates[`questionStatus/${previousUid}/answered`] = true;
       updates[`questionStatus/${previousUid}/updatedAt`] = serverTimestamp();
-    } else if (previousTelop) {
+    } else if (previousNowShowing) {
       const prev = app.state.allQuestions.find(
-        (q) => q["ラジオネーム"] === previousTelop.name && q["質問・お悩み"] === previousTelop.question
+        (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
       );
       if (prev) {
         updates[`questionStatus/${prev.UID}/selecting`] = false;
@@ -513,7 +514,7 @@ export async function handleDisplay(app) {
       participantId: app.state.selectedRowData.participantId || "",
       name: app.state.selectedRowData.name
     });
-    await set(telopRef, {
+    await set(nowShowingRef, {
       uid: app.state.selectedRowData.uid,
       participantId: app.state.selectedRowData.participantId || "",
       name: app.state.selectedRowData.name,
@@ -529,9 +530,9 @@ export async function handleDisplay(app) {
     app.api.fireAndForgetApi({ action: "updateSelectingStatus", uid: app.state.selectedRowData.uid });
     if (previousUid) {
       app.api.fireAndForgetApi({ action: "updateStatus", uid: previousUid, status: true });
-    } else if (previousTelop) {
+    } else if (previousNowShowing) {
       const prev = app.state.allQuestions.find(
-        (q) => q["ラジオネーム"] === previousTelop.name && q["質問・お悩み"] === previousTelop.question
+        (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
       );
       if (prev) {
         app.api.fireAndForgetApi({ action: "updateStatus", uid: prev.UID, status: true });
@@ -623,7 +624,7 @@ export async function handleBatchUnanswer(app) {
   }
 }
 
-export async function clearTelop(app) {
+export async function clearNowShowing(app) {
   if (!app.state.displaySessionActive) {
     app.toast("送出端末が接続されていません。", "error");
     return;
@@ -631,13 +632,13 @@ export async function clearTelop(app) {
   if (!(await ensureChannelAligned(app))) {
     return;
   }
-  const { ref: telopRef, eventId, scheduleId } = resolveTelopRef(app);
+  const { ref: nowShowingRef, eventId, scheduleId } = resolveNowShowingReference(app);
   if (!eventId || !scheduleId) {
     app.toast("イベントまたは日程が割り当てられていないため送出をクリアできません。", "error");
     return;
   }
-  const snapshot = await get(telopRef);
-  const previousTelop = snapshot.val();
+  const snapshot = await get(nowShowingRef);
+  const previousNowShowing = snapshot.val();
   try {
     logDisplayLinkInfo("Clearing nowShowing payload", { eventId, scheduleId });
     const updates = {};
@@ -646,9 +647,9 @@ export async function clearTelop(app) {
       updates[`questionStatus/${item.UID}/selecting`] = false;
       updates[`questionStatus/${item.UID}/updatedAt`] = serverTimestamp();
     });
-    if (previousTelop) {
+    if (previousNowShowing) {
       const prevItem = app.state.allQuestions.find(
-        (q) => q["ラジオネーム"] === previousTelop.name && q["質問・お悩み"] === previousTelop.question
+        (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
       );
       if (prevItem) {
         updates[`questionStatus/${prevItem.UID}/answered`] = true;
@@ -659,7 +660,7 @@ export async function clearTelop(app) {
     if (Object.keys(updates).length > 0) {
       await update(ref(database), updates);
     }
-    await remove(telopRef);
+    await remove(nowShowingRef);
     logDisplayLinkInfo("Display nowShowing cleared", { eventId, scheduleId });
     app.api.fireAndForgetApi({ action: "clearSelectingStatus" });
     app.api.logAction("CLEAR");

@@ -43,7 +43,7 @@ const DOM_EVENT_BINDINGS = [
   { element: "dictionaryToggle", type: "click", handler: "toggleDictionaryDrawer" },
   { element: "logsToggle", type: "click", handler: "toggleLogsDrawer" },
   { element: "logsRefreshButton", type: "click", handler: "fetchLogs" },
-  { element: "clearButton", type: "click", handler: "clearTelop" },
+  { element: "clearButton", type: "click", handler: "clearNowShowing" },
   { element: "fetchDictionaryButton", type: "click", handler: "fetchDictionary" },
   { element: "addTermForm", type: "submit", handler: "addTerm" },
   { element: "dictionarySelectAllCheckbox", type: "change", handler: "handleDictionarySelectAll" },
@@ -157,7 +157,7 @@ const MODULE_METHOD_GROUPS = [
       "handleUnanswer",
       "handleSelectAll",
       "handleBatchUnanswer",
-      "clearTelop",
+      "clearNowShowing",
       "updateActionAvailability",
       "updateBatchButtonVisibility",
       "syncSelectAllState"
