@@ -28,10 +28,13 @@ import {
 } from "./state.js";
 import { dom } from "./dom.js";
 import { goToLogin } from "../shared/routes.js";
+import {
+  loadAuthPreflightContext,
+  preflightContextMatchesUser
+} from "../shared/auth-preflight.js";
 import { collectParticipantTokens } from "../shared/participant-tokens.js";
 import {
   sleep,
-  isPermissionDenied,
   toMillis,
   ensureCrypto,
   generateShortId,
@@ -117,6 +120,11 @@ const PARTICIPANT_DESCRIPTION_DEFAULT =
 const CANCEL_LABEL = "キャンセル";
 const RELOCATE_LABEL = "別日";
 const NO_TEAM_GROUP_KEY = "__no_team__";
+const AUTHORIZED_EMAIL_CACHE_MS = 5 * 60 * 1000;
+
+let cachedAuthorizedEmails = null;
+let cachedAuthorizedFetchedAt = 0;
+let authorizedEmailsPromise = null;
 
 function getMissingSelectionStatusMessage() {
   return isEmbeddedMode()
@@ -610,17 +618,36 @@ async function ensureTokenSnapshot(force = false) {
 }
 
 async function fetchAuthorizedEmails() {
-  const result = await api.apiPost({ action: "fetchSheet", sheet: "users" });
-  if (!result || !result.success || !Array.isArray(result.data)) {
-    throw new Error("ユーザー権限の確認に失敗しました。");
+  const cached = getCachedAuthorizedEmails();
+  if (cached) {
+    return cached;
   }
-  return result.data
-    .map(entry =>
-      String(entry["メールアドレス"] || entry.email || "")
-        .trim()
-        .toLowerCase()
-    )
-    .filter(Boolean);
+
+  if (!authorizedEmailsPromise) {
+    authorizedEmailsPromise = (async () => {
+      const result = await api.apiPost({ action: "fetchSheet", sheet: "users" });
+      if (!result || !result.success || !Array.isArray(result.data)) {
+        throw new Error("ユーザー権限の確認に失敗しました。");
+      }
+      const emails = result.data
+        .map(entry =>
+          String(entry["メールアドレス"] || entry.email || "")
+            .trim()
+            .toLowerCase()
+        )
+        .filter(Boolean);
+      cachedAuthorizedEmails = emails;
+      cachedAuthorizedFetchedAt = Date.now();
+      return emails;
+    })();
+  }
+
+  try {
+    const emails = await authorizedEmailsPromise;
+    return emails;
+  } finally {
+    authorizedEmailsPromise = null;
+  }
 }
 
 function renderUserSummary(user) {
@@ -4930,12 +4957,69 @@ function removeParticipantFromState(participantId, fallbackEntry, rowKey) {
   return removed;
 }
 
-async function verifyEnrollment(user) {
-  const authorized = await fetchAuthorizedEmails();
-  const email = String(user.email || "").trim().toLowerCase();
-  if (!authorized.includes(email)) {
-    throw new Error("あなたのアカウントはこのシステムへのアクセスが許可されていません。");
+function getCachedAuthorizedEmails() {
+  if (!cachedAuthorizedEmails || !cachedAuthorizedFetchedAt) {
+    return null;
   }
+  if (Date.now() - cachedAuthorizedFetchedAt > AUTHORIZED_EMAIL_CACHE_MS) {
+    return null;
+  }
+  return cachedAuthorizedEmails;
+}
+
+function getFreshPreflightContext(user) {
+  if (!user) {
+    return null;
+  }
+  try {
+    const context = loadAuthPreflightContext();
+    if (!context) {
+      return null;
+    }
+    if (!preflightContextMatchesUser(context, user)) {
+      return null;
+    }
+    if (!context?.admin || !context.admin.ensuredAt) {
+      return null;
+    }
+    return context;
+  } catch (error) {
+    console.warn("Failed to load auth preflight context", error);
+    return null;
+  }
+}
+
+async function verifyEnrollment(user) {
+  if (!user) {
+    throw new Error("サインイン情報を確認できませんでした。");
+  }
+
+  const preflight = getFreshPreflightContext(user);
+  if (preflight) {
+    return;
+  }
+
+  const email = String(user.email || "").trim().toLowerCase();
+  if (!email) {
+    throw new Error("メールアドレスを確認できませんでした。");
+  }
+
+  const cached = getCachedAuthorizedEmails();
+  if (cached && cached.includes(email)) {
+    return;
+  }
+
+  try {
+    const authorized = await fetchAuthorizedEmails();
+    if (authorized.includes(email)) {
+      return;
+    }
+  } catch (error) {
+    console.warn("Failed to fetch authorized emails", error);
+    throw new Error(error.message || "ユーザー権限の確認に失敗しました。");
+  }
+
+  throw new Error("あなたのアカウントはこのシステムへのアクセスが許可されていません。");
 }
 
 async function waitForQuestionIntakeAccess(options = {}) {
@@ -4997,12 +5081,70 @@ async function waitForQuestionIntakeAccess(options = {}) {
   throw lastError || new Error("管理者権限の確認がタイムアウトしました。");
 }
 
+async function probeQuestionIntakeAccess() {
+  const baseUrl = String(firebaseConfig.databaseURL || "").replace(/\/$/, "");
+  if (!baseUrl) {
+    throw new Error("リアルタイムデータベースのURLが設定されていません。");
+  }
+
+  const token = await getAuthIdToken(false);
+  const url = `${baseUrl}/questionIntake/events.json?shallow=true&limitToFirst=1&auth=${encodeURIComponent(
+    token
+  )}`;
+  const response = await fetch(url, { method: "GET" });
+  if (response.ok) {
+    return true;
+  }
+
+  const bodyText = await response.text().catch(() => "");
+  const permissionIssue =
+    response.status === 401 || response.status === 403 || /permission\s*denied/i.test(bodyText);
+  if (permissionIssue) {
+    return false;
+  }
+
+  const message = bodyText || `Realtime Database request failed (${response.status})`;
+  const error = new Error(message);
+  error.status = response.status;
+  throw error;
+}
+
+function isNotInUsersSheetError(error) {
+  if (!error) {
+    return false;
+  }
+  const message = String(error?.message || error || "");
+  return /not in users sheet/i.test(message) || /NOT_IN_USER_SHEET/i.test(message);
+}
+
 async function ensureAdminAccess() {
+  let ensureRequired = true;
+  try {
+    const hasAccess = await probeQuestionIntakeAccess();
+    if (hasAccess) {
+      ensureRequired = false;
+    }
+  } catch (error) {
+    console.warn("Failed to probe question intake access", error);
+  }
+
+  if (!ensureRequired) {
+    return;
+  }
+
   try {
     await api.apiPost({ action: "ensureAdmin" });
+  } catch (error) {
+    if (isNotInUsersSheetError(error)) {
+      throw new Error("あなたのアカウントはこのシステムへのアクセスが許可されていません。");
+    }
+    throw new Error(error?.message || "管理者権限の確認に失敗しました。");
+  }
+
+  try {
     await waitForQuestionIntakeAccess({ attempts: 6, initialDelay: 250 });
   } catch (error) {
-    throw new Error(error.message || "管理者権限の確認に失敗しました。");
+    throw new Error(error?.message || "管理者権限の確認に失敗しました。");
   }
 }
 
