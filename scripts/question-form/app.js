@@ -16,43 +16,15 @@ import {
   sanitizeRadioName,
   truncateGraphemes
 } from "./string-utils.js";
-
-// Intl.DateTimeFormat を利用可能か判定し、日付フォーマットに使用します。
-const hasIntlDateTime = typeof Intl !== "undefined" && typeof Intl.DateTimeFormat === "function";
-const DATE_FORMATTER = hasIntlDateTime
-  ? new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" })
-  : null;
-const TIME_FORMATTER = hasIntlDateTime
-  ? new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false })
-  : null;
-
-/**
- * 値を文字列化して前後の空白を除去します。
- * null/undefinedは空文字に揃えて扱いを簡素化します。
- * @param {unknown} value
- * @returns {string}
- */
-function ensureTrimmedString(value) {
-  if (value === undefined || value === null) {
-    return "";
-  }
-  return typeof value === "string" ? value.trim() : String(value).trim();
-}
-
-/**
- * 可変長引数から最初に非空となる文字列を返します。
- * @param {...unknown} values
- * @returns {string}
- */
-function coalesceTrimmed(...values) {
-  for (const value of values) {
-    const trimmed = ensureTrimmedString(value);
-    if (trimmed) {
-      return trimmed;
-    }
-  }
-  return "";
-}
+import { ensureTrimmedString, coalesceTrimmed } from "./value-utils.js";
+import { formatScheduleSummary } from "./schedule-format.js";
+import { buildContextDescription } from "./context-copy.js";
+import {
+  sanitizeSubmissionPayload,
+  collectClientMetadata,
+  generateQuestionUid,
+  buildQuestionRecord
+} from "./submission-utils.js";
 
 /**
  * フォーム送信時のバリデーション失敗を表す独自エラー。
@@ -78,107 +50,6 @@ class FormValidationError extends Error {
   }
 }
 
-/**
- * 文字列化された日時表現をDateオブジェクトに変換します。
- * 日付のみ/日時/ISO形式など複数のフォーマットに対応します。
- * @param {unknown} value
- * @returns {Date|null}
- */
-function parseDateTimeValue(value) {
-  const trimmed = ensureTrimmedString(value);
-  if (!trimmed) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    const [year, month, day] = trimmed.split("-").map(Number);
-    if ([year, month, day].some(Number.isNaN)) return null;
-    return new Date(year, month - 1, day);
-  }
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(trimmed)) {
-    const [datePart, timePart] = trimmed.split("T");
-    const [year, month, day] = datePart.split("-").map(Number);
-    const timeParts = timePart.split(":").map(Number);
-    if ([year, month, day, ...timeParts].some(Number.isNaN)) return null;
-    const [hour, minute, second = 0] = timeParts;
-    return new Date(year, month - 1, day, hour, minute, second);
-  }
-  const parsed = new Date(trimmed);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
-}
-
-/**
- * Dateオブジェクトをユーザー向けの年月日表示へ整形します。
- * Intlが利用できない環境ではISOフォーマットを簡易利用します。
- * @param {Date} date
- * @returns {string}
- */
-function formatDateDisplay(date) {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
-  if (DATE_FORMATTER) return DATE_FORMATTER.format(date);
-  return date.toISOString().split("T")[0];
-}
-
-/**
- * Dateオブジェクトから時刻部分を抽出し、24時間表記で返します。
- * @param {Date} date
- * @returns {string}
- */
-function formatTimeDisplay(date) {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
-  if (TIME_FORMATTER) return TIME_FORMATTER.format(date);
-  return date.toTimeString().slice(0, 5);
-}
-
-/**
- * 質問フォームに表示する日程概要テキストを組み立てます。
- * ラベルや開始/終了時刻を柔軟に扱い、可能な限り情報を含めます。
- * @param {{ label?: string, date?: string, start?: string, end?: string }} [options]
- * @returns {string}
- */
-function formatScheduleSummary({ label = "", date = "", start = "", end = "" } = {}) {
-  const trimmedLabel = ensureTrimmedString(label);
-  const trimmedDate = ensureTrimmedString(date);
-  const startDate = parseDateTimeValue(ensureTrimmedString(start));
-  const endDate = parseDateTimeValue(ensureTrimmedString(end));
-  const baseDate = startDate || parseDateTimeValue(trimmedDate);
-  const fallback = trimmedLabel || trimmedDate;
-
-  if (!baseDate && !fallback) {
-    return "未設定";
-  }
-
-  const dateText = baseDate ? formatDateDisplay(baseDate) : "";
-  if (!dateText) {
-    return fallback || "未設定";
-  }
-
-  let timeText = "";
-  if (startDate) {
-    const startTime = formatTimeDisplay(startDate);
-    if (startTime) {
-      if (endDate && !Number.isNaN(endDate.getTime())) {
-        const endTime = formatTimeDisplay(endDate);
-        if (endTime) {
-          if (startDate.toDateString() === endDate.toDateString()) {
-            timeText = `${startTime}〜${endTime}`;
-          } else {
-            const endDateText = formatDateDisplay(endDate);
-            timeText = endDateText ? `${startTime}〜${endDateText} ${endTime}` : `${startTime}〜${endTime}`;
-          }
-        }
-      } else {
-        timeText = `${startTime}〜`;
-      }
-    }
-  }
-
-  const rangeText = timeText ? `${dateText} ${timeText}` : dateText;
-  if (!rangeText) {
-    return fallback || "未設定";
-  }
-
-  const labelSuffix = trimmedLabel && trimmedLabel !== dateText ? `（${trimmedLabel}）` : "";
-  return `${rangeText}${labelSuffix}`;
-}
 
 /**
  * トークンAPIから取得した文脈オブジェクトを整形し、空文字を排除します。
@@ -204,18 +75,7 @@ function normalizeContextData(rawContext) {
   };
 }
 
-/**
- * 画面上部に表示する挨拶文の定型フレーズを生成します。
- * @param {string} eventName
- * @returns {string}
- */
-function buildContextDescription(eventName) {
-  const trimmedEventName = ensureTrimmedString(eventName);
-  if (!trimmedEventName) {
-    return "こちらは【なんでも相談ラジオ】の質問受付フォームです。気になることや相談したいことをお気軽にお寄せください。";
-  }
-  return `こちらは「${trimmedEventName}」の中で行われる【なんでも相談ラジオ】の質問受付フォームです。気になることや相談したいことをお気軽にお寄せください。`;
-}
+
 
 /**
  * 非同期処理の中断を明示するためのDOMException互換エラーを生成します。
@@ -228,6 +88,23 @@ function createAbortError() {
   const error = new Error("Aborted");
   error.name = "AbortError";
   return error;
+}
+
+/**
+ * AbortController が利用できない環境向けに簡易的な代替を返します。
+ * @returns {AbortController & { abort(): void }}
+ */
+function createSubmissionAbortController() {
+  if (typeof AbortController === "function") {
+    return new AbortController();
+  }
+  const signal = { aborted: false };
+  return {
+    signal,
+    abort() {
+      signal.aborted = true;
+    }
+  };
 }
 
 /**
@@ -265,44 +142,8 @@ function isAbortError(error) {
  *   scheduleId: string,
  *   participantId: string
  * }} values
- * @returns {Record<string, string | number>}
+ * @returns {Record<string, string | number | boolean>}
  */
-function sanitizeSubmissionPayload(values) {
-  return Object.entries(values).reduce((acc, [key, value]) => {
-    if (value === undefined || value === null) {
-      return acc;
-    }
-    if (typeof value === "string") {
-      acc[key] = value.trim();
-      return acc;
-    }
-    if (typeof value === "number") {
-      acc[key] = value;
-      return acc;
-    }
-    acc[key] = String(value);
-    return acc;
-  }, {});
-}
-
-/**
- * 質問送信時に付与する端末メタデータを組み立てます。
- * @returns {{ language: string, userAgent: string, referrer: string, origin: string, timestamp: number }}
- */
-function collectClientMetadata() {
-  const nav = typeof navigator === "object" && navigator ? navigator : null;
-  const doc = typeof document === "object" && document ? document : null;
-  const win = typeof window === "object" && window ? window : null;
-
-  const language = typeof nav?.language === "string" ? nav.language : "";
-  const userAgent = typeof nav?.userAgent === "string" ? nav.userAgent : "";
-  const referrer = typeof doc?.referrer === "string" ? doc.referrer : "";
-  const origin = typeof win?.location?.origin === "string" ? win.location.origin : "";
-  const timestamp = Date.now();
-
-  return { language, userAgent, referrer, origin, timestamp };
-}
-
 /**
  * 質問フォーム全体の状態管理と送信フローを統括するアプリケーションクラス。
  * ビュー層やFirebase依存を注入可能にし、テスト容易性を高めています。
@@ -706,7 +547,7 @@ export class QuestionFormApp {
    */
   resetSubmissionController() {
     this.abortPendingSubmission();
-    const controller = new AbortController();
+    const controller = createSubmissionAbortController();
     this.state.submittingController = controller;
     return controller;
   }
@@ -843,119 +684,3 @@ export class QuestionFormApp {
  * 非対応環境ではnullを返し、代替処理へフォールバックさせます。
  * @returns {Crypto|null}
  */
-function getCrypto() {
-  if (typeof globalThis !== "undefined" && globalThis.crypto) {
-    return globalThis.crypto;
-  }
-  if (typeof window !== "undefined" && window.crypto) {
-    return window.crypto;
-  }
-  if (typeof self !== "undefined" && self.crypto) {
-    return self.crypto;
-  }
-  return undefined;
-}
-
-/**
- * 16バイトのランダム値をUUID v4形式の文字列へ整形します。
- * @param {Uint8Array} bytes
- * @returns {string}
- */
-function formatUuidFromBytes(bytes) {
-  const toHex = (segment) => Array.from(segment, (b) => b.toString(16).padStart(2, "0")).join("");
-  return [
-    toHex(bytes.subarray(0, 4)),
-    toHex(bytes.subarray(4, 6)),
-    toHex(bytes.subarray(6, 8)),
-    toHex(bytes.subarray(8, 10)),
-    toHex(bytes.subarray(10))
-  ].join("-");
-}
-
-/**
- * 生成したUUIDにフォーム識別用の接頭辞を付与します。
- * @param {string} rawValue
- * @returns {string}
- */
-function prefixQuestionUid(rawValue) {
-  const value = String(rawValue ?? "").trim();
-  if (!value) {
-    return `q_${Date.now().toString(36)}`;
-  }
-  return value.startsWith("q_") ? value : `q_${value}`;
-}
-
-/**
- * 質問送信レコード用のユニークIDを生成します。
- * 暗号APIが利用できない場合はUUID文字列を擬似生成します。
- * @returns {string}
- */
-function generateQuestionUid() {
-  const cryptoObj = getCrypto();
-  if (cryptoObj) {
-    if (typeof cryptoObj.randomUUID === "function") {
-      return prefixQuestionUid(cryptoObj.randomUUID());
-    }
-    if (typeof cryptoObj.getRandomValues === "function") {
-      const bytes = new Uint8Array(16);
-      cryptoObj.getRandomValues(bytes);
-      bytes[6] = (bytes[6] & 0x0f) | 0x40;
-      bytes[8] = (bytes[8] & 0x3f) | 0x80;
-      return prefixQuestionUid(formatUuidFromBytes(bytes));
-    }
-  }
-  const timestamp = Date.now().toString(36);
-  const randomPart = Array.from({ length: 3 }, () => Math.random().toString(36).slice(2, 10)).join("");
-  return prefixQuestionUid(`${timestamp}_${randomPart.slice(0, 18)}`);
-}
-
-/**
- * Firebase Databaseへ保存する質問レコードの構造を組み立てます。
- * フォーム送信内容とコンテキスト情報をマージし、欠損値の補完を行います。
- * @param {{ uid: string, token: string, submission: Record<string, any>, context: Record<string, any>|null, timestamp: number }} params
- * @returns {Record<string, unknown>}
- */
-function buildQuestionRecord({
-  uid,
-  token,
-  submission,
-  context,
-  timestamp
-}) {
-  const coalescedGroup = coalesceTrimmed(submission.groupNumber, context?.groupNumber);
-  const scheduleLabel = coalesceTrimmed(submission.scheduleLabel, context?.scheduleLabel);
-  const scheduleStart = coalesceTrimmed(submission.scheduleStart, context?.scheduleStart);
-  const scheduleEnd = coalesceTrimmed(submission.scheduleEnd, context?.scheduleEnd);
-  const participantId = coalesceTrimmed(submission.participantId, context?.participantId);
-  const eventId = coalesceTrimmed(submission.eventId, context?.eventId);
-  const scheduleId = coalesceTrimmed(submission.scheduleId, context?.scheduleId);
-  const questionLength = Number(submission.questionLength);
-
-  const record = {
-    uid,
-    token: ensureTrimmedString(token),
-    name: ensureTrimmedString(submission.radioName),
-    question: ensureTrimmedString(submission.question),
-    group: coalescedGroup,
-    genre: coalesceTrimmed(submission.genre) || "その他",
-    schedule: scheduleLabel,
-    scheduleStart,
-    scheduleEnd,
-    scheduleDate: coalesceTrimmed(submission.scheduleDate, context?.scheduleDate),
-    participantId,
-    participantName: coalesceTrimmed(submission.participantName, context?.participantName),
-    guidance: coalesceTrimmed(submission.guidance, context?.guidance),
-    eventId,
-    eventName: coalesceTrimmed(submission.eventName, context?.eventName),
-    scheduleId,
-    ts: timestamp,
-    updatedAt: timestamp,
-    type: "normal"
-  };
-
-  if (Number.isFinite(questionLength) && questionLength > 0) {
-    record.questionLength = questionLength;
-  }
-
-  return record;
-}
