@@ -1,0 +1,43 @@
+# OperatorApp Shared Storage and Fallback Notes
+
+## Overview
+This document summarizes the shared storage surfaces that coordinate the operator tool with other parts of the system and records how the application falls back to the legacy processing path when newer signals (such as a completion flag) are absent. Use it as a reference when extending the embed handshake or adding new shared fields.
+
+## 1. Shared storage inventory
+
+### 1.1 Browser storage (per operator workstation)
+| Storage | Key | Producers / Consumers | Stored fields | Purpose |
+| --- | --- | --- | --- | --- |
+| `sessionStorage` | `sos:operatorAuthTransfer` | Produced by `storeAuthTransfer`, consumed by `consumeAuthTransfer` (`scripts/shared/auth-transfer.js`) | `providerId`, `signInMethod`, `idToken`, `accessToken`, `timestamp` | Temporarily carries Firebase OAuth credentials across navigation steps so the operator embed can reuse the same sign-in result.【F:scripts/shared/auth-transfer.js†L1-L76】
+| `localStorage` | `telop-ops-dictionary-open` | `applyInitialDictionaryState` and `toggleDictionaryDrawer` (`scripts/operator/dictionary.js`) | Boolean flag persisted as `'0'` / `'1'` | Remembers whether the ruby-dictionary drawer should start opened or collapsed.【F:scripts/operator/constants.js†L1-L26】【F:scripts/operator/dictionary.js†L817-L856】
+| `localStorage` | `telop-ops-logs-open` | `applyInitialLogsState` and `toggleLogsDrawer` (`scripts/operator/logs.js`) | Boolean flag persisted as `'0'` / `'1'` | Restores the operator activity log drawer state when the screen reloads.【F:scripts/operator/constants.js†L1-L26】【F:scripts/operator/logs.js†L67-L109】
+| `localStorage` | `telop-ops-questions-subtab` | `loadPreferredSubTab` and `persistSubTabPreference` (`scripts/operator/questions.js`) | Normalized sub-tab identifier (`"all"`, `"normal"`, `"puq"`) | Keeps the question list focused on the tab the operator used last (e.g. normal queue vs. pickup).【F:scripts/operator/constants.js†L1-L26】【F:scripts/operator/questions.js†L117-L134】
+
+### 1.2 Firebase Realtime Database (shared across apps)
+| Node / Path | Primary producers | Primary consumers | Key fields relied on by OperatorApp | Notes |
+| --- | --- | --- | --- | --- |
+| `render/session` | Display device clients | OperatorApp `startDisplaySessionMonitor` | `status`, `expiresAt`, `sessionId`, `eventId`, `scheduleId`, `scheduleLabel`, nested `assignment` (`eventId`, `scheduleId`, `scheduleLabel`, `lockedByUid`, `lockedByName`, `lockedAt`) | Determines whether the display link is active and which schedule the screen has locked; missing entries cause the UI to report the display as disconnected.【F:scripts/operator/app.js†L2870-L2908】【F:scripts/operator/app.js†L543-L565】
+| `render/state` (legacy) and `render/events/<event>/<schedule>/state` | Display renderer | OperatorApp `refreshChannelSubscriptions`, `handleRenderUpdate` | `phase`, `updatedAt`, `nowShowing` payload with `name`, `question`, optional `uid`, `participantId`, `pickup` | OperatorApp subscribes to either the legacy or scoped channel depending on the active event and schedule; data drives the current subtitle preview and status lamps.【F:scripts/operator/firebase.js†L63-L70】【F:scripts/operator/display.js†L5-L178】
+| `render/state/nowShowing` (legacy) and `render/events/<event>/<schedule>/nowShowing` | OperatorApp when pushing selections | Display renderer | `uid`, `participantId`, `name`, `question`, `pickup` | Path selection follows the same legacy/modern rules as the main render state helper.【F:scripts/operator/firebase.js†L63-L71】【F:scripts/operator/questions.js†L480-L507】
+| `questions` | Back-office mirroring job | OperatorApp `startQuestionsStream` / `applyQuestionsBranch` | Records keyed by UID with metadata such as `name`, `question`, `genre`, `group`, `eventId`, `scheduleId`, `scheduleLabel`, `scheduleStart`, `scheduleEnd`, `participantId`, `ts`, plus optional `type` and `pickup` flags | The loader merges the branch into a `Map` and annotates each entry with derived schedule labels for filtering.【F:scripts/operator/app.js†L2644-L2701】【F:scripts/operator/app.js†L2734-L2785】
+| `questionStatus` | Operator actions | OperatorApp `startQuestionStatusStream` / `applyQuestionStatusSnapshot` | Per-UID flags `answered`, `selecting`, `pickup`, and `updatedAt` | Joined with the main question map to build the interactive queue state.【F:scripts/operator/app.js†L2654-L2727】
+| `questionIntake/events` & `questionIntake/schedules` | Intake pipeline | OperatorApp `startScheduleMetadataStreams` / `rebuildScheduleMetadata` | Event `name`; schedule `label`, `date`, `startAt`, `endAt` keyed by `<event>::<schedule>` | Provides canonical labels and time ranges that populate the banner and filter menus.【F:scripts/operator/app.js†L2805-L2864】
+| `dictionary` | Operator dictionary editor or sheet import | OperatorApp `startDictionaryListener` / `applyDictionarySnapshot` | Entries with `uid`, `term`, `ruby`, `enabled`, `updatedAt` | Shared between the operator panel and subtitle renderer so everyone renders the same furigana substitutions.【F:scripts/operator/dictionary.js†L740-L788】
+| `signals/logs` | Backend trigger | OperatorApp `startLogsUpdateMonitor` | Timestamp value (content unused, only change notifications) | Used as a cheap signal to refetch the textual operation log when back-office tooling appends new entries.【F:scripts/operator/logs.js†L111-L118】
+| `operatorPresence` / `operatorPresenceConsensus` | Operator clients | OperatorApp presence-sync helpers | Presence entries (`scheduleKey`, `scheduleId`, `scheduleLabel`, `updatedAt`, etc.) | While not directly part of the completion flag design, the entries feed schedule conflict detection that runs alongside the channel assignment fallback flow.【F:scripts/operator/firebase.js†L73-L90】
+
+## 2. Fallback when the completion flag is absent
+When the embed host does not expose a completion flag (or the display session omits the new field), OperatorApp keeps working by progressively falling back to the data it already understands:
+
+1. **Persisted or URL context is applied first.** During construction the app parses `window.location.search` and any embedded context to fill `pageContext`, then writes the values into `state.activeEventId`, `state.activeScheduleId`, and related fields (`applyContextToState`).【F:scripts/operator/app.js†L384-L449】
+2. **UI context is refreshed from available inputs.** Each time questions or metadata reload, `updateScheduleContext` looks at the current page context and, if it cannot find an event/schedule pair, consults the most recent display `assignment` pulled from `render/session` before updating the banner labels and cached selection keys.【F:scripts/operator/questions.js†L293-L414】
+3. **Active channel resolution uses multiple fallbacks.** `getActiveChannel` first checks the explicit `state.active*` fields, then tries the derived `state.currentSchedule` or URL-provided schedule key so that a legacy selection remains available even without new session data.【F:scripts/operator/app.js†L453-L491】
+4. **Legacy render endpoints remain reachable.** The Firebase helpers translate a missing event ID into the historic `render/state` and `render/state/nowShowing` locations, ensuring the app continues reading and writing the global channel when no scoped channel is identified.【F:scripts/operator/firebase.js†L48-L70】【F:scripts/shared/channel-paths.js†L1-L112】
+5. **Subscriptions adjust automatically.** `refreshChannelSubscriptions` reuses the channel selected in the previous steps, so the operator preview and display controls continue to work against whichever path the fallbacks resolved, including the legacy node.【F:scripts/operator/app.js†L654-L680】
+
+This chain means that in the absence of a new completion flag the embed effectively behaves the same as today: it subscribes to the global render node, keeps the last known schedule context, and only escalates to the scoped channel once the host writes the richer session metadata.
+
+## 3. Usage guidance for follow-up work
+- Treat the tables above as the authoritative list of shared keys when adding new fields—extend them instead of inventing additional ad hoc storage.
+- Preserve the fallback flow outlined in §2 so that deployments without the completion flag continue to function; any new signals should layer on top of these helpers instead of bypassing them.
+- When introducing a completion flag, consider storing it alongside the existing `render/session` payload so the same subscription delivers both assignment and completion state, and gate new behavior on the flag while leaving the fallback untouched.
