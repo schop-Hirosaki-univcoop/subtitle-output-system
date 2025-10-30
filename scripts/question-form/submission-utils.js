@@ -5,6 +5,8 @@ export const ZERO_WIDTH_SPACE_PATTERN = /[\u200B\u200C\u200D\u200E\u200F\uFEFF]/
 
 // fallback counter used when a deterministic suffix is required
 let fallbackRandomSequence = 0;
+let lastRandomBase = "";
+let randomCollisionCounter = 0;
 
 /**
  * 送信ペイロードに含まれる空白やゼロ幅文字を除去し、型に応じた正規化を行います。
@@ -143,6 +145,29 @@ function createRandomSuffix(randomFn) {
 }
 
 /**
+ * 同一タイムスタンプかつ同一乱数サフィックスが生成された場合に、
+ * 衝突を避けるための連番を付与します。
+ * @param {string} base
+ * @returns {string}
+ */
+function disambiguateRandomBase(base) {
+  if (!base) {
+    return "";
+  }
+  if (base === lastRandomBase) {
+    randomCollisionCounter = (randomCollisionCounter + 1) % 2176782336; // 36^8
+  } else {
+    lastRandomBase = base;
+    randomCollisionCounter = 0;
+  }
+  if (randomCollisionCounter === 0) {
+    return base;
+  }
+  const suffix = randomCollisionCounter.toString(36).padStart(2, "0");
+  return `${base}_${suffix}`;
+}
+
+/**
  * 暗号APIまたは擬似乱数を利用して質問レコードのUIDを生成します。
  * @param {{ crypto?: Crypto|null, random?: () => number, now?: () => number, scopes?: any[] }} [options]
  * @returns {string}
@@ -172,7 +197,8 @@ export function generateQuestionUid({ crypto: cryptoOverride, random = Math.rand
   const timestamp = Number.isFinite(timestampCandidate) ? timestampCandidate : Date.now();
   const timestampPart = timestamp.toString(36);
   const randomSuffix = createRandomSuffix(random);
-  const combined = randomSuffix ? `${timestampPart}_${randomSuffix}` : timestampPart;
+  const randomBase = randomSuffix ? `${timestampPart}_${randomSuffix}` : timestampPart;
+  const combined = disambiguateRandomBase(randomBase);
 
   return prefixQuestionUid(combined);
 }

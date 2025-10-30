@@ -152,6 +152,16 @@ test('generateQuestionUid recovers from invalid random values with deterministic
   assert.notEqual(uid1, uid2);
 });
 
+test('generateQuestionUid disambiguates repeated random outputs at the same timestamp', () => {
+  const now = () => 135791113;
+  const options = { crypto: {}, random: () => 0.5, now };
+  const uid1 = generateQuestionUid(options);
+  const uid2 = generateQuestionUid(options);
+  assert.notEqual(uid1, uid2);
+  assert(uid2.startsWith(`${uid1}_`));
+  assert(uid2.length > uid1.length);
+});
+
 test('buildQuestionRecord merges submission data with context defaults', () => {
   const record = buildQuestionRecord({
     uid: 'q_test',
