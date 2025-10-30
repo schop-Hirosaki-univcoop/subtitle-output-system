@@ -7,7 +7,7 @@
 4. イベント一覧の **EventAdminApp.init** が UI 初期化後に再び `onAuthStateChanged` を購読します。【F:scripts/events/app.js†L374-L395】
 5. サインインコールバック **handleAuthState** は未ログイン時に `consumeAuthTransfer` で資格情報を復元し、成功すれば Firebase 認証を再開します。【F:scripts/events/app.js†L729-L783】
 6. 認証済みの場合、同メソッドがローディングインジケーターを開始し、`ensureAdminAccess` → `loadEvents` を通じて権限とイベント情報を同期します。【F:scripts/events/app.js†L787-L838】
-7. イベントからオペレーター画面へ遷移すると **OperatorApp.init** がモジュール初期化と `onAuthStateChanged` 監視を開始します。【F:scripts/operator/app.js†L259-L2075】
+7. イベント管理アプリは権限確認とイベント読み込み完了後に **tools.preloadOperatorGlobals** を呼び、埋め込みオペレーターのモジュールを事前読み込みします。内部で `OperatorToolManager.ensureReady` が `scripts/operator/index.js` を動的 import し、`OperatorApp.init` を起動して認証監視を始めます。【F:scripts/events/app.js†L793-L812】【F:scripts/events/tools/operator.js†L71-L112】【F:scripts/operator/index.js†L1-L27】
 8. ログインダイアログまたは転送済み認証で **handleAuthState** が呼ばれ、ローダーを段階的に更新しながら API のユーザー表確認、権限同期、Realtime Database 初期ロードを順に実行します。【F:scripts/operator/app.js†L2290-L2407】
 9. 必要な購読が揃うとローダーを完了表示に切り替え、辞書・ログの初期取得と UI の最終調整を行います。【F:scripts/operator/app.js†L2392-L2407】
 
