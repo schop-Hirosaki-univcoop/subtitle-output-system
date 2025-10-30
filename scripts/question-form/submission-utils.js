@@ -3,6 +3,9 @@ import { coalesceTrimmed, ensureTrimmedString } from "./value-utils.js";
 
 export const ZERO_WIDTH_SPACE_PATTERN = /[\u200B\u200C\u200D\u200E\u200F\uFEFF]/g;
 
+// fallback counter used when a deterministic suffix is required
+let fallbackRandomSequence = 0;
+
 /**
  * 送信ペイロードに含まれる空白やゼロ幅文字を除去し、型に応じた正規化を行います。
  * @param {Record<string, unknown>} values
@@ -15,11 +18,7 @@ export function sanitizeSubmissionPayload(values) {
     }
 
     if (typeof value === "number") {
-      if (Number.isFinite(value)) {
-        acc[key] = value;
-      } else {
-        acc[key] = Number.isNaN(value) ? "" : value;
-      }
+      acc[key] = Number.isFinite(value) ? value : "";
       return acc;
     }
 
@@ -113,6 +112,37 @@ function prefixQuestionUid(rawValue) {
 }
 
 /**
+ * Math.randomベースのフォールバックで利用する疑似乱数サフィックスを生成します。
+ * 渡されたrandom関数が不正値を返した場合も安定した長さの文字列を返します。
+ * @param {() => number} randomFn
+ * @returns {string}
+ */
+function createRandomSuffix(randomFn) {
+  let buffer = "";
+  for (let index = 0; index < 6 && buffer.length < 18; index += 1) {
+    let candidate;
+    try {
+      candidate = Number(randomFn());
+    } catch (error) {
+      candidate = Number.NaN;
+    }
+    if (!Number.isFinite(candidate)) {
+      continue;
+    }
+    const safeValue = Math.abs(candidate);
+    const chunk = safeValue.toString(36).replace(/^0\./, "");
+    buffer += (chunk || "0").slice(0, 6);
+  }
+
+  if (!buffer) {
+    fallbackRandomSequence = (fallbackRandomSequence + 1) % 2176782336; // 36^8
+    buffer = fallbackRandomSequence.toString(36).padStart(8, "0");
+  }
+
+  return buffer.slice(0, 18);
+}
+
+/**
  * 暗号APIまたは擬似乱数を利用して質問レコードのUIDを生成します。
  * @param {{ crypto?: Crypto|null, random?: () => number, now?: () => number, scopes?: any[] }} [options]
  * @returns {string}
@@ -141,13 +171,10 @@ export function generateQuestionUid({ crypto: cryptoOverride, random = Math.rand
   const timestampCandidate = Number(now());
   const timestamp = Number.isFinite(timestampCandidate) ? timestampCandidate : Date.now();
   const timestampPart = timestamp.toString(36);
-  const randomPart = Array.from({ length: 3 }, () => {
-    const value = Number(random());
-    const normalized = Number.isFinite(value) ? value : Math.random();
-    return normalized.toString(36).slice(2, 10);
-  }).join("");
+  const randomSuffix = createRandomSuffix(random);
+  const combined = randomSuffix ? `${timestampPart}_${randomSuffix}` : timestampPart;
 
-  return prefixQuestionUid(`${timestampPart}_${randomPart.slice(0, 18)}`);
+  return prefixQuestionUid(combined);
 }
 
 /**
