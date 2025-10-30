@@ -65,6 +65,7 @@ class LoginPage {
     this.statusFlowActive = false;
 
     this.handleLoginClick = this.handleLoginClick.bind(this);
+    this.handlePreflightProgress = this.handlePreflightProgress.bind(this);
     this.preflightPromise = null;
     this.preflightError = null;
 
@@ -151,14 +152,16 @@ class LoginPage {
         providerId: result?.providerId || null
       });
       this.completeStep("popup");
-      this.activateStep("preflight", "イベント情報を準備しています…");
       const credential = this.GoogleAuthProvider.credentialFromResult(result);
-      const context = await runAuthPreflight({ auth: this.auth, credential });
+      const context = await runAuthPreflight({
+        auth: this.auth,
+        credential,
+        onProgress: this.handlePreflightProgress
+      });
       appendAuthDebugLog("login:preflight:success", {
         adminSheetHash: context?.admin?.sheetHash || null,
         questionCount: context?.mirror?.questionCount ?? null
       });
-      this.completeStep("preflight");
       this.activateStep("transfer", "資格情報を保存しています…");
       await this.waitForVisualUpdate({ minimumDelay: 120 });
       this.storeCredential(credential);
@@ -304,6 +307,93 @@ class LoginPage {
       this.statusDetail.classList.add("is-error");
     } else {
       this.statusDetail.classList.remove("is-error");
+    }
+  }
+
+  /**
+   * プリフライト処理内の進捗イベントを受け取り、ステータスUIへ反映します。
+   * @param {{ stage?: string, phase?: string, payload?: any }} progress
+   */
+  handlePreflightProgress(progress) {
+    if (!progress || typeof progress !== "object") {
+      return;
+    }
+    const { stage, phase, payload } = progress;
+    const stepMap = {
+      ensureAdmin: "preflight-admin",
+      userSheet: "preflight-access",
+      mirror: "preflight-data"
+    };
+    const step = stage ? stepMap[stage] : null;
+    if (!step || !this.statusItems.has(step)) {
+      return;
+    }
+
+    if (phase === "start") {
+      const startMessages = {
+        ensureAdmin: "管理者権限を確認しています…",
+        userSheet: "アクセス権限を照合しています…",
+        mirror: "イベント情報を取得しています…"
+      };
+      const message = startMessages[stage] || null;
+      this.activateStep(step, message);
+      return;
+    }
+
+    if (stage === "mirror" && phase === "refresh") {
+      this.activateStep(step, "最新のイベント情報を同期しています…");
+      this.setStatusDetail("最新のイベント情報を同期しています…");
+      return;
+    }
+
+    if (phase === "success") {
+      this.completeStep(step);
+      let message = null;
+      if (stage === "ensureAdmin") {
+        message = "管理者権限を確認しました。アクセス権限を照合しています…";
+      } else if (stage === "userSheet") {
+        const useFallback = Boolean(payload && payload.fallback);
+        if (useFallback) {
+          message = "アクセス権限の最新情報を取得できなかったため、前回の情報で続行しています。イベント情報を取得しています…";
+        } else {
+          const totalUsers =
+            payload && typeof payload.totalUsers === "number" && Number.isFinite(payload.totalUsers)
+              ? payload.totalUsers
+              : null;
+          if (typeof totalUsers === "number" && totalUsers >= 0) {
+            message = `アクセス権限を確認しました（登録ユーザー ${totalUsers} 件）。イベント情報を取得しています…`;
+          } else {
+            message = "アクセス権限を確認しました。イベント情報を取得しています…";
+          }
+        }
+      } else if (stage === "mirror") {
+        const useFallback = Boolean(payload && payload.fallback);
+        if (useFallback) {
+          message = "イベント情報の最新状態を取得できた範囲で続行しています。資格情報を保存しています…";
+        } else {
+          const questionCount =
+            payload && typeof payload.questionCount === "number" && Number.isFinite(payload.questionCount)
+              ? payload.questionCount
+              : null;
+          if (typeof questionCount === "number" && questionCount >= 0) {
+            message = `イベント情報を取得しました（質問 ${questionCount} 件）。資格情報を保存しています…`;
+          } else {
+            message = "イベント情報を取得しました。資格情報を保存しています…";
+          }
+        }
+      }
+      if (message) {
+        this.setStatusDetail(message);
+      }
+      return;
+    }
+
+    if (phase === "error") {
+      const detail = payload && typeof payload.message === "string" ? payload.message : null;
+      if (detail) {
+        this.setStatusDetail(detail, { isError: true });
+      }
+      this.setStepState(step, "error");
     }
   }
 
