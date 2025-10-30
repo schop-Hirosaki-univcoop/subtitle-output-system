@@ -6,6 +6,7 @@ export const STEP_LABELS = [
   "在籍チェック",
   "管理者付与",
   "初期データ取得",
+  "仕上げ",
   "準備完了"
 ];
 export const PARTICIPANT_TEMPLATE_HEADERS = [
