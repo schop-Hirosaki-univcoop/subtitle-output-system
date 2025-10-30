@@ -160,8 +160,10 @@ class LoginPage {
       });
       this.completeStep("preflight");
       this.activateStep("transfer", "資格情報を保存しています…");
+      await this.waitForVisualUpdate({ minimumDelay: 120 });
       this.storeCredential(credential);
       this.completeStep("transfer");
+      await this.waitForVisualUpdate({ minimumDelay: 160 });
       this.setStatusDetail("ログイン情報を保存しました。アカウント状態を確認しています…");
       return context;
     })();
@@ -302,6 +304,27 @@ class LoginPage {
       this.statusDetail.classList.add("is-error");
     } else {
       this.statusDetail.classList.remove("is-error");
+    }
+  }
+
+  /**
+   * DOMの状態更新をレンダリングへ反映させるために、小さな待機時間を挿入します。
+   * @param {{ minimumDelay?: number }} [options]
+   */
+  async waitForVisualUpdate({ minimumDelay = 0 } = {}) {
+    await new Promise((resolve) => {
+      const raf =
+        typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
+          ? window.requestAnimationFrame.bind(window)
+          : null;
+      if (raf) {
+        raf(() => resolve());
+      } else {
+        setTimeout(resolve, 16);
+      }
+    });
+    if (minimumDelay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, minimumDelay));
     }
   }
 
@@ -511,7 +534,9 @@ class LoginPage {
     });
     if (this.statusFlowActive) {
       this.activateStep("redirect", "イベント管理画面へ移動しています…");
+      await this.waitForVisualUpdate({ minimumDelay: 200 });
       this.completeStep("redirect");
+      await this.waitForVisualUpdate({ minimumDelay: 140 });
       this.statusFlowActive = false;
     }
     goToEvents();
