@@ -750,8 +750,23 @@ export class EventAdminApp {
       return false;
     }
     this.authTransferAttempted = true;
-    const transfer = consumeAuthTransfer();
-    if (!transfer) {
+
+    let transfer = consumeAuthTransfer();
+    if (!this.isValidTransferPayload(transfer)) {
+      const fallbackContext = loadAuthPreflightContext();
+      const fallbackCredential = fallbackContext?.credential;
+      if (fallbackCredential && (fallbackCredential.idToken || fallbackCredential.accessToken)) {
+        transfer = {
+          providerId: fallbackCredential.providerId || GoogleAuthProvider.PROVIDER_ID,
+          signInMethod: fallbackCredential.signInMethod || "",
+          idToken: fallbackCredential.idToken || "",
+          accessToken: fallbackCredential.accessToken || "",
+          timestamp: Date.now()
+        };
+      }
+    }
+
+    if (!this.isValidTransferPayload(transfer)) {
       return false;
     }
 
@@ -763,10 +778,6 @@ export class EventAdminApp {
 
     const idToken = transfer.idToken || "";
     const accessToken = transfer.accessToken || "";
-    if (!idToken && !accessToken) {
-      return false;
-    }
-
     const credential = GoogleAuthProvider.credential(
       idToken || undefined,
       accessToken || undefined
@@ -782,6 +793,14 @@ export class EventAdminApp {
       logError("Failed to resume auth from transfer payload", error);
       return false;
     }
+  }
+
+  isValidTransferPayload(payload) {
+    if (!payload || typeof payload !== "object") {
+      return false;
+    }
+    const hasToken = Boolean((payload.idToken || "").trim()) || Boolean((payload.accessToken || "").trim());
+    return hasToken;
   }
 
   async handleAuthState(user) {
