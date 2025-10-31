@@ -22,6 +22,8 @@ export function queryDom() {
     addEventButton: document.getElementById("flow-add-event-button"),
     refreshButton: document.getElementById("flow-events-refresh-button"),
     fullscreenButton: document.getElementById("events-fullscreen-button"),
+    backupButton: document.getElementById("flow-backup-button"),
+    restoreButton: document.getElementById("flow-restore-button"),
     metaNote: document.getElementById("events-meta"),
     logoutButton: document.getElementById("flow-logout-button"),
     userLabel: document.getElementById("flow-user-label"),
