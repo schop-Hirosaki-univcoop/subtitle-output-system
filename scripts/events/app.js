@@ -7598,7 +7598,6 @@ export class EventAdminApp {
 
       await this.loadEvents();
       this.selectSchedule(scheduleId);
-      await this.requestSheetSync();
     } finally {
       this.endScheduleLoading();
     }
@@ -7628,7 +7627,6 @@ export class EventAdminApp {
 
       await this.loadEvents();
       this.selectSchedule(scheduleId);
-      await this.requestSheetSync();
     } finally {
       this.endScheduleLoading();
     }
@@ -7682,7 +7680,6 @@ export class EventAdminApp {
       await update(ref(database), updates);
       await this.loadEvents();
       this.selectSchedule("");
-      await this.requestSheetSync();
     } catch (error) {
       throw new Error(error?.message || "日程の削除に失敗しました。");
     } finally {
@@ -7825,7 +7822,6 @@ export class EventAdminApp {
       });
       await this.loadEvents();
       this.selectEvent(eventId);
-      await this.requestSheetSync();
     } finally {
       this.endEventsLoading();
     }
@@ -7849,7 +7845,6 @@ export class EventAdminApp {
       });
       await this.loadEvents();
       this.selectEvent(eventId);
-      await this.requestSheetSync();
     } finally {
       this.endEventsLoading();
     }
@@ -7889,24 +7884,12 @@ export class EventAdminApp {
 
       await update(ref(database), updates);
       await this.loadEvents();
-      await this.requestSheetSync();
       this.showAlert(`イベント「${label}」を削除しました。`);
     } catch (error) {
       throw new Error(error?.message || "イベントの削除に失敗しました。");
     } finally {
       this.endEventsLoading();
     }
-  }
-
-  requestSheetSync() {
-    if (!this.api) {
-      return;
-    }
-    this.api
-      .apiPost({ action: "syncQuestionIntakeToSheet" })
-      .catch((error) => {
-        console.warn("Failed to request sheet sync:", error);
-      });
   }
 
   bindDialogDismiss(element) {

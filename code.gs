@@ -14,31 +14,6 @@ function doGet(e) {
   );
 }
 
-/**
- * 指定シートの全行を読み込み、ヘッダー行をキーとするオブジェクト配列へ変換します。
- * @param {string} sheetName - 対象シート名
- * @returns {Array<Record<string, any>>}
- */
-function getSheetData(sheetName) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(sheetName);
-  if (!sheet) {
-    throw new Error(`Sheet "${sheetName}" not found.`);
-  }
-
-  const range = sheet.getDataRange();
-  const values = range.getValues();
-  const headers = values.shift();
-
-  return values.map(row => {
-    const obj = {};
-    headers.forEach((header, index) => {
-      obj[header] = row[index];
-    });
-    return obj;
-  });
-}
-
 const DISPLAY_SESSION_TTL_MS = 60 * 1000;
 const DEFAULT_SCHEDULE_KEY = '__default_schedule__';
 const ALLOWED_ORIGINS = [
@@ -46,135 +21,6 @@ const ALLOWED_ORIGINS = [
   'https://schop-hirosaki-univcoop.github.io/'
 ];
 
-const QUESTION_SHEET_NAME = 'question';
-const PICKUP_QUESTION_SHEET_NAME = 'pick_up_question';
-const QUESTION_SHEET_NAMES = [QUESTION_SHEET_NAME, PICKUP_QUESTION_SHEET_NAME];
-
-/**
- * ヘッダ名の比較用にNFKC正規化・空白除去・小文字化を行います。
- * @param {unknown} value
- * @returns {string}
- */
-function normalizeHeaderKey_(value) {
-  return String(value || '')
-    .normalize('NFKC')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .replace(/\s+/g, '')
-    .toLowerCase();
-}
-
-/**
- * 与えられた候補キーの中から最初に一致したヘッダのインデックスを返します。
- * @param {Map<string, number>} headerMap
- * @param {string|string[]} keys
- * @returns {number|null}
- */
-function getHeaderIndex_(headerMap, keys) {
-  if (!headerMap) return null;
-  const list = Array.isArray(keys) ? keys : [keys];
-  for (let i = 0; i < list.length; i++) {
-    const key = normalizeHeaderKey_(list[i]);
-    if (headerMap.has(key)) {
-      return headerMap.get(key);
-    }
-  }
-  return null;
-}
-
-/**
- * シートからヘッダ行とデータ行を抽出し、照合用マップと共に返します。
- * @param {GoogleAppsScript.Spreadsheet.Sheet|null} sheet
- * @returns {{ sheet: GoogleAppsScript.Spreadsheet.Sheet|null, headers: any[], headerMap: Map<string, number>, rows: any[][] }}
- */
-function readSheetWithHeaders_(sheet) {
-  if (!sheet) {
-    return { sheet: null, headers: [], headerMap: new Map(), rows: [] };
-  }
-  const lastRow = sheet.getLastRow();
-  const lastColumn = sheet.getLastColumn();
-  if (lastRow < 1 || lastColumn < 1) {
-    return { sheet, headers: [], headerMap: new Map(), rows: [] };
-  }
-  const values = sheet.getRange(1, 1, lastRow, lastColumn).getValues();
-  const headers = (values.shift() || []).map(value => value);
-  const headerMap = new Map();
-  headers.forEach((header, index) => {
-    const key = normalizeHeaderKey_(header);
-    if (!key) return;
-    if (!headerMap.has(key)) {
-      headerMap.set(key, index);
-    }
-  });
-  return { sheet, headers, headerMap, rows: values };
-}
-
-/**
- * 質問シートにイベントID/日程ID列が存在することを保証します。
- * 不足している場合は列を追加してヘッダを更新します。
- * @param {GoogleAppsScript.Spreadsheet.Sheet|null} sheet
- * @returns {{ sheet: GoogleAppsScript.Spreadsheet.Sheet|null, headers: any[], headerMap: Map<string, number>, rows: any[][] }}
- */
-function ensureQuestionSheetInfoWithEventColumns_(sheet) {
-  if (!sheet) {
-    return { sheet: null, headers: [], headerMap: new Map(), rows: [] };
-  }
-  let info = readSheetWithHeaders_(sheet);
-  if (!info.sheet) {
-    return info;
-  }
-
-  const sheetName = typeof sheet.getName === 'function' ? sheet.getName() : '';
-  if (sheetName === PICKUP_QUESTION_SHEET_NAME) {
-    return info;
-  }
-
-  const headers = Array.isArray(info.headers) ? info.headers.slice() : [];
-  const required = ['イベントID', '日程ID'];
-  const missing = required.filter(header => !headers.includes(header));
-  if (!missing.length) {
-    return info;
-  }
-  const nextHeaders = headers.concat(missing);
-  const newColumnCount = nextHeaders.length;
-  const maxColumns = sheet.getMaxColumns();
-  if (maxColumns < newColumnCount) {
-    sheet.insertColumnsAfter(maxColumns, newColumnCount - maxColumns);
-  }
-  sheet.getRange(1, 1, 1, newColumnCount).setValues([nextHeaders]);
-  info = readSheetWithHeaders_(sheet);
-  return info;
-}
-
-/**
- * Spreadsheetセルで表現された日時をUnixミリ秒に変換します。
- * シリアル値・UNIX秒・ISO文字列など複数形式に対応します。
- * @param {any} value
- * @returns {number}
- */
-function parseSpreadsheetTimestamp_(value) {
-  if (value instanceof Date && !isNaN(value)) {
-    return value.getTime();
-  }
-  if (typeof value === 'number' && !isNaN(value)) {
-    if (value > 1e12) return value;
-    if (value > 1e10) return value * 1000;
-    if (value > 20000 && value < 70000) {
-      return Math.round((value - 25569) * 86400 * 1000);
-    }
-    if (value > 1e6) return value * 1000;
-    return value;
-  }
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (trimmed) {
-      const parsed = new Date(trimmed.replace(' ', 'T'));
-      if (!isNaN(parsed)) {
-        return parsed.getTime();
-      }
-    }
-  }
-  return 0;
-}
 
 /**
  * Spreadsheetセル値をDateオブジェクトに変換します。
@@ -201,6 +47,14 @@ function parseDateCell_(value) {
     if (!isNaN(parsed)) return parsed;
   }
   return null;
+}
+
+function parseDateToMillis_(value, fallback) {
+  const date = parseDateCell_(value);
+  if (date) {
+    return date.getTime();
+  }
+  return fallback == null ? 0 : fallback;
 }
 
 /**
@@ -269,389 +123,7 @@ function formatQuestionTimestamp_(value) {
   return Utilities.formatDate(date, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss');
 }
 
-function findQuestionRowByUid_(uid) {
-  const targetUid = String(uid || '').trim();
-  if (!targetUid) {
-    return null;
-  }
-  ensureQuestionUids_();
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  for (let i = 0; i < QUESTION_SHEET_NAMES.length; i++) {
-    const sheetName = QUESTION_SHEET_NAMES[i];
-    const sheet = ss.getSheetByName(sheetName);
-    if (!sheet) continue;
-    const info = ensureQuestionSheetInfoWithEventColumns_(sheet);
-    const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
-    if (uidIdx == null) continue;
-    for (let rowIndex = 0; rowIndex < info.rows.length; rowIndex++) {
-      const row = info.rows[rowIndex];
-      if (String(row[uidIdx] || '').trim() === targetUid) {
-        return {
-          sheet,
-          rowNumber: rowIndex + 2,
-          headerMap: info.headerMap,
-          headers: info.headers
-        };
-      }
-    }
-  }
-  return null;
-}
 
-function ensureQuestionSheetUids_(sheet) {
-  if (!sheet) {
-    return 0;
-  }
-  const info = readSheetWithHeaders_(sheet);
-  if (!info.sheet || !info.rows.length) {
-    return 0;
-  }
-  const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
-  if (uidIdx == null) {
-    return 0;
-  }
-
-  const seen = new Set();
-  const updates = [];
-  info.rows.forEach((row, rowIndex) => {
-    const current = String(row[uidIdx] || '').trim();
-    if (current && !seen.has(current)) {
-      seen.add(current);
-      return;
-    }
-    let nextUid = '';
-    do {
-      nextUid = Utilities.getUuid();
-    } while (seen.has(nextUid));
-    seen.add(nextUid);
-    updates.push({ rowIndex, value: nextUid });
-  });
-
-  if (!updates.length) {
-    return 0;
-  }
-
-  updates.forEach(update => {
-    sheet.getRange(update.rowIndex + 2, uidIdx + 1).setValue(update.value);
-  });
-
-  return updates.length;
-}
-
-function ensureQuestionUids_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let updated = 0;
-  QUESTION_SHEET_NAMES.forEach(name => {
-    const sheet = ss.getSheetByName(name);
-    if (!sheet) return;
-    updated += ensureQuestionSheetUids_(sheet);
-  });
-  return updated;
-}
-
-function ensurePickupQuestionSheetStructure_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(PICKUP_QUESTION_SHEET_NAME);
-  if (!sheet) {
-    throw new Error('Pick Up Question シートが見つかりませんでした。');
-  }
-  let info = readSheetWithHeaders_(sheet);
-  if (!info.sheet || !info.headers.length) {
-    const headers = ['UID', '質問・お悩み', 'ジャンル', '回答済', '選択中', 'タイムスタンプ'];
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    info = readSheetWithHeaders_(sheet);
-  }
-  const headers = Array.isArray(info.headers) ? info.headers.slice() : [];
-  const required = ['UID', '質問・お悩み', 'ジャンル', '回答済', '選択中', 'タイムスタンプ'];
-  const missing = required.filter((header) => !headers.includes(header));
-  if (missing.length) {
-    const nextHeaders = headers.concat(missing);
-    const maxColumns = sheet.getMaxColumns();
-    if (maxColumns < nextHeaders.length) {
-      sheet.insertColumnsAfter(maxColumns, nextHeaders.length - maxColumns);
-    }
-    sheet.getRange(1, 1, 1, nextHeaders.length).setValues([nextHeaders]);
-    info = readSheetWithHeaders_(sheet);
-  }
-  ensureQuestionSheetUids_(sheet);
-  info = readSheetWithHeaders_(sheet);
-  const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
-  const questionIdx = getHeaderIndex_(info.headerMap, '質問・お悩み');
-  const genreIdx = getHeaderIndex_(info.headerMap, 'ジャンル');
-  const answeredIdx = getHeaderIndex_(info.headerMap, '回答済');
-  const selectingIdx = getHeaderIndex_(info.headerMap, '選択中');
-  const timestampIdx = getHeaderIndex_(info.headerMap, ['タイムスタンプ', 'timestamp']);
-  return {
-    sheet,
-    info,
-    uidIdx,
-    questionIdx,
-    genreIdx,
-    answeredIdx,
-    selectingIdx,
-    timestampIdx
-  };
-}
-
-function mirrorQuestionsFromRtdbToSheet_(providedAccessToken) {
-  const accessToken = providedAccessToken || getFirebaseAccessToken_();
-  const questionsBranch = fetchRtdb_('questions', accessToken) || {};
-  const statusBranch = fetchRtdb_('questionStatus', accessToken) || {};
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  const ensureString = (value) => {
-    if (value == null) return '';
-    if (typeof value === 'string') return value.trim();
-    return String(value).trim();
-  };
-
-  const sheetDataMap = new Map();
-  const initSheetData = (type) => {
-    if (sheetDataMap.has(type)) {
-      return sheetDataMap.get(type);
-    }
-    const sheetName = type === 'pickup' ? PICKUP_QUESTION_SHEET_NAME : QUESTION_SHEET_NAME;
-    const sheet = ss.getSheetByName(sheetName);
-    if (!sheet) {
-      sheetDataMap.set(type, null);
-      return null;
-    }
-    const info = readSheetWithHeaders_(sheet);
-    if (!info.sheet || !info.headers || !info.headers.length) {
-      sheetDataMap.set(type, null);
-      return null;
-    }
-    const uidIdx = getHeaderIndex_(info.headerMap, ['uid', 'UID']);
-    if (uidIdx == null) {
-      sheetDataMap.set(type, null);
-      return null;
-    }
-
-    const ensureDateTimeFormat = (columnIdx) => {
-      if (columnIdx == null) return;
-      const columnNumber = columnIdx + 1;
-      const formatRows = Math.max(sheet.getMaxRows() - 1, 1);
-      sheet.getRange(2, columnNumber, formatRows, 1).setNumberFormat('yyyy/MM/dd HH:mm:ss');
-    };
-
-    ensureDateTimeFormat(getHeaderIndex_(info.headerMap, ['開始日時', '日程開始']));
-    ensureDateTimeFormat(getHeaderIndex_(info.headerMap, ['終了日時', '日程終了']));
-
-    const existingByUid = new Map();
-    info.rows.forEach((row, index) => {
-      const uid = String(row[uidIdx] || '').trim();
-      if (uid && !existingByUid.has(uid)) {
-        existingByUid.set(uid, { rowNumber: index + 2, values: row });
-      }
-    });
-    const data = {
-      sheet,
-      info,
-      uidIdx,
-      existingByUid,
-      updates: [],
-      appends: []
-    };
-    sheetDataMap.set(type, data);
-    return data;
-  };
-
-  const valuesEqual = (a, b) => {
-    if (a === b) return true;
-    const aDate = a instanceof Date ? a : null;
-    const bDate = b instanceof Date ? b : null;
-    if (aDate || bDate) {
-      const aTime = aDate ? aDate.getTime() : parseDateToMillis_(a, NaN);
-      const bTime = bDate ? bDate.getTime() : parseDateToMillis_(b, NaN);
-      if (!isNaN(aTime) && !isNaN(bTime)) {
-        return aTime === bTime;
-      }
-    }
-    if (typeof a === 'number' || typeof b === 'number') {
-      if (Number.isNaN(a) && Number.isNaN(b)) return true;
-      return Number(a) === Number(b);
-    }
-    if (typeof a === 'boolean' || typeof b === 'boolean') {
-      return Boolean(a) === Boolean(b);
-    }
-    return String(a == null ? '' : a).trim() === String(b == null ? '' : b).trim();
-  };
-
-  const results = {
-    total: 0,
-    updated: 0,
-    appended: 0,
-    pickupUpdated: 0,
-    pickupAppended: 0
-  };
-
-  const branches = [];
-  if (questionsBranch && typeof questionsBranch === 'object') {
-    const normalBranch = questionsBranch.normal && typeof questionsBranch.normal === 'object' ? questionsBranch.normal : null;
-    const pickupBranch = questionsBranch.pickup && typeof questionsBranch.pickup === 'object' ? questionsBranch.pickup : null;
-    if (normalBranch || pickupBranch) {
-      if (normalBranch) branches.push(['normal', normalBranch]);
-      if (pickupBranch) branches.push(['pickup', pickupBranch]);
-    } else {
-      branches.push(['normal', questionsBranch]);
-    }
-  }
-
-  const resolveStatus = (uid) => {
-    const entry = statusBranch && typeof statusBranch === 'object' ? statusBranch[uid] : null;
-    return {
-      answered: entry && entry.answered === true,
-      selecting: entry && entry.selecting === true,
-      updatedAt: Number(entry && entry.updatedAt)
-    };
-  };
-
-  branches.forEach(([type, branch]) => {
-    const sheetType = type === 'pickup' ? 'pickup' : 'normal';
-    Object.keys(branch || {}).forEach((uidKey) => {
-      const record = branch[uidKey];
-      if (!record || typeof record !== 'object') {
-        return;
-      }
-      const resolvedUid = ensureString(record.uid || uidKey);
-      if (!resolvedUid) {
-        return;
-      }
-
-      const data = initSheetData(sheetType);
-      if (!data) {
-        return;
-      }
-
-      const status = resolveStatus(resolvedUid);
-      const existing = data.existingByUid.get(resolvedUid);
-      const currentRow = existing ? existing.values : null;
-      const columnCount = data.info.headers.length;
-      const nextRow = currentRow ? currentRow.slice() : Array(columnCount).fill('');
-      const touched = new Set();
-
-      const setValue = (headerKeys, value) => {
-        const list = Array.isArray(headerKeys) ? headerKeys : [headerKeys];
-        list.forEach((headerKey) => {
-          const idx = getHeaderIndex_(data.info.headerMap, headerKey);
-          if (idx == null) return;
-          nextRow[idx] = value;
-          touched.add(idx);
-        });
-      };
-
-      const tsValue = Number(record.ts || record.timestamp || 0);
-      const tsDate = Number.isFinite(tsValue) && tsValue > 0 ? new Date(tsValue) : null;
-      const timestampLabel = formatQuestionTimestamp_(tsDate || new Date());
-      setValue(['タイムスタンプ', 'Timestamp'], timestampLabel);
-      if (tsValue) {
-        setValue('__ts', tsValue);
-      }
-
-      setValue('ラジオネーム', ensureString(record.name));
-      setValue('質問・お悩み', ensureString(record.question));
-
-      const groupValue = ensureString(record.group);
-      setValue('班番号', groupValue);
-
-      const genreValue = ensureString(record.genre) || 'その他';
-      setValue('ジャンル', genreValue);
-      if (record.genre != null) {
-        setValue('ジャンル(送信時)', ensureString(record.genre));
-      }
-
-      const scheduleStartMs = parseDateToMillis_(record.scheduleStart, 0);
-      const scheduleEndMs = parseDateToMillis_(record.scheduleEnd, 0);
-      const scheduleStartValue = scheduleStartMs ? new Date(scheduleStartMs) : ensureString(record.scheduleStart);
-      const scheduleEndValue = scheduleEndMs ? new Date(scheduleEndMs) : ensureString(record.scheduleEnd);
-      setValue(['日程開始', '開始日時'], scheduleStartValue || '');
-      setValue(['日程終了', '終了日時'], scheduleEndValue || '');
-
-      const scheduleLabel = ensureString(record.schedule) || formatScheduleLabel_(scheduleStartValue, scheduleEndValue);
-      setValue(['日程', '日程表示'], scheduleLabel);
-      setValue('日程日付', ensureString(record.scheduleDate));
-
-      setValue('イベントID', ensureString(record.eventId));
-      setValue('日程ID', ensureString(record.scheduleId));
-      setValue('参加者ID', ensureString(record.participantId));
-      if (record.participantName != null) {
-        const participantName = ensureString(record.participantName);
-        setValue(['参加者名', '氏名'], participantName);
-      }
-      if (record.eventName != null) {
-        setValue('イベント名', ensureString(record.eventName));
-      }
-
-      const tokenValue = ensureString(record.token);
-      setValue(['リンクトークン', 'Token'], tokenValue);
-
-      if (record.guidance != null) {
-        setValue(['ガイダンス', '案内文'], ensureString(record.guidance));
-      }
-
-      const questionLength = Number(record.questionLength);
-      setValue('質問文字数', Number.isFinite(questionLength) && questionLength > 0 ? questionLength : '');
-
-      setValue(['uid', 'UID'], resolvedUid);
-      setValue('回答済', status.answered);
-      setValue('選択中', status.selecting);
-
-      const updatedAtMs = Number(record.updatedAt || status.updatedAt);
-      if (Number.isFinite(updatedAtMs) && updatedAtMs > 0) {
-        setValue('更新日時', new Date(updatedAtMs));
-      }
-      setValue('タイプ', sheetType === 'pickup' ? 'pickup' : ensureString(record.type));
-      setValue('ピックアップ', sheetType === 'pickup');
-
-      const touchedIndexes = Array.from(touched);
-      let rowChanged = !currentRow;
-      if (currentRow) {
-        rowChanged = touchedIndexes.some((idx) => !valuesEqual(currentRow[idx], nextRow[idx]));
-      }
-
-      results.total += 1;
-      if (!rowChanged) {
-        return;
-      }
-
-      if (currentRow) {
-        data.updates.push({ rowNumber: existing.rowNumber, values: nextRow });
-        if (sheetType === 'pickup') {
-          results.pickupUpdated += 1;
-        } else {
-          results.updated += 1;
-        }
-      } else {
-        data.appends.push(nextRow);
-        if (sheetType === 'pickup') {
-          results.pickupAppended += 1;
-        } else {
-          results.appended += 1;
-        }
-      }
-    });
-  });
-
-  sheetDataMap.forEach((data) => {
-    if (!data) return;
-    const columnCount = data.info.headers.length;
-    data.updates.forEach((entry) => {
-      data.sheet.getRange(entry.rowNumber, 1, 1, columnCount).setValues([entry.values]);
-    });
-    if (data.appends.length) {
-      const startRow = data.sheet.getLastRow() + 1;
-      const requiredRows = startRow + data.appends.length - 1;
-      if (data.sheet.getMaxRows() < requiredRows) {
-        data.sheet.insertRowsAfter(data.sheet.getMaxRows(), requiredRows - data.sheet.getMaxRows());
-      }
-      data.sheet.getRange(startRow, 1, data.appends.length, columnCount).setValues(data.appends);
-    }
-  });
-
-  return results;
-}
-
-// WebAppにPOSTリクエストが送られたときに実行される関数
 function doPost(e) {
   let requestOrigin = getRequestOrigin_(e);
   try {
@@ -661,7 +133,7 @@ function doPost(e) {
     if (!action) throw new Error('Missing action');
 
     const displayActions = new Set(['beginDisplaySession', 'heartbeatDisplaySession', 'endDisplaySession']);
-    const noAuthActions = new Set(['submitQuestion', 'fetchNameMappings', 'fetchQuestionContext', 'processQuestionQueueForToken']);
+    const noAuthActions = new Set(['submitQuestion', 'processQuestionQueueForToken']);
     let principal = null;
     if (!noAuthActions.has(action)) {
       principal = requireAuth_(idToken, displayActions.has(action) ? { allowAnonymous: true } : {});
@@ -680,22 +152,6 @@ function doPost(e) {
         return ok(ensureAdmin_(principal));
       case 'submitQuestion':
         return ok(submitQuestion_(req));
-      case 'fetchNameMappings':
-        return ok({ mappings: fetchNameMappings_() });
-      case 'fetchQuestionContext':
-        return ok({ context: fetchQuestionContext_(req) });
-      case 'saveNameMappings':
-        assertOperator_(principal);
-        return ok(saveNameMappings_(req.entries));
-      case 'mirrorSheet':
-        assertOperator_(principal);
-        return ok(mirrorSheetToRtdb_());
-      case 'mirrorQuestionIntake':
-        assertOperator_(principal);
-        return ok(mirrorQuestionIntake_());
-      case 'syncQuestionIntakeToSheet':
-        assertOperator_(principal);
-        return ok(syncQuestionIntakeToSheet_());
       case 'processQuestionQueue':
         assertOperator_(principal);
         return ok(processQuestionSubmissionQueue_());
@@ -707,29 +163,6 @@ function doPost(e) {
           throw new Error('fetchSheet is only available for the users sheet.');
         }
         return ok({ data: getSheetData_(req.sheet) });
-      case 'listQuestionEvents':
-        assertOperator_(principal);
-        return ok({ events: listQuestionEvents_() });
-      case 'createQuestionEvent':
-        assertOperator_(principal);
-        return ok({ event: createQuestionEvent_(req.name) });
-      case 'deleteQuestionEvent':
-        assertOperator_(principal);
-        return ok(deleteQuestionEvent_(req.eventId));
-      case 'createQuestionSchedule':
-        assertOperator_(principal);
-        return ok({
-          schedule: createQuestionSchedule_(req.eventId, req.label, req.date, req.startAt, req.endAt)
-        });
-      case 'deleteQuestionSchedule':
-        assertOperator_(principal);
-        return ok(deleteQuestionSchedule_(req.eventId, req.scheduleId));
-      case 'fetchQuestionParticipants':
-        assertOperator_(principal);
-        return ok({ participants: fetchQuestionParticipants_(req.eventId, req.scheduleId) });
-      case 'saveQuestionParticipants':
-        assertOperator_(principal);
-        return ok(saveQuestionParticipants_(req.eventId, req.scheduleId, req.entries));
       case 'addTerm':
         assertOperator_(principal);
         return ok(addDictionaryTerm(req.term, req.ruby, req.uid));
@@ -748,15 +181,6 @@ function doPost(e) {
       case 'batchToggleTerms':
         assertOperator_(principal);
         return ok(batchToggleDictionaryTerms(req.uids, req.enabled));
-      case 'createPickupQuestion':
-        assertOperator_(principal);
-        return ok(createPickupQuestion(req.question, req.genre));
-      case 'updatePickupQuestion':
-        assertOperator_(principal);
-        return ok(updatePickupQuestion(req.uid, req.question, req.genre));
-      case 'deletePickupQuestion':
-        assertOperator_(principal);
-        return ok(deletePickupQuestion(req.uid));
       case 'updateStatus':
         assertOperator_(principal);
         return ok(updateAnswerStatus(req.uid, req.status));
@@ -995,247 +419,6 @@ function processQuestionQueueForToken_(rawToken) {
   };
 }
 
-function processQuestionSubmissionQueue_(providedAccessToken, options) {
-  const accessToken = providedAccessToken || getFirebaseAccessToken_();
-  const queueBranch = fetchRtdb_('questionIntake/submissions', accessToken) || {};
-  const opts = options || {};
-  let tokenFilter = null;
-  if (opts && opts.tokenFilter != null) {
-    const list = Array.isArray(opts.tokenFilter) ? opts.tokenFilter : [opts.tokenFilter];
-    tokenFilter = new Set(
-      list
-        .map(value => String(value || '').trim())
-        .filter(Boolean)
-    );
-  }
-
-  let queueTokens = Object.keys(queueBranch || {});
-  queueTokens = queueTokens
-    .map(token => String(token || '').trim())
-    .filter(token => {
-      if (!token) return false;
-      if (tokenFilter && !tokenFilter.has(token)) {
-        return false;
-      }
-      return true;
-    });
-
-  if (!queueTokens.length) {
-    return { processed: 0, discarded: 0 };
-  }
-
-  const tokenRecords = fetchRtdb_('questionIntake/tokens', accessToken) || {};
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(QUESTION_SHEET_NAME);
-  if (!sheet) throw new Error(`Sheet "${QUESTION_SHEET_NAME}" not found.`);
-
-  const lastColumn = sheet.getLastColumn();
-  if (lastColumn < 1) throw new Error('question sheet has no headers.');
-
-  const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
-  const norm = s => String(s || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
-  const headerMap = new Map();
-  headers.forEach((header, index) => {
-    if (header == null) return;
-    headerMap.set(norm(header), index);
-  });
-
-  const rowsToAppend = [];
-  const updates = {};
-  const processedAt = Date.now();
-  const questionUpdates = {};
-  let processed = 0;
-  let discarded = 0;
-
-  const ensureString = value => String(value || '').trim();
-  const nowIso = () => new Date().toISOString();
-
-  queueTokens.forEach(token => {
-    const submissions = queueBranch[token] && typeof queueBranch[token] === 'object'
-      ? queueBranch[token]
-      : {};
-    const tokenRecord = tokenRecords[token] || {};
-    const revoked = tokenRecord && tokenRecord.revoked === true;
-    const expiresAt = Number(tokenRecord && tokenRecord.expiresAt || 0);
-    const eventId = ensureString(tokenRecord && tokenRecord.eventId);
-    const scheduleId = ensureString(tokenRecord && tokenRecord.scheduleId);
-    const participantId = ensureString(tokenRecord && tokenRecord.participantId);
-
-    Object.keys(submissions).forEach(entryId => {
-      const submissionPath = `questionIntake/submissions/${token}/${entryId}`;
-      const entry = submissions[entryId] && typeof submissions[entryId] === 'object'
-        ? submissions[entryId]
-        : null;
-
-      if (!entry) {
-        updates[submissionPath] = null;
-        discarded += 1;
-        return;
-      }
-
-      if (!tokenRecord || !eventId || !scheduleId || !participantId || revoked || (expiresAt && Date.now() > expiresAt)) {
-        updates[submissionPath] = null;
-        discarded += 1;
-        return;
-      }
-
-      try {
-        const radioName = ensureString(entry.radioName);
-        const questionText = ensureString(entry.question);
-        if (!radioName) throw new Error('ラジオネームが空です。');
-        if (!questionText) throw new Error('質問内容が空です。');
-
-        const questionLength = Number(entry.questionLength);
-        if (!Number.isFinite(questionLength) || questionLength <= 0) {
-          throw new Error('質問文字数が不正です。');
-        }
-
-        const genreValue = ensureString(entry.genre) || 'その他';
-        const groupNumber = ensureString(entry.groupNumber || tokenRecord.teamNumber || tokenRecord.groupNumber);
-        const scheduleLabel = ensureString(entry.scheduleLabel || tokenRecord.scheduleLabel);
-        const scheduleDate = ensureString(entry.scheduleDate || tokenRecord.scheduleDate);
-        const scheduleStart = ensureString(entry.scheduleStart || tokenRecord.scheduleStart);
-        const scheduleEnd = ensureString(entry.scheduleEnd || tokenRecord.scheduleEnd);
-        const eventName = ensureString(entry.eventName || tokenRecord.eventName);
-        const participantName = ensureString(entry.participantName || tokenRecord.displayName);
-        const guidance = ensureString(entry.guidance || tokenRecord.guidance);
-
-        const timestampMs = Number(entry.submittedAt || entry.clientTimestamp || Date.now());
-        const timestamp = Number.isFinite(timestampMs) && timestampMs > 0 ? new Date(timestampMs) : new Date();
-        const timestampLabel = formatQuestionTimestamp_(timestamp);
-        const providedUid = ensureString(entry.uid) || ensureString(entryId);
-        const uid = providedUid || Utilities.getUuid();
-
-        const newRow = Array.from({ length: headers.length }, () => '');
-        const setValue = (headerKey, value) => {
-          const idx = headerMap.get(norm(headerKey));
-          if (idx == null || idx < 0) return;
-          newRow[idx] = value;
-        };
-
-        setValue('タイムスタンプ', timestampLabel);
-        setValue('Timestamp', timestampLabel);
-        setValue('ラジオネーム', radioName);
-        setValue('質問・お悩み', questionText);
-        if (groupNumber) setValue('班番号', groupNumber);
-        setValue('ジャンル', genreValue);
-        if (scheduleLabel) {
-          setValue('日程', scheduleLabel);
-          setValue('日程表示', scheduleLabel);
-        }
-        if (scheduleDate) setValue('日程日付', scheduleDate);
-        const scheduleStartMs = parseDateToMillis_(scheduleStart, 0);
-        const scheduleEndMs = parseDateToMillis_(scheduleEnd, 0);
-        const scheduleStartValue = scheduleStartMs ? new Date(scheduleStartMs) : (scheduleStart || '');
-        const scheduleEndValue = scheduleEndMs ? new Date(scheduleEndMs) : (scheduleEnd || '');
-        const scheduleStartIso = scheduleStartValue ? toIsoStringOrValue_(scheduleStartValue) : '';
-        const scheduleEndIso = scheduleEndValue ? toIsoStringOrValue_(scheduleEndValue) : '';
-        if (scheduleStartValue) {
-          setValue('日程開始', scheduleStartValue);
-          setValue('開始日時', scheduleStartValue);
-        }
-        if (scheduleEndValue) {
-          setValue('日程終了', scheduleEndValue);
-          setValue('終了日時', scheduleEndValue);
-        }
-        setValue('イベントID', eventId);
-        if (eventName) setValue('イベント名', eventName);
-        setValue('日程ID', scheduleId);
-        setValue('参加者ID', participantId);
-        if (participantName) {
-          setValue('参加者名', participantName);
-          setValue('氏名', participantName);
-        }
-        setValue('リンクトークン', token);
-        setValue('Token', token);
-        if (guidance) {
-          setValue('ガイダンス', guidance);
-          setValue('案内文', guidance);
-        }
-        setValue('uid', uid);
-        setValue('UID', uid);
-        setValue('回答済', false);
-        setValue('選択中', false);
-        if (ensureString(entry.genre)) {
-          setValue('ジャンル(送信時)', ensureString(entry.genre));
-        }
-        setValue('質問文字数', questionLength);
-
-        rowsToAppend.push(newRow);
-        const questionPayload = {
-          uid,
-          token,
-          name: radioName,
-          question: questionText,
-          group: groupNumber,
-          genre: genreValue,
-          schedule: scheduleLabel,
-          scheduleStart: scheduleStartIso,
-          scheduleEnd: scheduleEndIso,
-          scheduleDate,
-          participantId,
-          participantName,
-          eventId,
-          eventName,
-          scheduleId,
-          guidance,
-          ts: timestamp.getTime(),
-          updatedAt: processedAt,
-          type: 'normal'
-        };
-        if (Number.isFinite(questionLength) && questionLength > 0) {
-          questionPayload.questionLength = questionLength;
-        }
-        questionUpdates[`questions/normal/${uid}`] = questionPayload;
-        questionUpdates[`questionStatus/${uid}`] = {
-          answered: false,
-          selecting: false,
-          updatedAt: processedAt
-        };
-        updates[submissionPath] = null;
-        processed += 1;
-      } catch (err) {
-        console.warn('Failed to process queued submission', token, entryId, err);
-        updates[submissionPath] = null;
-        const errorPath = `questionIntake/submissionErrors/${token}/${entryId}`;
-        updates[errorPath] = {
-          error: String(err && err.message || err),
-          failedAt: nowIso(),
-          payload: entry
-        };
-        discarded += 1;
-      }
-    });
-  });
-
-  if (Object.keys(questionUpdates).length) {
-    try {
-      patchRtdb_(questionUpdates, accessToken);
-    } catch (err) {
-      console.warn('Failed to patch RTDB questions during queue processing', err);
-    }
-  }
-
-  if (rowsToAppend.length) {
-    const startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, rowsToAppend.length, headers.length).setValues(rowsToAppend);
-  }
-
-  if (Object.keys(updates).length) {
-    patchRtdb_(updates, accessToken);
-  }
-
-  if (rowsToAppend.length) {
-    try {
-      notifyUpdate('question');
-    } catch (e) {
-      console.warn('notifyUpdate failed after processQuestionSubmissionQueue_', e);
-    }
-  }
-
-  return { processed, discarded };
-}
-
 function cleanupUnusedQuestionTokens_(participantsBranch, tokensBranch, accessToken) {
   const participantKeys = new Set();
   const activeTokens = new Set();
@@ -1293,186 +476,6 @@ function cleanupUnusedQuestionTokens_(participantsBranch, tokensBranch, accessTo
 
   return { removed };
 }
-
-function applyParticipantGroupsToQuestionSheet_(participantsBranch, questionsBranch) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheets = QUESTION_SHEET_NAMES
-    .map(name => ss.getSheetByName(name))
-    .filter(Boolean);
-
-  if (!sheets.length) {
-    return { updated: 0, questionUpdates: 0 };
-  }
-
-  const groupByParticipant = new Map();
-  const groupByToken = new Map();
-  Object.keys(participantsBranch || {}).forEach(eventId => {
-    const schedules = participantsBranch[eventId] || {};
-    Object.keys(schedules).forEach(scheduleId => {
-      const entries = schedules[scheduleId] || {};
-      Object.keys(entries).forEach(participantId => {
-        const entry = entries[participantId] || {};
-        const groupNumber = String(entry.teamNumber || entry.groupNumber || '').trim();
-        const participantKey = String(participantId || '').trim();
-        const token = String(entry.token || '').trim();
-        if (participantKey) {
-          groupByParticipant.set(participantKey, groupNumber);
-        }
-        if (token) {
-          groupByToken.set(token, groupNumber);
-        }
-      });
-    });
-  });
-
-  if (!groupByParticipant.size && !groupByToken.size) {
-    return { updated: 0, questionUpdates: 0 };
-  }
-
-  const sheetUpdates = [];
-  const uidUpdateMap = new Map();
-
-  sheets.forEach(sheet => {
-    const info = readSheetWithHeaders_(sheet);
-    if (!info.sheet || !info.headers || !info.headers.length || !info.rows) {
-      return;
-    }
-
-    const groupIdx = getHeaderIndex_(info.headerMap, ['班番号']);
-    if (groupIdx == null) {
-      return;
-    }
-
-    const participantIdx = getHeaderIndex_(info.headerMap, ['参加者ID', 'participantid', 'participant_id']);
-    const tokenIdx = getHeaderIndex_(info.headerMap, ['リンクトークン', 'token']);
-    const uidIdx = getHeaderIndex_(info.headerMap, ['uid', 'UID']);
-    if ((participantIdx == null && tokenIdx == null) || uidIdx == null) {
-      return;
-    }
-
-    const sheetType = sheet.getName() === PICKUP_QUESTION_SHEET_NAME ? 'pickup' : 'normal';
-    info.rows.forEach((row, index) => {
-      let desired = null;
-      if (participantIdx != null) {
-        const participantId = String(row[participantIdx] || '').trim();
-        if (participantId && groupByParticipant.has(participantId)) {
-          desired = groupByParticipant.get(participantId) || '';
-        }
-      }
-      if (desired === null && tokenIdx != null) {
-        const token = String(row[tokenIdx] || '').trim();
-        if (token && groupByToken.has(token)) {
-          desired = groupByToken.get(token) || '';
-        }
-      }
-      if (desired === null) {
-        return;
-      }
-
-      const current = String(row[groupIdx] || '').trim();
-      const normalizedDesired = String(desired || '').trim();
-      if (current === normalizedDesired) {
-        return;
-      }
-
-      const uid = String(row[uidIdx] || '').trim();
-      if (!uid) {
-        return;
-      }
-
-      sheetUpdates.push({ sheet, rowNumber: index + 2, column: groupIdx + 1, value: normalizedDesired, uid, type: sheetType });
-      uidUpdateMap.set(uid, { value: normalizedDesired, type: sheetType });
-    });
-  });
-
-  const pendingQuestionUpdates = new Map();
-  const assignPendingUpdates = (branch, typeHint) => {
-    if (!branch || typeof branch !== 'object') {
-      return;
-    }
-    Object.keys(branch).forEach(uid => {
-      const question = branch[uid] || {};
-      const participantId = String(question.participantId || '').trim();
-      const token = String(question.token || '').trim();
-      let desired = null;
-      if (participantId && groupByParticipant.has(participantId)) {
-        desired = groupByParticipant.get(participantId) || '';
-      }
-      if (desired === null && token && groupByToken.has(token)) {
-        desired = groupByToken.get(token) || '';
-      }
-      if (desired === null) {
-        return;
-      }
-
-      const current = String(question.group || '').trim();
-      const normalizedDesired = String(desired || '').trim();
-      if (current === normalizedDesired) {
-        return;
-      }
-
-      const type = String(question.type || typeHint || 'normal').toLowerCase() === 'pickup' ? 'pickup' : 'normal';
-      pendingQuestionUpdates.set(uid, { value: normalizedDesired, type });
-    });
-  };
-
-  if (questionsBranch && typeof questionsBranch === 'object') {
-    if (questionsBranch.normal || questionsBranch.pickup) {
-      assignPendingUpdates(questionsBranch.normal, 'normal');
-      assignPendingUpdates(questionsBranch.pickup, 'pickup');
-    } else {
-      assignPendingUpdates(questionsBranch, null);
-    }
-  }
-
-  pendingQuestionUpdates.forEach((entry, uid) => {
-    uidUpdateMap.set(uid, entry);
-  });
-
-  let patchedCount = 0;
-  if (uidUpdateMap.size) {
-    const now = Date.now();
-    const questionUpdates = {};
-    uidUpdateMap.forEach((entry, uid) => {
-      const type = entry && entry.type === 'pickup' ? 'pickup' : 'normal';
-      const value = entry && typeof entry === 'object' ? entry.value : entry;
-      questionUpdates[`questions/${type}/${uid}/group`] = value || '';
-      questionUpdates[`questions/${type}/${uid}/updatedAt`] = now;
-    });
-    try {
-      patchRtdb_(questionUpdates, getFirebaseAccessToken_());
-      patchedCount = uidUpdateMap.size;
-    } catch (error) {
-      console.warn('applyParticipantGroupsToQuestionSheet_ failed to update RTDB questions', error);
-    }
-  }
-
-  sheetUpdates.forEach(update => {
-    update.sheet.getRange(update.rowNumber, update.column).setValue(update.value || '');
-  });
-
-  return { updated: sheetUpdates.length, questionUpdates: patchedCount };
-}
-
-const NAME_MAP_SHEET_NAME = 'name_mappings';
-
-function ensureNameMapSheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(NAME_MAP_SHEET_NAME);
-  if (!sheet) {
-    sheet = ss.insertSheet(NAME_MAP_SHEET_NAME);
-  }
-
-  const headerRange = sheet.getRange(1, 1, 1, 2);
-  const headers = headerRange.getValues()[0];
-  const expected = ['ラジオネーム', '班番号'];
-  if (headers[0] !== expected[0] || headers[1] !== expected[1]) {
-    headerRange.setValues([expected]);
-  }
-
-  return sheet;
-}
-
 function normalizeNameKey_(value) {
   return String(value || '')
     .trim()
@@ -1482,1312 +485,6 @@ function normalizeNameKey_(value) {
 function normalizeNameForLookup_(value) {
   return normalizeNameKey_(value).replace(/[\u200B-\u200D\uFEFF]/g, '');
 }
-
-function readNameMappings_() {
-  const sheet = ensureNameMapSheet_();
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) {
-    return [];
-  }
-
-  const values = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
-  return values
-    .map(row => ({
-      name: normalizeNameKey_(row[0]),
-      groupNumber: String(row[1] || '').trim()
-    }))
-    .filter(entry => entry.name && entry.groupNumber);
-}
-
-function fetchNameMappings_() {
-  return readNameMappings_();
-}
-
-function saveNameMappings_(entries) {
-  if (!Array.isArray(entries)) {
-    throw new Error('Invalid payload: entries');
-  }
-
-  const deduped = [];
-  const seen = new Set();
-  entries.forEach(entry => {
-    if (!entry) return;
-    const name = normalizeNameKey_(entry.name || entry.radioName || '');
-    const groupNumber = String(entry.groupNumber || entry.group || '').trim();
-    if (!name || !groupNumber) return;
-    const lookup = normalizeNameForLookup_(name);
-    if (seen.has(lookup)) return;
-    seen.add(lookup);
-    deduped.push({ name, groupNumber });
-  });
-
-  const sheet = ensureNameMapSheet_();
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, 2).clearContent();
-  }
-
-  if (deduped.length) {
-    const values = deduped.map(entry => [entry.name, entry.groupNumber]);
-    sheet.getRange(2, 1, values.length, 2).setValues(values);
-  }
-
-  return { count: deduped.length };
-}
-
-const QUESTION_EVENT_SHEET = 'question_events';
-const QUESTION_SCHEDULE_SHEET = 'question_schedules';
-const QUESTION_PARTICIPANT_SHEET = 'question_participants';
-
-function ensureSheetWithHeaders_(sheetName, headers) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(sheetName);
-  if (!sheet) {
-    sheet = ss.insertSheet(sheetName);
-  }
-
-  const headerRange = sheet.getRange(1, 1, 1, headers.length);
-  const existing = headerRange.getValues()[0];
-  let needsUpdate = false;
-  headers.forEach((header, idx) => {
-    if (existing[idx] !== header) {
-      needsUpdate = true;
-    }
-  });
-  if (needsUpdate) {
-    headerRange.setValues([headers]);
-  }
-
-  return sheet;
-}
-
-function ensureQuestionEventSheet_() {
-  const sheet = ensureSheetWithHeaders_(QUESTION_EVENT_SHEET, ['イベントID', 'イベント名', '作成日時']);
-  sheet.getRange('C2:C').setNumberFormat('yyyy/MM/dd HH:mm:ss');
-  return sheet;
-}
-
-function ensureQuestionScheduleSheet_() {
-  const sheet = ensureSheetWithHeaders_(
-    QUESTION_SCHEDULE_SHEET,
-    ['イベントID', '日程ID', '表示名', '日付', '開始日時', '終了日時', '作成日時']
-  );
-  sheet.getRange('E2:E').setNumberFormat('yyyy/MM/dd HH:mm:ss');
-  sheet.getRange('F2:F').setNumberFormat('yyyy/MM/dd HH:mm:ss');
-  sheet.getRange('G2:G').setNumberFormat('yyyy/MM/dd HH:mm:ss');
-  return sheet;
-}
-
-function ensureQuestionParticipantSheet_() {
-  const sheet = ensureSheetWithHeaders_(
-    QUESTION_PARTICIPANT_SHEET,
-    [
-      'イベントID',
-      '日程ID',
-      '参加者ID',
-      '氏名',
-      'フリガナ',
-      '性別',
-      '学部学科',
-      '携帯電話',
-      'メールアドレス',
-      '班番号',
-      'トークン',
-      '更新日時'
-    ]
-  );
-  sheet.getRange('L2:L').setNumberFormat('yyyy/MM/dd HH:mm:ss');
-  return sheet;
-}
-
-function replaceSheetRows_(sheet, rows, columnCount) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, columnCount).clearContent();
-  }
-  if (!rows.length) {
-    return;
-  }
-  const requiredRows = rows.length + 1;
-  if (sheet.getMaxRows() < requiredRows) {
-    sheet.insertRowsAfter(sheet.getMaxRows(), requiredRows - sheet.getMaxRows());
-  }
-  sheet.getRange(2, 1, rows.length, columnCount).setValues(rows);
-}
-
-function replaceSheetRows_(sheet, rows, columnCount) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, columnCount).clearContent();
-  }
-  if (!rows.length) {
-    return;
-  }
-  const requiredRows = rows.length + 1;
-  if (sheet.getMaxRows() < requiredRows) {
-    sheet.insertRowsAfter(sheet.getMaxRows(), requiredRows - sheet.getMaxRows());
-  }
-  sheet.getRange(2, 1, rows.length, columnCount).setValues(rows);
-}
-
-function generateShortId_(prefix) {
-  const raw = Utilities.getUuid().replace(/-/g, '');
-  return (prefix || '') + raw.slice(0, 8);
-}
-
-function parseDateToMillis_(value, fallback) {
-  const fb = fallback == null ? Date.now() : fallback;
-  if (!value) return fb;
-  if (value instanceof Date && !isNaN(value)) return value.getTime();
-  if (typeof value === 'number' && !isNaN(value)) {
-    if (value > 1e12) return value;
-    if (value > 1e10) return value * 1000;
-    if (value > 20000 && value < 70000) {
-      return Math.round((value - 25569) * 86400 * 1000);
-    }
-    return value;
-  }
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return fb;
-    const isoLike = trimmed.replace(' ', 'T');
-    const parsed = new Date(isoLike);
-    if (!isNaN(parsed)) return parsed.getTime();
-  }
-  return fb;
-}
-
-function generateQuestionToken_(existingTokens) {
-  const used = existingTokens || new Set();
-  while (true) {
-    const seed = Utilities.getUuid() + ':' + Math.random() + ':' + Date.now();
-    const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, seed);
-    const token = Utilities.base64EncodeWebSafe(digest).replace(/=+/g, '').slice(0, 32);
-    if (!used.has(token)) {
-      used.add(token);
-      return token;
-    }
-  }
-}
-
-function mirrorQuestionIntake_() {
-  const events = readEvents_();
-  const schedules = readSchedules_();
-  const participants = readParticipantEntries_();
-  const now = Date.now();
-  const accessToken = getFirebaseAccessToken_();
-
-  const existingEvents = fetchRtdb_('questionIntake/events', accessToken) || {};
-  const existingSchedules = fetchRtdb_('questionIntake/schedules', accessToken) || {};
-  const existingParticipants = fetchRtdb_('questionIntake/participants', accessToken) || {};
-  const existingTokens = fetchRtdb_('questionIntake/tokens', accessToken) || {};
-
-  const usedTokens = new Set(Object.keys(existingTokens));
-  const tokenByKey = new Map();
-  Object.keys(existingTokens).forEach(key => {
-    const record = existingTokens[key];
-    if (!record) return;
-    const mapKey = `${record.eventId || ''}::${record.scheduleId || ''}::${record.participantId || ''}`;
-    tokenByKey.set(mapKey, { token: key, record });
-  });
-
-  const eventMap = {};
-  const scheduleTree = {};
-  const participantsTree = {};
-  const tokensMap = {};
-  const scheduleUpdateMap = {};
-  const eventUpdateMap = {};
-
-  const eventLookup = new Map();
-  events.forEach(event => {
-    if (!event || !event.id) return;
-    eventLookup.set(event.id, event);
-    const existing = existingEvents[event.id] || {};
-    const createdAt = existing.createdAt || parseDateToMillis_(event.createdAt, now);
-    eventMap[event.id] = {
-      name: event.name || '',
-      createdAt,
-      updatedAt: Math.max(existing.updatedAt || 0, createdAt)
-    };
-  });
-
-  const scheduleLookup = new Map();
-  schedules.forEach(schedule => {
-    if (!schedule || !schedule.eventId || !schedule.id) return;
-    const key = `${schedule.eventId}::${schedule.id}`;
-    scheduleLookup.set(key, schedule);
-    if (!scheduleTree[schedule.eventId]) {
-      scheduleTree[schedule.eventId] = {};
-    }
-    const existing = (existingSchedules[schedule.eventId] || {})[schedule.id] || {};
-    const createdAt = existing.createdAt || parseDateToMillis_(schedule.createdAt, now);
-    const startAt = schedule.startAt || existing.startAt || '';
-    const endAt = schedule.endAt || existing.endAt || '';
-    scheduleTree[schedule.eventId][schedule.id] = {
-      label: schedule.label || '',
-      date: schedule.date || '',
-      startAt,
-      endAt,
-      participantCount: 0,
-      createdAt,
-      updatedAt: Math.max(existing.updatedAt || 0, createdAt)
-    };
-  });
-
-  participants.forEach(entry => {
-    if (!entry || !entry.eventId || !entry.scheduleId || !entry.participantId) return;
-    if (!participantsTree[entry.eventId]) {
-      participantsTree[entry.eventId] = {};
-    }
-    if (!participantsTree[entry.eventId][entry.scheduleId]) {
-      participantsTree[entry.eventId][entry.scheduleId] = {};
-    }
-
-    const existingBranch = (existingParticipants[entry.eventId] || {})[entry.scheduleId] || {};
-    const existingParticipantRecord = existingBranch[entry.participantId];
-    const hasExistingParticipant = existingParticipantRecord && typeof existingParticipantRecord === 'object';
-    const existingParticipant = hasExistingParticipant ? existingParticipantRecord : {};
-    const key = `${entry.eventId}::${entry.scheduleId}::${entry.participantId}`;
-    const tokenInfo = tokenByKey.get(key) || {};
-    let tokenValue = tokenInfo.token;
-    let tokenRecord = tokenInfo.record || {};
-    if (!tokenValue) {
-      tokenValue = generateQuestionToken_(usedTokens);
-      tokenRecord = {};
-    }
-
-    const sheetTimestamp = typeof entry.updatedAt === 'string' ? entry.updatedAt.trim() : '';
-    const hasSheetTimestamp = sheetTimestamp.length > 0;
-    const participantUpdatedAt = parseDateToMillis_(entry.updatedAt, 0);
-    const effectiveUpdatedAt = participantUpdatedAt > 0 ? participantUpdatedAt : now;
-    const existingGuidance = hasExistingParticipant ? String(existingParticipant.guidance || '') : '';
-    const guidance = existingGuidance || String(tokenRecord.guidance || '');
-
-    const teamValue = String(entry.teamNumber || entry.groupNumber || '');
-
-    const scheduleNodeExisting = ((existingSchedules[entry.eventId] || {})[entry.scheduleId]) || {};
-    const scheduleUpdatedAt = parseDateToMillis_(scheduleNodeExisting.updatedAt, 0);
-    if (scheduleUpdatedAt) {
-      if (!hasSheetTimestamp && !hasExistingParticipant) {
-        return;
-      }
-      if (participantUpdatedAt > 0 && participantUpdatedAt < scheduleUpdatedAt) {
-        return;
-      }
-    }
-
-    participantsTree[entry.eventId][entry.scheduleId][entry.participantId] = {
-      participantId: entry.participantId,
-      uid: entry.participantId,
-      name: entry.name || '',
-      phonetic: entry.phonetic || entry.furigana || '',
-      furigana: entry.furigana || entry.phonetic || '',
-      gender: entry.gender || '',
-      department: entry.department || '',
-      phone: entry.phone || '',
-      email: entry.email || '',
-      groupNumber: teamValue,
-      teamNumber: teamValue,
-      token: tokenValue,
-      guidance,
-      status: existingParticipant.status || '',
-      isCancelled: existingParticipant.isCancelled === true,
-      isRelocated: existingParticipant.isRelocated === true,
-      relocationSourceScheduleId: existingParticipant.relocationSourceScheduleId || '',
-      relocationSourceScheduleLabel: existingParticipant.relocationSourceScheduleLabel || '',
-      relocationDestinationScheduleId: existingParticipant.relocationDestinationScheduleId || '',
-      relocationDestinationScheduleLabel: existingParticipant.relocationDestinationScheduleLabel || '',
-      relocationDestinationTeamNumber: existingParticipant.relocationDestinationTeamNumber || '',
-      updatedAt: effectiveUpdatedAt
-    };
-
-    scheduleUpdateMap[key] = Math.max(scheduleUpdateMap[key] || 0, effectiveUpdatedAt);
-    eventUpdateMap[entry.eventId] = Math.max(eventUpdateMap[entry.eventId] || 0, effectiveUpdatedAt);
-
-    const event = eventLookup.get(entry.eventId) || { id: entry.eventId, name: '' };
-    const schedule = scheduleLookup.get(`${entry.eventId}::${entry.scheduleId}`) || { id: entry.scheduleId, label: entry.scheduleId, date: '' };
-    const tokenCreatedAt = parseDateToMillis_(tokenRecord.createdAt, effectiveUpdatedAt);
-    const tokenUpdatedAt = Math.max(parseDateToMillis_(tokenRecord.updatedAt, effectiveUpdatedAt), effectiveUpdatedAt);
-
-    tokensMap[tokenValue] = {
-      eventId: entry.eventId,
-      eventName: event.name || tokenRecord.eventName || '',
-      scheduleId: entry.scheduleId,
-      scheduleLabel: schedule.label || tokenRecord.scheduleLabel || schedule.id || '',
-      scheduleDate: schedule.date || tokenRecord.scheduleDate || '',
-      scheduleStart: schedule.startAt || tokenRecord.scheduleStart || '',
-      scheduleEnd: schedule.endAt || tokenRecord.scheduleEnd || '',
-      participantId: entry.participantId,
-      participantUid: entry.participantId || tokenRecord.participantUid || '',
-      displayName: entry.name || '',
-      groupNumber: teamValue,
-      teamNumber: teamValue,
-      guidance,
-      revoked: false,
-      createdAt: tokenCreatedAt,
-      updatedAt: tokenUpdatedAt
-    };
-  });
-
-  Object.keys(scheduleTree).forEach(eventId => {
-    const schedulesForEvent = scheduleTree[eventId];
-    Object.keys(schedulesForEvent).forEach(scheduleId => {
-      const branch = (participantsTree[eventId] || {})[scheduleId] || {};
-      const count = Object.keys(branch).length;
-      const scheduleKey = `${eventId}::${scheduleId}`;
-      const existing = (existingSchedules[eventId] || {})[scheduleId] || {};
-      schedulesForEvent[scheduleId].participantCount = count;
-      const candidateUpdated = Math.max(
-        schedulesForEvent[scheduleId].updatedAt || 0,
-        scheduleUpdateMap[scheduleKey] || 0,
-        existing.updatedAt || 0
-      );
-      schedulesForEvent[scheduleId].updatedAt = candidateUpdated;
-    });
-  });
-
-  Object.keys(eventMap).forEach(eventId => {
-    const existing = existingEvents[eventId] || {};
-    const candidate = Math.max(
-      eventMap[eventId].updatedAt || 0,
-      eventUpdateMap[eventId] || 0,
-      existing.updatedAt || 0
-    );
-    eventMap[eventId].updatedAt = candidate;
-  });
-
-  const updates = {};
-
-  Object.keys(eventMap).forEach(eventId => {
-    updates[`questionIntake/events/${eventId}`] = eventMap[eventId];
-  });
-  Object.keys(existingEvents).forEach(eventId => {
-    if (!eventMap[eventId]) {
-      updates[`questionIntake/events/${eventId}`] = null;
-    }
-  });
-
-  Object.keys(scheduleTree).forEach(eventId => {
-    const schedulesForEvent = scheduleTree[eventId] || {};
-    Object.keys(schedulesForEvent).forEach(scheduleId => {
-      updates[`questionIntake/schedules/${eventId}/${scheduleId}`] = schedulesForEvent[scheduleId];
-    });
-  });
-  Object.keys(existingSchedules).forEach(eventId => {
-    const existingSchedulesForEvent = existingSchedules[eventId] || {};
-    const nextSchedulesForEvent = scheduleTree[eventId];
-    if (!nextSchedulesForEvent) {
-      updates[`questionIntake/schedules/${eventId}`] = null;
-      return;
-    }
-    Object.keys(existingSchedulesForEvent).forEach(scheduleId => {
-      if (!nextSchedulesForEvent[scheduleId]) {
-        updates[`questionIntake/schedules/${eventId}/${scheduleId}`] = null;
-      }
-    });
-  });
-
-  Object.keys(participantsTree).forEach(eventId => {
-    const participantsForEvent = participantsTree[eventId] || {};
-    Object.keys(participantsForEvent).forEach(scheduleId => {
-      const participantEntries = participantsForEvent[scheduleId] || {};
-      Object.keys(participantEntries).forEach(participantId => {
-        updates[`questionIntake/participants/${eventId}/${scheduleId}/${participantId}`] = participantEntries[participantId];
-      });
-    });
-  });
-  Object.keys(existingParticipants).forEach(eventId => {
-    const existingSchedulesForEvent = existingParticipants[eventId] || {};
-    const nextSchedulesForEvent = participantsTree[eventId];
-    if (!nextSchedulesForEvent) {
-      updates[`questionIntake/participants/${eventId}`] = null;
-      return;
-    }
-    Object.keys(existingSchedulesForEvent).forEach(scheduleId => {
-      const existingParticipantsForSchedule = existingSchedulesForEvent[scheduleId] || {};
-      const nextParticipantsForSchedule = nextSchedulesForEvent[scheduleId];
-      if (!nextParticipantsForSchedule) {
-        updates[`questionIntake/participants/${eventId}/${scheduleId}`] = null;
-        return;
-      }
-      Object.keys(existingParticipantsForSchedule).forEach(participantId => {
-        if (!nextParticipantsForSchedule[participantId]) {
-          updates[`questionIntake/participants/${eventId}/${scheduleId}/${participantId}`] = null;
-        }
-      });
-    });
-  });
-
-  Object.keys(tokensMap).forEach(token => {
-    updates[`questionIntake/tokens/${token}`] = tokensMap[token];
-  });
-  Object.keys(existingTokens).forEach(token => {
-    if (!tokensMap[token]) {
-      updates[`questionIntake/tokens/${token}`] = null;
-    }
-  });
-
-  if (Object.keys(updates).length) {
-    patchRtdb_(updates, accessToken);
-  }
-
-  return {
-    eventCount: Object.keys(eventMap).length,
-    scheduleCount: schedules.length,
-    participantCount: participants.length,
-    tokenCount: Object.keys(tokensMap).length
-  };
-}
-
-function syncQuestionIntakeToSheet_() {
-  const accessToken = getFirebaseAccessToken_();
-  let queueResult = null;
-  try {
-    queueResult = processQuestionSubmissionQueue_(accessToken);
-  } catch (error) {
-    console.warn('processQuestionSubmissionQueue_ failed during syncQuestionIntakeToSheet_', error);
-  }
-
-  const eventsBranch = fetchRtdb_('questionIntake/events', accessToken) || {};
-  const schedulesBranch = fetchRtdb_('questionIntake/schedules', accessToken) || {};
-  const participantsBranch = fetchRtdb_('questionIntake/participants', accessToken) || {};
-  let tokensBranch = {};
-  try {
-    tokensBranch = fetchRtdb_('questionIntake/tokens', accessToken) || {};
-  } catch (error) {
-    console.warn('Failed to fetch questionIntake/tokens during sync', error);
-    tokensBranch = {};
-  }
-  let questionsBranch = {};
-  try {
-    questionsBranch = fetchRtdb_('questions', accessToken) || {};
-  } catch (error) {
-    console.warn('Failed to fetch questions during sync', error);
-    questionsBranch = {};
-  }
-
-  let cleanupResult = { removed: 0 };
-  try {
-    cleanupResult = cleanupUnusedQuestionTokens_(participantsBranch, tokensBranch, accessToken);
-  } catch (error) {
-    console.warn('cleanupUnusedQuestionTokens_ failed during syncQuestionIntakeToSheet_', error);
-    cleanupResult = { removed: 0 };
-  }
-
-  const toSheetDate = (value) => {
-    const ms = parseDateToMillis_(value, 0);
-    return ms ? new Date(ms) : '';
-  };
-
-  const eventRows = Object.keys(eventsBranch).map(eventId => {
-    const event = eventsBranch[eventId] || {};
-    const createdAt = parseDateToMillis_(event.createdAt, 0);
-    return {
-      id: eventId,
-      name: String(event.name || ''),
-      createdAt
-    };
-  });
-
-  eventRows.sort((a, b) => {
-    if (a.createdAt !== b.createdAt) {
-      return a.createdAt - b.createdAt;
-    }
-    return a.id.localeCompare(b.id);
-  });
-
-  const eventSheetRows = eventRows.map(row => [row.id, row.name, toSheetDate(row.createdAt)]);
-  replaceSheetRows_(ensureQuestionEventSheet_(), eventSheetRows, 3);
-
-  const scheduleRows = [];
-  Object.keys(schedulesBranch).forEach(eventId => {
-    const branch = schedulesBranch[eventId] || {};
-    Object.keys(branch).forEach(scheduleId => {
-      const schedule = branch[scheduleId] || {};
-      const createdAt = parseDateToMillis_(schedule.createdAt, 0);
-      scheduleRows.push({
-        eventId,
-        scheduleId,
-        label: String(schedule.label || ''),
-        date: String(schedule.date || ''),
-        startAt: String(schedule.startAt || ''),
-        endAt: String(schedule.endAt || ''),
-        createdAt
-      });
-    });
-  });
-
-  scheduleRows.sort((a, b) => {
-    if (a.eventId !== b.eventId) {
-      return a.eventId.localeCompare(b.eventId);
-    }
-    if (a.createdAt !== b.createdAt) {
-      return a.createdAt - b.createdAt;
-    }
-    return a.scheduleId.localeCompare(b.scheduleId);
-  });
-
-  const toSheetDateTime = value => {
-    const ms = parseDateToMillis_(value, 0);
-    return ms ? new Date(ms) : '';
-  };
-
-  const scheduleSheetRows = scheduleRows.map(row => [
-    row.eventId,
-    row.scheduleId,
-    row.label,
-    row.date,
-    toSheetDateTime(row.startAt),
-    toSheetDateTime(row.endAt),
-    toSheetDate(row.createdAt)
-  ]);
-  replaceSheetRows_(ensureQuestionScheduleSheet_(), scheduleSheetRows, 7);
-
-  const participantRows = [];
-  Object.keys(participantsBranch).forEach(eventId => {
-    const schedules = participantsBranch[eventId] || {};
-    Object.keys(schedules).forEach(scheduleId => {
-      const entries = schedules[scheduleId] || {};
-      Object.keys(entries).forEach(participantId => {
-        const participant = entries[participantId] || {};
-        const updatedAt = parseDateToMillis_(participant.updatedAt, 0);
-        participantRows.push({
-          eventId,
-          scheduleId,
-          participantId,
-          name: String(participant.name || ''),
-          phonetic: String(participant.phonetic || participant.furigana || ''),
-          gender: String(participant.gender || ''),
-          department: String(participant.department || ''),
-          phone: String(participant.phone || ''),
-          email: String(participant.email || ''),
-          groupNumber: String(participant.teamNumber || participant.groupNumber || ''),
-          token: String(participant.token || ''),
-          updatedAt
-        });
-      });
-    });
-  });
-
-  participantRows.sort((a, b) => {
-    if (a.eventId !== b.eventId) {
-      return a.eventId.localeCompare(b.eventId);
-    }
-    if (a.scheduleId !== b.scheduleId) {
-      return a.scheduleId.localeCompare(b.scheduleId);
-    }
-    if (a.participantId !== b.participantId) {
-      return a.participantId.localeCompare(b.participantId);
-    }
-    return a.updatedAt - b.updatedAt;
-  });
-
-  const participantSheetRows = participantRows.map(row => [
-    row.eventId,
-    row.scheduleId,
-    row.participantId,
-    row.name,
-    row.phonetic,
-    row.gender,
-    row.department,
-    row.phone,
-    row.email,
-    row.groupNumber,
-    row.token,
-    toSheetDate(row.updatedAt)
-  ]);
-  replaceSheetRows_(ensureQuestionParticipantSheet_(), participantSheetRows, 12);
-
-  let groupUpdateResult = { updated: 0 };
-  try {
-    groupUpdateResult = applyParticipantGroupsToQuestionSheet_(participantsBranch, questionsBranch);
-  } catch (error) {
-    console.warn('applyParticipantGroupsToQuestionSheet_ failed during syncQuestionIntakeToSheet_', error);
-    groupUpdateResult = { updated: 0 };
-  }
-
-  let questionMirrorResult = {
-    total: 0,
-    updated: 0,
-    appended: 0,
-    pickupUpdated: 0,
-    pickupAppended: 0
-  };
-  try {
-    questionMirrorResult = mirrorQuestionsFromRtdbToSheet_(accessToken);
-  } catch (error) {
-    console.warn('mirrorQuestionsFromRtdbToSheet_ failed during syncQuestionIntakeToSheet_', error);
-    questionMirrorResult = {
-      total: 0,
-      updated: 0,
-      appended: 0,
-      pickupUpdated: 0,
-      pickupAppended: 0
-    };
-  }
-
-  let mirrorResult = null;
-  const shouldMirrorQuestions = (groupUpdateResult && groupUpdateResult.updated > 0);
-  if (shouldMirrorQuestions) {
-    try {
-      mirrorResult = mirrorSheetToRtdb_();
-    } catch (error) {
-      console.warn('mirrorSheetToRtdb_ failed during syncQuestionIntakeToSheet_', error);
-      mirrorResult = null;
-    }
-  }
-
-  return {
-    events: eventRows.length,
-    schedules: scheduleRows.length,
-    participants: participantRows.length,
-    queueProcessed: queueResult ? queueResult.processed || 0 : 0,
-    queueDiscarded: queueResult ? queueResult.discarded || 0 : 0,
-    tokensRemoved: cleanupResult ? cleanupResult.removed || 0 : 0,
-    questionGroupUpdates: groupUpdateResult ? groupUpdateResult.updated || 0 : 0,
-    questionFeedUpdates: groupUpdateResult ? groupUpdateResult.questionUpdates || 0 : 0,
-    questionsMirrored: mirrorResult ? mirrorResult.count || 0 : 0,
-    questionSheetAppended: questionMirrorResult.appended || 0,
-    questionSheetUpdated: questionMirrorResult.updated || 0,
-    pickupSheetAppended: questionMirrorResult.pickupAppended || 0,
-    pickupSheetUpdated: questionMirrorResult.pickupUpdated || 0
-  };
-}
-
-function readEvents_() {
-  const sheet = ensureQuestionEventSheet_();
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) {
-    return [];
-  }
-  const values = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
-  return values
-    .map(row => {
-      const id = String(row[0] || '').trim();
-      if (!id) return null;
-      return {
-        id,
-        name: String(row[1] || '').trim(),
-        createdAt: row[2] instanceof Date ? toIsoJst_(row[2]) : ''
-      };
-    })
-    .filter(Boolean);
-}
-
-function readSchedules_() {
-  const sheet = ensureQuestionScheduleSheet_();
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) {
-    return [];
-  }
-  const values = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
-  return values
-    .map(row => {
-      const eventId = String(row[0] || '').trim();
-      const scheduleId = String(row[1] || '').trim();
-      if (!eventId || !scheduleId) return null;
-      return {
-        eventId,
-        id: scheduleId,
-        label: String(row[2] || '').trim(),
-        date: String(row[3] || '').trim(),
-        startAt: row[4] instanceof Date ? toIsoJst_(row[4]) : String(row[4] || '').trim(),
-        endAt: row[5] instanceof Date ? toIsoJst_(row[5]) : String(row[5] || '').trim(),
-        createdAt: row[6] instanceof Date ? toIsoJst_(row[6]) : ''
-      };
-    })
-    .filter(Boolean);
-}
-
-function readParticipantEntries_() {
-  const sheet = ensureQuestionParticipantSheet_();
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) {
-    return [];
-  }
-  const values = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
-  return values
-    .map(row => {
-      const eventId = String(row[0] || '').trim();
-      const scheduleId = String(row[1] || '').trim();
-      const participantId = String(row[2] || '').trim();
-      if (!eventId || !scheduleId || !participantId) return null;
-      const phonetic = normalizeNameKey_(row[4] || '');
-      const gender = String(row[5] || '').trim();
-      const department = String(row[6] || '').trim();
-      const phone = String(row[7] || '').trim();
-      const email = String(row[8] || '').trim();
-      const teamNumber = String(row[9] || '').trim();
-      const token = String(row[10] || '').trim();
-      return {
-        eventId,
-        scheduleId,
-        participantId,
-        name: normalizeNameKey_(row[3] || ''),
-        phonetic,
-        furigana: phonetic,
-        gender,
-        department,
-        phone,
-        email,
-        groupNumber: teamNumber,
-        teamNumber,
-        token,
-        updatedAt: row[11] instanceof Date ? toIsoJst_(row[11]) : ''
-      };
-    })
-    .filter(Boolean);
-}
-
-function listQuestionEvents_() {
-  const events = readEvents_();
-  const schedules = readSchedules_();
-  const participants = readParticipantEntries_();
-
-  const scheduleMap = new Map();
-  schedules.forEach(schedule => {
-    const list = scheduleMap.get(schedule.eventId) || [];
-    list.push(schedule);
-    scheduleMap.set(schedule.eventId, list);
-  });
-
-  const participantCounts = new Map();
-  participants.forEach(entry => {
-    const key = `${entry.eventId}::${entry.scheduleId}`;
-    participantCounts.set(key, (participantCounts.get(key) || 0) + 1);
-  });
-
-  return events.map(event => {
-    const scheduleList = scheduleMap.get(event.id) || [];
-    const enrichedSchedules = scheduleList.map(schedule => ({
-      id: schedule.id,
-      label: schedule.label,
-      date: schedule.date,
-      startAt: schedule.startAt,
-      endAt: schedule.endAt,
-      createdAt: schedule.createdAt,
-      participantCount: participantCounts.get(`${event.id}::${schedule.id}`) || 0
-    }));
-    return { ...event, schedules: enrichedSchedules };
-  });
-}
-
-function createQuestionEvent_(name) {
-  const trimmedName = String(name || '').trim();
-  if (!trimmedName) {
-    throw new Error('イベント名を入力してください。');
-  }
-
-  const sheet = ensureQuestionEventSheet_();
-  const id = generateShortId_('evt_');
-  const now = new Date();
-  sheet.appendRow([id, trimmedName, now]);
-  mirrorQuestionIntake_();
-  return { id, name: trimmedName, createdAt: toIsoJst_(now), schedules: [] };
-}
-
-function deleteQuestionEvent_(eventId) {
-  const id = String(eventId || '').trim();
-  if (!id) {
-    throw new Error('eventId is required');
-  }
-
-  const eventSheet = ensureQuestionEventSheet_();
-  const lastRow = eventSheet.getLastRow();
-  for (let row = lastRow; row >= 2; row--) {
-    const value = String(eventSheet.getRange(row, 1).getValue() || '').trim();
-    if (value === id) {
-      eventSheet.deleteRow(row);
-    }
-  }
-
-  const scheduleSheet = ensureQuestionScheduleSheet_();
-  const scheduleLast = scheduleSheet.getLastRow();
-  for (let row = scheduleLast; row >= 2; row--) {
-    const value = String(scheduleSheet.getRange(row, 1).getValue() || '').trim();
-    if (value === id) {
-      scheduleSheet.deleteRow(row);
-    }
-  }
-
-  const participantSheet = ensureQuestionParticipantSheet_();
-  const participantLast = participantSheet.getLastRow();
-  for (let row = participantLast; row >= 2; row--) {
-    const value = String(participantSheet.getRange(row, 1).getValue() || '').trim();
-    if (value === id) {
-      participantSheet.deleteRow(row);
-    }
-  }
-
-  mirrorQuestionIntake_();
-  return { deleted: true };
-}
-
-function assertEventExists_(eventId) {
-  const events = readEvents_();
-  const found = events.find(event => event.id === eventId);
-  if (!found) {
-    throw new Error('指定されたイベントが見つかりません。');
-  }
-  return found;
-}
-
-function createQuestionSchedule_(eventId, label, date, startAt, endAt) {
-  const trimmedEventId = String(eventId || '').trim();
-  if (!trimmedEventId) {
-    throw new Error('eventId is required');
-  }
-  assertEventExists_(trimmedEventId);
-
-  const trimmedLabel = String(label || '').trim();
-  const trimmedDate = String(date || '').trim();
-  const trimmedStartAt = String(startAt || '').trim();
-  const trimmedEndAt = String(endAt || '').trim();
-  if (!trimmedLabel) {
-    throw new Error('日程の表示名を入力してください。');
-  }
-
-  const sheet = ensureQuestionScheduleSheet_();
-  const id = generateShortId_('sch_');
-  const now = new Date();
-  const toSheetDate = value => {
-    const ms = parseDateToMillis_(value, 0);
-    return ms ? new Date(ms) : '';
-  };
-
-  sheet.appendRow([
-    trimmedEventId,
-    id,
-    trimmedLabel,
-    trimmedDate,
-    toSheetDate(trimmedStartAt),
-    toSheetDate(trimmedEndAt),
-    now
-  ]);
-  mirrorQuestionIntake_();
-  return {
-    id,
-    label: trimmedLabel,
-    date: trimmedDate,
-    startAt: trimmedStartAt,
-    endAt: trimmedEndAt,
-    createdAt: toIsoJst_(now),
-    participantCount: 0
-  };
-}
-
-function deleteQuestionSchedule_(eventId, scheduleId) {
-  const trimmedEventId = String(eventId || '').trim();
-  const trimmedScheduleId = String(scheduleId || '').trim();
-  if (!trimmedEventId || !trimmedScheduleId) {
-    throw new Error('eventId and scheduleId are required');
-  }
-
-  const scheduleSheet = ensureQuestionScheduleSheet_();
-  const lastRow = scheduleSheet.getLastRow();
-  for (let row = lastRow; row >= 2; row--) {
-    const eventValue = String(scheduleSheet.getRange(row, 1).getValue() || '').trim();
-    const scheduleValue = String(scheduleSheet.getRange(row, 2).getValue() || '').trim();
-    if (eventValue === trimmedEventId && scheduleValue === trimmedScheduleId) {
-      scheduleSheet.deleteRow(row);
-    }
-  }
-
-  const participantSheet = ensureQuestionParticipantSheet_();
-  const participantLast = participantSheet.getLastRow();
-  for (let row = participantLast; row >= 2; row--) {
-    const eventValue = String(participantSheet.getRange(row, 1).getValue() || '').trim();
-    const scheduleValue = String(participantSheet.getRange(row, 2).getValue() || '').trim();
-    if (eventValue === trimmedEventId && scheduleValue === trimmedScheduleId) {
-      participantSheet.deleteRow(row);
-    }
-  }
-
-  mirrorQuestionIntake_();
-  return { deleted: true };
-}
-
-function fetchQuestionParticipants_(eventId, scheduleId) {
-  const trimmedEventId = String(eventId || '').trim();
-  const trimmedScheduleId = String(scheduleId || '').trim();
-  if (!trimmedEventId || !trimmedScheduleId) {
-    throw new Error('eventId and scheduleId are required');
-  }
-
-  const entries = readParticipantEntries_().filter(entry => entry.eventId === trimmedEventId && entry.scheduleId === trimmedScheduleId);
-  if (!entries.length) {
-    return [];
-  }
-
-  const accessToken = getFirebaseAccessToken_();
-  const now = Date.now();
-
-  const participantPath = `questionIntake/participants/${trimmedEventId}/${trimmedScheduleId}`;
-  const existingBranch = fetchRtdb_(participantPath, accessToken) || {};
-
-  let tokensBranch = {};
-  try {
-    tokensBranch = fetchRtdb_('questionIntake/tokens', accessToken) || {};
-  } catch (error) {
-    console.warn('Failed to fetch questionIntake/tokens during fetchQuestionParticipants_', error);
-    tokensBranch = {};
-  }
-
-  const scheduleNode = fetchRtdb_(`questionIntake/schedules/${trimmedEventId}/${trimmedScheduleId}`, accessToken) || {};
-  const eventNode = fetchRtdb_(`questionIntake/events/${trimmedEventId}`, accessToken) || {};
-
-  const nextParticipants = existingBranch && typeof existingBranch === 'object' ? { ...existingBranch } : {};
-  const usedTokens = new Set(Object.keys(tokensBranch));
-  Object.values(nextParticipants).forEach(record => {
-    const tokenValue = record && record.token ? String(record.token) : '';
-    if (tokenValue) {
-      usedTokens.add(tokenValue);
-    }
-  });
-
-  const tokenByKey = new Map();
-  Object.entries(tokensBranch).forEach(([token, record]) => {
-    if (!token || !record) return;
-    const mapKey = `${record.eventId || ''}::${record.scheduleId || ''}::${record.participantId || ''}`;
-    if (mapKey) {
-      tokenByKey.set(mapKey, { token, record });
-    }
-  });
-
-  const updates = {};
-  const tokenUpdates = {};
-  let insertedCount = 0;
-  const scheduleUpdatedAt = parseDateToMillis_(scheduleNode.updatedAt, 0);
-  let latestParticipantUpdate = scheduleUpdatedAt;
-
-  entries.forEach(entry => {
-    if (!entry || !entry.participantId) return;
-
-    const key = `${trimmedEventId}::${trimmedScheduleId}::${entry.participantId}`;
-    const existingRecord = nextParticipants[entry.participantId] && typeof nextParticipants[entry.participantId] === 'object'
-      ? { ...nextParticipants[entry.participantId] }
-      : null;
-
-    const sheetTimestamp = typeof entry.updatedAt === 'string' ? entry.updatedAt.trim() : '';
-    const hasSheetTimestamp = sheetTimestamp.length > 0;
-    const participantUpdatedAt = parseDateToMillis_(entry.updatedAt, 0);
-    const effectiveUpdatedAt = participantUpdatedAt > 0 ? participantUpdatedAt : now;
-    if (scheduleUpdatedAt) {
-      if (!hasSheetTimestamp && !existingRecord) {
-        return;
-      }
-      if (participantUpdatedAt > 0 && participantUpdatedAt < scheduleUpdatedAt) {
-        return;
-      }
-    }
-    const teamValue = String(entry.teamNumber || entry.groupNumber || '').trim();
-
-    let tokenValue = '';
-    let tokenRecord = {};
-    if (existingRecord && existingRecord.token) {
-      tokenValue = String(existingRecord.token);
-      tokenRecord = tokensBranch[tokenValue] || {};
-    } else {
-      const mapped = tokenByKey.get(key) || {};
-      tokenValue = mapped.token || '';
-      tokenRecord = mapped.record || {};
-    }
-
-    if (!tokenValue) {
-      tokenValue = generateQuestionToken_(usedTokens);
-      tokenRecord = {};
-    }
-
-    const existingGuidance = existingRecord && typeof existingRecord.guidance === 'string'
-      ? existingRecord.guidance
-      : '';
-    const guidance = existingGuidance || String(tokenRecord.guidance || '');
-
-    let recordToWrite = null;
-    if (existingRecord) {
-      const needsTokenUpdate = !existingRecord.token && tokenValue;
-      if (needsTokenUpdate) {
-        const merged = { ...existingRecord };
-        merged.token = tokenValue;
-        merged.guidance = guidance;
-        if (teamValue) {
-          merged.groupNumber = teamValue;
-          merged.teamNumber = teamValue;
-        }
-        merged.updatedAt = Math.max(parseDateToMillis_(existingRecord.updatedAt, effectiveUpdatedAt), effectiveUpdatedAt, now);
-        recordToWrite = merged;
-        nextParticipants[entry.participantId] = merged;
-        latestParticipantUpdate = Math.max(latestParticipantUpdate, merged.updatedAt || effectiveUpdatedAt, now);
-      }
-    } else {
-      const payload = {
-        participantId: entry.participantId,
-        uid: entry.uid || entry.participantId,
-        legacyParticipantId: entry.legacyParticipantId || '',
-        name: entry.name || '',
-        phonetic: entry.phonetic || entry.furigana || '',
-        furigana: entry.furigana || entry.phonetic || '',
-        gender: entry.gender || '',
-        department: entry.department || '',
-        phone: entry.phone || '',
-        email: entry.email || '',
-        groupNumber: teamValue,
-        teamNumber: teamValue,
-        status: entry.status || '',
-        isCancelled: entry.isCancelled === true,
-        isRelocated: entry.isRelocated === true,
-        token: tokenValue,
-        guidance,
-        updatedAt: effectiveUpdatedAt
-      };
-      recordToWrite = payload;
-      nextParticipants[entry.participantId] = payload;
-      insertedCount++;
-      latestParticipantUpdate = Math.max(latestParticipantUpdate, payload.updatedAt || effectiveUpdatedAt, now);
-    }
-
-    if (recordToWrite) {
-      updates[`${participantPath}/${entry.participantId}`] = recordToWrite;
-    }
-
-    if (tokenValue) {
-      const existingTokenRecord = tokensBranch[tokenValue] || {};
-      if (
-        !existingTokenRecord.participantId ||
-        existingTokenRecord.participantId !== entry.participantId ||
-        existingTokenRecord.scheduleId !== trimmedScheduleId ||
-        existingTokenRecord.eventId !== trimmedEventId
-      ) {
-        const fallbackName = existingRecord ? String(existingRecord.name || '') : '';
-        const fallbackGroup = existingRecord ? String(existingRecord.groupNumber || existingRecord.teamNumber || '') : '';
-        const scheduleLabel = String(scheduleNode.label || existingTokenRecord.scheduleLabel || '');
-        const scheduleDate = String(scheduleNode.date || existingTokenRecord.scheduleDate || '');
-        const scheduleStart = String(scheduleNode.startAt || existingTokenRecord.scheduleStart || '');
-        const scheduleEnd = String(scheduleNode.endAt || existingTokenRecord.scheduleEnd || '');
-        const tokenCreatedAt = parseDateToMillis_(existingTokenRecord.createdAt, effectiveUpdatedAt);
-        const tokenUpdatedAt = Math.max(parseDateToMillis_(existingTokenRecord.updatedAt, effectiveUpdatedAt), effectiveUpdatedAt, now);
-        tokenUpdates[tokenValue] = {
-          eventId: trimmedEventId,
-          eventName: String(eventNode.name || existingTokenRecord.eventName || ''),
-          scheduleId: trimmedScheduleId,
-          scheduleLabel,
-          scheduleDate,
-          scheduleStart,
-          scheduleEnd,
-          participantId: entry.participantId,
-          participantUid: entry.participantId || existingTokenRecord.participantUid || '',
-          displayName: String(entry.name || fallbackName || existingTokenRecord.displayName || ''),
-          groupNumber: teamValue || fallbackGroup || String(existingTokenRecord.groupNumber || ''),
-          teamNumber: teamValue || fallbackGroup || String(existingTokenRecord.teamNumber || ''),
-          guidance: guidance || existingTokenRecord.guidance || '',
-          revoked: false,
-          createdAt: tokenCreatedAt,
-          updatedAt: tokenUpdatedAt
-        };
-      }
-    }
-  });
-
-  Object.entries(tokenUpdates).forEach(([token, record]) => {
-    updates[`questionIntake/tokens/${token}`] = record;
-  });
-
-  if (insertedCount > 0) {
-    const participantCount = Object.keys(nextParticipants).length;
-    updates[`questionIntake/schedules/${trimmedEventId}/${trimmedScheduleId}/participantCount`] = participantCount;
-    const scheduleUpdatedAt = Math.max(latestParticipantUpdate || 0, parseDateToMillis_(scheduleNode.updatedAt, now));
-    updates[`questionIntake/schedules/${trimmedEventId}/${trimmedScheduleId}/updatedAt`] = scheduleUpdatedAt;
-    const eventUpdatedAt = Math.max(scheduleUpdatedAt, parseDateToMillis_(eventNode.updatedAt, now));
-    updates[`questionIntake/events/${trimmedEventId}/updatedAt`] = eventUpdatedAt;
-  }
-
-  if (Object.keys(updates).length) {
-    patchRtdb_(updates, accessToken);
-  }
-
-  const branchForReturn = nextParticipants;
-  return entries.map(entry => {
-    const current = branchForReturn[entry.participantId] || {};
-    const fallbackGroup = current.groupNumber || current.teamNumber || entry.teamNumber || entry.groupNumber || '';
-    const phonetic = current.phonetic || current.furigana || entry.phonetic || entry.furigana || '';
-    const furigana = current.furigana || current.phonetic || entry.furigana || entry.phonetic || '';
-    return {
-      participantId: current.participantId || entry.participantId,
-      name: current.name || entry.name,
-      phonetic,
-      furigana,
-      gender: current.gender || entry.gender || '',
-      department: current.department || entry.department || '',
-      phone: current.phone || entry.phone || '',
-      email: current.email || entry.email || '',
-      groupNumber: fallbackGroup,
-      teamNumber: fallbackGroup,
-      token: current.token || '',
-      guidance: current.guidance || ''
-    };
-  });
-}
-
-function saveQuestionParticipants_(eventId, scheduleId, entries) {
-  const trimmedEventId = String(eventId || '').trim();
-  const trimmedScheduleId = String(scheduleId || '').trim();
-  if (!trimmedEventId || !trimmedScheduleId) {
-    throw new Error('eventId and scheduleId are required');
-  }
-  assertEventExists_(trimmedEventId);
-  const schedules = readSchedules_();
-  const scheduleFound = schedules.find(schedule => schedule.eventId === trimmedEventId && schedule.id === trimmedScheduleId);
-  if (!scheduleFound) {
-    throw new Error('指定された日程が見つかりません。');
-  }
-
-  if (!Array.isArray(entries)) {
-    throw new Error('entries must be an array');
-  }
-
-  const deduped = [];
-  const seen = new Set();
-  entries.forEach(entry => {
-    if (!entry) return;
-    const uid = String(entry.uid || entry.participantId || entry.id || '').trim();
-    if (!uid) return;
-    if (seen.has(uid)) return;
-    seen.add(uid);
-    const name = normalizeNameKey_(entry.name || entry.displayName || '');
-    const phonetic = normalizeNameKey_(entry.phonetic || entry.furigana || '');
-    const gender = String(entry.gender || '').trim();
-    const department = String(entry.department || entry.faculty || '').trim();
-    const phone = String(entry.phone || '').trim();
-    const email = String(entry.email || '').trim();
-    const groupNumber = String(entry.groupNumber || entry.group || entry.teamNumber || '').trim();
-    const legacyId = String(entry.legacyParticipantId || '').trim();
-    const status = String(entry.status || '').trim();
-    const isCancelled = entry.isCancelled === true || /cancel/i.test(groupNumber);
-    const isRelocated = entry.isRelocated === true;
-    deduped.push({
-      participantId: uid,
-      uid,
-      legacyParticipantId: legacyId && legacyId !== uid ? legacyId : '',
-      name,
-      phonetic,
-      gender,
-      department,
-      phone,
-      email,
-      groupNumber,
-      status,
-      isCancelled,
-      isRelocated
-    });
-  });
-
-  const sheet = ensureQuestionParticipantSheet_();
-  const lastRow = sheet.getLastRow();
-  let existing = [];
-  if (lastRow >= 2) {
-    existing = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
-  }
-
-  const nextRows = [];
-  existing.forEach(row => {
-    const eventValue = String(row[0] || '').trim();
-    const scheduleValue = String(row[1] || '').trim();
-    if (!eventValue || !scheduleValue) {
-      return;
-    }
-    if (eventValue === trimmedEventId && scheduleValue === trimmedScheduleId) {
-      return;
-    }
-    nextRows.push([
-      eventValue,
-      scheduleValue,
-      String(row[2] || '').trim(),
-      normalizeNameKey_(row[3] || ''),
-      normalizeNameKey_(row[4] || ''),
-      String(row[5] || '').trim(),
-      String(row[6] || '').trim(),
-      String(row[7] || '').trim(),
-      String(row[8] || '').trim(),
-      String(row[9] || '').trim(),
-      row[10]
-    ]);
-  });
-
-  const now = new Date();
-  deduped.forEach(entry => {
-    nextRows.push([
-      trimmedEventId,
-      trimmedScheduleId,
-      entry.participantId,
-      entry.name,
-      entry.phonetic,
-      entry.gender,
-      entry.department,
-      entry.phone,
-      entry.email,
-      entry.groupNumber,
-      now
-    ]);
-  });
-
-  if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, 11).clearContent();
-  }
-  if (nextRows.length) {
-    const requiredRows = nextRows.length + 1;
-    if (sheet.getMaxRows() < requiredRows) {
-      sheet.insertRowsAfter(sheet.getMaxRows(), requiredRows - sheet.getMaxRows());
-    }
-    sheet.getRange(2, 1, nextRows.length, 11).setValues(nextRows);
-  }
-
-  mirrorQuestionIntake_();
-  return {
-    count: deduped.length,
-    participants: fetchQuestionParticipants_(trimmedEventId, trimmedScheduleId)
-  };
-}
-
-function fetchQuestionContext_(payload) {
-  const eventId = String(payload.eventId || payload.event || '').trim();
-  const scheduleId = String(payload.scheduleId || payload.schedule || '').trim();
-  const participantId = String(payload.participantId || payload.participant || payload.id || '').trim();
-
-  if (!eventId || !scheduleId || !participantId) {
-    throw new Error('アクセスに必要な情報が不足しています。');
-  }
-
-  const events = listQuestionEvents_();
-  const event = events.find(evt => evt.id === eventId);
-  if (!event) {
-    throw new Error('イベント情報が見つかりません。担当者にお問い合わせください。');
-  }
-  const schedule = (event.schedules || []).find(s => s.id === scheduleId);
-  if (!schedule) {
-    throw new Error('日程情報が見つかりません。担当者にお問い合わせください。');
-  }
-
-  const participants = fetchQuestionParticipants_(eventId, scheduleId);
-  const participant = participants.find(entry => entry.participantId === participantId);
-  if (!participant) {
-    throw new Error('参加者情報が確認できません。担当者にお問い合わせください。');
-  }
-
-  return {
-    eventId,
-    eventName: event.name,
-    scheduleId,
-    scheduleLabel: schedule.label || schedule.date || '',
-    scheduleDate: schedule.date || '',
-    scheduleStart: schedule.startAt || '',
-    scheduleEnd: schedule.endAt || '',
-    participantId,
-    participantName: participant.name,
-    groupNumber: participant.teamNumber || participant.groupNumber || '',
-    teamNumber: participant.teamNumber || participant.groupNumber || ''
-  };
-}
-
 function ensureAdmin_(principal){
   const uid   = principal && principal.uid;
   const email = String(principal && principal.email || '').trim().toLowerCase();
@@ -2815,131 +512,6 @@ function rtdbUrl_(path){
   const FIREBASE_DB_URL = PropertiesService.getScriptProperties().getProperty('FIREBASE_DB_URL');
   return FIREBASE_DB_URL.replace(/\/$/, '') + '/' + String(path || '').replace(/^\//,'') + '.json';
 }
-
-function mirrorSheetToRtdb_(){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  ensureQuestionUids_();
-  const questionSheet = ss.getSheetByName(QUESTION_SHEET_NAME);
-  if (!questionSheet) throw new Error(`Sheet "${QUESTION_SHEET_NAME}" not found.`);
-  const pickupSheet = ss.getSheetByName(PICKUP_QUESTION_SHEET_NAME);
-
-  const sources = [
-    { info: ensureQuestionSheetInfoWithEventColumns_(questionSheet), type: 'normal' }
-  ];
-  if (pickupSheet) {
-    sources.push({ info: ensureQuestionSheetInfoWithEventColumns_(pickupSheet), type: 'pickup' });
-  }
-  const now = Date.now();
-  const questionBranch = { normal: {}, pickup: {} };
-  const statusBranch = {};
-
-  sources.forEach(source => {
-    const info = source.info;
-    if (!info || !info.sheet || !info.rows.length) {
-      return;
-    }
-
-    const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
-    const questionIdx = getHeaderIndex_(info.headerMap, '質問・お悩み');
-    if (uidIdx == null || questionIdx == null) {
-      throw new Error(`Sheet "${info.sheet.getName()}" is missing required columns (UID/質問・お悩み)`);
-    }
-
-    const answeredIdx = getHeaderIndex_(info.headerMap, '回答済');
-    const selectingIdx = getHeaderIndex_(info.headerMap, '選択中');
-    const genreIdx = getHeaderIndex_(info.headerMap, 'ジャンル');
-    const groupIdx = getHeaderIndex_(info.headerMap, '班番号');
-    const participantIdx = getHeaderIndex_(info.headerMap, '参加者ID');
-    const eventIdIdx = getHeaderIndex_(info.headerMap, 'イベントID');
-    const scheduleIdIdx = getHeaderIndex_(info.headerMap, '日程ID');
-    const tsIdx = getHeaderIndex_(info.headerMap, ['タイムスタンプ', 'timestamp']);
-    const startIdx = getHeaderIndex_(info.headerMap, ['開始日時', '日程開始']);
-    const endIdx = getHeaderIndex_(info.headerMap, ['終了日時', '日程終了']);
-    const nameIdx = getHeaderIndex_(info.headerMap, 'ラジオネーム');
-    const scheduleLabelIdx = getHeaderIndex_(info.headerMap, ['日程', '日程表示']);
-    const scheduleDateIdx = getHeaderIndex_(info.headerMap, '日程日付');
-    const eventNameIdx = getHeaderIndex_(info.headerMap, 'イベント名');
-    const participantNameIdx = getHeaderIndex_(info.headerMap, ['参加者名', '氏名']);
-    const guidanceIdx = getHeaderIndex_(info.headerMap, ['ガイダンス', '案内文']);
-    const questionLengthIdx = getHeaderIndex_(info.headerMap, '質問文字数');
-
-    info.rows.forEach(row => {
-      const uid = String(row[uidIdx] || '').trim();
-      if (!uid) {
-        return;
-      }
-
-      const tsValue = tsIdx != null ? row[tsIdx] : null;
-      const tsMs = parseSpreadsheetTimestamp_(tsValue);
-
-      const rawName = nameIdx != null ? String(row[nameIdx] || '') : '';
-      const name = rawName || (source.type === 'pickup' ? 'Pick Up Question' : '');
-
-      const startValue = startIdx != null ? row[startIdx] : '';
-      const endValue = endIdx != null ? row[endIdx] : '';
-      const scheduleStart = startIdx != null ? toIsoStringOrValue_(startValue) : '';
-      const scheduleEnd = endIdx != null ? toIsoStringOrValue_(endValue) : '';
-      const scheduleLabelCell = scheduleLabelIdx != null ? row[scheduleLabelIdx] : '';
-      const scheduleLabel = scheduleLabelCell ? String(scheduleLabelCell || '').trim() : formatScheduleLabel_(startValue, endValue);
-
-      const participantId = participantIdx != null ? String(row[participantIdx] || '').trim() : '';
-      const eventId = eventIdIdx != null ? String(row[eventIdIdx] || '').trim() : '';
-      const scheduleId = scheduleIdIdx != null ? String(row[scheduleIdIdx] || '').trim() : '';
-      const groupValue = groupIdx != null ? String(row[groupIdx] || '').trim() : '';
-      const genreValue = genreIdx != null ? String(row[genreIdx] || '').trim() : '';
-      const scheduleDate = scheduleDateIdx != null ? row[scheduleDateIdx] : '';
-      const eventName = eventNameIdx != null ? String(row[eventNameIdx] || '').trim() : '';
-      const participantName = participantNameIdx != null ? String(row[participantNameIdx] || '').trim() : '';
-      const guidance = guidanceIdx != null ? String(row[guidanceIdx] || '').trim() : '';
-      const questionLength = questionLengthIdx != null ? Number(row[questionLengthIdx]) : null;
-
-      const targetBranch = source.type === 'pickup' ? questionBranch.pickup : questionBranch.normal;
-      const record = {
-        uid,
-        name,
-        question: String(row[questionIdx] || ''),
-        group: groupValue,
-        genre: genreValue,
-        schedule: scheduleLabel,
-        scheduleStart,
-        scheduleEnd,
-        scheduleDate: scheduleDate ? String(scheduleDate || '').trim() : '',
-        participantId,
-        participantName,
-        guidance,
-        eventId,
-        eventName,
-        scheduleId,
-        ts: tsMs || 0,
-        updatedAt: now,
-        type: source.type
-      };
-      if (source.type === 'pickup') {
-        record.pickup = true;
-      }
-      if (Number.isFinite(questionLength) && questionLength > 0) {
-        record.questionLength = Number(questionLength);
-      }
-      targetBranch[uid] = record;
-
-      statusBranch[uid] = {
-        answered: answeredIdx != null ? toBooleanCell_(row[answeredIdx]) : false,
-        selecting: selectingIdx != null ? toBooleanCell_(row[selectingIdx]) : false,
-        updatedAt: now
-      };
-    });
-  });
-
-  const updates = {
-    'questions/normal': questionBranch.normal,
-    'questions/pickup': questionBranch.pickup,
-    questionStatus: statusBranch
-  };
-  const token = getFirebaseAccessToken_();
-  patchRtdb_(updates, token);
-  return { count: Object.keys(questionBranch.normal).length + Object.keys(questionBranch.pickup).length, status: 200 };
-}
-
 function logAction_(principal, actionType, details) {
   const now = new Date();
   const timestampMs = now.getTime();
@@ -2969,53 +541,6 @@ function logAction_(principal, actionType, details) {
     }
   }
   return { ok: true, id: name };
-}
-
-function ensureBackupSheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheetName = 'backups';
-  let sheet = ss.getSheetByName(sheetName);
-  if (!sheet) {
-    sheet = ss.insertSheet(sheetName);
-  }
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['Timestamp', 'Data']);
-  }
-  return sheet;
-}
-
-function backupRealtimeDatabase_() {
-  const token = getFirebaseAccessToken_();
-  const snapshot = fetchRtdb_('', token) || {};
-  const sheet = ensureBackupSheet_();
-  const now = new Date();
-  sheet.appendRow([now, JSON.stringify(snapshot)]);
-  return {
-    timestamp: toIsoJst_(now),
-    rowCount: Math.max(0, sheet.getLastRow() - 1)
-  };
-}
-
-function restoreRealtimeDatabase_() {
-  const sheet = ensureBackupSheet_();
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) {
-    throw new Error('バックアップが存在しません。');
-  }
-  const [[rawTimestamp, rawPayload]] = sheet.getRange(lastRow, 1, 1, 2).getValues();
-  if (!rawPayload) {
-    throw new Error('バックアップデータが空です。');
-  }
-  let data;
-  try {
-    data = JSON.parse(rawPayload);
-  } catch (error) {
-    throw new Error('バックアップデータの解析に失敗しました。');
-  }
-  const token = getFirebaseAccessToken_();
-  putRtdb_('', data, token);
-  const timestamp = rawTimestamp instanceof Date ? toIsoJst_(rawTimestamp) : String(rawTimestamp || '');
-  return { timestamp };
 }
 
 function ensureBackupSheet_() {
@@ -4035,261 +1560,6 @@ function assertOperatorForEvent_(principal, eventId) {
     throw new Error('このイベントに対する操作権限がありません。');
   }
 }
-
-function updateSelectingStatus(uid) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  ensureQuestionUids_();
-  const infos = QUESTION_SHEET_NAMES.map(name => {
-    const sheet = ss.getSheetByName(name);
-    if (!sheet) return null;
-    return readSheetWithHeaders_(sheet);
-  }).filter(info => info && info.sheet);
-
-  if (!infos.length) {
-    throw new Error('Question sheets are not available.');
-  }
-
-  const targetUid = String(uid || '').trim();
-  if (!targetUid) {
-    throw new Error('UID is required.');
-  }
-
-  let target = null;
-  infos.forEach(info => {
-    if (target) return;
-    const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
-    if (uidIdx == null) return;
-    for (let i = 0; i < info.rows.length; i++) {
-      if (String(info.rows[i][uidIdx] || '').trim() === targetUid) {
-        target = {
-          sheet: info.sheet,
-          rowNumber: i + 2,
-          selectingIdx: getHeaderIndex_(info.headerMap, '選択中')
-        };
-        break;
-      }
-    }
-  });
-
-  if (!target) {
-    throw new Error(`UID: ${uid} not found.`);
-  }
-  if (target.selectingIdx == null) {
-    throw new Error('Column "選択中" not found.');
-  }
-
-  infos.forEach(info => {
-    const selectingIdx = getHeaderIndex_(info.headerMap, '選択中');
-    if (selectingIdx == null) return;
-    if (!info.rows.length) return;
-    const range = info.sheet.getRange(2, selectingIdx + 1, info.rows.length, 1);
-    const cleared = info.rows.map(() => [false]);
-    range.setValues(cleared);
-  });
-
-  target.sheet.getRange(target.rowNumber, target.selectingIdx + 1).setValue(true);
-  const statusUpdates = {};
-  const now = Date.now();
-  infos.forEach(info => {
-    const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
-    if (uidIdx == null) return;
-    info.rows.forEach(row => {
-      const rowUid = String(row[uidIdx] || '').trim();
-      if (!rowUid || rowUid === targetUid) return;
-      statusUpdates[`questionStatus/${rowUid}/selecting`] = false;
-      statusUpdates[`questionStatus/${rowUid}/updatedAt`] = now;
-    });
-  });
-  statusUpdates[`questionStatus/${targetUid}/selecting`] = true;
-  statusUpdates[`questionStatus/${targetUid}/updatedAt`] = Date.now();
-  try {
-    patchRtdb_(statusUpdates, getFirebaseAccessToken_());
-  } catch (error) {
-    console.warn('updateSelectingStatus failed to patch RTDB', error);
-  }
-  return { success: true, message: `UID: ${uid} is now selecting.` };
-}
-
-function editQuestionText(uid, newText) {
-  if (!uid || typeof newText === 'undefined') {
-    throw new Error('UID and new text are required.');
-  }
-  const match = findQuestionRowByUid_(uid);
-  if (!match) {
-    throw new Error(`UID: ${uid} not found.`);
-  }
-  const questionIdx = getHeaderIndex_(match.headerMap, '質問・お悩み');
-  if (questionIdx == null) {
-    throw new Error('Column "質問・お悩み" not found.');
-  }
-  match.sheet.getRange(match.rowNumber, questionIdx + 1).setValue(newText);
-  return { success: true, message: `UID: ${uid} question updated.` };
-}
-
-function createPickupQuestion(question, genre) {
-  const normalizedQuestion = String(question || '').trim();
-  if (!normalizedQuestion) {
-    throw new Error('質問内容を入力してください。');
-  }
-  const normalizedGenre = String(genre || '').trim() || 'その他';
-  const { sheet, info, uidIdx, questionIdx, genreIdx } =
-    ensurePickupQuestionSheetStructure_();
-  if (sheet == null || uidIdx == null || questionIdx == null || genreIdx == null) {
-    throw new Error('Pick Up Question シートの構成が正しくありません。');
-  }
-  const existingUids = new Set();
-  info.rows.forEach((row) => {
-    const value = String(row[uidIdx] || '').trim();
-    if (value) existingUids.add(value);
-  });
-  let newUid = '';
-  do {
-    newUid = Utilities.getUuid();
-  } while (existingUids.has(newUid));
-
-  const now = new Date();
-  const rowValues = new Array(info.headers.length).fill('');
-  info.headers.forEach((header, index) => {
-    switch (String(header || '').trim()) {
-      case 'UID':
-        rowValues[index] = newUid;
-        break;
-      case '質問・お悩み':
-        rowValues[index] = normalizedQuestion;
-        break;
-      case 'ジャンル':
-        rowValues[index] = normalizedGenre;
-        break;
-      case '回答済':
-      case '選択中':
-        rowValues[index] = false;
-        break;
-      case 'タイムスタンプ':
-        rowValues[index] = formatQuestionTimestamp_(now);
-        break;
-      default:
-        rowValues[index] = '';
-    }
-  });
-  sheet.appendRow(rowValues);
-
-  const nowMs = Date.now();
-  const token = getFirebaseAccessToken_();
-  const record = {
-    uid: newUid,
-    name: 'Pick Up Question',
-    question: normalizedQuestion,
-    genre: normalizedGenre,
-    pickup: true,
-    type: 'pickup',
-    schedule: '',
-    scheduleStart: '',
-    scheduleEnd: '',
-    scheduleDate: '',
-    participantId: '',
-    participantName: '',
-    guidance: '',
-    eventId: '',
-    eventName: '',
-    scheduleId: '',
-    ts: nowMs,
-    updatedAt: nowMs
-  };
-  const updates = {};
-  updates[`questions/pickup/${newUid}`] = record;
-  updates[`questionStatus/${newUid}`] = { answered: false, selecting: false, pickup: true, updatedAt: nowMs };
-  patchRtdb_(updates, token);
-  return { success: true, question: { uid: newUid, question: normalizedQuestion, genre: normalizedGenre } };
-}
-
-function updatePickupQuestion(uid, question, genre) {
-  const normalizedUid = String(uid || '').trim();
-  if (!normalizedUid) {
-    throw new Error('UID is required.');
-  }
-  const normalizedQuestion = String(question || '').trim();
-  if (!normalizedQuestion) {
-    throw new Error('質問内容を入力してください。');
-  }
-  const normalizedGenre = String(genre || '').trim() || 'その他';
-  const match = findQuestionRowByUid_(normalizedUid);
-  if (!match || match.sheet.getName() !== PICKUP_QUESTION_SHEET_NAME) {
-    throw new Error('指定した Pick Up Question が見つかりませんでした。');
-  }
-  const questionIdx = getHeaderIndex_(match.headerMap, '質問・お悩み');
-  const genreIdx = getHeaderIndex_(match.headerMap, 'ジャンル');
-  if (questionIdx == null || genreIdx == null) {
-    throw new Error('Pick Up Question シートに必要な列がありません。');
-  }
-  match.sheet.getRange(match.rowNumber, questionIdx + 1).setValue(normalizedQuestion);
-  match.sheet.getRange(match.rowNumber, genreIdx + 1).setValue(normalizedGenre);
-  const timestampIdx = getHeaderIndex_(match.headerMap, ['タイムスタンプ', 'timestamp']);
-  if (timestampIdx != null) {
-    match.sheet.getRange(match.rowNumber, timestampIdx + 1).setValue(formatQuestionTimestamp_(new Date()));
-  }
-
-  const token = getFirebaseAccessToken_();
-  let current = null;
-  try {
-    current = fetchRtdb_(`questions/pickup/${normalizedUid}`, token);
-  } catch (error) {
-    current = null;
-  }
-  const nextRecord = current && typeof current === 'object' ? { ...current } : { uid: normalizedUid };
-  nextRecord.uid = normalizedUid;
-  nextRecord.question = normalizedQuestion;
-  nextRecord.genre = normalizedGenre;
-  nextRecord.pickup = true;
-  nextRecord.type = 'pickup';
-  nextRecord.name = String(nextRecord.name || 'Pick Up Question');
-  nextRecord.updatedAt = Date.now();
-  const updates = {};
-  updates[`questions/pickup/${normalizedUid}`] = nextRecord;
-  updates[`questionStatus/${normalizedUid}/updatedAt`] = nextRecord.updatedAt;
-  updates[`questionStatus/${normalizedUid}/pickup`] = true;
-  patchRtdb_(updates, token);
-  return { success: true, message: `UID: ${normalizedUid} updated.` };
-}
-
-function deletePickupQuestion(uid) {
-  const normalizedUid = String(uid || '').trim();
-  if (!normalizedUid) {
-    throw new Error('UID is required.');
-  }
-  const match = findQuestionRowByUid_(normalizedUid);
-  if (!match || match.sheet.getName() !== PICKUP_QUESTION_SHEET_NAME) {
-    throw new Error('指定した Pick Up Question が見つかりませんでした。');
-  }
-  match.sheet.deleteRow(match.rowNumber);
-  const updates = {};
-  updates[`questions/pickup/${normalizedUid}`] = null;
-  updates[`questionStatus/${normalizedUid}`] = null;
-  patchRtdb_(updates, getFirebaseAccessToken_());
-  return { success: true, message: `UID: ${normalizedUid} deleted.` };
-}
-
-function updateAnswerStatus(uid, status) {
-  const match = findQuestionRowByUid_(uid);
-  if (!match) {
-    throw new Error(`UID: ${uid} not found.`);
-  }
-  const answeredIdx = getHeaderIndex_(match.headerMap, '回答済');
-  if (answeredIdx == null) {
-    throw new Error('Column "回答済" not found.');
-  }
-  const isAnswered = status === true || status === 'true' || status === 1;
-  match.sheet.getRange(match.rowNumber, answeredIdx + 1).setValue(isAnswered);
-  const updates = {};
-  updates[`questionStatus/${uid}/answered`] = isAnswered;
-  updates[`questionStatus/${uid}/updatedAt`] = Date.now();
-  try {
-    patchRtdb_(updates, getFirebaseAccessToken_());
-  } catch (error) {
-    console.warn('updateAnswerStatus failed to patch RTDB', error);
-  }
-  return { success: true, message: `UID: ${uid} updated.` };
-}
-
 function normalizeDictionaryEnabled_(value) {
   if (value === true || value === false) {
     return value;
@@ -4530,540 +1800,6 @@ function batchToggleDictionaryTerms(uids, enabled) {
   }
   return { success: true, message: `${updated} entries updated.` };
 }
-
-function createPickupQuestion(question, genre) {
-  const normalizedQuestion = String(question || '').trim();
-  if (!normalizedQuestion) {
-    throw new Error('質問内容を入力してください。');
-  }
-  const normalizedGenre = String(genre || '').trim() || 'その他';
-  const { sheet, info, uidIdx, questionIdx, genreIdx } =
-    ensurePickupQuestionSheetStructure_();
-  if (sheet == null || uidIdx == null || questionIdx == null || genreIdx == null) {
-    throw new Error('Pick Up Question シートの構成が正しくありません。');
-  }
-  const existingUids = new Set();
-  info.rows.forEach((row) => {
-    const value = String(row[uidIdx] || '').trim();
-    if (value) existingUids.add(value);
-  });
-  let newUid = '';
-  do {
-    newUid = Utilities.getUuid();
-  } while (existingUids.has(newUid));
-
-  const now = new Date();
-  const rowValues = new Array(info.headers.length).fill('');
-  info.headers.forEach((header, index) => {
-    switch (String(header || '').trim()) {
-      case 'UID':
-        rowValues[index] = newUid;
-        break;
-      case '質問・お悩み':
-        rowValues[index] = normalizedQuestion;
-        break;
-      case 'ジャンル':
-        rowValues[index] = normalizedGenre;
-        break;
-      case '回答済':
-      case '選択中':
-        rowValues[index] = false;
-        break;
-      case 'タイムスタンプ':
-        rowValues[index] = formatQuestionTimestamp_(now);
-        break;
-      default:
-        rowValues[index] = '';
-    }
-  });
-  sheet.appendRow(rowValues);
-
-  const nowMs = Date.now();
-  const token = getFirebaseAccessToken_();
-  const record = {
-    uid: newUid,
-    name: 'Pick Up Question',
-    question: normalizedQuestion,
-    genre: normalizedGenre,
-    pickup: true,
-    type: 'pickup',
-    schedule: '',
-    scheduleStart: '',
-    scheduleEnd: '',
-    scheduleDate: '',
-    participantId: '',
-    participantName: '',
-    guidance: '',
-    eventId: '',
-    eventName: '',
-    scheduleId: '',
-    ts: nowMs,
-    updatedAt: nowMs
-  };
-  const updates = {};
-  updates[`questions/pickup/${newUid}`] = record;
-  updates[`questionStatus/${newUid}`] = { answered: false, selecting: false, pickup: true, updatedAt: nowMs };
-  patchRtdb_(updates, token);
-  return { success: true, question: { uid: newUid, question: normalizedQuestion, genre: normalizedGenre } };
-}
-
-function updatePickupQuestion(uid, question, genre) {
-  const normalizedUid = String(uid || '').trim();
-  if (!normalizedUid) {
-    throw new Error('UID is required.');
-  }
-  const normalizedQuestion = String(question || '').trim();
-  if (!normalizedQuestion) {
-    throw new Error('質問内容を入力してください。');
-  }
-  const normalizedGenre = String(genre || '').trim() || 'その他';
-  const match = findQuestionRowByUid_(normalizedUid);
-  if (!match || match.sheet.getName() !== PICKUP_QUESTION_SHEET_NAME) {
-    throw new Error('指定した Pick Up Question が見つかりませんでした。');
-  }
-  const questionIdx = getHeaderIndex_(match.headerMap, '質問・お悩み');
-  const genreIdx = getHeaderIndex_(match.headerMap, 'ジャンル');
-  if (questionIdx == null || genreIdx == null) {
-    throw new Error('Pick Up Question シートに必要な列がありません。');
-  }
-  match.sheet.getRange(match.rowNumber, questionIdx + 1).setValue(normalizedQuestion);
-  match.sheet.getRange(match.rowNumber, genreIdx + 1).setValue(normalizedGenre);
-  const timestampIdx = getHeaderIndex_(match.headerMap, ['タイムスタンプ', 'timestamp']);
-  if (timestampIdx != null) {
-    match.sheet.getRange(match.rowNumber, timestampIdx + 1).setValue(formatQuestionTimestamp_(new Date()));
-  }
-
-  const token = getFirebaseAccessToken_();
-  let current = null;
-  try {
-    current = fetchRtdb_(`questions/pickup/${normalizedUid}`, token);
-  } catch (error) {
-    current = null;
-  }
-  const nextRecord = current && typeof current === 'object' ? { ...current } : { uid: normalizedUid };
-  nextRecord.uid = normalizedUid;
-  nextRecord.question = normalizedQuestion;
-  nextRecord.genre = normalizedGenre;
-  nextRecord.pickup = true;
-  nextRecord.type = 'pickup';
-  nextRecord.name = String(nextRecord.name || 'Pick Up Question');
-  nextRecord.updatedAt = Date.now();
-  const updates = {};
-  updates[`questions/pickup/${normalizedUid}`] = nextRecord;
-  updates[`questionStatus/${normalizedUid}/updatedAt`] = nextRecord.updatedAt;
-  updates[`questionStatus/${normalizedUid}/pickup`] = true;
-  patchRtdb_(updates, token);
-  return { success: true, message: `UID: ${normalizedUid} updated.` };
-}
-
-function deletePickupQuestion(uid) {
-  const normalizedUid = String(uid || '').trim();
-  if (!normalizedUid) {
-    throw new Error('UID is required.');
-  }
-  const match = findQuestionRowByUid_(normalizedUid);
-  if (!match || match.sheet.getName() !== PICKUP_QUESTION_SHEET_NAME) {
-    throw new Error('指定した Pick Up Question が見つかりませんでした。');
-  }
-  match.sheet.deleteRow(match.rowNumber);
-  const updates = {};
-  updates[`questions/pickup/${normalizedUid}`] = null;
-  updates[`questionStatus/${normalizedUid}`] = null;
-  patchRtdb_(updates, getFirebaseAccessToken_());
-  return { success: true, message: `UID: ${normalizedUid} deleted.` };
-}
-
-function updateAnswerStatus(uid, status) {
-  const match = findQuestionRowByUid_(uid);
-  if (!match) {
-    throw new Error(`UID: ${uid} not found.`);
-  }
-  const answeredIdx = getHeaderIndex_(match.headerMap, '回答済');
-  if (answeredIdx == null) {
-    throw new Error('Column "回答済" not found.');
-  }
-  const isAnswered = status === true || status === 'true' || status === 1;
-  match.sheet.getRange(match.rowNumber, answeredIdx + 1).setValue(isAnswered);
-  const updates = {};
-  updates[`questionStatus/${uid}/answered`] = isAnswered;
-  updates[`questionStatus/${uid}/updatedAt`] = Date.now();
-  try {
-    patchRtdb_(updates, getFirebaseAccessToken_());
-  } catch (error) {
-    console.warn('updateAnswerStatus failed to patch RTDB', error);
-  }
-  return { success: true, message: `UID: ${uid} updated.` };
-}
-
-function ensureDictionarySheetStructure_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName('dictionary');
-  if (!sheet) {
-    throw new Error('Dictionary sheet not found.');
-  }
-  let info = readSheetWithHeaders_(sheet);
-  if (!info.sheet) {
-    return { sheet, info, uidIdx: null, termIdx: null, rubyIdx: null, enabledIdx: null };
-  }
-  const headers = Array.isArray(info.headers) ? info.headers.slice() : [];
-  const normalized = headers.map((header) => normalizeHeaderKey_(header));
-  const required = [
-    { key: 'term', header: 'term' },
-    { key: 'ruby', header: 'ruby' },
-    { key: 'enabled', header: 'enabled' },
-    { key: 'uid', header: 'uid' }
-  ];
-  let changed = false;
-  required.forEach(({ key, header }) => {
-    if (!normalized.includes(key)) {
-      headers.push(header);
-      normalized.push(key);
-      changed = true;
-    }
-  });
-  if (changed) {
-    const columnCount = headers.length;
-    const maxColumns = sheet.getMaxColumns();
-    if (maxColumns < columnCount) {
-      sheet.insertColumnsAfter(maxColumns, columnCount - maxColumns);
-    }
-    sheet.getRange(1, 1, 1, columnCount).setValues([headers]);
-    info = readSheetWithHeaders_(sheet);
-  }
-  let uidIdx = getHeaderIndex_(info.headerMap, 'uid');
-  let termIdx = getHeaderIndex_(info.headerMap, 'term');
-  let rubyIdx = getHeaderIndex_(info.headerMap, 'ruby');
-  let enabledIdx = getHeaderIndex_(info.headerMap, 'enabled');
-  if (uidIdx == null || termIdx == null || rubyIdx == null || enabledIdx == null) {
-    info = readSheetWithHeaders_(sheet);
-    uidIdx = getHeaderIndex_(info.headerMap, 'uid');
-    termIdx = getHeaderIndex_(info.headerMap, 'term');
-    rubyIdx = getHeaderIndex_(info.headerMap, 'ruby');
-    enabledIdx = getHeaderIndex_(info.headerMap, 'enabled');
-  }
-  if (uidIdx == null) {
-    throw new Error('Failed to ensure dictionary UID column.');
-  }
-  const missing = [];
-  info.rows.forEach((row, index) => {
-    const uid = String(row[uidIdx] || '').trim();
-    if (!uid) {
-      missing.push({ index, rowNumber: index + 2, columnNumber: uidIdx + 1 });
-    }
-  });
-  if (missing.length) {
-    missing.forEach((item) => {
-      sheet.getRange(item.rowNumber, item.columnNumber).setValue(Utilities.getUuid());
-    });
-    info = readSheetWithHeaders_(sheet);
-    uidIdx = getHeaderIndex_(info.headerMap, 'uid');
-    termIdx = getHeaderIndex_(info.headerMap, 'term');
-    rubyIdx = getHeaderIndex_(info.headerMap, 'ruby');
-    enabledIdx = getHeaderIndex_(info.headerMap, 'enabled');
-  }
-  return { sheet, info, uidIdx, termIdx, rubyIdx, enabledIdx };
-}
-
-function normalizeDictionaryEnabled_(value) {
-  if (value === true || value === false) {
-    return value;
-  }
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (['', '0', 'false', 'off', 'no'].includes(normalized)) {
-      return false;
-    }
-    if (['1', 'true', 'on', 'yes'].includes(normalized)) {
-      return true;
-    }
-  }
-  if (typeof value === 'number') {
-    return value !== 0;
-  }
-  return Boolean(value);
-}
-
-function findDictionaryRowByUid_(info, uidIdx, uid) {
-  const normalized = String(uid || '').trim();
-  if (!normalized) {
-    return null;
-  }
-  for (let i = 0; i < info.rows.length; i++) {
-    const rowUid = String(info.rows[i][uidIdx] || '').trim();
-    if (rowUid === normalized) {
-      return { index: i, rowNumber: i + 2, values: info.rows[i] };
-    }
-  }
-  return null;
-}
-
-function addDictionaryTerm(term, ruby, providedUid) {
-  const normalizedTerm = String(term || '').trim();
-  const normalizedRuby = String(ruby || '').trim();
-  if (!normalizedTerm || !normalizedRuby) {
-    throw new Error('Term and ruby are required.');
-  }
-  const { sheet, info, uidIdx, termIdx, rubyIdx, enabledIdx } = ensureDictionarySheetStructure_();
-  if (sheet == null || uidIdx == null || termIdx == null || rubyIdx == null || enabledIdx == null) {
-    throw new Error('Dictionary sheet is not properly configured.');
-  }
-  const suppliedUid = String(providedUid || '').trim();
-  const token = getFirebaseAccessToken_();
-  const now = Date.now();
-  for (let i = 0; i < info.rows.length; i++) {
-    const rowTerm = String(info.rows[i][termIdx] || '').trim();
-    if (rowTerm === normalizedTerm) {
-      const rowNumber = i + 2;
-      sheet.getRange(rowNumber, rubyIdx + 1).setValue(normalizedRuby);
-      sheet.getRange(rowNumber, enabledIdx + 1).setValue(true);
-      let uid = String(info.rows[i][uidIdx] || '').trim();
-      if (!uid) {
-        uid = suppliedUid || Utilities.getUuid();
-        sheet.getRange(rowNumber, uidIdx + 1).setValue(uid);
-      }
-      const updates = {};
-      updates[`dictionary/${uid}`] = {
-        uid,
-        term: normalizedTerm,
-        ruby: normalizedRuby,
-        enabled: true,
-        updatedAt: now
-      };
-      patchRtdb_(updates, token);
-      return { success: true, message: `Term "${normalizedTerm}" updated.`, uid };
-    }
-  }
-  const headers = info.headers || [];
-  const newUid = suppliedUid || Utilities.getUuid();
-  const rowValues = headers.map((header, column) => {
-    const key = normalizeHeaderKey_(header);
-    if (key === 'term') return normalizedTerm;
-    if (key === 'ruby') return normalizedRuby;
-    if (key === 'enabled') return true;
-    if (key === 'uid') return newUid;
-    if (key === 'type') return 'default';
-    return '';
-  });
-  sheet.appendRow(rowValues);
-  const updates = {};
-  updates[`dictionary/${newUid}`] = {
-    uid: newUid,
-    term: normalizedTerm,
-    ruby: normalizedRuby,
-    enabled: true,
-    updatedAt: now
-  };
-  patchRtdb_(updates, token);
-  return { success: true, message: `Term "${normalizedTerm}" added.`, uid: newUid };
-}
-
-function updateDictionaryTerm(uid, term, ruby) {
-  const normalizedUid = String(uid || '').trim();
-  const normalizedTerm = String(term || '').trim();
-  const normalizedRuby = String(ruby || '').trim();
-  if (!normalizedUid) {
-    throw new Error('Term UID is required.');
-  }
-  if (!normalizedTerm || !normalizedRuby) {
-    throw new Error('Term and ruby are required.');
-  }
-  const { sheet, info, uidIdx, termIdx, rubyIdx, enabledIdx } = ensureDictionarySheetStructure_();
-  if (sheet == null || uidIdx == null || termIdx == null || rubyIdx == null) {
-    throw new Error('Dictionary sheet is not properly configured.');
-  }
-  const rowInfo = findDictionaryRowByUid_(info, uidIdx, normalizedUid);
-  if (!rowInfo) {
-    throw new Error('Term not found: ' + normalizedUid);
-  }
-  for (let i = 0; i < info.rows.length; i++) {
-    if (i === rowInfo.index) continue;
-    const rowTerm = String(info.rows[i][termIdx] || '').trim();
-    const rowUid = String(info.rows[i][uidIdx] || '').trim();
-    if (rowTerm && rowTerm === normalizedTerm && rowUid !== normalizedUid) {
-      throw new Error('同じ単語が別の UID に紐づいています。');
-    }
-  }
-  const rowNumber = rowInfo.rowNumber;
-  sheet.getRange(rowNumber, termIdx + 1).setValue(normalizedTerm);
-  sheet.getRange(rowNumber, rubyIdx + 1).setValue(normalizedRuby);
-  if (enabledIdx != null) {
-    sheet.getRange(rowNumber, enabledIdx + 1).setValue(true);
-  }
-  info.rows[rowInfo.index][termIdx] = normalizedTerm;
-  info.rows[rowInfo.index][rubyIdx] = normalizedRuby;
-  if (enabledIdx != null) {
-    info.rows[rowInfo.index][enabledIdx] = true;
-  }
-  const updates = {};
-  updates[`dictionary/${normalizedUid}`] = {
-    uid: normalizedUid,
-    term: normalizedTerm,
-    ruby: normalizedRuby,
-    enabled: true,
-    updatedAt: Date.now()
-  };
-  patchRtdb_(updates, getFirebaseAccessToken_());
-  return { success: true, message: `Term "${normalizedTerm}" updated.` };
-}
-
-function deleteDictionaryTerm(uid, fallbackTerm) {
-  const { sheet, info, uidIdx, termIdx } = ensureDictionarySheetStructure_();
-  if (sheet == null || uidIdx == null || termIdx == null) {
-    throw new Error('Dictionary sheet is not properly configured.');
-  }
-  const target = findDictionaryRowByUid_(info, uidIdx, uid);
-  let rowInfo = target;
-  if (!rowInfo && fallbackTerm) {
-    const normalizedTerm = String(fallbackTerm || '').trim();
-    if (normalizedTerm) {
-      for (let i = 0; i < info.rows.length; i++) {
-        const rowTerm = String(info.rows[i][termIdx] || '').trim();
-        if (rowTerm === normalizedTerm) {
-          rowInfo = { index: i, rowNumber: i + 2, values: info.rows[i] };
-          break;
-        }
-      }
-    }
-  }
-  if (!rowInfo) {
-    throw new Error(`Term not found: ${uid || fallbackTerm || ''}`);
-  }
-  const termLabel = String(rowInfo.values[termIdx] || '').trim();
-  const uidValue = String(rowInfo.values[uidIdx] || '').trim();
-  sheet.deleteRow(rowInfo.rowNumber);
-  if (uidValue) {
-    const updates = {};
-    updates[`dictionary/${uidValue}`] = null;
-    patchRtdb_(updates, getFirebaseAccessToken_());
-  }
-  return { success: true, message: `Term "${termLabel}" deleted.` };
-}
-
-function toggleDictionaryTerm(uid, enabled, fallbackTerm) {
-  const { sheet, info, uidIdx, termIdx, rubyIdx, enabledIdx } = ensureDictionarySheetStructure_();
-  if (sheet == null || uidIdx == null || termIdx == null || enabledIdx == null || rubyIdx == null) {
-    throw new Error('Dictionary sheet is not properly configured.');
-  }
-  const normalizedEnabled = normalizeDictionaryEnabled_(enabled);
-  let rowInfo = findDictionaryRowByUid_(info, uidIdx, uid);
-  if (!rowInfo && fallbackTerm) {
-    const normalizedTerm = String(fallbackTerm || '').trim();
-    if (normalizedTerm) {
-      for (let i = 0; i < info.rows.length; i++) {
-        const rowTerm = String(info.rows[i][termIdx] || '').trim();
-        if (rowTerm === normalizedTerm) {
-          rowInfo = { index: i, rowNumber: i + 2, values: info.rows[i] };
-          break;
-        }
-      }
-    }
-  }
-  if (!rowInfo) {
-    throw new Error(`Term not found: ${uid || fallbackTerm || ''}`);
-  }
-  const termLabel = String(rowInfo.values[termIdx] || '').trim();
-  sheet.getRange(rowInfo.rowNumber, enabledIdx + 1).setValue(normalizedEnabled);
-  const uidValue = String(rowInfo.values[uidIdx] || '').trim();
-  if (uidValue) {
-    const updates = {};
-    updates[`dictionary/${uidValue}`] = {
-      uid: uidValue,
-      term: termLabel,
-      ruby: String(rowInfo.values[rubyIdx] || '').trim(),
-      enabled: normalizedEnabled,
-      updatedAt: Date.now()
-    };
-    patchRtdb_(updates, getFirebaseAccessToken_());
-  }
-  return { success: true, message: `Term "${termLabel}" status updated.` };
-}
-
-function batchDeleteDictionaryTerms(uids) {
-  if (!Array.isArray(uids) || !uids.length) {
-    return { success: true, message: 'No terms deleted.' };
-  }
-  const unique = Array.from(new Set(uids.map((uid) => String(uid || '').trim()).filter(Boolean)));
-  if (!unique.length) {
-    return { success: true, message: 'No terms deleted.' };
-  }
-  const { sheet, info, uidIdx, termIdx } = ensureDictionarySheetStructure_();
-  if (sheet == null || uidIdx == null || termIdx == null) {
-    throw new Error('Dictionary sheet is not properly configured.');
-  }
-  const matches = [];
-  unique.forEach((uid) => {
-    const rowInfo = findDictionaryRowByUid_(info, uidIdx, uid);
-    if (rowInfo) {
-      matches.push({ rowNumber: rowInfo.rowNumber, term: String(rowInfo.values[termIdx] || '').trim() });
-    }
-  });
-  if (!matches.length) {
-    throw new Error('指定した語句が見つかりませんでした。');
-  }
-  matches.sort((a, b) => b.rowNumber - a.rowNumber).forEach((match) => {
-    sheet.deleteRow(match.rowNumber);
-  });
-  const updates = {};
-  uids.forEach(uid => {
-    const normalized = String(uid || '').trim();
-    if (!normalized) return;
-    updates[`dictionary/${normalized}`] = null;
-  });
-  if (Object.keys(updates).length) {
-    patchRtdb_(updates, getFirebaseAccessToken_());
-  }
-  return { success: true, message: `${matches.length} 件の語句を削除しました。` };
-}
-
-function batchToggleDictionaryTerms(uids, enabled) {
-  if (!Array.isArray(uids) || !uids.length) {
-    return { success: true, message: 'No terms updated.' };
-  }
-  const unique = Array.from(new Set(uids.map((uid) => String(uid || '').trim()).filter(Boolean)));
-  if (!unique.length) {
-    return { success: true, message: 'No terms updated.' };
-  }
-  const normalizedEnabled = normalizeDictionaryEnabled_(enabled);
-  const { sheet, info, uidIdx, termIdx, rubyIdx, enabledIdx } = ensureDictionarySheetStructure_();
-  if (sheet == null || uidIdx == null || termIdx == null || rubyIdx == null || enabledIdx == null) {
-    throw new Error('Dictionary sheet is not properly configured.');
-  }
-  const updates = [];
-  unique.forEach((uid) => {
-    const rowInfo = findDictionaryRowByUid_(info, uidIdx, uid);
-    if (rowInfo) {
-      updates.push(rowInfo.rowNumber);
-    }
-  });
-  if (!updates.length) {
-    throw new Error('指定した語句が見つかりませんでした。');
-  }
-  updates.forEach((rowNumber) => {
-    sheet.getRange(rowNumber, enabledIdx + 1).setValue(normalizedEnabled);
-  });
-  const patch = {};
-  const now = Date.now();
-  uids.forEach(uid => {
-    const normalized = String(uid || '').trim();
-    if (!normalized) return;
-    const rowInfo = findDictionaryRowByUid_(info, uidIdx, normalized);
-    if (!rowInfo) return;
-    const termLabel = String(rowInfo.values[termIdx] || '').trim();
-    const rubyValue = String(rowInfo.values[rubyIdx] || '').trim();
-    patch[`dictionary/${normalized}`] = {
-      uid: normalized,
-      term: termLabel,
-      ruby: rubyValue,
-      enabled: normalizedEnabled,
-      updatedAt: now
-    };
-  });
-  if (Object.keys(patch).length) {
-    patchRtdb_(patch, getFirebaseAccessToken_());
-  }
-  return { success: true, message: `${updates.length} 件の語句を${normalizedEnabled ? '有効' : '無効'}にしました。` };
-}
-
 function dailyCheckAndResetUserForm() {
     const today = new Date();
     const month = today.getMonth() + 1;
@@ -5138,9 +1874,6 @@ function notifyUpdate(kind) {
       const FIREBASE_DB_URL = properties.getProperty('FIREBASE_DB_URL');
       const accessToken = getFirebaseAccessToken_();
 
-      if (kind !== 'logs') {
-        mirrorSheetToRtdb_();
-      }
       const signalKey = kind ? `signals/${kind}` : 'signals/misc';
       const url = `${FIREBASE_DB_URL}/${signalKey}.json`;
       const payload = { triggeredAt: new Date().getTime() };
@@ -5163,198 +1896,357 @@ function notifyUpdate(kind) {
     }
   }
 }
-
-function diagnoseSheetConnection() {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    Logger.log(`診断開始：スクリプトは "${ss.getName()}" という名前のスプレッドシートに接続されています。`);
-    
-    const sheet = ss.getSheetByName('logs');
-    if (sheet) {
-      Logger.log('成功： "logs" という名前のシートが見つかりました。');
-      sheet.getRange("E1").setValue("テスト書き込み成功：" + new Date());
-      Browser.msgBox('成功！', '"logs" という名前のシートが見つかり、テスト書き込みを行いました。E1セルを確認してください。', Browser.Buttons.OK);
-    } else {
-      Logger.log('失敗： "logs" という名前のシートがこのスプレッドシートには見つかりません。');
-      const allSheetNames = ss.getSheets().map(s => s.getName());
-      Logger.log(`現在認識されているシート名の一覧: [${allSheetNames.join(", ")}]`);
-      Browser.msgBox('失敗！', '"logs" という名前のシートが見つかりませんでした。詳細は実行ログを確認してください。', Browser.Buttons.OK);
-    }
-  } catch (e) {
-    Logger.log('致命的なエラーが発生しました: ' + e.toString());
-    Browser.msgBox('エラー', '診断中に致命的なエラーが発生しました。実行ログを確認してください。', Browser.Buttons.OK);
-  }
-}
-
-function batchUpdateStatus(uids, status) {
-  if (!uids || !Array.isArray(uids)) {
-    throw new Error('UIDs array is required.');
-  }
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    ensureQuestionUids_();
-    const uidSet = new Set((uids || []).map(value => String(value || '').trim()).filter(Boolean));
-    if (!uidSet.size) {
-      return { success: true, message: '0 items updated.' };
-    }
-
-    const isAnswered = status === true || status === 'true' || status === 1;
-    let updatedCount = 0;
-    const statusUpdates = {};
-
-    QUESTION_SHEET_NAMES.forEach(name => {
-      const sheet = ss.getSheetByName(name);
-      if (!sheet) return;
-      const info = readSheetWithHeaders_(sheet);
-      if (!info.rows.length) return;
-      const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
-      const answeredIdx = getHeaderIndex_(info.headerMap, '回答済');
-      if (uidIdx == null || answeredIdx == null) return;
-
-      const range = sheet.getRange(2, answeredIdx + 1, info.rows.length, 1);
-      const values = range.getValues();
-      let changed = false;
-
-      for (let i = 0; i < info.rows.length; i++) {
-        const rowUid = String(info.rows[i][uidIdx] || '').trim();
-        if (!uidSet.has(rowUid)) continue;
-        updatedCount += 1;
-        if (values[i][0] !== isAnswered) {
-          values[i][0] = isAnswered;
-          changed = true;
-        }
-        statusUpdates[`questionStatus/${rowUid}/answered`] = isAnswered;
-        statusUpdates[`questionStatus/${rowUid}/updatedAt`] = Date.now();
-      }
-
-      if (changed) {
-        range.setValues(values);
-      }
-    });
-
-    if (Object.keys(statusUpdates).length) {
-      try {
-        patchRtdb_(statusUpdates, getFirebaseAccessToken_());
-      } catch (error) {
-        console.warn('batchUpdateStatus failed to patch RTDB', error);
-      }
-    }
-
-    return { success: true, message: `${updatedCount} items updated.` };
-
-  } catch (error) {
-    return { success: false, error: error.message };
-
-  }
-}
-
-function clearSelectingStatus() {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let changedAny = false;
-    const statusUpdates = {};
-    const now = Date.now();
-    QUESTION_SHEET_NAMES.forEach(name => {
-      const sheet = ss.getSheetByName(name);
-      if (!sheet) return;
-      const info = readSheetWithHeaders_(sheet);
-      const selectingIdx = getHeaderIndex_(info.headerMap, '選択中');
-      const uidIdx = getHeaderIndex_(info.headerMap, 'UID');
-      if (selectingIdx == null || uidIdx == null || !info.rows.length) return;
-      const range = sheet.getRange(2, selectingIdx + 1, info.rows.length, 1);
-      const values = range.getValues();
-      let changed = false;
-      for (let i = 0; i < values.length; i++) {
-        if (values[i][0] === true) {
-          values[i][0] = false;
-          changed = true;
-        }
-        const rowUid = String(info.rows[i][uidIdx] || '').trim();
-        if (rowUid) {
-          statusUpdates[`questionStatus/${rowUid}/selecting`] = false;
-          statusUpdates[`questionStatus/${rowUid}/updatedAt`] = now;
-        }
-      }
-      if (changed) {
-        range.setValues(values);
-        changedAny = true;
-      }
-    });
-    if (Object.keys(statusUpdates).length) {
-      try {
-        patchRtdb_(statusUpdates, getFirebaseAccessToken_());
-      } catch (error) {
-        console.warn('clearSelectingStatus failed to patch RTDB', error);
-      }
-    }
-    return { success: true, changed: changedAny };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-}
-
 function toIsoJst_(d){ return Utilities.formatDate(d,'Asia/Tokyo',"yyyy-MM-dd'T'HH:mm:ssXXX"); }
 
 function getSheetData_(sheetKey) {
-  if (!sheetKey) throw new Error('Missing sheet');
-
-  const ALLOW = {
-    question:          QUESTION_SHEET_NAME,
-    pick_up_question:  PICKUP_QUESTION_SHEET_NAME,
-    dictionary:        'dictionary',
-    users:             'users',
-    logs:              'logs',
-  };
-  const sheetName = ALLOW[String(sheetKey)];
-  if (!sheetName) throw new Error('Invalid sheet: ' + sheetKey);
-
-  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
-  if (!sh) throw new Error('Sheet not found: ' + sheetName);
-
-  if (sheetKey === 'question' || sheetKey === 'pick_up_question') {
-    ensureQuestionUids_();
-  }
-  if (sheetKey === 'dictionary') {
-    ensureDictionarySheetStructure_();
+  const normalized = String(sheetKey || '').trim().toLowerCase();
+  if (normalized !== 'users') {
+    throw new Error('Invalid sheet: ' + sheetKey);
   }
 
-  const range = sh.getDataRange();
-  const values = range.getValues();
-  if (values.length < 2) return [];
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('users');
+  if (!sheet) {
+    throw new Error('Sheet not found: users');
+  }
 
-  if (sheetKey === 'logs') {
-    const out = [];
-    for (let r = 1; r < values.length; r++) {
-      const row = values[r];
-      if (!row || row.length === 0 || row.every(v => v === '' || v == null)) continue;
-      let ts = row[0];
-      if (ts instanceof Date) ts = toIsoJst_(ts);
-      out.push({
-        Timestamp: ts || '',
-        User:      String(row[1] ?? ''),
-        Action:    String(row[2] ?? ''),
-        Details:   String(row[3] ?? '')
-      });
+  const values = sheet.getDataRange().getValues();
+  if (!values || values.length < 2) {
+    return [];
+  }
+
+  const headers = values[0].map((header, index) => {
+    const label = String(header || '').trim();
+    return label || `column_${index}`;
+  });
+
+  const rows = [];
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r];
+    if (!row || row.length === 0 || row.every(value => value === '' || value == null)) {
+      continue;
     }
-    return out;
+    const entry = {};
+    headers.forEach((header, index) => {
+      entry[header] = row[index];
+    });
+    rows.push(entry);
   }
 
-  const headers = values[0].map(h =>
-    String(h || '')
-      .normalize('NFKC')
-      .replace(/[\u200B-\u200D\uFEFF]/g, '')
-      .trim()
-  );
-  const out = [];
-  for (let r=1; r<values.length; r++){
-    const obj = {};
-    for (let c=0; c<headers.length; c++){
-      const key = headers[c] || ('COL'+(c+1));
-      let v = values[r][c];
-      if (key.toLowerCase()==='timestamp' && v instanceof Date) v = toIsoJst_(v);
-      obj[key] = v;
-    }
-    out.push(obj);
+  return rows;
+}
+function processQuestionSubmissionQueue_(providedAccessToken, options) {
+  const accessToken = providedAccessToken || getFirebaseAccessToken_();
+  const queueBranch = fetchRtdb_('questionIntake/submissions', accessToken) || {};
+  const opts = options || {};
+  let tokenFilter = null;
+  if (opts && opts.tokenFilter != null) {
+    const list = Array.isArray(opts.tokenFilter) ? opts.tokenFilter : [opts.tokenFilter];
+    tokenFilter = new Set(list.map((value) => String(value || '').trim()).filter(Boolean));
   }
-  return out;
+
+  const ensureString = (value) => String(value || '').trim();
+
+  const queueTokens = Object.keys(queueBranch || {})
+    .map((token) => ensureString(token))
+    .filter((token) => {
+      if (!token) return false;
+      if (tokenFilter && !tokenFilter.has(token)) {
+        return false;
+      }
+      return true;
+    });
+
+  if (!queueTokens.length) {
+    return { processed: 0, discarded: 0 };
+  }
+
+  const tokenRecords = fetchRtdb_('questionIntake/tokens', accessToken) || {};
+  const updates = {};
+  let processed = 0;
+  let discarded = 0;
+
+  queueTokens.forEach((token) => {
+    const submissions = queueBranch[token] && typeof queueBranch[token] === 'object' ? queueBranch[token] : {};
+    const tokenRecord = tokenRecords[token] || {};
+    const revoked = tokenRecord && tokenRecord.revoked === true;
+    const expiresAt = Number(tokenRecord && tokenRecord.expiresAt || 0);
+    const eventId = ensureString(tokenRecord && tokenRecord.eventId);
+    const scheduleId = ensureString(tokenRecord && tokenRecord.scheduleId);
+    const participantId = ensureString(tokenRecord && tokenRecord.participantId);
+
+    Object.keys(submissions).forEach((entryId) => {
+      const submissionPath = `questionIntake/submissions/${token}/${entryId}`;
+      const entry = submissions[entryId] && typeof submissions[entryId] === 'object' ? submissions[entryId] : null;
+
+      updates[submissionPath] = null;
+
+      if (!entry) {
+        discarded += 1;
+        return;
+      }
+
+      if (!tokenRecord || !eventId || !scheduleId || !participantId || revoked || (expiresAt && Date.now() > expiresAt)) {
+        discarded += 1;
+        return;
+      }
+
+      try {
+        const radioName = ensureString(entry.radioName);
+        const questionText = ensureString(entry.question);
+        if (!radioName) throw new Error('ラジオネームが空です。');
+        if (!questionText) throw new Error('質問内容が空です。');
+
+        const questionLength = Number(entry.questionLength);
+        if (!Number.isFinite(questionLength) || questionLength <= 0) {
+          throw new Error('質問文字数が不正です。');
+        }
+
+        const now = Date.now();
+        const timestampCandidate = Number(entry.submittedAt || entry.clientTimestamp || now);
+        const ts = Number.isFinite(timestampCandidate) && timestampCandidate > 0 ? timestampCandidate : now;
+        const scheduleLabel = ensureString(entry.scheduleLabel || tokenRecord.scheduleLabel);
+        const scheduleDate = ensureString(entry.scheduleDate || tokenRecord.scheduleDate);
+        const scheduleStart = ensureString(entry.scheduleStart || tokenRecord.scheduleStart);
+        const scheduleEnd = ensureString(entry.scheduleEnd || tokenRecord.scheduleEnd);
+        const eventName = ensureString(entry.eventName || tokenRecord.eventName);
+        const participantName = ensureString(entry.participantName || tokenRecord.displayName);
+        const guidance = ensureString(entry.guidance || tokenRecord.guidance);
+        const genreValue = ensureString(entry.genre) || 'その他';
+        const groupNumber = ensureString(entry.groupNumber || tokenRecord.teamNumber || tokenRecord.groupNumber);
+        const providedUid = ensureString(entry.uid) || ensureString(entryId);
+        const uid = providedUid || Utilities.getUuid();
+
+        const record = {
+          uid,
+          name: radioName,
+          question: questionText,
+          genre: genreValue,
+          group: groupNumber,
+          teamNumber: groupNumber,
+          schedule: scheduleLabel,
+          scheduleDate,
+          scheduleStart,
+          scheduleEnd,
+          eventId,
+          eventName,
+          scheduleId,
+          participantId,
+          participantName,
+          guidance,
+          token,
+          ts,
+          updatedAt: ts,
+          type: 'normal'
+        };
+
+        if (Number.isFinite(questionLength) && questionLength > 0) {
+          record.questionLength = Math.round(questionLength);
+        }
+
+        updates[`questions/normal/${uid}`] = record;
+        updates[`questionStatus/${uid}`] = {
+          answered: false,
+          selecting: false,
+          pickup: false,
+          updatedAt: ts
+        };
+        processed += 1;
+      } catch (error) {
+        console.warn('Failed to process queued submission', error);
+        discarded += 1;
+      }
+    });
+  });
+
+  if (Object.keys(updates).length) {
+    patchRtdb_(updates, accessToken);
+  }
+
+  return { processed, discarded };
+}
+
+function resolveQuestionRecordForUid_(uid, token) {
+  const normalizedUid = String(uid || '').trim();
+  if (!normalizedUid) {
+    return { branch: '', record: null };
+  }
+  const accessToken = token || getFirebaseAccessToken_();
+  const branches = ['normal', 'pickup'];
+  for (let i = 0; i < branches.length; i++) {
+    const branch = branches[i];
+    const path = `questions/${branch}/${normalizedUid}`;
+    try {
+      const record = fetchRtdb_(path, accessToken);
+      if (record && typeof record === 'object') {
+        return { branch, record, token: accessToken };
+      }
+    } catch (error) {
+      // Ignore missing branch errors and continue searching other branches.
+    }
+  }
+  return { branch: '', record: null, token: accessToken };
+}
+
+function updateAnswerStatus(uid, status) {
+  const normalizedUid = String(uid || '').trim();
+  if (!normalizedUid) {
+    throw new Error('UID is required.');
+  }
+
+  const token = getFirebaseAccessToken_();
+  const statusPath = `questionStatus/${normalizedUid}`;
+  const currentStatus = fetchRtdb_(statusPath, token);
+  if (!currentStatus || typeof currentStatus !== 'object') {
+    throw new Error(`UID: ${normalizedUid} not found.`);
+  }
+
+  const isAnswered = status === true || status === 'true' || status === 1 || status === '1';
+  const now = Date.now();
+  const updates = {};
+  updates[`${statusPath}/answered`] = isAnswered;
+  updates[`${statusPath}/updatedAt`] = now;
+
+  const { branch } = resolveQuestionRecordForUid_(normalizedUid, token);
+  if (branch) {
+    updates[`questions/${branch}/${normalizedUid}/answered`] = isAnswered;
+    updates[`questions/${branch}/${normalizedUid}/updatedAt`] = now;
+  }
+
+  patchRtdb_(updates, token);
+  return { success: true, message: `UID: ${normalizedUid} updated.` };
+}
+
+function batchUpdateStatus(uids, status) {
+  if (!Array.isArray(uids)) {
+    throw new Error('UIDs array is required.');
+  }
+  const normalized = Array.from(new Set(
+    uids
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+  ));
+  if (!normalized.length) {
+    return { success: true, message: '0 items updated.' };
+  }
+
+  const token = getFirebaseAccessToken_();
+  const statusBranch = fetchRtdb_('questionStatus', token) || {};
+  const isAnswered = status === true || status === 'true' || status === 1 || status === '1';
+  const now = Date.now();
+  const updates = {};
+  let updatedCount = 0;
+
+  normalized.forEach((uid) => {
+    if (!statusBranch || typeof statusBranch !== 'object' || !statusBranch[uid]) {
+      return;
+    }
+    updatedCount += 1;
+    updates[`questionStatus/${uid}/answered`] = isAnswered;
+    updates[`questionStatus/${uid}/updatedAt`] = now;
+    const { branch } = resolveQuestionRecordForUid_(uid, token);
+    if (branch) {
+      updates[`questions/${branch}/${uid}/answered`] = isAnswered;
+      updates[`questions/${branch}/${uid}/updatedAt`] = now;
+    }
+  });
+
+  if (!updatedCount) {
+    return { success: true, message: '0 items updated.' };
+  }
+
+  patchRtdb_(updates, token);
+  return { success: true, message: `${updatedCount} items updated.` };
+}
+
+function updateSelectingStatus(uid) {
+  const normalizedUid = String(uid || '').trim();
+  if (!normalizedUid) {
+    throw new Error('UID is required.');
+  }
+  const token = getFirebaseAccessToken_();
+  const statusBranch = fetchRtdb_('questionStatus', token) || {};
+  if (!statusBranch || typeof statusBranch !== 'object' || !statusBranch[normalizedUid]) {
+    throw new Error(`UID: ${normalizedUid} not found.`);
+  }
+
+  const now = Date.now();
+  const updates = {};
+  Object.keys(statusBranch).forEach((key) => {
+    const normalizedKey = String(key || '').trim();
+    if (!normalizedKey) {
+      return;
+    }
+    const selecting = normalizedKey === normalizedUid;
+    updates[`questionStatus/${normalizedKey}/selecting`] = selecting;
+    updates[`questionStatus/${normalizedKey}/updatedAt`] = now;
+    const { branch } = resolveQuestionRecordForUid_(normalizedKey, token);
+    if (branch) {
+      updates[`questions/${branch}/${normalizedKey}/selecting`] = selecting;
+      updates[`questions/${branch}/${normalizedKey}/updatedAt`] = now;
+    }
+  });
+
+  patchRtdb_(updates, token);
+  return { success: true, message: `UID: ${normalizedUid} is now selecting.` };
+}
+
+function clearSelectingStatus() {
+  const token = getFirebaseAccessToken_();
+  const statusBranch = fetchRtdb_('questionStatus', token) || {};
+  if (!statusBranch || typeof statusBranch !== 'object') {
+    return { success: true, changed: false };
+  }
+
+  const updates = {};
+  let changed = false;
+  const now = Date.now();
+  Object.entries(statusBranch).forEach(([uid, record]) => {
+    if (!uid) {
+      return;
+    }
+    if (record && record.selecting === true) {
+      changed = true;
+      updates[`questionStatus/${uid}/selecting`] = false;
+      updates[`questionStatus/${uid}/updatedAt`] = now;
+      const { branch } = resolveQuestionRecordForUid_(uid, token);
+      if (branch) {
+        updates[`questions/${branch}/${uid}/selecting`] = false;
+        updates[`questions/${branch}/${uid}/updatedAt`] = now;
+      }
+    }
+  });
+
+  if (changed) {
+    patchRtdb_(updates, token);
+  }
+
+  return { success: true, changed };
+}
+
+function editQuestionText(uid, newText) {
+  const normalizedUid = String(uid || '').trim();
+  if (!normalizedUid) {
+    throw new Error('UID is required.');
+  }
+  if (typeof newText === 'undefined') {
+    throw new Error('New text is required.');
+  }
+  const trimmed = String(newText || '').trim();
+  if (!trimmed) {
+    throw new Error('質問内容を入力してください。');
+  }
+
+  const token = getFirebaseAccessToken_();
+  const { branch, record } = resolveQuestionRecordForUid_(normalizedUid, token);
+  if (!branch || !record) {
+    throw new Error(`UID: ${normalizedUid} not found.`);
+  }
+
+  const now = Date.now();
+  const updates = {};
+  updates[`questions/${branch}/${normalizedUid}/question`] = trimmed;
+  updates[`questions/${branch}/${normalizedUid}/updatedAt`] = now;
+  updates[`questionStatus/${normalizedUid}/updatedAt`] = now;
+  patchRtdb_(updates, token);
+  return { success: true, message: `UID: ${normalizedUid} question updated.` };
 }

@@ -1,6 +1,6 @@
 // pickup.js: Pick Up Question機能の抽選・管理ロジックをまとめています。
 import { GENRE_OPTIONS, GENRE_ALL_VALUE } from "./constants.js";
-import { pickupQuestionsRef, database, ref, update, onValue } from "./firebase.js";
+import { pickupQuestionsRef, database, ref, update, onValue, get } from "./firebase.js";
 import { escapeHtml, resolveGenreLabel, formatRelative } from "./utils.js";
 
 const ALL_FILTER_VALUE = GENRE_ALL_VALUE;
@@ -224,22 +224,6 @@ function createPickupRecord(uid, question, genre, existingRecord = null, timesta
   }
   record.updatedAt = timestamp;
   return record;
-}
-
-function scheduleSheetSync(app) {
-  if (!app?.api?.apiPost) {
-    return;
-  }
-  try {
-    const promise = app.api.apiPost({ action: "syncQuestionIntakeToSheet" });
-    if (promise && typeof promise.catch === "function") {
-      promise.catch((error) => {
-        console.debug("pickup sheet sync skipped", error);
-      });
-    }
-  } catch (error) {
-    console.debug("pickup sheet sync not scheduled", error);
-  }
 }
 
 function ensureGenreOptions(select) {
@@ -715,10 +699,9 @@ export async function fetchPickupQuestions(app) {
   const button = app.dom.pickupRefreshButton;
   setBusy(button, true);
   try {
-    const result = await app.api.apiPost({ action: "mirrorSheet" });
-    if (!result?.success) {
-      throw new Error(result?.error || "Pick Up Question の再読み込みに失敗しました。");
-    }
+    const snapshot = await get(pickupQuestionsRef);
+    const value = snapshot?.exists?.() && snapshot.exists() ? snapshot.val() || {} : {};
+    applyPickupSnapshot(app, value);
     app.toast("最新の質問を読み込みました。", "success");
   } catch (error) {
     console.error("Failed to refresh pickup questions", error);
@@ -863,7 +846,6 @@ export async function handlePickupFormSubmit(app, event) {
     };
     syncPickupSelectionUi(app);
     app.toast("Pick Up Question を追加しました。", "success");
-    scheduleSheetSync(app);
     closePickupAddDialog(app);
   } catch (error) {
     console.error("Failed to add pickup question", error);
@@ -979,7 +961,6 @@ export async function handlePickupEditSubmit(app, event) {
     await update(ref(database), updates);
     app.toast("Pick Up Question を更新しました。", "success");
     closePickupEditDialog(app);
-    scheduleSheetSync(app);
   } catch (error) {
     console.error("Failed to update pickup question", error);
     app.toast("Pick Up Question の更新に失敗しました。", "error");
@@ -1094,7 +1075,6 @@ export async function handlePickupDelete(app) {
     }
     closePickupConfirmDialog(app);
     syncPickupSelectionUi(app);
-    scheduleSheetSync(app);
   } catch (error) {
     console.error("Failed to delete pickup question", error);
     app.toast("Pick Up Question の削除に失敗しました。", "error");
