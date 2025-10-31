@@ -1,7 +1,7 @@
 // logs.js: 操作ログの取得・整形・表示を司るモジュールです。
 import { LOGS_STATE_KEY } from "./constants.js";
 import { escapeHtml, getLogLevel, parseLogTimestamp } from "./utils.js";
-import { updateTriggerRef, onValue } from "./firebase.js";
+import { database, updateTriggerRef, onValue, ref, get, query, orderByChild, limitToLast } from "./firebase.js";
 
 const LOGS_LOADER_STEPS = [
   { label: "初期化", message: "操作ログパネルを初期化しています…" },
@@ -11,6 +11,8 @@ const LOGS_LOADER_STEPS = [
   { label: "監視開始", message: "更新通知を監視しています…" },
   { label: "完了", message: "準備が整いました！" }
 ];
+const LOGS_FETCH_LIMIT = 2000;
+
 
 function ensureLogsLoader(app) {
   if (!app) {
@@ -120,15 +122,29 @@ export function resetLogsLoader(app) {
 export async function fetchLogs(app) {
   setLogsLoaderStep(app, 1);
   try {
-    const result = await app.api.apiPost({ action: "fetchSheet", sheet: "logs" });
-    if (result.success) {
-      setLogsLoaderStep(app, 2);
-      app.state.allLogs = result.data || [];
-      renderLogs(app);
-    }
+    const logsQuery = query(ref(database, 'logs/history'), orderByChild('timestamp'), limitToLast(LOGS_FETCH_LIMIT));
+    const snapshot = await get(logsQuery);
+    const exists = snapshot && typeof snapshot.exists === 'function' ? snapshot.exists() : false;
+    const branch = exists ? snapshot.val() : {};
+    const rows = branch && typeof branch === 'object'
+      ? Object.entries(branch).map(([id, entry]) => ({
+          id,
+          Timestamp: entry?.Timestamp ?? entry?.timestamp ?? '',
+          timestamp: typeof entry?.timestamp === 'number' ? entry.timestamp : parseLogTimestamp(entry?.Timestamp)?.getTime() || 0,
+          User: entry?.User ?? entry?.user ?? '',
+          Action: entry?.Action ?? entry?.action ?? '',
+          Details: entry?.Details ?? entry?.details ?? '',
+          Level: entry?.Level ?? entry?.level ?? '',
+          raw: entry || {}
+        }))
+      : [];
+    rows.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    app.state.allLogs = rows;
+    renderLogs(app);
   } catch (error) {
-    console.error("ログの取得に失敗:", error);
+    console.error('ログの取得に失敗しました', error);
     hideLogsLoader(app);
+    app.toast?.('ログの取得に失敗: ' + (error?.message || '不明なエラー'), 'error');
   }
 }
 
