@@ -791,6 +791,12 @@ function doPost(e) {
       case 'logAction':
         assertOperator_(principal);
         return ok(logAction_(principal, req.action_type, req.details));
+      case 'backupRealtimeDatabase':
+        assertOperator_(principal);
+        return ok(backupRealtimeDatabase_());
+      case 'restoreRealtimeDatabase':
+        assertOperator_(principal);
+        return ok(restoreRealtimeDatabase_());
       case 'whoami':
         return ok({ principal });
       default:
@@ -2932,7 +2938,7 @@ function mirrorSheetToRtdb_(){
 }
 
 function logAction_(principal, actionType, details) {
-  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('logs') 
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('logs')
             || SpreadsheetApp.getActiveSpreadsheet().insertSheet('logs');
   if (sh.getLastRow() === 0) {
     sh.appendRow(['Timestamp','User','Action','Details']);
@@ -2942,6 +2948,53 @@ function logAction_(principal, actionType, details) {
   sh.appendRow(row);
   try { notifyUpdate('logs'); } catch (e) { console.error('notifyUpdate failed', e); }
   return { ok: true };
+}
+
+function ensureBackupSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = 'backups';
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Timestamp', 'Data']);
+  }
+  return sheet;
+}
+
+function backupRealtimeDatabase_() {
+  const token = getFirebaseAccessToken_();
+  const snapshot = fetchRtdb_('', token) || {};
+  const sheet = ensureBackupSheet_();
+  const now = new Date();
+  sheet.appendRow([now, JSON.stringify(snapshot)]);
+  return {
+    timestamp: toIsoJst_(now),
+    rowCount: Math.max(0, sheet.getLastRow() - 1)
+  };
+}
+
+function restoreRealtimeDatabase_() {
+  const sheet = ensureBackupSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    throw new Error('バックアップが存在しません。');
+  }
+  const [[rawTimestamp, rawPayload]] = sheet.getRange(lastRow, 1, 1, 2).getValues();
+  if (!rawPayload) {
+    throw new Error('バックアップデータが空です。');
+  }
+  let data;
+  try {
+    data = JSON.parse(rawPayload);
+  } catch (error) {
+    throw new Error('バックアップデータの解析に失敗しました。');
+  }
+  const token = getFirebaseAccessToken_();
+  putRtdb_('', data, token);
+  const timestamp = rawTimestamp instanceof Date ? toIsoJst_(rawTimestamp) : String(rawTimestamp || '');
+  return { timestamp };
 }
 
 function parseBody_(e) {
@@ -3334,6 +3387,20 @@ function patchRtdb_(updates, token) {
   const code = res.getResponseCode();
   if (code >= 400) {
     throw new Error('RTDB patch failed: HTTP ' + code + ' ' + res.getContentText());
+  }
+}
+
+function putRtdb_(path, data, token) {
+  const res = UrlFetchApp.fetch(rtdbUrl_(path), {
+    method: 'put',
+    contentType: 'application/json',
+    payload: JSON.stringify(data),
+    headers: { Authorization: 'Bearer ' + token },
+    muteHttpExceptions: true
+  });
+  const code = res.getResponseCode();
+  if (code >= 400) {
+    throw new Error('RTDB put failed: HTTP ' + code + ' ' + res.getContentText());
   }
 }
 
