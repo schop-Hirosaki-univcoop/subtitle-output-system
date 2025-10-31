@@ -28,9 +28,9 @@ This document summarizes the current API client implementation used by the opera
 | Lifecycle compatibility | Establishing the client before authentication is finalized complicates auth-transfer recovery and embed detection. | Works with `handleAuthState` style flows that manage login transitions and retries. |
 | Fault isolation | A failure in the shared initializer affects all screens. | Failures surface per screen, allowing localized error handling and toasts. |
 
-**Current baseline:** We still instantiate the client per screen so the existing flows keep working, while the preflight cache lets each surface skip redundant permission checks when a fresh context is available.【F:scripts/events/app.js†L108-L138】【F:scripts/events/app.js†L861-L881】【F:scripts/operator/app.js†L2357-L2436】
+**Current baseline:** We still instantiate the client per screen so the existing flows keep working, while the preflight cache lets each surface skip redundant permission checks when a fresh context is available.【F:scripts/events/app.js†L109-L216】【F:scripts/events/app.js†L860-L881】【F:scripts/operator/app.js†L2372-L2448】
 
-**Preflight integration:** `runAuthPreflight` runs immediately after login, warms an API client once, and persists the resulting credential, admin, and mirror metadata for later screens. Event and operator surfaces read this context first and fall back to their local constructors only when no cached data is present.【F:scripts/shared/auth-preflight.js†L161-L245】【F:scripts/events/app.js†L748-L881】【F:scripts/operator/app.js†L2357-L2436】
+**Preflight integration:** `runAuthPreflight` runs immediately after login, warms an API client once, and persists the resulting credential, admin, and mirror metadata for later screens. Event and operator surfaces read this context first and fall back to their local constructors only when no cached data is present.【F:scripts/shared/auth-preflight.js†L161-L289】【F:scripts/events/app.js†L883-L1059】【F:scripts/operator/app.js†L2372-L2448】
 
 ## Credential Storage and Retrieval (Per-Screen Strategy)
 1. **Storage format**

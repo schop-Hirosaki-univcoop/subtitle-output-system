@@ -1739,19 +1739,6 @@ function hasUnsavedChanges() {
   return signatureForEntries(state.participants) !== state.lastSavedSignature;
 }
 
-async function requestSheetSync({ suppressError = true } = {}) {
-  try {
-    await api.apiPost({ action: "syncQuestionIntakeToSheet" });
-    return true;
-  } catch (error) {
-    console.error("Failed to request sheet sync", error);
-    if (!suppressError) {
-      throw error;
-    }
-    return false;
-  }
-}
-
 function setUploadStatus(message, variant = "") {
   const normalized = normalizeKey(message);
   if (normalized && UPLOAD_STATUS_PLACEHOLDERS.has(normalized)) {
@@ -3206,39 +3193,6 @@ async function loadParticipants(options = {}) {
         normalizeParticipantRecord(participantValue, participantKey)
       )
       .filter(entry => resolveParticipantUid(entry));
-    let hydratedFromSheet = false;
-
-    if (!normalized.length) {
-      try {
-        const response = await api.apiPost({
-          action: "fetchQuestionParticipants",
-          eventId,
-          scheduleId
-        });
-        const imported = Array.isArray(response?.participants) ? response.participants : [];
-        if (imported.length) {
-          hydratedFromSheet = true;
-          await ensureTokenSnapshot(true);
-          
-          // Re-fetch scheduleBranch in case of sheet hydration
-          scheduleBranch = await fetchDbValue(
-            `questionIntake/participants/${eventId}/${scheduleId}`
-          );
-          scheduleBranch =
-            scheduleBranch && typeof scheduleBranch === "object"
-              ? scheduleBranch
-              : {};
-          eventBranch = { [scheduleId]: scheduleBranch };
-          normalized = Object.entries(scheduleBranch)
-            .map(([participantKey, participantValue]) =>
-              normalizeParticipantRecord(participantValue, participantKey)
-            )
-            .filter(entry => resolveParticipantUid(entry));
-        }
-      } catch (error) {
-        console.warn("Failed to synchronize participants from sheet", error);
-      }
-    }
     
     // This cache is now incomplete, containing only the current schedule.
     // We will populate it fully in the deferred step.
@@ -3300,9 +3254,7 @@ async function loadParticipants(options = {}) {
     if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVをアップロード";
     if (dom.csvInput) dom.csvInput.value = "";
     if (!suppressStatus) {
-      const defaultMessage = hydratedFromSheet
-        ? "スプレッドシートの参加者データを同期しました。"
-        : "現在の参加者リストを読み込みました。";
+      const defaultMessage = "現在の参加者リストを読み込みました。";
       setUploadStatus(statusMessage || defaultMessage, statusVariant);
     }
 
@@ -3601,7 +3553,6 @@ async function handleAddEvent(name) {
 
     await loadEvents({ preserveSelection: false });
     selectEvent(eventId);
-    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
   } catch (error) {
     console.error(error);
     throw new Error(error.message || "イベントの追加に失敗しました。");
@@ -3625,7 +3576,6 @@ async function handleUpdateEvent(eventId, name) {
     });
     await loadEvents({ preserveSelection: true });
     selectEvent(eventId);
-    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
   } catch (error) {
     console.error(error);
     throw new Error(error.message || "イベントの更新に失敗しました。");
@@ -3688,7 +3638,6 @@ async function handleDeleteEvent(eventId, eventName) {
     renderParticipants();
     updateParticipantContext();
     state.tokenSnapshotFetchedAt = Date.now();
-    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
     setUploadStatus(`イベント「${label}」を削除しました。`, "success");
   } catch (error) {
     console.error(error);
@@ -3735,7 +3684,6 @@ async function handleAddSchedule({ label, date, startTime, endTime }) {
     selectEvent(eventId);
     selectSchedule(scheduleId);
     setCalendarPickedDate(normalizedDate, { updateInput: true });
-    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
   } catch (error) {
     console.error(error);
     throw new Error(error.message || "日程の追加に失敗しました。");
@@ -3773,7 +3721,6 @@ async function handleUpdateSchedule(scheduleId, { label, date, startTime, endTim
     selectEvent(eventId);
     selectSchedule(scheduleId);
     setCalendarPickedDate(normalizedDate, { updateInput: true });
-    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
   } catch (error) {
     console.error(error);
     throw new Error(error.message || "日程の更新に失敗しました。");
@@ -3842,7 +3789,6 @@ async function handleDeleteSchedule(scheduleId, scheduleLabel) {
     renderParticipants();
     updateParticipantContext();
     state.tokenSnapshotFetchedAt = Date.now();
-    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
     setUploadStatus(`日程「${label}」を削除しました。`, "success");
   } catch (error) {
     console.error(error);
@@ -4385,7 +4331,6 @@ async function handleSave(options = {}) {
     await loadParticipants();
     state.tokenSnapshotFetchedAt = Date.now();
     updateParticipantContext({ preserveStatus: true });
-    requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
     return true;
   } catch (error) {
     console.error(error);
@@ -5213,7 +5158,6 @@ function attachEventHandlers() {
       try {
         await loadEvents({ preserveSelection: true });
         await loadParticipants();
-        requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
       } catch (error) {
         console.error(error);
       }
@@ -5491,7 +5435,6 @@ function initAuthWatcher() {
       setLoaderStep(4, embedded ? "仕上げ処理を行っています…" : "初期データの取得が完了しました。仕上げ中…");
       setAuthUi(true);
       finishLoaderSteps("準備完了");
-      requestSheetSync().catch(err => console.warn("Sheet sync request failed", err));
       resolveEmbedReady();
       if (state.initialFocusTarget) {
         window.setTimeout(() => maybeFocusInitialSection(), 400);
