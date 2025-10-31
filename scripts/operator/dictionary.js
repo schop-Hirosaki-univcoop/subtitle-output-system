@@ -1,11 +1,11 @@
 // dictionary.js: ルビ辞書のロードと検索、編集操作をまとめたモジュールです。
-import { database, dictionaryRef, onValue, ref, set, update } from "./firebase.js";
+import { database, dictionaryRef, onValue, ref, set, update, get } from "./firebase.js";
 import { DICTIONARY_STATE_KEY } from "./constants.js";
 import { escapeHtml } from "./utils.js";
 
 const DICTIONARY_LOADER_STEPS = [
   { label: "初期化", message: "辞書パネルを初期化しています…" },
-  { label: "シート取得", message: "辞書シートから最新データを取得しています…" },
+  { label: "データ取得", message: "辞書データを取得しています…" },
   { label: "更新待機", message: "リアルタイム更新を待機しています…" },
   { label: "描画", message: "辞書一覧を描画しています…" },
   { label: "完了", message: "準備が整いました！" }
@@ -882,20 +882,13 @@ function applyDictionarySnapshot(app, rawEntries, { render = true } = {}) {
 export async function fetchDictionary(app) {
   setDictionaryLoaderStep(app, 1);
   try {
-    const result = await app.api.apiPost({ action: "fetchSheet", sheet: "dictionary" });
-    if (!result.success) return;
-    const normalized = applyDictionarySnapshot(app, result.data || []);
-    const timestamp = Date.now();
-    const payload = normalized.reduce((acc, { uid, term, ruby, enabled }) => {
-      if (!uid) {
-        return acc;
-      }
-      acc[uid] = { uid, term, ruby, enabled, updatedAt: timestamp };
-      return acc;
-    }, {});
-    await set(dictionaryRef, payload);
+    const snapshot = await get(dictionaryRef);
+    const exists = snapshot && typeof snapshot.exists === 'function' ? snapshot.exists() : false;
+    const payload = exists ? snapshot.val() : {};
+    applyDictionarySnapshot(app, payload);
   } catch (error) {
-    app.toast("辞書の取得に失敗: " + error.message, "error");
+    console.error('辞書の取得に失敗しました', error);
+    app.toast('辞書の取得に失敗: ' + (error?.message || '不明なエラー'), 'error');
   }
 }
 

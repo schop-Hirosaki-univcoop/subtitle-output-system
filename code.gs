@@ -703,6 +703,9 @@ function doPost(e) {
         return ok(processQuestionQueueForToken_(req.token));
       case 'fetchSheet':
         assertOperator_(principal);
+        if (String(req.sheet || '').trim().toLowerCase() !== 'users') {
+          throw new Error('fetchSheet is only available for the users sheet.');
+        }
         return ok({ data: getSheetData_(req.sheet) });
       case 'listQuestionEvents':
         assertOperator_(principal);
@@ -791,6 +794,12 @@ function doPost(e) {
       case 'logAction':
         assertOperator_(principal);
         return ok(logAction_(principal, req.action_type, req.details));
+      case 'backupRealtimeDatabase':
+        assertOperator_(principal);
+        return ok(backupRealtimeDatabase_());
+      case 'restoreRealtimeDatabase':
+        assertOperator_(principal);
+        return ok(restoreRealtimeDatabase_());
       case 'whoami':
         return ok({ principal });
       default:
@@ -2932,16 +2941,81 @@ function mirrorSheetToRtdb_(){
 }
 
 function logAction_(principal, actionType, details) {
-  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('logs') 
-            || SpreadsheetApp.getActiveSpreadsheet().insertSheet('logs');
-  if (sh.getLastRow() === 0) {
-    sh.appendRow(['Timestamp','User','Action','Details']);
+  const now = new Date();
+  const timestampMs = now.getTime();
+  const userEmail = String((principal && principal.email) || '').trim() || 'unknown';
+  const payload = {
+    Timestamp: toIsoJst_(now),
+    timestamp: timestampMs,
+    User: userEmail,
+    UserId: String((principal && principal.uid) || '').trim(),
+    Action: String(actionType || ''),
+    Details: String(details || ''),
+    createdAt: timestampMs,
+    updatedAt: timestampMs
+  };
+  const token = getFirebaseAccessToken_();
+  let name = '';
+  try {
+    const res = postRtdb_('logs/history', payload, token);
+    if (res && typeof res === 'object' && res.name) {
+      name = String(res.name || '');
+    }
+  } finally {
+    try {
+      notifyUpdate('logs');
+    } catch (error) {
+      console.error('notifyUpdate failed', error);
+    }
   }
-  const userEmail = (principal && principal.email) || 'unknown';
-  const row = [new Date(), userEmail, actionType || '', details || ''];
-  sh.appendRow(row);
-  try { notifyUpdate('logs'); } catch (e) { console.error('notifyUpdate failed', e); }
-  return { ok: true };
+  return { ok: true, id: name };
+}
+
+function ensureBackupSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = 'backups';
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Timestamp', 'Data']);
+  }
+  return sheet;
+}
+
+function backupRealtimeDatabase_() {
+  const token = getFirebaseAccessToken_();
+  const snapshot = fetchRtdb_('', token) || {};
+  const sheet = ensureBackupSheet_();
+  const now = new Date();
+  sheet.appendRow([now, JSON.stringify(snapshot)]);
+  return {
+    timestamp: toIsoJst_(now),
+    rowCount: Math.max(0, sheet.getLastRow() - 1)
+  };
+}
+
+function restoreRealtimeDatabase_() {
+  const sheet = ensureBackupSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    throw new Error('バックアップが存在しません。');
+  }
+  const [[rawTimestamp, rawPayload]] = sheet.getRange(lastRow, 1, 1, 2).getValues();
+  if (!rawPayload) {
+    throw new Error('バックアップデータが空です。');
+  }
+  let data;
+  try {
+    data = JSON.parse(rawPayload);
+  } catch (error) {
+    throw new Error('バックアップデータの解析に失敗しました。');
+  }
+  const token = getFirebaseAccessToken_();
+  putRtdb_('', data, token);
+  const timestamp = rawTimestamp instanceof Date ? toIsoJst_(rawTimestamp) : String(rawTimestamp || '');
+  return { timestamp };
 }
 
 function parseBody_(e) {
@@ -3335,6 +3409,36 @@ function patchRtdb_(updates, token) {
   if (code >= 400) {
     throw new Error('RTDB patch failed: HTTP ' + code + ' ' + res.getContentText());
   }
+}
+
+function putRtdb_(path, data, token) {
+  const res = UrlFetchApp.fetch(rtdbUrl_(path), {
+    method: 'put',
+    contentType: 'application/json',
+    payload: JSON.stringify(data),
+    headers: { Authorization: 'Bearer ' + token },
+    muteHttpExceptions: true
+  });
+  const code = res.getResponseCode();
+  if (code >= 400) {
+    throw new Error('RTDB put failed: HTTP ' + code + ' ' + res.getContentText());
+  }
+}
+
+function postRtdb_(path, data, token) {
+  const res = UrlFetchApp.fetch(rtdbUrl_(path), {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(data),
+    headers: { Authorization: 'Bearer ' + token },
+    muteHttpExceptions: true
+  });
+  const code = res.getResponseCode();
+  if (code >= 400) {
+    throw new Error('RTDB post failed: HTTP ' + code + ' ' + res.getContentText());
+  }
+  const textBody = res.getContentText();
+  return textBody ? JSON.parse(textBody) : null;
 }
 
 function isDisplayPrincipal_(principal) {
@@ -3973,6 +4077,411 @@ function editQuestionText(uid, newText) {
   }
   match.sheet.getRange(match.rowNumber, questionIdx + 1).setValue(newText);
   return { success: true, message: `UID: ${uid} question updated.` };
+}
+
+function createPickupQuestion(question, genre) {
+  const normalizedQuestion = String(question || '').trim();
+  if (!normalizedQuestion) {
+    throw new Error('質問内容を入力してください。');
+  }
+  const normalizedGenre = String(genre || '').trim() || 'その他';
+  const { sheet, info, uidIdx, questionIdx, genreIdx } =
+    ensurePickupQuestionSheetStructure_();
+  if (sheet == null || uidIdx == null || questionIdx == null || genreIdx == null) {
+    throw new Error('Pick Up Question シートの構成が正しくありません。');
+  }
+  const existingUids = new Set();
+  info.rows.forEach((row) => {
+    const value = String(row[uidIdx] || '').trim();
+    if (value) existingUids.add(value);
+  });
+  let newUid = '';
+  do {
+    newUid = Utilities.getUuid();
+  } while (existingUids.has(newUid));
+
+  const now = new Date();
+  const rowValues = new Array(info.headers.length).fill('');
+  info.headers.forEach((header, index) => {
+    switch (String(header || '').trim()) {
+      case 'UID':
+        rowValues[index] = newUid;
+        break;
+      case '質問・お悩み':
+        rowValues[index] = normalizedQuestion;
+        break;
+      case 'ジャンル':
+        rowValues[index] = normalizedGenre;
+        break;
+      case '回答済':
+      case '選択中':
+        rowValues[index] = false;
+        break;
+      case 'タイムスタンプ':
+        rowValues[index] = formatQuestionTimestamp_(now);
+        break;
+      default:
+        rowValues[index] = '';
+    }
+  });
+  sheet.appendRow(rowValues);
+
+  const nowMs = Date.now();
+  const token = getFirebaseAccessToken_();
+  const record = {
+    uid: newUid,
+    name: 'Pick Up Question',
+    question: normalizedQuestion,
+    genre: normalizedGenre,
+    pickup: true,
+    type: 'pickup',
+    schedule: '',
+    scheduleStart: '',
+    scheduleEnd: '',
+    scheduleDate: '',
+    participantId: '',
+    participantName: '',
+    guidance: '',
+    eventId: '',
+    eventName: '',
+    scheduleId: '',
+    ts: nowMs,
+    updatedAt: nowMs
+  };
+  const updates = {};
+  updates[`questions/pickup/${newUid}`] = record;
+  updates[`questionStatus/${newUid}`] = { answered: false, selecting: false, pickup: true, updatedAt: nowMs };
+  patchRtdb_(updates, token);
+  return { success: true, question: { uid: newUid, question: normalizedQuestion, genre: normalizedGenre } };
+}
+
+function updatePickupQuestion(uid, question, genre) {
+  const normalizedUid = String(uid || '').trim();
+  if (!normalizedUid) {
+    throw new Error('UID is required.');
+  }
+  const normalizedQuestion = String(question || '').trim();
+  if (!normalizedQuestion) {
+    throw new Error('質問内容を入力してください。');
+  }
+  const normalizedGenre = String(genre || '').trim() || 'その他';
+  const match = findQuestionRowByUid_(normalizedUid);
+  if (!match || match.sheet.getName() !== PICKUP_QUESTION_SHEET_NAME) {
+    throw new Error('指定した Pick Up Question が見つかりませんでした。');
+  }
+  const questionIdx = getHeaderIndex_(match.headerMap, '質問・お悩み');
+  const genreIdx = getHeaderIndex_(match.headerMap, 'ジャンル');
+  if (questionIdx == null || genreIdx == null) {
+    throw new Error('Pick Up Question シートに必要な列がありません。');
+  }
+  match.sheet.getRange(match.rowNumber, questionIdx + 1).setValue(normalizedQuestion);
+  match.sheet.getRange(match.rowNumber, genreIdx + 1).setValue(normalizedGenre);
+  const timestampIdx = getHeaderIndex_(match.headerMap, ['タイムスタンプ', 'timestamp']);
+  if (timestampIdx != null) {
+    match.sheet.getRange(match.rowNumber, timestampIdx + 1).setValue(formatQuestionTimestamp_(new Date()));
+  }
+
+  const token = getFirebaseAccessToken_();
+  let current = null;
+  try {
+    current = fetchRtdb_(`questions/pickup/${normalizedUid}`, token);
+  } catch (error) {
+    current = null;
+  }
+  const nextRecord = current && typeof current === 'object' ? { ...current } : { uid: normalizedUid };
+  nextRecord.uid = normalizedUid;
+  nextRecord.question = normalizedQuestion;
+  nextRecord.genre = normalizedGenre;
+  nextRecord.pickup = true;
+  nextRecord.type = 'pickup';
+  nextRecord.name = String(nextRecord.name || 'Pick Up Question');
+  nextRecord.updatedAt = Date.now();
+  const updates = {};
+  updates[`questions/pickup/${normalizedUid}`] = nextRecord;
+  updates[`questionStatus/${normalizedUid}/updatedAt`] = nextRecord.updatedAt;
+  updates[`questionStatus/${normalizedUid}/pickup`] = true;
+  patchRtdb_(updates, token);
+  return { success: true, message: `UID: ${normalizedUid} updated.` };
+}
+
+function deletePickupQuestion(uid) {
+  const normalizedUid = String(uid || '').trim();
+  if (!normalizedUid) {
+    throw new Error('UID is required.');
+  }
+  const match = findQuestionRowByUid_(normalizedUid);
+  if (!match || match.sheet.getName() !== PICKUP_QUESTION_SHEET_NAME) {
+    throw new Error('指定した Pick Up Question が見つかりませんでした。');
+  }
+  match.sheet.deleteRow(match.rowNumber);
+  const updates = {};
+  updates[`questions/pickup/${normalizedUid}`] = null;
+  updates[`questionStatus/${normalizedUid}`] = null;
+  patchRtdb_(updates, getFirebaseAccessToken_());
+  return { success: true, message: `UID: ${normalizedUid} deleted.` };
+}
+
+function updateAnswerStatus(uid, status) {
+  const match = findQuestionRowByUid_(uid);
+  if (!match) {
+    throw new Error(`UID: ${uid} not found.`);
+  }
+  const answeredIdx = getHeaderIndex_(match.headerMap, '回答済');
+  if (answeredIdx == null) {
+    throw new Error('Column "回答済" not found.');
+  }
+  const isAnswered = status === true || status === 'true' || status === 1;
+  match.sheet.getRange(match.rowNumber, answeredIdx + 1).setValue(isAnswered);
+  const updates = {};
+  updates[`questionStatus/${uid}/answered`] = isAnswered;
+  updates[`questionStatus/${uid}/updatedAt`] = Date.now();
+  try {
+    patchRtdb_(updates, getFirebaseAccessToken_());
+  } catch (error) {
+    console.warn('updateAnswerStatus failed to patch RTDB', error);
+  }
+  return { success: true, message: `UID: ${uid} updated.` };
+}
+
+function normalizeDictionaryEnabled_(value) {
+  if (value === true || value === false) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['', '0', 'false', 'off', 'no'].includes(normalized)) {
+      return false;
+    }
+    if (['1', 'true', 'on', 'yes'].includes(normalized)) {
+      return true;
+    }
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  return Boolean(value);
+}
+
+function normalizeDictionaryTermKey_(value) {
+  return normalizeNameForLookup_(value).toLowerCase();
+}
+
+function loadDictionaryBranch_() {
+  const token = getFirebaseAccessToken_();
+  const branch = fetchRtdb_('dictionary', token) || {};
+  return { token, branch };
+}
+
+function resolveDictionaryEntry_(branch, uid) {
+  if (!branch || typeof branch !== 'object') {
+    return null;
+  }
+  const key = String(uid || '').trim();
+  if (!key) {
+    return null;
+  }
+  const entry = branch[key];
+  if (!entry) {
+    return null;
+  }
+  return {
+    uid: key,
+    term: String(entry.term || '').trim(),
+    ruby: String(entry.ruby || '').trim(),
+    enabled: normalizeDictionaryEnabled_(entry.enabled),
+    createdAt: parseDateToMillis_(entry.createdAt, 0),
+    updatedAt: parseDateToMillis_(entry.updatedAt, 0)
+  };
+}
+
+function findDictionaryUidByTerm_(branch, termKey) {
+  if (!branch || typeof branch !== 'object') {
+    return '';
+  }
+  const normalizedKey = String(termKey || '').trim();
+  if (!normalizedKey) {
+    return '';
+  }
+  const entries = Object.entries(branch);
+  for (let i = 0; i < entries.length; i++) {
+    const [uid, entry] = entries[i];
+    const candidateKey = normalizeDictionaryTermKey_(entry && entry.term);
+    if (candidateKey === normalizedKey) {
+      return uid;
+    }
+  }
+  return '';
+}
+
+function addDictionaryTerm(term, ruby, providedUid) {
+  const normalizedTerm = String(term || '').trim();
+  const normalizedRuby = String(ruby || '').trim();
+  if (!normalizedTerm || !normalizedRuby) {
+    throw new Error('Term and ruby are required.');
+  }
+  const { token, branch } = loadDictionaryBranch_();
+  const termKey = normalizeDictionaryTermKey_(normalizedTerm);
+  const now = Date.now();
+  const existingUid = findDictionaryUidByTerm_(branch, termKey);
+  const updates = {};
+  if (existingUid) {
+    const existing = resolveDictionaryEntry_(branch, existingUid) || {};
+    updates[`dictionary/${existingUid}`] = {
+      uid: existingUid,
+      term: normalizedTerm,
+      ruby: normalizedRuby,
+      enabled: true,
+      termKey,
+      createdAt: existing.createdAt || now,
+      updatedAt: now
+    };
+    patchRtdb_(updates, token);
+    return { success: true, message: `Term "${normalizedTerm}" updated.`, uid: existingUid };
+  }
+  const uid = String(providedUid || '').trim() || Utilities.getUuid();
+  updates[`dictionary/${uid}`] = {
+    uid,
+    term: normalizedTerm,
+    ruby: normalizedRuby,
+    enabled: true,
+    termKey,
+    createdAt: now,
+    updatedAt: now
+  };
+  patchRtdb_(updates, token);
+  return { success: true, message: `Term "${normalizedTerm}" added.`, uid };
+}
+
+function updateDictionaryTerm(uid, term, ruby) {
+  const normalizedUid = String(uid || '').trim();
+  if (!normalizedUid) {
+    throw new Error('uid is required.');
+  }
+  const normalizedTerm = String(term || '').trim();
+  const normalizedRuby = String(ruby || '').trim();
+  if (!normalizedTerm || !normalizedRuby) {
+    throw new Error('Term and ruby are required.');
+  }
+  const { token, branch } = loadDictionaryBranch_();
+  const current = resolveDictionaryEntry_(branch, normalizedUid);
+  if (!current) {
+    throw new Error(`UID: ${normalizedUid} not found.`);
+  }
+  const termKey = normalizeDictionaryTermKey_(normalizedTerm);
+  const now = Date.now();
+  const updates = {};
+  updates[`dictionary/${normalizedUid}`] = {
+    uid: normalizedUid,
+    term: normalizedTerm,
+    ruby: normalizedRuby,
+    enabled: true,
+    termKey,
+    createdAt: current.createdAt || now,
+    updatedAt: now
+  };
+  patchRtdb_(updates, token);
+  return { success: true, message: `UID: ${normalizedUid} updated.` };
+}
+
+function deleteDictionaryTerm(uid, term) {
+  const normalizedUid = String(uid || '').trim();
+  if (!normalizedUid) {
+    throw new Error('uid is required.');
+  }
+  const { token, branch } = loadDictionaryBranch_();
+  const current = resolveDictionaryEntry_(branch, normalizedUid);
+  if (!current) {
+    throw new Error(`UID: ${normalizedUid} not found.`);
+  }
+  const updates = {};
+  updates[`dictionary/${normalizedUid}`] = null;
+  patchRtdb_(updates, token);
+  return { success: true, message: `UID: ${normalizedUid} deleted.` };
+}
+
+function toggleDictionaryTerm(uid, enabled, term) {
+  const normalizedUid = String(uid || '').trim();
+  if (!normalizedUid) {
+    throw new Error('uid is required.');
+  }
+  const normalizedEnabled = normalizeDictionaryEnabled_(enabled);
+  const { token, branch } = loadDictionaryBranch_();
+  const current = resolveDictionaryEntry_(branch, normalizedUid);
+  if (!current) {
+    throw new Error(`UID: ${normalizedUid} not found.`);
+  }
+  const now = Date.now();
+  const termKey = normalizeDictionaryTermKey_(current.term || term || '');
+  const updates = {};
+  updates[`dictionary/${normalizedUid}`] = {
+    uid: normalizedUid,
+    term: current.term || String(term || '').trim(),
+    ruby: current.ruby,
+    enabled: normalizedEnabled,
+    termKey,
+    createdAt: current.createdAt || now,
+    updatedAt: now
+  };
+  patchRtdb_(updates, token);
+  return { success: true, message: `UID: ${normalizedUid} toggled.` };
+}
+
+function batchDeleteDictionaryTerms(uids) {
+  if (!Array.isArray(uids) || !uids.length) {
+    return { success: true, message: 'No entries specified.' };
+  }
+  const normalized = uids.map(uid => String(uid || '').trim()).filter(Boolean);
+  if (!normalized.length) {
+    return { success: true, message: 'No entries specified.' };
+  }
+  const { token, branch } = loadDictionaryBranch_();
+  const updates = {};
+  let deleted = 0;
+  normalized.forEach(uid => {
+    if (resolveDictionaryEntry_(branch, uid)) {
+      updates[`dictionary/${uid}`] = null;
+      deleted++;
+    }
+  });
+  if (deleted) {
+    patchRtdb_(updates, token);
+  }
+  return { success: true, message: `${deleted} entries deleted.` };
+}
+
+function batchToggleDictionaryTerms(uids, enabled) {
+  if (!Array.isArray(uids) || !uids.length) {
+    return { success: true, message: 'No entries specified.' };
+  }
+  const normalized = uids.map(uid => String(uid || '').trim()).filter(Boolean);
+  if (!normalized.length) {
+    return { success: true, message: 'No entries specified.' };
+  }
+  const { token, branch } = loadDictionaryBranch_();
+  const normalizedEnabled = normalizeDictionaryEnabled_(enabled);
+  const now = Date.now();
+  const updates = {};
+  let updated = 0;
+  normalized.forEach(uid => {
+    const current = resolveDictionaryEntry_(branch, uid);
+    if (!current) {
+      return;
+    }
+    updates[`dictionary/${uid}`] = {
+      uid,
+      term: current.term,
+      ruby: current.ruby,
+      enabled: normalizedEnabled,
+      termKey: normalizeDictionaryTermKey_(current.term),
+      createdAt: current.createdAt || now,
+      updatedAt: now
+    };
+    updated++;
+  });
+  if (updated) {
+    patchRtdb_(updates, token);
+  }
+  return { success: true, message: `${updated} entries updated.` };
 }
 
 function createPickupQuestion(question, genre) {
