@@ -209,7 +209,7 @@
       "history": {
         ".indexOn": ["timestamp"],
         "$logId": {
-          ".validate": "!newData.exists() || (newData.hasChildren(['timestamp','User','Action','Details']) && newData.child('timestamp').isNumber() && newData.child('User').isString() && newData.child('Action').isString() && newData.child('Details').isString() && (!newData.child('UserId').exists() || newData.child('UserId').isString()) && (!newData.child('Level').exists() || newData.child('Level').isString()) && (!newData.child('Timestamp').exists() || newData.child('Timestamp').isString()) && (!newData.child('createdAt').exists() || newData.child('createdAt').isNumber() || newData.child('createdAt').val() == now) && (!newData.child('updatedAt').exists() || newData.child('updatedAt').isNumber() || newData.child('updatedAt').val() == now) && newData.getChildrenCount() <= 9)"
+          ".validate": "!newData.exists() || (newData.hasChildren(['timestamp','User','Action','Details']) && newData.child('timestamp').isNumber() && newData.child('User').isString() && newData.child('Action').isString() && newData.child('Details').isString() && (!newData.child('UserId').exists() || newData.child('UserId').isString()) && (!newData.child('Level').exists() || newData.child('Level').isString()) && (!newData.child('Timestamp').exists() || newData.child('Timestamp').isString()) && (!newData.child('createdAt').exists() || newData.child('createdAt').isNumber() || newData.child('createdAt').val() == now) && (!newData.child('updatedAt').exists() || newData.child('updatedAt').isNumber() || newData.child('updatedAt').val() == now) && newData.childrenCount <= 9)"
         }
       }
     },
