@@ -226,6 +226,16 @@ function createPickupRecord(uid, question, genre, existingRecord = null, timesta
   return record;
 }
 
+function buildPickupLogDetails(uid, question, genre) {
+  const normalizedUid = String(uid || "");
+  const normalizedGenre = normalizeGenreValue(genre);
+  const snippet = String(question || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const truncated = snippet.length > 40 ? `${snippet.slice(0, 40)}…` : snippet || "—";
+  return `UID: ${normalizedUid}, Genre: ${normalizedGenre}, Q: ${truncated}`;
+}
+
 function ensureGenreOptions(select) {
   if (!(select instanceof HTMLSelectElement)) {
     return;
@@ -516,7 +526,7 @@ function ensurePickupStates(app) {
     app.pickupEditState = { uid: "", submitting: false, lastFocused: null };
   }
   if (!app.pickupConfirmState) {
-    app.pickupConfirmState = { uid: "", submitting: false, lastFocused: null, question: "" };
+    app.pickupConfirmState = { uid: "", submitting: false, lastFocused: null, question: "", genre: "" };
   }
 }
 
@@ -833,6 +843,7 @@ export async function handlePickupFormSubmit(app, event) {
       [`questionStatus/${uid}`]: { answered: false, selecting: false, pickup: true, updatedAt: now }
     };
     await update(ref(database), updates);
+    app.api?.logAction?.("PICKUP_ADD", buildPickupLogDetails(uid, question, genre));
     if (questionInput) {
       questionInput.value = "";
     }
@@ -959,6 +970,7 @@ export async function handlePickupEditSubmit(app, event) {
       };
     }
     await update(ref(database), updates);
+    app.api?.logAction?.("PICKUP_UPDATE", buildPickupLogDetails(state.uid, question, genre));
     app.toast("Pick Up Question を更新しました。", "success");
     closePickupEditDialog(app);
   } catch (error) {
@@ -1007,6 +1019,7 @@ export function confirmPickupDelete(app, entry, triggerButton) {
   const state = app.pickupConfirmState;
   state.uid = entry.uid;
   state.question = entry.question;
+  state.genre = entry.genre;
   state.lastFocused = triggerButton || document.activeElement;
   state.submitting = false;
   if (message) {
@@ -1043,6 +1056,7 @@ export function closePickupConfirmDialog(app) {
   if (state) {
     state.uid = "";
     state.question = "";
+    state.genre = "";
     state.lastFocused = null;
     state.submitting = false;
   }
@@ -1068,6 +1082,7 @@ export async function handlePickupDelete(app) {
       [`questionStatus/${state.uid}`]: null
     };
     await update(ref(database), updates);
+    app.api?.logAction?.("PICKUP_DELETE", buildPickupLogDetails(state.uid, state.question, state.genre));
     app.toast("Pick Up Question を削除しました。", "success");
     if (app.pickupSelectedId === state.uid) {
       app.pickupSelectedId = "";
