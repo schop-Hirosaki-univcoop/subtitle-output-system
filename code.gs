@@ -3018,6 +3018,53 @@ function restoreRealtimeDatabase_() {
   return { timestamp };
 }
 
+function ensureBackupSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = 'backups';
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Timestamp', 'Data']);
+  }
+  return sheet;
+}
+
+function backupRealtimeDatabase_() {
+  const token = getFirebaseAccessToken_();
+  const snapshot = fetchRtdb_('', token) || {};
+  const sheet = ensureBackupSheet_();
+  const now = new Date();
+  sheet.appendRow([now, JSON.stringify(snapshot)]);
+  return {
+    timestamp: toIsoJst_(now),
+    rowCount: Math.max(0, sheet.getLastRow() - 1)
+  };
+}
+
+function restoreRealtimeDatabase_() {
+  const sheet = ensureBackupSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    throw new Error('バックアップが存在しません。');
+  }
+  const [[rawTimestamp, rawPayload]] = sheet.getRange(lastRow, 1, 1, 2).getValues();
+  if (!rawPayload) {
+    throw new Error('バックアップデータが空です。');
+  }
+  let data;
+  try {
+    data = JSON.parse(rawPayload);
+  } catch (error) {
+    throw new Error('バックアップデータの解析に失敗しました。');
+  }
+  const token = getFirebaseAccessToken_();
+  putRtdb_('', data, token);
+  const timestamp = rawTimestamp instanceof Date ? toIsoJst_(rawTimestamp) : String(rawTimestamp || '');
+  return { timestamp };
+}
+
 function parseBody_(e) {
   if (!e) throw new Error('No body');
 
