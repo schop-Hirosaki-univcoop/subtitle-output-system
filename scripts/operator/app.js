@@ -2424,22 +2424,8 @@ export class OperatorApp {
         console.warn("Failed to load questions before subscriptions", error);
       }
 
-      const expectedQuestionCount = Number(this.preflightContext?.mirror?.questionCount);
-      const hasExpectedCount = Number.isFinite(expectedQuestionCount);
-      const shouldAttemptMirror =
-        !this.preflightContext || !hasExpectedCount || expectedQuestionCount > 0;
-
-      let hasQuestions = questionsSnapshot?.exists?.() && questionsSnapshot.exists();
-      if (!hasQuestions && shouldAttemptMirror) {
-        this.setLoaderStep(3, this.isEmbedded ? "初期データを同期しています…" : "初期ミラー実行中…");
-        try {
-          await this.api.apiPost({ action: "mirrorSheet" });
-          questionsSnapshot = await get(questionsRef);
-          hasQuestions = questionsSnapshot?.exists?.() && questionsSnapshot.exists();
-        } catch (error) {
-          console.warn("Failed to mirror questions during operator bootstrap", error);
-        }
-      } else if (!hasQuestions) {
+      const hasQuestions = questionsSnapshot?.exists?.() && questionsSnapshot.exists();
+      if (!hasQuestions) {
         this.setLoaderStep(3, this.isEmbedded ? "プリフライト済みの空データを適用しています…" : "プリフライトの結果を適用しています…");
       }
 

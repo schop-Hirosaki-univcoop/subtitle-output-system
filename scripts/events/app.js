@@ -149,6 +149,8 @@ export class EventAdminApp {
     this.applyMetaNote();
     this.chat = new EventChat(this);
     this.operatorMode = OPERATOR_MODE_TELOP;
+    this.backupInFlight = false;
+    this.restoreInFlight = false;
     this.displayUrlCopyTimer = 0;
     this.operatorPresenceEntries = [];
     this.operatorPresenceEventId = "";
@@ -456,6 +458,7 @@ export class EventAdminApp {
     this.updatePanelNavigation();
     this.updateSelectionNotes();
     this.refreshChatIndicators();
+    this.applyBackupRestoreState();
   }
 
   bindEvents() {
@@ -479,6 +482,18 @@ export class EventAdminApp {
           this.endEventsLoading();
           this.dom.refreshButton.disabled = false;
         }
+      });
+    }
+
+    if (this.dom.backupButton) {
+      this.dom.backupButton.addEventListener("click", () => {
+        void this.handleBackupClick();
+      });
+    }
+
+    if (this.dom.restoreButton) {
+      this.dom.restoreButton.addEventListener("click", () => {
+        void this.handleRestoreClick();
       });
     }
 
@@ -670,6 +685,103 @@ export class EventAdminApp {
       if (this.dom.logoutButton) {
         this.dom.logoutButton.disabled = false;
       }
+    }
+  }
+
+  applyBackupRestoreState() {
+    const anyBusy = this.backupInFlight || this.restoreInFlight;
+    const backupButton = this.dom.backupButton;
+    if (backupButton) {
+      backupButton.disabled = anyBusy;
+      if (this.backupInFlight) {
+        backupButton.setAttribute("aria-busy", "true");
+      } else {
+        backupButton.removeAttribute("aria-busy");
+      }
+    }
+    const restoreButton = this.dom.restoreButton;
+    if (restoreButton) {
+      restoreButton.disabled = anyBusy;
+      if (this.restoreInFlight) {
+        restoreButton.setAttribute("aria-busy", "true");
+      } else {
+        restoreButton.removeAttribute("aria-busy");
+      }
+    }
+  }
+
+  formatBackupTimestamp(value) {
+    if (!value) {
+      return "";
+    }
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return String(value);
+    }
+    try {
+      return date.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+    } catch (error) {
+      console.warn("Failed to format backup timestamp", error);
+      return date.toISOString();
+    }
+  }
+
+  async handleBackupClick() {
+    if (this.backupInFlight || this.restoreInFlight) {
+      return;
+    }
+    this.backupInFlight = true;
+    this.applyBackupRestoreState();
+    try {
+      const result = await this.api.apiPost({ action: "backupRealtimeDatabase" });
+      const timestamp = this.formatBackupTimestamp(result?.timestamp);
+      const message = timestamp
+        ? `最新のバックアップを作成しました（${timestamp}）。`
+        : "最新のバックアップを作成しました。";
+      this.showAlert(message);
+    } catch (error) {
+      logError("Failed to backup realtime database", error);
+      const detail = error && typeof error === "object" && "message" in error ? error.message : "";
+      const fallback = "バックアップに失敗しました。時間をおいて再度お試しください。";
+      this.showAlert(detail ? `バックアップに失敗しました: ${detail}` : fallback);
+    } finally {
+      this.backupInFlight = false;
+      this.applyBackupRestoreState();
+    }
+  }
+
+  async handleRestoreClick() {
+    if (this.backupInFlight || this.restoreInFlight) {
+      return;
+    }
+    const confirmed = await this.confirm({
+      title: "バックアップを復元",
+      description: "最新のバックアップでRealtime Databaseを上書きします。現在のデータは失われますがよろしいですか？",
+      confirmLabel: "復元する",
+      cancelLabel: "キャンセル",
+      tone: "danger"
+    });
+    if (!confirmed) {
+      return;
+    }
+    this.restoreInFlight = true;
+    this.applyBackupRestoreState();
+    try {
+      const result = await this.api.apiPost({ action: "restoreRealtimeDatabase" });
+      const timestamp = this.formatBackupTimestamp(result?.timestamp);
+      const message = timestamp
+        ? `バックアップ（${timestamp}）を復元しました。`
+        : "バックアップを復元しました。";
+      this.showAlert(message);
+      await this.loadEvents();
+    } catch (error) {
+      logError("Failed to restore realtime database", error);
+      const detail = error && typeof error === "object" && "message" in error ? error.message : "";
+      const fallback = "復元に失敗しました。時間をおいて再度お試しください。";
+      this.showAlert(detail ? `復元に失敗しました: ${detail}` : fallback);
+    } finally {
+      this.restoreInFlight = false;
+      this.applyBackupRestoreState();
     }
   }
 
@@ -7486,7 +7598,6 @@ export class EventAdminApp {
 
       await this.loadEvents();
       this.selectSchedule(scheduleId);
-      await this.requestSheetSync();
     } finally {
       this.endScheduleLoading();
     }
@@ -7516,7 +7627,6 @@ export class EventAdminApp {
 
       await this.loadEvents();
       this.selectSchedule(scheduleId);
-      await this.requestSheetSync();
     } finally {
       this.endScheduleLoading();
     }
@@ -7570,7 +7680,6 @@ export class EventAdminApp {
       await update(ref(database), updates);
       await this.loadEvents();
       this.selectSchedule("");
-      await this.requestSheetSync();
     } catch (error) {
       throw new Error(error?.message || "日程の削除に失敗しました。");
     } finally {
@@ -7713,7 +7822,6 @@ export class EventAdminApp {
       });
       await this.loadEvents();
       this.selectEvent(eventId);
-      await this.requestSheetSync();
     } finally {
       this.endEventsLoading();
     }
@@ -7737,7 +7845,6 @@ export class EventAdminApp {
       });
       await this.loadEvents();
       this.selectEvent(eventId);
-      await this.requestSheetSync();
     } finally {
       this.endEventsLoading();
     }
@@ -7777,24 +7884,12 @@ export class EventAdminApp {
 
       await update(ref(database), updates);
       await this.loadEvents();
-      await this.requestSheetSync();
       this.showAlert(`イベント「${label}」を削除しました。`);
     } catch (error) {
       throw new Error(error?.message || "イベントの削除に失敗しました。");
     } finally {
       this.endEventsLoading();
     }
-  }
-
-  requestSheetSync() {
-    if (!this.api) {
-      return;
-    }
-    this.api
-      .apiPost({ action: "syncQuestionIntakeToSheet" })
-      .catch((error) => {
-        console.warn("Failed to request sheet sync:", error);
-      });
   }
 
   bindDialogDismiss(element) {

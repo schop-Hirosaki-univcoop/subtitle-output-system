@@ -261,17 +261,6 @@ export async function runAuthPreflight({
       console.warn("Failed to read questions during preflight", error);
     }
 
-    if (!snapshot?.exists?.() || !snapshot.exists()) {
-      report("mirror", "refresh");
-      try {
-        await api.apiPost({ action: "mirrorSheet" });
-        snapshot = await get(questionsRef);
-      } catch (error) {
-        console.warn("Failed to mirror questions during preflight", error);
-        snapshot = null;
-      }
-    }
-
     const data = snapshot?.exists?.() && snapshot.exists() ? snapshot.val() || {} : {};
     mirrorInfo = { syncedAt: now, questionCount: countQuestions(data) };
     report("mirror", "success", { questionCount: mirrorInfo.questionCount, fallback: false });
