@@ -567,8 +567,14 @@ export async function handleUnanswer(app) {
   });
   if (!confirmed) return;
   const uid = app.state.selectedRowData.uid;
-  update(ref(database, `questionStatus/${uid}`), { answered: false, updatedAt: serverTimestamp() });
-  app.api.fireAndForgetApi({ action: "updateStatus", uid: app.state.selectedRowData.uid, status: false });
+  try {
+    await update(ref(database, `questionStatus/${uid}`), { answered: false, updatedAt: serverTimestamp() });
+    app.api.fireAndForgetApi({ action: "updateStatus", uid: app.state.selectedRowData.uid, status: false });
+    app.api.logAction("UNANSWER", `UID: ${uid}, RN: ${displayLabel}`);
+  } catch (error) {
+    console.error("Failed to revert question to unanswered", error);
+    app.toast("未回答への戻し中にエラーが発生しました。", "error");
+  }
 }
 
 export function handleSelectAll(app, event) {
@@ -610,6 +616,9 @@ export async function handleBatchUnanswer(app) {
   try {
     await update(ref(database), updates);
     app.api.fireAndForgetApi({ action: "batchUpdateStatus", uids: uidsToUpdate, status: false });
+    if (uidsToUpdate.length) {
+      app.api.logAction("BATCH_UNANSWER", `Count: ${uidsToUpdate.length}`);
+    }
     checkedBoxes.forEach((checkbox) => {
       checkbox.checked = false;
     });
