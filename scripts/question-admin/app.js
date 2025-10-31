@@ -3194,9 +3194,11 @@ async function loadParticipants(options = {}) {
   try {
     await ensureTokenSnapshot(false);
     // --- FIX 1: Load current schedule participants ONLY ---
-    let scheduleBranch = await fetchDbValue(`questionIntake/participants/${eventId}/${scheduleId}`);
-    scheduleBranch = scheduleBranch && typeof scheduleBranch === "object"      ? eventBranch[scheduleId]
-      : {};
+    let scheduleBranch = await fetchDbValue(
+      `questionIntake/participants/${eventId}/${scheduleId}`
+    );
+    scheduleBranch =
+      scheduleBranch && typeof scheduleBranch === "object" ? scheduleBranch : {};
     // Temporarily set eventBranch to just this schedule's data
     let eventBranch = { [scheduleId]: scheduleBranch };
     let normalized = Object.entries(scheduleBranch)
@@ -3219,10 +3221,13 @@ async function loadParticipants(options = {}) {
           await ensureTokenSnapshot(true);
           
           // Re-fetch scheduleBranch in case of sheet hydration
-          scheduleBranch = await fetchDbValue(`questionIntake/participants/${eventId}/${scheduleId}`);
-          scheduleBranch = scheduleBranch && typeof scheduleBranch === "object"
-            ? eventBranch[scheduleId]
-            : {};
+          scheduleBranch = await fetchDbValue(
+            `questionIntake/participants/${eventId}/${scheduleId}`
+          );
+          scheduleBranch =
+            scheduleBranch && typeof scheduleBranch === "object"
+              ? scheduleBranch
+              : {};
           eventBranch = { [scheduleId]: scheduleBranch };
           normalized = Object.entries(scheduleBranch)
             .map(([participantKey, participantValue]) =>
@@ -3266,6 +3271,8 @@ async function loadParticipants(options = {}) {
         state.knownTokens.add(token);
       }
     });
+    state.duplicateMatches = new Map();
+    state.duplicateGroups = new Map();
     const overrideKey = eventId && scheduleId ? `${eventId}::${scheduleId}` : "";
     const override = overrideKey && state.scheduleContextOverrides instanceof Map
       ? state.scheduleContextOverrides.get(overrideKey)
