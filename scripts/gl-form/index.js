@@ -366,6 +366,20 @@ function renderAcademicTreeForFaculty(facultyName) {
   } else {
     updateAcademicCustomField("所属");
   }
+  if (hasEnd) {
+    const end = new Date(endAt);
+    return `${shiftDateFormatter.format(end)} ${scheduleTimeFormatter.format(end)}`;
+  }
+  const rawDateText = ensureString(fallbackDate);
+  if (!rawDateText) {
+    return "";
+  }
+  const parsed = Date.parse(rawDateText);
+  if (!Number.isNaN(parsed)) {
+    const date = new Date(parsed);
+    return `${shiftDateFormatter.format(date)} ${scheduleTimeFormatter.format(date)}`;
+  }
+  return rawDateText;
 }
 
 function collectAcademicPathState() {
