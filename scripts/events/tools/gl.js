@@ -98,6 +98,49 @@ function formatTeamConfig(teams = []) {
   return teams.map((team) => ensureString(team)).filter(Boolean).join("\n");
 }
 
+function normalizeScheduleConfig(raw) {
+  if (!raw) {
+    return [];
+  }
+  if (Array.isArray(raw)) {
+    return raw
+      .map((entry) => ({
+        id: ensureString(entry?.id),
+        label: ensureString(entry?.label || entry?.date || entry?.id),
+        date: ensureString(entry?.date || entry?.startAt || "")
+      }))
+      .filter((entry) => entry.id);
+  }
+  if (typeof raw === "object") {
+    return Object.entries(raw)
+      .map(([key, value]) => {
+        const id = ensureString(value?.id) || ensureString(key);
+        return {
+          id,
+          label: ensureString(value?.label || value?.date || value?.id || key),
+          date: ensureString(value?.date || value?.startAt || "")
+        };
+      })
+      .filter((entry) => entry.id);
+  }
+  return [];
+}
+
+function buildScheduleConfigMap(schedules = []) {
+  return schedules.reduce((acc, schedule) => {
+    const id = ensureString(schedule?.id);
+    if (!id) {
+      return acc;
+    }
+    acc[id] = {
+      id,
+      label: ensureString(schedule?.label || schedule?.date || id),
+      date: ensureString(schedule?.date || schedule?.startAt || "")
+    };
+    return acc;
+  }, {});
+}
+
 function normalizeAssignmentSnapshot(snapshot = {}) {
   const map = new Map();
   if (!snapshot || typeof snapshot !== "object") {
@@ -405,11 +448,12 @@ export class GlToolManager {
 
   applyConfig(raw) {
     const config = raw && typeof raw === "object" ? raw : {};
+    const schedules = normalizeScheduleConfig(config.schedules);
     this.config = {
       slug: ensureString(config.slug),
       faculties: Array.isArray(config.faculties) ? config.faculties : [],
       teams: Array.isArray(config.teams) ? config.teams : [],
-      schedules: Array.isArray(config.schedules) ? config.schedules : [],
+      schedules,
       startAt: config.startAt || "",
       endAt: config.endAt || "",
       guidance: ensureString(config.guidance),
@@ -484,13 +528,14 @@ export class GlToolManager {
         return;
       }
     }
-    const scheduleSummary = this.getAvailableSchedules({ includeConfigFallback: true })
+    const scheduleSummaryList = this.getAvailableSchedules({ includeConfigFallback: true })
       .map((schedule) => ({
         id: ensureString(schedule?.id),
         label: ensureString(schedule?.label || schedule?.date || schedule?.id),
-        date: ensureString(schedule?.date || schedule?.startAt)
+        date: ensureString(schedule?.date || schedule?.startAt || "")
       }))
       .filter((entry) => entry.id);
+    const scheduleSummary = buildScheduleConfigMap(scheduleSummaryList);
     const configPayload = {
       slug,
       startAt,

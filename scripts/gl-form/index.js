@@ -243,11 +243,14 @@ function parseSchedules(raw) {
   }
   if (typeof raw === "object") {
     return Object.entries(raw)
-      .map(([id, schedule]) => ({
-        id: ensureString(id),
-        label: ensureString(schedule?.label || schedule?.date || id),
-        date: ensureString(schedule?.date)
-      }))
+      .map(([id, schedule]) => {
+        const scheduleId = ensureString(schedule?.id) || ensureString(id);
+        return {
+          id: scheduleId,
+          label: ensureString(schedule?.label || schedule?.date || scheduleId || id),
+          date: ensureString(schedule?.date || schedule?.startAt || "")
+        };
+      })
       .filter((entry) => entry.id);
   }
   return [];
