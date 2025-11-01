@@ -150,6 +150,7 @@
         </button>
         <nav class="sidebar-nav" aria-label="パネル選択">
           <button id="flow-tab-participants" class="sidebar-nav__button" type="button" data-panel-target="participants">参加者リスト</button>
+          <button id="flow-tab-gl" class="sidebar-nav__button" type="button" data-panel-target="gl">GLリスト</button>
           <button id="flow-tab-operator" class="sidebar-nav__button" type="button" data-panel-target="operator">テロップ操作</button>
           <button id="flow-tab-dictionary" class="sidebar-nav__button" type="button" data-panel-target="dictionary">ルビ辞書</button>
           <button id="flow-tab-pickup" class="sidebar-nav__button" type="button" data-panel-target="pickup">Pick Up Question</button>
@@ -430,6 +431,96 @@
                   </div>
                 </div>
               </div>
+        </section>
+        <!-- GL管理パネル: 応募設定と班割りの整理を行う -->
+        <section id="flow-panel-gl" class="flow-tool-panel flow-stage-panel" data-panel="gl" aria-labelledby="flow-panel-gl-title" hidden>
+          <div class="module module--primary admin-module" aria-labelledby="flow-panel-gl-title">
+            <div class="module-header">
+              <div class="module-heading">
+                <h2 id="flow-panel-gl-title">GLリストの管理</h2>
+                <p class="module-description">
+                  選択したイベントのGL応募情報を確認し、募集設定や班割りステータスを更新できます。募集URLのコピー、募集期間の調整、学部学科や班リストの編集が可能です。
+                </p>
+              </div>
+            </div>
+            <div class="module-body">
+              <div class="gl-config-grid">
+                <section class="gl-config-card" aria-labelledby="gl-config-title">
+                  <div class="gl-card-header">
+                    <h3 id="gl-config-title" class="gl-card-title">募集設定</h3>
+                    <p id="gl-config-status" class="gl-card-status" role="status" aria-live="polite"></p>
+                  </div>
+                  <div class="gl-card-body">
+                    <p id="gl-config-event-note" class="gl-card-note" hidden>イベントを選択してください。</p>
+                    <div id="gl-config-content" class="gl-config-content" hidden>
+                      <div class="gl-config-row">
+                        <label class="gl-config-label" for="gl-link-slug">フォーム識別子</label>
+                        <div class="gl-config-control">
+                          <input id="gl-link-slug" class="input" type="text" autocomplete="off" spellcheck="false" placeholder="例: summer-gl-2025">
+                          <p class="gl-config-hint">GL応募フォームのURLに利用するIDです。例: <code>gl-form.html?evt=<span id="gl-link-slug-preview">sample</span></code></p>
+                        </div>
+                      </div>
+                      <div class="gl-config-row">
+                        <label class="gl-config-label" for="gl-period-start">募集開始</label>
+                        <div class="gl-config-control">
+                          <input id="gl-period-start" class="input" type="datetime-local">
+                        </div>
+                      </div>
+                      <div class="gl-config-row">
+                        <label class="gl-config-label" for="gl-period-end">募集終了</label>
+                        <div class="gl-config-control">
+                          <input id="gl-period-end" class="input" type="datetime-local">
+                        </div>
+                      </div>
+                      <div class="gl-config-row">
+                        <label class="gl-config-label" for="gl-faculty-config">学部・学科リスト</label>
+                        <div class="gl-config-control">
+                          <textarea id="gl-faculty-config" class="input input--textarea" rows="6" placeholder="学部: 学科1, 学科2"></textarea>
+                          <p class="gl-config-hint">1行につき「学部名: 学科A, 学科B」の形式で入力してください。</p>
+                        </div>
+                      </div>
+                      <div class="gl-config-row">
+                        <label class="gl-config-label" for="gl-team-config">班リスト</label>
+                        <div class="gl-config-control">
+                          <textarea id="gl-team-config" class="input input--textarea" rows="4" placeholder="A-1&#10;A-2"></textarea>
+                          <p class="gl-config-hint">1行につき1つの班名称を入力します。欠席・運営は自動で追加されます。</p>
+                        </div>
+                      </div>
+                      <div class="gl-config-actions">
+                        <button id="gl-config-save" class="btn btn-primary btn-sm" type="button">設定を保存</button>
+                        <button id="gl-config-copy" class="btn btn-ghost btn-sm" type="button" disabled>応募URLをコピー</button>
+                        <span id="gl-config-copy-status" class="visually-hidden" aria-live="polite"></span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="gl-applications-card" aria-labelledby="gl-application-title">
+                  <div class="gl-card-header">
+                    <h3 id="gl-application-title" class="gl-card-title">応募一覧</h3>
+                    <div class="gl-card-tools">
+                      <label class="gl-filter-label" for="gl-filter">表示</label>
+                      <select id="gl-filter" class="input input--dense">
+                        <option value="all" selected>すべて</option>
+                        <option value="unassigned">未割当</option>
+                        <option value="assigned">班割当のみ</option>
+                        <option value="absent">欠席</option>
+                        <option value="staff">運営待機</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="gl-card-body">
+                    <p id="gl-application-empty" class="gl-card-note" hidden>応募はまだありません。フォームを公開し、GLからの応募をお待ちください。</p>
+                    <div id="gl-application-loading" class="hub-loading" role="status" hidden>
+                      <span class="spinner" aria-hidden="true"></span>
+                      <span>応募情報を読み込んでいます…</span>
+                    </div>
+                    <ul id="gl-application-list" class="gl-application-list" aria-live="polite"></ul>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
         </section>
         <!-- テロップ操作ツール: 本番テロップの送出面を iframe で統合 -->
         <section id="flow-panel-operator" class="flow-tool-panel flow-stage-panel" data-panel="operator" aria-labelledby="flow-panel-operator-title" hidden>

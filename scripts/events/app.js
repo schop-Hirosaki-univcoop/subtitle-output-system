@@ -2608,6 +2608,7 @@ export class EventAdminApp {
     return {
       events: this.dom.eventsModule,
       schedules: this.dom.schedulesModule,
+      gl: this.dom.glPanel,
       participants: this.dom.participantsPanel,
       operator: this.dom.operatorPanel,
       dictionary: this.dom.dictionaryPanel,
