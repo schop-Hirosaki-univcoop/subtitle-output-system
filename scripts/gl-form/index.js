@@ -366,9 +366,23 @@ function renderAcademicTreeForFaculty(facultyName) {
   } else {
     updateAcademicCustomField("所属");
   }
+  if (hasEnd) {
+    const end = new Date(endAt);
+    return `${shiftDateFormatter.format(end)} ${scheduleTimeFormatter.format(end)}`;
+  }
+  const rawDateText = ensureString(fallbackDate);
+  if (!rawDateText) {
+    return "";
+  }
+  const parsed = Date.parse(rawDateText);
+  if (!Number.isNaN(parsed)) {
+    const date = new Date(parsed);
+    return `${shiftDateFormatter.format(date)} ${scheduleTimeFormatter.format(date)}`;
+  }
+  return rawDateText;
 }
 
-function getAcademicPath() {
+function collectAcademicPathState() {
   const selects = Array.from(elements.academicFields?.querySelectorAll(".gl-academic-select") ?? []);
   const path = [];
   let requiresCustom = false;
@@ -466,174 +480,6 @@ function formatScheduleRange(startAt, endAt, fallbackDate) {
   if (!Number.isNaN(parsed)) {
     const date = new Date(parsed);
     return `${shiftDateFormatter.format(date)} ${scheduleTimeFormatter.format(date)}`;
-  }
-  return rawDateText;
-}
-
-function formatScheduleOption(schedule) {
-  const fallbackDate = ensureString(schedule.date);
-  const rangeText = ensureString(formatScheduleRange(schedule.startAt, schedule.endAt, fallbackDate));
-  const labelText = ensureString(schedule.label);
-  if (rangeText && labelText && !rangeText.includes(labelText)) {
-    return `${rangeText}（${labelText}）`;
-  }
-  return rangeText || labelText || ensureString(schedule.id);
-}
-
-function getAcademicPath() {
-  const selects = Array.from(elements.academicFields?.querySelectorAll(".gl-academic-select") ?? []);
-  const path = [];
-  let requiresCustom = false;
-  let customLabel = "";
-  let firstSelect = null;
-  let pendingSelect = null;
-  selects.forEach((select) => {
-    if (!(select instanceof HTMLSelectElement)) return;
-    if (!firstSelect) {
-      firstSelect = select;
-    }
-    const level = unitLevelMap.get(select);
-    const levelLabel = level?.label ?? "";
-    const value = ensureString(select.value);
-    if (!value && !pendingSelect) {
-      pendingSelect = select;
-    }
-    if (!value) return;
-    if (value === CUSTOM_OPTION_VALUE) {
-      requiresCustom = true;
-      customLabel = levelLabel || customLabel;
-      path.push({
-        label: levelLabel,
-        value: ensureString(elements.academicCustomInput?.value),
-        isCustom: true,
-        element: elements.academicCustomInput ?? null
-      });
-      return;
-    }
-    const selectedOption = select.selectedOptions[0];
-    const optionIndex = selectedOption ? Number(selectedOption.dataset.optionIndex ?? "-1") : -1;
-    const option = optionIndex >= 0 && level ? level.options[optionIndex] : null;
-    const storedValue = option ? option.value : value;
-    path.push({
-      label: levelLabel,
-      value: storedValue,
-      displayLabel: option ? option.label : ensureString(selectedOption?.textContent ?? storedValue),
-      isCustom: false,
-      element: select
-    });
-  });
-  if (!selects.length && state.currentCustomLabel) {
-    requiresCustom = true;
-    customLabel = state.currentCustomLabel;
-    path.push({
-      label: state.currentCustomLabel,
-      value: ensureString(elements.academicCustomInput?.value),
-      isCustom: true,
-      element: elements.academicCustomInput ?? null
-    });
-  }
-  const customValue = ensureString(elements.academicCustomInput?.value);
-  return { path, requiresCustom, customLabel, customValue, firstSelect, pendingSelect };
-}
-
-const scheduleDateFormatter = new Intl.DateTimeFormat("ja-JP", {
-  month: "numeric",
-  day: "numeric",
-  weekday: "short"
-});
-
-const scheduleTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
-  hour: "2-digit",
-  minute: "2-digit"
-});
-
-function formatScheduleRange(startAt, endAt, fallbackDate) {
-  const hasStart = Number.isFinite(startAt) && startAt > 0;
-  const hasEnd = Number.isFinite(endAt) && endAt > 0;
-  if (hasStart && hasEnd) {
-    const start = new Date(startAt);
-    const end = new Date(endAt);
-    const startDateText = scheduleDateFormatter.format(start);
-    const endDateText = scheduleDateFormatter.format(end);
-    const startTimeText = scheduleTimeFormatter.format(start);
-    const endTimeText = scheduleTimeFormatter.format(end);
-    if (startDateText === endDateText) {
-      return `${startDateText} ${startTimeText}〜${endTimeText}`;
-    }
-    return `${startDateText} ${startTimeText} 〜 ${endDateText} ${endTimeText}`;
-  }
-  if (hasStart) {
-    const start = new Date(startAt);
-    return `${scheduleDateFormatter.format(start)} ${scheduleTimeFormatter.format(start)}`;
-  }
-  if (hasEnd) {
-    const end = new Date(endAt);
-    return `${scheduleDateFormatter.format(end)} ${scheduleTimeFormatter.format(end)}`;
-  }
-  const rawDateText = ensureString(fallbackDate);
-  if (!rawDateText) {
-    return "";
-  }
-  const parsed = Date.parse(rawDateText);
-  if (!Number.isNaN(parsed)) {
-    const date = new Date(parsed);
-    return `${scheduleDateFormatter.format(date)} ${scheduleTimeFormatter.format(date)}`;
-  }
-  return rawDateText;
-}
-
-function formatScheduleOption(schedule) {
-  const fallbackDate = ensureString(schedule.date);
-  const rangeText = ensureString(formatScheduleRange(schedule.startAt, schedule.endAt, fallbackDate));
-  const labelText = ensureString(schedule.label);
-  if (rangeText && labelText && !rangeText.includes(labelText)) {
-    return `${rangeText}（${labelText}）`;
-  }
-  return rangeText || labelText || ensureString(schedule.id);
-}
-
-const scheduleDateFormatter = new Intl.DateTimeFormat("ja-JP", {
-  month: "numeric",
-  day: "numeric",
-  weekday: "short"
-});
-
-const scheduleTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
-  hour: "2-digit",
-  minute: "2-digit"
-});
-
-function formatScheduleRange(startAt, endAt, fallbackDate) {
-  const hasStart = Number.isFinite(startAt) && startAt > 0;
-  const hasEnd = Number.isFinite(endAt) && endAt > 0;
-  if (hasStart && hasEnd) {
-    const start = new Date(startAt);
-    const end = new Date(endAt);
-    const startDateText = scheduleDateFormatter.format(start);
-    const endDateText = scheduleDateFormatter.format(end);
-    const startTimeText = scheduleTimeFormatter.format(start);
-    const endTimeText = scheduleTimeFormatter.format(end);
-    if (startDateText === endDateText) {
-      return `${startDateText} ${startTimeText}〜${endTimeText}`;
-    }
-    return `${startDateText} ${startTimeText} 〜 ${endDateText} ${endTimeText}`;
-  }
-  if (hasStart) {
-    const start = new Date(startAt);
-    return `${scheduleDateFormatter.format(start)} ${scheduleTimeFormatter.format(start)}`;
-  }
-  if (hasEnd) {
-    const end = new Date(endAt);
-    return `${scheduleDateFormatter.format(end)} ${scheduleTimeFormatter.format(end)}`;
-  }
-  const rawDateText = ensureString(fallbackDate);
-  if (!rawDateText) {
-    return "";
-  }
-  const parsed = Date.parse(rawDateText);
-  if (!Number.isNaN(parsed)) {
-    const date = new Date(parsed);
-    return `${scheduleDateFormatter.format(date)} ${scheduleTimeFormatter.format(date)}`;
   }
   return rawDateText;
 }
@@ -850,7 +696,7 @@ async function handleSubmit(event) {
     elements.facultySelect?.focus();
     return;
   }
-  const academic = getAcademicPath();
+  const academic = collectAcademicPathState();
   if (academic.pendingSelect instanceof HTMLSelectElement) {
     const label = ensureString(academic.pendingSelect.dataset.levelLabel) || "所属";
     elements.feedback.textContent = `${label}を選択してください。`;
