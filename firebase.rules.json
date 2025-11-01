@@ -96,6 +96,55 @@
       }
     },
 
+    "glIntake": {
+      "events": {
+        "$eventId": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+          ".validate": "!newData.exists() || newData.isMap()"
+        }
+      },
+      "applications": {
+        "$eventId": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+          "$applicationId": {
+            ".write": "(auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)) || (auth == null && !data.exists())",
+            ".validate": "newData.hasChildren(['name','email','faculty','department','shifts','eventId','eventName','slug','createdAt','updatedAt']) && newData.child('name').isString() && newData.child('email').isString() && newData.child('faculty').isString() && newData.child('department').isString() && newData.child('eventId').isString() && newData.child('eventName').isString() && newData.child('slug').isString() && (!newData.child('grade').exists() || newData.child('grade').isString()) && (!newData.child('phonetic').exists() || newData.child('phonetic').isString()) && (!newData.child('club').exists() || newData.child('club').isString()) && (!newData.child('studentId').exists() || newData.child('studentId').isString()) && (!newData.child('note').exists() || newData.child('note').isString()) && !newData.child('shifts').isString() && !newData.child('shifts').isNumber() && !newData.child('shifts').isBoolean() && (newData.child('createdAt').isNumber() || newData.child('createdAt').val() == now) && (newData.child('updatedAt').isNumber() || newData.child('updatedAt').val() == now)",
+          "createdAt": { ".validate": "newData.isNumber() || newData.val() == now" },
+          "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now" },
+          "shifts": {
+            ".validate": "!newData.isString() && !newData.isNumber() && !newData.isBoolean()",
+            "$scheduleId": { ".validate": "!newData.exists() || newData.isBoolean()" }
+          },
+          "$other": { ".validate": true }
+        }
+      }
+      },
+      "slugIndex": {
+        "$slug": {
+          ".read": true,
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+          ".validate": "newData.isString() || !newData.exists()"
+        }
+      }
+    },
+
+    "glAssignments": {
+      "$eventId": {
+        ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+        "$glId": {
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+          ".validate": "!newData.exists() || (newData.hasChildren(['status','teamId','updatedAt']) && newData.child('status').isString() && newData.child('teamId').isString() && (newData.child('updatedAt').isNumber() || newData.child('updatedAt').val() == now) && (!newData.child('updatedByUid').exists() || newData.child('updatedByUid').isString()) && (!newData.child('updatedByName').exists() || newData.child('updatedByName').isString()))",
+          "status": { ".validate": "newData.isString() || !newData.exists()" },
+          "teamId": { ".validate": "newData.isString() || !newData.exists()" },
+          "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
+          "updatedByUid": { ".validate": "newData.isString() || !newData.exists()" },
+          "updatedByName": { ".validate": "newData.isString() || !newData.exists()" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+
     "operatorPresence": {
       ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
       "$eventId": {

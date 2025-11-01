@@ -151,6 +151,22 @@ body.question-admin-page{
   gap:.75rem;
   align-items:flex-start;
 }
+.gl-shift-checkboxes{
+  display:grid;
+  gap:.75rem;
+  grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));
+}
+.gl-shift-option{
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+  font-size:.9rem;
+  color:rgba(230,242,255,.9);
+}
+.gl-shift-option input{
+  width:1.1rem;
+  height:1.1rem;
+}
 
 .form-feedback{
   min-height:1.25rem;
@@ -158,14 +174,11 @@ body.question-admin-page{
   font-size:.9rem;
   color:var(--muted);
 }
-
-.form-feedback--success{
-  color:var(--success);
-}
-
-.form-feedback--error{
-  color:var(--danger);
-}
+.form-feedback[data-variant="success"],
+.form-feedback--success{color:var(--success);}
+.form-feedback[data-variant="error"],
+.form-feedback--error{color:var(--danger);}
+.form-feedback[data-variant="progress"]{color:var(--accent);}
 
 /* 送信後の案内文章ブロック */
 .form-meta{
