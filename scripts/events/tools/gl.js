@@ -219,6 +219,52 @@ export class GlToolManager {
     this.updateConfigVisibility();
   }
 
+  getAvailableSchedules({ includeConfigFallback = false } = {}) {
+    const eventId = ensureString(this.currentEventId);
+    if (!eventId) {
+      if (includeConfigFallback && Array.isArray(this.config?.schedules)) {
+        return this.config.schedules.map((schedule) => ({ ...schedule }));
+      }
+      return [];
+    }
+
+    const scheduleSource = [];
+    const selectedEventId = ensureString(this.app?.selectedEventId);
+    if (Array.isArray(this.app?.schedules) && selectedEventId === eventId) {
+      scheduleSource.push(...this.app.schedules);
+    }
+
+    if (!scheduleSource.length && Array.isArray(this.app?.events)) {
+      const match = this.app.events.find((entry) => ensureString(entry.id) === eventId);
+      if (match && Array.isArray(match.schedules)) {
+        scheduleSource.push(...match.schedules);
+      }
+    }
+
+    if (
+      !scheduleSource.length &&
+      typeof this.app?.getParticipantEventsSnapshot === "function"
+    ) {
+      const snapshot = this.app.getParticipantEventsSnapshot();
+      const match = Array.isArray(snapshot)
+        ? snapshot.find((entry) => ensureString(entry?.id) === eventId)
+        : null;
+      if (match && Array.isArray(match.schedules)) {
+        scheduleSource.push(...match.schedules);
+      }
+    }
+
+    if (!scheduleSource.length && includeConfigFallback && Array.isArray(this.config?.schedules)) {
+      return this.config.schedules.map((schedule) => ({ ...schedule }));
+    }
+
+    return scheduleSource.map((schedule) => ({ ...schedule }));
+  }
+
+  refreshSchedules() {
+    this.currentSchedules = this.getAvailableSchedules({ includeConfigFallback: true });
+  }
+
   bindDom() {
     if (this.dom.glConfigSaveButton) {
       this.dom.glConfigSaveButton.addEventListener("click", () => {
@@ -297,10 +343,10 @@ export class GlToolManager {
     const active = events.find((event) => ensureString(event.id) === this.currentEventId) || null;
     if (active) {
       this.currentEventName = ensureString(active.name) || this.currentEventId;
-      this.currentSchedules = Array.isArray(active.schedules) ? [...active.schedules] : [];
-      this.renderApplications();
-      this.updateSlugPreview();
     }
+    this.refreshSchedules();
+    this.renderApplications();
+    this.updateSlugPreview();
   }
 
   handleSelection(detail = {}) {
@@ -308,13 +354,7 @@ export class GlToolManager {
     const changed = eventId !== this.currentEventId;
     this.currentEventId = eventId;
     this.currentEventName = ensureString(detail.eventName) || eventId;
-    this.currentSchedules = [];
-    if (eventId) {
-      const event = (this.app?.events || []).find((entry) => ensureString(entry.id) === eventId);
-      if (event) {
-        this.currentSchedules = Array.isArray(event.schedules) ? [...event.schedules] : [];
-      }
-    }
+    this.refreshSchedules();
     this.updateConfigVisibility();
     this.updateSlugPreview();
     this.setStatus("", "info");
@@ -395,6 +435,8 @@ export class GlToolManager {
       this.dom.glTeamConfigInput.value = formatTeamConfig(this.config.teams);
     }
     this.updateSlugPreview();
+    this.refreshSchedules();
+    this.renderApplications();
   }
 
   updateConfigVisibility() {
@@ -442,15 +484,13 @@ export class GlToolManager {
         return;
       }
     }
-    const scheduleSummary = Array.isArray(this.currentSchedules)
-      ? this.currentSchedules
-          .map((schedule) => ({
-            id: ensureString(schedule?.id),
-            label: ensureString(schedule?.label || schedule?.date || schedule?.id),
-            date: ensureString(schedule?.date)
-          }))
-          .filter((entry) => entry.id)
-      : [];
+    const scheduleSummary = this.getAvailableSchedules({ includeConfigFallback: true })
+      .map((schedule) => ({
+        id: ensureString(schedule?.id),
+        label: ensureString(schedule?.label || schedule?.date || schedule?.id),
+        date: ensureString(schedule?.date || schedule?.startAt)
+      }))
+      .filter((entry) => entry.id);
     const configPayload = {
       slug,
       startAt,
