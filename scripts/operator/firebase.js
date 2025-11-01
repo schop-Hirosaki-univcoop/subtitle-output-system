@@ -57,6 +57,10 @@ export const updateTriggerRef = ref(database, "signals/logs");
 export const dictionaryRef = ref(database, "dictionary");
 export const operatorChatMessagesRef = ref(database, "operatorChat/messages");
 export const operatorChatReadsRef = ref(database, "operatorChat/reads");
+export const glIntakeEventsRef = ref(database, "glIntake/events");
+export const glIntakeSlugIndexRef = ref(database, "glIntake/slugIndex");
+const glIntakeApplicationsRootRef = ref(database, "glIntake/applications");
+const glAssignmentsRootRef = ref(database, "glAssignments");
 const operatorPresenceRootRef = ref(database, "operatorPresence");
 const operatorScheduleConsensusRootRef = ref(database, "operatorPresenceConsensus");
 
@@ -87,6 +91,54 @@ export function getOperatorPresenceEntryRef(eventId = "", operatorId = "") {
 export function getOperatorScheduleConsensusRef(eventId = "") {
   const eventKey = String(eventId || "").trim();
   return eventKey ? ref(database, `operatorPresenceConsensus/${eventKey}`) : operatorScheduleConsensusRootRef;
+}
+
+export function getGlEventConfigRef(eventId = "") {
+  const key = String(eventId || "").trim();
+  if (!key) {
+    return glIntakeEventsRef;
+  }
+  return ref(database, `glIntake/events/${key}`);
+}
+
+export function getGlApplicationsRef(eventId = "") {
+  const key = String(eventId || "").trim();
+  if (!key) {
+    return glIntakeApplicationsRootRef;
+  }
+  return ref(database, `glIntake/applications/${key}`);
+}
+
+export function getGlApplicationRef(eventId = "", applicationId = "") {
+  const eventKey = String(eventId || "").trim();
+  const appKey = String(applicationId || "").trim();
+  if (!eventKey) {
+    return glIntakeApplicationsRootRef;
+  }
+  if (!appKey) {
+    return ref(database, `glIntake/applications/${eventKey}`);
+  }
+  return ref(database, `glIntake/applications/${eventKey}/${appKey}`);
+}
+
+export function getGlAssignmentsRef(eventId = "") {
+  const key = String(eventId || "").trim();
+  if (!key) {
+    return glAssignmentsRootRef;
+  }
+  return ref(database, `glAssignments/${key}`);
+}
+
+export function getGlAssignmentRef(eventId = "", glId = "") {
+  const eventKey = String(eventId || "").trim();
+  const glKey = String(glId || "").trim();
+  if (!eventKey) {
+    return glAssignmentsRootRef;
+  }
+  if (!glKey) {
+    return ref(database, `glAssignments/${eventKey}`);
+  }
+  return ref(database, `glAssignments/${eventKey}/${glKey}`);
 }
 
 export {
