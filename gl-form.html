@@ -86,21 +86,24 @@
             </select>
           </div>
 
-          <div class="form-field">
-            <div class="field-header">
-              <label for="gl-department">学科</label>
-              <span class="field-tag field-tag--required">必須</span>
+          <div id="gl-academic-fields"></div>
+          <template id="gl-academic-select-template">
+            <div class="form-field gl-academic-field">
+              <div class="field-header">
+                <label class="gl-academic-label"></label>
+                <span class="field-tag field-tag--required">必須</span>
+              </div>
+              <select class="input gl-academic-select" required>
+                <option value="" data-placeholder="true" disabled selected></option>
+              </select>
             </div>
-            <select id="gl-department" name="department" class="input" required>
-              <option value="" data-placeholder="true" disabled selected>学科を選択してください</option>
-            </select>
-          </div>
+          </template>
 
-          <div class="form-field" id="gl-department-custom-field" hidden>
+          <div class="form-field" id="gl-academic-custom-field" hidden>
             <div class="field-header">
-              <label for="gl-department-custom">学科（その他入力）</label>
+              <label for="gl-academic-custom" id="gl-academic-custom-label">所属（その他入力）</label>
             </div>
-            <input id="gl-department-custom" name="department-custom" class="input" type="text" autocomplete="off" placeholder="学科名を入力してください">
+            <input id="gl-academic-custom" name="academic-custom" class="input" type="text" autocomplete="off" placeholder="所属名を入力してください">
           </div>
 
           <div class="form-field">
