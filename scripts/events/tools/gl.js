@@ -103,42 +103,66 @@ function normalizeScheduleConfig(raw) {
     return [];
   }
   if (Array.isArray(raw)) {
-    return raw
-      .map((entry) => ({
-        id: ensureString(entry?.id),
-        label: ensureString(entry?.label || entry?.date || entry?.id),
-        date: ensureString(entry?.date || entry?.startAt || "")
-      }))
-      .filter((entry) => entry.id);
+    return sanitizeScheduleEntries(raw);
   }
   if (typeof raw === "object") {
-    return Object.entries(raw)
-      .map(([key, value]) => {
-        const id = ensureString(value?.id) || ensureString(key);
-        return {
-          id,
-          label: ensureString(value?.label || value?.date || value?.id || key),
-          date: ensureString(value?.date || value?.startAt || "")
-        };
-      })
-      .filter((entry) => entry.id);
+    const entries = Object.entries(raw).map(([key, value]) => ({
+      id: ensureString(value?.id) || ensureString(key),
+      label: ensureString(value?.label || value?.date || value?.id || key),
+      date: ensureString(value?.date || value?.startAt || "")
+    }));
+    return sanitizeScheduleEntries(entries);
   }
   return [];
 }
 
+function sanitizeScheduleEntries(schedules = []) {
+  if (!Array.isArray(schedules) || !schedules.length) {
+    return [];
+  }
+  return schedules
+    .map((schedule) => ({
+      id: ensureString(schedule?.id),
+      label: ensureString(schedule?.label || schedule?.date || schedule?.id),
+      date: ensureString(schedule?.date || schedule?.startAt || "")
+    }))
+    .filter((entry) => entry.id);
+}
+
 function buildScheduleConfigMap(schedules = []) {
-  return schedules.reduce((acc, schedule) => {
-    const id = ensureString(schedule?.id);
+  const entries = sanitizeScheduleEntries(schedules);
+  return entries.reduce((acc, schedule) => {
+    const id = schedule.id;
     if (!id) {
       return acc;
     }
     acc[id] = {
       id,
-      label: ensureString(schedule?.label || schedule?.date || id),
-      date: ensureString(schedule?.date || schedule?.startAt || "")
+      label: schedule.label,
+      date: schedule.date
     };
     return acc;
   }, {});
+}
+
+function scheduleSummaryMapsEqual(first = {}, second = {}) {
+  const firstKeys = Object.keys(first);
+  const secondKeys = Object.keys(second);
+  if (firstKeys.length !== secondKeys.length) {
+    return false;
+  }
+  return firstKeys.every((key) => {
+    if (!Object.prototype.hasOwnProperty.call(second, key)) {
+      return false;
+    }
+    const firstEntry = first[key] || {};
+    const secondEntry = second[key] || {};
+    return (
+      ensureString(firstEntry.id) === ensureString(secondEntry.id) &&
+      ensureString(firstEntry.label) === ensureString(secondEntry.label) &&
+      ensureString(firstEntry.date) === ensureString(secondEntry.date)
+    );
+  });
 }
 
 function normalizeAssignmentSnapshot(snapshot = {}) {
@@ -253,6 +277,7 @@ export class GlToolManager {
     this.assignments = new Map();
     this.filter = "all";
     this.loading = false;
+    this.scheduleSyncPending = false;
     this.configUnsubscribe = null;
     this.applicationsUnsubscribe = null;
     this.assignmentsUnsubscribe = null;
@@ -306,6 +331,7 @@ export class GlToolManager {
 
   refreshSchedules() {
     this.currentSchedules = this.getAvailableSchedules({ includeConfigFallback: true });
+    this.syncScheduleSummaryCache();
   }
 
   bindDom() {
@@ -483,6 +509,32 @@ export class GlToolManager {
     this.renderApplications();
   }
 
+  async syncScheduleSummaryCache() {
+    if (!this.currentEventId || !this.config || this.scheduleSyncPending) {
+      return;
+    }
+    const primarySchedules = this.getAvailableSchedules({ includeConfigFallback: false });
+    const summaryList = sanitizeScheduleEntries(primarySchedules);
+    if (!summaryList.length) {
+      return;
+    }
+    const nextMap = buildScheduleConfigMap(summaryList);
+    const currentMap = buildScheduleConfigMap(this.config.schedules || []);
+    if (scheduleSummaryMapsEqual(currentMap, nextMap)) {
+      return;
+    }
+    this.scheduleSyncPending = true;
+    try {
+      await update(ref(database), {
+        [`glIntake/events/${this.currentEventId}/schedules`]: nextMap
+      });
+    } catch (error) {
+      logError("Failed to sync GL schedule summary", error);
+    } finally {
+      this.scheduleSyncPending = false;
+    }
+  }
+
   updateConfigVisibility() {
     if (!this.dom.glConfigEventNote || !this.dom.glConfigContent) {
       return;
@@ -528,13 +580,9 @@ export class GlToolManager {
         return;
       }
     }
-    const scheduleSummaryList = this.getAvailableSchedules({ includeConfigFallback: true })
-      .map((schedule) => ({
-        id: ensureString(schedule?.id),
-        label: ensureString(schedule?.label || schedule?.date || schedule?.id),
-        date: ensureString(schedule?.date || schedule?.startAt || "")
-      }))
-      .filter((entry) => entry.id);
+    const scheduleSummaryList = sanitizeScheduleEntries(
+      this.getAvailableSchedules({ includeConfigFallback: true })
+    );
     const scheduleSummary = buildScheduleConfigMap(scheduleSummaryList);
     const configPayload = {
       slug,
