@@ -101,7 +101,7 @@
         "$eventId": {
           ".read": "(auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)) || (data.child('slug').isString() && data.child('slug').val().length > 0)",
           ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
-          ".validate": "!newData.exists() || newData.hasChildren(['eventId','eventName'])",
+          ".validate": "!newData.exists() || ((!data.exists() && newData.hasChildren(['eventId','eventName'])) || (data.exists() && (!newData.child('eventId').exists() || newData.child('eventId').isString()) && (!newData.child('eventName').exists() || newData.child('eventName').isString()) && (!data.child('eventId').exists() || newData.child('eventId').isString()) && (!data.child('eventName').exists() || newData.child('eventName').isString())))",
           "slug": { ".validate": "newData.isString() || !newData.exists()" },
           "startAt": { ".validate": "newData.isString() || !newData.exists()" },
           "endAt": { ".validate": "newData.isString() || !newData.exists()" },
