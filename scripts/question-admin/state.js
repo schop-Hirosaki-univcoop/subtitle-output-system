@@ -16,6 +16,8 @@ const state = {
   duplicateGroups: new Map(),
   scheduleContextOverrides: new Map(),
   teamAssignments: new Map(),
+  glRoster: new Map(),
+  glAssignments: new Map(),
   lastUploadStatusMessage: "",
   lastUploadStatusVariant: "",
   tokenSnapshotFetchedAt: 0,
