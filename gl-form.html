@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GL応募フォーム</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="question-form.css">
+  <script type="module" src="./scripts/shared/layout.js"></script>
+</head>
+<body class="op-theme question-form-page gl-form-page">
+  <noscript>
+    <div class="noscript-banner" role="alert">
+      このフォームを利用するにはブラウザの JavaScript を有効にしてください。
+    </div>
+  </noscript>
+  <telop-header tagline="GL Application" context-label="フォーム情報"></telop-header>
+  <main class="single-main" id="gl-form-main">
+    <section class="module module--primary intake-module" aria-labelledby="gl-form-title">
+      <div class="module-header">
+        <div class="module-heading">
+          <h1 id="gl-form-title">GL応募フォーム</h1>
+          <p class="module-description" id="gl-form-description">運営から案内されたURLからアクセスし、必要事項をご入力ください。</p>
+        </div>
+      </div>
+      <div class="module-body">
+        <div id="gl-context-banner" class="context-banner" hidden>
+          <p id="gl-context-event" class="context-text"></p>
+          <p id="gl-context-period" class="context-text" hidden></p>
+        </div>
+        <div id="gl-context-guard" class="context-guard" role="alert" aria-live="assertive" hidden></div>
+        <form id="gl-entry-form" class="intake-form" novalidate hidden>
+          <input id="gl-event-id" name="event-id" type="hidden">
+          <input id="gl-slug" name="form-slug" type="hidden">
+
+          <div class="form-field">
+            <div class="field-header">
+              <label for="gl-name">氏名</label>
+              <span class="field-tag field-tag--required">必須</span>
+            </div>
+            <input id="gl-name" name="name" class="input" type="text" autocomplete="name" required>
+          </div>
+
+          <div class="form-field">
+            <div class="field-header">
+              <label for="gl-phonetic">フリガナ</label>
+            </div>
+            <input id="gl-phonetic" name="phonetic" class="input" type="text" autocomplete="off">
+          </div>
+
+          <div class="form-field">
+            <div class="field-header">
+              <label for="gl-grade">学年</label>
+            </div>
+            <input id="gl-grade" name="grade" class="input" type="text" autocomplete="off" placeholder="例: 2年">
+          </div>
+
+          <div class="form-field">
+            <div class="field-header">
+              <label for="gl-faculty">学部</label>
+              <span class="field-tag field-tag--required">必須</span>
+            </div>
+            <select id="gl-faculty" name="faculty" class="input" required>
+              <option value="" data-placeholder="true" disabled selected>学部を選択してください</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <div class="field-header">
+              <label for="gl-department">学科</label>
+              <span class="field-tag field-tag--required">必須</span>
+            </div>
+            <select id="gl-department" name="department" class="input" required>
+              <option value="" data-placeholder="true" disabled selected>学科を選択してください</option>
+            </select>
+          </div>
+
+          <div class="form-field" id="gl-department-custom-field" hidden>
+            <div class="field-header">
+              <label for="gl-department-custom">学科（その他入力）</label>
+            </div>
+            <input id="gl-department-custom" name="department-custom" class="input" type="text" autocomplete="off" placeholder="学科名を入力してください">
+          </div>
+
+          <div class="form-field">
+            <div class="field-header">
+              <label for="gl-email">メールアドレス</label>
+              <span class="field-tag field-tag--required">必須</span>
+            </div>
+            <input id="gl-email" name="email" class="input" type="email" autocomplete="email" required>
+          </div>
+
+          <div class="form-field">
+            <div class="field-header">
+              <label for="gl-club">所属している部活・サークル</label>
+            </div>
+            <input id="gl-club" name="club" class="input" type="text" autocomplete="off">
+          </div>
+
+          <div class="form-field">
+            <div class="field-header">
+              <label for="gl-student-id">学籍番号</label>
+            </div>
+            <input id="gl-student-id" name="student-id" class="input" type="text" autocomplete="off">
+          </div>
+
+          <fieldset id="gl-shift-fieldset" class="form-field" aria-describedby="gl-shift-hint">
+            <legend class="field-header">参加可能な日程</legend>
+            <p id="gl-shift-hint" class="field-hint">参加できる日程にチェックを入れてください。</p>
+            <div id="gl-shift-list" class="gl-shift-checkboxes"></div>
+          </fieldset>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="gl-submit-button">送信する</button>
+            <p class="form-feedback" id="gl-form-feedback" role="alert" aria-live="polite"></p>
+          </div>
+        </form>
+        <div class="form-meta" id="gl-form-meta" hidden>
+          <p class="form-meta-line">送信完了後、運営からの案内をお待ちください。</p>
+          <p class="form-meta-line">入力内容に誤りがあった場合は、案内元までご連絡ください。</p>
+        </div>
+      </div>
+    </section>
+  </main>
+  <telop-footer year="2025"></telop-footer>
+  <script src="./scripts/gl-form/index.js" type="module"></script>
+</body>
+</html>

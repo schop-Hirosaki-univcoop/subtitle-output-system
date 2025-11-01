@@ -17,6 +17,7 @@ export const PANEL_CONFIG = {
   events: { stage: "events", requireEvent: false, requireSchedule: false },
   schedules: { stage: "schedules", requireEvent: true, requireSchedule: false },
   participants: { stage: "tabs", requireEvent: true, requireSchedule: true },
+  gl: { stage: "tabs", requireEvent: true, requireSchedule: false },
   operator: { stage: "tabs", requireEvent: true, requireSchedule: true },
   dictionary: { stage: "tabs", requireEvent: false, requireSchedule: false, dictionary: true },
   pickup: { stage: "tabs", requireEvent: false, requireSchedule: false },
@@ -30,6 +31,11 @@ export const PANEL_STAGE_INFO = {
     title: "参加者リストの管理",
     description:
       "選択したイベント・日程の参加者情報を管理できます。各参加者ごとに質問フォームの専用リンクを発行でき、「編集」から詳細や班番号を更新できます。電話番号とメールアドレスは内部で管理され、編集時のみ確認できます。同じイベント内で名前と学部学科が一致する参加者は重複候補として件数付きで表示されます。専用リンクは各行のボタンまたはURLから取得できます。"
+  },
+  gl: {
+    title: "GLリストの管理",
+    description:
+      "GL応募フォームの設定を編集し、応募者の学部学科やシフト可否を確認しながら班割りステータスを更新できます。"
   },
   operator: {
     title: "テロップ操作パネル",
