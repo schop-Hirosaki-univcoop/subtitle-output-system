@@ -315,7 +315,15 @@ async function prepareForm() {
     return;
   }
   state.faculties = parseFaculties(config.faculties || []);
-  state.schedules = parseSchedules(config.schedules || []);
+  const scheduleSources = [config.schedules, config.scheduleSummary, config.scheduleOptions];
+  let parsedSchedules = [];
+  for (const source of scheduleSources) {
+    parsedSchedules = parseSchedules(source);
+    if (parsedSchedules.length) {
+      break;
+    }
+  }
+  state.schedules = parsedSchedules;
   const eventName = ensureString(config.eventName || eventId);
   state.eventName = eventName;
   const periodText = formatPeriod(startAt, endAt);
