@@ -99,7 +99,7 @@
     "glIntake": {
       "events": {
         "$eventId": {
-          ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+          ".read": "(auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)) || (data.child('slug').isString() && data.child('slug').val().length > 0)",
           ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
           ".validate": "!newData.exists() || newData.hasChildren(['eventId','eventName'])",
           "slug": { ".validate": "newData.isString() || !newData.exists()" },
@@ -120,6 +120,16 @@
           "teams": {
             ".validate": "!newData.isString() && !newData.isNumber() && !newData.isBoolean()",
             "$teamIndex": { ".validate": "!newData.exists() || newData.isString()" }
+          },
+          "schedules": {
+            ".validate": "!newData.isString() && !newData.isNumber() && !newData.isBoolean()",
+            "$index": {
+              ".validate": "!newData.exists() || (newData.hasChildren(['id']) && newData.child('id').isString() && (!newData.child('label').exists() || newData.child('label').isString()) && (!newData.child('date').exists() || newData.child('date').isString()))",
+              "id": { ".validate": "newData.isString()" },
+              "label": { ".validate": "newData.isString() || !newData.exists()" },
+              "date": { ".validate": "newData.isString() || !newData.exists()" },
+              "$other": { ".validate": false }
+            }
           },
           "guidance": { ".validate": "newData.isString() || !newData.exists()" },
           "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },

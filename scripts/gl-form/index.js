@@ -231,14 +231,26 @@ function parseFaculties(raw) {
 }
 
 function parseSchedules(raw) {
-  if (!raw || typeof raw !== "object") return [];
-  return Object.entries(raw)
-    .map(([id, schedule]) => ({
-      id: ensureString(id),
-      label: ensureString(schedule?.label || schedule?.date || id),
-      date: ensureString(schedule?.date)
-    }))
-    .filter((entry) => entry.id);
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw
+      .map((schedule) => ({
+        id: ensureString(schedule?.id),
+        label: ensureString(schedule?.label || schedule?.date || schedule?.id),
+        date: ensureString(schedule?.date)
+      }))
+      .filter((entry) => entry.id);
+  }
+  if (typeof raw === "object") {
+    return Object.entries(raw)
+      .map(([id, schedule]) => ({
+        id: ensureString(id),
+        label: ensureString(schedule?.label || schedule?.date || id),
+        date: ensureString(schedule?.date)
+      }))
+      .filter((entry) => entry.id);
+  }
+  return [];
 }
 
 function populateContext(eventName, periodText) {
@@ -286,13 +298,7 @@ async function prepareForm() {
     elements.eventIdInput.value = eventId;
   }
   const configRef = ref(database, `glIntake/events/${eventId}`);
-  const eventRef = ref(database, `questionIntake/events/${eventId}`);
-  const scheduleRef = ref(database, `questionIntake/schedules/${eventId}`);
-  const [configSnap, eventSnap, scheduleSnap] = await Promise.all([
-    get(configRef),
-    get(eventRef),
-    get(scheduleRef)
-  ]);
+  const configSnap = await get(configRef);
   const config = configSnap.val() || {};
   const now = Date.now();
   const startAt = parseTimestamp(config.startAt);
@@ -306,8 +312,8 @@ async function prepareForm() {
     return;
   }
   state.faculties = parseFaculties(config.faculties || []);
-  state.schedules = parseSchedules(scheduleSnap.val() || {});
-  const eventName = ensureString(eventSnap.val()?.name || eventId);
+  state.schedules = parseSchedules(config.schedules || []);
+  const eventName = ensureString(config.eventName || eventId);
   state.eventName = eventName;
   const periodText = formatPeriod(startAt, endAt);
   populateContext(eventName, periodText);

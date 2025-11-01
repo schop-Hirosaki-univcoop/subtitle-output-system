@@ -369,6 +369,7 @@ export class GlToolManager {
       slug: ensureString(config.slug),
       faculties: Array.isArray(config.faculties) ? config.faculties : [],
       teams: Array.isArray(config.teams) ? config.teams : [],
+      schedules: Array.isArray(config.schedules) ? config.schedules : [],
       startAt: config.startAt || "",
       endAt: config.endAt || "",
       guidance: ensureString(config.guidance),
@@ -441,12 +442,22 @@ export class GlToolManager {
         return;
       }
     }
+    const scheduleSummary = Array.isArray(this.currentSchedules)
+      ? this.currentSchedules
+          .map((schedule) => ({
+            id: ensureString(schedule?.id),
+            label: ensureString(schedule?.label || schedule?.date || schedule?.id),
+            date: ensureString(schedule?.date)
+          }))
+          .filter((entry) => entry.id)
+      : [];
     const configPayload = {
       slug,
       startAt,
       endAt,
       faculties,
       teams,
+      schedules: scheduleSummary,
       guidance: ensureString(this.config?.guidance),
       updatedAt: serverTimestamp(),
       eventId: this.currentEventId,
