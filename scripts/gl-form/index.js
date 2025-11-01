@@ -480,6 +480,62 @@ function formatScheduleOption(schedule) {
   return rangeText || labelText || ensureString(schedule.id);
 }
 
+const scheduleDateFormatter = new Intl.DateTimeFormat("ja-JP", {
+  month: "numeric",
+  day: "numeric",
+  weekday: "short"
+});
+
+const scheduleTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
+  hour: "2-digit",
+  minute: "2-digit"
+});
+
+function formatScheduleRange(startAt, endAt, fallbackDate) {
+  const hasStart = Number.isFinite(startAt) && startAt > 0;
+  const hasEnd = Number.isFinite(endAt) && endAt > 0;
+  if (hasStart && hasEnd) {
+    const start = new Date(startAt);
+    const end = new Date(endAt);
+    const startDateText = scheduleDateFormatter.format(start);
+    const endDateText = scheduleDateFormatter.format(end);
+    const startTimeText = scheduleTimeFormatter.format(start);
+    const endTimeText = scheduleTimeFormatter.format(end);
+    if (startDateText === endDateText) {
+      return `${startDateText} ${startTimeText}〜${endTimeText}`;
+    }
+    return `${startDateText} ${startTimeText} 〜 ${endDateText} ${endTimeText}`;
+  }
+  if (hasStart) {
+    const start = new Date(startAt);
+    return `${scheduleDateFormatter.format(start)} ${scheduleTimeFormatter.format(start)}`;
+  }
+  if (hasEnd) {
+    const end = new Date(endAt);
+    return `${scheduleDateFormatter.format(end)} ${scheduleTimeFormatter.format(end)}`;
+  }
+  const rawDateText = ensureString(fallbackDate);
+  if (!rawDateText) {
+    return "";
+  }
+  const parsed = Date.parse(rawDateText);
+  if (!Number.isNaN(parsed)) {
+    const date = new Date(parsed);
+    return `${scheduleDateFormatter.format(date)} ${scheduleTimeFormatter.format(date)}`;
+  }
+  return rawDateText;
+}
+
+function formatScheduleOption(schedule) {
+  const fallbackDate = ensureString(schedule.date);
+  const rangeText = ensureString(formatScheduleRange(schedule.startAt, schedule.endAt, fallbackDate));
+  const labelText = ensureString(schedule.label);
+  if (rangeText && labelText && !rangeText.includes(labelText)) {
+    return `${rangeText}（${labelText}）`;
+  }
+  return rangeText || labelText || ensureString(schedule.id);
+}
+
 function renderShifts(schedules) {
   if (!elements.shiftList) return;
   elements.shiftList.innerHTML = "";
