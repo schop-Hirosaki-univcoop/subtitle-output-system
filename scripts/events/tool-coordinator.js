@@ -3,6 +3,7 @@ import { logError } from "./helpers.js";
 import { normalizeOperatorMode } from "../shared/operator-modes.js";
 import { OperatorToolManager } from "./tools/operator.js";
 import { ParticipantToolManager } from "./tools/participant.js";
+import { GlToolManager } from "./tools/gl.js";
 import { prepareEmbeddedFrames, resetEmbeddedFrames } from "./tools/frame-utils.js";
 
 export class ToolCoordinator {
@@ -10,6 +11,7 @@ export class ToolCoordinator {
     this.app = app;
     this.participants = new ParticipantToolManager(app);
     this.operator = new OperatorToolManager(app);
+    this.gl = new GlToolManager(app);
     this.handleParticipantSyncEvent = this.participants.handleSyncEvent;
     this.handleParticipantSelectionBroadcast = this.participants.handleSelectionBroadcast;
     this.lastOperatorContextSignature = null;
@@ -24,6 +26,7 @@ export class ToolCoordinator {
     resetEmbeddedFrames();
     this.participants.resetFlowState();
     this.operator.resetFlowState();
+    this.gl.resetFlowState();
     this.prepareFrames();
     this.lastOperatorContextSignature = null;
   }
@@ -31,6 +34,7 @@ export class ToolCoordinator {
   resetContext(options) {
     this.logFlow("埋め込みツールの共有コンテキストをリセットします", options);
     this.participants.resetContext(options);
+    this.gl.resetContext(options);
     this.lastOperatorContextSignature = null;
     this.syncOperatorContext({
       context: {

@@ -69,6 +69,8 @@ import {
 
 let redirectingToIndex = false;
 
+const glDataFetchCache = new Map();
+
 function getEmbedPrefix() {
   if (typeof document === "undefined") {
     return "";
@@ -119,6 +121,8 @@ const PARTICIPANT_DESCRIPTION_DEFAULT =
 
 const CANCEL_LABEL = "キャンセル";
 const RELOCATE_LABEL = "別日";
+const GL_STAFF_GROUP_KEY = "__gl_staff__";
+const GL_STAFF_LABEL = "運営待機";
 const NO_TEAM_GROUP_KEY = "__no_team__";
 const AUTHORIZED_EMAIL_CACHE_MS = 5 * 60 * 1000;
 
@@ -2019,6 +2023,9 @@ function describeParticipantGroup(groupKey) {
   if (normalized === RELOCATE_LABEL) {
     return { label: "ステータス", value: RELOCATE_LABEL };
   }
+  if (normalized === GL_STAFF_GROUP_KEY) {
+    return { label: "ステータス", value: GL_STAFF_LABEL };
+  }
   return { label: "班番号", value: normalized };
 }
 
@@ -2053,10 +2060,243 @@ function createParticipantGroupElements(groupKey) {
   const cardsContainer = document.createElement("div");
   cardsContainer.className = "participant-card-group__cards";
 
-  header.append(badge, countElement);
+  const leadersContainer = document.createElement("div");
+  leadersContainer.className = "participant-card-group__leaders";
+  leadersContainer.hidden = true;
+
+  const leadersLabel = document.createElement("span");
+  leadersLabel.className = "participant-card-group__leaders-label";
+  leadersLabel.textContent = "GL";
+
+  const leadersList = document.createElement("div");
+  leadersList.className = "participant-card-group__leaders-list";
+
+  leadersContainer.append(leadersLabel, leadersList);
+
+  header.append(badge, leadersContainer, countElement);
   section.append(header, cardsContainer);
 
-  return { section, cardsContainer, countElement };
+  return {
+    section,
+    cardsContainer,
+    countElement,
+    leadersContainer,
+    leadersList
+  };
+}
+
+function getEventGlRoster(eventId) {
+  if (!(state.glRoster instanceof Map)) {
+    state.glRoster = new Map();
+  }
+  const roster = state.glRoster.get(eventId);
+  return roster instanceof Map ? roster : null;
+}
+
+function getEventGlAssignmentsMap(eventId) {
+  if (!(state.glAssignments instanceof Map)) {
+    state.glAssignments = new Map();
+  }
+  const assignments = state.glAssignments.get(eventId);
+  return assignments instanceof Map ? assignments : null;
+}
+
+function normalizeGlRoster(raw) {
+  const map = new Map();
+  if (!raw || typeof raw !== "object") {
+    return map;
+  }
+  Object.entries(raw).forEach(([glId, value]) => {
+    if (!glId || !value || typeof value !== "object") return;
+    map.set(String(glId), {
+      id: String(glId),
+      name: normalizeKey(value.name || value.fullName || ""),
+      phonetic: normalizeKey(value.phonetic || value.furigana || ""),
+      grade: normalizeKey(value.grade || ""),
+      faculty: normalizeKey(value.faculty || ""),
+      department: normalizeKey(value.department || ""),
+      email: normalizeKey(value.email || ""),
+      club: normalizeKey(value.club || "")
+    });
+  });
+  return map;
+}
+
+function normalizeGlAssignments(raw) {
+  const map = new Map();
+  if (!raw || typeof raw !== "object") {
+    return map;
+  }
+  Object.entries(raw).forEach(([glId, value]) => {
+    if (!glId || !value || typeof value !== "object") return;
+    const statusRaw = String(value.status || "").trim().toLowerCase();
+    let status = "";
+    if (statusRaw === "absent" || statusRaw === "欠席") {
+      status = "absent";
+    } else if (statusRaw === "staff" || statusRaw === "運営" || statusRaw === "運営待機") {
+      status = "staff";
+    } else if (statusRaw === "team") {
+      status = "team";
+    }
+    const teamId = normalizeKey(value.teamId || "");
+    if (!status && teamId) {
+      status = "team";
+    }
+    map.set(String(glId), {
+      status,
+      teamId,
+      updatedAt: Number(value.updatedAt || 0) || 0,
+      updatedByName: normalizeKey(value.updatedByName || ""),
+      updatedByUid: normalizeKey(value.updatedByUid || "")
+    });
+  });
+  return map;
+}
+
+function renderGroupGlAssignments(group, { eventId, rosterMap, assignmentsMap }) {
+  if (!group || !group.leadersContainer || !group.leadersList) {
+    return;
+  }
+  const container = group.leadersContainer;
+  const list = group.leadersList;
+  list.innerHTML = "";
+  container.hidden = true;
+  container.dataset.count = "0";
+
+  const assignments = assignmentsMap instanceof Map ? assignmentsMap : getEventGlAssignmentsMap(eventId);
+  const roster = rosterMap instanceof Map ? rosterMap : getEventGlRoster(eventId);
+  if (!(assignments instanceof Map) || !(roster instanceof Map)) {
+    return;
+  }
+
+  const rawGroupKey = String(group.key || "").trim();
+  const normalizedGroupKey = normalizeKey(rawGroupKey);
+  const normalizedCancelLabel = normalizeKey(CANCEL_LABEL);
+  const normalizedStaffLabel = normalizeKey(GL_STAFF_LABEL);
+  const isCancelGroup = normalizedGroupKey === normalizedCancelLabel;
+  const isStaffGroup = rawGroupKey === GL_STAFF_GROUP_KEY || normalizedGroupKey === normalizedStaffLabel;
+
+  const leaders = [];
+  assignments.forEach((assignment, glId) => {
+    if (!assignment) return;
+    const status = assignment.status || "";
+    const teamId = normalizeKey(assignment.teamId || "");
+    if (status === "team") {
+      if (!teamId || isCancelGroup || isStaffGroup || teamId !== normalizedGroupKey) {
+        return;
+      }
+    } else if (status === "absent") {
+      if (!isCancelGroup) return;
+    } else if (status === "staff") {
+      if (!isStaffGroup) return;
+    } else {
+      return;
+    }
+
+    const profile = roster.get(String(glId)) || {};
+    const name = profile.name || String(glId);
+    const metaParts = [];
+    if (status === "absent") {
+      metaParts.push("欠席");
+    } else if (status === "staff") {
+      metaParts.push(GL_STAFF_LABEL);
+    }
+    if (profile.grade) {
+      metaParts.push(profile.grade);
+    }
+    if (profile.faculty) {
+      metaParts.push(profile.faculty);
+    }
+    if (profile.department && profile.department !== profile.faculty) {
+      metaParts.push(profile.department);
+    }
+    const meta = metaParts.join(" / ");
+    leaders.push({ name, meta });
+  });
+
+  if (!leaders.length) {
+    return;
+  }
+
+  leaders.sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true }));
+  leaders.forEach(leader => {
+    const item = document.createElement("span");
+    item.className = "participant-group-gl";
+    const nameEl = document.createElement("span");
+    nameEl.className = "participant-group-gl__name";
+    nameEl.textContent = leader.name;
+    item.appendChild(nameEl);
+    if (leader.meta) {
+      const metaEl = document.createElement("span");
+      metaEl.className = "participant-group-gl__meta";
+      metaEl.textContent = leader.meta;
+      item.appendChild(metaEl);
+    }
+    list.appendChild(item);
+  });
+
+  container.hidden = false;
+  container.dataset.count = String(leaders.length);
+}
+
+async function loadGlDataForEvent(eventId, { force = false } = {}) {
+  const key = normalizeKey(eventId || "");
+  if (!key) {
+    return;
+  }
+  if (!force && glDataFetchCache.has(key)) {
+    try {
+      await glDataFetchCache.get(key);
+    } catch (error) {
+      // Swallow errors from prior attempts; a manual refresh will retry.
+    }
+    return;
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const [applicationsRaw, assignmentsRaw] = await Promise.all([
+        fetchDbValue(`glIntake/applications/${key}`),
+        fetchDbValue(`glAssignments/${key}`)
+      ]);
+      const rosterMap = normalizeGlRoster(applicationsRaw || {});
+      const assignmentsMap = normalizeGlAssignments(assignmentsRaw || {});
+      if (!(state.glRoster instanceof Map)) {
+        state.glRoster = new Map();
+      }
+      if (!(state.glAssignments instanceof Map)) {
+        state.glAssignments = new Map();
+      }
+      state.glRoster.set(key, rosterMap);
+      state.glAssignments.set(key, assignmentsMap);
+    } catch (error) {
+      console.error("Failed to load GL roster", error);
+      if (!(state.glRoster instanceof Map)) {
+        state.glRoster = new Map();
+      }
+      if (!(state.glAssignments instanceof Map)) {
+        state.glAssignments = new Map();
+      }
+      if (!state.glRoster.has(key)) {
+        state.glRoster.set(key, new Map());
+      }
+      if (!state.glAssignments.has(key)) {
+        state.glAssignments.set(key, new Map());
+      }
+      throw error;
+    } finally {
+      if (state.selectedEventId && normalizeKey(state.selectedEventId) === key) {
+        renderParticipants();
+      }
+    }
+  })();
+
+  glDataFetchCache.set(key, fetchPromise);
+  try {
+    await fetchPromise;
+  } finally {
+    glDataFetchCache.delete(key);
+  }
 }
 
 function createParticipantBadge(label, value, { hideLabel = false } = {}) {
@@ -2356,6 +2596,8 @@ function renderParticipants() {
   const scheduleId = state.selectedScheduleId;
   const duplicateMap = state.duplicateMatches instanceof Map ? state.duplicateMatches : new Map();
   const participants = sortParticipants(state.participants);
+  const glRosterMap = getEventGlRoster(eventId);
+  const glAssignmentsMap = getEventGlAssignmentsMap(eventId);
 
   const diff = diffParticipantLists(state.participants, state.savedParticipants || []);
   const changeInfoByKey = new Map();
@@ -2380,6 +2622,9 @@ function renderParticipants() {
   const fragment = document.createDocumentFragment();
   const groupMap = new Map();
   let selectionFound = false;
+  const ensuredTeamGroups = new Set();
+  let needsCancelGroup = false;
+  let needsStaffGroup = false;
 
   participants.forEach((entry, index) => {
     const changeKey = participantChangeKey(entry, index);
@@ -2397,16 +2642,57 @@ function renderParticipants() {
     let group = groupMap.get(groupKey);
     if (!group) {
       const elements = createParticipantGroupElements(groupKey);
-      group = { ...elements, count: 0 };
+      group = { ...elements, count: 0, key: groupKey };
       groupMap.set(groupKey, group);
       fragment.appendChild(elements.section);
     }
     group.cardsContainer.appendChild(card);
     group.count += 1;
+    ensuredTeamGroups.add(normalizeKey(groupKey || ""));
   });
+
+  if (glAssignmentsMap instanceof Map) {
+    glAssignmentsMap.forEach(assignment => {
+      if (!assignment) return;
+      if (assignment.status === "absent") {
+        needsCancelGroup = true;
+      } else if (assignment.status === "staff") {
+        needsStaffGroup = true;
+      } else if (assignment.status === "team") {
+        const teamKey = normalizeKey(assignment.teamId || "");
+        if (teamKey) {
+          if (!groupMap.has(teamKey)) {
+            const elements = createParticipantGroupElements(teamKey);
+            groupMap.set(teamKey, { ...elements, count: 0, key: teamKey });
+            fragment.appendChild(elements.section);
+          }
+          ensuredTeamGroups.add(teamKey);
+        }
+      }
+    });
+  }
+
+  if (needsCancelGroup && !groupMap.has(CANCEL_LABEL)) {
+    const elements = createParticipantGroupElements(CANCEL_LABEL);
+    groupMap.set(CANCEL_LABEL, { ...elements, count: 0, key: CANCEL_LABEL });
+    fragment.appendChild(elements.section);
+    ensuredTeamGroups.add(normalizeKey(CANCEL_LABEL));
+  }
+
+  if (needsStaffGroup && !groupMap.has(GL_STAFF_GROUP_KEY)) {
+    const elements = createParticipantGroupElements(GL_STAFF_GROUP_KEY);
+    groupMap.set(GL_STAFF_GROUP_KEY, { ...elements, count: 0, key: GL_STAFF_GROUP_KEY });
+    fragment.appendChild(elements.section);
+    ensuredTeamGroups.add(normalizeKey(GL_STAFF_GROUP_KEY));
+  }
 
   groupMap.forEach(group => {
     group.countElement.textContent = `${group.count}名`;
+    renderGroupGlAssignments(group, {
+      eventId,
+      rosterMap: glRosterMap,
+      assignmentsMap: glAssignmentsMap
+    });
   });
 
   list.appendChild(fragment);
@@ -3153,6 +3439,10 @@ async function loadParticipants(options = {}) {
   state.selectedEventId = eventId || null;
   state.selectedScheduleId = scheduleId || null;
 
+  if (eventId) {
+    loadGlDataForEvent(eventId).catch(error => console.error(error));
+  }
+
   if (selectionRecovered) {
     renderEvents();
     renderSchedules();
@@ -3355,6 +3645,7 @@ function selectEvent(eventId, options = {}) {
   renderEvents();
   renderSchedules();
   renderParticipants();
+  loadGlDataForEvent(eventId).catch(error => console.error(error));
 
   if (!skipContextUpdate) {
     updateParticipantContext({ preserveStatus: Boolean(preservingScheduleId) });
