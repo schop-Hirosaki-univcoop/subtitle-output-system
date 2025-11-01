@@ -441,8 +441,7 @@ export class GlToolManager {
         return;
       }
     }
-    const updates = {};
-    updates[`glIntake/events/${this.currentEventId}`] = {
+    const configPayload = {
       slug,
       startAt,
       endAt,
@@ -453,9 +452,13 @@ export class GlToolManager {
       eventId: this.currentEventId,
       eventName: this.currentEventName
     };
-    if (!this.config?.createdAt) {
-      updates[`glIntake/events/${this.currentEventId}/createdAt`] = serverTimestamp();
+    if (this.config?.createdAt) {
+      configPayload.createdAt = this.config.createdAt;
+    } else {
+      configPayload.createdAt = serverTimestamp();
     }
+    const updates = {};
+    updates[`glIntake/events/${this.currentEventId}`] = configPayload;
     if (slug) {
       updates[`glIntake/slugIndex/${slug}`] = this.currentEventId;
     }
