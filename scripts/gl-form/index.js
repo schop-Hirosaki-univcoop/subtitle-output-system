@@ -29,13 +29,15 @@ const elements = {
   emailInput: document.getElementById("gl-email"),
   clubInput: document.getElementById("gl-club"),
   studentIdInput: document.getElementById("gl-student-id"),
+  noteInput: document.getElementById("gl-note"),
   shiftList: document.getElementById("gl-shift-list"),
   shiftFieldset: document.getElementById("gl-shift-fieldset"),
   submitButton: document.getElementById("gl-submit-button"),
   feedback: document.getElementById("gl-form-feedback"),
   formMeta: document.getElementById("gl-form-meta"),
   eventIdInput: document.getElementById("gl-event-id"),
-  slugInput: document.getElementById("gl-slug")
+  slugInput: document.getElementById("gl-slug"),
+  privacyConsent: document.getElementById("gl-privacy-consent")
 };
 
 const state = {
@@ -185,6 +187,62 @@ function toggleDepartmentCustom(visible) {
   }
 }
 
+const scheduleDateFormatter = new Intl.DateTimeFormat("ja-JP", {
+  month: "numeric",
+  day: "numeric",
+  weekday: "short"
+});
+
+const scheduleTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
+  hour: "2-digit",
+  minute: "2-digit"
+});
+
+function formatScheduleRange(startAt, endAt, fallbackDate) {
+  const hasStart = Number.isFinite(startAt) && startAt > 0;
+  const hasEnd = Number.isFinite(endAt) && endAt > 0;
+  if (hasStart && hasEnd) {
+    const start = new Date(startAt);
+    const end = new Date(endAt);
+    const startDateText = scheduleDateFormatter.format(start);
+    const endDateText = scheduleDateFormatter.format(end);
+    const startTimeText = scheduleTimeFormatter.format(start);
+    const endTimeText = scheduleTimeFormatter.format(end);
+    if (startDateText === endDateText) {
+      return `${startDateText} ${startTimeText}〜${endTimeText}`;
+    }
+    return `${startDateText} ${startTimeText} 〜 ${endDateText} ${endTimeText}`;
+  }
+  if (hasStart) {
+    const start = new Date(startAt);
+    return `${scheduleDateFormatter.format(start)} ${scheduleTimeFormatter.format(start)}`;
+  }
+  if (hasEnd) {
+    const end = new Date(endAt);
+    return `${scheduleDateFormatter.format(end)} ${scheduleTimeFormatter.format(end)}`;
+  }
+  const rawDateText = ensureString(fallbackDate);
+  if (!rawDateText) {
+    return "";
+  }
+  const parsed = Date.parse(rawDateText);
+  if (!Number.isNaN(parsed)) {
+    const date = new Date(parsed);
+    return `${scheduleDateFormatter.format(date)} ${scheduleTimeFormatter.format(date)}`;
+  }
+  return rawDateText;
+}
+
+function formatScheduleOption(schedule) {
+  const fallbackDate = ensureString(schedule.date);
+  const rangeText = ensureString(formatScheduleRange(schedule.startAt, schedule.endAt, fallbackDate));
+  const labelText = ensureString(schedule.label);
+  if (rangeText && labelText && !rangeText.includes(labelText)) {
+    return `${rangeText}（${labelText}）`;
+  }
+  return rangeText || labelText || ensureString(schedule.id);
+}
+
 function renderShifts(schedules) {
   if (!elements.shiftList) return;
   elements.shiftList.innerHTML = "";
@@ -209,7 +267,7 @@ function renderShifts(schedules) {
     checkbox.value = schedule.id;
     checkbox.dataset.scheduleId = schedule.id;
     checkbox.name = `shift-${schedule.id}`;
-    const title = schedule.label || schedule.date || schedule.id;
+    const title = formatScheduleOption(schedule);
     const span = document.createElement("span");
     span.textContent = title;
     wrapper.append(checkbox, span);
@@ -237,7 +295,9 @@ function parseSchedules(raw) {
       .map((schedule) => ({
         id: ensureString(schedule?.id),
         label: ensureString(schedule?.label || schedule?.date || schedule?.id),
-        date: ensureString(schedule?.date)
+        date: ensureString(schedule?.date),
+        startAt: parseTimestamp(schedule?.startAt),
+        endAt: parseTimestamp(schedule?.endAt)
       }))
       .filter((entry) => entry.id);
   }
@@ -248,7 +308,9 @@ function parseSchedules(raw) {
         return {
           id: scheduleId,
           label: ensureString(schedule?.label || schedule?.date || scheduleId || id),
-          date: ensureString(schedule?.date || schedule?.startAt || "")
+          date: ensureString(schedule?.date || schedule?.startAt || ""),
+          startAt: parseTimestamp(schedule?.startAt),
+          endAt: parseTimestamp(schedule?.endAt)
         };
       })
       .filter((entry) => entry.id);
@@ -384,6 +446,12 @@ async function handleSubmit(event) {
     }
     return;
   }
+  if (elements.privacyConsent && !elements.privacyConsent.checked) {
+    elements.feedback.textContent = "個人情報の取扱いについて同意してください。";
+    elements.feedback.dataset.variant = "error";
+    elements.privacyConsent.focus();
+    return;
+  }
   const payload = {
     name: ensureString(elements.nameInput?.value),
     phonetic: ensureString(elements.phoneticInput?.value),
@@ -393,6 +461,7 @@ async function handleSubmit(event) {
     email: ensureString(elements.emailInput?.value),
     club: ensureString(elements.clubInput?.value),
     studentId: ensureString(elements.studentIdInput?.value),
+    note: ensureString(elements.noteInput?.value),
     shifts,
     eventId: state.eventId,
     eventName: state.eventName,
@@ -400,6 +469,12 @@ async function handleSubmit(event) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
+  if (elements.privacyConsent) {
+    payload.privacyConsent = true;
+  }
+  if (!payload.note) {
+    delete payload.note;
+  }
   if (!payload.name) {
     elements.feedback.textContent = "氏名を入力してください。";
     elements.feedback.dataset.variant = "error";
