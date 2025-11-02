@@ -473,10 +473,25 @@
                         </div>
                       </div>
                       <div class="gl-config-row">
-                        <label class="gl-config-label" for="gl-faculty-config">学部・学科リスト</label>
+                        <label class="gl-config-label" for="gl-faculty-add">学部・学科リスト</label>
                         <div class="gl-config-control">
-                          <textarea id="gl-faculty-config" class="input input--textarea" rows="6" placeholder="学部: 学科1, 学科2"></textarea>
-                          <p class="gl-config-hint">1行につき「学部名: 学科A, 学科B」の形式で入力してください。</p>
+                          <div id="gl-faculty-builder" class="gl-faculty-builder">
+                            <div class="gl-faculty-builder-header">
+                              <button id="gl-faculty-add" class="btn btn-secondary btn-sm" type="button">学部を追加</button>
+                              <p class="gl-faculty-builder-note">弘前大学の「学部 → 学科 / 課程 → 専攻 → コース」のような階層をカード形式で設定できます。</p>
+                            </div>
+                            <p id="gl-faculty-empty" class="gl-faculty-empty">学部カードを追加して所属の階層構造を設定してください。</p>
+                            <div id="gl-faculty-list" class="gl-faculty-list" aria-live="polite"></div>
+                          </div>
+                          <datalist id="gl-faculty-level-suggestions">
+                            <option value="学科"></option>
+                            <option value="課程"></option>
+                            <option value="専攻"></option>
+                            <option value="コース"></option>
+                            <option value="プログラム"></option>
+                            <option value="領域"></option>
+                          </datalist>
+                          <p class="gl-config-hint">各カードで学部名と階層ラベル（例: 学科・課程・専攻）を入力し、必要に応じて選択肢や下位階層を追加してください。選択肢を作成しない場合は自由入力欄として扱われます。</p>
                         </div>
                       </div>
                       <div class="gl-config-row">
@@ -491,6 +506,64 @@
                         <button id="gl-config-copy" class="btn btn-ghost btn-sm" type="button" disabled>応募URLをコピー</button>
                         <span id="gl-config-copy-status" class="visually-hidden" aria-live="polite"></span>
                       </div>
+                      <template id="gl-faculty-template">
+                        <article class="gl-faculty-card" data-faculty-card>
+                          <header class="gl-faculty-card-header">
+                            <div class="gl-faculty-card-title">
+                              <label class="gl-faculty-label">学部名
+                                <input type="text" class="input" data-faculty-name placeholder="学部名を入力してください">
+                              </label>
+                            </div>
+                            <div class="gl-faculty-card-actions">
+                              <button type="button" class="btn btn-ghost btn-sm" data-move-up aria-label="1つ上に移動">↑</button>
+                              <button type="button" class="btn btn-ghost btn-sm" data-move-down aria-label="1つ下に移動">↓</button>
+                              <button type="button" class="btn btn-danger btn-sm" data-remove-faculty>削除</button>
+                            </div>
+                          </header>
+                          <div class="gl-faculty-card-body">
+                            <div class="gl-faculty-field">
+                              <label class="gl-faculty-label">最上位の階層名
+                                <input type="text" class="input" data-faculty-fallback list="gl-faculty-level-suggestions" placeholder="例: 学科">
+                              </label>
+                              <p class="gl-faculty-hint">選択肢を追加しない場合は、この名称の自由入力欄になります。</p>
+                            </div>
+                            <div data-level-container class="gl-faculty-level-root"></div>
+                          </div>
+                        </article>
+                      </template>
+                      <template id="gl-faculty-level-template">
+                        <section class="gl-faculty-level" data-level>
+                          <header class="gl-faculty-level-header">
+                            <label class="gl-faculty-label">階層ラベル
+                              <input type="text" class="input" data-level-label list="gl-faculty-level-suggestions" placeholder="例: 学科">
+                            </label>
+                            <label class="gl-faculty-checkbox">
+                              <input type="checkbox" data-level-allow-custom checked>
+                              <span>「その他」の自由入力を許可</span>
+                            </label>
+                            <button type="button" class="btn btn-ghost btn-sm" data-remove-level>階層を削除</button>
+                          </header>
+                          <div class="gl-faculty-options" data-options></div>
+                          <div class="gl-faculty-level-footer">
+                            <button type="button" class="btn btn-secondary btn-sm" data-add-option>選択肢を追加</button>
+                          </div>
+                        </section>
+                      </template>
+                      <template id="gl-faculty-option-template">
+                        <article class="gl-faculty-option" data-option>
+                          <div class="gl-faculty-option-header">
+                            <label class="gl-faculty-label">名称
+                              <input type="text" class="input" data-option-label placeholder="選択肢名を入力">
+                            </label>
+                            <button type="button" class="btn btn-ghost btn-sm" data-remove-option aria-label="選択肢を削除">削除</button>
+                          </div>
+                          <div class="gl-faculty-option-children" data-option-children></div>
+                          <div class="gl-faculty-option-footer">
+                            <button type="button" class="btn btn-ghost btn-sm" data-add-child>下位階層を追加</button>
+                            <button type="button" class="btn btn-ghost btn-sm" data-remove-child hidden>下位階層を削除</button>
+                          </div>
+                        </article>
+                      </template>
                     </div>
                   </div>
                 </section>

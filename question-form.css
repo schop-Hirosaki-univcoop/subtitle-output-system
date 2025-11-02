@@ -136,6 +136,18 @@ body.question-admin-page{
   line-height:1.5;
 }
 
+.checkbox-label{
+  display:inline-flex;
+  align-items:flex-start;
+  gap:.5rem;
+  font-size:.9rem;
+  line-height:1.6;
+}
+
+.checkbox-label input[type="checkbox"]{
+  margin-top:.2rem;
+}
+
 .field-hint--status{
   font-variant-numeric:tabular-nums;
   color:var(--accent);
