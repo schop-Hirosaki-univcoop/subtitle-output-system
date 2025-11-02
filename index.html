@@ -433,17 +433,23 @@
               </div>
         </section>
         <!-- GL管理パネル: 応募設定と班割りの整理を行う -->
-        <section id="flow-panel-gl" class="flow-tool-panel flow-stage-panel" data-panel="gl" aria-labelledby="flow-panel-gl-title" hidden>
-          <div class="module module--primary admin-module" aria-labelledby="flow-panel-gl-title">
-            <div class="module-header">
-              <div class="module-heading">
-                <h2 id="flow-panel-gl-title">GLリストの管理</h2>
-                <p class="module-description">
-                  選択したイベントのGL応募情報を確認し、募集設定や班割りステータスを更新できます。募集URLのコピー、募集期間の調整、学部学科や班リストの編集が可能です。
-                </p>
-              </div>
+        <section
+          id="flow-panel-gl"
+          class="module module--primary admin-module flow-card flow-card--tabs flow-tool-panel flow-stage-panel"
+          data-panel="gl"
+          aria-labelledby="flow-panel-gl-title"
+          hidden
+        >
+          <div class="module-header">
+            <div class="module-heading">
+              <h2 id="flow-panel-gl-title">GLリストの管理</h2>
+              <p class="module-description">
+                選択したイベントのGL応募情報を確認し、募集設定や班割りステータスを更新できます。募集URLのコピー、募集期間の調整、学部学科や班リストの編集が可能です。
+              </p>
             </div>
-            <div class="module-body">
+          </div>
+          <div class="module-body">
+            <div class="flow-pane flow-pane--primary gl-panel">
               <div class="gl-panel-switcher">
                 <div class="gl-panel-tabs">
                   <span class="gl-panel-tabs__label" aria-hidden="true">表示モード</span>
