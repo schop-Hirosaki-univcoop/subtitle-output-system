@@ -16,6 +16,7 @@ import { ensureString, formatDateTimeLocal, logError } from "../helpers.js";
 
 const ASSIGNMENT_VALUE_ABSENT = "__absent";
 const ASSIGNMENT_VALUE_STAFF = "__staff";
+const MAX_TEAM_COUNT = 50;
 
 function toDateTimeLocalString(value) {
   if (!value) {
@@ -45,57 +46,425 @@ function toTimestamp(value) {
   return date.toISOString();
 }
 
-function parseFacultyConfig(text) {
-  return String(text || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [facultyPart, departmentsPart = ""] = line.split(":");
-      const faculty = ensureString(facultyPart);
-      const departments = departmentsPart
-        .split(",")
-        .map((entry) => entry.trim())
-        .filter(Boolean);
-      return { faculty, departments };
-    })
-    .filter((entry) => entry.faculty);
-}
+const FACULTY_LEVEL_SUGGESTIONS = ["学科", "課程", "専攻", "コース", "プログラム", "領域"];
 
-function formatFacultyConfig(faculties = []) {
-  if (!Array.isArray(faculties) || !faculties.length) {
-    return "";
+class GlFacultyBuilder {
+  constructor(dom) {
+    this.list = dom?.glFacultyList ?? null;
+    this.emptyState = dom?.glFacultyEmpty ?? null;
+    this.addButton = dom?.glFacultyAddButton ?? null;
+    this.facultyTemplate = dom?.glFacultyTemplate ?? null;
+    this.levelTemplate = dom?.glFacultyLevelTemplate ?? null;
+    this.optionTemplate = dom?.glFacultyOptionTemplate ?? null;
+    this.boundHandleAdd = () => {
+      const card = this.addFaculty();
+      const input = card?.querySelector("[data-faculty-name]");
+      input?.focus();
+    };
+    if (this.addButton) {
+      this.addButton.addEventListener("click", this.boundHandleAdd);
+    }
+    this.updateEmptyState();
   }
-  return faculties
-    .map((entry) => {
-      const faculty = ensureString(entry?.faculty);
-      const departments = Array.isArray(entry?.departments)
-        ? entry.departments.map((dept) => ensureString(dept)).filter(Boolean)
-        : [];
-      if (!faculty) {
-        return "";
-      }
-      if (!departments.length) {
-        return faculty;
-      }
-      return `${faculty}: ${departments.join(", ")}`;
-    })
-    .filter(Boolean)
-    .join("\n");
-}
 
-function parseTeamConfig(text) {
-  return String(text || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function formatTeamConfig(teams = []) {
-  if (!Array.isArray(teams) || !teams.length) {
-    return "";
+  destroy() {
+    if (this.addButton) {
+      this.addButton.removeEventListener("click", this.boundHandleAdd);
+    }
   }
-  return teams.map((team) => ensureString(team)).filter(Boolean).join("\n");
+
+  updateEmptyState() {
+    if (!this.emptyState) return;
+    const hasEntries = Boolean(this.list && this.list.children.length);
+    this.emptyState.hidden = hasEntries;
+  }
+
+  clear() {
+    if (this.list) {
+      this.list.innerHTML = "";
+    }
+    this.updateEmptyState();
+  }
+
+  setFaculties(faculties) {
+    this.clear();
+    if (!Array.isArray(faculties) || !faculties.length) {
+      return;
+    }
+    faculties.forEach((entry) => {
+      this.addFaculty(entry);
+    });
+    this.updateEmptyState();
+  }
+
+  addFaculty(raw = {}) {
+    if (!this.list || !this.facultyTemplate) {
+      return null;
+    }
+    const fragment = this.facultyTemplate.content.cloneNode(true);
+    const card = fragment.querySelector("[data-faculty-card]");
+    if (!card) {
+      return null;
+    }
+    const facultyNameInput = card.querySelector("[data-faculty-name]");
+    const fallbackInput = card.querySelector("[data-faculty-fallback]");
+    const levelContainer = card.querySelector("[data-level-container]");
+    const removeButton = card.querySelector("[data-remove-faculty]");
+    const moveUpButton = card.querySelector("[data-move-up]");
+    const moveDownButton = card.querySelector("[data-move-down]");
+    if (facultyNameInput) {
+      facultyNameInput.value = ensureString(raw?.faculty);
+    }
+    const fallbackFromData = ensureString(raw?.fallbackLabel);
+    const rootLabelFromTree = ensureString(raw?.unitTree?.label || raw?.departmentLabel);
+    const fallbackValue = fallbackFromData || rootLabelFromTree || "学科";
+    if (fallbackInput) {
+      fallbackInput.value = fallbackValue;
+      if (fallbackInput.value && fallbackInput.value !== rootLabelFromTree) {
+        fallbackInput.dataset.userEdited = "true";
+      }
+    }
+    if (levelContainer) {
+      const level = this.createLevel(raw?.unitTree, {
+        depth: 0,
+        isRoot: true,
+        rootFallbackInput: fallbackInput,
+        initialLabel: rootLabelFromTree || fallbackValue
+      });
+      if (level) {
+        levelContainer.append(level);
+      }
+    }
+    removeButton?.addEventListener("click", () => {
+      card.remove();
+      this.updateEmptyState();
+    });
+    moveUpButton?.addEventListener("click", () => {
+      this.moveFaculty(card, -1);
+    });
+    moveDownButton?.addEventListener("click", () => {
+      this.moveFaculty(card, 1);
+    });
+    this.list.append(card);
+    this.updateEmptyState();
+    return card;
+  }
+
+  moveFaculty(card, direction) {
+    if (!this.list || !card) return;
+    const siblings = Array.from(this.list.querySelectorAll("[data-faculty-card]"));
+    const index = siblings.indexOf(card);
+    if (index < 0) return;
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= siblings.length) {
+      return;
+    }
+    const reference = siblings[targetIndex];
+    if (direction < 0) {
+      this.list.insertBefore(card, reference);
+    } else {
+      this.list.insertBefore(card, reference.nextSibling);
+    }
+    card.scrollIntoView({ block: "nearest" });
+  }
+
+  createLevel(raw = {}, options = {}) {
+    if (!this.levelTemplate) {
+      return null;
+    }
+    const { depth = 0, isRoot = false, rootFallbackInput = null, initialLabel = "", onRemove } = options;
+    const fragment = this.levelTemplate.content.cloneNode(true);
+    const level = fragment.querySelector("[data-level]");
+    if (!level) {
+      return null;
+    }
+    level.dataset.depth = String(depth);
+    const labelInput = level.querySelector("[data-level-label]");
+    const allowCustomInput = level.querySelector("[data-level-allow-custom]");
+    const removeButton = level.querySelector("[data-remove-level]");
+    const optionsContainer = level.querySelector("[data-options]");
+    const addOptionButton = level.querySelector("[data-add-option]");
+    const labelValue = ensureString(raw?.label) || ensureString(initialLabel) || "学科";
+    if (labelInput) {
+      labelInput.value = labelValue;
+      if (isRoot && rootFallbackInput) {
+        this.setupRootFallbackSync(labelInput, rootFallbackInput);
+      }
+    }
+    if (allowCustomInput) {
+      allowCustomInput.checked = raw?.allowCustom !== false;
+    }
+    if (removeButton) {
+      if (isRoot) {
+        removeButton.hidden = true;
+      } else {
+        removeButton.hidden = false;
+        removeButton.addEventListener("click", () => {
+          level.remove();
+          if (typeof onRemove === "function") {
+            onRemove();
+          }
+          this.updateEmptyState();
+        });
+      }
+    }
+    if (Array.isArray(raw?.options) && optionsContainer) {
+      raw.options.forEach((option) => {
+        const optionEl = this.createOption(option, { depth, parentLevel: level });
+        if (optionEl) {
+          optionsContainer.append(optionEl);
+        }
+      });
+    }
+    addOptionButton?.addEventListener("click", () => {
+      if (!optionsContainer) return;
+      const optionEl = this.createOption({}, { depth, parentLevel: level });
+      if (!optionEl) return;
+      optionsContainer.append(optionEl);
+      const optionInput = optionEl.querySelector("[data-option-label]");
+      optionInput?.focus();
+      this.updateEmptyState();
+    });
+    return level;
+  }
+
+  createOption(raw = {}, { depth = 0, parentLevel = null } = {}) {
+    if (!this.optionTemplate) {
+      return null;
+    }
+    const fragment = this.optionTemplate.content.cloneNode(true);
+    const option = fragment.querySelector("[data-option]");
+    if (!option) {
+      return null;
+    }
+    const labelInput = option.querySelector("[data-option-label]");
+    const removeButton = option.querySelector("[data-remove-option]");
+    const addChildButton = option.querySelector("[data-add-child]");
+    const removeChildButton = option.querySelector("[data-remove-child]");
+    const childContainer = option.querySelector("[data-option-children]");
+    if (labelInput) {
+      labelInput.value = ensureString(raw?.label || raw?.value);
+    }
+    removeButton?.addEventListener("click", () => {
+      option.remove();
+      this.updateEmptyState();
+    });
+    const attachChild = (childRaw = {}) => {
+      if (!childContainer) return;
+      childContainer.innerHTML = "";
+      const childLevel = this.createLevel(childRaw, {
+        depth: depth + 1,
+        isRoot: false,
+        onRemove: () => {
+          childContainer.innerHTML = "";
+          if (addChildButton) addChildButton.hidden = false;
+          if (removeChildButton) removeChildButton.hidden = true;
+        }
+      });
+      if (childLevel) {
+        childContainer.append(childLevel);
+        if (addChildButton) addChildButton.hidden = true;
+        if (removeChildButton) removeChildButton.hidden = false;
+      }
+    };
+    addChildButton?.addEventListener("click", () => {
+      const suggested = this.suggestNextLabel(parentLevel);
+      attachChild({ label: suggested });
+      const childInput = childContainer?.querySelector("[data-level-label]");
+      childInput?.focus();
+    });
+    removeChildButton?.addEventListener("click", () => {
+      if (childContainer) {
+        childContainer.innerHTML = "";
+      }
+      if (addChildButton) addChildButton.hidden = false;
+      if (removeChildButton) removeChildButton.hidden = true;
+    });
+    if (raw?.children) {
+      attachChild(raw.children);
+    }
+    return option;
+  }
+
+  setupRootFallbackSync(labelInput, fallbackInput) {
+    if (!labelInput || !fallbackInput) return;
+    const syncIfAllowed = () => {
+      if (fallbackInput.dataset.userEdited === "true") {
+        return;
+      }
+      const label = ensureString(labelInput.value) || "学科";
+      fallbackInput.value = label;
+    };
+    labelInput.addEventListener("input", syncIfAllowed);
+    fallbackInput.addEventListener("input", () => {
+      const label = ensureString(labelInput.value);
+      if (!fallbackInput.value) {
+        delete fallbackInput.dataset.userEdited;
+        fallbackInput.value = label || "学科";
+      } else if (fallbackInput.value !== label) {
+        fallbackInput.dataset.userEdited = "true";
+      } else {
+        delete fallbackInput.dataset.userEdited;
+      }
+    });
+    syncIfAllowed();
+  }
+
+  suggestNextLabel(levelElement) {
+    const currentLabel = ensureString(
+      levelElement?.querySelector("[data-level-label]")?.value
+    );
+    if (!currentLabel) {
+      return FACULTY_LEVEL_SUGGESTIONS[0];
+    }
+    const exactIndex = FACULTY_LEVEL_SUGGESTIONS.indexOf(currentLabel);
+    if (exactIndex >= 0 && exactIndex < FACULTY_LEVEL_SUGGESTIONS.length - 1) {
+      return FACULTY_LEVEL_SUGGESTIONS[exactIndex + 1];
+    }
+    if (currentLabel.endsWith("学科")) {
+      return "専攻";
+    }
+    if (currentLabel.endsWith("課程")) {
+      return "専攻";
+    }
+    return currentLabel;
+  }
+
+  collectFaculties() {
+    if (!this.list) {
+      return { faculties: [], errors: [] };
+    }
+    const cards = Array.from(this.list.querySelectorAll("[data-faculty-card]"));
+    const faculties = [];
+    const errors = [];
+    cards.forEach((card, index) => {
+      const nameInput = card.querySelector("[data-faculty-name]");
+      const fallbackInput = card.querySelector("[data-faculty-fallback]");
+      const levelContainer = card.querySelector("[data-level-container]");
+      const facultyName = ensureString(nameInput?.value);
+      if (!facultyName) {
+        errors.push(`学部カード${index + 1}の学部名を入力してください。`);
+        return;
+      }
+      const fallbackLabel = ensureString(fallbackInput?.value) || "学科";
+      const rootLevel = levelContainer?.querySelector(":scope > [data-level]");
+      const unitTree = this.buildLevelPayload(rootLevel, errors, {
+        faculty: facultyName,
+        levelLabel: fallbackLabel
+      });
+      const payload = {
+        faculty: facultyName,
+        fallbackLabel,
+        departmentLabel: fallbackLabel
+      };
+      if (unitTree) {
+        payload.unitTree = unitTree;
+      } else {
+        payload.unitTree = null;
+      }
+      faculties.push(payload);
+    });
+    return { faculties, errors };
+  }
+
+  buildLevelPayload(levelElement, errors = [], meta = {}) {
+    if (!levelElement) {
+      return null;
+    }
+    const labelInput = levelElement.querySelector("[data-level-label]");
+    const allowCustomInput = levelElement.querySelector("[data-level-allow-custom]");
+    const optionsContainer = levelElement.querySelector("[data-options]");
+    const label = ensureString(labelInput?.value) || ensureString(meta?.levelLabel) || "所属";
+    const optionElements = Array.from(optionsContainer?.querySelectorAll(":scope > [data-option]") ?? []);
+    const options = optionElements
+      .map((option) => this.buildOptionPayload(option, errors, { faculty: meta?.faculty, levelLabel: label }))
+      .filter(Boolean);
+    if (!options.length) {
+      if (optionElements.length) {
+        const prefix = meta?.faculty ? `学部「${meta.faculty}」の` : "";
+        errors.push(`${prefix}${label}の選択肢を入力してください。`);
+      }
+      return null;
+    }
+    const placeholder = `${label}を選択してください`;
+    return {
+      label,
+      placeholder,
+      allowCustom: allowCustomInput?.checked !== false,
+      options
+    };
+  }
+
+  buildOptionPayload(optionElement, errors = [], meta = {}) {
+    const labelInput = optionElement.querySelector("[data-option-label]");
+    const childLevel = optionElement.querySelector("[data-option-children] > [data-level]");
+    const label = ensureString(labelInput?.value);
+    if (!label) {
+      const levelLabel = ensureString(meta?.levelLabel) || "所属";
+      const prefix = meta?.faculty ? `学部「${meta.faculty}」の` : "";
+      errors.push(`${prefix}${levelLabel}の選択肢名を入力してください。`);
+      return null;
+    }
+    const payload = {
+      label,
+      value: label
+    };
+    if (childLevel) {
+      const childPayload = this.buildLevelPayload(childLevel, errors, { faculty: meta?.faculty });
+      if (childPayload) {
+        payload.children = childPayload;
+      } else {
+        const childLabelInput = childLevel.querySelector("[data-level-label]");
+        const childLabel = ensureString(childLabelInput?.value) || "下位階層";
+        const childOptionsContainer = childLevel.querySelector("[data-options]");
+        const hasChildOptions = Boolean(
+          childOptionsContainer?.querySelector("[data-option]")
+        );
+        if (!hasChildOptions) {
+          const prefix = meta?.faculty ? `学部「${meta.faculty}」の` : "";
+          errors.push(`${prefix}${childLabel}の選択肢を追加するか、階層を削除してください。`);
+        }
+      }
+    }
+    return payload;
+  }
+}
+
+function parseTeamCount(value) {
+  const raw = ensureString(value).trim();
+  if (!raw) {
+    return { count: 0, error: "" };
+  }
+  if (!/^\d+$/.test(raw)) {
+    return { count: 0, error: "班の数は0以上の整数で入力してください。" };
+  }
+  const numeric = Number.parseInt(raw, 10);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return { count: 0, error: "班の数は0以上の整数で入力してください。" };
+  }
+  if (numeric > MAX_TEAM_COUNT) {
+    return { count: 0, error: `班は最大${MAX_TEAM_COUNT}班まで設定できます。` };
+  }
+  return { count: numeric, error: "" };
+}
+
+function buildSequentialTeams(count = 0) {
+  const safeCount = Number.isFinite(count) ? Math.max(0, Math.min(MAX_TEAM_COUNT, Math.floor(count))) : 0;
+  if (safeCount <= 0) {
+    return [];
+  }
+  const teams = [];
+  for (let index = 1; index <= safeCount; index += 1) {
+    teams.push(`${index}班`);
+  }
+  return teams;
+}
+
+function deriveTeamCountFromConfig(teams = []) {
+  if (!Array.isArray(teams)) {
+    return 0;
+  }
+  return teams.map((team) => ensureString(team)).filter(Boolean).length;
 }
 
 function normalizeScheduleConfig(raw) {
@@ -269,6 +638,7 @@ export class GlToolManager {
   constructor(app) {
     this.app = app;
     this.dom = app.dom;
+    this.facultyBuilder = new GlFacultyBuilder(this.dom);
     this.currentEventId = "";
     this.currentEventName = "";
     this.currentSchedules = [];
@@ -281,6 +651,7 @@ export class GlToolManager {
     this.configUnsubscribe = null;
     this.applicationsUnsubscribe = null;
     this.assignmentsUnsubscribe = null;
+    this.activeTab = "config";
     this.selectionUnsubscribe = this.app.addSelectionListener((detail) => this.handleSelection(detail));
     this.eventsUnsubscribe = this.app.addEventListener((events) => this.handleEvents(events));
     this.bindDom();
@@ -351,11 +722,38 @@ export class GlToolManager {
         });
       });
     }
-    if (this.dom.glSlugInput) {
-      this.dom.glSlugInput.addEventListener("input", () => {
-        this.updateSlugPreview();
+    const tabOrder = ["config", "applications"];
+    const getTabButton = (tab) =>
+      tab === "applications" ? this.dom.glTabApplicationsButton : this.dom.glTabConfigButton;
+    tabOrder.forEach((tab) => {
+      const button = getTabButton(tab);
+      if (!button) {
+        return;
+      }
+      button.addEventListener("click", () => {
+        this.setActiveTab(tab);
+        button.focus();
       });
-    }
+      button.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+          return;
+        }
+        event.preventDefault();
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        let index = tabOrder.indexOf(tab);
+        for (let step = 0; step < tabOrder.length; step += 1) {
+          index = (index + direction + tabOrder.length) % tabOrder.length;
+          const targetTab = tabOrder[index];
+          const targetButton = getTabButton(targetTab);
+          if (targetButton && !targetButton.disabled) {
+            targetButton.focus();
+            this.setActiveTab(targetTab);
+            break;
+          }
+        }
+      });
+    });
+    this.setActiveTab(this.activeTab);
     if (this.dom.glFilterSelect) {
       this.dom.glFilterSelect.addEventListener("change", (event) => {
         const value = event.target instanceof HTMLSelectElement ? event.target.value : "all";
@@ -385,18 +783,44 @@ export class GlToolManager {
     }
   }
 
+  setActiveTab(tab) {
+    const normalized = tab === "applications" ? "applications" : "config";
+    this.activeTab = normalized;
+    const entries = [
+      { tab: "config", button: this.dom.glTabConfigButton, panel: this.dom.glTabpanelConfig },
+      { tab: "applications", button: this.dom.glTabApplicationsButton, panel: this.dom.glTabpanelApplications }
+    ];
+    entries.forEach(({ tab: key, button, panel }) => {
+      const isActive = key === normalized;
+      if (button) {
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
+        button.setAttribute("tabindex", isActive ? "0" : "-1");
+      }
+      if (panel) {
+        panel.hidden = !isActive;
+        panel.setAttribute("aria-hidden", isActive ? "false" : "true");
+      }
+    });
+  }
+
   resetFlowState() {
     this.detachListeners();
     this.currentEventId = "";
     this.currentEventName = "";
     this.currentSchedules = [];
     this.config = null;
+    this.facultyBuilder?.clear();
     this.applications = [];
     this.assignments = new Map();
     this.filter = "all";
     this.loading = false;
     this.updateConfigVisibility();
+    this.setActiveTab("config");
     this.renderApplications();
+    if (this.dom.glTeamCountInput) {
+      this.dom.glTeamCountInput.value = "";
+    }
   }
 
   resetContext() {
@@ -428,6 +852,11 @@ export class GlToolManager {
     this.updateSlugPreview();
     this.setStatus("", "info");
     if (changed) {
+      this.filter = "all";
+      if (this.dom.glFilterSelect) {
+        this.dom.glFilterSelect.value = "all";
+      }
+      this.setActiveTab("config");
       this.attachListeners();
     }
   }
@@ -486,23 +915,16 @@ export class GlToolManager {
       updatedAt: Number(config.updatedAt) || 0,
       createdAt: Number(config.createdAt) || 0
     };
-    if (this.dom.glSlugInput) {
-      const slug = this.config.slug || this.currentEventId;
-      if (this.dom.glSlugInput.value !== slug) {
-        this.dom.glSlugInput.value = slug;
-      }
-    }
     if (this.dom.glPeriodStartInput) {
       this.dom.glPeriodStartInput.value = toDateTimeLocalString(this.config.startAt);
     }
     if (this.dom.glPeriodEndInput) {
       this.dom.glPeriodEndInput.value = toDateTimeLocalString(this.config.endAt);
     }
-    if (this.dom.glFacultyConfigInput) {
-      this.dom.glFacultyConfigInput.value = formatFacultyConfig(this.config.faculties);
-    }
-    if (this.dom.glTeamConfigInput) {
-      this.dom.glTeamConfigInput.value = formatTeamConfig(this.config.teams);
+    this.facultyBuilder?.setFaculties(this.config.faculties);
+    if (this.dom.glTeamCountInput) {
+      const teamCount = deriveTeamCountFromConfig(this.config.teams);
+      this.dom.glTeamCountInput.value = teamCount > 0 ? String(teamCount) : "";
     }
     this.updateSlugPreview();
     this.refreshSchedules();
@@ -548,14 +970,17 @@ export class GlToolManager {
     if (this.dom.glConfigSaveButton) {
       this.dom.glConfigSaveButton.disabled = !hasEvent;
     }
+    if (this.dom.glFilterSelect) {
+      this.dom.glFilterSelect.disabled = !hasEvent;
+    }
+  }
+
+  getDefaultSlug() {
+    return ensureString(this.currentEventId);
   }
 
   updateSlugPreview() {
-    if (!this.dom.glSlugPreview) {
-      return;
-    }
-    const slug = ensureString(this.dom.glSlugInput?.value) || this.currentEventId || "sample";
-    this.dom.glSlugPreview.textContent = slug;
+    const slug = this.getDefaultSlug();
     if (this.dom.glConfigCopyButton) {
       this.dom.glConfigCopyButton.disabled = !slug || !this.currentEventId;
     }
@@ -566,17 +991,30 @@ export class GlToolManager {
       this.setStatus("イベントを選択してください。", "warning");
       return;
     }
-    const slug = ensureString(this.dom.glSlugInput?.value) || this.currentEventId;
+    const slug = this.getDefaultSlug();
     const startAt = toTimestamp(this.dom.glPeriodStartInput?.value || "");
     const endAt = toTimestamp(this.dom.glPeriodEndInput?.value || "");
-    const faculties = parseFacultyConfig(this.dom.glFacultyConfigInput?.value || "");
-    const teams = parseTeamConfig(this.dom.glTeamConfigInput?.value || "");
+    const facultyResult = this.facultyBuilder?.collectFaculties?.() ?? { faculties: [], errors: [] };
+    if (facultyResult.errors.length) {
+      this.setStatus(facultyResult.errors[0], "error");
+      return;
+    }
+    const faculties = facultyResult.faculties;
+    const { count: teamCount, error: teamError } = parseTeamCount(this.dom.glTeamCountInput?.value);
+    if (teamError) {
+      this.setStatus(teamError, "error");
+      if (this.dom.glTeamCountInput) {
+        this.dom.glTeamCountInput.focus();
+      }
+      return;
+    }
+    const teams = buildSequentialTeams(teamCount);
     const previousSlug = ensureString(this.config?.slug);
     if (slug) {
       const slugSnapshot = await get(ref(database, `glIntake/slugIndex/${slug}`));
       const ownerEventId = ensureString(slugSnapshot.val());
       if (ownerEventId && ownerEventId !== this.currentEventId) {
-        this.setStatus("同じフォーム識別子が既に使用されています。別の識別子を入力してください。", "error");
+        this.setStatus("同じイベントIDが別のGLフォームに割り当てられています。イベント設定を確認してください。", "error");
         return;
       }
     }
@@ -618,9 +1056,9 @@ export class GlToolManager {
       this.setStatus("イベントを選択してください。", "warning");
       return;
     }
-    const slug = ensureString(this.dom.glSlugInput?.value) || this.currentEventId;
+    const slug = this.getDefaultSlug();
     if (!slug) {
-      this.setStatus("フォーム識別子を入力してください。", "warning");
+      this.setStatus("イベントIDを取得できませんでした。", "error");
       return;
     }
     let url = `${window.location.origin}${window.location.pathname}`;
@@ -680,6 +1118,19 @@ export class GlToolManager {
       return;
     }
     list.innerHTML = "";
+    const hasEvent = Boolean(this.currentEventId);
+    if (this.dom.glApplicationEventNote) {
+      this.dom.glApplicationEventNote.hidden = hasEvent;
+    }
+    if (!hasEvent) {
+      if (this.dom.glApplicationEmpty) {
+        this.dom.glApplicationEmpty.hidden = true;
+      }
+      if (this.dom.glApplicationLoading) {
+        this.dom.glApplicationLoading.hidden = true;
+      }
+      return;
+    }
     const filtered = this.applyFilter(this.applications);
     if (this.dom.glApplicationLoading) {
       this.dom.glApplicationLoading.hidden = !this.loading;
