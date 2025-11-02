@@ -126,6 +126,7 @@
             ".validate": "!newData.isString() && !newData.isNumber() && !newData.isBoolean()",
             "$teamIndex": { ".validate": "!newData.exists() || newData.isString()" }
           },
+          "teamCount": { ".validate": "newData.isNumber() || !newData.exists()" },
           "schedules": {
             ".validate": "!newData.isString() && !newData.isNumber() && !newData.isBoolean()",
             "$index": {
@@ -137,10 +138,50 @@
             }
           },
           "guidance": { ".validate": "newData.isString() || !newData.exists()" },
+          "facultyLibraryId": { ".validate": "newData.isString() || !newData.exists()" },
           "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
           "createdAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
           "eventId": { ".validate": "newData.isString() || !newData.exists()" },
           "eventName": { ".validate": "newData.isString() || !newData.exists()" },
+          "$other": { ".validate": false }
+        }
+      },
+      "facultyLibrary": {
+        ".read": true,
+        "$libraryId": {
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+          ".validate": "!newData.exists() || newData.hasChildren(['id','name'])",
+          "id": { ".validate": "newData.isString()" },
+          "name": { ".validate": "newData.isString()" },
+          "faculties": {
+            ".validate": "!newData.isString() && !newData.isNumber() && !newData.isBoolean()",
+            "$facultyIndex": {
+              ".validate": "!newData.exists() || (newData.hasChildren(['faculty']) && newData.child('faculty').isString() && (!newData.child('fallbackLabel').exists() || newData.child('fallbackLabel').isString()) && (!newData.child('unitTree').exists() || (!newData.child('unitTree').isString() && !newData.child('unitTree').isNumber() && !newData.child('unitTree').isBoolean())))",
+              "faculty": { ".validate": "newData.isString()" },
+              "fallbackLabel": { ".validate": "newData.isString() || !newData.exists()" },
+              "unitTree": {
+                ".validate": "!newData.isString() && !newData.isNumber() && !newData.isBoolean()",
+                "label": { ".validate": "newData.isString() || !newData.exists()" },
+                "placeholder": { ".validate": "newData.isString() || !newData.exists()" },
+                "allowCustom": { ".validate": "newData.isBoolean() || !newData.exists()" },
+                "options": {
+                  ".validate": "!newData.isString() && !newData.isNumber() && !newData.isBoolean()",
+                  "$optionIndex": {
+                    ".validate": "!newData.exists() || (newData.hasChildren(['label']) && newData.child('label').isString() && (!newData.child('value').exists() || newData.child('value').isString()) && (!newData.child('children').exists() || (!newData.child('children').isString() && !newData.child('children').isNumber() && !newData.child('children').isBoolean())))",
+                    "label": { ".validate": "newData.isString()" },
+                    "value": { ".validate": "newData.isString() || !newData.exists()" },
+                    "children": { ".validate": "!newData.isString() && !newData.isNumber() && !newData.isBoolean()" },
+                    "$other": { ".validate": false }
+                  }
+                },
+                "$other": { ".validate": false }
+              },
+              "$other": { ".validate": false }
+            }
+          },
+          "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
+          "updatedByUid": { ".validate": "newData.isString() || !newData.exists()" },
+          "updatedByName": { ".validate": "newData.isString() || !newData.exists()" },
           "$other": { ".validate": false }
         }
       },

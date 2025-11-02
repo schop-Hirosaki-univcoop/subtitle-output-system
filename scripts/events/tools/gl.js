@@ -10,13 +10,887 @@ import {
   getGlApplicationsRef,
   getGlAssignmentsRef,
   getGlAssignmentRef,
+  getGlFacultyLibraryRef,
   get
 } from "../../operator/firebase.js";
 import { ensureString, formatDateTimeLocal, logError } from "../helpers.js";
 
 const ASSIGNMENT_VALUE_ABSENT = "__absent";
 const ASSIGNMENT_VALUE_STAFF = "__staff";
-const MAX_TEAM_COUNT = 50;
+const DEFAULT_FACULTY_LIBRARY_ID = "default";
+const DEFAULT_FACULTY_LIBRARY_NAME = "共通リスト";
+const FACULTY_LABEL_FALLBACK = "学科";
+const DEFAULT_LEVEL_LABELS = ["学科", "課程", "専攻", "コース"];
+
+function escapeSelector(value) {
+  const text = ensureString(value);
+  if (!text) {
+    return "";
+  }
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    return CSS.escape(text);
+  }
+  return text.replace(/[^a-zA-Z0-9_\-]/g, (char) => `\\${char}`);
+}
+
+function generateLocalId(prefix = "gl") {
+  if (typeof crypto !== "undefined") {
+    if (typeof crypto.randomUUID === "function") {
+      return `${prefix}-${crypto.randomUUID()}`;
+    }
+    if (typeof crypto.getRandomValues === "function") {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      return `${prefix}-${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
+    }
+  }
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getDefaultLevelLabel(depth = 0, fallback = FACULTY_LABEL_FALLBACK) {
+  const label = DEFAULT_LEVEL_LABELS[depth];
+  return ensureString(label) || ensureString(fallback) || FACULTY_LABEL_FALLBACK;
+}
+
+function createEmptyFaculty() {
+  return {
+    id: generateLocalId("faculty"),
+    faculty: "",
+    fallbackLabel: FACULTY_LABEL_FALLBACK,
+    unitTree: null
+  };
+}
+
+function createEmptyLevel(label = FACULTY_LABEL_FALLBACK) {
+  const normalizedLabel = ensureString(label) || FACULTY_LABEL_FALLBACK;
+  return {
+    id: generateLocalId("level"),
+    label: normalizedLabel,
+    placeholder: `${normalizedLabel}を選択してください`,
+    allowCustom: true,
+    options: []
+  };
+}
+
+function createEmptyOption(label = "") {
+  const normalizedLabel = ensureString(label);
+  return {
+    id: generateLocalId("option"),
+    label: normalizedLabel,
+    value: normalizedLabel,
+    children: null
+  };
+}
+
+function normalizeFacultyCollection(raw) {
+  if (!raw) {
+    return [];
+  }
+  const entries = Array.isArray(raw) ? raw : Object.values(raw);
+  return entries
+    .map((entry) => normalizeFacultyEntry(entry))
+    .filter(Boolean);
+}
+
+function normalizeFacultyEntry(raw) {
+  if (!raw || (typeof raw !== "object" && typeof raw !== "string" && typeof raw !== "number")) {
+    return null;
+  }
+  if (typeof raw === "string" || typeof raw === "number") {
+    const facultyName = ensureString(raw);
+    if (!facultyName) {
+      return null;
+    }
+    return {
+      id: generateLocalId("faculty"),
+      faculty: facultyName,
+      fallbackLabel: FACULTY_LABEL_FALLBACK,
+      unitTree: null
+    };
+  }
+  const facultyName = ensureString(raw.faculty ?? raw.name ?? "");
+  if (!facultyName) {
+    return null;
+  }
+  const fallbackLabel =
+    ensureString(raw.fallbackLabel ?? raw.departmentLabel ?? raw.unitLabel ?? "") || FACULTY_LABEL_FALLBACK;
+  const hierarchySource = raw.unitTree ?? raw.units ?? raw.hierarchy ?? null;
+  let unitTree = normalizeUnitLevel(hierarchySource, fallbackLabel);
+  if (!unitTree) {
+    const departments = Array.isArray(raw.departments) ? raw.departments.map(ensureString).filter(Boolean) : [];
+    if (departments.length) {
+      const level = createEmptyLevel(fallbackLabel);
+      level.options = departments.map((name) => createEmptyOption(name)).filter((option) => option.label);
+      unitTree = level.options.length ? level : null;
+    }
+  }
+  return {
+    id: generateLocalId("faculty"),
+    faculty: facultyName,
+    fallbackLabel,
+    unitTree
+  };
+}
+
+function normalizeUnitLevel(raw, fallbackLabel = FACULTY_LABEL_FALLBACK) {
+  if (!raw) {
+    return null;
+  }
+  if (Array.isArray(raw)) {
+    const level = createEmptyLevel(fallbackLabel);
+    level.options = raw.map((item) => normalizeUnitOption(item, fallbackLabel)).filter(Boolean);
+    return level.options.length ? level : null;
+  }
+  if (typeof raw !== "object") {
+    return null;
+  }
+  const label =
+    ensureString(raw.label ?? raw.name ?? raw.title ?? raw.type ?? fallbackLabel) || FACULTY_LABEL_FALLBACK;
+  const placeholder =
+    ensureString(raw.placeholder ?? raw.hint ?? "") || `${label}を選択してください`;
+  const allowCustom = raw.allowCustom !== false;
+  const source =
+    raw.options ?? raw.values ?? raw.items ?? raw.list ?? raw.departments ?? raw.choices ?? raw.children ?? null;
+  let options = [];
+  if (Array.isArray(source)) {
+    options = source.map((item) => normalizeUnitOption(item, label)).filter(Boolean);
+  } else if (source && typeof source === "object") {
+    options = Object.values(source)
+      .map((item) => normalizeUnitOption(item, label))
+      .filter(Boolean);
+  }
+  if (!options.length) {
+    return null;
+  }
+  return {
+    id: generateLocalId("level"),
+    label,
+    placeholder,
+    allowCustom,
+    options
+  };
+}
+
+function normalizeUnitOption(raw, parentLabel = FACULTY_LABEL_FALLBACK) {
+  if (!raw || (typeof raw !== "object" && typeof raw !== "string" && typeof raw !== "number")) {
+    return null;
+  }
+  if (typeof raw === "string" || typeof raw === "number") {
+    const label = ensureString(raw);
+    if (!label) {
+      return null;
+    }
+    return {
+      id: generateLocalId("option"),
+      label,
+      value: label,
+      children: null
+    };
+  }
+  const label = ensureString(raw.label ?? raw.name ?? raw.title ?? raw.value ?? "");
+  if (!label) {
+    return null;
+  }
+  const value = ensureString(raw.value ?? raw.id ?? label);
+  const childSource = raw.children ?? raw.child ?? raw.next ?? raw.unitTree ?? raw.units ?? null;
+  const childLevel = normalizeUnitLevel(childSource, parentLabel);
+  return {
+    id: generateLocalId("option"),
+    label,
+    value,
+    children: childLevel
+  };
+}
+
+function stripUnitLevel(level) {
+  if (!level) {
+    return null;
+  }
+  const options = Array.isArray(level.options) ? level.options : [];
+  return {
+    label: ensureString(level.label) || FACULTY_LABEL_FALLBACK,
+    placeholder: ensureString(level.placeholder) || `${ensureString(level.label) || FACULTY_LABEL_FALLBACK}を選択してください`,
+    allowCustom: level.allowCustom !== false,
+    options: options
+      .map((option) => stripUnitOption(option))
+      .filter(Boolean)
+  };
+}
+
+function stripUnitOption(option) {
+  if (!option) {
+    return null;
+  }
+  const label = ensureString(option.label);
+  if (!label) {
+    return null;
+  }
+  const value = ensureString(option.value) || label;
+  const payload = {
+    label,
+    value
+  };
+  const children = stripUnitLevel(option.children);
+  if (children) {
+    payload.children = children;
+  }
+  return payload;
+}
+
+function stripFacultyEntry(entry) {
+  if (!entry) {
+    return null;
+  }
+  const faculty = ensureString(entry.faculty);
+  if (!faculty) {
+    return null;
+  }
+  const payload = {
+    faculty,
+    fallbackLabel: ensureString(entry.fallbackLabel) || FACULTY_LABEL_FALLBACK
+  };
+  const unitTree = stripUnitLevel(entry.unitTree);
+  if (unitTree) {
+    payload.unitTree = unitTree;
+  }
+  return payload;
+}
+
+function cloneFacultyStructure(list = []) {
+  if (!Array.isArray(list)) {
+    return [];
+  }
+  return list
+    .map((entry) => {
+      const faculty = ensureString(entry?.faculty);
+      if (!faculty) {
+        return null;
+      }
+      const clone = {
+        faculty,
+        fallbackLabel: ensureString(entry?.fallbackLabel) || FACULTY_LABEL_FALLBACK
+      };
+      if (entry?.unitTree) {
+        try {
+          clone.unitTree = JSON.parse(JSON.stringify(entry.unitTree));
+        } catch (error) {
+          clone.unitTree = entry.unitTree;
+        }
+      }
+      return clone;
+    })
+    .filter(Boolean);
+}
+
+class GlFacultyLibraryManager {
+  constructor(app) {
+    this.app = app;
+    this.dom = app.dom;
+    this.libraryId = DEFAULT_FACULTY_LIBRARY_ID;
+    this.libraryName = DEFAULT_FACULTY_LIBRARY_NAME;
+    this.faculties = [];
+    this.loading = false;
+    this.saving = false;
+    this.dirty = false;
+    this.listeners = new Set();
+    this.unsubscribe = null;
+    this.bindDom();
+    this.attach();
+  }
+
+  bindDom() {
+    if (this.dom.glFacultyAddButton) {
+      this.dom.glFacultyAddButton.addEventListener("click", () => {
+        this.addFaculty();
+      });
+    }
+    if (this.dom.glFacultySaveButton) {
+      this.dom.glFacultySaveButton.addEventListener("click", () => {
+        this.save().catch((error) => {
+          logError("Failed to save faculty library", error);
+          this.setStatus("学部リストの保存に失敗しました。", "error");
+        });
+      });
+    }
+    if (this.dom.glFacultyList) {
+      this.dom.glFacultyList.addEventListener("input", (event) => this.handleInput(event));
+      this.dom.glFacultyList.addEventListener("change", (event) => this.handleChange(event));
+      this.dom.glFacultyList.addEventListener("click", (event) => this.handleClick(event));
+    }
+  }
+
+  onChange(listener) {
+    if (typeof listener === "function") {
+      this.listeners.add(listener);
+      listener(this.getSnapshot());
+    }
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  notifyChange() {
+    const snapshot = this.getSnapshot();
+    this.listeners.forEach((listener) => {
+      try {
+        listener(snapshot);
+      } catch (error) {
+        logError("Failed to notify faculty library listener", error);
+      }
+    });
+  }
+
+  getSnapshot() {
+    return {
+      id: this.libraryId,
+      name: this.libraryName,
+      faculties: this.faculties.map((entry) => stripFacultyEntry(entry)).filter(Boolean)
+    };
+  }
+
+  attach() {
+    if (typeof this.unsubscribe === "function") {
+      this.unsubscribe();
+    }
+    this.loading = true;
+    this.updateLoadingState();
+    this.unsubscribe = onValue(getGlFacultyLibraryRef(this.libraryId), (snapshot) => {
+      this.loading = false;
+      const value = snapshot.val() || {};
+      this.applySnapshot(value);
+    });
+  }
+
+  applySnapshot(raw) {
+    const name = ensureString(raw?.name) || DEFAULT_FACULTY_LIBRARY_NAME;
+    const faculties = normalizeFacultyCollection(raw?.faculties);
+    this.libraryName = name;
+    this.faculties = faculties;
+    this.setDirty(false);
+    this.render();
+    this.notifyChange();
+  }
+
+  handleInput(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
+      return;
+    }
+    const field = ensureString(target.dataset.field);
+    if (!field) {
+      return;
+    }
+    if (field === "faculty-name" || field === "fallback-label") {
+      const facultyId = ensureString(target.closest("[data-faculty-id]")?.dataset.facultyId);
+      if (!facultyId) {
+        return;
+      }
+      const faculty = this.faculties.find((entry) => entry.id === facultyId);
+      if (!faculty) {
+        return;
+      }
+      if (field === "faculty-name") {
+        faculty.faculty = ensureString(target.value);
+      } else {
+        faculty.fallbackLabel = ensureString(target.value) || FACULTY_LABEL_FALLBACK;
+      }
+      this.setDirty(true);
+      return;
+    }
+    if (field === "level-label" || field === "level-placeholder") {
+      const context = this.findLevelContextFromElement(target);
+      if (!context) {
+        return;
+      }
+      if (field === "level-label") {
+        context.level.label = ensureString(target.value) || getDefaultLevelLabel(context.depth);
+        if (context.depth === 0) {
+          context.faculty.fallbackLabel = context.level.label || FACULTY_LABEL_FALLBACK;
+        }
+      } else {
+        context.level.placeholder = ensureString(target.value) || `${context.level.label}を選択してください`;
+      }
+      this.setDirty(true);
+      return;
+    }
+    if (field === "option-label" || field === "option-value") {
+      const context = this.findOptionContextFromElement(target);
+      if (!context) {
+        return;
+      }
+      if (field === "option-label") {
+        context.option.label = ensureString(target.value);
+        if (!ensureString(context.option.value)) {
+          context.option.value = context.option.label;
+        }
+      } else {
+        context.option.value = ensureString(target.value);
+      }
+      this.setDirty(true);
+    }
+  }
+
+  handleChange(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    const field = ensureString(target.dataset.field);
+    if (field === "level-allow-custom") {
+      const context = this.findLevelContextFromElement(target);
+      if (!context) {
+        return;
+      }
+      context.level.allowCustom = target.checked;
+      this.setDirty(true);
+    }
+  }
+
+  handleClick(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    const action = ensureString(target.dataset.action);
+    if (!action) {
+      return;
+    }
+    event.preventDefault();
+    switch (action) {
+      case "add-root-level":
+        this.addRootLevel(target);
+        break;
+      case "remove-faculty":
+        this.removeFaculty(target);
+        break;
+      case "add-option":
+        this.addOption(target);
+        break;
+      case "remove-level":
+        this.removeLevel(target);
+        break;
+      case "remove-option":
+        this.removeOption(target);
+        break;
+      case "add-child-level":
+        this.addChildLevel(target);
+        break;
+      default:
+        break;
+    }
+  }
+
+  addFaculty() {
+    const faculty = createEmptyFaculty();
+    this.faculties.push(faculty);
+    this.render();
+    this.setDirty(true);
+    this.focusField(`[data-faculty-id="${escapeSelector(faculty.id)}"] [data-field="faculty-name"]`);
+  }
+
+  addRootLevel(trigger) {
+    const facultyId = ensureString(trigger.closest("[data-faculty-id]")?.dataset.facultyId);
+    if (!facultyId) {
+      return;
+    }
+    const faculty = this.faculties.find((entry) => entry.id === facultyId);
+    if (!faculty) {
+      return;
+    }
+    const level = createEmptyLevel(getDefaultLevelLabel(0, faculty.fallbackLabel));
+    faculty.unitTree = level;
+    faculty.fallbackLabel = ensureString(level.label) || FACULTY_LABEL_FALLBACK;
+    this.render();
+    this.setDirty(true);
+    this.focusField(`[data-level-id="${escapeSelector(level.id)}"] [data-field="level-label"]`);
+  }
+
+  addOption(trigger) {
+    const context = this.findLevelContextFromElement(trigger);
+    if (!context) {
+      return;
+    }
+    const option = createEmptyOption();
+    option.value = "";
+    context.level.options.push(option);
+    this.render();
+    this.setDirty(true);
+    this.focusField(`[data-option-id="${escapeSelector(option.id)}"] [data-field="option-label"]`);
+  }
+
+  addChildLevel(trigger) {
+    const context = this.findOptionContextFromElement(trigger);
+    if (!context) {
+      return;
+    }
+    if (context.option.children) {
+      this.focusField(`[data-level-id="${escapeSelector(context.option.children.id)}"] [data-field="level-label"]`);
+      return;
+    }
+    const label = getDefaultLevelLabel(context.depth + 1, context.faculty.fallbackLabel);
+    context.option.children = createEmptyLevel(label);
+    this.render();
+    this.setDirty(true);
+    this.focusField(`[data-level-id="${escapeSelector(context.option.children.id)}"] [data-field="level-label"]`);
+  }
+
+  removeFaculty(trigger) {
+    const facultyId = ensureString(trigger.closest("[data-faculty-id]")?.dataset.facultyId);
+    if (!facultyId) {
+      return;
+    }
+    this.faculties = this.faculties.filter((entry) => entry.id !== facultyId);
+    this.render();
+    this.setDirty(true);
+  }
+
+  removeLevel(trigger) {
+    const context = this.findLevelContextFromElement(trigger);
+    if (!context) {
+      return;
+    }
+    if (context.parentOption) {
+      context.parentOption.children = null;
+    } else {
+      context.faculty.unitTree = null;
+    }
+    this.render();
+    this.setDirty(true);
+  }
+
+  removeOption(trigger) {
+    const context = this.findOptionContextFromElement(trigger);
+    if (!context) {
+      return;
+    }
+    context.level.options = context.level.options.filter((option) => option.id !== context.option.id);
+    this.render();
+    this.setDirty(true);
+  }
+
+  findLevelContextFromElement(element) {
+    const facultyId = ensureString(element.closest("[data-faculty-id]")?.dataset.facultyId);
+    const levelId = ensureString(element.closest("[data-level-id]")?.dataset.levelId);
+    if (!facultyId || !levelId) {
+      return null;
+    }
+    const faculty = this.faculties.find((entry) => entry.id === facultyId);
+    if (!faculty) {
+      return null;
+    }
+    const search = this.findLevelRecursive(faculty.unitTree, levelId, 0);
+    if (!search) {
+      return null;
+    }
+    return {
+      faculty,
+      level: search.level,
+      parentOption: search.parentOption,
+      depth: search.depth
+    };
+  }
+
+  findOptionContextFromElement(element) {
+    const facultyId = ensureString(element.closest("[data-faculty-id]")?.dataset.facultyId);
+    const optionId = ensureString(element.closest("[data-option-id]")?.dataset.optionId);
+    if (!facultyId || !optionId) {
+      return null;
+    }
+    const faculty = this.faculties.find((entry) => entry.id === facultyId);
+    if (!faculty) {
+      return null;
+    }
+    const search = this.findOptionRecursive(faculty.unitTree, optionId, 0);
+    if (!search) {
+      return null;
+    }
+    return {
+      faculty,
+      option: search.option,
+      level: search.parentLevel,
+      depth: search.depth
+    };
+  }
+
+  findLevelRecursive(level, targetId, depth, parentOption = null) {
+    if (!level) {
+      return null;
+    }
+    if (level.id === targetId) {
+      return { level, parentOption, depth };
+    }
+    for (const option of level.options || []) {
+      const child = this.findLevelRecursive(option.children, targetId, depth + 1, option);
+      if (child) {
+        return child;
+      }
+    }
+    return null;
+  }
+
+  findOptionRecursive(level, targetId, depth) {
+    if (!level) {
+      return null;
+    }
+    for (const option of level.options || []) {
+      if (option.id === targetId) {
+        return { option, parentLevel: level, depth };
+      }
+      const child = this.findOptionRecursive(option.children, targetId, depth + 1);
+      if (child) {
+        return child;
+      }
+    }
+    return null;
+  }
+
+  render() {
+    const container = this.dom.glFacultyList;
+    if (!container) {
+      return;
+    }
+    container.innerHTML = "";
+    this.faculties.forEach((faculty) => {
+      const card = this.renderFacultyCard(faculty);
+      if (card) {
+        container.append(card);
+      }
+    });
+    if (this.dom.glFacultyEmpty) {
+      this.dom.glFacultyEmpty.hidden = this.faculties.length > 0;
+    }
+    if (this.dom.glFacultyLibraryName) {
+      this.dom.glFacultyLibraryName.textContent = this.libraryName || "—";
+    }
+    this.updateSaveButtonState();
+    this.updateLoadingState();
+  }
+
+  renderFacultyCard(faculty) {
+    if (!this.dom.glFacultyCardTemplate) {
+      return null;
+    }
+    const fragment = this.dom.glFacultyCardTemplate.content.cloneNode(true);
+    const card = fragment.querySelector("[data-faculty-card]");
+    if (!(card instanceof HTMLElement)) {
+      return null;
+    }
+    card.dataset.facultyId = faculty.id;
+    const nameInput = card.querySelector('[data-field="faculty-name"]');
+    if (nameInput instanceof HTMLInputElement) {
+      nameInput.value = faculty.faculty;
+    }
+    const fallbackInput = card.querySelector('[data-field="fallback-label"]');
+    if (fallbackInput instanceof HTMLInputElement) {
+      fallbackInput.value = faculty.fallbackLabel || FACULTY_LABEL_FALLBACK;
+    }
+    const fallbackContainer = card.querySelector('[data-fallback-container]');
+    if (fallbackContainer instanceof HTMLElement) {
+      fallbackContainer.hidden = Boolean(faculty.unitTree);
+    }
+    const addLevelButton = card.querySelector('[data-action="add-root-level"]');
+    const levelContainer = card.querySelector('[data-level-container]');
+    if (faculty.unitTree && levelContainer instanceof HTMLElement) {
+      const levelCard = this.renderLevelCard(faculty.unitTree, 0);
+      if (levelCard) {
+        levelContainer.append(levelCard);
+      }
+      if (addLevelButton instanceof HTMLButtonElement) {
+        addLevelButton.hidden = true;
+      }
+    } else if (addLevelButton instanceof HTMLButtonElement) {
+      addLevelButton.hidden = false;
+    }
+    return card;
+  }
+
+  renderLevelCard(level, depth) {
+    if (!this.dom.glFacultyLevelTemplate) {
+      return null;
+    }
+    const fragment = this.dom.glFacultyLevelTemplate.content.cloneNode(true);
+    const card = fragment.querySelector("[data-level-card]");
+    if (!(card instanceof HTMLElement)) {
+      return null;
+    }
+    card.dataset.levelId = level.id;
+    card.dataset.depth = String(depth);
+    const labelInput = card.querySelector('[data-field="level-label"]');
+    if (labelInput instanceof HTMLInputElement) {
+      labelInput.value = level.label;
+    }
+    const placeholderInput = card.querySelector('[data-field="level-placeholder"]');
+    if (placeholderInput instanceof HTMLInputElement) {
+      placeholderInput.value = level.placeholder;
+    }
+    const allowCustomInput = card.querySelector('[data-field="level-allow-custom"]');
+    if (allowCustomInput instanceof HTMLInputElement) {
+      allowCustomInput.checked = level.allowCustom !== false;
+    }
+    const optionsContainer = card.querySelector('[data-option-container]');
+    if (optionsContainer instanceof HTMLElement) {
+      level.options.forEach((option) => {
+        const optionCard = this.renderOptionCard(option, depth + 1);
+        if (optionCard) {
+          optionsContainer.append(optionCard);
+        }
+      });
+    }
+    return card;
+  }
+
+  renderOptionCard(option, depth) {
+    if (!this.dom.glFacultyOptionTemplate) {
+      return null;
+    }
+    const fragment = this.dom.glFacultyOptionTemplate.content.cloneNode(true);
+    const card = fragment.querySelector("[data-option-card]");
+    if (!(card instanceof HTMLElement)) {
+      return null;
+    }
+    card.dataset.optionId = option.id;
+    card.dataset.depth = String(depth);
+    const labelInput = card.querySelector('[data-field="option-label"]');
+    if (labelInput instanceof HTMLInputElement) {
+      labelInput.value = option.label;
+    }
+    const valueInput = card.querySelector('[data-field="option-value"]');
+    if (valueInput instanceof HTMLInputElement) {
+      valueInput.value = option.value || "";
+    }
+    const addChildButton = card.querySelector('[data-action="add-child-level"]');
+    const childContainer = card.querySelector('[data-child-container]');
+    if (option.children && childContainer instanceof HTMLElement) {
+      const levelCard = this.renderLevelCard(option.children, depth);
+      if (levelCard) {
+        childContainer.append(levelCard);
+      }
+      if (addChildButton instanceof HTMLButtonElement) {
+        addChildButton.hidden = true;
+      }
+    } else if (addChildButton instanceof HTMLButtonElement) {
+      addChildButton.hidden = false;
+    }
+    return card;
+  }
+
+  focusField(selector) {
+    if (!selector || !this.dom.glFacultyList) {
+      return;
+    }
+    requestAnimationFrame(() => {
+      const element = this.dom.glFacultyList.querySelector(selector);
+      if (element instanceof HTMLElement) {
+        element.focus();
+      }
+    });
+  }
+
+  validate() {
+    if (!this.faculties.length) {
+      return { ok: true };
+    }
+    for (const faculty of this.faculties) {
+      if (!ensureString(faculty.faculty)) {
+        this.focusField(`[data-faculty-id="${escapeSelector(faculty.id)}"] [data-field="faculty-name"]`);
+        return { ok: false, message: "学部名を入力してください。" };
+      }
+      if (faculty.unitTree) {
+        const result = this.validateLevel(faculty, faculty.unitTree);
+        if (!result.ok) {
+          return result;
+        }
+      }
+    }
+    return { ok: true };
+  }
+
+  validateLevel(faculty, level) {
+    if (!level.options.length) {
+      this.focusField(`[data-level-id="${escapeSelector(level.id)}"] [data-field="level-label"]`);
+      return { ok: false, message: `${level.label || "階層"}の選択肢を追加してください。` };
+    }
+    for (const option of level.options) {
+      if (!ensureString(option.label)) {
+        this.focusField(`[data-option-id="${escapeSelector(option.id)}"] [data-field="option-label"]`);
+        return { ok: false, message: "選択肢の表示名を入力してください。" };
+      }
+      if (option.children) {
+        const result = this.validateLevel(faculty, option.children);
+        if (!result.ok) {
+          return result;
+        }
+      }
+    }
+    return { ok: true };
+  }
+
+  async save() {
+    const validation = this.validate();
+    if (!validation.ok) {
+      this.setStatus(validation.message, "error");
+      return;
+    }
+    if (this.saving) {
+      return;
+    }
+    this.saving = true;
+    this.updateSaveButtonState();
+    try {
+      const payload = {
+        id: this.libraryId,
+        name: this.libraryName || DEFAULT_FACULTY_LIBRARY_NAME,
+        faculties: this.faculties.map((entry) => stripFacultyEntry(entry)).filter(Boolean),
+        updatedAt: serverTimestamp()
+      };
+      const uid = ensureString(this.app?.currentUser?.uid);
+      if (uid) {
+        payload.updatedByUid = uid;
+      }
+      const displayName = ensureString(this.app?.currentUser?.displayName);
+      if (displayName) {
+        payload.updatedByName = displayName;
+      }
+      await set(getGlFacultyLibraryRef(this.libraryId), payload);
+      this.setStatus("学部リストを保存しました。", "success");
+      this.setDirty(false);
+    } catch (error) {
+      logError("Failed to persist faculty library", error);
+      this.setStatus("学部リストの保存に失敗しました。", "error");
+    } finally {
+      this.saving = false;
+      this.updateSaveButtonState();
+    }
+  }
+
+  setDirty(flag) {
+    this.dirty = Boolean(flag);
+    this.updateSaveButtonState();
+  }
+
+  setStatus(message, variant = "info") {
+    if (!this.dom.glFacultyStatus) {
+      return;
+    }
+    const text = ensureString(message);
+    this.dom.glFacultyStatus.textContent = text;
+    this.dom.glFacultyStatus.dataset.variant = variant;
+    this.dom.glFacultyStatus.hidden = !text;
+  }
+
+  updateLoadingState() {
+    if (!this.dom.glFacultyLoadingOverlay) {
+      return;
+    }
+    this.dom.glFacultyLoadingOverlay.hidden = !this.loading;
+  }
+
+  updateSaveButtonState() {
+    if (this.dom.glFacultySaveButton) {
+      this.dom.glFacultySaveButton.disabled = !this.dirty || this.saving;
+    }
+  }
+}
 
 function toDateTimeLocalString(value) {
   if (!value) {
@@ -46,425 +920,63 @@ function toTimestamp(value) {
   return date.toISOString();
 }
 
-const FACULTY_LEVEL_SUGGESTIONS = ["学科", "課程", "専攻", "コース", "プログラム", "領域"];
-
-class GlFacultyBuilder {
-  constructor(dom) {
-    this.list = dom?.glFacultyList ?? null;
-    this.emptyState = dom?.glFacultyEmpty ?? null;
-    this.addButton = dom?.glFacultyAddButton ?? null;
-    this.facultyTemplate = dom?.glFacultyTemplate ?? null;
-    this.levelTemplate = dom?.glFacultyLevelTemplate ?? null;
-    this.optionTemplate = dom?.glFacultyOptionTemplate ?? null;
-    this.boundHandleAdd = () => {
-      const card = this.addFaculty();
-      const input = card?.querySelector("[data-faculty-name]");
-      input?.focus();
-    };
-    if (this.addButton) {
-      this.addButton.addEventListener("click", this.boundHandleAdd);
-    }
-    this.updateEmptyState();
-  }
-
-  destroy() {
-    if (this.addButton) {
-      this.addButton.removeEventListener("click", this.boundHandleAdd);
-    }
-  }
-
-  updateEmptyState() {
-    if (!this.emptyState) return;
-    const hasEntries = Boolean(this.list && this.list.children.length);
-    this.emptyState.hidden = hasEntries;
-  }
-
-  clear() {
-    if (this.list) {
-      this.list.innerHTML = "";
-    }
-    this.updateEmptyState();
-  }
-
-  setFaculties(faculties) {
-    this.clear();
-    if (!Array.isArray(faculties) || !faculties.length) {
-      return;
-    }
-    faculties.forEach((entry) => {
-      this.addFaculty(entry);
-    });
-    this.updateEmptyState();
-  }
-
-  addFaculty(raw = {}) {
-    if (!this.list || !this.facultyTemplate) {
-      return null;
-    }
-    const fragment = this.facultyTemplate.content.cloneNode(true);
-    const card = fragment.querySelector("[data-faculty-card]");
-    if (!card) {
-      return null;
-    }
-    const facultyNameInput = card.querySelector("[data-faculty-name]");
-    const fallbackInput = card.querySelector("[data-faculty-fallback]");
-    const levelContainer = card.querySelector("[data-level-container]");
-    const removeButton = card.querySelector("[data-remove-faculty]");
-    const moveUpButton = card.querySelector("[data-move-up]");
-    const moveDownButton = card.querySelector("[data-move-down]");
-    if (facultyNameInput) {
-      facultyNameInput.value = ensureString(raw?.faculty);
-    }
-    const fallbackFromData = ensureString(raw?.fallbackLabel);
-    const rootLabelFromTree = ensureString(raw?.unitTree?.label || raw?.departmentLabel);
-    const fallbackValue = fallbackFromData || rootLabelFromTree || "学科";
-    if (fallbackInput) {
-      fallbackInput.value = fallbackValue;
-      if (fallbackInput.value && fallbackInput.value !== rootLabelFromTree) {
-        fallbackInput.dataset.userEdited = "true";
-      }
-    }
-    if (levelContainer) {
-      const level = this.createLevel(raw?.unitTree, {
-        depth: 0,
-        isRoot: true,
-        rootFallbackInput: fallbackInput,
-        initialLabel: rootLabelFromTree || fallbackValue
-      });
-      if (level) {
-        levelContainer.append(level);
-      }
-    }
-    removeButton?.addEventListener("click", () => {
-      card.remove();
-      this.updateEmptyState();
-    });
-    moveUpButton?.addEventListener("click", () => {
-      this.moveFaculty(card, -1);
-    });
-    moveDownButton?.addEventListener("click", () => {
-      this.moveFaculty(card, 1);
-    });
-    this.list.append(card);
-    this.updateEmptyState();
-    return card;
-  }
-
-  moveFaculty(card, direction) {
-    if (!this.list || !card) return;
-    const siblings = Array.from(this.list.querySelectorAll("[data-faculty-card]"));
-    const index = siblings.indexOf(card);
-    if (index < 0) return;
-    const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= siblings.length) {
-      return;
-    }
-    const reference = siblings[targetIndex];
-    if (direction < 0) {
-      this.list.insertBefore(card, reference);
-    } else {
-      this.list.insertBefore(card, reference.nextSibling);
-    }
-    card.scrollIntoView({ block: "nearest" });
-  }
-
-  createLevel(raw = {}, options = {}) {
-    if (!this.levelTemplate) {
-      return null;
-    }
-    const { depth = 0, isRoot = false, rootFallbackInput = null, initialLabel = "", onRemove } = options;
-    const fragment = this.levelTemplate.content.cloneNode(true);
-    const level = fragment.querySelector("[data-level]");
-    if (!level) {
-      return null;
-    }
-    level.dataset.depth = String(depth);
-    const labelInput = level.querySelector("[data-level-label]");
-    const allowCustomInput = level.querySelector("[data-level-allow-custom]");
-    const removeButton = level.querySelector("[data-remove-level]");
-    const optionsContainer = level.querySelector("[data-options]");
-    const addOptionButton = level.querySelector("[data-add-option]");
-    const labelValue = ensureString(raw?.label) || ensureString(initialLabel) || "学科";
-    if (labelInput) {
-      labelInput.value = labelValue;
-      if (isRoot && rootFallbackInput) {
-        this.setupRootFallbackSync(labelInput, rootFallbackInput);
-      }
-    }
-    if (allowCustomInput) {
-      allowCustomInput.checked = raw?.allowCustom !== false;
-    }
-    if (removeButton) {
-      if (isRoot) {
-        removeButton.hidden = true;
-      } else {
-        removeButton.hidden = false;
-        removeButton.addEventListener("click", () => {
-          level.remove();
-          if (typeof onRemove === "function") {
-            onRemove();
-          }
-          this.updateEmptyState();
-        });
-      }
-    }
-    if (Array.isArray(raw?.options) && optionsContainer) {
-      raw.options.forEach((option) => {
-        const optionEl = this.createOption(option, { depth, parentLevel: level });
-        if (optionEl) {
-          optionsContainer.append(optionEl);
-        }
-      });
-    }
-    addOptionButton?.addEventListener("click", () => {
-      if (!optionsContainer) return;
-      const optionEl = this.createOption({}, { depth, parentLevel: level });
-      if (!optionEl) return;
-      optionsContainer.append(optionEl);
-      const optionInput = optionEl.querySelector("[data-option-label]");
-      optionInput?.focus();
-      this.updateEmptyState();
-    });
-    return level;
-  }
-
-  createOption(raw = {}, { depth = 0, parentLevel = null } = {}) {
-    if (!this.optionTemplate) {
-      return null;
-    }
-    const fragment = this.optionTemplate.content.cloneNode(true);
-    const option = fragment.querySelector("[data-option]");
-    if (!option) {
-      return null;
-    }
-    const labelInput = option.querySelector("[data-option-label]");
-    const removeButton = option.querySelector("[data-remove-option]");
-    const addChildButton = option.querySelector("[data-add-child]");
-    const removeChildButton = option.querySelector("[data-remove-child]");
-    const childContainer = option.querySelector("[data-option-children]");
-    if (labelInput) {
-      labelInput.value = ensureString(raw?.label || raw?.value);
-    }
-    removeButton?.addEventListener("click", () => {
-      option.remove();
-      this.updateEmptyState();
-    });
-    const attachChild = (childRaw = {}) => {
-      if (!childContainer) return;
-      childContainer.innerHTML = "";
-      const childLevel = this.createLevel(childRaw, {
-        depth: depth + 1,
-        isRoot: false,
-        onRemove: () => {
-          childContainer.innerHTML = "";
-          if (addChildButton) addChildButton.hidden = false;
-          if (removeChildButton) removeChildButton.hidden = true;
-        }
-      });
-      if (childLevel) {
-        childContainer.append(childLevel);
-        if (addChildButton) addChildButton.hidden = true;
-        if (removeChildButton) removeChildButton.hidden = false;
-      }
-    };
-    addChildButton?.addEventListener("click", () => {
-      const suggested = this.suggestNextLabel(parentLevel);
-      attachChild({ label: suggested });
-      const childInput = childContainer?.querySelector("[data-level-label]");
-      childInput?.focus();
-    });
-    removeChildButton?.addEventListener("click", () => {
-      if (childContainer) {
-        childContainer.innerHTML = "";
-      }
-      if (addChildButton) addChildButton.hidden = false;
-      if (removeChildButton) removeChildButton.hidden = true;
-    });
-    if (raw?.children) {
-      attachChild(raw.children);
-    }
-    return option;
-  }
-
-  setupRootFallbackSync(labelInput, fallbackInput) {
-    if (!labelInput || !fallbackInput) return;
-    const syncIfAllowed = () => {
-      if (fallbackInput.dataset.userEdited === "true") {
-        return;
-      }
-      const label = ensureString(labelInput.value) || "学科";
-      fallbackInput.value = label;
-    };
-    labelInput.addEventListener("input", syncIfAllowed);
-    fallbackInput.addEventListener("input", () => {
-      const label = ensureString(labelInput.value);
-      if (!fallbackInput.value) {
-        delete fallbackInput.dataset.userEdited;
-        fallbackInput.value = label || "学科";
-      } else if (fallbackInput.value !== label) {
-        fallbackInput.dataset.userEdited = "true";
-      } else {
-        delete fallbackInput.dataset.userEdited;
-      }
-    });
-    syncIfAllowed();
-  }
-
-  suggestNextLabel(levelElement) {
-    const currentLabel = ensureString(
-      levelElement?.querySelector("[data-level-label]")?.value
-    );
-    if (!currentLabel) {
-      return FACULTY_LEVEL_SUGGESTIONS[0];
-    }
-    const exactIndex = FACULTY_LEVEL_SUGGESTIONS.indexOf(currentLabel);
-    if (exactIndex >= 0 && exactIndex < FACULTY_LEVEL_SUGGESTIONS.length - 1) {
-      return FACULTY_LEVEL_SUGGESTIONS[exactIndex + 1];
-    }
-    if (currentLabel.endsWith("学科")) {
-      return "専攻";
-    }
-    if (currentLabel.endsWith("課程")) {
-      return "専攻";
-    }
-    return currentLabel;
-  }
-
-  collectFaculties() {
-    if (!this.list) {
-      return { faculties: [], errors: [] };
-    }
-    const cards = Array.from(this.list.querySelectorAll("[data-faculty-card]"));
-    const faculties = [];
-    const errors = [];
-    cards.forEach((card, index) => {
-      const nameInput = card.querySelector("[data-faculty-name]");
-      const fallbackInput = card.querySelector("[data-faculty-fallback]");
-      const levelContainer = card.querySelector("[data-level-container]");
-      const facultyName = ensureString(nameInput?.value);
-      if (!facultyName) {
-        errors.push(`学部カード${index + 1}の学部名を入力してください。`);
-        return;
-      }
-      const fallbackLabel = ensureString(fallbackInput?.value) || "学科";
-      const rootLevel = levelContainer?.querySelector(":scope > [data-level]");
-      const unitTree = this.buildLevelPayload(rootLevel, errors, {
-        faculty: facultyName,
-        levelLabel: fallbackLabel
-      });
-      const payload = {
-        faculty: facultyName,
-        fallbackLabel,
-        departmentLabel: fallbackLabel
-      };
-      if (unitTree) {
-        payload.unitTree = unitTree;
-      } else {
-        payload.unitTree = null;
-      }
-      faculties.push(payload);
-    });
-    return { faculties, errors };
-  }
-
-  buildLevelPayload(levelElement, errors = [], meta = {}) {
-    if (!levelElement) {
-      return null;
-    }
-    const labelInput = levelElement.querySelector("[data-level-label]");
-    const allowCustomInput = levelElement.querySelector("[data-level-allow-custom]");
-    const optionsContainer = levelElement.querySelector("[data-options]");
-    const label = ensureString(labelInput?.value) || ensureString(meta?.levelLabel) || "所属";
-    const optionElements = Array.from(optionsContainer?.querySelectorAll(":scope > [data-option]") ?? []);
-    const options = optionElements
-      .map((option) => this.buildOptionPayload(option, errors, { faculty: meta?.faculty, levelLabel: label }))
-      .filter(Boolean);
-    if (!options.length) {
-      if (optionElements.length) {
-        const prefix = meta?.faculty ? `学部「${meta.faculty}」の` : "";
-        errors.push(`${prefix}${label}の選択肢を入力してください。`);
-      }
-      return null;
-    }
-    const placeholder = `${label}を選択してください`;
-    return {
-      label,
-      placeholder,
-      allowCustom: allowCustomInput?.checked !== false,
-      options
-    };
-  }
-
-  buildOptionPayload(optionElement, errors = [], meta = {}) {
-    const labelInput = optionElement.querySelector("[data-option-label]");
-    const childLevel = optionElement.querySelector("[data-option-children] > [data-level]");
-    const label = ensureString(labelInput?.value);
-    if (!label) {
-      const levelLabel = ensureString(meta?.levelLabel) || "所属";
-      const prefix = meta?.faculty ? `学部「${meta.faculty}」の` : "";
-      errors.push(`${prefix}${levelLabel}の選択肢名を入力してください。`);
-      return null;
-    }
-    const payload = {
-      label,
-      value: label
-    };
-    if (childLevel) {
-      const childPayload = this.buildLevelPayload(childLevel, errors, { faculty: meta?.faculty });
-      if (childPayload) {
-        payload.children = childPayload;
-      } else {
-        const childLabelInput = childLevel.querySelector("[data-level-label]");
-        const childLabel = ensureString(childLabelInput?.value) || "下位階層";
-        const childOptionsContainer = childLevel.querySelector("[data-options]");
-        const hasChildOptions = Boolean(
-          childOptionsContainer?.querySelector("[data-option]")
-        );
-        if (!hasChildOptions) {
-          const prefix = meta?.faculty ? `学部「${meta.faculty}」の` : "";
-          errors.push(`${prefix}${childLabel}の選択肢を追加するか、階層を削除してください。`);
-        }
-      }
-    }
-    return payload;
-  }
-}
-
 function parseTeamCount(value) {
-  const raw = ensureString(value).trim();
-  if (!raw) {
-    return { count: 0, error: "" };
+  const text = ensureString(value).trim();
+  if (!text) {
+    return null;
   }
-  if (!/^\d+$/.test(raw)) {
-    return { count: 0, error: "班の数は0以上の整数で入力してください。" };
+  const number = Number(text);
+  if (!Number.isFinite(number) || number < 0) {
+    return Number.NaN;
   }
-  const numeric = Number.parseInt(raw, 10);
-  if (!Number.isFinite(numeric) || numeric < 0) {
-    return { count: 0, error: "班の数は0以上の整数で入力してください。" };
-  }
-  if (numeric > MAX_TEAM_COUNT) {
-    return { count: 0, error: `班は最大${MAX_TEAM_COUNT}班まで設定できます。` };
-  }
-  return { count: numeric, error: "" };
+  return Math.floor(number);
 }
 
-function buildSequentialTeams(count = 0) {
-  const safeCount = Number.isFinite(count) ? Math.max(0, Math.min(MAX_TEAM_COUNT, Math.floor(count))) : 0;
-  if (safeCount <= 0) {
+function parseStoredTeamCount(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) {
+    return null;
+  }
+  return Math.floor(number);
+}
+
+function generateTeamNames(count = 0) {
+  if (!Number.isFinite(count) || count <= 0) {
     return [];
   }
+  const total = Math.floor(count);
   const teams = [];
-  for (let index = 1; index <= safeCount; index += 1) {
+  for (let index = 1; index <= total; index += 1) {
     teams.push(`${index}班`);
   }
   return teams;
 }
 
-function deriveTeamCountFromConfig(teams = []) {
-  if (!Array.isArray(teams)) {
-    return 0;
+function sanitizeTeamList(list = []) {
+  if (!Array.isArray(list)) {
+    return [];
   }
-  return teams.map((team) => ensureString(team)).filter(Boolean).length;
+  return list.map((team) => ensureString(team)).filter(Boolean);
+}
+
+function inferSequentialTeamCount(teams = []) {
+  if (!Array.isArray(teams) || !teams.length) {
+    return null;
+  }
+  const normalized = teams.map((team) => ensureString(team)).filter(Boolean);
+  if (!normalized.length) {
+    return null;
+  }
+  for (let index = 0; index < normalized.length; index += 1) {
+    const expected = `${index + 1}班`;
+    if (normalized[index] !== expected) {
+      return null;
+    }
+  }
+  return normalized.length;
 }
 
 function normalizeScheduleConfig(raw) {
@@ -651,11 +1163,29 @@ export class GlToolManager {
     this.configUnsubscribe = null;
     this.applicationsUnsubscribe = null;
     this.assignmentsUnsubscribe = null;
-    this.activeTab = "config";
+    this.facultyLibraryManager = new GlFacultyLibraryManager(app);
+    this.librarySnapshot = null;
+    this.facultyLibraryUnsubscribe = this.facultyLibraryManager.onChange((snapshot) =>
+      this.applyFacultyLibrarySnapshot(snapshot)
+    );
     this.selectionUnsubscribe = this.app.addSelectionListener((detail) => this.handleSelection(detail));
     this.eventsUnsubscribe = this.app.addEventListener((events) => this.handleEvents(events));
     this.bindDom();
     this.updateConfigVisibility();
+  }
+
+  applyFacultyLibrarySnapshot(snapshot) {
+    this.librarySnapshot = snapshot || null;
+    if (this.dom.glFacultyLibraryName) {
+      this.dom.glFacultyLibraryName.textContent = ensureString(snapshot?.name) || "—";
+    }
+    if (this.config && (!Array.isArray(this.config.faculties) || !this.config.faculties.length)) {
+      this.config.faculties = cloneFacultyStructure(snapshot?.faculties);
+    }
+    if (this.config && !ensureString(this.config.facultyLibraryId)) {
+      this.config.facultyLibraryId = ensureString(snapshot?.id) || DEFAULT_FACULTY_LIBRARY_ID;
+    }
+    this.updateCopyButtonState();
   }
 
   getAvailableSchedules({ includeConfigFallback = false } = {}) {
@@ -722,38 +1252,9 @@ export class GlToolManager {
         });
       });
     }
-    const tabOrder = ["config", "applications"];
-    const getTabButton = (tab) =>
-      tab === "applications" ? this.dom.glTabApplicationsButton : this.dom.glTabConfigButton;
-    tabOrder.forEach((tab) => {
-      const button = getTabButton(tab);
-      if (!button) {
-        return;
-      }
-      button.addEventListener("click", () => {
-        this.setActiveTab(tab);
-        button.focus();
-      });
-      button.addEventListener("keydown", (event) => {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
-          return;
-        }
-        event.preventDefault();
-        const direction = event.key === "ArrowRight" ? 1 : -1;
-        let index = tabOrder.indexOf(tab);
-        for (let step = 0; step < tabOrder.length; step += 1) {
-          index = (index + direction + tabOrder.length) % tabOrder.length;
-          const targetTab = tabOrder[index];
-          const targetButton = getTabButton(targetTab);
-          if (targetButton && !targetButton.disabled) {
-            targetButton.focus();
-            this.setActiveTab(targetTab);
-            break;
-          }
-        }
-      });
-    });
-    this.setActiveTab(this.activeTab);
+    if (this.dom.glTeamCountInput) {
+      this.dom.glTeamCountInput.addEventListener("input", () => this.updateTeamPreview());
+    }
     if (this.dom.glFilterSelect) {
       this.dom.glFilterSelect.addEventListener("change", (event) => {
         const value = event.target instanceof HTMLSelectElement ? event.target.value : "all";
@@ -839,7 +1340,7 @@ export class GlToolManager {
     }
     this.refreshSchedules();
     this.renderApplications();
-    this.updateSlugPreview();
+    this.updateCopyButtonState();
   }
 
   handleSelection(detail = {}) {
@@ -849,7 +1350,7 @@ export class GlToolManager {
     this.currentEventName = ensureString(detail.eventName) || eventId;
     this.refreshSchedules();
     this.updateConfigVisibility();
-    this.updateSlugPreview();
+    this.updateCopyButtonState();
     this.setStatus("", "info");
     if (changed) {
       this.filter = "all";
@@ -904,10 +1405,27 @@ export class GlToolManager {
   applyConfig(raw) {
     const config = raw && typeof raw === "object" ? raw : {};
     const schedules = normalizeScheduleConfig(config.schedules);
+    const facultyLibraryId = ensureString(config.facultyLibraryId) || DEFAULT_FACULTY_LIBRARY_ID;
+    const facultiesSource = Array.isArray(config.faculties) && config.faculties.length
+      ? config.faculties
+      : this.librarySnapshot?.faculties;
+    const storedTeamCount = parseStoredTeamCount(config.teamCount);
+    let teams = sanitizeTeamList(config.teams);
+    let teamCount = storedTeamCount;
+    if (teamCount !== null) {
+      teams = generateTeamNames(teamCount);
+    } else {
+      const inferred = inferSequentialTeamCount(teams);
+      if (inferred !== null) {
+        teamCount = inferred;
+      }
+    }
     this.config = {
-      slug: ensureString(config.slug),
-      faculties: Array.isArray(config.faculties) ? config.faculties : [],
-      teams: Array.isArray(config.teams) ? config.teams : [],
+      slug: ensureString(config.slug) || this.currentEventId || "",
+      facultyLibraryId,
+      faculties: cloneFacultyStructure(facultiesSource),
+      teams,
+      teamCount,
       schedules,
       startAt: config.startAt || "",
       endAt: config.endAt || "",
@@ -921,12 +1439,15 @@ export class GlToolManager {
     if (this.dom.glPeriodEndInput) {
       this.dom.glPeriodEndInput.value = toDateTimeLocalString(this.config.endAt);
     }
-    this.facultyBuilder?.setFaculties(this.config.faculties);
     if (this.dom.glTeamCountInput) {
-      const teamCount = deriveTeamCountFromConfig(this.config.teams);
-      this.dom.glTeamCountInput.value = teamCount > 0 ? String(teamCount) : "";
+      if (Number.isInteger(this.config.teamCount) && this.config.teamCount >= 0) {
+        this.dom.glTeamCountInput.value = String(this.config.teamCount);
+      } else {
+        this.dom.glTeamCountInput.value = "";
+      }
     }
-    this.updateSlugPreview();
+    this.updateTeamPreview();
+    this.updateCopyButtonState();
     this.refreshSchedules();
     this.renderApplications();
   }
@@ -957,6 +1478,49 @@ export class GlToolManager {
     }
   }
 
+  updateTeamPreview() {
+    if (!this.dom.glTeamPreview) {
+      return;
+    }
+    const preview = this.dom.glTeamPreview;
+    delete preview.dataset.variant;
+    const inputValue = this.dom.glTeamCountInput instanceof HTMLInputElement ? this.dom.glTeamCountInput.value : "";
+    const parsed = parseTeamCount(inputValue);
+    if (Number.isNaN(parsed)) {
+      preview.hidden = false;
+      preview.textContent = "0以上の整数を入力してください。";
+      preview.dataset.variant = "error";
+      return;
+    }
+    if (parsed === null) {
+      const currentTeams = sanitizeTeamList(this.config?.teams || []);
+      if (currentTeams.length) {
+        preview.hidden = false;
+        preview.textContent = `現在の班: ${currentTeams.join("、")}`;
+        preview.dataset.variant = "info";
+      } else {
+        preview.hidden = true;
+        preview.textContent = "";
+      }
+      return;
+    }
+    if (parsed === 0) {
+      preview.hidden = false;
+      preview.textContent = "班は作成されません。";
+      preview.dataset.variant = "muted";
+      return;
+    }
+    const teams = generateTeamNames(parsed);
+    if (!teams.length) {
+      preview.hidden = true;
+      preview.textContent = "";
+      return;
+    }
+    preview.hidden = false;
+    preview.textContent = `作成される班: ${teams.join("、")}`;
+    preview.dataset.variant = "info";
+  }
+
   updateConfigVisibility() {
     if (!this.dom.glConfigEventNote || !this.dom.glConfigContent) {
       return;
@@ -970,20 +1534,15 @@ export class GlToolManager {
     if (this.dom.glConfigSaveButton) {
       this.dom.glConfigSaveButton.disabled = !hasEvent;
     }
-    if (this.dom.glFilterSelect) {
-      this.dom.glFilterSelect.disabled = !hasEvent;
-    }
+    this.updateCopyButtonState();
   }
 
-  getDefaultSlug() {
-    return ensureString(this.currentEventId);
-  }
-
-  updateSlugPreview() {
-    const slug = this.getDefaultSlug();
-    if (this.dom.glConfigCopyButton) {
-      this.dom.glConfigCopyButton.disabled = !slug || !this.currentEventId;
+  updateCopyButtonState() {
+    if (!this.dom.glConfigCopyButton) {
+      return;
     }
+    const slug = ensureString(this.config?.slug) || this.currentEventId || "";
+    this.dom.glConfigCopyButton.disabled = !slug || !this.currentEventId;
   }
 
   async saveConfig() {
@@ -991,24 +1550,29 @@ export class GlToolManager {
       this.setStatus("イベントを選択してください。", "warning");
       return;
     }
-    const slug = this.getDefaultSlug();
+    const slug = ensureString(this.currentEventId);
     const startAt = toTimestamp(this.dom.glPeriodStartInput?.value || "");
     const endAt = toTimestamp(this.dom.glPeriodEndInput?.value || "");
-    const facultyResult = this.facultyBuilder?.collectFaculties?.() ?? { faculties: [], errors: [] };
-    if (facultyResult.errors.length) {
-      this.setStatus(facultyResult.errors[0], "error");
-      return;
-    }
-    const faculties = facultyResult.faculties;
-    const { count: teamCount, error: teamError } = parseTeamCount(this.dom.glTeamCountInput?.value);
-    if (teamError) {
-      this.setStatus(teamError, "error");
-      if (this.dom.glTeamCountInput) {
+    const rawTeamInput = this.dom.glTeamCountInput instanceof HTMLInputElement ? this.dom.glTeamCountInput.value : "";
+    const parsedTeamCount = parseTeamCount(rawTeamInput);
+    if (Number.isNaN(parsedTeamCount)) {
+      this.setStatus("班の数は0以上の整数で入力してください。", "error");
+      if (this.dom.glTeamCountInput instanceof HTMLInputElement) {
         this.dom.glTeamCountInput.focus();
       }
+      this.updateTeamPreview();
       return;
     }
-    const teams = buildSequentialTeams(teamCount);
+    let teamCount = parsedTeamCount;
+    if (teamCount === null && Number.isInteger(this.config?.teamCount) && this.config.teamCount >= 0) {
+      teamCount = this.config.teamCount;
+    }
+    let teams;
+    if (teamCount === null) {
+      teams = sanitizeTeamList(this.config?.teams || []);
+    } else {
+      teams = generateTeamNames(teamCount);
+    }
     const previousSlug = ensureString(this.config?.slug);
     if (slug) {
       const slugSnapshot = await get(ref(database, `glIntake/slugIndex/${slug}`));
@@ -1022,12 +1586,18 @@ export class GlToolManager {
       this.getAvailableSchedules({ includeConfigFallback: true })
     );
     const scheduleSummary = buildScheduleConfigMap(scheduleSummaryList);
+    const faculties = cloneFacultyStructure(
+      this.librarySnapshot?.faculties?.length ? this.librarySnapshot.faculties : this.config?.faculties
+    );
+    const facultyLibraryId = ensureString(this.config?.facultyLibraryId) || DEFAULT_FACULTY_LIBRARY_ID;
     const configPayload = {
       slug,
       startAt,
       endAt,
       faculties,
+      facultyLibraryId,
       teams,
+      teamCount: teamCount === null ? null : teamCount,
       schedules: scheduleSummary,
       guidance: ensureString(this.config?.guidance),
       updatedAt: serverTimestamp(),
@@ -1048,7 +1618,14 @@ export class GlToolManager {
       updates[`glIntake/slugIndex/${previousSlug}`] = null;
     }
     await update(ref(database), updates);
+    this.config.slug = slug;
+    this.config.faculties = faculties;
+    this.config.facultyLibraryId = facultyLibraryId;
+    this.config.teamCount = teamCount;
+    this.config.teams = teams;
+    this.updateCopyButtonState();
     this.setStatus("募集設定を保存しました。", "success");
+    this.updateTeamPreview();
   }
 
   async copyFormUrl() {
@@ -1056,9 +1633,9 @@ export class GlToolManager {
       this.setStatus("イベントを選択してください。", "warning");
       return;
     }
-    const slug = this.getDefaultSlug();
+    const slug = ensureString(this.config?.slug) || this.currentEventId;
     if (!slug) {
-      this.setStatus("イベントIDを取得できませんでした。", "error");
+      this.setStatus("応募URLを生成できませんでした。", "warning");
       return;
     }
     let url = `${window.location.origin}${window.location.pathname}`;
