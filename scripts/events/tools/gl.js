@@ -16,6 +16,7 @@ import { ensureString, formatDateTimeLocal, logError } from "../helpers.js";
 
 const ASSIGNMENT_VALUE_ABSENT = "__absent";
 const ASSIGNMENT_VALUE_STAFF = "__staff";
+const MAX_TEAM_COUNT = 50;
 
 function toDateTimeLocalString(value) {
   if (!value) {
@@ -429,18 +430,41 @@ class GlFacultyBuilder {
   }
 }
 
-function parseTeamConfig(text) {
-  return String(text || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+function parseTeamCount(value) {
+  const raw = ensureString(value).trim();
+  if (!raw) {
+    return { count: 0, error: "" };
+  }
+  if (!/^\d+$/.test(raw)) {
+    return { count: 0, error: "班の数は0以上の整数で入力してください。" };
+  }
+  const numeric = Number.parseInt(raw, 10);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return { count: 0, error: "班の数は0以上の整数で入力してください。" };
+  }
+  if (numeric > MAX_TEAM_COUNT) {
+    return { count: 0, error: `班は最大${MAX_TEAM_COUNT}班まで設定できます。` };
+  }
+  return { count: numeric, error: "" };
 }
 
-function formatTeamConfig(teams = []) {
-  if (!Array.isArray(teams) || !teams.length) {
-    return "";
+function buildSequentialTeams(count = 0) {
+  const safeCount = Number.isFinite(count) ? Math.max(0, Math.min(MAX_TEAM_COUNT, Math.floor(count))) : 0;
+  if (safeCount <= 0) {
+    return [];
   }
-  return teams.map((team) => ensureString(team)).filter(Boolean).join("\n");
+  const teams = [];
+  for (let index = 1; index <= safeCount; index += 1) {
+    teams.push(`${index}班`);
+  }
+  return teams;
+}
+
+function deriveTeamCountFromConfig(teams = []) {
+  if (!Array.isArray(teams)) {
+    return 0;
+  }
+  return teams.map((team) => ensureString(team)).filter(Boolean).length;
 }
 
 function normalizeScheduleConfig(raw) {
@@ -794,6 +818,9 @@ export class GlToolManager {
     this.updateConfigVisibility();
     this.setActiveTab("config");
     this.renderApplications();
+    if (this.dom.glTeamCountInput) {
+      this.dom.glTeamCountInput.value = "";
+    }
   }
 
   resetContext() {
@@ -888,10 +915,6 @@ export class GlToolManager {
       updatedAt: Number(config.updatedAt) || 0,
       createdAt: Number(config.createdAt) || 0
     };
-    if (this.dom.glSlugInput) {
-      const slug = this.getDefaultSlug();
-      this.dom.glSlugInput.value = slug || "";
-    }
     if (this.dom.glPeriodStartInput) {
       this.dom.glPeriodStartInput.value = toDateTimeLocalString(this.config.startAt);
     }
@@ -899,8 +922,9 @@ export class GlToolManager {
       this.dom.glPeriodEndInput.value = toDateTimeLocalString(this.config.endAt);
     }
     this.facultyBuilder?.setFaculties(this.config.faculties);
-    if (this.dom.glTeamConfigInput) {
-      this.dom.glTeamConfigInput.value = formatTeamConfig(this.config.teams);
+    if (this.dom.glTeamCountInput) {
+      const teamCount = deriveTeamCountFromConfig(this.config.teams);
+      this.dom.glTeamCountInput.value = teamCount > 0 ? String(teamCount) : "";
     }
     this.updateSlugPreview();
     this.refreshSchedules();
@@ -956,14 +980,7 @@ export class GlToolManager {
   }
 
   updateSlugPreview() {
-    if (!this.dom.glSlugPreview) {
-      return;
-    }
     const slug = this.getDefaultSlug();
-    if (this.dom.glSlugInput) {
-      this.dom.glSlugInput.value = slug || "";
-    }
-    this.dom.glSlugPreview.textContent = slug || "sample";
     if (this.dom.glConfigCopyButton) {
       this.dom.glConfigCopyButton.disabled = !slug || !this.currentEventId;
     }
@@ -983,13 +1000,21 @@ export class GlToolManager {
       return;
     }
     const faculties = facultyResult.faculties;
-    const teams = parseTeamConfig(this.dom.glTeamConfigInput?.value || "");
+    const { count: teamCount, error: teamError } = parseTeamCount(this.dom.glTeamCountInput?.value);
+    if (teamError) {
+      this.setStatus(teamError, "error");
+      if (this.dom.glTeamCountInput) {
+        this.dom.glTeamCountInput.focus();
+      }
+      return;
+    }
+    const teams = buildSequentialTeams(teamCount);
     const previousSlug = ensureString(this.config?.slug);
     if (slug) {
       const slugSnapshot = await get(ref(database, `glIntake/slugIndex/${slug}`));
       const ownerEventId = ensureString(slugSnapshot.val());
       if (ownerEventId && ownerEventId !== this.currentEventId) {
-        this.setStatus("同じフォーム識別子が既に使用されています。別の識別子を入力してください。", "error");
+        this.setStatus("同じイベントIDが別のGLフォームに割り当てられています。イベント設定を確認してください。", "error");
         return;
       }
     }
@@ -1033,7 +1058,7 @@ export class GlToolManager {
     }
     const slug = this.getDefaultSlug();
     if (!slug) {
-      this.setStatus("フォーム識別子を入力してください。", "warning");
+      this.setStatus("イベントIDを取得できませんでした。", "error");
       return;
     }
     let url = `${window.location.origin}${window.location.pathname}`;

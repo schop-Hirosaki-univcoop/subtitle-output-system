@@ -463,7 +463,7 @@
                       aria-controls="gl-tabpanel-config"
                       tabindex="0"
                     >
-                      募集設定
+                      <span class="gl-panel-tab__label">募集設定</span>
                     </button>
                     <button
                       id="gl-tab-applications"
@@ -474,7 +474,7 @@
                       aria-controls="gl-tabpanel-applications"
                       tabindex="-1"
                     >
-                      応募一覧
+                      <span class="gl-panel-tab__label">応募一覧</span>
                     </button>
                   </div>
                 </div>
@@ -489,13 +489,6 @@
                         <div class="gl-card-body">
                           <p id="gl-config-event-note" class="gl-card-note" hidden>イベントを選択してください。</p>
                           <div id="gl-config-content" class="gl-config-content" hidden>
-                            <div class="gl-config-row">
-                              <label class="gl-config-label" for="gl-link-slug">フォーム識別子</label>
-                              <div class="gl-config-control">
-                                <input id="gl-link-slug" class="input" type="text" autocomplete="off" spellcheck="false" placeholder="イベントIDが表示されます" readonly aria-readonly="true">
-                                <p class="gl-config-hint">フォーム識別子はイベントIDをそのまま利用します。例: <code>gl-form.html?evt=<span id="gl-link-slug-preview">sample</span></code></p>
-                              </div>
-                            </div>
                             <div class="gl-config-row">
                               <label class="gl-config-label" for="gl-period-start">募集開始</label>
                               <div class="gl-config-control">
@@ -531,10 +524,19 @@
                               </div>
                             </div>
                             <div class="gl-config-row">
-                              <label class="gl-config-label" for="gl-team-config">班リスト</label>
+                              <label class="gl-config-label" for="gl-team-count">班の数</label>
                               <div class="gl-config-control">
-                                <textarea id="gl-team-config" class="input input--textarea" rows="4" placeholder="A-1&#10;A-2"></textarea>
-                                <p class="gl-config-hint">1行につき1つの班名称を入力します。欠席・運営は自動で追加されます。</p>
+                                <input
+                                  id="gl-team-count"
+                                  class="input input--dense"
+                                  type="number"
+                                  inputmode="numeric"
+                                  min="0"
+                                  max="50"
+                                  step="1"
+                                  placeholder="例: 12"
+                                >
+                                <p class="gl-config-hint">班は「1班」「2班」のように自動生成されます。欠席・運営は自動で含まれます。</p>
                               </div>
                             </div>
                             <div class="gl-config-actions">
