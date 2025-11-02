@@ -60,6 +60,7 @@ export const operatorChatReadsRef = ref(database, "operatorChat/reads");
 export const glIntakeEventsRef = ref(database, "glIntake/events");
 export const glIntakeSlugIndexRef = ref(database, "glIntake/slugIndex");
 const glIntakeApplicationsRootRef = ref(database, "glIntake/applications");
+const glFacultyLibraryRootRef = ref(database, "glIntake/facultyLibrary");
 const glAssignmentsRootRef = ref(database, "glAssignments");
 const operatorPresenceRootRef = ref(database, "operatorPresence");
 const operatorScheduleConsensusRootRef = ref(database, "operatorPresenceConsensus");
@@ -107,6 +108,14 @@ export function getGlApplicationsRef(eventId = "") {
     return glIntakeApplicationsRootRef;
   }
   return ref(database, `glIntake/applications/${key}`);
+}
+
+export function getGlFacultyLibraryRef(libraryId = "") {
+  const key = String(libraryId || "").trim();
+  if (!key) {
+    return glFacultyLibraryRootRef;
+  }
+  return ref(database, `glIntake/facultyLibrary/${key}`);
 }
 
 export function getGlApplicationRef(eventId = "", applicationId = "") {
