@@ -1150,6 +1150,7 @@ export class GlToolManager {
   constructor(app) {
     this.app = app;
     this.dom = app.dom;
+    this.facultyBuilder = new GlFacultyBuilder(this.dom);
     this.currentEventId = "";
     this.currentEventName = "";
     this.currentSchedules = [];
@@ -1283,18 +1284,44 @@ export class GlToolManager {
     }
   }
 
+  setActiveTab(tab) {
+    const normalized = tab === "applications" ? "applications" : "config";
+    this.activeTab = normalized;
+    const entries = [
+      { tab: "config", button: this.dom.glTabConfigButton, panel: this.dom.glTabpanelConfig },
+      { tab: "applications", button: this.dom.glTabApplicationsButton, panel: this.dom.glTabpanelApplications }
+    ];
+    entries.forEach(({ tab: key, button, panel }) => {
+      const isActive = key === normalized;
+      if (button) {
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
+        button.setAttribute("tabindex", isActive ? "0" : "-1");
+      }
+      if (panel) {
+        panel.hidden = !isActive;
+        panel.setAttribute("aria-hidden", isActive ? "false" : "true");
+      }
+    });
+  }
+
   resetFlowState() {
     this.detachListeners();
     this.currentEventId = "";
     this.currentEventName = "";
     this.currentSchedules = [];
     this.config = null;
+    this.facultyBuilder?.clear();
     this.applications = [];
     this.assignments = new Map();
     this.filter = "all";
     this.loading = false;
     this.updateConfigVisibility();
+    this.setActiveTab("config");
     this.renderApplications();
+    if (this.dom.glTeamCountInput) {
+      this.dom.glTeamCountInput.value = "";
+    }
   }
 
   resetContext() {
@@ -1326,6 +1353,11 @@ export class GlToolManager {
     this.updateCopyButtonState();
     this.setStatus("", "info");
     if (changed) {
+      this.filter = "all";
+      if (this.dom.glFilterSelect) {
+        this.dom.glFilterSelect.value = "all";
+      }
+      this.setActiveTab("config");
       this.attachListeners();
     }
   }
@@ -1546,7 +1578,7 @@ export class GlToolManager {
       const slugSnapshot = await get(ref(database, `glIntake/slugIndex/${slug}`));
       const ownerEventId = ensureString(slugSnapshot.val());
       if (ownerEventId && ownerEventId !== this.currentEventId) {
-        this.setStatus("同じフォーム識別子が既に使用されています。別の識別子を入力してください。", "error");
+        this.setStatus("同じイベントIDが別のGLフォームに割り当てられています。イベント設定を確認してください。", "error");
         return;
       }
     }
@@ -1663,6 +1695,19 @@ export class GlToolManager {
       return;
     }
     list.innerHTML = "";
+    const hasEvent = Boolean(this.currentEventId);
+    if (this.dom.glApplicationEventNote) {
+      this.dom.glApplicationEventNote.hidden = hasEvent;
+    }
+    if (!hasEvent) {
+      if (this.dom.glApplicationEmpty) {
+        this.dom.glApplicationEmpty.hidden = true;
+      }
+      if (this.dom.glApplicationLoading) {
+        this.dom.glApplicationLoading.hidden = true;
+      }
+      return;
+    }
     const filtered = this.applyFilter(this.applications);
     if (this.dom.glApplicationLoading) {
       this.dom.glApplicationLoading.hidden = !this.loading;

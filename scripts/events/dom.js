@@ -133,6 +133,7 @@ export function queryDom() {
     glConfigCopyStatus: document.getElementById("gl-config-copy-status"),
     glFilterSelect: document.getElementById("gl-filter"),
     glApplicationList: document.getElementById("gl-application-list"),
+    glApplicationEventNote: document.getElementById("gl-application-event-note"),
     glApplicationEmpty: document.getElementById("gl-application-empty"),
     glApplicationLoading: document.getElementById("gl-application-loading"),
     glFacultyPanel: document.getElementById("flow-panel-gl-faculty"),

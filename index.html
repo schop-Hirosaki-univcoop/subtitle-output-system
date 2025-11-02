@@ -546,12 +546,35 @@
                 </p>
               </div>
             </div>
-            <div class="module-body">
-              <div class="gl-config-grid">
-                <section class="gl-config-card" aria-labelledby="gl-config-title">
-                  <div class="gl-card-header">
-                    <h3 id="gl-config-title" class="gl-card-title">募集設定</h3>
-                    <p id="gl-config-status" class="gl-card-status" role="status" aria-live="polite"></p>
+          </div>
+          <div class="module-body">
+            <div class="flow-pane flow-pane--primary gl-panel">
+              <div class="gl-panel-switcher">
+                <div class="gl-panel-tabs">
+                  <span class="gl-panel-tabs__label" aria-hidden="true">表示モード</span>
+                  <div id="gl-tablist" class="gl-panel-tabs__buttons" role="tablist" aria-label="GLリストの表示を切り替え">
+                    <button
+                      id="gl-tab-config"
+                      class="gl-panel-tab is-active"
+                      type="button"
+                      role="tab"
+                      aria-selected="true"
+                      aria-controls="gl-tabpanel-config"
+                      tabindex="0"
+                    >
+                      <span class="gl-panel-tab__label">募集設定</span>
+                    </button>
+                    <button
+                      id="gl-tab-applications"
+                      class="gl-panel-tab"
+                      type="button"
+                      role="tab"
+                      aria-selected="false"
+                      aria-controls="gl-tabpanel-applications"
+                      tabindex="-1"
+                    >
+                      <span class="gl-panel-tab__label">応募一覧</span>
+                    </button>
                   </div>
                   <div class="gl-card-body">
                     <p id="gl-config-event-note" class="gl-card-note" hidden>イベントを選択してください。</p>
@@ -561,11 +584,123 @@
                         <div class="gl-config-control">
                           <input id="gl-period-start" class="input" type="datetime-local">
                         </div>
-                      </div>
-                      <div class="gl-config-row">
-                        <label class="gl-config-label" for="gl-period-end">募集終了</label>
-                        <div class="gl-config-control">
-                          <input id="gl-period-end" class="input" type="datetime-local">
+                        <div class="gl-card-body">
+                          <p id="gl-config-event-note" class="gl-card-note" hidden>イベントを選択してください。</p>
+                          <div id="gl-config-content" class="gl-config-content" hidden>
+                            <div class="gl-config-row">
+                              <label class="gl-config-label" for="gl-period-start">募集開始</label>
+                              <div class="gl-config-control">
+                                <input id="gl-period-start" class="input" type="datetime-local">
+                              </div>
+                            </div>
+                            <div class="gl-config-row">
+                              <label class="gl-config-label" for="gl-period-end">募集終了</label>
+                              <div class="gl-config-control">
+                                <input id="gl-period-end" class="input" type="datetime-local">
+                              </div>
+                            </div>
+                            <div class="gl-config-row">
+                              <label class="gl-config-label" for="gl-faculty-add">学部・学科リスト</label>
+                              <div class="gl-config-control">
+                                <div id="gl-faculty-builder" class="gl-faculty-builder">
+                                  <div class="gl-faculty-builder-header">
+                                    <button id="gl-faculty-add" class="btn btn-secondary btn-sm" type="button">学部を追加</button>
+                                    <p class="gl-faculty-builder-note">弘前大学の「学部 → 学科 / 課程 → 専攻 → コース」のような階層をカード形式で設定できます。</p>
+                                  </div>
+                                  <p id="gl-faculty-empty" class="gl-faculty-empty">学部カードを追加して所属の階層構造を設定してください。</p>
+                                  <div id="gl-faculty-list" class="gl-faculty-list" aria-live="polite"></div>
+                                </div>
+                                <datalist id="gl-faculty-level-suggestions">
+                                  <option value="学科"></option>
+                                  <option value="課程"></option>
+                                  <option value="専攻"></option>
+                                  <option value="コース"></option>
+                                  <option value="プログラム"></option>
+                                  <option value="領域"></option>
+                                </datalist>
+                                <p class="gl-config-hint">各カードで学部名と階層ラベル（例: 学科・課程・専攻）を入力し、必要に応じて選択肢や下位階層を追加してください。選択肢を作成しない場合は自由入力欄として扱われます。</p>
+                              </div>
+                            </div>
+                            <div class="gl-config-row">
+                              <label class="gl-config-label" for="gl-team-count">班の数</label>
+                              <div class="gl-config-control">
+                                <input
+                                  id="gl-team-count"
+                                  class="input input--dense"
+                                  type="number"
+                                  inputmode="numeric"
+                                  min="0"
+                                  max="50"
+                                  step="1"
+                                  placeholder="例: 12"
+                                >
+                                <p class="gl-config-hint">班は「1班」「2班」のように自動生成されます。欠席・運営は自動で含まれます。</p>
+                              </div>
+                            </div>
+                            <div class="gl-config-actions">
+                              <button id="gl-config-save" class="btn btn-primary btn-sm" type="button">設定を保存</button>
+                              <button id="gl-config-copy" class="btn btn-ghost btn-sm" type="button" disabled>応募URLをコピー</button>
+                              <span id="gl-config-copy-status" class="visually-hidden" aria-live="polite"></span>
+                            </div>
+                            <template id="gl-faculty-template">
+                              <article class="gl-faculty-card" data-faculty-card>
+                                <header class="gl-faculty-card-header">
+                                  <div class="gl-faculty-card-title">
+                                    <label class="gl-faculty-label">学部名
+                                      <input type="text" class="input" data-faculty-name placeholder="学部名を入力してください">
+                                    </label>
+                                  </div>
+                                  <div class="gl-faculty-card-actions">
+                                    <button type="button" class="btn btn-ghost btn-sm" data-move-up aria-label="1つ上に移動">↑</button>
+                                    <button type="button" class="btn btn-ghost btn-sm" data-move-down aria-label="1つ下に移動">↓</button>
+                                    <button type="button" class="btn btn-danger btn-sm" data-remove-faculty>削除</button>
+                                  </div>
+                                </header>
+                                <div class="gl-faculty-card-body">
+                                  <div class="gl-faculty-field">
+                                    <label class="gl-faculty-label">最上位の階層名
+                                      <input type="text" class="input" data-faculty-fallback list="gl-faculty-level-suggestions" placeholder="例: 学科">
+                                    </label>
+                                    <p class="gl-faculty-hint">選択肢を追加しない場合は、この名称の自由入力欄になります。</p>
+                                  </div>
+                                  <div data-level-container class="gl-faculty-level-root"></div>
+                                </div>
+                              </article>
+                            </template>
+                            <template id="gl-faculty-level-template">
+                              <section class="gl-faculty-level" data-level>
+                                <header class="gl-faculty-level-header">
+                                  <label class="gl-faculty-label">階層ラベル
+                                    <input type="text" class="input" data-level-label list="gl-faculty-level-suggestions" placeholder="例: 学科">
+                                  </label>
+                                  <label class="gl-faculty-checkbox">
+                                    <input type="checkbox" data-level-allow-custom checked>
+                                    <span>「その他」の自由入力を許可</span>
+                                  </label>
+                                  <button type="button" class="btn btn-ghost btn-sm" data-remove-level>階層を削除</button>
+                                </header>
+                                <div class="gl-faculty-options" data-options></div>
+                                <div class="gl-faculty-level-footer">
+                                  <button type="button" class="btn btn-secondary btn-sm" data-add-option>選択肢を追加</button>
+                                </div>
+                              </section>
+                            </template>
+                            <template id="gl-faculty-option-template">
+                              <article class="gl-faculty-option" data-option>
+                                <div class="gl-faculty-option-header">
+                                  <label class="gl-faculty-label">名称
+                                    <input type="text" class="input" data-option-label placeholder="選択肢名を入力">
+                                  </label>
+                                  <button type="button" class="btn btn-ghost btn-sm" data-remove-option aria-label="選択肢を削除">削除</button>
+                                </div>
+                                <div class="gl-faculty-option-children" data-option-children></div>
+                                <div class="gl-faculty-option-footer">
+                                  <button type="button" class="btn btn-ghost btn-sm" data-add-child>下位階層を追加</button>
+                                  <button type="button" class="btn btn-ghost btn-sm" data-remove-child hidden>下位階層を削除</button>
+                                </div>
+                              </article>
+                            </template>
+                          </div>
                         </div>
                       </div>
                       <div class="gl-config-row">
@@ -585,39 +720,10 @@
                           <p class="gl-config-hint">指定した数だけ「1班、2班…」が自動で作成されます。欠席・運営は常に表示されます。</p>
                           <p id="gl-team-preview" class="gl-config-hint" hidden></p>
                         </div>
-                      </div>
-                      <div class="gl-config-actions">
-                        <button id="gl-config-save" class="btn btn-primary btn-sm" type="button">設定を保存</button>
-                        <button id="gl-config-copy" class="btn btn-ghost btn-sm" type="button" disabled>応募URLをコピー</button>
-                        <span id="gl-config-copy-status" class="visually-hidden" aria-live="polite"></span>
-                      </div>
+                      </section>
                     </div>
-                  </div>
-                </section>
-
-                <section class="gl-applications-card" aria-labelledby="gl-application-title">
-                  <div class="gl-card-header">
-                    <h3 id="gl-application-title" class="gl-card-title">応募一覧</h3>
-                    <div class="gl-card-tools">
-                      <label class="gl-filter-label" for="gl-filter">表示</label>
-                      <select id="gl-filter" class="input input--dense">
-                        <option value="all" selected>すべて</option>
-                        <option value="unassigned">未割当</option>
-                        <option value="assigned">班割当のみ</option>
-                        <option value="absent">欠席</option>
-                        <option value="staff">運営待機</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div class="gl-card-body">
-                    <p id="gl-application-empty" class="gl-card-note" hidden>応募はまだありません。フォームを公開し、GLからの応募をお待ちください。</p>
-                    <div id="gl-application-loading" class="hub-loading" role="status" hidden>
-                      <span class="spinner" aria-hidden="true"></span>
-                      <span>応募情報を読み込んでいます…</span>
-                    </div>
-                    <ul id="gl-application-list" class="gl-application-list" aria-live="polite"></ul>
-                  </div>
-                </section>
+                  </section>
+                </div>
               </div>
             </div>
           </div>
