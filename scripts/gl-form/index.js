@@ -49,8 +49,6 @@ import { FIREBASE_CONFIG } from "../shared/firebase-config.js";
     privacyConsent: document.getElementById("gl-privacy-consent")
   };
   
-  const DEFAULT_FACULTY_LIBRARY_ID = "default";
-
   const state = {
     eventId: "",
     slug: "",
@@ -644,37 +642,7 @@ import { FIREBASE_CONFIG } from "../shared/firebase-config.js";
       showGuard("募集期間が終了しました。運営までお問い合わせください。");
       return;
     }
-    const facultyLibraryId = ensureString(config.facultyLibraryId) || DEFAULT_FACULTY_LIBRARY_ID;
-    let facultySource = config.faculties;
-    if (facultyLibraryId) {
-      try {
-        const libraryRef = ref(database, `glIntake/facultyLibrary/${facultyLibraryId}`);
-        const librarySnap = await get(libraryRef);
-        if (librarySnap.exists()) {
-          const libraryData = librarySnap.val();
-          if (libraryData && libraryData.faculties) {
-            facultySource = libraryData.faculties;
-          }
-        }
-      } catch (error) {
-        console.warn("Failed to load faculty library", error);
-      }
-    }
-    if ((!facultySource || (Array.isArray(facultySource) && facultySource.length === 0)) && facultyLibraryId !== DEFAULT_FACULTY_LIBRARY_ID) {
-      try {
-        const fallbackRef = ref(database, `glIntake/facultyLibrary/${DEFAULT_FACULTY_LIBRARY_ID}`);
-        const fallbackSnap = await get(fallbackRef);
-        if (fallbackSnap.exists()) {
-          const fallbackData = fallbackSnap.val();
-          if (fallbackData && fallbackData.faculties) {
-            facultySource = fallbackData.faculties;
-          }
-        }
-      } catch (error) {
-        console.warn("Failed to load default faculty library", error);
-      }
-    }
-    state.faculties = parseFaculties(facultySource || []);
+    state.faculties = parseFaculties(config.faculties || []);
     const scheduleSources = [config.schedules, config.scheduleSummary, config.scheduleOptions];
     let parsedSchedules = [];
     for (const source of scheduleSources) {
