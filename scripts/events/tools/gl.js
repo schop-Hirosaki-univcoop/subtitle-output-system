@@ -627,6 +627,7 @@ export class GlToolManager {
     this.configUnsubscribe = null;
     this.applicationsUnsubscribe = null;
     this.assignmentsUnsubscribe = null;
+    this.activeTab = "config";
     this.selectionUnsubscribe = this.app.addSelectionListener((detail) => this.handleSelection(detail));
     this.eventsUnsubscribe = this.app.addEventListener((events) => this.handleEvents(events));
     this.bindDom();
@@ -697,11 +698,38 @@ export class GlToolManager {
         });
       });
     }
-    if (this.dom.glSlugInput) {
-      this.dom.glSlugInput.addEventListener("input", () => {
-        this.updateSlugPreview();
+    const tabOrder = ["config", "applications"];
+    const getTabButton = (tab) =>
+      tab === "applications" ? this.dom.glTabApplicationsButton : this.dom.glTabConfigButton;
+    tabOrder.forEach((tab) => {
+      const button = getTabButton(tab);
+      if (!button) {
+        return;
+      }
+      button.addEventListener("click", () => {
+        this.setActiveTab(tab);
+        button.focus();
       });
-    }
+      button.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+          return;
+        }
+        event.preventDefault();
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        let index = tabOrder.indexOf(tab);
+        for (let step = 0; step < tabOrder.length; step += 1) {
+          index = (index + direction + tabOrder.length) % tabOrder.length;
+          const targetTab = tabOrder[index];
+          const targetButton = getTabButton(targetTab);
+          if (targetButton && !targetButton.disabled) {
+            targetButton.focus();
+            this.setActiveTab(targetTab);
+            break;
+          }
+        }
+      });
+    });
+    this.setActiveTab(this.activeTab);
     if (this.dom.glFilterSelect) {
       this.dom.glFilterSelect.addEventListener("change", (event) => {
         const value = event.target instanceof HTMLSelectElement ? event.target.value : "all";
@@ -731,6 +759,27 @@ export class GlToolManager {
     }
   }
 
+  setActiveTab(tab) {
+    const normalized = tab === "applications" ? "applications" : "config";
+    this.activeTab = normalized;
+    const entries = [
+      { tab: "config", button: this.dom.glTabConfigButton, panel: this.dom.glTabpanelConfig },
+      { tab: "applications", button: this.dom.glTabApplicationsButton, panel: this.dom.glTabpanelApplications }
+    ];
+    entries.forEach(({ tab: key, button, panel }) => {
+      const isActive = key === normalized;
+      if (button) {
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
+        button.setAttribute("tabindex", isActive ? "0" : "-1");
+      }
+      if (panel) {
+        panel.hidden = !isActive;
+        panel.setAttribute("aria-hidden", isActive ? "false" : "true");
+      }
+    });
+  }
+
   resetFlowState() {
     this.detachListeners();
     this.currentEventId = "";
@@ -743,6 +792,7 @@ export class GlToolManager {
     this.filter = "all";
     this.loading = false;
     this.updateConfigVisibility();
+    this.setActiveTab("config");
     this.renderApplications();
   }
 
@@ -775,6 +825,11 @@ export class GlToolManager {
     this.updateSlugPreview();
     this.setStatus("", "info");
     if (changed) {
+      this.filter = "all";
+      if (this.dom.glFilterSelect) {
+        this.dom.glFilterSelect.value = "all";
+      }
+      this.setActiveTab("config");
       this.attachListeners();
     }
   }
@@ -834,10 +889,8 @@ export class GlToolManager {
       createdAt: Number(config.createdAt) || 0
     };
     if (this.dom.glSlugInput) {
-      const slug = this.config.slug || this.currentEventId;
-      if (this.dom.glSlugInput.value !== slug) {
-        this.dom.glSlugInput.value = slug;
-      }
+      const slug = this.getDefaultSlug();
+      this.dom.glSlugInput.value = slug || "";
     }
     if (this.dom.glPeriodStartInput) {
       this.dom.glPeriodStartInput.value = toDateTimeLocalString(this.config.startAt);
@@ -893,14 +946,24 @@ export class GlToolManager {
     if (this.dom.glConfigSaveButton) {
       this.dom.glConfigSaveButton.disabled = !hasEvent;
     }
+    if (this.dom.glFilterSelect) {
+      this.dom.glFilterSelect.disabled = !hasEvent;
+    }
+  }
+
+  getDefaultSlug() {
+    return ensureString(this.currentEventId);
   }
 
   updateSlugPreview() {
     if (!this.dom.glSlugPreview) {
       return;
     }
-    const slug = ensureString(this.dom.glSlugInput?.value) || this.currentEventId || "sample";
-    this.dom.glSlugPreview.textContent = slug;
+    const slug = this.getDefaultSlug();
+    if (this.dom.glSlugInput) {
+      this.dom.glSlugInput.value = slug || "";
+    }
+    this.dom.glSlugPreview.textContent = slug || "sample";
     if (this.dom.glConfigCopyButton) {
       this.dom.glConfigCopyButton.disabled = !slug || !this.currentEventId;
     }
@@ -911,7 +974,7 @@ export class GlToolManager {
       this.setStatus("イベントを選択してください。", "warning");
       return;
     }
-    const slug = ensureString(this.dom.glSlugInput?.value) || this.currentEventId;
+    const slug = this.getDefaultSlug();
     const startAt = toTimestamp(this.dom.glPeriodStartInput?.value || "");
     const endAt = toTimestamp(this.dom.glPeriodEndInput?.value || "");
     const facultyResult = this.facultyBuilder?.collectFaculties?.() ?? { faculties: [], errors: [] };
@@ -968,7 +1031,7 @@ export class GlToolManager {
       this.setStatus("イベントを選択してください。", "warning");
       return;
     }
-    const slug = ensureString(this.dom.glSlugInput?.value) || this.currentEventId;
+    const slug = this.getDefaultSlug();
     if (!slug) {
       this.setStatus("フォーム識別子を入力してください。", "warning");
       return;
@@ -1030,6 +1093,19 @@ export class GlToolManager {
       return;
     }
     list.innerHTML = "";
+    const hasEvent = Boolean(this.currentEventId);
+    if (this.dom.glApplicationEventNote) {
+      this.dom.glApplicationEventNote.hidden = hasEvent;
+    }
+    if (!hasEvent) {
+      if (this.dom.glApplicationEmpty) {
+        this.dom.glApplicationEmpty.hidden = true;
+      }
+      if (this.dom.glApplicationLoading) {
+        this.dom.glApplicationLoading.hidden = true;
+      }
+      return;
+    }
     const filtered = this.applyFilter(this.applications);
     if (this.dom.glApplicationLoading) {
       this.dom.glApplicationLoading.hidden = !this.loading;

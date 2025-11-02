@@ -5757,6 +5757,94 @@ body.sidebar-overlay-open{
 
 /* Compact embedded panel adjustments */
 
+.gl-panel-switcher{
+  display:flex;
+  flex-direction:column;
+  gap:clamp(.85rem, 1.6vw, 1.2rem);
+  flex:1 1 auto;
+  min-height:0;
+}
+
+.gl-panel-tabs{
+  display:flex;
+  flex-direction:column;
+  gap:.45rem;
+}
+
+.gl-panel-tabs__label{
+  font-size:.85rem;
+  color:rgba(200, 225, 255, .65);
+}
+
+.gl-panel-tabs__buttons{
+  display:inline-flex;
+  align-items:center;
+  gap:.5rem;
+  padding:.35rem;
+  border-radius:999px;
+  border:1px solid rgba(110, 150, 200, .32);
+  background:rgba(10, 24, 40, .65);
+  box-shadow:inset 0 1px 0 rgba(255, 255, 255, .05), 0 10px 26px rgba(8, 18, 32, .35);
+}
+
+.gl-panel-tab{
+  font-size:.9rem;
+  font-weight:600;
+  color:rgba(190, 215, 245, .72);
+  background:transparent;
+  border:0;
+  border-radius:999px;
+  padding:.55rem 1.15rem;
+  cursor:pointer;
+  transition:color .2s ease, background .2s ease, box-shadow .2s ease;
+}
+
+.gl-panel-tab:hover{
+  color:rgba(220, 238, 255, .88);
+}
+
+.gl-panel-tab.is-active{
+  color:#e6f6ff;
+  background:linear-gradient(135deg, rgba(60, 150, 255, .65), rgba(70, 210, 255, .45));
+  box-shadow:0 8px 20px rgba(40, 120, 210, .35);
+}
+
+.gl-panel-tab[disabled]{
+  cursor:not-allowed;
+  opacity:.55;
+}
+
+.gl-panel-tab:focus-visible{
+  outline:2px solid rgba(110, 200, 255, .8);
+  outline-offset:2px;
+}
+
+.gl-panel-surfaces{
+  flex:1 1 auto;
+  min-height:0;
+  display:flex;
+}
+
+.gl-panel-tabpanel{
+  flex:1 1 auto;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+
+.gl-panel-tabpanel[hidden]{
+  display:none !important;
+}
+
+.gl-panel-scroll{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+  display:flex;
+  flex-direction:column;
+  gap:clamp(1rem, 1.8vw, 1.35rem);
+}
+
 .gl-config-grid{
   display:grid;
   gap:clamp(1rem, 2vw, 1.5rem);
@@ -5772,6 +5860,12 @@ body.sidebar-overlay-open{
   display:flex;
   flex-direction:column;
   gap:clamp(1rem, 1.8vw, 1.4rem);
+}
+
+.gl-card-body{
+  display:flex;
+  flex-direction:column;
+  gap:clamp(.75rem, 1.2vw, 1rem);
 }
 
 .gl-card-header{
