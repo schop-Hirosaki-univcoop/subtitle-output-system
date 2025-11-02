@@ -638,7 +638,7 @@ export class GlToolManager {
   constructor(app) {
     this.app = app;
     this.dom = app.dom;
-//    this.facultyBuilder = new GlFacultyBuilder(this.dom);
+    this.facultyBuilder = new GlFacultyBuilder(this.dom);
     this.currentEventId = "";
     this.currentEventName = "";
     this.currentSchedules = [];
@@ -810,7 +810,7 @@ export class GlToolManager {
     this.currentEventName = "";
     this.currentSchedules = [];
     this.config = null;
-//    this.facultyBuilder?.clear();
+    this.facultyBuilder?.clear();
     this.applications = [];
     this.assignments = new Map();
     this.filter = "all";
