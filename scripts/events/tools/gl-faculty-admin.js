@@ -58,27 +58,33 @@ export class GlFacultyAdminManager {
     }
 
   attachListeners() {
-    // ▼▼▼ ログ追加 ▼▼▼
+    // ▼▼▼ ログ ▼▼▼
     console.log("[FacultyAdmin] attachListeners: メソッドが呼び出されました。");
-    if (this.catalogUnsubscribe){
+    if (this.catalogUnsubscribe) {
       console.warn("[FacultyAdmin] attachListeners: 既にリスナーが登録済みのため、処理を中断します。");
-      return;
+      return; 
     }
     console.log("[FacultyAdmin] attachListeners: onValue リスナーを glIntakeFacultyCatalogRef に登録します...");
-    this.catalogUnsubscribe = onValue(glIntakeFacultyCatalogRef, (snapshot) => {
-      // ▼▼▼ ログ追加 ▼▼▼
-      console.log("[FacultyAdmin] onValue (Success): データを受信しました。applyCatalog を呼び出します。", snapshot.val());
-      const value = snapshot.val() || {};
-      this.applyCatalog(value);
-    },
-    (error) => {
-      // ▼▼▼ ログ追加（エラーハンドラ追加） ▼▼▼
-      console.error("[FacultyAdmin] onValue (Error): データ受信に失敗しました。", error);
-      logError("Failed to fetch faculty catalog", error);
-      this.setStatus("共通設定の読み込みに失敗しました。", "error");
-      this.showLoading(false);
-      // ▲▲▲ ログ追加（エラーハンドラ追加） ▲▲▲
-    });
+    // ▲▲▲ ログ ▲▲▲
+
+    this.catalogUnsubscribe = onValue(
+      glIntakeFacultyCatalogRef,
+      (snapshot) => {
+        // ▼▼▼ ログ ▼▼▼
+        console.log("[FacultyAdmin] onValue (Success): データを受信しました。applyCatalog を呼び出します。", snapshot.val());
+        // ▲▲▲ ログ ▼▼▲
+        const value = snapshot.val() || {};
+        this.applyCatalog(value);
+      },
+      (error) => {
+        // ▼▼▼ ログ（エラーハンドラ追加） ▼▼▼
+        console.error("[FacultyAdmin] onValue (Error): データ受信に失敗しました。", error);
+        logError("Failed to fetch faculty catalog", error);
+        this.setStatus("共通設定の読み込みに失敗しました。", "error");
+        this.showLoading(false);
+        // ▲▲▲ ログ（エラーハンドラ追加） ▲▲▲
+      }
+    );
   }
 
   bindDom() {
