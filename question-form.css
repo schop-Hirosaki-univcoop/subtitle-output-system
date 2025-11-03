@@ -78,7 +78,8 @@ body.question-admin-page{
 }
 
 /* 入力フォーム全体の縦並びを調整 */
-.intake-form{
+.intake-form,
+#gl-academic-fields{
   display:flex;
   flex-direction:column;
   gap:clamp(1rem, 2vw, 1.35rem);
