@@ -37,26 +37,19 @@ export class GlFacultyAdminManager {
     // ▼▼▼ ログ追加 ▼▼▼
     console.log("[FacultyAdmin] constructor: showLoading(true) を実行しました。");
 //    this.attachListeners();
-    this.app.addSelectionListener(() => this.handleSelection());
+    // ▼▼▼ 修正: selectionListener (間違い) を削除し、onAuthStateChanged (正しい) に変更 ▼▼▼
+    console.log("[FacultyAdmin] constructor: onAuthStateChanged リスナーを登録します。");
+    this.app.auth.onAuthStateChanged((user) => {
+      console.log(`[FacultyAdmin] onAuthStateChanged: 状態が変化しました。 User: ${user?.uid}`);
+      // ユーザーがログインしており、かつリスナーがまだ登録されていない場合のみ実行
+      if (user && !this.catalogUnsubscribe) {
+        console.log("[FacultyAdmin] onAuthStateChanged: ユーザーがおり、リスナーは未登録です。attachListeners() を呼び出します。");
+        this.attachListeners();
+      }
+    });
     // ▼▼▼ ログ追加 ▼▼▼
-    console.log("[FacultyAdmin] constructor: selectionListener を登録しました。");
+//    console.log("[FacultyAdmin] constructor: selectionListener を登録しました。");  //削除
   }
-
-    handleSelection() {
-      console.log(`[FacultyAdmin] handleSelection: 選択イベントを検知しました。 (selectedEventId: ${this.app.selectedEventId})`);
-      // 既にリスナーがアタッチされていれば、何もしない
-      if (this.catalogUnsubscribe) {
-        console.log("[FacultyAdmin] handleSelection: 既にリスナーが登録済みのため、処理をスキップします。");
-        return;
-      }
-      // イベントが選択されたら（＝ログイン後）、リスナーをアタッチする
-      if (this.app.selectedEventId) {
-        console.log("[FacultyAdmin] handleSelection: selectedEventId が存在するため、attachListeners を呼び出します。");
-        this.attachListeners();
-      } else {
-      console.warn("[FacultyAdmin] handleSelection: selectedEventId がまだないため、リスナー登録を保留します。");
-      }
-    }
 
   attachListeners() {
     // ▼▼▼ ログ ▼▼▼
