@@ -18,8 +18,12 @@ function createSignature(list) {
 
 export class GlFacultyAdminManager {
   constructor(app) {
+    // ▼▼▼ ログ追加 ▼▼▼
+    console.log("[FacultyAdmin] constructor: 初期化が開始されました。");
     this.app = app;
     this.dom = app.dom;
+    // ▼▼▼ ログ追加 ▼▼▼
+    console.log("[FacultyAdmin] constructor: GlFacultyBuilder を作成します。");
     this.builder = new GlFacultyBuilder(this.dom);
     this.catalogUnsubscribe = null;
     this.originalFaculties = [];
@@ -30,26 +34,50 @@ export class GlFacultyAdminManager {
     this.bindDom();
     this.observeBuilder();
     this.showLoading(true);
+    // ▼▼▼ ログ追加 ▼▼▼
+    console.log("[FacultyAdmin] constructor: showLoading(true) を実行しました。");
 //    this.attachListeners();
     this.app.addSelectionListener(() => this.handleSelection());
+    // ▼▼▼ ログ追加 ▼▼▼
+    console.log("[FacultyAdmin] constructor: selectionListener を登録しました。");
   }
 
-  handleSelection() {
+    handleSelection() {
+      console.log(`[FacultyAdmin] handleSelection: 選択イベントを検知しました。 (selectedEventId: ${this.app.selectedEventId})`);
       // 既にリスナーがアタッチされていれば、何もしない
       if (this.catalogUnsubscribe) {
+        console.log("[FacultyAdmin] handleSelection: 既にリスナーが登録済みのため、処理をスキップします。");
         return;
       }
       // イベントが選択されたら（＝ログイン後）、リスナーをアタッチする
       if (this.app.selectedEventId) {
+        console.log("[FacultyAdmin] handleSelection: selectedEventId が存在するため、attachListeners を呼び出します。");
         this.attachListeners();
-      }
+      } else {
+      console.warn("[FacultyAdmin] handleSelection: selectedEventId がまだないため、リスナー登録を保留します。");
     }
 
   attachListeners() {
-    if (this.catalogUnsubscribe) return;
+    // ▼▼▼ ログ追加 ▼▼▼
+    console.log("[FacultyAdmin] attachListeners: メソッドが呼び出されました。");
+    if (this.catalogUnsubscribe){
+      console.warn("[FacultyAdmin] attachListeners: 既にリスナーが登録済みのため、処理を中断します。");
+      return;
+    }
+    console.log("[FacultyAdmin] attachListeners: onValue リスナーを glIntakeFacultyCatalogRef に登録します...");
     this.catalogUnsubscribe = onValue(glIntakeFacultyCatalogRef, (snapshot) => {
+      // ▼▼▼ ログ追加 ▼▼▼
+      console.log("[FacultyAdmin] onValue (Success): データを受信しました。applyCatalog を呼び出します。", snapshot.val());
       const value = snapshot.val() || {};
       this.applyCatalog(value);
+    },
+    (error) => {
+      // ▼▼▼ ログ追加（エラーハンドラ追加） ▼▼▼
+      console.error("[FacultyAdmin] onValue (Error): データ受信に失敗しました。", error);
+      logError("Failed to fetch faculty catalog", error);
+      this.setStatus("共通設定の読み込みに失敗しました。", "error");
+      this.showLoading(false);
+      // ▲▲▲ ログ追加（エラーハンドラ追加） ▲▲▲
     });
   }
 
@@ -90,7 +118,12 @@ export class GlFacultyAdminManager {
   }
 
   showLoading(flag) {
-    if (this.dom.glFacultyAdminLoading) {
+    // ▼▼▼ ログ追加 ▼▼▼
+    console.log(`[FacultyAdmin] showLoading: 状態を ${!flag} に切り替えます。`, {
+      loadingElement: this.dom.glFacultyAdminLoading,
+      contentElement: this.dom.glFacultyAdminContent
+    });
+      if (this.dom.glFacultyAdminLoading) {
       this.dom.glFacultyAdminLoading.hidden = !flag;
     }
     if (this.dom.glFacultyAdminContent) {
@@ -131,6 +164,8 @@ export class GlFacultyAdminManager {
   }
 
   applyCatalog(raw) {
+    // ▼▼▼ ログ追加 ▼▼▼
+    console.log("[FacultyAdmin] applyCatalog: カタログデータを適用します。showLoading(false) を実行します。");
     const faculties = normalizeFacultyList(raw);
     const meta = raw && typeof raw === "object" ? raw : {};
     this.originalFaculties = faculties;
