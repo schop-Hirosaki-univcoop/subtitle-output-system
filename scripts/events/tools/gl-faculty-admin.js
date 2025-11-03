@@ -30,10 +30,23 @@ export class GlFacultyAdminManager {
     this.bindDom();
     this.observeBuilder();
     this.showLoading(true);
-    this.attachListeners();
+//    this.attachListeners();
+    this.app.addSelectionListener(() => this.handleSelection());
   }
 
+  handleSelection() {
+      // 既にリスナーがアタッチされていれば、何もしない
+      if (this.catalogUnsubscribe) {
+        return;
+      }
+      // イベントが選択されたら（＝ログイン後）、リスナーをアタッチする
+      if (this.app.selectedEventId) {
+        this.attachListeners();
+      }
+    }
+
   attachListeners() {
+    if (this.catalogUnsubscribe) return;
     this.catalogUnsubscribe = onValue(glIntakeFacultyCatalogRef, (snapshot) => {
       const value = snapshot.val() || {};
       this.applyCatalog(value);
