@@ -628,6 +628,21 @@ import { FIREBASE_CONFIG } from "../shared/firebase-config.js";
     if (elements.eventIdInput) {
       elements.eventIdInput.value = eventId;
     }
+    
+    let catalogFaculties = []; // 学部マスターデータの格納用
+    try {
+      const catalogRef = ref(database, "glIntake/facultyCatalog");
+      const catalogSnap = await get(catalogRef);
+      if (catalogSnap.exists()) {
+        const catalogData = catalogSnap.val();
+        // gl-form/index.js 内部の parseFaculties を利用
+        catalogFaculties = parseFaculties(catalogData.faculties || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch faculty catalog:", error);
+      // カタログの取得に失敗しても、フォームの読み込みを続行
+    }
+   
     const configRef = ref(database, `glIntake/events/${eventId}`);
     const configSnap = await get(configRef);
     const config = configSnap.val() || {};
@@ -642,7 +657,8 @@ import { FIREBASE_CONFIG } from "../shared/firebase-config.js";
       showGuard("募集期間が終了しました。運営までお問い合わせください。");
       return;
     }
-    state.faculties = parseFaculties(config.faculties || []);
+//    state.faculties = parseFaculties(config.faculties || []);
+    state.faculties = catalogFaculties.length > 0 ? catalogFaculties : parseFaculties(config.faculties || []);
     const scheduleSources = [config.schedules, config.scheduleSummary, config.scheduleOptions];
     let parsedSchedules = [];
     for (const source of scheduleSources) {
