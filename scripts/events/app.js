@@ -110,6 +110,7 @@ export class EventAdminApp {
   constructor() {
     this.dom = queryDom();
     this.api = createApiClient(auth, onAuthStateChanged);
+    this.auth = auth; // Firebase auth サービスをインスタンスにアタッチ
     this.authUnsubscribe = null;
     this.currentUser = null;
     this.events = [];
@@ -141,7 +142,7 @@ export class EventAdminApp {
     this.scheduleLoadingTracker = new LoadingTracker({
       onChange: (state) => this.applyScheduleLoadingState(state)
     });
-    this.tools = new ToolCoordinator(this);
+//    this.tools = new ToolCoordinator(this);
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
     this.cleanup = this.cleanup.bind(this);
     this.eventCountNote = "";
@@ -149,6 +150,8 @@ export class EventAdminApp {
     this.applyMetaNote();
     this.chat = new EventChat(this);
     this.operatorMode = OPERATOR_MODE_TELOP;
+    // auth のアタッチ後に ToolCoordinator を初期化する
+    this.tools = new ToolCoordinator(this);
     this.backupInFlight = false;
     this.restoreInFlight = false;
     this.displayUrlCopyTimer = 0;
