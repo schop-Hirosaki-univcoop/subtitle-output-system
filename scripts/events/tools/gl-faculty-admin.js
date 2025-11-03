@@ -55,6 +55,7 @@ export class GlFacultyAdminManager {
         this.attachListeners();
       } else {
       console.warn("[FacultyAdmin] handleSelection: selectedEventId がまだないため、リスナー登録を保留します。");
+      }
     }
 
   attachListeners() {
