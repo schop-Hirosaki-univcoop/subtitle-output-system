@@ -18,6 +18,7 @@ export const PANEL_CONFIG = {
   schedules: { stage: "schedules", requireEvent: true, requireSchedule: false },
   participants: { stage: "tabs", requireEvent: true, requireSchedule: true },
   gl: { stage: "tabs", requireEvent: true, requireSchedule: false },
+  "gl-faculties": { stage: "tabs", requireEvent: false, requireSchedule: false },
   operator: { stage: "tabs", requireEvent: true, requireSchedule: true },
   dictionary: { stage: "tabs", requireEvent: false, requireSchedule: false, dictionary: true },
   pickup: { stage: "tabs", requireEvent: false, requireSchedule: false },
@@ -36,6 +37,11 @@ export const PANEL_STAGE_INFO = {
     title: "GLリストの管理",
     description:
       "GL応募フォームの設定を編集し、応募者の学部学科やシフト可否を確認しながら班割りステータスを更新できます。"
+  },
+  "gl-faculties": {
+    title: "学部・学科設定",
+    description:
+      "GL応募フォームで共通利用する学部・学科の階層構造を編集し、イベント設定に反映できます。"
   },
   operator: {
     title: "テロップ操作パネル",

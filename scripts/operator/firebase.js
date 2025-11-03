@@ -61,6 +61,7 @@ export const glIntakeEventsRef = ref(database, "glIntake/events");
 export const glIntakeSlugIndexRef = ref(database, "glIntake/slugIndex");
 const glIntakeApplicationsRootRef = ref(database, "glIntake/applications");
 const glAssignmentsRootRef = ref(database, "glAssignments");
+export const glIntakeFacultyCatalogRef = ref(database, "glIntake/facultyCatalog");
 const operatorPresenceRootRef = ref(database, "operatorPresence");
 const operatorScheduleConsensusRootRef = ref(database, "operatorPresenceConsensus");
 

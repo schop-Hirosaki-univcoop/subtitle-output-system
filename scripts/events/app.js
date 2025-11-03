@@ -2609,6 +2609,7 @@ export class EventAdminApp {
       events: this.dom.eventsModule,
       schedules: this.dom.schedulesModule,
       gl: this.dom.glPanel,
+      "gl-faculties": this.dom.glFacultyPanel,
       participants: this.dom.participantsPanel,
       operator: this.dom.operatorPanel,
       dictionary: this.dom.dictionaryPanel,

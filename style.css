@@ -5944,6 +5944,26 @@ body.sidebar-overlay-open{
   color:rgba(200, 225, 255, .6);
   margin:0;
 }
+.gl-config-meta{
+  margin:.25rem 0 .75rem;
+  font-size:.78rem;
+  color:rgba(200, 220, 245, .65);
+}
+.gl-config-actions--inline{
+  display:flex;
+  gap:.5rem;
+  flex-wrap:wrap;
+  align-items:center;
+  margin-top:.75rem;
+}
+.gl-faculty-preview{
+  margin:.4rem 0 0;
+  padding-left:1.25rem;
+  font-size:.9rem;
+  color:rgba(224, 240, 255, .85);
+}
+.gl-faculty-preview li{margin:.2rem 0;}
+.gl-faculty-preview[hidden]{display:none;}
 
 .gl-config-actions{
   display:flex;
