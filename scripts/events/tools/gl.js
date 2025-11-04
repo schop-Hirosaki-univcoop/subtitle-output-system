@@ -287,7 +287,6 @@ export class GlToolManager {
     this.eventsUnsubscribe = this.app.addEventListener((events) => this.handleEvents(events));
     this.bindDom();
     this.updateConfigVisibility();
-    this.updateFacultySummary();
   }
 
   getAvailableSchedules({ includeConfigFallback = false } = {}) {
@@ -352,22 +351,6 @@ export class GlToolManager {
           logError("Failed to copy GL form URL", error);
           this.setStatus("応募URLのコピーに失敗しました。", "error");
         });
-      });
-    }
-    if (this.dom.glFacultySyncButton) {
-      this.dom.glFacultySyncButton.addEventListener("click", () => {
-        this.useSharedFaculties();
-      });
-    }
-    if (this.dom.glFacultyOpenButton) {
-      this.dom.glFacultyOpenButton.addEventListener("click", () => {
-        try {
-          if (this.app && typeof this.app.showPanel === "function") {
-            this.app.showPanel("gl-faculties");
-          }
-        } catch (error) {
-          logError("Failed to open faculty settings", error);
-        }
       });
     }
     const tabOrder = ["config", "applications"];
@@ -468,14 +451,12 @@ export class GlToolManager {
     if (this.dom.glTeamCountInput) {
       this.dom.glTeamCountInput.value = "";
     }
-    this.updateFacultySummary();
   }
 
   resetContext() {
     this.applications = [];
     this.assignments = new Map();
     this.renderApplications();
-    this.updateFacultySummary();
   }
 
   handleEvents(events = []) {
@@ -577,7 +558,6 @@ export class GlToolManager {
     this.updateSlugPreview();
     this.refreshSchedules();
     this.renderApplications();
-    this.updateFacultySummary();
   }
 
   applySharedCatalog(raw) {
@@ -591,81 +571,10 @@ export class GlToolManager {
       updatedByName: ensureString(meta.updatedByName)
     };
     this.updateConfigVisibility();
-    this.updateFacultySummary();
   }
 
   getConfigFaculties() {
     return Array.isArray(this.config?.faculties) ? this.config.faculties : [];
-  }
-
-  updateFacultySummary() {
-    const summaryEl = this.dom.glFacultySummary;
-    const metaEl = this.dom.glFacultySharedMeta;
-    const previewEl = this.dom.glFacultyPreview;
-    const hasEvent = Boolean(this.currentEventId);
-    const eventFaculties = this.getConfigFaculties();
-    const eventCount = eventFaculties.length;
-    const sharedCount = this.sharedFaculties.length;
-    const eventSignature = createSignature(eventFaculties);
-    if (summaryEl) {
-      let message = "";
-      if (!hasEvent) {
-        message = "イベントを選択すると学部・学科リストを確認できます。";
-      } else if (!eventCount) {
-        message = sharedCount
-          ? "このイベントには学部・学科が設定されていません。共通設定を反映すると共通リストを利用できます。"
-          : "学部・学科リストは未設定です。";
-      } else {
-        message = `学部カード ${eventCount}件が設定されています。`;
-        if (sharedCount) {
-          message +=
-            eventSignature && eventSignature === this.sharedSignature
-              ? "共通設定と同じ内容です。"
-              : `共通設定（${sharedCount}件）と異なる内容が設定されています。`;
-        }
-      }
-      summaryEl.textContent = message;
-    }
-    if (metaEl) {
-      if (sharedCount) {
-        const parts = [`共通設定: ${sharedCount}件`];
-        const updatedAt = Number(this.sharedMeta.updatedAt) || 0;
-        if (updatedAt > 0) {
-          const formatted = formatDateTimeLocal(new Date(updatedAt));
-          if (formatted) {
-            parts.push(`更新: ${formatted}`);
-          }
-        }
-        const updatedBy = ensureString(this.sharedMeta.updatedByName || this.sharedMeta.updatedByUid);
-        if (updatedBy) {
-          parts.push(`更新者: ${updatedBy}`);
-        }
-        metaEl.textContent = parts.join(" ／ ");
-        metaEl.hidden = false;
-      } else {
-        metaEl.textContent = "";
-        metaEl.hidden = true;
-      }
-    }
-    if (previewEl) {
-      previewEl.innerHTML = "";
-      if (!hasEvent || !eventCount) {
-        previewEl.hidden = true;
-      } else {
-        previewEl.hidden = false;
-        const limit = 5;
-        eventFaculties.slice(0, limit).forEach((entry) => {
-          const item = document.createElement("li");
-          item.textContent = ensureString(entry?.faculty);
-          previewEl.append(item);
-        });
-        if (eventCount > limit) {
-          const item = document.createElement("li");
-          item.textContent = `ほか${eventCount - limit}件`;
-          previewEl.append(item);
-        }
-      }
-    }
   }
 
   useSharedFaculties() {
@@ -682,7 +591,6 @@ export class GlToolManager {
       this.config = {};
     }
     this.config.faculties = faculties;
-    this.updateFacultySummary();
     this.setStatus("共通設定を反映しました。必要に応じて保存してください。", "success");
   }
 
@@ -727,9 +635,6 @@ export class GlToolManager {
     }
     if (this.dom.glFilterSelect) {
       this.dom.glFilterSelect.disabled = !hasEvent;
-    }
-    if (this.dom.glFacultySyncButton) {
-      this.dom.glFacultySyncButton.disabled = !hasEvent || !this.sharedFaculties.length;
     }
   }
 
