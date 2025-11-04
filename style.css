@@ -5892,7 +5892,8 @@ body.sidebar-overlay-open{
   gap:clamp(1rem, 1.8vw, 1.4rem);
 }
 
-.gl-card-body{
+.gl-card-body,
+.gl-config-content{
   display:flex;
   flex-direction:column;
   gap:clamp(.75rem, 1.2vw, 1rem);
