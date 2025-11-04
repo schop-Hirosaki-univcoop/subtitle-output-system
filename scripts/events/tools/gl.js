@@ -860,18 +860,32 @@ export class GlToolManager {
       };
 //      addDetail("学部", entry.faculty);
 //      addDetail("学科", entry.department);
-      const academicPathText = (entry.academicPath || [])
+      const faculty = ensureString(entry.faculty);
+      
+      const academicPathParts = (entry.academicPath || [])
         .map((segment) => ensureString(segment.display) || ensureString(segment.value))
-        .filter(Boolean)
-        .join(" / "); // 例: "人文社会科学部 / 社会経営課程"
+        .filter(Boolean);
+
+      // 結合用の配列を準備
+      const fullAcademicPath = [];
+
+      // 学部情報を最初に追加
+      if (faculty) {
+        fullAcademicPath.push(faculty);
+      }
+      
+      // academicPath の情報を追加
+      fullAcademicPath.push(...academicPathParts);
+
+      // すべてを " / " で連結
+      const academicPathText = fullAcademicPath.join(" / "); 
+      // 例: "人文社会科学部 / 社会経営課程 / 〇〇コース"
 
       if (academicPathText) {
         addDetail("学部・所属", academicPathText);
       }
 
       addDetail("メール", entry.email);
-      
-      // 3. ラベルが紛らわしい「所属」を「部活・サークル」に変更
       addDetail("部活・サークル", entry.club);
       addDetail("学籍番号", entry.studentId);
       body.append(details);
