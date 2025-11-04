@@ -203,6 +203,7 @@ function normalizeApplications(snapshot = {}) {
         grade: ensureString(value.grade),
         faculty: ensureString(value.faculty),
         department: ensureString(value.department),
+        academicPath: Array.isArray(value.academicPath) ? value.academicPath : [],
         club: ensureString(value.club),
         studentId: ensureString(value.studentId),
         note: ensureString(value.note),
@@ -857,10 +858,21 @@ export class GlToolManager {
         row.append(dt, dd);
         details.append(row);
       };
-      addDetail("学部", entry.faculty);
-      addDetail("学科", entry.department);
+//      addDetail("学部", entry.faculty);
+//      addDetail("学科", entry.department);
+      const academicPathText = (entry.academicPath || [])
+        .map((segment) => ensureString(segment.display) || ensureString(segment.value))
+        .filter(Boolean)
+        .join(" / "); // 例: "人文社会科学部 / 社会経営課程"
+
+      if (academicPathText) {
+        addDetail("学部・所属", academicPathText);
+      }
+
       addDetail("メール", entry.email);
-      addDetail("所属", entry.club);
+      
+      // 3. ラベルが紛らわしい「所属」を「部活・サークル」に変更
+      addDetail("部活・サークル", entry.club);
       addDetail("学籍番号", entry.studentId);
       body.append(details);
 
