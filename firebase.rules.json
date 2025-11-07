@@ -155,13 +155,22 @@
           },
           "schedules": {
             ".validate": "!newData.isString() && !newData.isNumber() && !newData.isBoolean()",
-            "$index": {
+            /* ▼▼▼ [修正] `$index` を `$scheduleId` にリネームし、ルールをマージ ▼▼▼ */
+            "$scheduleId": {
               ".validate": "!newData.exists() || (newData.hasChildren(['id']) && newData.child('id').isString() && (!newData.child('label').exists() || newData.child('label').isString()) && (!newData.child('date').exists() || newData.child('date').isString()))",
               "id": { ".validate": "newData.isString()" },
               "label": { ".validate": "newData.isString() || !newData.exists()" },
               "date": { ".validate": "newData.isString() || !newData.exists()" },
+              "glTeamCount": {
+                ".validate": "newData.isNumber() || !newData.exists()"
+              },
+              "teams": {
+                ".validate": "(!newData.isString() && !newData.isNumber() && !newData.isBoolean()) || !newData.exists()",
+                "$teamIndex": { ".validate": "!newData.exists() || newData.isString()" }
+              },
               "$other": { ".validate": false }
             }
+            /* ▲▲▲ 修正ここまで ▲▲▲ */
           },
           "guidance": { ".validate": "newData.isString() || !newData.exists()" },
           "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
@@ -264,15 +273,18 @@
     "glAssignments": {
       "$eventId": {
         ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
-        "$glId": {
-          ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
-          ".validate": "!newData.exists() || (newData.hasChildren(['status','teamId','updatedAt']) && newData.child('status').isString() && newData.child('teamId').isString() && (newData.child('updatedAt').isNumber() || newData.child('updatedAt').val() == now) && (!newData.child('updatedByUid').exists() || newData.child('updatedByUid').isString()) && (!newData.child('updatedByName').exists() || newData.child('updatedByName').isString()))",
-          "status": { ".validate": "newData.isString() || !newData.exists()" },
-          "teamId": { ".validate": "newData.isString() || !newData.exists()" },
-          "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
-          "updatedByUid": { ".validate": "newData.isString() || !newData.exists()" },
-          "updatedByName": { ".validate": "newData.isString() || !newData.exists()" },
-          "$other": { ".validate": false }
+        /* ▼▼▼ [修正] 班割当を日程($scheduleId)ごとに管理 (ここは変更なし) ▼▼▼ */
+        "$scheduleId": {
+          "$glId": {
+            ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+            ".validate": "!newData.exists() || (newData.hasChildren(['status','teamId','updatedAt']) && newData.child('status').isString() && newData.child('teamId').isString() && (newData.child('updatedAt').isNumber() || newData.child('updatedAt').val() == now) && (!newData.child('updatedByUid').exists() || newData.child('updatedByUid').isString()) && (!newData.child('updatedByName').exists() || newData.child('updatedByName').isString()))",
+            "status": { ".validate": "newData.isString() || !newData.exists()" },
+            "teamId": { ".validate": "newData.isString() || !newData.exists()" },
+            "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
+            "updatedByUid": { ".validate": "newData.isString() || !newData.exists()" },
+            "updatedByName": { ".validate": "newData.isString() || !newData.exists()" },
+            "$other": { ".validate": false }
+          }
         }
       }
     },
@@ -435,6 +447,13 @@
             "participantCount": { ".validate": "newData.isNumber() || !newData.exists()" },
             "createdAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
             "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
+            /* ▼▼▼ [修正] 日程ごとのGL班数を許可 (ここは前回から正) ▼▼▼ */
+            "glTeamCount": { ".validate": "newData.isNumber() || !newData.exists()" },
+            "teams": {
+              ".validate": "(!newData.isString() && !newData.isNumber() && !newData.isBoolean()) || !newData.exists()",
+              "$teamIndex": { ".validate": "!newData.exists() || newData.isString()" }
+            },
+            /* ▲▲▲ 修正ここまで ▲▲▲ */
             "$other": { ".validate": false }
           }
         }
