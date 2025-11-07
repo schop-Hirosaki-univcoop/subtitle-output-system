@@ -146,7 +146,7 @@ export function queryDom() {
     glFacultySyncButton: document.getElementById("gl-faculty-sync"),
     glFacultyOpenButton: document.getElementById("gl-faculty-open"),
     glFilterSelect: document.getElementById("gl-filter"),
-    glApplicationList: document.getElementById("gl-application-list"),
+    glApplicationBoard: document.getElementById("gl-application-board"),
     glApplicationEventNote: document.getElementById("gl-application-event-note"),
     glApplicationEmpty: document.getElementById("gl-application-empty"),
     glApplicationLoading: document.getElementById("gl-application-loading"),
