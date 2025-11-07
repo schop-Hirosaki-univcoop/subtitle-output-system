@@ -523,6 +523,16 @@
                                 <p class="gl-config-hint">班は「1班」「2班」のように自動生成されます。欠席・運営は自動で含まれます。</p>
                               </div>
                             </div>
+                            <div class="gl-config-row gl-config-row--schedule-teams">
+                              <span class="gl-config-label">日程ごとの班数</span>
+                              <div class="gl-config-control gl-config-control--schedule-teams">
+                                <p class="gl-config-hint">空欄の場合は上記のデフォルト班数を利用します。</p>
+                                <div id="gl-schedule-teams" class="gl-schedule-teams">
+                                  <p id="gl-schedule-teams-empty" class="gl-schedule-teams__empty">日程がありません。日程を追加するとここに表示されます。</p>
+                                  <div id="gl-schedule-teams-body" class="gl-schedule-teams__list"></div>
+                                </div>
+                              </div>
+                            </div>
                             <div class="gl-config-actions">
                               <button id="gl-config-save" class="btn btn-primary btn-sm" type="button">設定を保存</button>
                               <button id="gl-config-copy" class="btn btn-ghost btn-sm" type="button" disabled>応募URLをコピー</button>
@@ -531,6 +541,29 @@
                           </div>
                         </div>
                       </section>
+                      <template id="gl-schedule-team-template">
+                        <div class="gl-schedule-team" data-schedule-id="">
+                          <div class="gl-schedule-team__header">
+                            <div class="gl-schedule-team__title">
+                              <span class="gl-schedule-team__label" data-role="schedule-label"></span>
+                              <span class="gl-schedule-team__date" data-role="schedule-date"></span>
+                            </div>
+                            <label class="gl-schedule-team__field">
+                              <span class="gl-schedule-team__field-label">班の数</span>
+                              <input
+                                class="input input--dense gl-schedule-team__input"
+                                type="number"
+                                min="0"
+                                max="50"
+                                step="1"
+                                inputmode="numeric"
+                                data-schedule-team-input
+                              >
+                            </label>
+                          </div>
+                          <p class="gl-schedule-team__note" data-role="schedule-note"></p>
+                        </div>
+                      </template>
                     </div>
                   </section>
                   <section
@@ -558,12 +591,54 @@
                         </div>
                         <div class="gl-card-body">
                           <p id="gl-application-event-note" class="gl-card-note">イベントを選択してください。</p>
-                          <p id="gl-application-empty" class="gl-card-note" hidden>応募はまだありません。フォームを公開し、GLからの応募をお待ちください。</p>
+                          <p id="gl-application-empty" class="gl-card-note" hidden>該当する応募はありません。フォームの公開や条件を確認してください。</p>
                           <div id="gl-application-loading" class="hub-loading" role="status" hidden>
                             <span class="spinner" aria-hidden="true"></span>
                             <span>応募情報を読み込んでいます…</span>
                           </div>
-                          <ul id="gl-application-list" class="gl-application-list" aria-live="polite"></ul>
+                          <div id="gl-application-views" class="gl-application-views" hidden>
+                            <div id="gl-application-view-tabs" class="gl-application-view-tabs" role="tablist" aria-label="応募一覧の表示切替">
+                              <button
+                                id="gl-view-schedule"
+                                class="gl-application-view-tab is-active"
+                                type="button"
+                                role="tab"
+                                aria-selected="true"
+                                aria-controls="gl-application-view-schedule"
+                              >
+                                日程別
+                              </button>
+                              <button
+                                id="gl-view-applicant"
+                                class="gl-application-view-tab"
+                                type="button"
+                                role="tab"
+                                aria-selected="false"
+                                aria-controls="gl-application-view-applicant"
+                                tabindex="-1"
+                              >
+                                応募者別
+                              </button>
+                            </div>
+                            <section
+                              id="gl-application-view-schedule"
+                              class="gl-application-view"
+                              role="tabpanel"
+                              aria-labelledby="gl-view-schedule"
+                            >
+                              <div id="gl-application-board" class="gl-shift-board" aria-live="polite"></div>
+                            </section>
+                            <section
+                              id="gl-application-view-applicant"
+                              class="gl-application-view"
+                              role="tabpanel"
+                              aria-labelledby="gl-view-applicant"
+                              hidden
+                              aria-hidden="true"
+                            >
+                              <ul id="gl-application-list" class="gl-applicant-list"></ul>
+                            </section>
+                          </div>
                         </div>
                       </section>
                     </div>
