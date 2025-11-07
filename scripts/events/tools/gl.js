@@ -107,19 +107,30 @@ function normalizeScheduleTeamConfig(raw, fallback = []) {
     return {};
   }
   const normalized = {};
+  const fallbackTeams = sanitizeTeamList(fallback);
   Object.entries(raw).forEach(([scheduleId, value]) => {
     const id = ensureString(scheduleId);
     if (!id) {
       return;
     }
-    const teams = sanitizeTeamList(value);
-    const teamCountRaw = typeof value === "object" && value !== null ? value.teamCount : null;
-    const teamCount = Number.isFinite(teamCountRaw) ? Math.max(0, Math.min(MAX_TEAM_COUNT, Math.floor(teamCountRaw))) : teams.length;
-    if (!teams.length && !teamCount) {
+    const source = value && typeof value === "object" ? value : {};
+    const hasExplicitCount = Object.prototype.hasOwnProperty.call(source, "teamCount") && Number.isFinite(source.teamCount);
+    const teamCountValue = hasExplicitCount ? Math.max(0, Math.min(MAX_TEAM_COUNT, Math.floor(Number(source.teamCount)))) : null;
+    const teamsFromSource = sanitizeTeamList(source.teams || value);
+    let teams = teamsFromSource.slice();
+    if (!teams.length) {
+      if (hasExplicitCount) {
+        teams = buildSequentialTeams(teamCountValue);
+      } else if (fallbackTeams.length) {
+        teams = fallbackTeams.slice();
+      }
+    }
+    if (!teams.length && !hasExplicitCount) {
       return;
     }
+    const teamCount = hasExplicitCount ? teamCountValue : deriveTeamCountFromConfig(teams);
     normalized[id] = {
-      teams: teams.length ? teams : sanitizeTeamList(fallback),
+      teams,
       teamCount
     };
   });
@@ -135,9 +146,15 @@ function getScheduleTeams(config, scheduleId) {
   const scheduleTeams = config?.scheduleTeams && typeof config.scheduleTeams === "object"
     ? config.scheduleTeams[id]
     : null;
-  const resolved = sanitizeTeamList(scheduleTeams || defaultTeams);
-  if (resolved.length) {
-    return resolved;
+  const explicitTeams = sanitizeTeamList(scheduleTeams?.teams || scheduleTeams);
+  if (explicitTeams.length) {
+    return explicitTeams;
+  }
+  const teamCount = Number.isFinite(scheduleTeams?.teamCount)
+    ? Math.max(0, Math.min(MAX_TEAM_COUNT, Math.floor(scheduleTeams.teamCount)))
+    : null;
+  if (teamCount !== null) {
+    return buildSequentialTeams(teamCount);
   }
   return defaultTeams;
 }
@@ -325,33 +342,37 @@ function normalizeAssignmentSnapshot(snapshot = {}) {
   if (!snapshot || typeof snapshot !== "object") {
     return map;
   }
-  Object.entries(snapshot).forEach(([glId, value]) => {
-    if (!glId || !value || typeof value !== "object") {
+  const ensureEntry = (glId) => {
+    const id = ensureString(glId);
+    if (!id) {
+      return null;
+    }
+    if (!map.has(id)) {
+      map.set(id, { fallback: null, schedules: new Map() });
+    }
+    return map.get(id) || null;
+  };
+
+  Object.entries(snapshot).forEach(([outerKey, outerValue]) => {
+    if (!outerValue || typeof outerValue !== "object") {
       return;
     }
-    const schedules = new Map();
-    const fallback = normalizeAssignmentEntry(value);
-    const scheduleSource = value?.schedules && typeof value.schedules === "object"
-      ? value.schedules
-      : value;
-    const excludedKeys = new Set(["status", "teamId", "updatedAt", "updatedByUid", "updatedByName", "schedules"]);
-    Object.entries(scheduleSource || {}).forEach(([scheduleId, entry]) => {
-      if (excludedKeys.has(scheduleId)) {
+    const legacyEntry = normalizeAssignmentEntry(outerValue);
+    if (legacyEntry) {
+      const entry = ensureEntry(outerKey);
+      if (!entry) {
         return;
       }
-      const normalized = normalizeAssignmentEntry(entry);
-      if (!normalized) {
-        return;
-      }
-      const key = ensureString(scheduleId);
-      if (!key) {
-        return;
-      }
-      schedules.set(key, normalized);
-    });
-    if (!schedules.size && value?.schedules && typeof value.schedules === "object") {
-      Object.entries(value.schedules).forEach(([scheduleId, entry]) => {
-        const normalized = normalizeAssignmentEntry(entry);
+      entry.fallback = legacyEntry;
+      const excludedKeys = new Set(["status", "teamId", "updatedAt", "updatedByUid", "updatedByName", "schedules"]);
+      const scheduleSource = outerValue?.schedules && typeof outerValue.schedules === "object"
+        ? outerValue.schedules
+        : outerValue;
+      Object.entries(scheduleSource || {}).forEach(([scheduleId, scheduleValue]) => {
+        if (excludedKeys.has(scheduleId)) {
+          return;
+        }
+        const normalized = normalizeAssignmentEntry(scheduleValue);
         if (!normalized) {
           return;
         }
@@ -359,12 +380,38 @@ function normalizeAssignmentSnapshot(snapshot = {}) {
         if (!key) {
           return;
         }
-        schedules.set(key, normalized);
+        entry.schedules.set(key, normalized);
       });
+      if (outerValue?.schedules && typeof outerValue.schedules === "object") {
+        Object.entries(outerValue.schedules).forEach(([scheduleId, scheduleValue]) => {
+          const normalized = normalizeAssignmentEntry(scheduleValue);
+          if (!normalized) {
+            return;
+          }
+          const key = ensureString(scheduleId);
+          if (!key) {
+            return;
+          }
+          entry.schedules.set(key, normalized);
+        });
+      }
+      return;
     }
-    map.set(glId, {
-      fallback: fallback || null,
-      schedules
+
+    const scheduleId = ensureString(outerKey);
+    if (!scheduleId) {
+      return;
+    }
+    Object.entries(outerValue).forEach(([glId, assignmentValue]) => {
+      const normalized = normalizeAssignmentEntry(assignmentValue);
+      if (!normalized) {
+        return;
+      }
+      const entry = ensureEntry(glId);
+      if (!entry) {
+        return;
+      }
+      entry.schedules.set(scheduleId, normalized);
     });
   });
   return map;
@@ -469,6 +516,7 @@ export class GlToolManager {
     this.applications = [];
     this.assignments = new Map();
     this.filter = "all";
+    this.applicationView = "schedule";
     this.loading = false;
     this.scheduleSyncPending = false;
     this.configUnsubscribe = null;
@@ -532,6 +580,7 @@ export class GlToolManager {
   refreshSchedules() {
     this.currentSchedules = this.getAvailableSchedules({ includeConfigFallback: true });
     this.syncScheduleSummaryCache();
+    this.renderScheduleTeamControls();
   }
 
   bindDom() {
@@ -549,6 +598,20 @@ export class GlToolManager {
           logError("Failed to copy GL form URL", error);
           this.setStatus("応募URLのコピーに失敗しました。", "error");
         });
+      });
+    }
+    if (this.dom.glTeamCountInput) {
+      this.dom.glTeamCountInput.addEventListener("change", () => {
+        this.handleDefaultTeamCountChange();
+      });
+    }
+    if (this.dom.glScheduleTeamsList) {
+      this.dom.glScheduleTeamsList.addEventListener("change", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement) || !target.matches("[data-schedule-team-input]")) {
+          return;
+        }
+        this.handleScheduleTeamInput(target);
       });
     }
     const tabOrder = ["config", "applications"];
@@ -590,13 +653,42 @@ export class GlToolManager {
         this.renderApplications();
       });
     }
-    if (this.dom.glApplicationBoard) {
-      this.dom.glApplicationBoard.addEventListener("change", (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLSelectElement)) {
+    const viewOrder = ["schedule", "applicant"];
+    const getViewButton = (key) =>
+      key === "applicant" ? this.dom.glApplicationViewApplicantButton : this.dom.glApplicationViewScheduleButton;
+    viewOrder.forEach((key) => {
+      const button = getViewButton(key);
+      if (!button) {
+        return;
+      }
+      button.addEventListener("click", () => {
+        this.setActiveApplicationView(key);
+        button.focus();
+      });
+      button.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
           return;
         }
-        if (!target.matches("[data-gl-assignment]")) {
+        event.preventDefault();
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        let index = viewOrder.indexOf(key);
+        for (let step = 0; step < viewOrder.length; step += 1) {
+          index = (index + direction + viewOrder.length) % viewOrder.length;
+          const targetKey = viewOrder[index];
+          const targetButton = getViewButton(targetKey);
+          if (targetButton && !targetButton.disabled) {
+            targetButton.focus();
+            this.setActiveApplicationView(targetKey);
+            break;
+          }
+        }
+      });
+    });
+    this.setActiveApplicationView(this.applicationView);
+    if (this.dom.glApplicationViews) {
+      this.dom.glApplicationViews.addEventListener("change", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLSelectElement) || !target.matches("[data-gl-assignment]")) {
           return;
         }
         const item = target.closest("[data-gl-id][data-schedule-id]");
@@ -635,6 +727,327 @@ export class GlToolManager {
     });
   }
 
+  setActiveApplicationView(view) {
+    const normalized = view === "applicant" ? "applicant" : "schedule";
+    this.applicationView = normalized;
+    const entries = [
+      {
+        key: "schedule",
+        button: this.dom.glApplicationViewScheduleButton,
+        panel: this.dom.glApplicationViewSchedulePanel
+      },
+      {
+        key: "applicant",
+        button: this.dom.glApplicationViewApplicantButton,
+        panel: this.dom.glApplicationViewApplicantPanel
+      }
+    ];
+    entries.forEach(({ key, button, panel }) => {
+      const isActive = key === normalized;
+      if (button) {
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
+        button.setAttribute("tabindex", isActive ? "0" : "-1");
+      }
+      if (panel) {
+        panel.hidden = !isActive;
+        panel.setAttribute("aria-hidden", isActive ? "false" : "true");
+      }
+    });
+    this.renderApplications();
+  }
+
+  getDefaultTeamCountPreview() {
+    const rawValue = ensureString(this.dom.glTeamCountInput?.value).trim();
+    if (!rawValue) {
+      return deriveTeamCountFromConfig(this.config?.defaultTeams || this.config?.teams || []);
+    }
+    const { count, error } = parseTeamCount(rawValue);
+    if (error) {
+      return deriveTeamCountFromConfig(this.config?.defaultTeams || this.config?.teams || []);
+    }
+    return count;
+  }
+
+  handleDefaultTeamCountChange() {
+    if (!this.dom.glTeamCountInput) {
+      return;
+    }
+    const rawValue = ensureString(this.dom.glTeamCountInput.value).trim();
+    if (!this.config || typeof this.config !== "object") {
+      this.config = {};
+    }
+    if (!rawValue) {
+      this.config.defaultTeams = [];
+      this.config.teams = [];
+      this.renderScheduleTeamControls();
+      this.renderApplications();
+      return;
+    }
+    const { count, error } = parseTeamCount(rawValue);
+    if (error) {
+      this.setStatus(error, "error");
+      return;
+    }
+    const teams = buildSequentialTeams(count);
+    this.config.defaultTeams = teams;
+    this.config.teams = teams;
+    this.renderScheduleTeamControls();
+    this.renderApplications();
+  }
+
+  setScheduleTeamOverride(scheduleId, count) {
+    if (!this.config || typeof this.config !== "object") {
+      this.config = {};
+    }
+    if (!this.config.scheduleTeams || typeof this.config.scheduleTeams !== "object") {
+      this.config.scheduleTeams = {};
+    }
+    this.config.scheduleTeams[scheduleId] = {
+      teams: buildSequentialTeams(count),
+      teamCount: count
+    };
+  }
+
+  handleScheduleTeamInput(input) {
+    const wrapper = input.closest("[data-schedule-id]");
+    const scheduleId = ensureString(wrapper?.dataset.scheduleId);
+    if (!scheduleId) {
+      return;
+    }
+    const rawValue = ensureString(input.value).trim();
+    if (!rawValue) {
+      if (this.config && this.config.scheduleTeams && typeof this.config.scheduleTeams === "object") {
+        delete this.config.scheduleTeams[scheduleId];
+      }
+      input.value = "";
+      input.dataset.previousValue = "";
+      this.updateScheduleTeamNote(wrapper, scheduleId);
+      this.renderApplications();
+      return;
+    }
+    const { count, error } = parseTeamCount(rawValue);
+    if (error) {
+      input.setCustomValidity(error);
+      input.reportValidity();
+      this.setStatus(error, "error");
+      const previous = ensureString(input.dataset.previousValue);
+      if (previous) {
+        input.value = previous;
+      } else {
+        input.value = "";
+      }
+      return;
+    }
+    input.setCustomValidity("");
+    input.value = String(count);
+    input.dataset.previousValue = String(count);
+    this.setScheduleTeamOverride(scheduleId, count);
+    this.updateScheduleTeamNote(wrapper, scheduleId);
+    this.renderApplications();
+  }
+
+  updateScheduleTeamNote(element, scheduleId) {
+    if (!element) {
+      return;
+    }
+    const defaultCount = this.getDefaultTeamCountPreview();
+    const note = element.querySelector('[data-role="schedule-note"]');
+    const input = element.querySelector('[data-schedule-team-input]');
+    if (input instanceof HTMLInputElement) {
+      input.placeholder = defaultCount > 0 ? `${defaultCount}` : "";
+    }
+    const scheduleTeams = this.config?.scheduleTeams && typeof this.config.scheduleTeams === "object"
+      ? this.config.scheduleTeams
+      : {};
+    const hasOverride = Object.prototype.hasOwnProperty.call(scheduleTeams, scheduleId);
+    const entry = hasOverride ? scheduleTeams[scheduleId] : null;
+    let overrideCount = null;
+    if (entry) {
+      if (Number.isFinite(entry?.teamCount)) {
+        overrideCount = Math.max(0, Math.min(MAX_TEAM_COUNT, Math.floor(Number(entry.teamCount))));
+      } else if (Array.isArray(entry?.teams)) {
+        overrideCount = deriveTeamCountFromConfig(entry.teams);
+      }
+    }
+    let message = "";
+    if (Number.isFinite(overrideCount)) {
+      if (overrideCount > 0) {
+        message = `${overrideCount}班を自動生成します。`;
+      } else {
+        message = "この日程では班を作成しません。";
+      }
+    } else if (defaultCount > 0) {
+      message = `未入力の場合は${defaultCount}班で自動生成されます。`;
+    } else {
+      message = "未入力の場合は班を作成しません。";
+    }
+    if (note) {
+      note.textContent = message;
+    }
+  }
+
+  createScheduleTeamRowElement() {
+    const template = this.dom.glScheduleTeamTemplate;
+    if (template?.content?.firstElementChild) {
+      return template.content.firstElementChild.cloneNode(true);
+    }
+    const wrapper = document.createElement("div");
+    wrapper.className = "gl-schedule-team";
+    const header = document.createElement("div");
+    header.className = "gl-schedule-team__header";
+    const title = document.createElement("div");
+    title.className = "gl-schedule-team__title";
+    const label = document.createElement("span");
+    label.className = "gl-schedule-team__label";
+    label.dataset.role = "schedule-label";
+    const date = document.createElement("span");
+    date.className = "gl-schedule-team__date";
+    date.dataset.role = "schedule-date";
+    title.append(label, date);
+    const field = document.createElement("label");
+    field.className = "gl-schedule-team__field";
+    const fieldLabel = document.createElement("span");
+    fieldLabel.className = "gl-schedule-team__field-label";
+    fieldLabel.textContent = "班の数";
+    const input = document.createElement("input");
+    input.className = "input input--dense gl-schedule-team__input";
+    input.type = "number";
+    input.min = "0";
+    input.max = String(MAX_TEAM_COUNT);
+    input.step = "1";
+    input.inputMode = "numeric";
+    input.dataset.scheduleTeamInput = "true";
+    field.append(fieldLabel, input);
+    header.append(title, field);
+    const note = document.createElement("p");
+    note.className = "gl-schedule-team__note";
+    note.dataset.role = "schedule-note";
+    wrapper.append(header, note);
+    return wrapper;
+  }
+
+  renderScheduleTeamControls() {
+    const container = this.dom.glScheduleTeamsList;
+    const empty = this.dom.glScheduleTeamsEmpty;
+    if (!container) {
+      return;
+    }
+    container.innerHTML = "";
+    const schedules = buildRenderableSchedules(
+      this.currentSchedules,
+      this.config?.schedules || [],
+      this.applications
+    );
+    if (!schedules.length) {
+      container.hidden = true;
+      if (empty) {
+        empty.hidden = false;
+      }
+      return;
+    }
+    container.hidden = false;
+    if (empty) {
+      empty.hidden = true;
+    }
+    const fragment = document.createDocumentFragment();
+    const scheduleTeams = this.config?.scheduleTeams && typeof this.config.scheduleTeams === "object"
+      ? this.config.scheduleTeams
+      : {};
+    schedules.forEach((schedule) => {
+      const element = this.createScheduleTeamRowElement();
+      element.dataset.scheduleId = ensureString(schedule.id);
+      const labelEl = element.querySelector('[data-role="schedule-label"]');
+      if (labelEl) {
+        labelEl.textContent = ensureString(schedule.label) || ensureString(schedule.date) || schedule.id || "日程";
+      }
+      const dateEl = element.querySelector('[data-role="schedule-date"]');
+      if (dateEl) {
+        const dateText = ensureString(schedule.date);
+        dateEl.textContent = dateText;
+        dateEl.hidden = !dateText;
+      }
+      const input = element.querySelector('[data-schedule-team-input]');
+      if (input instanceof HTMLInputElement) {
+        input.value = "";
+        input.dataset.previousValue = "";
+        const hasOverride = Object.prototype.hasOwnProperty.call(scheduleTeams, schedule.id);
+        const entry = hasOverride ? scheduleTeams[schedule.id] : null;
+        let overrideCount = null;
+        if (entry) {
+          if (Number.isFinite(entry?.teamCount)) {
+            overrideCount = Math.max(0, Math.min(MAX_TEAM_COUNT, Math.floor(Number(entry.teamCount))));
+          } else if (Array.isArray(entry?.teams)) {
+            overrideCount = deriveTeamCountFromConfig(entry.teams);
+          }
+        }
+        if (Number.isFinite(overrideCount)) {
+          input.value = String(overrideCount);
+          input.dataset.previousValue = String(overrideCount);
+        }
+      }
+      fragment.append(element);
+      this.updateScheduleTeamNote(element, schedule.id);
+    });
+    container.append(fragment);
+  }
+
+  collectScheduleTeamSettings(defaultTeams = []) {
+    const container = this.dom.glScheduleTeamsList;
+    if (!container) {
+      return {};
+    }
+    const inputs = Array.from(container.querySelectorAll("[data-schedule-team-input]"));
+    const overrides = {};
+    const seen = new Set();
+    let firstInvalid = null;
+    inputs.forEach((element) => {
+      if (!(element instanceof HTMLInputElement)) {
+        return;
+      }
+      const wrapper = element.closest("[data-schedule-id]");
+      const scheduleId = ensureString(wrapper?.dataset.scheduleId);
+      if (!scheduleId) {
+        return;
+      }
+      seen.add(scheduleId);
+      const rawValue = ensureString(element.value).trim();
+      if (!rawValue) {
+        element.setCustomValidity("");
+        return;
+      }
+      const { count, error } = parseTeamCount(rawValue);
+      if (error) {
+        element.setCustomValidity(error);
+        element.reportValidity();
+        if (!firstInvalid) {
+          firstInvalid = element;
+        }
+        return;
+      }
+      element.setCustomValidity("");
+      overrides[scheduleId] = {
+        teams: buildSequentialTeams(count),
+        teamCount: count
+      };
+    });
+    if (firstInvalid) {
+      this.setStatus(firstInvalid.validationMessage || "班の数を確認してください。", "error");
+      firstInvalid.focus();
+      return null;
+    }
+    const existing = this.config?.scheduleTeams && typeof this.config.scheduleTeams === "object"
+      ? this.config.scheduleTeams
+      : {};
+    Object.entries(existing).forEach(([scheduleId, value]) => {
+      if (seen.has(scheduleId)) {
+        return;
+      }
+      overrides[scheduleId] = value;
+    });
+    return normalizeScheduleTeamConfig(overrides, defaultTeams);
+  }
+
   resetFlowState() {
     this.detachListeners();
     this.currentEventId = "";
@@ -648,6 +1061,7 @@ export class GlToolManager {
     this.updateConfigVisibility();
     this.setActiveTab("config");
     this.renderApplications();
+    this.renderScheduleTeamControls();
     if (this.dom.glTeamCountInput) {
       this.dom.glTeamCountInput.value = "";
     }
@@ -657,6 +1071,7 @@ export class GlToolManager {
     this.applications = [];
     this.assignments = new Map();
     this.renderApplications();
+    this.renderScheduleTeamControls();
   }
 
   handleEvents(events = []) {
@@ -840,6 +1255,12 @@ export class GlToolManager {
     if (this.dom.glFilterSelect) {
       this.dom.glFilterSelect.disabled = !hasEvent;
     }
+    if (this.dom.glApplicationViewScheduleButton) {
+      this.dom.glApplicationViewScheduleButton.disabled = !hasEvent;
+    }
+    if (this.dom.glApplicationViewApplicantButton) {
+      this.dom.glApplicationViewApplicantButton.disabled = !hasEvent;
+    }
   }
 
   getDefaultSlug() {
@@ -890,7 +1311,10 @@ export class GlToolManager {
     this.config.faculties = faculties;
     this.config.defaultTeams = teams;
     this.config.teams = teams;
-    const scheduleTeams = normalizeScheduleTeamConfig(this.config.scheduleTeams || {}, teams);
+    const scheduleTeams = this.collectScheduleTeamSettings(teams);
+    if (scheduleTeams === null) {
+      return;
+    }
     this.config.scheduleTeams = scheduleTeams;
     const configPayload = {
       slug,
@@ -986,10 +1410,14 @@ export class GlToolManager {
 
   renderApplications() {
     const board = this.dom.glApplicationBoard;
-    if (!board) {
-      return;
+    const list = this.dom.glApplicationList;
+    const viewsContainer = this.dom.glApplicationViews;
+    if (board) {
+      board.innerHTML = "";
     }
-    board.innerHTML = "";
+    if (list) {
+      list.innerHTML = "";
+    }
     const hasEvent = Boolean(this.currentEventId);
     if (this.dom.glApplicationEventNote) {
       this.dom.glApplicationEventNote.hidden = hasEvent;
@@ -1001,10 +1429,16 @@ export class GlToolManager {
       if (this.dom.glApplicationLoading) {
         this.dom.glApplicationLoading.hidden = true;
       }
+      if (viewsContainer) {
+        viewsContainer.hidden = true;
+      }
       return;
     }
     if (this.dom.glApplicationLoading) {
       this.dom.glApplicationLoading.hidden = !this.loading;
+    }
+    if (viewsContainer) {
+      viewsContainer.hidden = this.loading;
     }
     if (this.loading) {
       if (this.dom.glApplicationEmpty) {
@@ -1030,10 +1464,30 @@ export class GlToolManager {
         return matchesFilter(bucketKey);
       });
     });
+    const scheduleResult = this.renderScheduleBoard(schedules, filteredApplications, matchesFilter);
+    const applicantResult = this.renderApplicantList(schedules, filteredApplications, matchesFilter);
+    if (viewsContainer) {
+      viewsContainer.hidden = false;
+    }
+    if (this.dom.glApplicationEmpty) {
+      const activeView = this.applicationView === "applicant" ? "applicant" : "schedule";
+      const shouldShowEmpty = activeView === "applicant"
+        ? applicantResult.visibleCount === 0
+        : scheduleResult.visibleCount === 0;
+      this.dom.glApplicationEmpty.hidden = !shouldShowEmpty;
+    }
+  }
+
+  renderScheduleBoard(schedules, applications, matchesFilter) {
+    const board = this.dom.glApplicationBoard;
+    if (!board) {
+      return { visibleCount: 0 };
+    }
+    board.innerHTML = "";
     const fragment = document.createDocumentFragment();
     let totalVisibleEntries = 0;
     schedules.forEach((schedule) => {
-      const section = this.buildScheduleSection(schedule, filteredApplications, matchesFilter);
+      const section = this.buildScheduleSection(schedule, applications, matchesFilter);
       if (!section) {
         return;
       }
@@ -1041,10 +1495,216 @@ export class GlToolManager {
       totalVisibleEntries += section.visibleCount;
     });
     board.append(fragment);
-    if (this.dom.glApplicationEmpty) {
-      const shouldShowEmpty = !this.loading && (!filteredApplications.length || totalVisibleEntries === 0);
-      this.dom.glApplicationEmpty.hidden = !shouldShowEmpty;
+    return { visibleCount: totalVisibleEntries };
+  }
+
+  renderApplicantList(schedules, applications, matchesFilter) {
+    const list = this.dom.glApplicationList;
+    if (!list) {
+      return { visibleCount: 0 };
     }
+    list.innerHTML = "";
+    const fragment = document.createDocumentFragment();
+    applications.forEach((application) => {
+      const card = this.createApplicantCard({ application, schedules, matchesFilter });
+      if (card) {
+        fragment.append(card);
+      }
+    });
+    list.append(fragment);
+    return { visibleCount: applications.length };
+  }
+
+  createApplicantCard({ application, schedules, matchesFilter }) {
+    if (!application) {
+      return null;
+    }
+    const scheduleEntries = Array.isArray(schedules) ? schedules : [];
+    const item = document.createElement("li");
+    item.className = "gl-applicant-card";
+    item.dataset.glId = ensureString(application.id);
+
+    const header = document.createElement("header");
+    header.className = "gl-applicant-card__header";
+    const identity = document.createElement("div");
+    identity.className = "gl-applicant-card__identity";
+    const nameEl = document.createElement("span");
+    nameEl.className = "gl-applicant-card__name";
+    nameEl.textContent = ensureString(application.name) || "(無記入)";
+    identity.append(nameEl);
+    if (application.phonetic) {
+      const phoneticEl = document.createElement("span");
+      phoneticEl.className = "gl-applicant-card__phonetic";
+      phoneticEl.textContent = application.phonetic;
+      identity.append(phoneticEl);
+    }
+    header.append(identity);
+    if (application.grade) {
+      const gradeEl = document.createElement("span");
+      gradeEl.className = "gl-applicant-card__grade";
+      gradeEl.textContent = application.grade;
+      header.append(gradeEl);
+    }
+    item.append(header);
+
+    const infoList = document.createElement("ul");
+    infoList.className = "gl-applicant-card__info";
+    const addInfo = (label, value) => {
+      if (!value) {
+        return;
+      }
+      const li = document.createElement("li");
+      li.className = "gl-applicant-card__info-item";
+      const labelEl = document.createElement("span");
+      labelEl.className = "gl-applicant-card__info-label";
+      labelEl.textContent = label;
+      const valueEl = document.createElement("span");
+      valueEl.className = "gl-applicant-card__info-value";
+      valueEl.textContent = value;
+      li.append(labelEl, valueEl);
+      infoList.append(li);
+    };
+    const faculty = ensureString(application.faculty);
+    const academicPathParts = (application.academicPath || [])
+      .map((segment) => ensureString(segment.display) || ensureString(segment.value))
+      .filter(Boolean);
+    const fullAcademicPath = [];
+    if (faculty) {
+      fullAcademicPath.push(faculty);
+    }
+    fullAcademicPath.push(...academicPathParts);
+    const academicPathText = fullAcademicPath.join(" / ");
+    if (academicPathText) {
+      addInfo("所属", academicPathText);
+    }
+    addInfo("メール", ensureString(application.email));
+    addInfo("サークル", ensureString(application.club));
+    addInfo("学籍番号", ensureString(application.studentId));
+    if (infoList.children.length) {
+      item.append(infoList);
+    }
+
+    if (application.note) {
+      const note = document.createElement("p");
+      note.className = "gl-applicant-card__note";
+      note.textContent = application.note;
+      item.append(note);
+    }
+
+    const scheduleList = document.createElement("ul");
+    scheduleList.className = "gl-applicant-schedules";
+    if (!scheduleEntries.length) {
+      const empty = document.createElement("li");
+      empty.className = "gl-applicant-schedule gl-applicant-schedule--empty";
+      empty.textContent = "日程がまだ設定されていません。";
+      scheduleList.append(empty);
+    } else {
+      scheduleEntries.forEach((schedule) => {
+        const assignment = this.getAssignmentForSchedule(application.id, schedule.id);
+        const assignmentValue = resolveAssignmentValue(assignment);
+        const available = isApplicantAvailableForSchedule(application, schedule.id);
+        const teams = getScheduleTeams(this.config, schedule.id);
+        const row = this.createApplicantScheduleRow({
+          application,
+          schedule,
+          assignment,
+          assignmentValue,
+          available,
+          teams,
+          matchesFilter
+        });
+        scheduleList.append(row);
+      });
+    }
+    item.append(scheduleList);
+    return item;
+  }
+
+  createApplicantScheduleRow({
+    application,
+    schedule,
+    assignment,
+    assignmentValue,
+    available,
+    teams,
+    matchesFilter
+  }) {
+    const row = document.createElement("li");
+    row.className = "gl-applicant-schedule";
+    row.dataset.glId = ensureString(application.id);
+    row.dataset.scheduleId = ensureString(schedule.id);
+    const bucketKey = this.resolveAssignmentBucket(assignmentValue, available);
+    row.dataset.bucket = bucketKey;
+    row.dataset.matchesFilter = matchesFilter(bucketKey) ? "true" : "false";
+    if (assignmentValue === ASSIGNMENT_VALUE_ABSENT) {
+      row.dataset.assignmentStatus = "absent";
+    } else if (assignmentValue === ASSIGNMENT_VALUE_STAFF) {
+      row.dataset.assignmentStatus = "staff";
+    } else if (assignmentValue) {
+      row.dataset.assignmentStatus = "team";
+      row.dataset.teamId = assignmentValue;
+    } else if (!available) {
+      row.dataset.assignmentStatus = "unavailable";
+    } else {
+      row.dataset.assignmentStatus = "pending";
+    }
+
+    const header = document.createElement("div");
+    header.className = "gl-applicant-schedule__header";
+    const title = document.createElement("div");
+    title.className = "gl-applicant-schedule__title";
+    const label = document.createElement("span");
+    label.className = "gl-applicant-schedule__label";
+    label.textContent = ensureString(schedule.label) || ensureString(schedule.date) || schedule.id || "日程";
+    title.append(label);
+    if (schedule.date) {
+      const dateEl = document.createElement("span");
+      dateEl.className = "gl-applicant-schedule__date";
+      dateEl.textContent = schedule.date;
+      title.append(dateEl);
+    }
+    header.append(title);
+    const availability = document.createElement("span");
+    availability.className = "gl-applicant-schedule__availability";
+    availability.textContent = available ? "参加可" : "参加不可";
+    availability.classList.add(available ? "is-available" : "is-unavailable");
+    header.append(availability);
+    row.append(header);
+
+    const body = document.createElement("div");
+    body.className = "gl-applicant-schedule__body";
+    const assignmentLabel = document.createElement("label");
+    assignmentLabel.className = "gl-applicant-schedule__assignment";
+    const assignmentText = document.createElement("span");
+    assignmentText.className = "gl-applicant-schedule__assignment-text";
+    assignmentText.textContent = "班割当";
+    const select = document.createElement("select");
+    select.className = "input input--dense";
+    select.dataset.glAssignment = "true";
+    select.dataset.scheduleId = ensureString(schedule.id);
+    const options = buildAssignmentOptions(teams);
+    options.forEach((option) => {
+      const opt = document.createElement("option");
+      opt.value = option.value;
+      opt.textContent = option.label;
+      if (option.value === assignmentValue) {
+        opt.selected = true;
+      }
+      select.append(opt);
+    });
+    assignmentLabel.append(assignmentText, select);
+    body.append(assignmentLabel);
+
+    const updatedText = formatAssignmentTimestamp(assignment);
+    if (updatedText) {
+      const updated = document.createElement("span");
+      updated.className = "gl-applicant-schedule__updated";
+      const updatedBy = ensureString(assignment?.updatedByName) || ensureString(assignment?.updatedByUid);
+      updated.textContent = updatedBy ? `更新: ${updatedText} (${updatedBy})` : `更新: ${updatedText}`;
+      body.append(updated);
+    }
+    row.append(body);
+    return row;
   }
 
   createBucketMatcher() {
@@ -1361,15 +2021,10 @@ export class GlToolManager {
       return;
     }
     const { status, teamId } = resolveAssignmentStatus(value);
-    const basePath = `glAssignments/${this.currentEventId}/${glId}`;
+    const basePath = `glAssignments/${this.currentEventId}/${scheduleId}/${glId}`;
     if (!status && !teamId) {
       await update(ref(database), {
-        [`${basePath}/schedules/${scheduleId}`]: null,
-        [`${basePath}/status`]: null,
-        [`${basePath}/teamId`]: null,
-        [`${basePath}/updatedAt`]: null,
-        [`${basePath}/updatedByUid`]: null,
-        [`${basePath}/updatedByName`]: null
+        [basePath]: null
       });
       return;
     }
@@ -1382,12 +2037,7 @@ export class GlToolManager {
       updatedByName: ensureString(user?.displayName) || ensureString(user?.email)
     };
     await update(ref(database), {
-      [`${basePath}/schedules/${scheduleId}`]: payload,
-      [`${basePath}/status`]: null,
-      [`${basePath}/teamId`]: null,
-      [`${basePath}/updatedAt`]: null,
-      [`${basePath}/updatedByUid`]: null,
-      [`${basePath}/updatedByName`]: null
+      [basePath]: payload
     });
   }
 }
