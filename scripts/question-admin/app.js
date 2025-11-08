@@ -2122,38 +2122,130 @@ function normalizeGlRoster(raw) {
   return map;
 }
 
+function normalizeGlAssignmentEntry(raw) {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const statusRaw = String(raw.status || "").trim().toLowerCase();
+  let status = "";
+  if (statusRaw === "absent" || statusRaw === "欠席") {
+    status = "absent";
+  } else if (statusRaw === "staff" || statusRaw === "運営" || statusRaw === "運営待機") {
+    status = "staff";
+  } else if (statusRaw === "team") {
+    status = "team";
+  }
+  const teamId = normalizeKey(raw.teamId || "");
+  if (!status && teamId) {
+    status = "team";
+  }
+  if (!status && !teamId) {
+    return null;
+  }
+  return {
+    status,
+    teamId,
+    updatedAt: Number(raw.updatedAt || 0) || 0,
+    updatedByName: normalizeKey(raw.updatedByName || ""),
+    updatedByUid: normalizeKey(raw.updatedByUid || "")
+  };
+}
+
 function normalizeGlAssignments(raw) {
   const map = new Map();
   if (!raw || typeof raw !== "object") {
     return map;
   }
-  Object.entries(raw).forEach(([glId, value]) => {
-    if (!glId || !value || typeof value !== "object") return;
-    const statusRaw = String(value.status || "").trim().toLowerCase();
-    let status = "";
-    if (statusRaw === "absent" || statusRaw === "欠席") {
-      status = "absent";
-    } else if (statusRaw === "staff" || statusRaw === "運営" || statusRaw === "運営待機") {
-      status = "staff";
-    } else if (statusRaw === "team") {
-      status = "team";
+
+  const ensureEntry = (glId) => {
+    const id = String(glId || "").trim();
+    if (!id) {
+      return null;
     }
-    const teamId = normalizeKey(value.teamId || "");
-    if (!status && teamId) {
-      status = "team";
+    if (!map.has(id)) {
+      map.set(id, { fallback: null, schedules: new Map() });
     }
-    map.set(String(glId), {
-      status,
-      teamId,
-      updatedAt: Number(value.updatedAt || 0) || 0,
-      updatedByName: normalizeKey(value.updatedByName || ""),
-      updatedByUid: normalizeKey(value.updatedByUid || "")
+    return map.get(id) || null;
+  };
+
+  Object.entries(raw).forEach(([outerKey, outerValue]) => {
+    if (!outerValue || typeof outerValue !== "object") {
+      return;
+    }
+
+    const legacyAssignment = normalizeGlAssignmentEntry(outerValue);
+    if (legacyAssignment) {
+      const entry = ensureEntry(outerKey);
+      if (!entry) {
+        return;
+      }
+      entry.fallback = legacyAssignment;
+      const excludedKeys = new Set(["status", "teamId", "updatedAt", "updatedByUid", "updatedByName", "schedules"]);
+      Object.entries(outerValue).forEach(([scheduleId, scheduleValue]) => {
+        if (excludedKeys.has(scheduleId)) {
+          return;
+        }
+        const normalized = normalizeGlAssignmentEntry(scheduleValue);
+        if (!normalized) {
+          return;
+        }
+        const key = String(scheduleId || "").trim();
+        if (!key) {
+          return;
+        }
+        entry.schedules.set(key, normalized);
+      });
+      const scheduleOverrides = outerValue?.schedules && typeof outerValue.schedules === "object"
+        ? outerValue.schedules
+        : null;
+      if (scheduleOverrides) {
+        Object.entries(scheduleOverrides).forEach(([scheduleId, scheduleValue]) => {
+          const normalized = normalizeGlAssignmentEntry(scheduleValue);
+          if (!normalized) {
+            return;
+          }
+          const key = String(scheduleId || "").trim();
+          if (!key) {
+            return;
+          }
+          entry.schedules.set(key, normalized);
+        });
+      }
+      return;
+    }
+
+    const scheduleId = String(outerKey || "").trim();
+    if (!scheduleId) {
+      return;
+    }
+    Object.entries(outerValue).forEach(([glId, value]) => {
+      const normalized = normalizeGlAssignmentEntry(value);
+      if (!normalized) {
+        return;
+      }
+      const entry = ensureEntry(glId);
+      if (!entry) {
+        return;
+      }
+      entry.schedules.set(scheduleId, normalized);
     });
   });
+
   return map;
 }
 
-function renderGroupGlAssignments(group, { eventId, rosterMap, assignmentsMap }) {
+function resolveScheduleAssignment(entry, scheduleId) {
+  if (!entry) {
+    return null;
+  }
+  const key = String(scheduleId || "").trim();
+  if (key && entry.schedules instanceof Map && entry.schedules.has(key)) {
+    return entry.schedules.get(key) || null;
+  }
+  return entry.fallback || null;
+}
+
+function renderGroupGlAssignments(group, { eventId, rosterMap, assignmentsMap, scheduleId }) {
   if (!group || !group.leadersContainer || !group.leadersList) {
     return;
   }
@@ -2177,7 +2269,8 @@ function renderGroupGlAssignments(group, { eventId, rosterMap, assignmentsMap })
   const isStaffGroup = rawGroupKey === GL_STAFF_GROUP_KEY || normalizedGroupKey === normalizedStaffLabel;
 
   const leaders = [];
-  assignments.forEach((assignment, glId) => {
+  assignments.forEach((entry, glId) => {
+    const assignment = resolveScheduleAssignment(entry, scheduleId);
     if (!assignment) return;
     const status = assignment.status || "";
     const teamId = normalizeKey(assignment.teamId || "");
@@ -2652,7 +2745,8 @@ function renderParticipants() {
   });
 
   if (glAssignmentsMap instanceof Map) {
-    glAssignmentsMap.forEach(assignment => {
+    glAssignmentsMap.forEach(entry => {
+      const assignment = resolveScheduleAssignment(entry, scheduleId);
       if (!assignment) return;
       if (assignment.status === "absent") {
         needsCancelGroup = true;
@@ -2691,7 +2785,8 @@ function renderParticipants() {
     renderGroupGlAssignments(group, {
       eventId,
       rosterMap: glRosterMap,
-      assignmentsMap: glAssignmentsMap
+      assignmentsMap: glAssignmentsMap,
+      scheduleId
     });
   });
 
