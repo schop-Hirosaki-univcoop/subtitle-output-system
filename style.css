@@ -6262,6 +6262,9 @@ body.sidebar-overlay-open{
   flex-direction:column;
   gap:clamp(.75rem, 1.4vw, 1.05rem);
 }
+.gl-application-view[hidden]{
+  display:none !important;
+}
 .gl-applicant-matrix-container{
   display:flex;
   flex-direction:column;
