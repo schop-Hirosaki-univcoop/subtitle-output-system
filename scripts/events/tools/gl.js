@@ -15,6 +15,7 @@ import { normalizeFacultyList } from "./gl-faculty-utils.js";
 
 const ASSIGNMENT_VALUE_ABSENT = "__absent";
 const ASSIGNMENT_VALUE_STAFF = "__staff";
+const ASSIGNMENT_VALUE_UNAVAILABLE = "__unavailable";
 const MAX_TEAM_COUNT = 50;
 const ASSIGNMENT_BUCKET_UNASSIGNED = "__unassigned";
 const ASSIGNMENT_BUCKET_ABSENT = "__bucket_absent";
@@ -455,6 +456,7 @@ function buildAssignmentOptions(teams = []) {
   const options = [
     { value: "", label: "未割当" },
     ...normalizedTeams.map((team) => ({ value: team, label: `班: ${team}` })),
+    { value: ASSIGNMENT_VALUE_UNAVAILABLE, label: "参加不可" },
     { value: ASSIGNMENT_VALUE_ABSENT, label: "欠席" },
     { value: ASSIGNMENT_VALUE_STAFF, label: "運営待機" }
   ];
@@ -471,6 +473,9 @@ function resolveAssignmentValue(assignment) {
   if (assignment.status === "staff") {
     return ASSIGNMENT_VALUE_STAFF;
   }
+  if (assignment.status === "unavailable") {
+    return ASSIGNMENT_VALUE_UNAVAILABLE;
+  }
   if (assignment.status === "team" && assignment.teamId) {
     return assignment.teamId;
   }
@@ -481,6 +486,9 @@ function resolveAssignmentValue(assignment) {
 }
 
 function resolveAssignmentStatus(value) {
+  if (value === ASSIGNMENT_VALUE_UNAVAILABLE) {
+    return { status: "unavailable", teamId: "" };
+  }
   if (value === ASSIGNMENT_VALUE_ABSENT) {
     return { status: "absent", teamId: "" };
   }
@@ -541,6 +549,9 @@ function buildAcademicPathText(application) {
 }
 
 function describeAssignmentBadge(value) {
+  if (value === ASSIGNMENT_VALUE_UNAVAILABLE) {
+    return "参加不可";
+  }
   if (value === ASSIGNMENT_VALUE_ABSENT) {
     return "欠席";
   }
@@ -1727,6 +1738,8 @@ export class GlToolManager {
       cell.dataset.assignmentStatus = "absent";
     } else if (assignmentValue === ASSIGNMENT_VALUE_STAFF) {
       cell.dataset.assignmentStatus = "staff";
+    } else if (assignmentValue === ASSIGNMENT_VALUE_UNAVAILABLE) {
+      cell.dataset.assignmentStatus = "unavailable";
     } else if (assignmentValue) {
       cell.dataset.assignmentStatus = "team";
       cell.dataset.teamId = assignmentValue;
@@ -1826,6 +1839,9 @@ export class GlToolManager {
     }
     if (value === ASSIGNMENT_VALUE_STAFF) {
       return ASSIGNMENT_BUCKET_STAFF;
+    }
+    if (value === ASSIGNMENT_VALUE_UNAVAILABLE) {
+      return ASSIGNMENT_BUCKET_UNAVAILABLE;
     }
     if (value) {
       return `team:${value}`;
@@ -1976,6 +1992,8 @@ export class GlToolManager {
       item.dataset.assignmentStatus = "absent";
     } else if (assignmentValue === ASSIGNMENT_VALUE_STAFF) {
       item.dataset.assignmentStatus = "staff";
+    } else if (assignmentValue === ASSIGNMENT_VALUE_UNAVAILABLE) {
+      item.dataset.assignmentStatus = "unavailable";
     } else if (assignmentValue) {
       item.dataset.assignmentStatus = "team";
       item.dataset.teamId = assignmentValue;
@@ -2038,9 +2056,7 @@ export class GlToolManager {
     if (academicPathText) {
       addInfo("所属", academicPathText);
     }
-    addInfo("メール", ensureString(application.email));
     addInfo("サークル", ensureString(application.club));
-    addInfo("学籍番号", ensureString(application.studentId));
     if (infoList.children.length) {
       item.append(infoList);
     }
