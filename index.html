@@ -221,15 +221,6 @@
             <p id="flow-schedule-empty" class="entity-empty" hidden>このイベントにはまだ日程が登録されていません。まずは日程を追加してください。</p>
           </div>
         </div>
-        <div id="flow-operator-mode-panel" class="flow-operator-mode" hidden>
-          <label class="flow-operator-mode__choice">
-            <input type="checkbox" id="flow-operator-mode-support-toggle" />
-            <span class="flow-operator-mode__label">テロップ操作なしモードで開く</span>
-          </label>
-          <p id="flow-operator-mode-description" class="flow-operator-mode__description">
-            テロップ操作を行わない場合に選択してください。参加者リストや辞書、ログは引き続き利用できます。
-          </p>
-        </div>
         <div class="flow-navigation">
           <button class="btn btn-ghost btn-sm flow-nav-button flow-nav-button--prev" type="button" data-flow-nav-direction="prev" data-flow-nav-target="events">前へ</button>
           <button class="btn btn-primary btn-sm flow-nav-button flow-nav-button--next" type="button" data-flow-nav-direction="next" data-flow-nav-target="participants">確定</button>
@@ -1373,6 +1364,39 @@
             id="flow-schedule-conflict-confirm-button"
             data-autofocus="true"
           >この日程で確定する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div
+    id="flow-operator-mode-dialog"
+    class="modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="flow-operator-mode-title"
+    hidden
+  >
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <form id="flow-operator-mode-form" class="modal-form">
+        <div class="modal-header">
+          <h2 id="flow-operator-mode-title">テロップ操作のモードを選択</h2>
+        </div>
+        <div class="modal-body">
+          <p id="flow-operator-mode-summary" class="modal-helper"></p>
+          <fieldset
+            id="flow-operator-mode-options"
+            class="modal-field"
+            aria-describedby="flow-operator-mode-summary"
+          >
+            <legend class="modal-label">利用モード</legend>
+          </fieldset>
+          <div id="flow-operator-mode-error" class="hub-alert hub-alert--error" role="alert" hidden></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="flow-operator-mode-cancel-button" data-dialog-dismiss="true">キャンセル</button>
+          <button type="submit" class="btn btn-primary" id="flow-operator-mode-confirm-button" data-autofocus="true">決定する</button>
         </div>
       </form>
     </div>
