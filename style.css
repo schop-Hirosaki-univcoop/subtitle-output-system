@@ -6344,6 +6344,24 @@ body.sidebar-overlay-open{
   flex-direction:column;
   gap:.25rem;
 }
+.gl-grade-badge{
+  display:inline-flex;
+  align-items:center;
+  padding:.32rem .7rem;
+  border-radius:999px;
+  font-size:.78rem;
+  font-weight:600;
+  letter-spacing:.01em;
+  background:rgba(58, 102, 160, .28);
+  color:rgba(220, 238, 255, .9);
+}
+.gl-grade-badge--year1{background:rgba(70, 130, 220, .32);color:rgba(230, 242, 255, .95);}
+.gl-grade-badge--year2{background:rgba(64, 170, 170, .32);color:rgba(225, 245, 245, .95);}
+.gl-grade-badge--year3{background:rgba(110, 170, 110, .32);color:rgba(235, 250, 235, .95);}
+.gl-grade-badge--year4{background:rgba(200, 150, 80, .32);color:rgba(255, 244, 230, .95);}
+.gl-grade-badge--year5{background:rgba(170, 110, 190, .34);color:rgba(245, 235, 255, .96);}
+.gl-grade-badge--year6{background:rgba(205, 90, 115, .34);color:rgba(255, 235, 240, .95);}
+.gl-grade-badge--other{background:rgba(100, 120, 150, .34);color:rgba(225, 235, 245, .92);}
 .gl-applicant-matrix__name{
   font-size:clamp(1.05rem, 1.7vw, 1.22rem);
   font-weight:700;
@@ -6353,18 +6371,7 @@ body.sidebar-overlay-open{
   font-size:.82rem;
   color:rgba(200, 225, 255, .7);
 }
-.gl-applicant-matrix__grade{
-  margin-top:.4rem;
-  display:inline-flex;
-  align-items:center;
-  gap:.35rem;
-  padding:.35rem .75rem;
-  border-radius:999px;
-  background:rgba(42, 126, 214, .25);
-  color:rgba(220, 240, 255, .92);
-  font-size:.78rem;
-  font-weight:600;
-}
+.gl-applicant-matrix__grade{margin-top:.4rem;}
 .gl-applicant-matrix__meta{
   margin:.65rem 0 0;
   display:grid;
@@ -6405,26 +6412,6 @@ body.sidebar-overlay-open{
   flex-wrap:wrap;
   align-items:center;
   gap:.45rem;
-}
-.gl-applicant-matrix__availability{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  padding:.3rem .7rem;
-  border-radius:999px;
-  font-size:.75rem;
-  font-weight:600;
-  letter-spacing:.02em;
-  background:rgba(50, 90, 140, .32);
-  color:rgba(205, 230, 255, .9);
-}
-.gl-applicant-matrix__availability.is-available{
-  background:rgba(44, 140, 120, .35);
-  color:rgba(210, 255, 235, .92);
-}
-.gl-applicant-matrix__availability.is-unavailable{
-  background:rgba(160, 60, 70, .4);
-  color:rgba(255, 215, 220, .9);
 }
 .gl-applicant-matrix__assignment-badge{
   padding:.28rem .65rem;
@@ -6672,33 +6659,7 @@ body.sidebar-overlay-open{
 
 .gl-shift-entry__name{font-weight:600;color:#f0f7ff;}
 .gl-shift-entry__phonetic{font-size:.82rem;color:rgba(205, 225, 250, .68);}
-.gl-shift-entry__grade{font-size:.82rem;color:rgba(195, 220, 245, .75);}
-
-.gl-shift-entry__meta{
-  display:flex;
-  gap:.4rem;
-  align-items:center;
-}
-
-.gl-shift-entry__availability{
-  font-size:.72rem;
-  padding:.25rem .55rem;
-  border-radius:999px;
-  border:1px solid rgba(110, 160, 210, .35);
-  background:rgba(16, 40, 62, .6);
-  color:rgba(200, 230, 255, .8);
-}
-
-.gl-shift-entry__availability.is-available{
-  border-color:rgba(122, 230, 255, .5);
-  background:rgba(24, 82, 110, .7);
-}
-
-.gl-shift-entry__availability.is-unavailable{
-  border-color:rgba(150, 170, 200, .35);
-  background:rgba(24, 34, 48, .65);
-  color:rgba(190, 210, 230, .55);
-}
+.gl-shift-entry__grade{margin-left:auto;}
 
 .gl-shift-entry__info{
   margin:0;

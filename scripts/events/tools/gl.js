@@ -176,6 +176,38 @@ function buildScheduleBuckets(teams = []) {
   return columns;
 }
 
+function determineGradeBadgeVariant(grade) {
+  const raw = ensureString(grade).trim();
+  if (!raw) {
+    return "";
+  }
+  const normalized = raw.replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xFEE0)).toLowerCase();
+  const digitMatch = normalized.match(/\d/);
+  if (digitMatch) {
+    const digit = digitMatch[0];
+    if (digit >= "1" && digit <= "6") {
+      return `year${digit}`;
+    }
+  }
+  return "other";
+}
+
+function applyGradeBadge(element, grade) {
+  if (!element) {
+    return;
+  }
+  const text = ensureString(grade).trim();
+  if (!text) {
+    return;
+  }
+  const variant = determineGradeBadgeVariant(text);
+  element.classList.add("gl-grade-badge");
+  if (variant) {
+    element.classList.add(`gl-grade-badge--${variant}`);
+  }
+  element.textContent = text;
+}
+
 function buildRenderableSchedules(primary = [], fallbackSchedules = [], applications = []) {
   const scheduleMap = new Map();
   const pushSchedule = (schedule) => {
@@ -1659,7 +1691,7 @@ export class GlToolManager {
     if (application.grade) {
       const gradeEl = document.createElement("span");
       gradeEl.className = "gl-applicant-matrix__grade";
-      gradeEl.textContent = application.grade;
+      applyGradeBadge(gradeEl, application.grade);
       applicantCell.append(gradeEl);
     }
 
@@ -1754,12 +1786,6 @@ export class GlToolManager {
 
     const statusRow = document.createElement("div");
     statusRow.className = "gl-applicant-matrix__cell-header";
-    const availability = document.createElement("span");
-    availability.className = "gl-applicant-matrix__availability";
-    availability.classList.add(available ? "is-available" : "is-unavailable");
-    availability.textContent = available ? "参加可" : "参加不可";
-    statusRow.append(availability);
-
     const assignmentBadge = document.createElement("span");
     assignmentBadge.className = "gl-applicant-matrix__assignment-badge";
     assignmentBadge.textContent = describeAssignmentBadge(assignmentValue);
@@ -2021,19 +2047,10 @@ export class GlToolManager {
     if (application.grade) {
       const gradeEl = document.createElement("span");
       gradeEl.className = "gl-shift-entry__grade";
-      gradeEl.textContent = application.grade;
+      applyGradeBadge(gradeEl, application.grade);
       header.append(gradeEl);
     }
     item.append(header);
-
-    const meta = document.createElement("div");
-    meta.className = "gl-shift-entry__meta";
-    const availability = document.createElement("span");
-    availability.className = "gl-shift-entry__availability";
-    availability.textContent = available ? "参加可" : "参加不可";
-    availability.classList.add(available ? "is-available" : "is-unavailable");
-    meta.append(availability);
-    item.append(meta);
 
     const infoList = document.createElement("ul");
     infoList.className = "gl-shift-entry__info";
