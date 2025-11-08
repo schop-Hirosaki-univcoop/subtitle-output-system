@@ -130,16 +130,21 @@ export function getGlAssignmentsRef(eventId = "") {
   return ref(database, `glAssignments/${key}`);
 }
 
-export function getGlAssignmentRef(eventId = "", glId = "") {
+export function getGlAssignmentRef(eventId = "", scheduleId = "", glId = "") {
   const eventKey = String(eventId || "").trim();
+  const scheduleKey = String(scheduleId || "").trim();
   const glKey = String(glId || "").trim();
+
   if (!eventKey) {
     return glAssignmentsRootRef;
   }
-  if (!glKey) {
+  if (!scheduleKey) {
     return ref(database, `glAssignments/${eventKey}`);
   }
-  return ref(database, `glAssignments/${eventKey}/${glKey}`);
+  if (!glKey) {
+    return ref(database, `glAssignments/${eventKey}/${scheduleKey}`);
+  }
+  return ref(database, `glAssignments/${eventKey}/${scheduleKey}/${glKey}`);
 }
 
 export {
