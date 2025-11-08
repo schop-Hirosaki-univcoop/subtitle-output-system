@@ -505,6 +505,55 @@ function formatAssignmentTimestamp(assignment) {
   return date.toLocaleString("ja-JP");
 }
 
+function formatAssignmentUpdatedLabel(assignment) {
+  const updatedText = formatAssignmentTimestamp(assignment);
+  if (!updatedText) {
+    return "";
+  }
+  const updatedBy = ensureString(assignment?.updatedByName) || ensureString(assignment?.updatedByUid);
+  return updatedBy ? `更新: ${updatedText} (${updatedBy})` : `更新: ${updatedText}`;
+}
+
+function buildAcademicPathText(application) {
+  if (!application || typeof application !== "object") {
+    return "";
+  }
+  const faculty = ensureString(application.faculty);
+  const segments = Array.isArray(application.academicPath)
+    ? application.academicPath
+        .map((segment) => {
+          if (!segment) {
+            return "";
+          }
+          if (typeof segment === "object") {
+            return ensureString(segment.display) || ensureString(segment.value);
+          }
+          return ensureString(segment);
+        })
+        .filter(Boolean)
+    : [];
+  const parts = [];
+  if (faculty) {
+    parts.push(faculty);
+  }
+  parts.push(...segments);
+  return parts.join(" / ");
+}
+
+function describeAssignmentBadge(value) {
+  if (value === ASSIGNMENT_VALUE_ABSENT) {
+    return "欠席";
+  }
+  if (value === ASSIGNMENT_VALUE_STAFF) {
+    return "運営待機";
+  }
+  const teamId = ensureString(value);
+  if (teamId) {
+    return `班: ${teamId}`;
+  }
+  return "未割当";
+}
+
 export class GlToolManager {
   constructor(app) {
     this.app = app;
@@ -1504,123 +1553,160 @@ export class GlToolManager {
       return { visibleCount: 0 };
     }
     list.innerHTML = "";
-    const fragment = document.createDocumentFragment();
-    applications.forEach((application) => {
-      const card = this.createApplicantCard({ application, schedules, matchesFilter });
-      if (card) {
-        fragment.append(card);
+    const scheduleEntries = Array.isArray(schedules) ? schedules : [];
+    if (!scheduleEntries.length) {
+      const empty = document.createElement("p");
+      empty.className = "gl-applicant-matrix__empty";
+      empty.textContent = "日程がまだ設定されていません。";
+      list.append(empty);
+      return { visibleCount: 0 };
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "gl-applicant-matrix-wrapper";
+    const scroll = document.createElement("div");
+    scroll.className = "gl-applicant-matrix-scroll";
+    const table = document.createElement("table");
+    table.className = "gl-applicant-matrix";
+
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    const applicantHeader = document.createElement("th");
+    applicantHeader.className = "gl-applicant-matrix__header gl-applicant-matrix__header--applicant";
+    applicantHeader.scope = "col";
+    applicantHeader.textContent = "応募者";
+    headerRow.append(applicantHeader);
+
+    scheduleEntries.forEach((schedule) => {
+      const th = document.createElement("th");
+      th.className = "gl-applicant-matrix__header gl-applicant-matrix__header--schedule";
+      th.scope = "col";
+      th.dataset.scheduleId = ensureString(schedule.id);
+      const title = document.createElement("div");
+      title.className = "gl-applicant-matrix__schedule";
+      const label = document.createElement("span");
+      label.className = "gl-applicant-matrix__schedule-label";
+      label.textContent = ensureString(schedule.label) || ensureString(schedule.date) || schedule.id || "日程";
+      title.append(label);
+      if (schedule.date) {
+        const date = document.createElement("span");
+        date.className = "gl-applicant-matrix__schedule-date";
+        date.textContent = schedule.date;
+        title.append(date);
       }
+      th.append(title);
+      headerRow.append(th);
     });
-    list.append(fragment);
-    return { visibleCount: applications.length };
+    thead.append(headerRow);
+    table.append(thead);
+
+    const tbody = document.createElement("tbody");
+    let visibleRows = 0;
+    applications.forEach((application) => {
+      const row = this.createApplicantMatrixRow({ application, schedules: scheduleEntries, matchesFilter });
+      if (!row) {
+        return;
+      }
+      tbody.append(row);
+      visibleRows += 1;
+    });
+    table.append(tbody);
+
+    scroll.append(table);
+    wrapper.append(scroll);
+    list.append(wrapper);
+    return { visibleCount: visibleRows };
   }
 
-  createApplicantCard({ application, schedules, matchesFilter }) {
+  createApplicantMatrixRow({ application, schedules, matchesFilter }) {
     if (!application) {
       return null;
     }
-    const scheduleEntries = Array.isArray(schedules) ? schedules : [];
-    const item = document.createElement("li");
-    item.className = "gl-applicant-card";
-    item.dataset.glId = ensureString(application.id);
+    const row = document.createElement("tr");
+    row.className = "gl-applicant-matrix__row";
+    row.dataset.glId = ensureString(application.id);
 
-    const header = document.createElement("header");
-    header.className = "gl-applicant-card__header";
+    const applicantCell = document.createElement("th");
+    applicantCell.scope = "row";
+    applicantCell.className = "gl-applicant-matrix__applicant";
+    applicantCell.dataset.glId = ensureString(application.id);
+
     const identity = document.createElement("div");
-    identity.className = "gl-applicant-card__identity";
+    identity.className = "gl-applicant-matrix__identity";
     const nameEl = document.createElement("span");
-    nameEl.className = "gl-applicant-card__name";
+    nameEl.className = "gl-applicant-matrix__name";
     nameEl.textContent = ensureString(application.name) || "(無記入)";
     identity.append(nameEl);
     if (application.phonetic) {
       const phoneticEl = document.createElement("span");
-      phoneticEl.className = "gl-applicant-card__phonetic";
+      phoneticEl.className = "gl-applicant-matrix__phonetic";
       phoneticEl.textContent = application.phonetic;
       identity.append(phoneticEl);
     }
-    header.append(identity);
+    applicantCell.append(identity);
+
     if (application.grade) {
       const gradeEl = document.createElement("span");
-      gradeEl.className = "gl-applicant-card__grade";
+      gradeEl.className = "gl-applicant-matrix__grade";
       gradeEl.textContent = application.grade;
-      header.append(gradeEl);
+      applicantCell.append(gradeEl);
     }
-    item.append(header);
 
-    const infoList = document.createElement("ul");
-    infoList.className = "gl-applicant-card__info";
-    const addInfo = (label, value) => {
+    const metaList = document.createElement("dl");
+    metaList.className = "gl-applicant-matrix__meta";
+    const addMeta = (label, value) => {
       if (!value) {
         return;
       }
-      const li = document.createElement("li");
-      li.className = "gl-applicant-card__info-item";
-      const labelEl = document.createElement("span");
-      labelEl.className = "gl-applicant-card__info-label";
-      labelEl.textContent = label;
-      const valueEl = document.createElement("span");
-      valueEl.className = "gl-applicant-card__info-value";
-      valueEl.textContent = value;
-      li.append(labelEl, valueEl);
-      infoList.append(li);
+      const dt = document.createElement("dt");
+      dt.className = "gl-applicant-matrix__meta-label";
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.className = "gl-applicant-matrix__meta-value";
+      dd.textContent = value;
+      metaList.append(dt, dd);
     };
-    const faculty = ensureString(application.faculty);
-    const academicPathParts = (application.academicPath || [])
-      .map((segment) => ensureString(segment.display) || ensureString(segment.value))
-      .filter(Boolean);
-    const fullAcademicPath = [];
-    if (faculty) {
-      fullAcademicPath.push(faculty);
-    }
-    fullAcademicPath.push(...academicPathParts);
-    const academicPathText = fullAcademicPath.join(" / ");
-    if (academicPathText) {
-      addInfo("所属", academicPathText);
-    }
-    addInfo("メール", ensureString(application.email));
-    addInfo("サークル", ensureString(application.club));
-    addInfo("学籍番号", ensureString(application.studentId));
-    if (infoList.children.length) {
-      item.append(infoList);
+
+    const academicPathText = buildAcademicPathText(application);
+    addMeta("所属", academicPathText);
+    addMeta("メール", ensureString(application.email));
+    addMeta("サークル", ensureString(application.club));
+    addMeta("学籍番号", ensureString(application.studentId));
+
+    if (metaList.children.length) {
+      applicantCell.append(metaList);
     }
 
     if (application.note) {
       const note = document.createElement("p");
-      note.className = "gl-applicant-card__note";
+      note.className = "gl-applicant-matrix__note";
       note.textContent = application.note;
-      item.append(note);
+      applicantCell.append(note);
     }
 
-    const scheduleList = document.createElement("ul");
-    scheduleList.className = "gl-applicant-schedules";
-    if (!scheduleEntries.length) {
-      const empty = document.createElement("li");
-      empty.className = "gl-applicant-schedule gl-applicant-schedule--empty";
-      empty.textContent = "日程がまだ設定されていません。";
-      scheduleList.append(empty);
-    } else {
-      scheduleEntries.forEach((schedule) => {
-        const assignment = this.getAssignmentForSchedule(application.id, schedule.id);
-        const assignmentValue = resolveAssignmentValue(assignment);
-        const available = isApplicantAvailableForSchedule(application, schedule.id);
-        const teams = getScheduleTeams(this.config, schedule.id);
-        const row = this.createApplicantScheduleRow({
-          application,
-          schedule,
-          assignment,
-          assignmentValue,
-          available,
-          teams,
-          matchesFilter
-        });
-        scheduleList.append(row);
+    row.append(applicantCell);
+
+    schedules.forEach((schedule) => {
+      const assignment = this.getAssignmentForSchedule(application.id, schedule.id);
+      const assignmentValue = resolveAssignmentValue(assignment);
+      const available = isApplicantAvailableForSchedule(application, schedule.id);
+      const teams = getScheduleTeams(this.config, schedule.id);
+      const cell = this.createApplicantMatrixCell({
+        application,
+        schedule,
+        assignment,
+        assignmentValue,
+        available,
+        teams,
+        matchesFilter
       });
-    }
-    item.append(scheduleList);
-    return item;
+      row.append(cell);
+    });
+
+    return row;
   }
 
-  createApplicantScheduleRow({
+  createApplicantMatrixCell({
     application,
     schedule,
     assignment,
@@ -1629,59 +1715,54 @@ export class GlToolManager {
     teams,
     matchesFilter
   }) {
-    const row = document.createElement("li");
-    row.className = "gl-applicant-schedule";
-    row.dataset.glId = ensureString(application.id);
-    row.dataset.scheduleId = ensureString(schedule.id);
+    const cell = document.createElement("td");
+    cell.className = "gl-applicant-matrix__cell";
+    cell.dataset.glId = ensureString(application.id);
+    cell.dataset.scheduleId = ensureString(schedule.id);
     const bucketKey = this.resolveAssignmentBucket(assignmentValue, available);
-    row.dataset.bucket = bucketKey;
-    row.dataset.matchesFilter = matchesFilter(bucketKey) ? "true" : "false";
+    const matches = matchesFilter(bucketKey);
+    cell.dataset.bucket = bucketKey;
+    cell.dataset.matchesFilter = matches ? "true" : "false";
     if (assignmentValue === ASSIGNMENT_VALUE_ABSENT) {
-      row.dataset.assignmentStatus = "absent";
+      cell.dataset.assignmentStatus = "absent";
     } else if (assignmentValue === ASSIGNMENT_VALUE_STAFF) {
-      row.dataset.assignmentStatus = "staff";
+      cell.dataset.assignmentStatus = "staff";
     } else if (assignmentValue) {
-      row.dataset.assignmentStatus = "team";
-      row.dataset.teamId = assignmentValue;
+      cell.dataset.assignmentStatus = "team";
+      cell.dataset.teamId = assignmentValue;
     } else if (!available) {
-      row.dataset.assignmentStatus = "unavailable";
+      cell.dataset.assignmentStatus = "unavailable";
     } else {
-      row.dataset.assignmentStatus = "pending";
+      cell.dataset.assignmentStatus = "pending";
     }
 
-    const header = document.createElement("div");
-    header.className = "gl-applicant-schedule__header";
-    const title = document.createElement("div");
-    title.className = "gl-applicant-schedule__title";
-    const label = document.createElement("span");
-    label.className = "gl-applicant-schedule__label";
-    label.textContent = ensureString(schedule.label) || ensureString(schedule.date) || schedule.id || "日程";
-    title.append(label);
-    if (schedule.date) {
-      const dateEl = document.createElement("span");
-      dateEl.className = "gl-applicant-schedule__date";
-      dateEl.textContent = schedule.date;
-      title.append(dateEl);
-    }
-    header.append(title);
+    const content = document.createElement("div");
+    content.className = "gl-applicant-matrix__cell-content";
+
+    const statusRow = document.createElement("div");
+    statusRow.className = "gl-applicant-matrix__cell-header";
     const availability = document.createElement("span");
-    availability.className = "gl-applicant-schedule__availability";
-    availability.textContent = available ? "参加可" : "参加不可";
+    availability.className = "gl-applicant-matrix__availability";
     availability.classList.add(available ? "is-available" : "is-unavailable");
-    header.append(availability);
-    row.append(header);
+    availability.textContent = available ? "参加可" : "参加不可";
+    statusRow.append(availability);
 
-    const body = document.createElement("div");
-    body.className = "gl-applicant-schedule__body";
-    const assignmentLabel = document.createElement("label");
-    assignmentLabel.className = "gl-applicant-schedule__assignment";
-    const assignmentText = document.createElement("span");
-    assignmentText.className = "gl-applicant-schedule__assignment-text";
-    assignmentText.textContent = "班割当";
+    const assignmentBadge = document.createElement("span");
+    assignmentBadge.className = "gl-applicant-matrix__assignment-badge";
+    assignmentBadge.textContent = describeAssignmentBadge(assignmentValue);
+    statusRow.append(assignmentBadge);
+    content.append(statusRow);
+
+    const control = document.createElement("div");
+    control.className = "gl-applicant-matrix__assignment";
     const select = document.createElement("select");
-    select.className = "input input--dense";
+    select.className = "input input--dense gl-applicant-matrix__select";
     select.dataset.glAssignment = "true";
     select.dataset.scheduleId = ensureString(schedule.id);
+    select.setAttribute(
+      "aria-label",
+      `${ensureString(schedule.label) || ensureString(schedule.date) || schedule.id || "日程"}の班割当`
+    );
     const options = buildAssignmentOptions(teams);
     options.forEach((option) => {
       const opt = document.createElement("option");
@@ -1692,19 +1773,19 @@ export class GlToolManager {
       }
       select.append(opt);
     });
-    assignmentLabel.append(assignmentText, select);
-    body.append(assignmentLabel);
+    control.append(select);
 
-    const updatedText = formatAssignmentTimestamp(assignment);
-    if (updatedText) {
+    const updatedLabel = formatAssignmentUpdatedLabel(assignment);
+    if (updatedLabel) {
       const updated = document.createElement("span");
-      updated.className = "gl-applicant-schedule__updated";
-      const updatedBy = ensureString(assignment?.updatedByName) || ensureString(assignment?.updatedByUid);
-      updated.textContent = updatedBy ? `更新: ${updatedText} (${updatedBy})` : `更新: ${updatedText}`;
-      body.append(updated);
+      updated.className = "gl-applicant-matrix__updated";
+      updated.textContent = updatedLabel;
+      control.append(updated);
     }
-    row.append(body);
-    return row;
+
+    content.append(control);
+    cell.append(content);
+    return cell;
   }
 
   createBucketMatcher() {
@@ -1953,16 +2034,7 @@ export class GlToolManager {
       li.append(labelEl, valueEl);
       infoList.append(li);
     };
-    const faculty = ensureString(application.faculty);
-    const academicPathParts = (application.academicPath || [])
-      .map((segment) => ensureString(segment.display) || ensureString(segment.value))
-      .filter(Boolean);
-    const fullAcademicPath = [];
-    if (faculty) {
-      fullAcademicPath.push(faculty);
-    }
-    fullAcademicPath.push(...academicPathParts);
-    const academicPathText = fullAcademicPath.join(" / ");
+    const academicPathText = buildAcademicPathText(application);
     if (academicPathText) {
       addInfo("所属", academicPathText);
     }
@@ -2004,12 +2076,11 @@ export class GlToolManager {
     assignmentLabel.append(assignmentText, select);
     controls.append(assignmentLabel);
 
-    const updatedText = formatAssignmentTimestamp(assignment);
-    if (updatedText) {
+    const updatedLabel = formatAssignmentUpdatedLabel(assignment);
+    if (updatedLabel) {
       const updated = document.createElement("span");
       updated.className = "gl-shift-entry__updated";
-      const updatedBy = ensureString(assignment?.updatedByName) || ensureString(assignment?.updatedByUid);
-      updated.textContent = updatedBy ? `更新: ${updatedText} (${updatedBy})` : `更新: ${updatedText}`;
+      updated.textContent = updatedLabel;
       controls.append(updated);
     }
     item.append(controls);
