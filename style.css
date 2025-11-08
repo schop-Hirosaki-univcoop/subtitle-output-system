@@ -6339,6 +6339,13 @@ body.sidebar-overlay-open{
   z-index:2;
   box-shadow:12px 0 18px rgba(4, 12, 26, .35);
 }
+.gl-applicant-matrix__identity-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:.5rem;
+}
 .gl-applicant-matrix__identity{
   display:flex;
   flex-direction:column;
@@ -6371,7 +6378,7 @@ body.sidebar-overlay-open{
   font-size:.82rem;
   color:rgba(200, 225, 255, .7);
 }
-.gl-applicant-matrix__grade{margin-top:.4rem;}
+.gl-applicant-matrix__grade{margin-left:auto;}
 .gl-applicant-matrix__meta{
   margin:.65rem 0 0;
   display:grid;
@@ -6413,29 +6420,33 @@ body.sidebar-overlay-open{
   align-items:center;
   gap:.45rem;
 }
-.gl-applicant-matrix__assignment-badge{
+.gl-applicant-matrix__response-badge{
   padding:.28rem .65rem;
   border-radius:.55rem;
   font-size:.75rem;
   font-weight:600;
-  background:rgba(70, 120, 180, .32);
-  color:rgba(215, 230, 255, .88);
+  background:rgba(120, 140, 170, .32);
+  color:rgba(215, 228, 242, .88);
 }
-.gl-applicant-matrix__cell[data-assignment-status="team"] .gl-applicant-matrix__assignment-badge{
+.gl-applicant-matrix__response-badge--available{
   background:rgba(60, 110, 200, .38);
   color:rgba(225, 240, 255, .95);
 }
-.gl-applicant-matrix__cell[data-assignment-status="absent"] .gl-applicant-matrix__assignment-badge{
+.gl-applicant-matrix__response-badge--unavailable{
   background:rgba(190, 70, 90, .45);
   color:rgba(255, 225, 230, .96);
 }
-.gl-applicant-matrix__cell[data-assignment-status="staff"] .gl-applicant-matrix__assignment-badge{
+.gl-applicant-matrix__response-badge--staff{
   background:rgba(210, 160, 70, .4);
   color:rgba(255, 240, 220, .96);
 }
-.gl-applicant-matrix__cell[data-assignment-status="unavailable"] .gl-applicant-matrix__assignment-badge{
-  background:rgba(120, 140, 170, .32);
-  color:rgba(210, 220, 240, .82);
+.gl-applicant-matrix__response-badge--other{
+  background:rgba(90, 130, 180, .36);
+  color:rgba(220, 235, 250, .94);
+}
+.gl-applicant-matrix__response-badge--unknown{
+  background:rgba(105, 125, 150, .32);
+  color:rgba(205, 215, 230, .8);
 }
 .gl-applicant-matrix__assignment{
   display:flex;

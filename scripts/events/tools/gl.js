@@ -21,6 +21,9 @@ const ASSIGNMENT_BUCKET_UNASSIGNED = "__unassigned";
 const ASSIGNMENT_BUCKET_ABSENT = "__bucket_absent";
 const ASSIGNMENT_BUCKET_STAFF = "__bucket_staff";
 const ASSIGNMENT_BUCKET_UNAVAILABLE = "__bucket_unavailable";
+const SCHEDULE_RESPONSE_POSITIVE_KEYWORDS = ["yes", "true", "1", "available", "参加", "参加可", "ok", "可能", "出席", "参加する"];
+const SCHEDULE_RESPONSE_NEGATIVE_KEYWORDS = ["no", "false", "0", "unavailable", "不可", "欠席", "参加不可", "不参加", "参加できない"];
+const SCHEDULE_RESPONSE_STAFF_KEYWORDS = ["staff", "運営", "待機", "サポート"];
 
 function toDateTimeLocalString(value) {
   if (!value) {
@@ -206,6 +209,89 @@ function applyGradeBadge(element, grade) {
     element.classList.add(`gl-grade-badge--${variant}`);
   }
   element.textContent = text;
+}
+
+function resolveScheduleResponseValue(application, scheduleId) {
+  if (!application || typeof application !== "object") {
+    return { raw: undefined, text: "" };
+  }
+  const shifts = application.shifts && typeof application.shifts === "object" ? application.shifts : {};
+  const key = ensureString(scheduleId);
+  let raw;
+  if (key && Object.prototype.hasOwnProperty.call(shifts, key)) {
+    raw = shifts[key];
+  } else if (!key || key === "__default__") {
+    raw = shifts.__default__;
+  }
+  if (raw === undefined && Object.prototype.hasOwnProperty.call(shifts, "__default__")) {
+    raw = shifts.__default__;
+  }
+  const text = formatScheduleResponseText(raw);
+  return { raw, text };
+}
+
+function formatScheduleResponseText(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "boolean") {
+    return value ? "参加可能" : "参加不可";
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? `${value}` : "";
+  }
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => formatScheduleResponseText(entry))
+      .filter(Boolean)
+      .join(" / ");
+  }
+  if (typeof value === "object") {
+    const prioritizedKeys = ["label", "text", "status", "value", "answer"];
+    for (const key of prioritizedKeys) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        const resolved = formatScheduleResponseText(value[key]);
+        if (resolved) {
+          return resolved;
+        }
+      }
+    }
+    const nested = Object.values(value)
+      .map((entry) => formatScheduleResponseText(entry))
+      .filter(Boolean);
+    if (nested.length) {
+      return nested.join(" / ");
+    }
+  }
+  return "";
+}
+
+function determineScheduleResponseVariant(raw, text) {
+  if (raw === true) {
+    return "available";
+  }
+  if (raw === false) {
+    return "unavailable";
+  }
+  const normalized = ensureString(text)
+    .trim()
+    .toLowerCase();
+  if (!normalized) {
+    return "unknown";
+  }
+  if (SCHEDULE_RESPONSE_STAFF_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+    return "staff";
+  }
+  if (SCHEDULE_RESPONSE_NEGATIVE_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+    return "unavailable";
+  }
+  if (SCHEDULE_RESPONSE_POSITIVE_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+    return "available";
+  }
+  return "other";
 }
 
 function buildRenderableSchedules(primary = [], fallbackSchedules = [], applications = []) {
@@ -578,23 +664,6 @@ function buildAcademicPathText(application) {
   }
   parts.push(...segments);
   return parts.join(" / ");
-}
-
-function describeAssignmentBadge(value) {
-  if (value === ASSIGNMENT_VALUE_UNAVAILABLE) {
-    return "参加不可";
-  }
-  if (value === ASSIGNMENT_VALUE_ABSENT) {
-    return "欠席";
-  }
-  if (value === ASSIGNMENT_VALUE_STAFF) {
-    return "運営待機";
-  }
-  const teamId = ensureString(value);
-  if (teamId) {
-    return `班: ${teamId}`;
-  }
-  return "未割当";
 }
 
 export class GlToolManager {
@@ -1686,14 +1755,18 @@ export class GlToolManager {
       phoneticEl.textContent = application.phonetic;
       identity.append(phoneticEl);
     }
-    applicantCell.append(identity);
+    const identityHeader = document.createElement("div");
+    identityHeader.className = "gl-applicant-matrix__identity-header";
+    identityHeader.append(identity);
 
     if (application.grade) {
       const gradeEl = document.createElement("span");
       gradeEl.className = "gl-applicant-matrix__grade";
       applyGradeBadge(gradeEl, application.grade);
-      applicantCell.append(gradeEl);
+      identityHeader.append(gradeEl);
     }
+
+    applicantCell.append(identityHeader);
 
     const metaList = document.createElement("dl");
     metaList.className = "gl-applicant-matrix__meta";
@@ -1786,10 +1859,15 @@ export class GlToolManager {
 
     const statusRow = document.createElement("div");
     statusRow.className = "gl-applicant-matrix__cell-header";
-    const assignmentBadge = document.createElement("span");
-    assignmentBadge.className = "gl-applicant-matrix__assignment-badge";
-    assignmentBadge.textContent = describeAssignmentBadge(assignmentValue);
-    statusRow.append(assignmentBadge);
+    const responseDescriptor = resolveScheduleResponseValue(application, schedule.id);
+    const responseBadge = document.createElement("span");
+    responseBadge.className = "gl-applicant-matrix__response-badge";
+    const responseVariant = determineScheduleResponseVariant(responseDescriptor.raw, responseDescriptor.text);
+    if (responseVariant) {
+      responseBadge.classList.add(`gl-applicant-matrix__response-badge--${responseVariant}`);
+    }
+    responseBadge.textContent = responseDescriptor.text || "未回答";
+    statusRow.append(responseBadge);
     content.append(statusRow);
 
     const control = document.createElement("div");
