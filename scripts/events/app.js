@@ -340,12 +340,71 @@ export class EventAdminApp {
     this.logFlowEvent(message, payload);
   }
 
+  buildOperatorPresenceDebugSummary(detail) {
+    if (!detail || typeof detail !== "object") {
+      return "";
+    }
+
+    const candidates = [];
+    if (detail.payload && typeof detail.payload === "object") {
+      candidates.push(detail.payload);
+    }
+    if (detail.entry && typeof detail.entry === "object") {
+      candidates.push(detail.entry);
+    }
+    if (Array.isArray(detail.entries)) {
+      const entry = detail.entries.length === 1 ? detail.entries[0] : null;
+      if (entry && typeof entry === "object") {
+        candidates.push(entry);
+      }
+    }
+    if (!candidates.length && Object.keys(detail).length > 0) {
+      candidates.push(detail);
+    }
+
+    const candidate = candidates.find((item) => item && typeof item === "object");
+    if (!candidate) {
+      return "";
+    }
+
+    const operatorName =
+      ensureString(candidate.displayName) ||
+      ensureString(candidate.email) ||
+      ensureString(candidate.uid) ||
+      "";
+
+    const eventLabel =
+      ensureString(candidate.eventName) || ensureString(candidate.eventId) || "";
+
+    const scheduleLabel = ensureString(candidate.scheduleLabel);
+    const scheduleId = ensureString(candidate.scheduleId);
+    const selectedScheduleLabel = ensureString(candidate.selectedScheduleLabel);
+    const selectedScheduleId = ensureString(candidate.selectedScheduleId);
+
+    let scheduleSummary = scheduleLabel || selectedScheduleLabel || "";
+    const idForSummary = scheduleId || selectedScheduleId || "";
+    if (scheduleSummary && idForSummary && scheduleSummary !== idForSummary) {
+      scheduleSummary = `${scheduleSummary} (${idForSummary})`;
+    } else if (!scheduleSummary) {
+      scheduleSummary = idForSummary;
+    }
+
+    const parts = [
+      `operator=${operatorName || "(unknown)"}`,
+      `event=${eventLabel || "(none)"}`,
+      `schedule=${scheduleSummary || "(none)"}`
+    ];
+
+    return ` ${parts.join(" ")}`;
+  }
+
   logOperatorPresenceDebug(message, detail = null) {
     if (!this.operatorPresenceDebugEnabled) {
       return;
     }
     const timestamp = new Date().toISOString();
-    const prefix = `[Presence] ${timestamp} ${message}`;
+    const suffix = this.buildOperatorPresenceDebugSummary(detail);
+    const prefix = `[Presence] ${timestamp} ${message}${suffix}`;
     if (detail && typeof detail === "object" && Object.keys(detail).length > 0) {
       console.info(prefix, detail);
     } else if (typeof detail !== "undefined" && detail !== null) {
