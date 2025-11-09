@@ -994,7 +994,7 @@ export class OperatorApp {
    * @param {string} reason
    * @returns {Promise<void>}
    */
-  syncOperatorPresence(reason = "context-sync") {
+  syncOperatorPresence(reason = "context-sync", options = {}) {
     if (this.operatorPresencePrimePromise) {
       return;
     }
@@ -1021,15 +1021,19 @@ export class OperatorApp {
       this.state?.currentSchedule || this.state?.lastNormalSchedule || this.pageContext?.scheduleKey
     );
     const previousPresence = this.state?.operatorPresenceSelf || null;
-    const allowPresenceFallback = reason === "context-sync" || reason === "heartbeat";
+    const allowPresenceFallback =
+      typeof options?.allowFallback === "boolean"
+        ? options.allowFallback
+        : reason === "heartbeat";
+    const useActiveSchedule = options?.useActiveSchedule !== false;
     const sessionId = ensure(this.operatorPresenceSessionId) || this.generatePresenceSessionId();
 
-    let scheduleId = committedScheduleId || activeScheduleId;
+    let scheduleId = committedScheduleId || (useActiveSchedule ? activeScheduleId : "");
     if (!scheduleId && allowPresenceFallback) {
       scheduleId = ensure(previousPresence?.scheduleId);
     }
 
-    let scheduleLabel = committedScheduleLabel || activeScheduleLabel;
+    let scheduleLabel = committedScheduleLabel || (useActiveSchedule ? activeScheduleLabel : "");
     if (!scheduleLabel && allowPresenceFallback) {
       scheduleLabel = ensure(previousPresence?.scheduleLabel);
     }
@@ -1037,7 +1041,7 @@ export class OperatorApp {
       scheduleLabel = scheduleId;
     }
 
-    let scheduleKey = committedScheduleKey || activeScheduleKey;
+    let scheduleKey = committedScheduleKey || (useActiveSchedule ? activeScheduleKey : "");
     if (!scheduleKey && allowPresenceFallback) {
       scheduleKey = ensure(previousPresence?.scheduleKey);
     }
@@ -2038,7 +2042,7 @@ export class OperatorApp {
       }
     }
 
-    this.updateScheduleContext();
+    this.updateScheduleContext({ presenceOptions: { allowFallback: false } });
     this.refreshChannelSubscriptions();
     if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== eventId) {
       this.operatorPresencePrimedEventId = "";
@@ -2150,7 +2154,7 @@ export class OperatorApp {
         if (nextValue) {
           this.state.currentSchedule = nextValue;
           this.state.lastNormalSchedule = nextValue;
-          this.updateScheduleContext();
+          this.updateScheduleContext({ syncPresence: false });
           this.renderQuestions();
         }
       });
@@ -2191,7 +2195,7 @@ export class OperatorApp {
     if (preferredSubTab && preferredSubTab !== this.state.currentSubTab) {
       this.switchSubTab(preferredSubTab);
     } else {
-      this.updateScheduleContext();
+      this.updateScheduleContext({ syncPresence: false });
       this.refreshChannelSubscriptions();
       this.renderQuestions();
     }
@@ -2712,7 +2716,7 @@ export class OperatorApp {
     if (typeof Logs.resetLogsLoader === "function") {
       Logs.resetLogsLoader(this);
     }
-    this.updateScheduleContext();
+    this.updateScheduleContext({ syncPresence: false });
   }
 
   /**
@@ -2871,7 +2875,7 @@ export class OperatorApp {
       list.push(this.normalizeQuestionRecord({ ...record, ...status, uid }));
     });
     this.state.allQuestions = list;
-    this.updateScheduleContext();
+    this.updateScheduleContext({ syncPresence: false });
     this.refreshChannelSubscriptions();
     this.renderQuestions();
   }
@@ -2969,7 +2973,7 @@ export class OperatorApp {
         this.state.displaySession = data;
         this.state.displaySessionActive = active;
         this.state.channelAssignment = this.getDisplayAssignment();
-        this.updateScheduleContext();
+        this.updateScheduleContext({ presenceOptions: { allowFallback: false } });
         if (this.state.displaySessionLastActive !== null && this.state.displaySessionLastActive !== active) {
           logDisplayLinkInfo("Display session activity changed", { active });
           this.toast(active ? "送出端末とのセッションが確立されました。" : "送出端末の接続が確認できません。", active ? "success" : "error");
