@@ -180,6 +180,7 @@ export class EventAdminApp {
     this.awaitingScheduleConflictPrompt = false;
     this.scheduleConflictRadioName = generateShortId("flow-conflict-radio-");
     this.scheduleFallbackRadioName = generateShortId("flow-fallback-radio-");
+    this.operatorModeRadioName = generateShortId("flow-operator-mode-radio-");
     this.flowDebugEnabled = false;
     this.operatorPresenceDebugEnabled = true;
     this.scheduleConsensusEventId = "";
@@ -190,6 +191,9 @@ export class EventAdminApp {
     this.scheduleConsensusToastTimer = 0;
     this.scheduleConsensusHideTimer = 0;
     this.scheduleFallbackContext = null;
+    this.operatorModeChoiceContext = null;
+    this.operatorModeChoiceResolver = null;
+    this.suppressScheduleConflictPromptOnce = false;
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.updateChatLayoutMetrics = this.updateChatLayoutMetrics.bind(this);
     this.chatLayoutResizeObserver = null;
@@ -213,6 +217,8 @@ export class EventAdminApp {
     this.handleFullscreenError = this.handleFullscreenError.bind(this);
     this.handleScheduleConflictSubmit = this.handleScheduleConflictSubmit.bind(this);
     this.handleScheduleFallbackSubmit = this.handleScheduleFallbackSubmit.bind(this);
+    this.handleOperatorModeSubmit = this.handleOperatorModeSubmit.bind(this);
+    this.resolveOperatorModeChoice = this.resolveOperatorModeChoice.bind(this);
     appendAuthDebugLog("events:app-constructed", {
       hasCurrentUser: Boolean(this.currentUser)
     });
@@ -564,11 +570,13 @@ export class EventAdminApp {
       });
     }
 
-    if (this.dom.operatorModeToggle) {
-      this.dom.operatorModeToggle.addEventListener("change", (event) => {
-        const checked = event.target instanceof HTMLInputElement ? event.target.checked : this.dom.operatorModeToggle.checked;
-        const mode = checked ? OPERATOR_MODE_SUPPORT : OPERATOR_MODE_TELOP;
-        this.setOperatorMode(mode, { fromControl: true });
+    if (this.dom.operatorModeForm) {
+      this.dom.operatorModeForm.addEventListener("submit", this.handleOperatorModeSubmit);
+    }
+
+    if (this.dom.operatorModeCancelButton) {
+      this.dom.operatorModeCancelButton.addEventListener("click", () => {
+        this.resolveOperatorModeChoice(null);
       });
     }
 
@@ -605,6 +613,7 @@ export class EventAdminApp {
     this.bindDialogDismiss(this.dom.confirmDialog);
     this.bindDialogDismiss(this.dom.scheduleConflictDialog);
     this.bindDialogDismiss(this.dom.scheduleFallbackDialog);
+    this.bindDialogDismiss(this.dom.operatorModeDialog);
 
     if (this.dom.confirmAcceptButton) {
       this.dom.confirmAcceptButton.addEventListener("click", () => {
@@ -1816,9 +1825,6 @@ export class EventAdminApp {
     this.tools
       .syncOperatorContext({ force: true })
       .catch((error) => logError("Failed to apply operator mode to embed", error));
-    if (!fromControl && this.dom.operatorModeToggle) {
-      this.dom.operatorModeToggle.checked = normalized === OPERATOR_MODE_SUPPORT;
-    }
     const hasSelection = Boolean(this.selectedEventId && this.selectedScheduleId);
     if (!hasSelection) {
       return;
@@ -1834,32 +1840,9 @@ export class EventAdminApp {
   }
 
   syncOperatorModeUi() {
-    const panel = this.dom.operatorModePanel;
-    const toggle = this.dom.operatorModeToggle;
-    const description = this.dom.operatorModeDescription;
     const hasEvent = Boolean(this.selectedEventId);
-    const hasSchedule = Boolean(this.selectedScheduleId);
-    if (panel) {
-      panel.hidden = !hasEvent;
-    }
     if (this.dom.eventSummaryActions) {
       this.dom.eventSummaryActions.hidden = !hasEvent;
-    }
-    if (toggle) {
-      toggle.checked = this.operatorMode === OPERATOR_MODE_SUPPORT;
-      toggle.disabled = !hasSchedule;
-      if (description) {
-        if (!hasSchedule) {
-          description.textContent = "日程を選択するとモードを切り替えられます。";
-        } else if (this.operatorMode === OPERATOR_MODE_SUPPORT) {
-          description.textContent = "参加者リストなどのツールのみ利用するモードです。テロップ操作は無効になります。";
-        } else {
-          description.textContent = "テロップ操作を含む全機能を利用できます。";
-        }
-      }
-      if (description) {
-        toggle.setAttribute("aria-describedby", description.id);
-      }
     }
     const copyButton = this.dom.eventSummaryCopyButton;
     if (copyButton) {
@@ -2728,41 +2711,68 @@ export class EventAdminApp {
       config.requireSchedule &&
       this.selectedEventId
     ) {
-      this.pendingNavigationTarget = normalized;
-      this.pendingNavigationMeta = {
-        target: normalized,
-        originPanel,
-        reason: "flow-navigation"
-      };
-      this.awaitingScheduleConflictPrompt = true;
-      const committed = this.commitSelectedScheduleForTelop({ reason: "navigation" });
-      if (!committed) {
+      const modeChoice = await this.requestOperatorModeChoice({
+        schedule: this.getSelectedSchedule(),
+        defaultMode: this.operatorMode,
+        reason: "navigation"
+      });
+      if (!modeChoice) {
+        this.lastScheduleCommitChanged = false;
+        return;
+      }
+      const normalizedModeChoice = normalizeOperatorMode(modeChoice);
+      if (normalizedModeChoice !== this.operatorMode) {
+        this.setOperatorMode(normalizedModeChoice, { fromControl: true });
+      }
+      if (normalizedModeChoice === OPERATOR_MODE_SUPPORT) {
         this.pendingNavigationTarget = "";
         this.pendingNavigationMeta = null;
         this.awaitingScheduleConflictPrompt = false;
+        this.setHostCommittedSchedule("", {
+          reason: "support-mode",
+          sync: true,
+          updateContext: true,
+          force: true
+        });
         this.syncScheduleConflictPromptState();
         this.lastScheduleCommitChanged = false;
-        return;
-      }
-      const context = this.buildScheduleConflictContext();
-      this.scheduleConflictContext = context;
-      if (context.hasConflict) {
-        this.clearPendingNavigationTimer();
-        this.awaitingScheduleConflictPrompt = false;
-        void this.requestScheduleConflictPrompt(context);
-        this.openScheduleConflictDialog(context, {
-          reason: "navigation",
+      } else {
+        this.pendingNavigationTarget = normalized;
+        this.pendingNavigationMeta = {
+          target: normalized,
           originPanel,
-          target: normalized
-        });
+          reason: "flow-navigation"
+        };
+        this.awaitingScheduleConflictPrompt = true;
+        const committed = this.commitSelectedScheduleForTelop({ reason: "navigation" });
+        if (!committed) {
+          this.pendingNavigationTarget = "";
+          this.pendingNavigationMeta = null;
+          this.awaitingScheduleConflictPrompt = false;
+          this.syncScheduleConflictPromptState();
+          this.lastScheduleCommitChanged = false;
+          return;
+        }
+        const context = this.buildScheduleConflictContext();
+        this.scheduleConflictContext = context;
+        if (context.hasConflict) {
+          this.clearPendingNavigationTimer();
+          this.awaitingScheduleConflictPrompt = false;
+          void this.requestScheduleConflictPrompt(context);
+          this.openScheduleConflictDialog(context, {
+            reason: "navigation",
+            originPanel,
+            target: normalized
+          });
+          this.syncScheduleConflictPromptState(context);
+          this.lastScheduleCommitChanged = false;
+          return;
+        }
+        this.schedulePendingNavigationClear();
+        this.enforceScheduleConflictState(context);
         this.syncScheduleConflictPromptState(context);
         this.lastScheduleCommitChanged = false;
-        return;
       }
-      this.schedulePendingNavigationClear();
-      this.enforceScheduleConflictState(context);
-      this.syncScheduleConflictPromptState(context);
-      this.lastScheduleCommitChanged = false;
     }
     this.schedulePendingNavigationClear();
     if (normalized === "schedules") {
@@ -3393,6 +3403,10 @@ export class EventAdminApp {
 
   enforceScheduleConflictState(context = null) {
     const hasConflict = Boolean(context?.hasConflict);
+    const suppressOnce = this.suppressScheduleConflictPromptOnce;
+    if (suppressOnce) {
+      this.suppressScheduleConflictPromptOnce = false;
+    }
     if (!hasConflict) {
       if (this.isScheduleConflictDialogOpen()) {
         if (this.dom.scheduleConflictForm) {
@@ -3415,6 +3429,12 @@ export class EventAdminApp {
       hasSelection &&
       signature &&
       signature !== this.scheduleConflictLastPromptSignature;
+    if (suppressOnce) {
+      if (signature) {
+        this.scheduleConflictLastPromptSignature = signature;
+      }
+      return;
+    }
     if (!this.isScheduleConflictDialogOpen()) {
       if (shouldPromptDueToNavigation && hasSelection) {
         this.openScheduleConflictDialog(context, {
@@ -3753,7 +3773,8 @@ export class EventAdminApp {
         reason: "consensus-apply",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
     } else if (scheduleId && selectedScheduleId && scheduleId !== selectedScheduleId) {
       const currentSchedule = this.schedules.find((schedule) => schedule.id === selectedScheduleId) || null;
@@ -3762,7 +3783,8 @@ export class EventAdminApp {
         reason: "consensus-pending",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       if (this.operatorMode === OPERATOR_MODE_SUPPORT) {
         this.logFlowState("テロップ操作なしモードのためスケジュール合意モーダルを表示しません", {
@@ -3772,13 +3794,20 @@ export class EventAdminApp {
           consensusRange: range || ""
         });
       } else {
+        const conflictContext =
+          (this.scheduleConflictContext &&
+            ensureString(this.scheduleConflictContext?.signature) === ensureString(consensus.conflictSignature))
+            ? this.scheduleConflictContext
+            : this.buildScheduleConflictContext();
         this.openScheduleFallbackDialog({
           consensusScheduleId: scheduleId,
           consensusLabel: label,
           consensusRange: range,
           consensusByline: byline,
           currentScheduleId: selectedScheduleId,
-          currentScheduleLabel: currentLabel
+          currentScheduleLabel: currentLabel,
+          conflictContext,
+          pendingNavigationTarget: this.pendingNavigationTarget || ""
         });
       }
     } else if (scheduleId) {
@@ -3787,14 +3816,16 @@ export class EventAdminApp {
         reason: "consensus-align",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
     } else {
       this.setHostCommittedSchedule("", {
         reason: "consensus-clear",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
     }
     this.syncScheduleConflictPromptState();
@@ -3971,7 +4002,14 @@ export class EventAdminApp {
 
   setHostCommittedSchedule(
     scheduleId,
-    { schedule = null, reason = "state-change", sync = true, updateContext = true, force = false } = {}
+    {
+      schedule = null,
+      reason = "state-change",
+      sync = true,
+      updateContext = true,
+      force = false,
+      suppressConflictPrompt = false
+    } = {}
   ) {
     const normalizedId = ensureString(scheduleId);
     let resolvedSchedule = schedule;
@@ -3996,6 +4034,9 @@ export class EventAdminApp {
       this.syncHostPresence(reason);
     } else if (changed) {
       this.hostPresenceLastSignature = "";
+    }
+    if (suppressConflictPrompt) {
+      this.suppressScheduleConflictPromptOnce = true;
     }
     if (updateContext) {
       this.updateScheduleConflictState();
@@ -4653,6 +4694,176 @@ export class EventAdminApp {
     }
   }
 
+  clearOperatorModeChoiceError() {
+    if (this.dom.operatorModeError) {
+      this.dom.operatorModeError.hidden = true;
+      this.dom.operatorModeError.textContent = "";
+    }
+  }
+
+  setOperatorModeChoiceError(message = "") {
+    if (!this.dom.operatorModeError) {
+      return;
+    }
+    const trimmed = String(message || "").trim();
+    if (!trimmed) {
+      this.clearOperatorModeChoiceError();
+      return;
+    }
+    this.dom.operatorModeError.hidden = false;
+    this.dom.operatorModeError.textContent = trimmed;
+  }
+
+  renderOperatorModeDialog(context = null) {
+    const summary = this.dom.operatorModeSummary;
+    const scheduleLabel = ensureString(context?.scheduleLabel) || ensureString(context?.scheduleId);
+    const scheduleRange = ensureString(context?.scheduleRange);
+    if (summary) {
+      if (!summary.dataset.defaultText) {
+        summary.dataset.defaultText = summary.textContent || "";
+      }
+      if (scheduleLabel) {
+        summary.textContent = scheduleRange
+          ? `日程「${scheduleLabel}」（${scheduleRange}）をどのモードで扱うか選択してください。`
+          : `日程「${scheduleLabel}」をどのモードで扱うか選択してください。`;
+      } else {
+        summary.textContent = summary.dataset.defaultText || "テロップ操作を行うかどうかを選択してください。";
+      }
+    }
+    const container = this.dom.operatorModeOptions;
+    if (container) {
+      const legend = container.querySelector("legend");
+      container.innerHTML = "";
+      if (legend) {
+        container.appendChild(legend);
+      }
+      const options = [
+        {
+          value: OPERATOR_MODE_TELOP,
+          title: "テロップ操作ありで進行する",
+          description: scheduleLabel
+            ? `テロップ操作パネルを日程「${scheduleLabel}」で開きます。`
+            : "テロップ操作パネルを利用します。"
+        },
+        {
+          value: OPERATOR_MODE_SUPPORT,
+          title: "テロップ操作なしモードで進行する",
+          description: scheduleLabel
+            ? `日程「${scheduleLabel}」はテロップ操作パネルで扱わず、参加者リストなどのみ利用します。`
+            : "テロップ操作を行わず、補助ツールのみ利用します。"
+        }
+      ];
+      const radioName = this.operatorModeRadioName;
+      const defaultMode = normalizeOperatorMode(context?.defaultMode || this.operatorMode);
+      const updateSelectionState = () => {
+        const wrappers = container.querySelectorAll(".conflict-option");
+        wrappers.forEach((wrapperEl) => {
+          const input = wrapperEl.querySelector(`input[name="${radioName}"]`);
+          wrapperEl.classList.toggle("is-selected", Boolean(input?.checked));
+        });
+      };
+      options.forEach((option, index) => {
+        const optionId = `flow-operator-mode-option-${index}`;
+        const wrapper = document.createElement("label");
+        wrapper.className = "conflict-option";
+
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = radioName;
+        radio.id = optionId;
+        radio.value = option.value;
+        radio.className = "visually-hidden";
+        radio.required = true;
+        if (option.value === defaultMode || (!defaultMode && index === 0)) {
+          radio.checked = true;
+        }
+        radio.addEventListener("change", updateSelectionState);
+        wrapper.appendChild(radio);
+
+        const header = document.createElement("div");
+        header.className = "conflict-option__header";
+        const title = document.createElement("span");
+        title.className = "conflict-option__title";
+        title.textContent = option.title;
+        header.appendChild(title);
+        wrapper.appendChild(header);
+
+        if (option.description) {
+          const meta = document.createElement("div");
+          meta.className = "conflict-option__meta";
+          meta.textContent = option.description;
+          wrapper.appendChild(meta);
+        }
+
+        container.appendChild(wrapper);
+      });
+      updateSelectionState();
+    }
+    this.clearOperatorModeChoiceError();
+  }
+
+  resolveOperatorModeChoice(result) {
+    const resolver = this.operatorModeChoiceResolver;
+    this.operatorModeChoiceResolver = null;
+    const normalized = result ? normalizeOperatorMode(result) : null;
+    if (this.dom.operatorModeDialog) {
+      this.closeDialog(this.dom.operatorModeDialog);
+    }
+    if (typeof resolver === "function") {
+      resolver(normalized);
+    }
+    this.operatorModeChoiceContext = null;
+  }
+
+  handleOperatorModeSubmit(event) {
+    if (event) {
+      event.preventDefault();
+    }
+    if (!this.dom.operatorModeForm) {
+      return;
+    }
+    const container = this.dom.operatorModeOptions;
+    const inputs = Array.from(
+      container?.querySelectorAll(`input[name="${this.operatorModeRadioName}"]`) || []
+    );
+    const selected = inputs.find((input) => input.checked);
+    if (!selected) {
+      this.setOperatorModeChoiceError("モードを選択してください。");
+      return;
+    }
+    this.clearOperatorModeChoiceError();
+    this.resolveOperatorModeChoice(selected.value || OPERATOR_MODE_TELOP);
+  }
+
+  async requestOperatorModeChoice(context = null) {
+    if (!context) {
+      context = {};
+    }
+    const schedule = context.schedule || this.getSelectedSchedule?.();
+    if (schedule) {
+      context.scheduleId = ensureString(schedule.id);
+      context.scheduleLabel = ensureString(schedule.label) || context.scheduleId || "";
+      context.scheduleRange = formatScheduleRange(schedule.startAt, schedule.endAt);
+    } else {
+      context.scheduleId = ensureString(context.scheduleId);
+      context.scheduleLabel = ensureString(context.scheduleLabel) || context.scheduleId || "";
+      context.scheduleRange = ensureString(context.scheduleRange);
+    }
+    context.defaultMode = normalizeOperatorMode(context.defaultMode || this.operatorMode);
+    if (!this.dom.operatorModeDialog || !this.dom.operatorModeForm || !this.dom.operatorModeOptions) {
+      return context.defaultMode;
+    }
+    if (this.operatorModeChoiceResolver) {
+      this.resolveOperatorModeChoice(null);
+    }
+    this.operatorModeChoiceContext = context;
+    this.renderOperatorModeDialog(context);
+    this.openDialog(this.dom.operatorModeDialog);
+    return await new Promise((resolve) => {
+      this.operatorModeChoiceResolver = resolve;
+    });
+  }
+
   handleScheduleConflictSubmit(event) {
     event.preventDefault();
     const options = Array.from(
@@ -4701,13 +4912,20 @@ export class EventAdminApp {
         ? context.options
         : [];
     const option = optionsContext.find((item) => item.key === scheduleKey || item.scheduleId === scheduleId) || null;
+    const resolvedScheduleId = scheduleId;
     this.scheduleConflictContext = context;
     this.clearScheduleConflictError();
     this.setScheduleConflictSubmitting(true);
-    this.confirmScheduleConsensus({ scheduleId, scheduleKey, option, context })
+    this.confirmScheduleConsensus({ scheduleId: resolvedScheduleId, scheduleKey, option, context })
       .then((confirmed) => {
         if (!confirmed) {
           return;
+        }
+        if (
+          resolvedScheduleId &&
+          ensureString(this.selectedScheduleId) !== ensureString(resolvedScheduleId)
+        ) {
+          this.selectSchedule(resolvedScheduleId);
         }
         if (this.dom.scheduleConflictForm) {
           this.dom.scheduleConflictForm.reset();
@@ -4819,15 +5037,14 @@ export class EventAdminApp {
       const winnerLabel = ensureString(context?.consensusLabel) || ensureString(context?.consensusScheduleId);
       const winnerRange = ensureString(context?.consensusRange);
       const currentLabel = ensureString(context?.currentScheduleLabel) || ensureString(context?.currentScheduleId);
+      const hasConflictContext = Boolean(context?.conflictContext?.hasConflict);
       const options = [
         {
-          value: "follow",
-          title: "テロップを操作する日程を選ぶ",
-          description: winnerLabel
-            ? winnerRange
-              ? `テロップ操作パネルを「${winnerLabel}」（${winnerRange}）で開きます。`
-              : `テロップ操作パネルを「${winnerLabel}」で開きます。`
-            : "確定した日程でテロップ操作を行います。"
+          value: "retry",
+          title: "もう一度テロップ操作する日程を選び直す",
+          description: hasConflictContext
+            ? "再度、テロップ操作に使用する日程を選ぶモーダルを開きます。"
+            : "テロップ操作に使用する日程を改めて選択します。"
         },
         {
           value: "support",
@@ -4837,9 +5054,18 @@ export class EventAdminApp {
             : "テロップ操作を行わず、参加者向けツールのみ利用します。"
         },
         {
+          value: "follow",
+          title: "現在のテロップ操作ありモードの日程を開く",
+          description: winnerLabel
+            ? winnerRange
+              ? `テロップ操作パネルを「${winnerLabel}」（${winnerRange}）で開きます。`
+              : `テロップ操作パネルを「${winnerLabel}」で開きます。`
+            : "確定した日程でテロップ操作を行います。"
+        },
+        {
           value: "reselect",
-          title: "もう一度日程を選び直す",
-          description: "日程一覧に戻り、テロップ操作で使用する日程を改めて選び直します。"
+          title: "日程選択パネルに戻って選び直す",
+          description: "日程管理パネルへ戻ります。"
         }
       ];
       const radioName = this.scheduleFallbackRadioName;
@@ -4925,6 +5151,7 @@ export class EventAdminApp {
       ? this.schedules.find((item) => item.id === consensusScheduleId) || null
       : null;
     this.clearScheduleFallbackError();
+    let followupAction = null;
     if (action === "follow") {
       if (consensusScheduleId) {
         this.selectSchedule(consensusScheduleId);
@@ -4937,7 +5164,8 @@ export class EventAdminApp {
         reason: "consensus-follow",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.logFlowState("確定した日程に移動する対応を選択しました", {
         scheduleId: consensusScheduleId || ""
@@ -4950,7 +5178,8 @@ export class EventAdminApp {
         reason: "consensus-support",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.logFlowState("テロップ操作なしモードで続ける対応を選択しました", {
         previousScheduleId: ensureString(context.currentScheduleId) || ""
@@ -4960,10 +5189,42 @@ export class EventAdminApp {
         reason: "consensus-reselect",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
+      this.selectSchedule("");
       this.showPanel("schedules");
       this.logFlowState("別の日程を選び直す対応を選択しました", {
+        previousScheduleId: ensureString(context.currentScheduleId) || ""
+      });
+    } else if (action === "retry") {
+      const conflictContext =
+        context.conflictContext && context.conflictContext.hasConflict
+          ? context.conflictContext
+          : this.buildScheduleConflictContext();
+      if (this.operatorMode !== OPERATOR_MODE_TELOP) {
+        this.setOperatorMode(OPERATOR_MODE_TELOP);
+      }
+      this.setHostCommittedSchedule("", {
+        reason: "consensus-retry",
+        sync: true,
+        updateContext: true,
+        force: true,
+        suppressConflictPrompt: true
+      });
+      this.pendingNavigationTarget = context.pendingNavigationTarget || "participants";
+      this.pendingNavigationMeta = {
+        target: this.pendingNavigationTarget,
+        originPanel: "schedules",
+        reason: "fallback-retry"
+      };
+      this.awaitingScheduleConflictPrompt = false;
+      if (conflictContext && conflictContext.hasConflict) {
+        followupAction = { type: "conflict", context: conflictContext };
+      } else {
+        this.showPanel("schedules");
+      }
+      this.logFlowState("テロップ操作日程を再選択する対応を選択しました", {
         previousScheduleId: ensureString(context.currentScheduleId) || ""
       });
     } else {
@@ -4978,6 +5239,17 @@ export class EventAdminApp {
       this.dom.scheduleFallbackOptions.innerHTML = "";
     }
     this.scheduleFallbackContext = null;
+    if (followupAction?.type === "conflict") {
+      const conflictContext = followupAction.context;
+      this.scheduleConflictContext = conflictContext;
+      void this.requestScheduleConflictPrompt(conflictContext);
+      this.openScheduleConflictDialog(conflictContext, {
+        reason: "fallback-retry",
+        originPanel: "schedules",
+        target: this.pendingNavigationTarget || "participants"
+      });
+      this.syncScheduleConflictPromptState(conflictContext);
+    }
   }
 
   async confirmScheduleConsensus(selection) {
@@ -5095,7 +5367,8 @@ export class EventAdminApp {
         reason: "consensus-submit",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.tools.prepareContextForSelection();
       if (
@@ -5576,6 +5849,10 @@ export class EventAdminApp {
 
   enforceScheduleConflictState(context = null) {
     const hasConflict = Boolean(context?.hasConflict);
+    const suppressOnce = this.suppressScheduleConflictPromptOnce;
+    if (suppressOnce) {
+      this.suppressScheduleConflictPromptOnce = false;
+    }
     if (!hasConflict) {
       if (this.isScheduleConflictDialogOpen()) {
         if (this.dom.scheduleConflictForm) {
@@ -5598,6 +5875,12 @@ export class EventAdminApp {
       hasSelection &&
       signature &&
       signature !== this.scheduleConflictLastPromptSignature;
+    if (suppressOnce) {
+      if (signature) {
+        this.scheduleConflictLastPromptSignature = signature;
+      }
+      return;
+    }
     if (!this.isScheduleConflictDialogOpen()) {
       if (shouldPromptDueToNavigation && hasSelection) {
         this.openScheduleConflictDialog(context, {
@@ -5935,7 +6218,8 @@ export class EventAdminApp {
         reason: "consensus-apply",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
     } else if (scheduleId && selectedScheduleId && scheduleId !== selectedScheduleId) {
       const currentSchedule = this.schedules.find((schedule) => schedule.id === selectedScheduleId) || null;
@@ -5944,7 +6228,8 @@ export class EventAdminApp {
         reason: "consensus-pending",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       if (this.operatorMode === OPERATOR_MODE_SUPPORT) {
         this.logFlowState("テロップ操作なしモードのためスケジュール合意モーダルを表示しません", {
@@ -5954,13 +6239,20 @@ export class EventAdminApp {
           consensusRange: range || ""
         });
       } else {
+        const conflictContext =
+          (this.scheduleConflictContext &&
+            ensureString(this.scheduleConflictContext?.signature) === ensureString(consensus.conflictSignature))
+            ? this.scheduleConflictContext
+            : this.buildScheduleConflictContext();
         this.openScheduleFallbackDialog({
           consensusScheduleId: scheduleId,
           consensusLabel: label,
           consensusRange: range,
           consensusByline: byline,
           currentScheduleId: selectedScheduleId,
-          currentScheduleLabel: currentLabel
+          currentScheduleLabel: currentLabel,
+          conflictContext,
+          pendingNavigationTarget: this.pendingNavigationTarget || ""
         });
       }
     } else if (scheduleId) {
@@ -5969,14 +6261,16 @@ export class EventAdminApp {
         reason: "consensus-align",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
     } else {
       this.setHostCommittedSchedule("", {
         reason: "consensus-clear",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
     }
     this.syncScheduleConflictPromptState();
@@ -6137,7 +6431,14 @@ export class EventAdminApp {
 
   setHostCommittedSchedule(
     scheduleId,
-    { schedule = null, reason = "state-change", sync = true, updateContext = true, force = false } = {}
+    {
+      schedule = null,
+      reason = "state-change",
+      sync = true,
+      updateContext = true,
+      force = false,
+      suppressConflictPrompt = false
+    } = {}
   ) {
     const normalizedId = ensureString(scheduleId);
     let resolvedSchedule = schedule;
@@ -6157,6 +6458,9 @@ export class EventAdminApp {
       this.syncHostPresence(reason);
     } else if (changed) {
       this.hostPresenceLastSignature = "";
+    }
+    if (suppressConflictPrompt) {
+      this.suppressScheduleConflictPromptOnce = true;
     }
     if (updateContext) {
       this.updateScheduleConflictState();
@@ -6392,13 +6696,20 @@ export class EventAdminApp {
         ? context.options
         : [];
     const option = optionsContext.find((item) => item.key === scheduleKey || item.scheduleId === scheduleId) || null;
+    const resolvedScheduleId = scheduleId;
     this.scheduleConflictContext = context;
     this.clearScheduleConflictError();
     this.setScheduleConflictSubmitting(true);
-    this.confirmScheduleConsensus({ scheduleId, scheduleKey, option, context })
+    this.confirmScheduleConsensus({ scheduleId: resolvedScheduleId, scheduleKey, option, context })
       .then((confirmed) => {
         if (!confirmed) {
           return;
+        }
+        if (
+          resolvedScheduleId &&
+          ensureString(this.selectedScheduleId) !== ensureString(resolvedScheduleId)
+        ) {
+          this.selectSchedule(resolvedScheduleId);
         }
         if (this.dom.scheduleConflictForm) {
           this.dom.scheduleConflictForm.reset();
@@ -6524,15 +6835,14 @@ export class EventAdminApp {
       const winnerLabel = ensureString(context?.consensusLabel) || ensureString(context?.consensusScheduleId);
       const winnerRange = ensureString(context?.consensusRange);
       const currentLabel = ensureString(context?.currentScheduleLabel) || ensureString(context?.currentScheduleId);
+      const hasConflictContext = Boolean(context?.conflictContext?.hasConflict);
       const options = [
         {
-          value: "follow",
-          title: "テロップを操作する日程を選ぶ",
-          description: winnerLabel
-            ? winnerRange
-              ? `テロップ操作パネルを「${winnerLabel}」（${winnerRange}）で開きます。`
-              : `テロップ操作パネルを「${winnerLabel}」で開きます。`
-            : "確定した日程でテロップ操作を行います。"
+          value: "retry",
+          title: "もう一度テロップ操作する日程を選び直す",
+          description: hasConflictContext
+            ? "再度、テロップ操作に使用する日程を選ぶモーダルを開きます。"
+            : "テロップ操作に使用する日程を改めて選択します。"
         },
         {
           value: "support",
@@ -6542,9 +6852,18 @@ export class EventAdminApp {
             : "テロップ操作を行わず、参加者向けツールのみ利用します。"
         },
         {
+          value: "follow",
+          title: "現在のテロップ操作ありモードの日程を開く",
+          description: winnerLabel
+            ? winnerRange
+              ? `テロップ操作パネルを「${winnerLabel}」（${winnerRange}）で開きます。`
+              : `テロップ操作パネルを「${winnerLabel}」で開きます。`
+            : "確定した日程でテロップ操作を行います。"
+        },
+        {
           value: "reselect",
-          title: "もう一度日程を選び直す",
-          description: "日程一覧に戻り、テロップ操作で使用する日程を改めて選び直します。"
+          title: "日程選択パネルに戻って選び直す",
+          description: "日程管理パネルへ戻ります。"
         }
       ];
       const radioName = this.scheduleFallbackRadioName;
@@ -6630,6 +6949,7 @@ export class EventAdminApp {
       ? this.schedules.find((item) => item.id === consensusScheduleId) || null
       : null;
     this.clearScheduleFallbackError();
+    let followupAction = null;
     if (action === "follow") {
       if (consensusScheduleId) {
         this.selectSchedule(consensusScheduleId);
@@ -6642,7 +6962,8 @@ export class EventAdminApp {
         reason: "consensus-follow",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.logFlowState("確定した日程に移動する対応を選択しました", {
         scheduleId: consensusScheduleId || ""
@@ -6655,7 +6976,8 @@ export class EventAdminApp {
         reason: "consensus-support",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.logFlowState("テロップ操作なしモードで続ける対応を選択しました", {
         previousScheduleId: ensureString(context.currentScheduleId) || ""
@@ -6665,10 +6987,42 @@ export class EventAdminApp {
         reason: "consensus-reselect",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
+      this.selectSchedule("");
       this.showPanel("schedules");
       this.logFlowState("別の日程を選び直す対応を選択しました", {
+        previousScheduleId: ensureString(context.currentScheduleId) || ""
+      });
+    } else if (action === "retry") {
+      const conflictContext =
+        context.conflictContext && context.conflictContext.hasConflict
+          ? context.conflictContext
+          : this.buildScheduleConflictContext();
+      if (this.operatorMode !== OPERATOR_MODE_TELOP) {
+        this.setOperatorMode(OPERATOR_MODE_TELOP);
+      }
+      this.setHostCommittedSchedule("", {
+        reason: "consensus-retry",
+        sync: true,
+        updateContext: true,
+        force: true,
+        suppressConflictPrompt: true
+      });
+      this.pendingNavigationTarget = context.pendingNavigationTarget || "participants";
+      this.pendingNavigationMeta = {
+        target: this.pendingNavigationTarget,
+        originPanel: "schedules",
+        reason: "fallback-retry"
+      };
+      this.awaitingScheduleConflictPrompt = false;
+      if (conflictContext && conflictContext.hasConflict) {
+        followupAction = { type: "conflict", context: conflictContext };
+      } else {
+        this.showPanel("schedules");
+      }
+      this.logFlowState("テロップ操作日程を再選択する対応を選択しました", {
         previousScheduleId: ensureString(context.currentScheduleId) || ""
       });
     } else {
@@ -6683,6 +7037,17 @@ export class EventAdminApp {
       this.dom.scheduleFallbackOptions.innerHTML = "";
     }
     this.scheduleFallbackContext = null;
+    if (followupAction?.type === "conflict") {
+      const conflictContext = followupAction.context;
+      this.scheduleConflictContext = conflictContext;
+      void this.requestScheduleConflictPrompt(conflictContext);
+      this.openScheduleConflictDialog(conflictContext, {
+        reason: "fallback-retry",
+        originPanel: "schedules",
+        target: this.pendingNavigationTarget || "participants"
+      });
+      this.syncScheduleConflictPromptState(conflictContext);
+    }
   }
 
   async confirmScheduleConsensus(selection) {
@@ -6800,7 +7165,8 @@ export class EventAdminApp {
         reason: "consensus-submit",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.tools.prepareContextForSelection();
       if (
@@ -7906,6 +8272,9 @@ export class EventAdminApp {
           this.resolveConfirm(false);
         } else if (element === this.dom.scheduleConflictDialog) {
           return;
+        } else if (element === this.dom.operatorModeDialog) {
+          this.resolveOperatorModeChoice(null);
+          return;
         } else {
           this.closeDialog(element);
         }
@@ -7968,6 +8337,17 @@ export class EventAdminApp {
       this.clearScheduleFallbackError();
       this.scheduleFallbackContext = null;
     }
+    if (element === this.dom.operatorModeDialog) {
+      if (this.dom.operatorModeForm) {
+        this.dom.operatorModeForm.reset();
+      }
+      if (this.dom.operatorModeOptions) {
+        this.dom.operatorModeOptions.innerHTML = "";
+      }
+      this.clearOperatorModeChoiceError();
+      this.operatorModeChoiceContext = null;
+      this.operatorModeChoiceResolver = null;
+    }
   }
 
   handleGlobalKeydown(event) {
@@ -7975,6 +8355,8 @@ export class EventAdminApp {
       event.preventDefault();
       if (this.activeDialog === this.dom.confirmDialog) {
         this.resolveConfirm(false);
+      } else if (this.activeDialog === this.dom.operatorModeDialog) {
+        this.resolveOperatorModeChoice(null);
       } else {
         this.closeDialog(this.activeDialog);
       }
