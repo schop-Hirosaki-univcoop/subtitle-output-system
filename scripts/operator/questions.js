@@ -290,13 +290,18 @@ export function renderQuestions(app) {
   updateBatchButtonVisibility(app);
 }
 
-export function updateScheduleContext(app) {
+export function updateScheduleContext(app, options = {}) {
   const rangeEl = app.dom.scheduleTimeRange;
   const eventLabelEl = app.dom.scheduleEventName;
   const scheduleLabelEl = app.dom.scheduleLabel;
   const metadataMap = app.state.scheduleMetadata instanceof Map ? app.state.scheduleMetadata : null;
   const eventsMap = app.state.eventsById instanceof Map ? app.state.eventsById : null;
   const context = app.pageContext || {};
+  const {
+    syncPresence = true,
+    presenceReason = "context-sync",
+    presenceOptions = undefined
+  } = typeof options === "object" && options !== null ? options : {};
 
   const ensure = (value) => String(value ?? "").trim();
   let eventId = ensure(context.eventId);
@@ -405,8 +410,8 @@ export function updateScheduleContext(app) {
   if (typeof app.refreshOperatorPresenceSubscription === "function") {
     app.refreshOperatorPresenceSubscription();
   }
-  if (typeof app.syncOperatorPresence === "function") {
-    app.syncOperatorPresence();
+  if (syncPresence && typeof app.syncOperatorPresence === "function") {
+    app.syncOperatorPresence(presenceReason, presenceOptions);
   }
   if (typeof app.refreshChannelSubscriptions === "function") {
     app.refreshChannelSubscriptions();
@@ -433,7 +438,7 @@ export function switchSubTab(app, tabName) {
   } else {
     app.state.currentSchedule = "";
   }
-  updateScheduleContext(app);
+  updateScheduleContext(app, { syncPresence: false });
   if (typeof app.refreshChannelSubscriptions === "function") {
     app.refreshChannelSubscriptions();
   }
@@ -461,7 +466,7 @@ export function switchGenre(app, genreKey) {
   if (app.state.currentSubTab === "normal" && app.state.lastNormalSchedule) {
     app.state.currentSchedule = app.state.lastNormalSchedule;
   }
-  updateScheduleContext(app);
+  updateScheduleContext(app, { syncPresence: false });
   if (typeof app.refreshChannelSubscriptions === "function") {
     app.refreshChannelSubscriptions();
   }
