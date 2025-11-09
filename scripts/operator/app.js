@@ -354,6 +354,8 @@ export class OperatorApp {
     this.currentConflictSignature = "";
     this.conflictDialogSnoozedSignature = "";
     this.preflightContext = null;
+    this.pendingConsensusAdoption = null;
+    this.consensusAdoptionScheduled = false;
 
     this.toast = showToast;
     bindModuleMethods(this);
@@ -994,7 +996,7 @@ export class OperatorApp {
    * @param {string} reason
    * @returns {Promise<void>}
    */
-  syncOperatorPresence(reason = "context-sync") {
+  syncOperatorPresence(reason = "context-sync", options = {}) {
     if (this.operatorPresencePrimePromise) {
       return;
     }
@@ -1015,46 +1017,85 @@ export class OperatorApp {
     const committedScheduleId = ensure(this.state?.committedScheduleId);
     const committedScheduleLabel = ensure(this.state?.committedScheduleLabel);
     const committedScheduleKey = ensure(this.state?.committedScheduleKey);
+    const intentScheduleId = ensure(this.state?.operatorPresenceIntentId);
+    const intentScheduleLabel = ensure(this.state?.operatorPresenceIntentLabel);
+    const intentScheduleKey = ensure(this.state?.operatorPresenceIntentKey);
     const activeScheduleId = ensure(this.state?.activeScheduleId || this.pageContext?.scheduleId);
     const activeScheduleLabel = ensure(this.state?.activeScheduleLabel || this.pageContext?.scheduleLabel);
     const activeScheduleKey = ensure(
       this.state?.currentSchedule || this.state?.lastNormalSchedule || this.pageContext?.scheduleKey
     );
     const previousPresence = this.state?.operatorPresenceSelf || null;
-    const allowPresenceFallback = reason === "context-sync" || reason === "heartbeat";
+    const allowPresenceFallback =
+      typeof options?.allowFallback === "boolean"
+        ? options.allowFallback
+        : reason === "heartbeat";
+    const useActiveSchedule = options?.useActiveSchedule !== false;
+    const publishScheduleOption = options?.publishSchedule;
     const sessionId = ensure(this.operatorPresenceSessionId) || this.generatePresenceSessionId();
 
-    let scheduleId = committedScheduleId || activeScheduleId;
-    if (!scheduleId && allowPresenceFallback) {
-      scheduleId = ensure(previousPresence?.scheduleId);
-    }
+    const schedulePublicationExplicit = publishScheduleOption === true;
+    const scheduleSuppressed = publishScheduleOption === false;
+    const activeScheduleAvailable =
+      useActiveSchedule && (activeScheduleKey || activeScheduleId || activeScheduleLabel);
+    const shouldPublishSchedule =
+      schedulePublicationExplicit ||
+      (!scheduleSuppressed && (committedScheduleKey || intentScheduleKey || intentScheduleId || intentScheduleLabel || activeScheduleAvailable));
 
-    let scheduleLabel = committedScheduleLabel || activeScheduleLabel;
-    if (!scheduleLabel && allowPresenceFallback) {
-      scheduleLabel = ensure(previousPresence?.scheduleLabel);
-    }
-    if (!scheduleLabel && scheduleId) {
-      scheduleLabel = scheduleId;
-    }
+    let scheduleId = "";
+    let scheduleLabel = "";
+    let scheduleKey = "";
 
-    let scheduleKey = committedScheduleKey || activeScheduleKey;
-    if (!scheduleKey && allowPresenceFallback) {
-      scheduleKey = ensure(previousPresence?.scheduleKey);
+    if (shouldPublishSchedule) {
+      scheduleId = committedScheduleId || (useActiveSchedule ? activeScheduleId : "");
+      if (!scheduleId && intentScheduleId) {
+        scheduleId = intentScheduleId;
+      }
+      if (!scheduleId && intentScheduleKey) {
+        const [, schedulePart = ""] = intentScheduleKey.split("::");
+        scheduleId = ensure(schedulePart || intentScheduleKey);
+      }
+      if (!scheduleId && allowPresenceFallback) {
+        scheduleId = ensure(previousPresence?.scheduleId);
+      }
+
+      scheduleLabel = committedScheduleLabel || (useActiveSchedule ? activeScheduleLabel : "");
+      if (!scheduleLabel && intentScheduleLabel) {
+        scheduleLabel = intentScheduleLabel;
+      }
+      if (!scheduleLabel && allowPresenceFallback) {
+        scheduleLabel = ensure(previousPresence?.scheduleLabel);
+      }
+      if (!scheduleLabel && scheduleId) {
+        scheduleLabel = scheduleId;
+      }
+
+      scheduleKey = committedScheduleKey || (useActiveSchedule ? activeScheduleKey : "");
+      if (!scheduleKey && intentScheduleKey) {
+        scheduleKey = intentScheduleKey;
+      }
+      if (!scheduleKey && scheduleId && eventId) {
+        scheduleKey = `${eventId}::${normalizeScheduleId(scheduleId)}`;
+      }
+      if (!scheduleKey && allowPresenceFallback) {
+        scheduleKey = ensure(previousPresence?.scheduleKey);
+      }
+      if (!scheduleKey && scheduleId) {
+        scheduleKey = this.derivePresenceScheduleKey(eventId, { scheduleId, scheduleLabel }, sessionId);
+      }
+      if (!scheduleKey && scheduleLabel) {
+        scheduleKey = this.derivePresenceScheduleKey(
+          eventId,
+          {
+            scheduleId: "",
+            scheduleLabel
+          },
+          sessionId
+        );
+      }
     }
-    if (!scheduleKey && scheduleId) {
-      scheduleKey = this.derivePresenceScheduleKey(eventId, { scheduleId, scheduleLabel }, sessionId);
-    }
-    if (!scheduleKey && scheduleLabel) {
-      scheduleKey = this.derivePresenceScheduleKey(
-        eventId,
-        {
-          scheduleId: "",
-          scheduleLabel
-        },
-        sessionId
-      );
-    }
-    const eventName = String(this.state?.activeEventName || "").trim();
+    const publishEvent = shouldPublishSchedule || options?.publishEvent === true;
+    const eventName = publishEvent ? String(this.state?.activeEventName || "").trim() : "";
     const skipTelop = !this.isTelopEnabled();
     this.operatorPresenceSessionId = sessionId;
     const nextKey = `${eventId}/${sessionId}`;
@@ -1086,7 +1127,7 @@ export class OperatorApp {
       uid,
       email: String(user?.email || "").trim(),
       displayName: String(user?.displayName || "").trim(),
-      eventId,
+      eventId: publishEvent ? eventId : "",
       eventName,
       scheduleId,
       scheduleKey,
@@ -1187,6 +1228,38 @@ export class OperatorApp {
       remove(entryRef).catch(() => {});
     }
     this.state.operatorPresenceSelf = null;
+    this.clearOperatorPresenceIntent();
+  }
+
+  /**
+   * オペレーターpresenceで使用する日程意図をクリアします。
+   */
+  clearOperatorPresenceIntent() {
+    if (!this.state) {
+      return;
+    }
+    this.state.operatorPresenceIntentId = "";
+    this.state.operatorPresenceIntentLabel = "";
+    this.state.operatorPresenceIntentKey = "";
+  }
+
+  /**
+   * presenceで公開する日程意図を設定します。
+   * @param {string} eventId
+   * @param {string} scheduleId
+   * @param {string} scheduleLabel
+   */
+  markOperatorPresenceIntent(eventId, scheduleId, scheduleLabel = "") {
+    if (!this.state) {
+      return;
+    }
+    const normalizedEvent = String(eventId || "").trim();
+    const normalizedSchedule = normalizeScheduleId(scheduleId || "");
+    const label = String(scheduleLabel || "").trim();
+    const scheduleKey = normalizedEvent && normalizedSchedule ? `${normalizedEvent}::${normalizedSchedule}` : "";
+    this.state.operatorPresenceIntentId = normalizedSchedule;
+    this.state.operatorPresenceIntentLabel = label || normalizedSchedule;
+    this.state.operatorPresenceIntentKey = scheduleKey;
   }
 
   /**
@@ -1589,6 +1662,22 @@ export class OperatorApp {
       };
       const appliedAssignment = response && response.assignment ? response.assignment : fallbackAssignment;
       this.applyAssignmentLocally(appliedAssignment);
+      const committedEventId = String(appliedAssignment?.eventId || normalizedEvent).trim();
+      const committedScheduleId = normalizeScheduleId(appliedAssignment?.scheduleId || normalizedScheduleId);
+      const committedLabel =
+        String(appliedAssignment?.scheduleLabel || "").trim() || fallbackLabel || committedScheduleId;
+      const committedKey = committedEventId && committedScheduleId ? `${committedEventId}::${committedScheduleId}` : "";
+      if (this.state) {
+        this.state.committedScheduleId = committedScheduleId;
+        this.state.committedScheduleLabel = committedLabel;
+        this.state.committedScheduleKey = committedKey;
+      }
+      this.markOperatorPresenceIntent(committedEventId, committedScheduleId, committedLabel);
+      this.updateScheduleContext({
+        presenceReason: "schedule-commit",
+        presenceOptions: { allowFallback: false, publishSchedule: true },
+        trackIntent: true
+      });
       const summary = this.describeChannelAssignment();
       if (!silent) {
         this.toast(summary ? `${summary}に固定しました。` : "ディスプレイのチャンネルを固定しました。", "success");
@@ -1746,6 +1835,93 @@ export class OperatorApp {
   }
 
   /**
+   * 衝突解消後に合意された日程へ自動的に合わせる処理を遅延実行でスケジュールします。
+   * evaluateScheduleConflict内で直接stateを書き換えると再帰が発生するため、マイクロタスクで適用します。
+   * @param {{ eventId?: string, scheduleId?: string, key?: string, label?: string, startAt?: string, endAt?: string }} option
+   * @param {{ reason?: string, presenceOptions?: object, publishPresence?: boolean }} meta
+   */
+  scheduleConsensusAdoption(option, meta = {}) {
+    if (!option || typeof option !== "object") {
+      return;
+    }
+    const payload = {
+      option: { ...option },
+      meta: { ...meta }
+    };
+    this.pendingConsensusAdoption = payload;
+    if (this.consensusAdoptionScheduled) {
+      return;
+    }
+    this.consensusAdoptionScheduled = true;
+    Promise.resolve().then(() => {
+      this.consensusAdoptionScheduled = false;
+      const pending = this.pendingConsensusAdoption;
+      this.pendingConsensusAdoption = null;
+      if (!pending || !pending.option) {
+        return;
+      }
+      this.applyConsensusAdoption(pending.option, pending.meta || {});
+    });
+  }
+
+  /**
+   * 合意された日程をローカルstateとpresenceへ反映します。
+   * @param {{ eventId?: string, scheduleId?: string, key?: string, label?: string, startAt?: string, endAt?: string }} option
+   * @param {{ reason?: string, presenceOptions?: object, publishPresence?: boolean }} meta
+   */
+  applyConsensusAdoption(option, meta = {}) {
+    if (!option || typeof option !== "object") {
+      return;
+    }
+    const ensure = (value) => String(value ?? "").trim();
+    const eventId = ensure(option.eventId || this.state?.activeEventId || this.pageContext?.eventId || "");
+    const scheduleIdRaw = ensure(option.scheduleId || "");
+    const scheduleId = normalizeScheduleId(scheduleIdRaw);
+    const keyCandidate = ensure(option.key);
+    const scheduleKey = keyCandidate || (eventId && scheduleId ? `${eventId}::${scheduleId}` : "");
+    if (!eventId || !scheduleId || !scheduleKey) {
+      return;
+    }
+
+    const resolvedLabel = this.resolveScheduleLabel(scheduleKey, option.label, option.scheduleId);
+    const reason = ensure(meta.reason) || "consensus-adopt";
+    const publishPresence = meta.publishPresence !== false;
+    const presenceOptions = {
+      allowFallback: false,
+      ...(meta.presenceOptions || {})
+    };
+
+    const contextStart = ensure(option.startAt || option.scheduleStart || this.pageContext?.startAt || "");
+    const contextEnd = ensure(option.endAt || option.scheduleEnd || this.pageContext?.endAt || "");
+
+    this.pageContext = {
+      ...(this.pageContext || {}),
+      eventId,
+      scheduleId,
+      scheduleKey,
+      scheduleLabel: resolvedLabel,
+      startAt: contextStart,
+      endAt: contextEnd
+    };
+
+    Questions.updateScheduleContext(this, {
+      syncPresence: false,
+      presenceOptions
+    });
+
+    this.state.conflictSelection = scheduleKey;
+    this.markOperatorPresenceIntent(eventId, scheduleId, resolvedLabel);
+
+    if (publishPresence) {
+      this.syncOperatorPresence(reason, {
+        allowFallback: false,
+        publishSchedule: true,
+        useActiveSchedule: true
+      });
+    }
+  }
+
+  /**
    * presence情報と割当を照合し、衝突ダイアログの表示や自動ロックを制御します。
    */
   evaluateScheduleConflict() {
@@ -1835,11 +2011,30 @@ export class OperatorApp {
       this.conflictDialogSnoozedSignature = "";
     }
     this.currentConflictSignature = conflictSignature;
-    const uniqueKeys = new Set(options.map((opt) => opt.key || opt.scheduleId || ""));
+    const resolveOptionKey = (option) => {
+      if (!option || typeof option !== "object") {
+        return "";
+      }
+      const explicitKey = String(option.key || "").trim();
+      if (explicitKey) {
+        return explicitKey;
+      }
+      const optionEventId = String(option.eventId || eventId || "").trim();
+      const optionScheduleId = normalizeScheduleId(option.scheduleId || "");
+      if (optionEventId && optionScheduleId) {
+        return `${optionEventId}::${optionScheduleId}`;
+      }
+      if (optionScheduleId) {
+        return optionScheduleId;
+      }
+      return explicitKey;
+    };
+
+    const uniqueKeys = new Set(options.map((opt) => resolveOptionKey(opt) || ""));
     uniqueKeys.delete("");
     const presenceHasMultipleSchedules = uniqueKeys.size > 1;
     const hasPresence = options.length > 0;
-    const channelAligned = !this.hasChannelMismatch();
+    let channelAligned = !this.hasChannelMismatch();
     const assignmentTimestamp = Number(
       (this.state?.channelAssignment &&
         (this.state.channelAssignment.updatedAt || this.state.channelAssignment.lockedAt)) ||
@@ -1849,14 +2044,80 @@ export class OperatorApp {
     const presenceNewerThanAssignment =
       latestPresenceAt > assignmentTimestamp || (assignmentTimestamp === 0 && hasPresence);
     const now = Date.now();
+    const selfEntry = this.state?.operatorPresenceSelf || null;
+    const selfEntrySessionId = String(selfEntry?.sessionId || this.operatorPresenceSessionId || "").trim();
+    const selfEntryEventId = String(selfEntry?.eventId || eventId || "").trim();
+    let selfPresenceKey = selfEntry
+      ? this.derivePresenceScheduleKey(selfEntryEventId, selfEntry, selfEntrySessionId || selfEntry?.sessionId || "")
+      : "";
+    if (!selfPresenceKey) {
+      selfPresenceKey = this.getCurrentScheduleKey();
+    }
+
+    let winningOption = null;
+    let winningKey = "";
+    if (assignmentKey && uniqueKeys.has(assignmentKey)) {
+      winningKey = assignmentKey;
+      winningOption = options.find((opt) => resolveOptionKey(opt) === assignmentKey) || null;
+    }
+    if (!winningKey) {
+      let bestTimestamp = Number.POSITIVE_INFINITY;
+      options.forEach((opt) => {
+        const timestamps = Array.isArray(opt?.members)
+          ? opt.members.map((member) => Number(member?.updatedAt || 0)).filter((value) => value > 0)
+          : [];
+        const earliest = timestamps.length ? Math.min(...timestamps) : Number.POSITIVE_INFINITY;
+        if (!winningOption || earliest < bestTimestamp) {
+          winningOption = opt;
+          bestTimestamp = earliest;
+        }
+      });
+      if (!winningOption && options.length) {
+        winningOption = options[0];
+      }
+      winningKey = resolveOptionKey(winningOption);
+    }
+    const selfHasSchedule = !!selfPresenceKey;
+    const selfOnWinning = Boolean(winningKey && selfPresenceKey && selfPresenceKey === winningKey);
+    if (uniqueKeys.size === 1) {
+      const [soleKeyCandidate] = uniqueKeys;
+      let consensusOption = null;
+      if (soleKeyCandidate) {
+        consensusOption = options.find((opt) => opt && (opt.key === soleKeyCandidate || opt.scheduleId === soleKeyCandidate));
+      }
+      if (!consensusOption && options.length) {
+        consensusOption = options[0];
+      }
+      if (consensusOption) {
+        const consensusEventId = String(consensusOption.eventId || eventId || "").trim();
+        const consensusScheduleId = normalizeScheduleId(consensusOption.scheduleId || "");
+        const consensusKey =
+          String(consensusOption.key || "").trim() ||
+          (consensusEventId && consensusScheduleId ? `${consensusEventId}::${consensusScheduleId}` : "");
+        const currentKey = this.getCurrentScheduleKey();
+        const needsAlignment = consensusKey && (currentKey !== consensusKey || !channelAligned);
+        if (needsAlignment) {
+          const assignmentMatches = assignmentKey && consensusKey ? assignmentKey === consensusKey : !assignmentKey;
+          this.scheduleConsensusAdoption(consensusOption, {
+            reason: assignmentMatches ? "assignment-align" : "consensus-adopt",
+            presenceOptions: { allowFallback: false },
+            publishPresence: true
+          });
+          if (!assignmentKey || assignmentMatches) {
+            channelAligned = true;
+          }
+        }
+      }
+    }
+
     let shouldPrompt = false;
-    if (hasPresence && presenceNewerThanAssignment) {
+    if (hasPresence && presenceNewerThanAssignment && selfHasSchedule) {
       if (presenceHasMultipleSchedules) {
-        shouldPrompt = true;
+        shouldPrompt = !selfOnWinning;
       } else if (assignmentKey && (!uniqueKeys.has(assignmentKey) || !channelAligned)) {
-        shouldPrompt = true;
+        shouldPrompt = !selfOnWinning;
       } else if (!channelAligned && assignmentKey) {
-        shouldPrompt = true;
+        shouldPrompt = !selfOnWinning;
       }
     }
     const assignmentAlignedKey = assignmentKey && uniqueKeys.has(assignmentKey) ? assignmentKey : "";
@@ -1981,6 +2242,8 @@ export class OperatorApp {
       (eventId && committedScheduleId ? `${eventId}::${committedScheduleId}` : "");
     const operatorMode = normalizeOperatorMode(context.operatorMode ?? context.mode);
 
+    this.clearOperatorPresenceIntent();
+
     this.pageContext = {
       ...this.pageContext,
       eventId,
@@ -2038,12 +2301,15 @@ export class OperatorApp {
       }
     }
 
-    this.updateScheduleContext();
+    const presenceOptions = { allowFallback: false };
+    this.updateScheduleContext({ syncPresence: false, presenceOptions });
     this.refreshChannelSubscriptions();
     if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== eventId) {
       this.operatorPresencePrimedEventId = "";
     }
-    this.primeOperatorPresenceSession(eventId).finally(() => this.syncOperatorPresence());
+    this.primeOperatorPresenceSession(eventId).finally(() =>
+      this.syncOperatorPresence("context-sync", presenceOptions)
+    );
     this.renderChannelBanner();
     this.renderQuestions();
     this.updateActionAvailability();
@@ -2150,7 +2416,7 @@ export class OperatorApp {
         if (nextValue) {
           this.state.currentSchedule = nextValue;
           this.state.lastNormalSchedule = nextValue;
-          this.updateScheduleContext();
+          this.updateScheduleContext({ syncPresence: false });
           this.renderQuestions();
         }
       });
@@ -2191,7 +2457,7 @@ export class OperatorApp {
     if (preferredSubTab && preferredSubTab !== this.state.currentSubTab) {
       this.switchSubTab(preferredSubTab);
     } else {
-      this.updateScheduleContext();
+      this.updateScheduleContext({ syncPresence: false });
       this.refreshChannelSubscriptions();
       this.renderQuestions();
     }
@@ -2712,7 +2978,7 @@ export class OperatorApp {
     if (typeof Logs.resetLogsLoader === "function") {
       Logs.resetLogsLoader(this);
     }
-    this.updateScheduleContext();
+    this.updateScheduleContext({ syncPresence: false });
   }
 
   /**
@@ -2871,7 +3137,7 @@ export class OperatorApp {
       list.push(this.normalizeQuestionRecord({ ...record, ...status, uid }));
     });
     this.state.allQuestions = list;
-    this.updateScheduleContext();
+    this.updateScheduleContext({ syncPresence: false });
     this.refreshChannelSubscriptions();
     this.renderQuestions();
   }
@@ -2969,7 +3235,7 @@ export class OperatorApp {
         this.state.displaySession = data;
         this.state.displaySessionActive = active;
         this.state.channelAssignment = this.getDisplayAssignment();
-        this.updateScheduleContext();
+        this.updateScheduleContext({ presenceOptions: { allowFallback: false }, trackIntent: false });
         if (this.state.displaySessionLastActive !== null && this.state.displaySessionLastActive !== active) {
           logDisplayLinkInfo("Display session activity changed", { active });
           this.toast(active ? "送出端末とのセッションが確立されました。" : "送出端末の接続が確認できません。", active ? "success" : "error");
