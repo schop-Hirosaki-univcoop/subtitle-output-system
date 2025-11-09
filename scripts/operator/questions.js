@@ -300,7 +300,8 @@ export function updateScheduleContext(app, options = {}) {
   const {
     syncPresence = true,
     presenceReason = "context-sync",
-    presenceOptions = undefined
+    presenceOptions = undefined,
+    trackIntent = syncPresence
   } = typeof options === "object" && options !== null ? options : {};
 
   const ensure = (value) => String(value ?? "").trim();
@@ -406,6 +407,14 @@ export function updateScheduleContext(app, options = {}) {
     endAt: endText,
     scheduleKey: scheduleKey || ""
   };
+
+  if (trackIntent && typeof app?.markOperatorPresenceIntent === "function") {
+    if (eventId && scheduleId) {
+      app.markOperatorPresenceIntent(eventId, scheduleId, scheduleLabel);
+    } else if (typeof app?.clearOperatorPresenceIntent === "function") {
+      app.clearOperatorPresenceIntent();
+    }
+  }
 
   if (typeof app.refreshOperatorPresenceSubscription === "function") {
     app.refreshOperatorPresenceSubscription();

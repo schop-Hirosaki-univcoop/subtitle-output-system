@@ -1036,9 +1036,11 @@ export class OperatorApp {
 
     const schedulePublicationExplicit = publishScheduleOption === true;
     const scheduleSuppressed = publishScheduleOption === false;
+    const activeScheduleAvailable =
+      useActiveSchedule && (activeScheduleKey || activeScheduleId || activeScheduleLabel);
     const shouldPublishSchedule =
       schedulePublicationExplicit ||
-      (!scheduleSuppressed && (committedScheduleKey || intentScheduleKey || intentScheduleId || intentScheduleLabel));
+      (!scheduleSuppressed && (committedScheduleKey || intentScheduleKey || intentScheduleId || intentScheduleLabel || activeScheduleAvailable));
 
     let scheduleId = "";
     let scheduleLabel = "";
@@ -1092,7 +1094,8 @@ export class OperatorApp {
         );
       }
     }
-    const eventName = String(this.state?.activeEventName || "").trim();
+    const publishEvent = shouldPublishSchedule || options?.publishEvent === true;
+    const eventName = publishEvent ? String(this.state?.activeEventName || "").trim() : "";
     const skipTelop = !this.isTelopEnabled();
     this.operatorPresenceSessionId = sessionId;
     const nextKey = `${eventId}/${sessionId}`;
@@ -1124,7 +1127,7 @@ export class OperatorApp {
       uid,
       email: String(user?.email || "").trim(),
       displayName: String(user?.displayName || "").trim(),
-      eventId,
+      eventId: publishEvent ? eventId : "",
       eventName,
       scheduleId,
       scheduleKey,
@@ -1672,7 +1675,8 @@ export class OperatorApp {
       this.markOperatorPresenceIntent(committedEventId, committedScheduleId, committedLabel);
       this.updateScheduleContext({
         presenceReason: "schedule-commit",
-        presenceOptions: { allowFallback: false, publishSchedule: true }
+        presenceOptions: { allowFallback: false, publishSchedule: true },
+        trackIntent: true
       });
       const summary = this.describeChannelAssignment();
       if (!silent) {
@@ -2007,7 +2011,26 @@ export class OperatorApp {
       this.conflictDialogSnoozedSignature = "";
     }
     this.currentConflictSignature = conflictSignature;
-    const uniqueKeys = new Set(options.map((opt) => opt.key || opt.scheduleId || ""));
+    const resolveOptionKey = (option) => {
+      if (!option || typeof option !== "object") {
+        return "";
+      }
+      const explicitKey = String(option.key || "").trim();
+      if (explicitKey) {
+        return explicitKey;
+      }
+      const optionEventId = String(option.eventId || eventId || "").trim();
+      const optionScheduleId = normalizeScheduleId(option.scheduleId || "");
+      if (optionEventId && optionScheduleId) {
+        return `${optionEventId}::${optionScheduleId}`;
+      }
+      if (optionScheduleId) {
+        return optionScheduleId;
+      }
+      return explicitKey;
+    };
+
+    const uniqueKeys = new Set(options.map((opt) => resolveOptionKey(opt) || ""));
     uniqueKeys.delete("");
     const presenceHasMultipleSchedules = uniqueKeys.size > 1;
     const hasPresence = options.length > 0;
@@ -2021,6 +2044,41 @@ export class OperatorApp {
     const presenceNewerThanAssignment =
       latestPresenceAt > assignmentTimestamp || (assignmentTimestamp === 0 && hasPresence);
     const now = Date.now();
+    const selfEntry = this.state?.operatorPresenceSelf || null;
+    const selfEntrySessionId = String(selfEntry?.sessionId || this.operatorPresenceSessionId || "").trim();
+    const selfEntryEventId = String(selfEntry?.eventId || eventId || "").trim();
+    let selfPresenceKey = selfEntry
+      ? this.derivePresenceScheduleKey(selfEntryEventId, selfEntry, selfEntrySessionId || selfEntry?.sessionId || "")
+      : "";
+    if (!selfPresenceKey) {
+      selfPresenceKey = this.getCurrentScheduleKey();
+    }
+
+    let winningOption = null;
+    let winningKey = "";
+    if (assignmentKey && uniqueKeys.has(assignmentKey)) {
+      winningKey = assignmentKey;
+      winningOption = options.find((opt) => resolveOptionKey(opt) === assignmentKey) || null;
+    }
+    if (!winningKey) {
+      let bestTimestamp = Number.POSITIVE_INFINITY;
+      options.forEach((opt) => {
+        const timestamps = Array.isArray(opt?.members)
+          ? opt.members.map((member) => Number(member?.updatedAt || 0)).filter((value) => value > 0)
+          : [];
+        const earliest = timestamps.length ? Math.min(...timestamps) : Number.POSITIVE_INFINITY;
+        if (!winningOption || earliest < bestTimestamp) {
+          winningOption = opt;
+          bestTimestamp = earliest;
+        }
+      });
+      if (!winningOption && options.length) {
+        winningOption = options[0];
+      }
+      winningKey = resolveOptionKey(winningOption);
+    }
+    const selfHasSchedule = !!selfPresenceKey;
+    const selfOnWinning = Boolean(winningKey && selfPresenceKey && selfPresenceKey === winningKey);
     if (uniqueKeys.size === 1) {
       const [soleKeyCandidate] = uniqueKeys;
       let consensusOption = null;
@@ -2053,13 +2111,13 @@ export class OperatorApp {
     }
 
     let shouldPrompt = false;
-    if (hasPresence && presenceNewerThanAssignment) {
+    if (hasPresence && presenceNewerThanAssignment && selfHasSchedule) {
       if (presenceHasMultipleSchedules) {
-        shouldPrompt = true;
+        shouldPrompt = !selfOnWinning;
       } else if (assignmentKey && (!uniqueKeys.has(assignmentKey) || !channelAligned)) {
-        shouldPrompt = true;
+        shouldPrompt = !selfOnWinning;
       } else if (!channelAligned && assignmentKey) {
-        shouldPrompt = true;
+        shouldPrompt = !selfOnWinning;
       }
     }
     const assignmentAlignedKey = assignmentKey && uniqueKeys.has(assignmentKey) ? assignmentKey : "";
@@ -3177,7 +3235,7 @@ export class OperatorApp {
         this.state.displaySession = data;
         this.state.displaySessionActive = active;
         this.state.channelAssignment = this.getDisplayAssignment();
-        this.updateScheduleContext({ presenceOptions: { allowFallback: false } });
+        this.updateScheduleContext({ presenceOptions: { allowFallback: false }, trackIntent: false });
         if (this.state.displaySessionLastActive !== null && this.state.displaySessionLastActive !== active) {
           logDisplayLinkInfo("Display session activity changed", { active });
           this.toast(active ? "送出端末とのセッションが確立されました。" : "送出端末の接続が確認できません。", active ? "success" : "error");
