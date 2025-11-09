@@ -193,6 +193,7 @@ export class EventAdminApp {
     this.scheduleFallbackContext = null;
     this.operatorModeChoiceContext = null;
     this.operatorModeChoiceResolver = null;
+    this.suppressScheduleConflictPromptOnce = false;
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.updateChatLayoutMetrics = this.updateChatLayoutMetrics.bind(this);
     this.chatLayoutResizeObserver = null;
@@ -3402,6 +3403,10 @@ export class EventAdminApp {
 
   enforceScheduleConflictState(context = null) {
     const hasConflict = Boolean(context?.hasConflict);
+    const suppressOnce = this.suppressScheduleConflictPromptOnce;
+    if (suppressOnce) {
+      this.suppressScheduleConflictPromptOnce = false;
+    }
     if (!hasConflict) {
       if (this.isScheduleConflictDialogOpen()) {
         if (this.dom.scheduleConflictForm) {
@@ -3424,6 +3429,12 @@ export class EventAdminApp {
       hasSelection &&
       signature &&
       signature !== this.scheduleConflictLastPromptSignature;
+    if (suppressOnce) {
+      if (signature) {
+        this.scheduleConflictLastPromptSignature = signature;
+      }
+      return;
+    }
     if (!this.isScheduleConflictDialogOpen()) {
       if (shouldPromptDueToNavigation && hasSelection) {
         this.openScheduleConflictDialog(context, {
@@ -3762,7 +3773,8 @@ export class EventAdminApp {
         reason: "consensus-apply",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
     } else if (scheduleId && selectedScheduleId && scheduleId !== selectedScheduleId) {
       const currentSchedule = this.schedules.find((schedule) => schedule.id === selectedScheduleId) || null;
@@ -3771,7 +3783,8 @@ export class EventAdminApp {
         reason: "consensus-pending",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       if (this.operatorMode === OPERATOR_MODE_SUPPORT) {
         this.logFlowState("テロップ操作なしモードのためスケジュール合意モーダルを表示しません", {
@@ -3803,14 +3816,16 @@ export class EventAdminApp {
         reason: "consensus-align",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
     } else {
       this.setHostCommittedSchedule("", {
         reason: "consensus-clear",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
     }
     this.syncScheduleConflictPromptState();
@@ -3987,7 +4002,14 @@ export class EventAdminApp {
 
   setHostCommittedSchedule(
     scheduleId,
-    { schedule = null, reason = "state-change", sync = true, updateContext = true, force = false } = {}
+    {
+      schedule = null,
+      reason = "state-change",
+      sync = true,
+      updateContext = true,
+      force = false,
+      suppressConflictPrompt = false
+    } = {}
   ) {
     const normalizedId = ensureString(scheduleId);
     let resolvedSchedule = schedule;
@@ -4012,6 +4034,9 @@ export class EventAdminApp {
       this.syncHostPresence(reason);
     } else if (changed) {
       this.hostPresenceLastSignature = "";
+    }
+    if (suppressConflictPrompt) {
+      this.suppressScheduleConflictPromptOnce = true;
     }
     if (updateContext) {
       this.updateScheduleConflictState();
@@ -5139,7 +5164,8 @@ export class EventAdminApp {
         reason: "consensus-follow",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.logFlowState("確定した日程に移動する対応を選択しました", {
         scheduleId: consensusScheduleId || ""
@@ -5152,7 +5178,8 @@ export class EventAdminApp {
         reason: "consensus-support",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.logFlowState("テロップ操作なしモードで続ける対応を選択しました", {
         previousScheduleId: ensureString(context.currentScheduleId) || ""
@@ -5162,7 +5189,8 @@ export class EventAdminApp {
         reason: "consensus-reselect",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.selectSchedule("");
       this.showPanel("schedules");
@@ -5181,7 +5209,8 @@ export class EventAdminApp {
         reason: "consensus-retry",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.pendingNavigationTarget = context.pendingNavigationTarget || "participants";
       this.pendingNavigationMeta = {
@@ -5338,7 +5367,8 @@ export class EventAdminApp {
         reason: "consensus-submit",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.tools.prepareContextForSelection();
       if (
@@ -5819,6 +5849,10 @@ export class EventAdminApp {
 
   enforceScheduleConflictState(context = null) {
     const hasConflict = Boolean(context?.hasConflict);
+    const suppressOnce = this.suppressScheduleConflictPromptOnce;
+    if (suppressOnce) {
+      this.suppressScheduleConflictPromptOnce = false;
+    }
     if (!hasConflict) {
       if (this.isScheduleConflictDialogOpen()) {
         if (this.dom.scheduleConflictForm) {
@@ -5841,6 +5875,12 @@ export class EventAdminApp {
       hasSelection &&
       signature &&
       signature !== this.scheduleConflictLastPromptSignature;
+    if (suppressOnce) {
+      if (signature) {
+        this.scheduleConflictLastPromptSignature = signature;
+      }
+      return;
+    }
     if (!this.isScheduleConflictDialogOpen()) {
       if (shouldPromptDueToNavigation && hasSelection) {
         this.openScheduleConflictDialog(context, {
@@ -6178,7 +6218,8 @@ export class EventAdminApp {
         reason: "consensus-apply",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
     } else if (scheduleId && selectedScheduleId && scheduleId !== selectedScheduleId) {
       const currentSchedule = this.schedules.find((schedule) => schedule.id === selectedScheduleId) || null;
@@ -6187,7 +6228,8 @@ export class EventAdminApp {
         reason: "consensus-pending",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       if (this.operatorMode === OPERATOR_MODE_SUPPORT) {
         this.logFlowState("テロップ操作なしモードのためスケジュール合意モーダルを表示しません", {
@@ -6219,14 +6261,16 @@ export class EventAdminApp {
         reason: "consensus-align",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
     } else {
       this.setHostCommittedSchedule("", {
         reason: "consensus-clear",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
     }
     this.syncScheduleConflictPromptState();
@@ -6387,7 +6431,14 @@ export class EventAdminApp {
 
   setHostCommittedSchedule(
     scheduleId,
-    { schedule = null, reason = "state-change", sync = true, updateContext = true, force = false } = {}
+    {
+      schedule = null,
+      reason = "state-change",
+      sync = true,
+      updateContext = true,
+      force = false,
+      suppressConflictPrompt = false
+    } = {}
   ) {
     const normalizedId = ensureString(scheduleId);
     let resolvedSchedule = schedule;
@@ -6407,6 +6458,9 @@ export class EventAdminApp {
       this.syncHostPresence(reason);
     } else if (changed) {
       this.hostPresenceLastSignature = "";
+    }
+    if (suppressConflictPrompt) {
+      this.suppressScheduleConflictPromptOnce = true;
     }
     if (updateContext) {
       this.updateScheduleConflictState();
@@ -6908,7 +6962,8 @@ export class EventAdminApp {
         reason: "consensus-follow",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.logFlowState("確定した日程に移動する対応を選択しました", {
         scheduleId: consensusScheduleId || ""
@@ -6921,7 +6976,8 @@ export class EventAdminApp {
         reason: "consensus-support",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.logFlowState("テロップ操作なしモードで続ける対応を選択しました", {
         previousScheduleId: ensureString(context.currentScheduleId) || ""
@@ -6931,7 +6987,8 @@ export class EventAdminApp {
         reason: "consensus-reselect",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.selectSchedule("");
       this.showPanel("schedules");
@@ -6950,7 +7007,8 @@ export class EventAdminApp {
         reason: "consensus-retry",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.pendingNavigationTarget = context.pendingNavigationTarget || "participants";
       this.pendingNavigationMeta = {
@@ -7107,7 +7165,8 @@ export class EventAdminApp {
         reason: "consensus-submit",
         sync: true,
         updateContext: true,
-        force: true
+        force: true,
+        suppressConflictPrompt: true
       });
       this.tools.prepareContextForSelection();
       if (
