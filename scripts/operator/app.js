@@ -2123,12 +2123,15 @@ export class OperatorApp {
       }
     }
 
-    this.updateScheduleContext({ presenceOptions: { allowFallback: false } });
+    const presenceOptions = { allowFallback: false };
+    this.updateScheduleContext({ syncPresence: false, presenceOptions });
     this.refreshChannelSubscriptions();
     if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== eventId) {
       this.operatorPresencePrimedEventId = "";
     }
-    this.primeOperatorPresenceSession(eventId).finally(() => this.syncOperatorPresence());
+    this.primeOperatorPresenceSession(eventId).finally(() =>
+      this.syncOperatorPresence("context-sync", presenceOptions)
+    );
     this.renderChannelBanner();
     this.renderQuestions();
     this.updateActionAvailability();
