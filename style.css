@@ -2681,46 +2681,6 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   margin-top:1.25rem;
 }
 
-.flow-operator-mode{
-  margin-top:.5rem;
-  padding:.9rem 1.1rem;
-  border-radius:.9rem;
-  border:1px solid rgba(84,128,186,.45);
-  background:linear-gradient(180deg, rgba(16,30,52,.82), rgba(10,20,36,.78));
-  box-shadow:0 16px 36px rgba(6,14,26,.36), inset 0 1px 0 rgba(255,255,255,.04);
-  display:flex;
-  flex-direction:column;
-  gap:.6rem;
-}
-
-.flow-operator-mode[hidden]{
-  display:none;
-}
-
-.flow-operator-mode__choice{
-  display:flex;
-  align-items:center;
-  gap:.6rem;
-  font-weight:600;
-  color:rgba(220,232,252,.92);
-}
-
-.flow-operator-mode__choice input[type="checkbox"]{
-  width:1.1rem;
-  height:1.1rem;
-  accent-color:var(--accent, #5dd0ff);
-}
-
-.flow-operator-mode__label{
-  font-size:.95rem;
-}
-
-.flow-operator-mode__description{
-  margin:0;
-  font-size:.85rem;
-  color:rgba(202,216,238,.78);
-}
-
 .flow-stage-panel{
   width:min(100%, var(--flow-stage-panel-width));
   max-width:var(--flow-stage-panel-width);
