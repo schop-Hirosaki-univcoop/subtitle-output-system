@@ -685,11 +685,11 @@ export class OperatorApp {
     if (this.currentRenderPath !== path) {
       const normalizedEvent = String(eventId || "").trim();
       const normalizedSchedule = normalizeScheduleId(scheduleId || "");
-      logDisplayLinkInfo("Switching render subscription", {
-        path,
-        eventId: normalizedEvent || null,
-        scheduleId: normalizedSchedule || null
-      });
+      // logDisplayLinkInfo("Switching render subscription", {
+      //   path,
+      //   eventId: normalizedEvent || null,
+      //   scheduleId: normalizedSchedule || null
+      // });
     }
     if (this.currentRenderPath === path && this.renderUnsubscribe) {
       return;
@@ -1138,6 +1138,24 @@ export class OperatorApp {
       reason,
       source: "operator"
     };
+
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      const timestamp = new Date().toISOString();
+      const operatorName = String(payload.displayName || payload.email || uid || "").trim() || uid || "(unknown)";
+      const eventLabel = String(eventId || payload.eventId || "").trim() || "(none)";
+      const scheduleIdLabel = String(scheduleId || payload.scheduleId || "").trim();
+      const scheduleNameLabel = String(scheduleLabel || payload.scheduleLabel || "").trim();
+      let scheduleSummary = scheduleNameLabel || scheduleIdLabel;
+      if (scheduleNameLabel && scheduleIdLabel && scheduleNameLabel !== scheduleIdLabel) {
+        scheduleSummary = `${scheduleNameLabel} (${scheduleIdLabel})`;
+      }
+      if (!scheduleSummary) {
+        scheduleSummary = "(none)";
+      }
+      console.log(
+        `[OperatorPresence] ${timestamp} operator=${operatorName} event=${eventLabel} schedule=${scheduleSummary}`
+      );
+    }
 
     set(entryRef, payload).catch(() => {});
 
@@ -1823,11 +1841,11 @@ export class OperatorApp {
       scheduleId,
       scheduleLabel
     };
-    logDisplayLinkInfo("Applied display assignment", {
-      eventId: eventId || null,
-      scheduleId: normalizedScheduleId || null,
-      scheduleLabel: scheduleLabel || null
-    });
+    // logDisplayLinkInfo("Applied display assignment", {
+    //   eventId: eventId || null,
+    //   scheduleId: normalizedScheduleId || null,
+    //   scheduleLabel: scheduleLabel || null
+    // });
     this.state.displaySession = nextSession;
     this.state.channelAssignment = enriched;
     this.state.autoLockAttemptKey = "";
@@ -3223,21 +3241,21 @@ export class OperatorApp {
         const assignmentEvent = assignment && typeof assignment.eventId === "string" ? assignment.eventId.trim() : "";
         const assignmentSchedule =
           assignment && typeof assignment.scheduleId === "string" ? normalizeScheduleId(assignment.scheduleId) : "";
-        logDisplayLinkInfo("Display session snapshot", {
-          active,
-          status,
-          sessionId: data?.sessionId || null,
-          eventId: normalizedEvent || null,
-          scheduleId: normalizedSchedule || null,
-          assignmentEvent: assignmentEvent || null,
-          assignmentSchedule: assignmentSchedule || null
-        });
+        // logDisplayLinkInfo("Display session snapshot", {
+        //   active,
+        //   status,
+        //   sessionId: data?.sessionId || null,
+        //   eventId: normalizedEvent || null,
+        //   scheduleId: normalizedSchedule || null,
+        //   assignmentEvent: assignmentEvent || null,
+        //   assignmentSchedule: assignmentSchedule || null
+        // });
         this.state.displaySession = data;
         this.state.displaySessionActive = active;
         this.state.channelAssignment = this.getDisplayAssignment();
         this.updateScheduleContext({ presenceOptions: { allowFallback: false }, trackIntent: false });
         if (this.state.displaySessionLastActive !== null && this.state.displaySessionLastActive !== active) {
-          logDisplayLinkInfo("Display session activity changed", { active });
+          // logDisplayLinkInfo("Display session activity changed", { active });
           this.toast(active ? "送出端末とのセッションが確立されました。" : "送出端末の接続が確認できません。", active ? "success" : "error");
         }
         this.state.displaySessionLastActive = active;
