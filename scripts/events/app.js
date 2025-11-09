@@ -4887,13 +4887,20 @@ export class EventAdminApp {
         ? context.options
         : [];
     const option = optionsContext.find((item) => item.key === scheduleKey || item.scheduleId === scheduleId) || null;
+    const resolvedScheduleId = scheduleId;
     this.scheduleConflictContext = context;
     this.clearScheduleConflictError();
     this.setScheduleConflictSubmitting(true);
-    this.confirmScheduleConsensus({ scheduleId, scheduleKey, option, context })
+    this.confirmScheduleConsensus({ scheduleId: resolvedScheduleId, scheduleKey, option, context })
       .then((confirmed) => {
         if (!confirmed) {
           return;
+        }
+        if (
+          resolvedScheduleId &&
+          ensureString(this.selectedScheduleId) !== ensureString(resolvedScheduleId)
+        ) {
+          this.selectSchedule(resolvedScheduleId);
         }
         if (this.dom.scheduleConflictForm) {
           this.dom.scheduleConflictForm.reset();
@@ -5023,7 +5030,7 @@ export class EventAdminApp {
         },
         {
           value: "follow",
-          title: "勝ち日程を開く",
+          title: "現在のテロップ操作ありモードの日程を開く",
           description: winnerLabel
             ? winnerRange
               ? `テロップ操作パネルを「${winnerLabel}」（${winnerRange}）で開きます。`
@@ -5033,7 +5040,7 @@ export class EventAdminApp {
         {
           value: "reselect",
           title: "日程選択パネルに戻って選び直す",
-          description: "日程一覧に戻り、テロップ操作で使用する日程を改めて選び直します。"
+          description: "日程管理パネルへ戻ります。"
         }
       ];
       const radioName = this.scheduleFallbackRadioName;
@@ -5157,6 +5164,7 @@ export class EventAdminApp {
         updateContext: true,
         force: true
       });
+      this.selectSchedule("");
       this.showPanel("schedules");
       this.logFlowState("別の日程を選び直す対応を選択しました", {
         previousScheduleId: ensureString(context.currentScheduleId) || ""
@@ -6634,13 +6642,20 @@ export class EventAdminApp {
         ? context.options
         : [];
     const option = optionsContext.find((item) => item.key === scheduleKey || item.scheduleId === scheduleId) || null;
+    const resolvedScheduleId = scheduleId;
     this.scheduleConflictContext = context;
     this.clearScheduleConflictError();
     this.setScheduleConflictSubmitting(true);
-    this.confirmScheduleConsensus({ scheduleId, scheduleKey, option, context })
+    this.confirmScheduleConsensus({ scheduleId: resolvedScheduleId, scheduleKey, option, context })
       .then((confirmed) => {
         if (!confirmed) {
           return;
+        }
+        if (
+          resolvedScheduleId &&
+          ensureString(this.selectedScheduleId) !== ensureString(resolvedScheduleId)
+        ) {
+          this.selectSchedule(resolvedScheduleId);
         }
         if (this.dom.scheduleConflictForm) {
           this.dom.scheduleConflictForm.reset();
@@ -6784,7 +6799,7 @@ export class EventAdminApp {
         },
         {
           value: "follow",
-          title: "勝ち日程を開く",
+          title: "現在のテロップ操作ありモードの日程を開く",
           description: winnerLabel
             ? winnerRange
               ? `テロップ操作パネルを「${winnerLabel}」（${winnerRange}）で開きます。`
@@ -6794,7 +6809,7 @@ export class EventAdminApp {
         {
           value: "reselect",
           title: "日程選択パネルに戻って選び直す",
-          description: "日程一覧に戻り、テロップ操作で使用する日程を改めて選び直します。"
+          description: "日程管理パネルへ戻ります。"
         }
       ];
       const radioName = this.scheduleFallbackRadioName;
@@ -6918,6 +6933,7 @@ export class EventAdminApp {
         updateContext: true,
         force: true
       });
+      this.selectSchedule("");
       this.showPanel("schedules");
       this.logFlowState("別の日程を選び直す対応を選択しました", {
         previousScheduleId: ensureString(context.currentScheduleId) || ""
