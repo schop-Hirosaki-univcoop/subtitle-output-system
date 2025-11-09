@@ -68,6 +68,8 @@ const DISPLAY_LOCK_REASONS = new Set([
   "consensus-align",
   "consensus-follow"
 ]);
+const DISPLAY_LOCK_RETRY_DELAY_MS = 5_000;
+const DISPLAY_LOCK_RETRY_LIMIT = 6;
 
 /**
  * setTimeout/clearTimeout を持つホストオブジェクトを検出します。
@@ -194,6 +196,8 @@ export class EventAdminApp {
     this.operatorModeChoiceContext = null;
     this.operatorModeChoiceResolver = null;
     this.suppressScheduleConflictPromptOnce = false;
+    this.displayLockRetryTimer = 0;
+    this.pendingDisplayLockRequest = null;
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.updateChatLayoutMetrics = this.updateChatLayoutMetrics.bind(this);
     this.chatLayoutResizeObserver = null;
@@ -4026,6 +4030,7 @@ export class EventAdminApp {
       this.scheduleSelectionCommitted = true;
     } else {
       this.scheduleSelectionCommitted = false;
+      this.clearPendingDisplayLock();
     }
     if (force) {
       this.hostPresenceLastSignature = "";
@@ -4055,7 +4060,7 @@ export class EventAdminApp {
     if (normalizedId && this.shouldAutoLockDisplaySchedule(reason)) {
       const scheduleForLock =
         resolvedSchedule || this.schedules.find((item) => item.id === normalizedId) || null;
-      void this.requestDisplayScheduleLock(normalizedId, {
+      this.requestDisplayScheduleLockWithRetry(normalizedId, {
         schedule: scheduleForLock,
         reason
       });
@@ -4108,6 +4113,7 @@ export class EventAdminApp {
         eventId,
         scheduleId: normalizedScheduleId
       });
+      this.clearPendingDisplayLock();
       return false;
     }
     if (!this.api) {
@@ -4116,6 +4122,7 @@ export class EventAdminApp {
         eventId,
         scheduleId: normalizedScheduleId
       });
+      this.clearPendingDisplayLock();
       return false;
     }
     const scheduleLabel =
@@ -4136,6 +4143,7 @@ export class EventAdminApp {
         scheduleLabel,
         reason
       });
+      this.clearPendingDisplayLock();
       return true;
     } catch (error) {
       this.logFlowState("ディスプレイのチャンネル固定に失敗しました", {
@@ -4146,8 +4154,112 @@ export class EventAdminApp {
         error: error instanceof Error ? error.message : String(error ?? "")
       });
       logError("Failed to lock display schedule", error);
+      this.scheduleDisplayLockRetry(normalizedScheduleId, { schedule, reason });
       return false;
     }
+  }
+
+  requestDisplayScheduleLockWithRetry(scheduleId, { schedule = null, reason = "" } = {}) {
+    const eventId = ensureString(this.selectedEventId);
+    const normalizedScheduleId = ensureString(scheduleId);
+    if (!eventId || !normalizedScheduleId) {
+      this.clearPendingDisplayLock();
+      return;
+    }
+    const attempt = {
+      eventId,
+      scheduleId: normalizedScheduleId,
+      reason: ensureString(reason),
+      schedule: schedule || null,
+      attempts: 0
+    };
+    this.pendingDisplayLockRequest = attempt;
+    this.clearDisplayLockRetryTimer();
+    this.logFlowState("ディスプレイ固定の自動リクエストを開始します", {
+      eventId,
+      scheduleId: normalizedScheduleId,
+      reason: ensureString(reason)
+    });
+    void this.performDisplayLockAttempt();
+  }
+
+  async performDisplayLockAttempt() {
+    const pending = this.pendingDisplayLockRequest;
+    if (!pending) {
+      return;
+    }
+    const eventId = ensureString(this.selectedEventId);
+    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
+    if (!eventId || !committedScheduleId || committedScheduleId !== pending.scheduleId) {
+      this.clearPendingDisplayLock();
+      return;
+    }
+    const scheduleForLock =
+      pending.schedule || this.schedules.find((item) => item.id === pending.scheduleId) || null;
+    const success = await this.requestDisplayScheduleLock(pending.scheduleId, {
+      schedule: scheduleForLock,
+      reason: pending.reason
+    });
+    if (success) {
+      return;
+    }
+    const attempts = Number(pending.attempts || 0) + 1;
+    pending.attempts = attempts;
+    if (attempts >= DISPLAY_LOCK_RETRY_LIMIT) {
+      this.logFlowState("ディスプレイ固定の自動再試行を終了します", {
+        eventId,
+        scheduleId: pending.scheduleId,
+        reason: pending.reason,
+        attempts
+      });
+      this.clearPendingDisplayLock();
+      return;
+    }
+  }
+
+  scheduleDisplayLockRetry(scheduleId, { schedule = null, reason = "" } = {}) {
+    const pending = this.pendingDisplayLockRequest;
+    const eventId = ensureString(this.selectedEventId);
+    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
+    if (!eventId || !committedScheduleId || committedScheduleId !== ensureString(scheduleId)) {
+      this.clearPendingDisplayLock();
+      return;
+    }
+    if (!pending) {
+      this.pendingDisplayLockRequest = {
+        eventId,
+        scheduleId: ensureString(scheduleId),
+        reason: ensureString(reason),
+        schedule: schedule || null,
+        attempts: 0
+      };
+    }
+    const timerHost = getTimerHost();
+    this.clearDisplayLockRetryTimer();
+    this.displayLockRetryTimer = timerHost.setTimeout(() => {
+      this.displayLockRetryTimer = 0;
+      void this.performDisplayLockAttempt();
+    }, DISPLAY_LOCK_RETRY_DELAY_MS);
+    this.logFlowState("ディスプレイ固定を再試行します", {
+      eventId,
+      scheduleId: ensureString(scheduleId),
+      reason: ensureString(reason),
+      attempts: this.pendingDisplayLockRequest?.attempts || 0
+    });
+  }
+
+  clearDisplayLockRetryTimer() {
+    if (!this.displayLockRetryTimer) {
+      return;
+    }
+    const timerHost = getTimerHost();
+    timerHost.clearTimeout(this.displayLockRetryTimer);
+    this.displayLockRetryTimer = 0;
+  }
+
+  clearPendingDisplayLock() {
+    this.pendingDisplayLockRequest = null;
+    this.clearDisplayLockRetryTimer();
   }
 
   getHostPresenceStorage() {
@@ -6451,6 +6563,12 @@ export class EventAdminApp {
     const changed = previousId !== normalizedId || previousLabel !== nextLabel;
     this.hostCommittedScheduleId = normalizedId;
     this.hostCommittedScheduleLabel = normalizedId ? nextLabel : "";
+    if (normalizedId) {
+      this.scheduleSelectionCommitted = true;
+    } else {
+      this.scheduleSelectionCommitted = false;
+      this.clearPendingDisplayLock();
+    }
     if (force) {
       this.hostPresenceLastSignature = "";
     }
@@ -6471,11 +6589,15 @@ export class EventAdminApp {
         scheduleLabel: this.hostCommittedScheduleLabel || "",
         reason
       });
+      this.renderScheduleList();
+      this.updateScheduleSummary();
+      this.updateStageHeader();
+      this.updateSelectionNotes();
     }
     if (normalizedId && this.shouldAutoLockDisplaySchedule(reason)) {
       const scheduleForLock =
         resolvedSchedule || this.schedules.find((item) => item.id === normalizedId) || null;
-      void this.requestDisplayScheduleLock(normalizedId, {
+      this.requestDisplayScheduleLockWithRetry(normalizedId, {
         schedule: scheduleForLock,
         reason
       });
@@ -6499,6 +6621,7 @@ export class EventAdminApp {
       force: true
     });
     this.lastScheduleCommitChanged = changed;
+    this.scheduleSelectionCommitted = true;
     this.logFlowState("テロップ操作の日程の確定リクエストを処理しました", {
       scheduleId,
       scheduleLabel: schedule?.label || scheduleId,
