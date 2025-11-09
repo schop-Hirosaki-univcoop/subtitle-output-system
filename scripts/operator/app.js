@@ -354,6 +354,8 @@ export class OperatorApp {
     this.currentConflictSignature = "";
     this.conflictDialogSnoozedSignature = "";
     this.preflightContext = null;
+    this.pendingConsensusAdoption = null;
+    this.consensusAdoptionScheduled = false;
 
     this.toast = showToast;
     bindModuleMethods(this);
@@ -1829,6 +1831,93 @@ export class OperatorApp {
   }
 
   /**
+   * 衝突解消後に合意された日程へ自動的に合わせる処理を遅延実行でスケジュールします。
+   * evaluateScheduleConflict内で直接stateを書き換えると再帰が発生するため、マイクロタスクで適用します。
+   * @param {{ eventId?: string, scheduleId?: string, key?: string, label?: string, startAt?: string, endAt?: string }} option
+   * @param {{ reason?: string, presenceOptions?: object, publishPresence?: boolean }} meta
+   */
+  scheduleConsensusAdoption(option, meta = {}) {
+    if (!option || typeof option !== "object") {
+      return;
+    }
+    const payload = {
+      option: { ...option },
+      meta: { ...meta }
+    };
+    this.pendingConsensusAdoption = payload;
+    if (this.consensusAdoptionScheduled) {
+      return;
+    }
+    this.consensusAdoptionScheduled = true;
+    Promise.resolve().then(() => {
+      this.consensusAdoptionScheduled = false;
+      const pending = this.pendingConsensusAdoption;
+      this.pendingConsensusAdoption = null;
+      if (!pending || !pending.option) {
+        return;
+      }
+      this.applyConsensusAdoption(pending.option, pending.meta || {});
+    });
+  }
+
+  /**
+   * 合意された日程をローカルstateとpresenceへ反映します。
+   * @param {{ eventId?: string, scheduleId?: string, key?: string, label?: string, startAt?: string, endAt?: string }} option
+   * @param {{ reason?: string, presenceOptions?: object, publishPresence?: boolean }} meta
+   */
+  applyConsensusAdoption(option, meta = {}) {
+    if (!option || typeof option !== "object") {
+      return;
+    }
+    const ensure = (value) => String(value ?? "").trim();
+    const eventId = ensure(option.eventId || this.state?.activeEventId || this.pageContext?.eventId || "");
+    const scheduleIdRaw = ensure(option.scheduleId || "");
+    const scheduleId = normalizeScheduleId(scheduleIdRaw);
+    const keyCandidate = ensure(option.key);
+    const scheduleKey = keyCandidate || (eventId && scheduleId ? `${eventId}::${scheduleId}` : "");
+    if (!eventId || !scheduleId || !scheduleKey) {
+      return;
+    }
+
+    const resolvedLabel = this.resolveScheduleLabel(scheduleKey, option.label, option.scheduleId);
+    const reason = ensure(meta.reason) || "consensus-adopt";
+    const publishPresence = meta.publishPresence !== false;
+    const presenceOptions = {
+      allowFallback: false,
+      ...(meta.presenceOptions || {})
+    };
+
+    const contextStart = ensure(option.startAt || option.scheduleStart || this.pageContext?.startAt || "");
+    const contextEnd = ensure(option.endAt || option.scheduleEnd || this.pageContext?.endAt || "");
+
+    this.pageContext = {
+      ...(this.pageContext || {}),
+      eventId,
+      scheduleId,
+      scheduleKey,
+      scheduleLabel: resolvedLabel,
+      startAt: contextStart,
+      endAt: contextEnd
+    };
+
+    Questions.updateScheduleContext(this, {
+      syncPresence: false,
+      presenceOptions
+    });
+
+    this.state.conflictSelection = scheduleKey;
+    this.markOperatorPresenceIntent(eventId, scheduleId, resolvedLabel);
+
+    if (publishPresence) {
+      this.syncOperatorPresence(reason, {
+        allowFallback: false,
+        publishSchedule: true,
+        useActiveSchedule: true
+      });
+    }
+  }
+
+  /**
    * presence情報と割当を照合し、衝突ダイアログの表示や自動ロックを制御します。
    */
   evaluateScheduleConflict() {
@@ -1922,7 +2011,7 @@ export class OperatorApp {
     uniqueKeys.delete("");
     const presenceHasMultipleSchedules = uniqueKeys.size > 1;
     const hasPresence = options.length > 0;
-    const channelAligned = !this.hasChannelMismatch();
+    let channelAligned = !this.hasChannelMismatch();
     const assignmentTimestamp = Number(
       (this.state?.channelAssignment &&
         (this.state.channelAssignment.updatedAt || this.state.channelAssignment.lockedAt)) ||
@@ -1932,6 +2021,37 @@ export class OperatorApp {
     const presenceNewerThanAssignment =
       latestPresenceAt > assignmentTimestamp || (assignmentTimestamp === 0 && hasPresence);
     const now = Date.now();
+    if (uniqueKeys.size === 1) {
+      const [soleKeyCandidate] = uniqueKeys;
+      let consensusOption = null;
+      if (soleKeyCandidate) {
+        consensusOption = options.find((opt) => opt && (opt.key === soleKeyCandidate || opt.scheduleId === soleKeyCandidate));
+      }
+      if (!consensusOption && options.length) {
+        consensusOption = options[0];
+      }
+      if (consensusOption) {
+        const consensusEventId = String(consensusOption.eventId || eventId || "").trim();
+        const consensusScheduleId = normalizeScheduleId(consensusOption.scheduleId || "");
+        const consensusKey =
+          String(consensusOption.key || "").trim() ||
+          (consensusEventId && consensusScheduleId ? `${consensusEventId}::${consensusScheduleId}` : "");
+        const currentKey = this.getCurrentScheduleKey();
+        const needsAlignment = consensusKey && (currentKey !== consensusKey || !channelAligned);
+        if (needsAlignment) {
+          const assignmentMatches = assignmentKey && consensusKey ? assignmentKey === consensusKey : !assignmentKey;
+          this.scheduleConsensusAdoption(consensusOption, {
+            reason: assignmentMatches ? "assignment-align" : "consensus-adopt",
+            presenceOptions: { allowFallback: false },
+            publishPresence: true
+          });
+          if (!assignmentKey || assignmentMatches) {
+            channelAligned = true;
+          }
+        }
+      }
+    }
+
     let shouldPrompt = false;
     if (hasPresence && presenceNewerThanAssignment) {
       if (presenceHasMultipleSchedules) {
