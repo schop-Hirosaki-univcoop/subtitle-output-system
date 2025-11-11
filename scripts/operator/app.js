@@ -3840,6 +3840,10 @@ export class OperatorApp {
     const nextActive = allowActive && (presenceActive || snapshotActive);
     this.state.displaySessionActive = nextActive;
 
+    if (nextActive && this.state.renderChannelOnline === false) {
+      this.updateRenderAvailability(null);
+    }
+
     if (presenceActive) {
       this.refreshDisplaySessionFromPresence(session, presenceEntry, reason);
     } else if (!nextActive && sessionUid && sessionId) {
