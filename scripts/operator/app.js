@@ -296,6 +296,7 @@ export class OperatorApp {
     const autoScroll = this.dom.logAutoscroll ? this.dom.logAutoscroll.checked : true;
     this.state = createInitialState(autoScroll);
     this.pageContext = this.extractPageContext();
+    this.initialPageContext = { ...(this.pageContext || {}) };
     this.applyContextToState();
     this.api = createApiClient(auth, onAuthStateChanged);
     this.isEmbedded = Boolean(OperatorApp.embedPrefix);
@@ -381,6 +382,10 @@ export class OperatorApp {
     this.operatorPresencePrimedEventId = "";
     this.operatorPresencePrimeRequestId = 0;
     this.operatorPresencePrimeTargetEventId = "";
+    this.operatorPresencePurgePromise = null;
+    this.operatorPresencePurgeUid = "";
+    this.operatorPresencePurgeExclude = "";
+    this.operatorPresencePurgeRequestId = 0;
     this.conflictDialogOpen = false;
     this.operatorMode = OPERATOR_MODE_TELOP;
     this.currentConflictSignature = "";
@@ -478,6 +483,10 @@ export class OperatorApp {
           scheduleLabel: context.scheduleLabel
         }
       );
+      const hasInitialSelection = Boolean(context.eventId || context.scheduleId || context.scheduleKey);
+      if (hasInitialSelection) {
+        context.selectionConfirmed = false;
+      }
     } catch (error) {
       // Ignore malformed page context payloads.
     }
@@ -491,6 +500,7 @@ export class OperatorApp {
   applyContextToState() {
     if (!this.state) return;
     const context = this.pageContext || {};
+    const selectionConfirmed = context.selectionConfirmed === true;
     const scheduleKey = this.derivePresenceScheduleKey(
       context.eventId,
       {
@@ -507,21 +517,57 @@ export class OperatorApp {
         scheduleLabel: context.committedScheduleLabel
       }
     );
-    this.state.activeEventId = context.eventId || "";
-    this.state.activeScheduleId = context.scheduleId || "";
-    this.state.activeEventName = context.eventName || "";
-    this.state.activeScheduleLabel = context.scheduleLabel || "";
+    this.state.activeEventId = selectionConfirmed ? context.eventId || "" : "";
+    this.state.activeScheduleId = selectionConfirmed ? context.scheduleId || "" : "";
+    this.state.activeEventName = selectionConfirmed ? context.eventName || "" : "";
+    this.state.activeScheduleLabel = selectionConfirmed ? context.scheduleLabel || "" : "";
+    this.state.selectionConfirmed = selectionConfirmed;
     this.state.committedScheduleId = context.committedScheduleId || "";
     this.state.committedScheduleLabel = context.committedScheduleLabel || "";
     this.state.committedScheduleKey = committedScheduleKey;
-    if (committedScheduleKey) {
+    if (selectionConfirmed && committedScheduleKey) {
       this.state.currentSchedule = committedScheduleKey;
       this.state.lastNormalSchedule = committedScheduleKey;
-    } else if (scheduleKey) {
+    } else if (selectionConfirmed && scheduleKey) {
       this.state.currentSchedule = scheduleKey;
       this.state.lastNormalSchedule = scheduleKey;
+    } else if (!selectionConfirmed) {
+      this.state.currentSchedule = "";
+      this.state.lastNormalSchedule = "";
     }
     this.state.operatorMode = this.operatorMode;
+  }
+
+  /**
+   * 画面コンテキストに保持しているイベント/日程選択情報を初期状態へ戻します。
+   * 既存のその他のメタデータは維持しつつ、selectionConfirmedをfalseに戻します。
+   */
+  resetPageContextSelection() {
+    let baseContext = {};
+    if (this.pageContext && typeof this.pageContext === "object") {
+      baseContext = { ...this.pageContext };
+    } else if (this.initialPageContext && typeof this.initialPageContext === "object") {
+      baseContext = { ...this.initialPageContext };
+    }
+    const normalizedMode = normalizeOperatorMode(baseContext.operatorMode ?? this.operatorMode);
+    this.pageContext = {
+      ...baseContext,
+      eventId: "",
+      scheduleId: "",
+      eventName: "",
+      scheduleLabel: "",
+      startAt: "",
+      endAt: "",
+      scheduleKey: "",
+      committedScheduleId: "",
+      committedScheduleLabel: "",
+      committedScheduleKey: "",
+      selectionConfirmed: false,
+      operatorMode: normalizedMode || OPERATOR_MODE_TELOP
+    };
+    if (this.state) {
+      this.state.selectionConfirmed = false;
+    }
   }
 
   /**
@@ -531,12 +577,14 @@ export class OperatorApp {
    */
   getActiveChannel() {
     const ensure = (value) => String(value ?? "").trim();
-    let eventId = ensure(this.state?.activeEventId || this.pageContext?.eventId || "");
-    let scheduleId = ensure(this.state?.activeScheduleId || this.pageContext?.scheduleId || "");
+    const context = this.pageContext || {};
+    const contextConfirmed = context.selectionConfirmed === true;
+    let eventId = ensure(this.state?.activeEventId || (contextConfirmed ? context.eventId : ""));
+    let scheduleId = ensure(this.state?.activeScheduleId || (contextConfirmed ? context.scheduleId : ""));
 
     if (!eventId || !scheduleId) {
       const scheduleKey = ensure(
-        this.state?.currentSchedule || this.pageContext?.scheduleKey || ""
+        this.state?.currentSchedule || (contextConfirmed ? context.scheduleKey : "") || ""
       );
       if (scheduleKey) {
         const [eventPart = "", schedulePart = ""] = scheduleKey.split("::");
@@ -558,12 +606,16 @@ export class OperatorApp {
    */
   getCurrentScheduleKey() {
     const ensure = (value) => String(value ?? "").trim();
-    const directKey = ensure(this.state?.currentSchedule || this.pageContext?.scheduleKey || "");
+    const context = this.pageContext || {};
+    const contextConfirmed = context.selectionConfirmed === true;
+    const directKey = ensure(this.state?.currentSchedule || (contextConfirmed ? context.scheduleKey : "") || "");
     if (directKey) {
       return directKey;
     }
     const { eventId, scheduleId } = this.getActiveChannel();
-    const scheduleLabel = ensure(this.state?.activeScheduleLabel || this.pageContext?.scheduleLabel || "");
+    const scheduleLabel = ensure(
+      this.state?.activeScheduleLabel || (contextConfirmed ? context.scheduleLabel : "") || ""
+    );
     const entryId = ensure(this.operatorPresenceSessionId);
     return this.derivePresenceScheduleKey(eventId, { scheduleId, scheduleLabel }, entryId);
   }
@@ -1001,6 +1053,74 @@ export class OperatorApp {
   }
 
   /**
+   * 現在のユーザーに紐づく古いpresenceエントリを全イベントから削除します。
+   * sessionIdを指定した場合はそのエントリを除外します。
+   * @param {string} uid
+   * @param {{ excludeSessionId?: string }} [options]
+   * @returns {Promise<void>}
+   */
+  purgeOperatorPresenceSessionsForUser(uid = "", options = {}) {
+    const ensure = (value) => String(value ?? "").trim();
+    const normalizedUid = ensure(uid || this.operatorIdentity?.uid || auth.currentUser?.uid || "");
+    if (!normalizedUid) {
+      return Promise.resolve();
+    }
+    const excludeSessionId = ensure(options?.excludeSessionId);
+    if (
+      this.operatorPresencePurgePromise &&
+      this.operatorPresencePurgeUid === normalizedUid &&
+      this.operatorPresencePurgeExclude === excludeSessionId
+    ) {
+      return this.operatorPresencePurgePromise;
+    }
+    const requestId = ++this.operatorPresencePurgeRequestId;
+    this.operatorPresencePurgeUid = normalizedUid;
+    this.operatorPresencePurgeExclude = excludeSessionId;
+    const rootRef = getOperatorPresenceEventRef();
+    const purgePromise = get(rootRef)
+      .then((snapshot) => {
+        if (!snapshot || typeof snapshot.exists !== "function" || !snapshot.exists()) {
+          return;
+        }
+        const removals = [];
+        snapshot.forEach((eventSnap) => {
+          const eventId = ensure(eventSnap.key);
+          if (!eventId || typeof eventSnap.forEach !== "function") {
+            return;
+          }
+          eventSnap.forEach((entrySnap) => {
+            const value = entrySnap && typeof entrySnap.val === "function" ? entrySnap.val() || {} : {};
+            const entryUid = ensure(value.uid);
+            if (!entryUid || entryUid !== normalizedUid) {
+              return;
+            }
+            const sessionId = ensure(value.sessionId || entrySnap.key);
+            if (excludeSessionId && sessionId === excludeSessionId) {
+              return;
+            }
+            if (!sessionId) {
+              return;
+            }
+            removals.push(remove(getOperatorPresenceEntryRef(eventId, sessionId)).catch(() => {}));
+          });
+        });
+        if (removals.length) {
+          return Promise.all(removals).catch(() => {});
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (this.operatorPresencePurgeRequestId === requestId) {
+          this.operatorPresencePurgePromise = null;
+          this.operatorPresencePurgeUid = "";
+          this.operatorPresencePurgeExclude = "";
+        }
+      });
+    this.operatorPresencePurgePromise = purgePromise;
+    return purgePromise;
+  }
+
+  /**
    * presence同期処理を次のマイクロタスクに遅延させ、短時間に複数回呼ばれた場合もまとめて実行します。
    */
   queueOperatorPresenceSync() {
@@ -1021,9 +1141,7 @@ export class OperatorApp {
    * @returns {Promise<void>}
    */
   syncOperatorPresence(reason = "context-sync", options = {}) {
-    if (this.operatorPresencePrimePromise) {
-      return;
-    }
+    const primePending = Boolean(this.operatorPresencePrimePromise);
     const user = this.operatorIdentity?.uid ? this.operatorIdentity : auth.currentUser || null;
     const uid = String(user?.uid || "").trim();
     if (!uid || !this.isAuthorized) {
@@ -1031,24 +1149,41 @@ export class OperatorApp {
       return;
     }
 
-    const eventId = String(this.state?.activeEventId || "").trim();
-    if (!eventId) {
+    const context = this.pageContext || {};
+    const contextConfirmed = context.selectionConfirmed === true;
+    const selectionConfirmed = contextConfirmed && this.state?.selectionConfirmed === true;
+    const eventId = selectionConfirmed
+      ? String(this.state?.activeEventId || context.eventId || "").trim()
+      : "";
+    if (!selectionConfirmed || !eventId) {
       this.clearOperatorPresence();
       return;
     }
 
+    if (primePending) {
+      return;
+    }
+
     const ensure = (value) => String(value ?? "").trim();
-    const committedScheduleId = ensure(this.state?.committedScheduleId);
-    const committedScheduleLabel = ensure(this.state?.committedScheduleLabel);
-    const committedScheduleKey = ensure(this.state?.committedScheduleKey);
+    const committedScheduleId = selectionConfirmed ? ensure(this.state?.committedScheduleId) : "";
+    const committedScheduleLabel = selectionConfirmed ? ensure(this.state?.committedScheduleLabel) : "";
+    const committedScheduleKey = selectionConfirmed ? ensure(this.state?.committedScheduleKey) : "";
     const intentScheduleId = ensure(this.state?.operatorPresenceIntentId);
     const intentScheduleLabel = ensure(this.state?.operatorPresenceIntentLabel);
     const intentScheduleKey = ensure(this.state?.operatorPresenceIntentKey);
-    const activeScheduleId = ensure(this.state?.activeScheduleId || this.pageContext?.scheduleId);
-    const activeScheduleLabel = ensure(this.state?.activeScheduleLabel || this.pageContext?.scheduleLabel);
-    const activeScheduleKey = ensure(
-      this.state?.currentSchedule || this.state?.lastNormalSchedule || this.pageContext?.scheduleKey
-    );
+    const activeScheduleId = selectionConfirmed
+      ? ensure(this.state?.activeScheduleId || context.scheduleId || "")
+      : "";
+    const activeScheduleLabel = selectionConfirmed
+      ? ensure(this.state?.activeScheduleLabel || context.scheduleLabel || "")
+      : "";
+    const activeScheduleKey = selectionConfirmed
+      ? ensure(
+          this.state?.currentSchedule ||
+            this.state?.lastNormalSchedule ||
+            context.scheduleKey || ""
+        )
+      : "";
     const previousPresence = this.state?.operatorPresenceSelf || null;
     const allowPresenceFallback =
       typeof options?.allowFallback === "boolean"
@@ -1059,12 +1194,14 @@ export class OperatorApp {
     const sessionId = ensure(this.operatorPresenceSessionId) || this.generatePresenceSessionId();
 
     const schedulePublicationExplicit = publishScheduleOption === true;
-    const scheduleSuppressed = publishScheduleOption === false;
+    const scheduleSuppressed =
+      publishScheduleOption === false || (!selectionConfirmed && !schedulePublicationExplicit);
     const activeScheduleAvailable =
       useActiveSchedule && (activeScheduleKey || activeScheduleId || activeScheduleLabel);
     const shouldPublishSchedule =
       schedulePublicationExplicit ||
-      (!scheduleSuppressed && (committedScheduleKey || intentScheduleKey || intentScheduleId || intentScheduleLabel || activeScheduleAvailable));
+      (!scheduleSuppressed &&
+        (committedScheduleKey || intentScheduleKey || intentScheduleId || intentScheduleLabel || activeScheduleAvailable));
 
     let scheduleId = "";
     let scheduleLabel = "";
@@ -1119,7 +1256,9 @@ export class OperatorApp {
       }
     }
     const publishEvent = shouldPublishSchedule || options?.publishEvent === true;
-    const eventName = publishEvent ? String(this.state?.activeEventName || "").trim() : "";
+    const eventName = publishEvent
+      ? String(this.state?.activeEventName || (selectionConfirmed ? context.eventName : "") || "").trim()
+      : "";
     const skipTelop = !this.isTelopEnabled();
     this.operatorPresenceSessionId = sessionId;
     const nextKey = `${eventId}/${sessionId}`;
@@ -1266,8 +1405,15 @@ export class OperatorApp {
     this.operatorPresenceEntryRef = null;
     const hadKey = !!this.operatorPresenceEntryKey;
     this.operatorPresenceEntryKey = "";
+    const ensure = (value) => String(value ?? "").trim();
+    const sessionId = ensure(this.operatorPresenceSessionId);
     if (entryRef && hadKey) {
       remove(entryRef).catch(() => {});
+    } else {
+      const uid = ensure(this.operatorIdentity?.uid || auth.currentUser?.uid || "");
+      if (uid) {
+        this.purgeOperatorPresenceSessionsForUser(uid, { excludeSessionId: sessionId });
+      }
     }
     this.state.operatorPresenceSelf = null;
     this.clearOperatorPresenceIntent();
@@ -1714,11 +1860,20 @@ export class OperatorApp {
         this.state.committedScheduleLabel = committedLabel;
         this.state.committedScheduleKey = committedKey;
       }
+      this.pageContext = {
+        ...(this.pageContext || {}),
+        eventId: committedEventId,
+        scheduleId: committedScheduleId,
+        scheduleKey: committedKey,
+        scheduleLabel: committedLabel,
+        selectionConfirmed: true
+      };
       this.markOperatorPresenceIntent(committedEventId, committedScheduleId, committedLabel);
       this.updateScheduleContext({
         presenceReason: "schedule-commit",
         presenceOptions: { allowFallback: false, publishSchedule: true },
-        trackIntent: true
+        trackIntent: true,
+        selectionConfirmed: true
       });
       const summary = this.describeChannelAssignment();
       if (!silent) {
@@ -1916,7 +2071,11 @@ export class OperatorApp {
       return;
     }
     const ensure = (value) => String(value ?? "").trim();
-    const eventId = ensure(option.eventId || this.state?.activeEventId || this.pageContext?.eventId || "");
+    const context = this.pageContext || {};
+    const contextConfirmed = context.selectionConfirmed === true;
+    const eventId = ensure(
+      option.eventId || this.state?.activeEventId || (contextConfirmed ? context.eventId : "") || ""
+    );
     const scheduleIdRaw = ensure(option.scheduleId || "");
     const scheduleId = normalizeScheduleId(scheduleIdRaw);
     const keyCandidate = ensure(option.key);
@@ -1943,12 +2102,14 @@ export class OperatorApp {
       scheduleKey,
       scheduleLabel: resolvedLabel,
       startAt: contextStart,
-      endAt: contextEnd
+      endAt: contextEnd,
+      selectionConfirmed: true
     };
 
     Questions.updateScheduleContext(this, {
       syncPresence: false,
-      presenceOptions
+      presenceOptions,
+      selectionConfirmed: true
     });
 
     this.state.conflictSelection = scheduleKey;
@@ -1980,6 +2141,7 @@ export class OperatorApp {
       this.closeConflictDialog();
       return;
     }
+    const selectionConfirmed = this.state?.selectionConfirmed === true;
     const presenceMap = this.state?.operatorPresenceByUser instanceof Map ? this.state.operatorPresenceByUser : new Map();
     const groups = new Map();
     let latestPresenceAt = 0;
@@ -2130,7 +2292,7 @@ export class OperatorApp {
       if (!consensusOption && options.length) {
         consensusOption = options[0];
       }
-      if (consensusOption) {
+      if (consensusOption && selectionConfirmed) {
         const consensusEventId = String(consensusOption.eventId || eventId || "").trim();
         const consensusScheduleId = normalizeScheduleId(consensusOption.scheduleId || "");
         const consensusKey =
@@ -2299,19 +2461,36 @@ export class OperatorApp {
 
     this.clearOperatorPresenceIntent();
 
+    const selectionConfirmed = context.selectionConfirmed === true;
+    const effectiveEventId = selectionConfirmed ? eventId : "";
+    const baseContext = { ...(this.pageContext || {}) };
+    if (!selectionConfirmed) {
+      baseContext.eventId = "";
+      baseContext.scheduleId = "";
+      baseContext.eventName = "";
+      baseContext.scheduleLabel = "";
+      baseContext.startAt = "";
+      baseContext.endAt = "";
+      baseContext.scheduleKey = "";
+      baseContext.committedScheduleId = "";
+      baseContext.committedScheduleLabel = "";
+      baseContext.committedScheduleKey = "";
+    }
+
     this.pageContext = {
-      ...this.pageContext,
-      eventId,
-      scheduleId,
-      eventName,
-      scheduleLabel,
-      committedScheduleId,
-      committedScheduleLabel,
-      committedScheduleKey: resolvedCommittedKey,
-      startAt,
-      endAt,
-      scheduleKey,
-      operatorMode
+      ...baseContext,
+      eventId: selectionConfirmed ? eventId : "",
+      scheduleId: selectionConfirmed ? scheduleId : "",
+      eventName: selectionConfirmed ? eventName : "",
+      scheduleLabel: selectionConfirmed ? scheduleLabel : "",
+      committedScheduleId: selectionConfirmed ? committedScheduleId : "",
+      committedScheduleLabel: selectionConfirmed ? committedScheduleLabel : "",
+      committedScheduleKey: selectionConfirmed ? resolvedCommittedKey : "",
+      startAt: selectionConfirmed ? startAt : "",
+      endAt: selectionConfirmed ? endAt : "",
+      scheduleKey: selectionConfirmed ? scheduleKey : "",
+      operatorMode,
+      selectionConfirmed
     };
 
     this.operatorMode = operatorMode;
@@ -2356,13 +2535,15 @@ export class OperatorApp {
       }
     }
 
-    const presenceOptions = { allowFallback: false };
+    const presenceOptions = selectionConfirmed
+      ? { allowFallback: false }
+      : { allowFallback: false, publishSchedule: false, publishEvent: false, useActiveSchedule: false };
     this.updateScheduleContext({ syncPresence: false, presenceOptions });
     this.refreshChannelSubscriptions();
-    if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== eventId) {
+    if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== effectiveEventId) {
       this.operatorPresencePrimedEventId = "";
     }
-    this.primeOperatorPresenceSession(eventId).finally(() =>
+    this.primeOperatorPresenceSession(effectiveEventId).finally(() =>
       this.syncOperatorPresence("context-sync", presenceOptions)
     );
     this.renderChannelBanner();
@@ -2735,7 +2916,7 @@ export class OperatorApp {
         this.setLoaderStep(2, this.isEmbedded ? "管理者権限を適用しています…" : "管理者権限はプリフライト済みです。");
       }
 
-      this.renderLoggedInUi(user);
+      await this.renderLoggedInUi(user);
       this.setLoaderStep(3, this.isEmbedded ? "初期データを準備しています…" : "初期ミラーを確認しています…");
       this.updateLoader("初期データを準備しています…");
       let questionsSnapshot = null;
@@ -2794,11 +2975,15 @@ export class OperatorApp {
   /**
    * ログイン済みユーザー向けにUIを初期化し、必要な購読を開始します。
    * @param {import("firebase/auth").User} user
+   * @returns {Promise<void>}
    */
-  renderLoggedInUi(user) {
+  async renderLoggedInUi(user) {
+    const previousUid = String(this.operatorIdentity?.uid || "").trim();
+    const nextUid = String(user?.uid || "").trim();
+    const wasAuthorized = this.isAuthorized === true;
     this.redirectingToIndex = false;
     this.operatorIdentity = {
-      uid: String(user?.uid || "").trim(),
+      uid: nextUid,
       email: String(user?.email || "").trim(),
       displayName: String(user?.displayName || "").trim()
     };
@@ -2811,7 +2996,50 @@ export class OperatorApp {
       this.dom.actionPanel.style.display = "flex";
       this.dom.actionPanel.hidden = false;
     }
+    const userChanged = !wasAuthorized || !previousUid || previousUid !== nextUid;
     this.isAuthorized = true;
+    if (userChanged) {
+      this.operatorMode = OPERATOR_MODE_TELOP;
+      this.stopOperatorPresenceHeartbeat();
+      this.operatorPresenceSyncQueued = false;
+      this.operatorPresenceEntryKey = "";
+      this.operatorPresenceEntryRef = null;
+      this.operatorPresenceLastSignature = "";
+      this.operatorPresenceSessionId = this.generatePresenceSessionId();
+      this.operatorPresencePrimedEventId = "";
+      this.operatorPresencePrimePromise = null;
+      this.operatorPresencePrimeTargetEventId = "";
+      await this.purgeOperatorPresenceSessionsForUser(nextUid, {
+        excludeSessionId: String(this.operatorPresenceSessionId || "")
+      });
+      if (this.state) {
+        this.state.operatorPresenceEventId = "";
+        this.state.operatorPresenceByUser = new Map();
+        this.state.operatorPresenceSelf = null;
+      }
+      this.resetPageContextSelection();
+      if (this.pageContext && typeof this.pageContext === "object") {
+        this.pageContext.operatorMode = OPERATOR_MODE_TELOP;
+      }
+      this.applyContextToState();
+      if (typeof this.clearOperatorPresenceIntent === "function") {
+        this.clearOperatorPresenceIntent();
+      }
+      Questions.updateScheduleContext(this, {
+        syncPresence: false,
+        trackIntent: false,
+        presenceReason: "context-reset",
+        selectionConfirmed: false,
+        presenceOptions: {
+          allowFallback: false,
+          publishSchedule: false,
+          publishEvent: false,
+          useActiveSchedule: false
+        }
+      });
+      this.renderChannelBanner();
+      this.evaluateScheduleConflict();
+    }
     if (this.dom.userInfo) {
       this.dom.userInfo.innerHTML = "";
       const label = document.createElement("span");
@@ -2834,7 +3062,11 @@ export class OperatorApp {
       this.setExternalContext(pendingContext);
     }
     this.applyPreferredSubTab();
-    const activeEventId = String(this.state?.activeEventId || this.pageContext?.eventId || "").trim();
+    const context = this.pageContext || {};
+    const contextConfirmed = context.selectionConfirmed === true;
+    const activeEventId = String(
+      this.state?.activeEventId || (contextConfirmed ? context.eventId : "") || ""
+    ).trim();
     if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== activeEventId) {
       this.operatorPresencePrimedEventId = "";
     }
@@ -2848,6 +3080,12 @@ export class OperatorApp {
   showLoggedOutState() {
     if (this.redirectingToIndex) {
       return;
+    }
+    const ensure = (value) => String(value ?? "").trim();
+    const previousUid = ensure(this.operatorIdentity?.uid || auth.currentUser?.uid || "");
+    const sessionId = ensure(this.operatorPresenceSessionId);
+    if (previousUid) {
+      this.purgeOperatorPresenceSessionsForUser(previousUid, { excludeSessionId: sessionId });
     }
     this.isAuthorized = false;
     this.operatorIdentity = { uid: "", email: "", displayName: "" };
@@ -2955,6 +3193,7 @@ export class OperatorApp {
     const autoScroll = this.dom.logAutoscroll ? this.dom.logAutoscroll.checked : true;
     this.state = createInitialState(autoScroll);
     this.operatorMode = OPERATOR_MODE_TELOP;
+    this.resetPageContextSelection();
     if (this.pageContext && typeof this.pageContext === "object") {
       this.pageContext.operatorMode = OPERATOR_MODE_TELOP;
     }
