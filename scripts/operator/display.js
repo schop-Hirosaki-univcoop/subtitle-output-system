@@ -3,7 +3,14 @@ import { info as logDisplayLinkInfo } from "../shared/display-link-logger.js";
 import { escapeHtml, formatOperatorName, formatRelative, normalizeUpdatedAt, renderRubyHtml } from "./utils.js";
 
 export function handleRenderUpdate(app, snapshot) {
-  const value = snapshot.val() || {};
+  const rawValue = typeof snapshot?.val === "function" ? snapshot.val() : null;
+  const exists = typeof snapshot?.exists === "function" ? snapshot.exists() : rawValue != null;
+  const hadState = app?.state?.renderState != null;
+  if (typeof app.updateRenderAvailability === "function") {
+    const status = exists ? true : hadState ? false : null;
+    app.updateRenderAvailability(status);
+  }
+  const value = rawValue || {};
   setLamp(app, value.phase);
   const phase = value.phase || "";
   const isHidden = phase === "hidden";
@@ -37,7 +44,11 @@ export function handleRenderUpdate(app, snapshot) {
     nowShowing: normalizedNow,
     updatedAt: updatedAt || null
   });
-  app.state.renderState = { ...value, nowShowing: normalizedNow };
+  if (exists) {
+    app.state.renderState = { ...value, nowShowing: normalizedNow };
+  } else {
+    app.state.renderState = null;
+  }
   if (!areNowShowingEqual(previousNow, normalizedNow) && typeof app.renderQuestions === "function") {
     app.renderQuestions();
   }

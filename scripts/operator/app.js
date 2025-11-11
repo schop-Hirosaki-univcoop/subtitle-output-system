@@ -314,7 +314,10 @@ export class OperatorApp {
     this.displayPresenceEntries = [];
     this.displayPresenceLastRefreshAt = 0;
     this.displayPresenceLastInactiveAt = 0;
+    this.displayPresencePrimedForSession = false;
+    this.displayPresencePrimedSessionId = "";
     this.displaySessionStatusFromSnapshot = false;
+    this.displayAssetProbe = null;
     this.updateTriggerUnsubscribe = null;
     this.renderUnsubscribe = null;
     this.currentRenderPath = null;
@@ -641,6 +644,38 @@ export class OperatorApp {
   }
 
   /**
+   * レンダリングチャンネルのリアルタイム更新が有効かどうかを確認します。
+   * presenceが有効でもレンダーが切断されている場合はfalseを返します。
+   * @returns {boolean}
+   */
+  isDisplayOnline() {
+    const renderOnline = this.state?.renderChannelOnline !== false;
+    return !!this.state?.displaySessionActive && renderOnline;
+  }
+
+  /**
+   * レンダリングチャンネルの到達状況を更新し、UIへ反映します。
+   * @param {boolean|null|undefined} status
+   */
+  updateRenderAvailability(status) {
+    if (!this.state) {
+      return;
+    }
+    const normalized = status === true ? true : status === false ? false : null;
+    if (this.state.renderChannelOnline === normalized) {
+      return;
+    }
+    this.state.renderChannelOnline = normalized;
+    if (typeof this.updateActionAvailability === "function") {
+      this.updateActionAvailability();
+    }
+    if (typeof this.updateBatchButtonVisibility === "function") {
+      this.updateBatchButtonVisibility();
+    }
+    this.renderChannelBanner();
+  }
+
+  /**
    * 送出端末のセッション状態から現在の割当情報を抽出します。
    * @returns {null|{ eventId: string, scheduleId: string, label: string, updatedAt?: number, lockedAt?: number }}
    */
@@ -775,6 +810,7 @@ export class OperatorApp {
       this.renderUnsubscribe = null;
     }
     this.currentRenderPath = path;
+    this.updateRenderAvailability(null);
     const channelRef = getRenderRef(eventId, scheduleId);
     this.renderUnsubscribe = onValue(
       channelRef,
@@ -1516,16 +1552,26 @@ export class OperatorApp {
     const statusEl = this.dom.channelStatus;
     const assignmentEl = this.dom.channelAssignment;
     const lockButton = this.dom.channelLockButton;
-    const displayActive = !!this.state.displaySessionActive;
+    const displaySessionActive = !!this.state.displaySessionActive;
+    const renderOnline = this.state.renderChannelOnline !== false;
+    const displayActive = this.isDisplayOnline();
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
     const channelAligned = !this.hasChannelMismatch();
     const telopEnabled = this.isTelopEnabled();
+    const assetChecked = this.state.displayAssetChecked === true;
+    const assetAvailable = this.state.displayAssetAvailable !== false;
     let statusText = "";
     let statusClass = "channel-banner__status";
-    if (!telopEnabled) {
+    if (assetChecked && !assetAvailable) {
+      statusText = "表示端末ページ（display.html）が見つかりません。";
+      statusClass += " is-alert";
+    } else if (!telopEnabled) {
       statusText = "テロップ操作なしモードです。送出・固定は行えません。";
       statusClass += " is-muted";
-    } else if (!displayActive) {
+    } else if (!renderOnline) {
+      statusText = "送出端末の表示画面が切断されています。";
+      statusClass += " is-alert";
+    } else if (!displaySessionActive) {
       statusText = "送出端末が接続されていません。";
       statusClass += " is-alert";
     } else if (!assignment || !assignment.eventId) {
@@ -1547,7 +1593,10 @@ export class OperatorApp {
       assignmentEl.textContent = summary || "—";
     }
     if (lockButton) {
-      if (!telopEnabled) {
+      if (assetChecked && !assetAvailable) {
+        lockButton.textContent = "ページ未配置";
+        lockButton.disabled = true;
+      } else if (!telopEnabled) {
         lockButton.textContent = "テロップ操作なし";
         lockButton.disabled = true;
       } else {
@@ -1828,6 +1877,18 @@ export class OperatorApp {
     const label = String(scheduleLabel || "").trim();
     const fromModal = options?.fromModal === true;
     const silent = options?.silent === true;
+    const assetChecked = this.state.displayAssetChecked === true;
+    const assetAvailable = this.state.displayAssetAvailable !== false;
+    if (assetChecked && !assetAvailable) {
+      const message = "表示端末ページ（display.html）が配置されていないため固定できません。";
+      if (fromModal && this.dom.conflictError) {
+        this.dom.conflictError.textContent = message;
+        this.dom.conflictError.hidden = false;
+      } else if (!silent) {
+        this.toast(message, "error");
+      }
+      return;
+    }
     if (!this.isTelopEnabled()) {
       const message = "テロップ操作なしモードでは固定できません。";
       if (fromModal && this.dom.conflictError) {
@@ -2642,6 +2703,7 @@ export class OperatorApp {
     this.applyInitialDictionaryState();
     this.applyInitialLogsState();
     this.updateCopyrightYear();
+    this.probeDisplayAssetAvailability().catch(() => {});
     onAuthStateChanged(auth, (user) => {
       if (this.authFlow === "prompting") {
         this.pendingAuthUser = user || null;
@@ -2649,6 +2711,78 @@ export class OperatorApp {
       }
       this.handleAuthState(user);
     });
+  }
+
+  /**
+   * display.html の存在可否を確認し、送出機能の利用可否と整合させます。
+   * @returns {Promise<boolean>}
+   */
+  probeDisplayAssetAvailability() {
+    if (this.displayAssetProbe) {
+      return this.displayAssetProbe;
+    }
+    const finalize = (available) => {
+      const normalized = available === true ? true : available === false ? false : null;
+      this.state.displayAssetAvailable = normalized;
+      this.state.displayAssetChecked = true;
+      this.state.displayAssetChecking = false;
+      this.displayAssetProbe = null;
+      this.updateActionAvailability();
+      this.renderChannelBanner();
+      return normalized;
+    };
+    if (!this.state.displayAssetChecking) {
+      this.state.displayAssetChecking = true;
+    }
+    if (typeof window === "undefined" || typeof fetch !== "function") {
+      return Promise.resolve(finalize(true));
+    }
+    let assetUrl;
+    try {
+      assetUrl = new URL("display.html", window.location.href);
+    } catch (error) {
+      return Promise.resolve(finalize(true));
+    }
+    const fetchWithMethod = async (method) => {
+      const response = await fetch(assetUrl.toString(), {
+        method,
+        cache: "no-store",
+        credentials: "same-origin"
+      });
+      return response;
+    };
+    const performProbe = async () => {
+      try {
+        const headResponse = await fetchWithMethod("HEAD");
+        if (headResponse.status === 404) {
+          return false;
+        }
+        if (headResponse.ok) {
+          return true;
+        }
+        if (headResponse.status !== 405 && headResponse.status !== 501) {
+          return headResponse.ok ? true : null;
+        }
+      } catch (error) {
+        // Fallback to GET probe below.
+      }
+      try {
+        const getResponse = await fetchWithMethod("GET");
+        if (getResponse.status === 404) {
+          return false;
+        }
+        if (getResponse.ok) {
+          return true;
+        }
+        return null;
+      } catch (error) {
+        return null;
+      }
+    };
+    this.displayAssetProbe = performProbe()
+      .then((available) => finalize(available))
+      .catch(() => finalize(null));
+    return this.displayAssetProbe;
   }
 
   /**
@@ -3195,6 +3329,8 @@ export class OperatorApp {
     this.displayPresenceEntries = [];
     this.displayPresenceLastRefreshAt = 0;
     this.displayPresenceLastInactiveAt = 0;
+    this.displayPresencePrimedForSession = false;
+    this.displayPresencePrimedSessionId = "";
     if (this.questionStatusUnsubscribe) {
       this.questionStatusUnsubscribe();
       this.questionStatusUnsubscribe = null;
@@ -3678,10 +3814,25 @@ export class OperatorApp {
     const session = this.state.displaySession || null;
     const sessionUid = String(session?.uid || "").trim();
     const sessionId = String(session?.sessionId || "").trim();
+    if (!sessionId) {
+      this.displayPresencePrimedSessionId = "";
+      this.displayPresencePrimedForSession = false;
+    } else if (this.displayPresencePrimedSessionId !== sessionId) {
+      this.displayPresencePrimedSessionId = sessionId;
+      this.displayPresencePrimedForSession = false;
+    }
     const presenceEntries = Array.isArray(this.displayPresenceEntries) ? this.displayPresenceEntries : [];
     const presenceEntry = presenceEntries.find((entry) => entry.uid === sessionUid) || null;
     const presenceActive = !!presenceEntry && !presenceEntry.isStale && presenceEntry.sessionId === sessionId;
-    const nextActive = presenceActive || !!this.displaySessionStatusFromSnapshot;
+    if (presenceEntry && presenceEntry.sessionId === sessionId) {
+      this.displayPresencePrimedForSession = true;
+    }
+    const assetChecked = this.state.displayAssetChecked === true;
+    const assetAvailable = this.state.displayAssetAvailable !== false;
+    const allowActive = !assetChecked || assetAvailable;
+    const snapshotFallbackAllowed = !this.displayPresencePrimedForSession;
+    const snapshotActive = snapshotFallbackAllowed && !!this.displaySessionStatusFromSnapshot;
+    const nextActive = allowActive && (presenceActive || snapshotActive);
     this.state.displaySessionActive = nextActive;
 
     if (presenceActive) {
