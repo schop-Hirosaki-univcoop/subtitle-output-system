@@ -24,6 +24,7 @@ import {
   onDisconnect
 } from "./firebase.js";
 import { getRenderStatePath, parseChannelParams, normalizeScheduleId } from "../shared/channel-paths.js";
+import { derivePresenceScheduleKey as sharedDerivePresenceScheduleKey } from "../shared/presence-keys.js";
 import { OPERATOR_MODE_TELOP, normalizeOperatorMode, isTelopMode } from "../shared/operator-modes.js";
 import { goToLogin } from "../shared/routes.js";
 import { info as logDisplayLinkInfo, error as logDisplayLinkError } from "../shared/display-link-logger.js";
@@ -468,10 +469,15 @@ export class OperatorApp {
       context.scheduleLabel = String(params.get("scheduleLabel") ?? params.get("scheduleName") ?? "").trim();
       context.startAt = String(params.get("startAt") ?? params.get("scheduleStart") ?? params.get("start") ?? "").trim();
       context.endAt = String(params.get("endAt") ?? params.get("scheduleEnd") ?? params.get("end") ?? "").trim();
-      context.scheduleKey = String(params.get("scheduleKey") ?? "").trim();
-      if (!context.scheduleKey && context.eventId && context.scheduleId) {
-        context.scheduleKey = `${context.eventId}::${context.scheduleId}`;
-      }
+      const rawScheduleKey = String(params.get("scheduleKey") ?? "").trim();
+      context.scheduleKey = this.derivePresenceScheduleKey(
+        context.eventId,
+        {
+          scheduleKey: rawScheduleKey,
+          scheduleId: context.scheduleId,
+          scheduleLabel: context.scheduleLabel
+        }
+      );
     } catch (error) {
       // Ignore malformed page context payloads.
     }
@@ -485,12 +491,22 @@ export class OperatorApp {
   applyContextToState() {
     if (!this.state) return;
     const context = this.pageContext || {};
-    const scheduleKey = context.scheduleKey ||
-      (context.eventId && context.scheduleId ? `${context.eventId}::${context.scheduleId}` : "");
-    const committedScheduleKey = context.committedScheduleKey ||
-      (context.eventId && context.committedScheduleId
-        ? `${context.eventId}::${context.committedScheduleId}`
-        : "");
+    const scheduleKey = this.derivePresenceScheduleKey(
+      context.eventId,
+      {
+        scheduleKey: context.scheduleKey,
+        scheduleId: context.scheduleId,
+        scheduleLabel: context.scheduleLabel
+      }
+    );
+    const committedScheduleKey = this.derivePresenceScheduleKey(
+      context.eventId,
+      {
+        scheduleKey: context.committedScheduleKey,
+        scheduleId: context.committedScheduleId,
+        scheduleLabel: context.committedScheduleLabel
+      }
+    );
     this.state.activeEventId = context.eventId || "";
     this.state.activeScheduleId = context.scheduleId || "";
     this.state.activeEventName = context.eventName || "";
@@ -541,12 +557,15 @@ export class OperatorApp {
    * @returns {string}
    */
   getCurrentScheduleKey() {
-    const { eventId, scheduleId } = this.getActiveChannel();
-    const normalizedEvent = String(eventId || "").trim();
-    if (!normalizedEvent) {
-      return "";
+    const ensure = (value) => String(value ?? "").trim();
+    const directKey = ensure(this.state?.currentSchedule || this.pageContext?.scheduleKey || "");
+    if (directKey) {
+      return directKey;
     }
-    return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
+    const { eventId, scheduleId } = this.getActiveChannel();
+    const scheduleLabel = ensure(this.state?.activeScheduleLabel || this.pageContext?.scheduleLabel || "");
+    const entryId = ensure(this.operatorPresenceSessionId);
+    return this.derivePresenceScheduleKey(eventId, { scheduleId, scheduleLabel }, entryId);
   }
 
   /**
@@ -558,33 +577,7 @@ export class OperatorApp {
    * @returns {string}
    */
   derivePresenceScheduleKey(eventId, payload = {}, entryId = "") {
-    const ensure = (value) => String(value ?? "").trim();
-    const normalizedEvent = ensure(eventId);
-    const normalizedEntry = ensure(entryId);
-    const source = payload && typeof payload === "object" ? payload : {};
-    const rawKey = ensure(source.scheduleKey);
-    if (rawKey) {
-      return rawKey;
-    }
-    const scheduleId = ensure(source.scheduleId);
-    if (normalizedEvent && scheduleId) {
-      return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
-    }
-    if (scheduleId) {
-      return normalizeScheduleId(scheduleId);
-    }
-    const scheduleLabel = ensure(source.scheduleLabel);
-    if (scheduleLabel) {
-      const sanitizedLabel = scheduleLabel.replace(/\s+/g, " ").trim().replace(/::/g, "／");
-      if (normalizedEvent) {
-        return `${normalizedEvent}::label::${sanitizedLabel}`;
-      }
-      return `label::${sanitizedLabel}`;
-    }
-    if (normalizedEvent && normalizedEntry) {
-      return `${normalizedEvent}::session::${normalizedEntry}`;
-    }
-    return normalizedEntry || normalizedEvent || "";
+    return sharedDerivePresenceScheduleKey(eventId, payload, entryId);
   }
 
   /**
@@ -2286,9 +2279,22 @@ export class OperatorApp {
     const committedScheduleKey = ensure(context.committedScheduleKey);
     const startAt = ensure(context.startAt);
     const endAt = ensure(context.endAt);
-    const scheduleKey = eventId && scheduleId ? `${eventId}::${scheduleId}` : "";
-    const resolvedCommittedKey = committedScheduleKey ||
-      (eventId && committedScheduleId ? `${eventId}::${committedScheduleId}` : "");
+    const scheduleKeyFromContext = ensure(context.scheduleKey);
+    const presenceEntryId = ensure(context.presenceEntryId || context.entryId || context.sessionId);
+    const scheduleKey = this.derivePresenceScheduleKey(
+      eventId,
+      { scheduleKey: scheduleKeyFromContext, scheduleId, scheduleLabel },
+      presenceEntryId
+    );
+    const resolvedCommittedKey = this.derivePresenceScheduleKey(
+      eventId,
+      {
+        scheduleKey: committedScheduleKey,
+        scheduleId: committedScheduleId,
+        scheduleLabel: committedScheduleLabel
+      },
+      presenceEntryId
+    );
     const operatorMode = normalizeOperatorMode(context.operatorMode ?? context.mode);
 
     this.clearOperatorPresenceIntent();

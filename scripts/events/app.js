@@ -39,6 +39,7 @@ import {
   isTelopMode
 } from "../shared/operator-modes.js";
 import { normalizeScheduleId } from "../shared/channel-paths.js";
+import { derivePresenceScheduleKey as sharedDerivePresenceScheduleKey } from "../shared/presence-keys.js";
 import { goToLogin } from "../shared/routes.js";
 import {
   STAGE_SEQUENCE,
@@ -1514,6 +1515,11 @@ export class EventAdminApp {
           ensureString(this.hostPresenceSessionId)
         )
       : "";
+    const scheduleKey = this.derivePresenceScheduleKey(
+      ensureString(event?.id || ""),
+      { scheduleId, scheduleLabel },
+      ensureString(this.hostPresenceSessionId)
+    );
     return {
       eventId: event?.id || "",
       eventName: event?.name || event?.id || "",
@@ -1524,7 +1530,8 @@ export class EventAdminApp {
       operatorMode: this.operatorMode,
       committedScheduleId,
       committedScheduleLabel,
-      committedScheduleKey
+      committedScheduleKey,
+      scheduleKey
     };
   }
 
@@ -1582,33 +1589,7 @@ export class EventAdminApp {
   }
 
   derivePresenceScheduleKey(eventId, payload = {}, entryId = "") {
-    const ensure = (value) => String(value ?? "").trim();
-    const normalizedEvent = ensure(eventId);
-    const normalizedEntry = ensure(entryId);
-    const source = payload && typeof payload === "object" ? payload : {};
-    const rawKey = ensure(source.scheduleKey);
-    if (rawKey) {
-      return rawKey;
-    }
-    const scheduleId = ensure(source.scheduleId);
-    if (normalizedEvent && scheduleId) {
-      return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
-    }
-    if (scheduleId) {
-      return normalizeScheduleId(scheduleId);
-    }
-    const scheduleLabel = ensure(source.scheduleLabel);
-    if (scheduleLabel) {
-      const sanitizedLabel = scheduleLabel.replace(/\s+/g, " ").trim().replace(/::/g, "／");
-      if (normalizedEvent) {
-        return `${normalizedEvent}::label::${sanitizedLabel}`;
-      }
-      return `label::${sanitizedLabel}`;
-    }
-    if (normalizedEvent && normalizedEntry) {
-      return `${normalizedEvent}::session::${normalizedEntry}`;
-    }
-    return normalizedEntry || normalizedEvent || "";
+    return sharedDerivePresenceScheduleKey(eventId, payload, entryId);
   }
 
   getDisplayUrlForEvent(eventId) {
@@ -3095,33 +3076,7 @@ export class EventAdminApp {
   }
 
   buildPresenceScheduleKey(eventId, payload = {}, entryId = "") {
-    const ensure = (value) => String(value ?? "").trim();
-    const normalizedEvent = ensure(eventId);
-    const normalizedEntry = ensure(entryId);
-    const source = payload && typeof payload === "object" ? payload : {};
-    const rawKey = ensure(source.scheduleKey);
-    if (rawKey) {
-      return rawKey;
-    }
-    const scheduleId = ensure(source.scheduleId);
-    if (normalizedEvent && scheduleId) {
-      return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
-    }
-    if (scheduleId) {
-      return normalizeScheduleId(scheduleId);
-    }
-    const scheduleLabel = ensure(source.scheduleLabel);
-    if (scheduleLabel) {
-      const sanitized = scheduleLabel.replace(/\s+/g, " ").trim().replace(/::/g, "／");
-      if (normalizedEvent) {
-        return `${normalizedEvent}::label::${sanitized}`;
-      }
-      return `label::${sanitized}`;
-    }
-    if (normalizedEvent && normalizedEntry) {
-      return `${normalizedEvent}::session::${normalizedEntry}`;
-    }
-    return normalizedEntry || normalizedEvent || "";
+    return this.derivePresenceScheduleKey(eventId, payload, entryId);
   }
 
   extractScheduleIdFromKey(scheduleKey, eventId = "") {
