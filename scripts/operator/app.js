@@ -661,7 +661,12 @@ export class OperatorApp {
     if (!this.state) {
       return;
     }
-    const normalized = status === true ? true : status === false ? false : null;
+    const sessionActive = this.state.displaySessionActive === true;
+    const snapshotActive = this.displaySessionStatusFromSnapshot === true;
+    let normalized = status === true ? true : status === false ? false : null;
+    if (normalized === false && (sessionActive || snapshotActive)) {
+      normalized = null;
+    }
     if (this.state.renderChannelOnline === normalized) {
       return;
     }

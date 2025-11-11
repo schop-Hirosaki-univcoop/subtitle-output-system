@@ -6,8 +6,10 @@ export function handleRenderUpdate(app, snapshot) {
   const rawValue = typeof snapshot?.val === "function" ? snapshot.val() : null;
   const exists = typeof snapshot?.exists === "function" ? snapshot.exists() : rawValue != null;
   const hadState = app?.state?.renderState != null;
+  const sessionActive = app?.state?.displaySessionActive === true;
+  const snapshotActive = app?.displaySessionStatusFromSnapshot === true;
   if (typeof app.updateRenderAvailability === "function") {
-    const status = exists ? true : hadState ? false : null;
+    const status = exists ? true : hadState && !(sessionActive || snapshotActive) ? false : null;
     app.updateRenderAvailability(status);
   }
   const value = rawValue || {};
