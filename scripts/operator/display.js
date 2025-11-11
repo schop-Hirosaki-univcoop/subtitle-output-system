@@ -5,8 +5,10 @@ import { escapeHtml, formatOperatorName, formatRelative, normalizeUpdatedAt, ren
 export function handleRenderUpdate(app, snapshot) {
   const rawValue = typeof snapshot?.val === "function" ? snapshot.val() : null;
   const exists = typeof snapshot?.exists === "function" ? snapshot.exists() : rawValue != null;
+  const hadState = app?.state?.renderState != null;
   if (typeof app.updateRenderAvailability === "function") {
-    app.updateRenderAvailability(exists ? true : false);
+    const status = exists ? true : hadState ? false : null;
+    app.updateRenderAvailability(status);
   }
   const value = rawValue || {};
   setLamp(app, value.phase);
