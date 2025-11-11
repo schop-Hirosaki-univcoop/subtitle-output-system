@@ -314,6 +314,8 @@ export class OperatorApp {
     this.displayPresenceEntries = [];
     this.displayPresenceLastRefreshAt = 0;
     this.displayPresenceLastInactiveAt = 0;
+    this.displayPresencePrimedForSession = false;
+    this.displayPresencePrimedSessionId = "";
     this.displaySessionStatusFromSnapshot = false;
     this.displayAssetProbe = null;
     this.updateTriggerUnsubscribe = null;
@@ -3327,6 +3329,8 @@ export class OperatorApp {
     this.displayPresenceEntries = [];
     this.displayPresenceLastRefreshAt = 0;
     this.displayPresenceLastInactiveAt = 0;
+    this.displayPresencePrimedForSession = false;
+    this.displayPresencePrimedSessionId = "";
     if (this.questionStatusUnsubscribe) {
       this.questionStatusUnsubscribe();
       this.questionStatusUnsubscribe = null;
@@ -3810,13 +3814,25 @@ export class OperatorApp {
     const session = this.state.displaySession || null;
     const sessionUid = String(session?.uid || "").trim();
     const sessionId = String(session?.sessionId || "").trim();
+    if (!sessionId) {
+      this.displayPresencePrimedSessionId = "";
+      this.displayPresencePrimedForSession = false;
+    } else if (this.displayPresencePrimedSessionId !== sessionId) {
+      this.displayPresencePrimedSessionId = sessionId;
+      this.displayPresencePrimedForSession = false;
+    }
     const presenceEntries = Array.isArray(this.displayPresenceEntries) ? this.displayPresenceEntries : [];
     const presenceEntry = presenceEntries.find((entry) => entry.uid === sessionUid) || null;
     const presenceActive = !!presenceEntry && !presenceEntry.isStale && presenceEntry.sessionId === sessionId;
+    if (presenceEntry && presenceEntry.sessionId === sessionId) {
+      this.displayPresencePrimedForSession = true;
+    }
     const assetChecked = this.state.displayAssetChecked === true;
     const assetAvailable = this.state.displayAssetAvailable !== false;
     const allowActive = !assetChecked || assetAvailable;
-    const nextActive = allowActive && (presenceActive || !!this.displaySessionStatusFromSnapshot);
+    const snapshotFallbackAllowed = !this.displayPresencePrimedForSession;
+    const snapshotActive = snapshotFallbackAllowed && !!this.displaySessionStatusFromSnapshot;
+    const nextActive = allowActive && (presenceActive || snapshotActive);
     this.state.displaySessionActive = nextActive;
 
     if (presenceActive) {
