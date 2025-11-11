@@ -36,6 +36,10 @@ function resolveNowShowingReference(app) {
 }
 
 async function ensureChannelAligned(app) {
+  if (app.state.displayAssetChecked && app.state.displayAssetAvailable === false) {
+    app.toast("表示端末ページ（display.html）が見つからないため送出できません。", "error");
+    return false;
+  }
   const hasMismatch = typeof app.hasChannelMismatch === "function" ? app.hasChannelMismatch() : false;
   if (!hasMismatch) {
     return true;
@@ -767,21 +771,40 @@ function setActionPanelMode(app, mode) {
 
 export function updateActionAvailability(app) {
   const active = !!app.state.displaySessionActive;
+  const assetChecked = app.state.displayAssetChecked === true;
+  const assetAvailable = app.state.displayAssetAvailable !== false;
   const selection = app.state.selectedRowData;
   const checkedCount = getBatchSelectionCount(app);
   const hasBatchSelection = active && checkedCount > 0;
   const channelAligned = typeof app.hasChannelMismatch === "function" ? !app.hasChannelMismatch() : true;
   const telopEnabled = typeof app.isTelopEnabled === "function" ? app.isTelopEnabled() : true;
-  const mode = !active || !telopEnabled ? "inactive" : hasBatchSelection ? "multi" : selection ? "single" : "idle";
+  const mode =
+    !assetAvailable && assetChecked
+      ? "inactive"
+      : !active || !telopEnabled
+        ? "inactive"
+        : hasBatchSelection
+          ? "multi"
+          : selection
+            ? "single"
+            : "idle";
 
   setActionPanelMode(app, mode);
 
   app.dom.actionButtons.forEach((button) => {
     if (button) button.disabled = true;
   });
-  if (app.dom.clearButton) app.dom.clearButton.disabled = !active || !telopEnabled;
+  if (app.dom.clearButton) {
+    const canClear = assetAvailable && telopEnabled && active;
+    app.dom.clearButton.disabled = !canClear;
+  }
   if (!app.dom.selectedInfo) {
     updateBatchButtonVisibility(app, checkedCount);
+    return;
+  }
+  if (assetChecked && !assetAvailable) {
+    app.dom.selectedInfo.textContent = "表示端末ページ（display.html）が見つかりません";
+    updateBatchButtonVisibility(app, 0);
     return;
   }
   if (!telopEnabled) {
@@ -827,8 +850,11 @@ export function updateBatchButtonVisibility(app, providedCount) {
   if (!app.dom.batchUnanswerBtn) return;
   const active = !!app.state.displaySessionActive;
   const telopEnabled = typeof app.isTelopEnabled === "function" ? app.isTelopEnabled() : true;
+  const assetAvailable = app.state.displayAssetAvailable !== false;
+  const assetChecked = app.state.displayAssetChecked === true;
   const checkedCount = active ? providedCount ?? getBatchSelectionCount(app) : 0;
-  app.dom.batchUnanswerBtn.disabled = !active || !telopEnabled || checkedCount === 0;
+  const disabled = !assetAvailable && assetChecked;
+  app.dom.batchUnanswerBtn.disabled = disabled || !active || !telopEnabled || checkedCount === 0;
 }
 
 export function syncSelectAllState(app) {
