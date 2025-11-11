@@ -24,6 +24,7 @@ export function createInitialState(autoScroll = true) {
     operatorPresenceIntentId: "",
     operatorPresenceIntentLabel: "",
     operatorPresenceIntentKey: "",
+    selectionConfirmed: false,
     eventsById: new Map(),
     selectedRowData: null,
     lastDisplayedUid: null,

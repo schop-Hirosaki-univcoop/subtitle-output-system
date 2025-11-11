@@ -301,14 +301,32 @@ export function updateScheduleContext(app, options = {}) {
     syncPresence = true,
     presenceReason = "context-sync",
     presenceOptions = undefined,
-    trackIntent = syncPresence
+    trackIntent = syncPresence,
+    selectionConfirmed: selectionConfirmedOption
   } = typeof options === "object" && options !== null ? options : {};
 
   const ensure = (value) => String(value ?? "").trim();
-  let eventId = ensure(context.eventId);
-  let scheduleId = ensure(context.scheduleId);
-  let scheduleKey = ensure(app.state.currentSchedule);
+  const contextSelectionConfirmed =
+    typeof selectionConfirmedOption === "boolean"
+      ? selectionConfirmedOption
+      : context.selectionConfirmed === true;
+  const contextEventId = contextSelectionConfirmed ? ensure(context.eventId) : "";
+  const contextScheduleId = contextSelectionConfirmed ? ensure(context.scheduleId) : "";
+  const contextScheduleKey = contextSelectionConfirmed ? ensure(context.scheduleKey) : "";
+  let eventId = contextEventId;
+  let scheduleId = contextScheduleId;
+  let scheduleKey = contextSelectionConfirmed ? ensure(app.state.currentSchedule) : "";
+  if (!scheduleKey && contextSelectionConfirmed) {
+    scheduleKey = contextScheduleKey;
+  }
   let assignmentLabel = "";
+  const hadEventBeforeAssignment = Boolean(eventId);
+  const hadScheduleBeforeAssignment = Boolean(scheduleId);
+  const hadKeyBeforeAssignment = Boolean(scheduleKey);
+  const contextProvidedExplicitSelection = Boolean(
+    contextEventId || contextScheduleId || contextScheduleKey
+  );
+  let assignmentDerivedSelection = false;
 
   if (!scheduleKey && eventId && scheduleId) {
     scheduleKey = `${eventId}::${normalizeScheduleId(scheduleId)}`;
@@ -329,6 +347,12 @@ export function updateScheduleContext(app, options = {}) {
       scheduleKey = `${assignmentEvent}::${normalizeScheduleId(assignmentSchedule)}`;
     }
     assignmentLabel = ensure(assignment?.scheduleLabel);
+    assignmentDerivedSelection =
+      Boolean(assignmentEvent && assignmentSchedule) &&
+      !contextProvidedExplicitSelection &&
+      !hadEventBeforeAssignment &&
+      !hadScheduleBeforeAssignment &&
+      !hadKeyBeforeAssignment;
   }
 
   let meta = null;
@@ -350,14 +374,14 @@ export function updateScheduleContext(app, options = {}) {
     if (!scheduleId && schedulePart) scheduleId = ensure(schedulePart);
   }
 
-  let eventName = ensure(context.eventName);
+  let eventName = contextSelectionConfirmed ? ensure(context.eventName) : "";
   if (meta?.eventName) {
     eventName = ensure(meta.eventName);
   } else if (!eventName && eventId && eventsMap) {
     eventName = ensure(eventsMap.get(eventId)?.name);
   }
 
-  let scheduleLabel = ensure(context.scheduleLabel);
+  let scheduleLabel = contextSelectionConfirmed ? ensure(context.scheduleLabel) : "";
   if (!scheduleLabel && assignmentLabel) {
     scheduleLabel = assignmentLabel;
   }
@@ -365,14 +389,35 @@ export function updateScheduleContext(app, options = {}) {
     scheduleLabel = ensure(meta.label);
   }
 
-  const startValue = meta?.startAt || context.startAt || context.scheduleStart || "";
-  const endValue = meta?.endAt || context.endAt || context.scheduleEnd || "";
-  const startText = ensure(startValue);
-  const endText = ensure(endValue);
+  const startValue =
+    meta?.startAt ||
+    (contextSelectionConfirmed ? context.startAt || context.scheduleStart : "") ||
+    "";
+  const endValue =
+    meta?.endAt ||
+    (contextSelectionConfirmed ? context.endAt || context.scheduleEnd : "") ||
+    "";
+  let startText = ensure(startValue);
+  let endText = ensure(endValue);
+
+  const applySelection = !assignmentDerivedSelection;
+
+  if (!applySelection) {
+    scheduleKey = "";
+    eventId = "";
+    scheduleId = "";
+    eventName = "";
+    scheduleLabel = "";
+    startText = "";
+    endText = "";
+  }
 
   if (scheduleKey) {
     app.state.currentSchedule = scheduleKey;
     app.state.lastNormalSchedule = scheduleKey;
+  } else if (!applySelection) {
+    app.state.currentSchedule = "";
+    app.state.lastNormalSchedule = "";
   }
 
   app.state.activeEventId = eventId;
@@ -397,6 +442,13 @@ export function updateScheduleContext(app, options = {}) {
     }
   }
 
+  const nextSelectionConfirmed =
+    applySelection && eventId && scheduleId
+      ? typeof selectionConfirmedOption === "boolean"
+        ? selectionConfirmedOption
+        : contextSelectionConfirmed
+      : false;
+
   app.pageContext = {
     ...context,
     eventId,
@@ -405,8 +457,13 @@ export function updateScheduleContext(app, options = {}) {
     scheduleLabel,
     startAt: startText,
     endAt: endText,
-    scheduleKey: scheduleKey || ""
+    scheduleKey: scheduleKey || "",
+    selectionConfirmed: nextSelectionConfirmed
   };
+
+  if (app.state) {
+    app.state.selectionConfirmed = nextSelectionConfirmed;
+  }
 
   if (trackIntent && typeof app?.markOperatorPresenceIntent === "function") {
     if (eventId && scheduleId) {
