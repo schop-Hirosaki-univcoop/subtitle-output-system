@@ -69,11 +69,14 @@ async function ensureChannelAligned(app) {
   }
 
   const session = app?.state?.displaySession || null;
-  const sessionEvent = String(session?.eventId || "").trim();
-  const sessionSchedule = normalizeScheduleId(session?.scheduleId || "");
+  const sessionAssignment = session && typeof session.assignment === "object" ? session.assignment : null;
+  const sessionEvent = String(session?.eventId || sessionAssignment?.eventId || "").trim();
+  const sessionSchedule = normalizeScheduleId(
+    session?.scheduleId || sessionAssignment?.scheduleId || ""
+  );
   if (sessionEvent && sessionSchedule && sessionEvent === normalizedEvent && sessionSchedule === normalizedSchedule) {
     const assignment =
-      (session && typeof session.assignment === "object" && session.assignment) || {
+      sessionAssignment || {
         eventId: sessionEvent,
         scheduleId: sessionSchedule,
         scheduleLabel: String(session?.scheduleLabel || "").trim(),
