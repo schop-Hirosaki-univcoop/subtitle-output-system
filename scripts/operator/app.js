@@ -1362,10 +1362,58 @@ export class OperatorApp {
       this.stopOperatorPresenceHeartbeat();
       return;
     }
+
+    const ensure = (value) => {
+      if (typeof value === "string") {
+        return value.trim();
+      }
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return String(value);
+      }
+      if (value === null || value === undefined) {
+        return "";
+      }
+      return String(value).trim();
+    };
+
+    const uid = ensure(this.operatorIdentity?.uid || auth.currentUser?.uid || "");
+    if (!uid || !this.isAuthorized) {
+      this.clearOperatorPresence();
+      return;
+    }
+
+    const selfEntry = this.state?.operatorPresenceSelf || null;
+    const entryUid = ensure(selfEntry?.uid);
+    if (!selfEntry || !entryUid || entryUid !== uid) {
+      this.stopOperatorPresenceHeartbeat();
+      this.operatorPresenceEntryRef = null;
+      this.operatorPresenceEntryKey = "";
+      this.operatorPresenceLastSignature = "";
+      Promise.resolve().then(() =>
+        this.syncOperatorPresence("heartbeat-recover", { allowFallback: true })
+      );
+      return;
+    }
+
     const now = Date.now();
     update(this.operatorPresenceEntryRef, {
       clientTimestamp: now
-    }).catch(() => {});
+    }).catch((error) => {
+      const codeText = typeof error?.code === "string" ? error.code.toUpperCase() : "";
+      const messageText = typeof error?.message === "string" ? error.message.toLowerCase() : "";
+      const permissionDenied =
+        codeText === "PERMISSION_DENIED" || messageText.includes("permission_denied");
+      if (permissionDenied) {
+        this.stopOperatorPresenceHeartbeat();
+        this.operatorPresenceEntryRef = null;
+        this.operatorPresenceEntryKey = "";
+        this.operatorPresenceLastSignature = "";
+        Promise.resolve().then(() =>
+          this.syncOperatorPresence("heartbeat-recover", { allowFallback: true })
+        );
+      }
+    });
+
     if (this.state.operatorPresenceSelf) {
       this.state.operatorPresenceSelf = {
         ...this.state.operatorPresenceSelf,
