@@ -48,6 +48,7 @@ provider.setCustomParameters({ prompt: "select_account" });
 const LEGACY_RENDER_REF = ref(database, "render/state");
 const LEGACY_NOW_SHOWING_REF = ref(database, "render/state/nowShowing");
 export const displaySessionRef = ref(database, "render/session");
+export const displayPresenceRootRef = ref(database, "render/displayPresence");
 export const questionsRef = ref(database, "questions");
 export const pickupQuestionsRef = ref(database, "questions/pickup");
 export const questionStatusRef = ref(database, "questionStatus");
@@ -78,6 +79,14 @@ export function getNowShowingRef(eventId = "", scheduleId = "") {
 export function getOperatorPresenceEventRef(eventId = "") {
   const key = String(eventId || "").trim();
   return key ? ref(database, `operatorPresence/${key}`) : operatorPresenceRootRef;
+}
+
+export function getDisplayPresenceEntryRef(uid = "") {
+  const key = String(uid || "").trim();
+  if (!key) {
+    return displayPresenceRootRef;
+  }
+  return ref(database, `render/displayPresence/${key}`);
 }
 
 export function getOperatorPresenceEntryRef(eventId = "", operatorId = "") {
