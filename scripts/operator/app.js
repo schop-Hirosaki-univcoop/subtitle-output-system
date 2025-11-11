@@ -12,6 +12,8 @@ import {
   questionIntakeEventsRef,
   questionIntakeSchedulesRef,
   displaySessionRef,
+  displayPresenceRootRef,
+  getDisplayPresenceEntryRef,
   getRenderRef,
   getOperatorPresenceEventRef,
   getOperatorPresenceEntryRef,
@@ -22,6 +24,7 @@ import {
   onDisconnect
 } from "./firebase.js";
 import { getRenderStatePath, parseChannelParams, normalizeScheduleId } from "../shared/channel-paths.js";
+import { derivePresenceScheduleKey as sharedDerivePresenceScheduleKey } from "../shared/presence-keys.js";
 import { OPERATOR_MODE_TELOP, normalizeOperatorMode, isTelopMode } from "../shared/operator-modes.js";
 import { goToLogin } from "../shared/routes.js";
 import { info as logDisplayLinkInfo, error as logDisplayLinkError } from "../shared/display-link-logger.js";
@@ -95,6 +98,11 @@ const ACTION_BUTTON_BINDINGS = [
 ];
 
 const OPERATOR_PRESENCE_HEARTBEAT_MS = 60_000;
+const DISPLAY_PRESENCE_HEARTBEAT_MS = 20_000;
+const DISPLAY_PRESENCE_STALE_THRESHOLD_MS = 90_000;
+const DISPLAY_PRESENCE_CLEANUP_INTERVAL_MS = 30_000;
+const DISPLAY_SESSION_TTL_MS = 60_000;
+const DISPLAY_SESSION_REFRESH_MARGIN_MS = 15_000;
 
 const MODULE_METHOD_GROUPS = [
   {
@@ -260,6 +268,24 @@ function bindActionButtons(app) {
   });
 }
 
+/**
+ * setTimeout/clearTimeout を提供するホストを解決します。
+ * ブラウザ環境が存在しないテスト実行時でも安定してタイマーを利用するためのフォールバックです。
+ * @returns {{ setTimeout: typeof setTimeout, clearTimeout: typeof clearTimeout }}
+ */
+function getTimerHost() {
+  if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+    return window;
+  }
+  if (typeof globalThis !== "undefined" && typeof globalThis.setTimeout === "function") {
+    return globalThis;
+  }
+  return {
+    setTimeout,
+    clearTimeout
+  };
+}
+
 export class OperatorApp {
   /**
    * 画面構築時にDOMキャッシュと初期状態を準備し、埋め込みモードなどの文脈情報を読み取ります。
@@ -282,6 +308,12 @@ export class OperatorApp {
     this.renderTicker = null;
     this.questionsUnsubscribe = null;
     this.displaySessionUnsubscribe = null;
+    this.displayPresenceUnsubscribe = null;
+    this.displayPresenceCleanupTimer = 0;
+    this.displayPresenceEntries = [];
+    this.displayPresenceLastRefreshAt = 0;
+    this.displayPresenceLastInactiveAt = 0;
+    this.displaySessionStatusFromSnapshot = false;
     this.updateTriggerUnsubscribe = null;
     this.renderUnsubscribe = null;
     this.currentRenderPath = null;
@@ -437,10 +469,15 @@ export class OperatorApp {
       context.scheduleLabel = String(params.get("scheduleLabel") ?? params.get("scheduleName") ?? "").trim();
       context.startAt = String(params.get("startAt") ?? params.get("scheduleStart") ?? params.get("start") ?? "").trim();
       context.endAt = String(params.get("endAt") ?? params.get("scheduleEnd") ?? params.get("end") ?? "").trim();
-      context.scheduleKey = String(params.get("scheduleKey") ?? "").trim();
-      if (!context.scheduleKey && context.eventId && context.scheduleId) {
-        context.scheduleKey = `${context.eventId}::${context.scheduleId}`;
-      }
+      const rawScheduleKey = String(params.get("scheduleKey") ?? "").trim();
+      context.scheduleKey = this.derivePresenceScheduleKey(
+        context.eventId,
+        {
+          scheduleKey: rawScheduleKey,
+          scheduleId: context.scheduleId,
+          scheduleLabel: context.scheduleLabel
+        }
+      );
     } catch (error) {
       // Ignore malformed page context payloads.
     }
@@ -454,12 +491,22 @@ export class OperatorApp {
   applyContextToState() {
     if (!this.state) return;
     const context = this.pageContext || {};
-    const scheduleKey = context.scheduleKey ||
-      (context.eventId && context.scheduleId ? `${context.eventId}::${context.scheduleId}` : "");
-    const committedScheduleKey = context.committedScheduleKey ||
-      (context.eventId && context.committedScheduleId
-        ? `${context.eventId}::${context.committedScheduleId}`
-        : "");
+    const scheduleKey = this.derivePresenceScheduleKey(
+      context.eventId,
+      {
+        scheduleKey: context.scheduleKey,
+        scheduleId: context.scheduleId,
+        scheduleLabel: context.scheduleLabel
+      }
+    );
+    const committedScheduleKey = this.derivePresenceScheduleKey(
+      context.eventId,
+      {
+        scheduleKey: context.committedScheduleKey,
+        scheduleId: context.committedScheduleId,
+        scheduleLabel: context.committedScheduleLabel
+      }
+    );
     this.state.activeEventId = context.eventId || "";
     this.state.activeScheduleId = context.scheduleId || "";
     this.state.activeEventName = context.eventName || "";
@@ -510,12 +557,15 @@ export class OperatorApp {
    * @returns {string}
    */
   getCurrentScheduleKey() {
-    const { eventId, scheduleId } = this.getActiveChannel();
-    const normalizedEvent = String(eventId || "").trim();
-    if (!normalizedEvent) {
-      return "";
+    const ensure = (value) => String(value ?? "").trim();
+    const directKey = ensure(this.state?.currentSchedule || this.pageContext?.scheduleKey || "");
+    if (directKey) {
+      return directKey;
     }
-    return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
+    const { eventId, scheduleId } = this.getActiveChannel();
+    const scheduleLabel = ensure(this.state?.activeScheduleLabel || this.pageContext?.scheduleLabel || "");
+    const entryId = ensure(this.operatorPresenceSessionId);
+    return this.derivePresenceScheduleKey(eventId, { scheduleId, scheduleLabel }, entryId);
   }
 
   /**
@@ -527,33 +577,7 @@ export class OperatorApp {
    * @returns {string}
    */
   derivePresenceScheduleKey(eventId, payload = {}, entryId = "") {
-    const ensure = (value) => String(value ?? "").trim();
-    const normalizedEvent = ensure(eventId);
-    const normalizedEntry = ensure(entryId);
-    const source = payload && typeof payload === "object" ? payload : {};
-    const rawKey = ensure(source.scheduleKey);
-    if (rawKey) {
-      return rawKey;
-    }
-    const scheduleId = ensure(source.scheduleId);
-    if (normalizedEvent && scheduleId) {
-      return `${normalizedEvent}::${normalizeScheduleId(scheduleId)}`;
-    }
-    if (scheduleId) {
-      return normalizeScheduleId(scheduleId);
-    }
-    const scheduleLabel = ensure(source.scheduleLabel);
-    if (scheduleLabel) {
-      const sanitizedLabel = scheduleLabel.replace(/\s+/g, " ").trim().replace(/::/g, "／");
-      if (normalizedEvent) {
-        return `${normalizedEvent}::label::${sanitizedLabel}`;
-      }
-      return `label::${sanitizedLabel}`;
-    }
-    if (normalizedEvent && normalizedEntry) {
-      return `${normalizedEvent}::session::${normalizedEntry}`;
-    }
-    return normalizedEntry || normalizedEvent || "";
+    return sharedDerivePresenceScheduleKey(eventId, payload, entryId);
   }
 
   /**
@@ -2255,9 +2279,22 @@ export class OperatorApp {
     const committedScheduleKey = ensure(context.committedScheduleKey);
     const startAt = ensure(context.startAt);
     const endAt = ensure(context.endAt);
-    const scheduleKey = eventId && scheduleId ? `${eventId}::${scheduleId}` : "";
-    const resolvedCommittedKey = committedScheduleKey ||
-      (eventId && committedScheduleId ? `${eventId}::${committedScheduleId}` : "");
+    const scheduleKeyFromContext = ensure(context.scheduleKey);
+    const presenceEntryId = ensure(context.presenceEntryId || context.entryId || context.sessionId);
+    const scheduleKey = this.derivePresenceScheduleKey(
+      eventId,
+      { scheduleKey: scheduleKeyFromContext, scheduleId, scheduleLabel },
+      presenceEntryId
+    );
+    const resolvedCommittedKey = this.derivePresenceScheduleKey(
+      eventId,
+      {
+        scheduleKey: committedScheduleKey,
+        scheduleId: committedScheduleId,
+        scheduleLabel: committedScheduleLabel
+      },
+      presenceEntryId
+    );
     const operatorMode = normalizeOperatorMode(context.operatorMode ?? context.mode);
 
     this.clearOperatorPresenceIntent();
@@ -2736,6 +2773,7 @@ export class OperatorApp {
       this.startDictionaryListener();
       this.startPickupListener();
       this.startDisplaySessionMonitor();
+      this.startDisplayPresenceMonitor();
       this.fetchLogs().catch((error) => {
         console.error("ログの取得に失敗しました", error);
       });
@@ -2860,6 +2898,17 @@ export class OperatorApp {
       this.displaySessionUnsubscribe();
       this.displaySessionUnsubscribe = null;
     }
+    if (this.displayPresenceUnsubscribe) {
+      this.displayPresenceUnsubscribe();
+      this.displayPresenceUnsubscribe = null;
+    }
+    if (this.displayPresenceCleanupTimer) {
+      clearTimeout(this.displayPresenceCleanupTimer);
+      this.displayPresenceCleanupTimer = 0;
+    }
+    this.displayPresenceEntries = [];
+    this.displayPresenceLastRefreshAt = 0;
+    this.displayPresenceLastInactiveAt = 0;
     if (this.questionStatusUnsubscribe) {
       this.questionStatusUnsubscribe();
       this.questionStatusUnsubscribe = null;
@@ -3234,7 +3283,7 @@ export class OperatorApp {
         const now = Date.now();
         const expiresAt = Number(data && data.expiresAt) || 0;
         const status = String((data && data.status) || "");
-        const active = !!data && status === "active" && (!expiresAt || expiresAt > now);
+        const activeFromSnapshot = !!data && status === "active" && (!expiresAt || expiresAt > now);
         const assignment = data && typeof data.assignment === "object" ? data.assignment : null;
         const normalizedEvent = String(data?.eventId || "").trim();
         const normalizedSchedule = normalizeScheduleId(data?.scheduleId || "");
@@ -3242,7 +3291,7 @@ export class OperatorApp {
         const assignmentSchedule =
           assignment && typeof assignment.scheduleId === "string" ? normalizeScheduleId(assignment.scheduleId) : "";
         // logDisplayLinkInfo("Display session snapshot", {
-        //   active,
+        //   active: activeFromSnapshot,
         //   status,
         //   sessionId: data?.sessionId || null,
         //   eventId: normalizedEvent || null,
@@ -3251,14 +3300,10 @@ export class OperatorApp {
         //   assignmentSchedule: assignmentSchedule || null
         // });
         this.state.displaySession = data;
-        this.state.displaySessionActive = active;
+        this.displaySessionStatusFromSnapshot = activeFromSnapshot;
+        this.evaluateDisplaySessionActivity("session-snapshot");
         this.state.channelAssignment = this.getDisplayAssignment();
         this.updateScheduleContext({ presenceOptions: { allowFallback: false }, trackIntent: false });
-        if (this.state.displaySessionLastActive !== null && this.state.displaySessionLastActive !== active) {
-          // logDisplayLinkInfo("Display session activity changed", { active });
-          this.toast(active ? "送出端末とのセッションが確立されました。" : "送出端末の接続が確認できません。", active ? "success" : "error");
-        }
-        this.state.displaySessionLastActive = active;
         this.updateActionAvailability();
         this.updateBatchButtonVisibility();
         this.renderQuestions();
@@ -3269,6 +3314,221 @@ export class OperatorApp {
         logDisplayLinkError("Display session monitor error", error);
       }
     );
+  }
+
+  /**
+   * 送出端末からのpresenceハートビートを監視し、必要に応じてセッションの生存期間を更新します。
+   */
+  startDisplayPresenceMonitor() {
+    if (this.displayPresenceUnsubscribe) this.displayPresenceUnsubscribe();
+    this.displayPresenceUnsubscribe = onValue(
+      displayPresenceRootRef,
+      (snapshot) => {
+        const raw = snapshot.val() || {};
+        this.displayPresenceEntries = this.normalizeDisplayPresenceEntries(raw);
+        this.state.displayPresenceEntries = this.displayPresenceEntries;
+        this.evaluateDisplaySessionActivity("presence-update");
+        this.performDisplayPresenceCleanup({ scheduleNext: false, reason: "presence-snapshot" });
+        this.scheduleDisplayPresenceCleanup();
+      },
+      (error) => {
+        logDisplayLinkError("Display presence monitor error", error);
+      }
+    );
+    this.scheduleDisplayPresenceCleanup();
+  }
+
+  /**
+   * presenceノードを配列形式に正規化し、更新時刻でソートした結果を返します。
+   * @param {Record<string, any>} raw
+   * @returns {Array<object>}
+   */
+  normalizeDisplayPresenceEntries(raw) {
+    const now = Date.now();
+    const entries = [];
+    if (!raw || typeof raw !== "object") {
+      return entries;
+    }
+    Object.entries(raw).forEach(([uid, payload]) => {
+      if (!payload || typeof payload !== "object") {
+        return;
+      }
+      const sessionId = String(payload.sessionId || "").trim();
+      const normalizedUid = String(uid || "").trim();
+      if (!sessionId || !normalizedUid) {
+        return;
+      }
+      const entry = {
+        uid: normalizedUid,
+        sessionId,
+        eventId: String(payload.eventId || "").trim(),
+        scheduleId: normalizeScheduleId(payload.scheduleId || ""),
+        channelEventId: String(payload.channelEventId || "").trim(),
+        channelScheduleId: normalizeScheduleId(payload.channelScheduleId || ""),
+        assignmentEventId: String(payload.assignmentEventId || "").trim(),
+        assignmentScheduleId: normalizeScheduleId(payload.assignmentScheduleId || ""),
+        status: String(payload.status || "").trim(),
+        reason: String(payload.reason || "").trim(),
+        updatedBy: String(payload.updatedBy || "").trim(),
+        version: String(payload.version || "").trim(),
+        clientTimestamp: Number(payload.clientTimestamp || 0) || 0,
+        lastSeenAt: Number(payload.lastSeenAt || 0) || 0
+      };
+      entry.freshTimestamp = Math.max(entry.lastSeenAt || 0, entry.clientTimestamp || 0);
+      entry.isStale = entry.freshTimestamp ? now - entry.freshTimestamp > DISPLAY_PRESENCE_STALE_THRESHOLD_MS : true;
+      entries.push(entry);
+    });
+    entries.sort((a, b) => (b.freshTimestamp || 0) - (a.freshTimestamp || 0));
+    return entries;
+  }
+
+  /**
+   * displayのpresence・セッション情報からアクティブ状態を再計算し、必要に応じてセッションTTLを更新します。
+   * @param {string} reason
+   */
+  evaluateDisplaySessionActivity(reason = "unknown") {
+    const previousActive = this.state.displaySessionActive;
+    const session = this.state.displaySession || null;
+    const sessionUid = String(session?.uid || "").trim();
+    const sessionId = String(session?.sessionId || "").trim();
+    const presenceEntries = Array.isArray(this.displayPresenceEntries) ? this.displayPresenceEntries : [];
+    const presenceEntry = presenceEntries.find((entry) => entry.uid === sessionUid) || null;
+    const presenceActive = !!presenceEntry && !presenceEntry.isStale && presenceEntry.sessionId === sessionId;
+    const nextActive = presenceActive || !!this.displaySessionStatusFromSnapshot;
+    this.state.displaySessionActive = nextActive;
+
+    if (presenceActive) {
+      this.refreshDisplaySessionFromPresence(session, presenceEntry, reason);
+    } else if (!nextActive && sessionUid && sessionId) {
+      this.markDisplaySessionInactive(reason);
+    }
+
+    if (this.state.displaySessionLastActive !== null && this.state.displaySessionLastActive !== nextActive) {
+      this.toast(
+        nextActive ? "送出端末とのセッションが確立されました。" : "送出端末の接続が確認できません。",
+        nextActive ? "success" : "error"
+      );
+    }
+    this.state.displaySessionLastActive = nextActive;
+
+    if (previousActive !== nextActive) {
+      this.updateActionAvailability();
+      this.updateBatchButtonVisibility();
+    }
+  }
+
+  /**
+   * presenceの最新情報をもとに render/session のTTLを延長します。
+   * @param {any} session
+   * @param {any} entry
+   * @param {string} reason
+   */
+  refreshDisplaySessionFromPresence(session, entry, reason = "presence") {
+    const sessionId = String(session?.sessionId || "").trim();
+    const entrySessionId = String(entry?.sessionId || "").trim();
+    const uid = String(session?.uid || entry?.uid || "").trim();
+    if (!sessionId || !entrySessionId || !uid || sessionId !== entrySessionId) {
+      return;
+    }
+    const now = Date.now();
+    const lastRefresh = this.displayPresenceLastRefreshAt || 0;
+    const expiresAt = Number(session?.expiresAt || 0) || 0;
+    const shouldRefresh =
+      !expiresAt ||
+      expiresAt <= now + DISPLAY_SESSION_REFRESH_MARGIN_MS ||
+      now - lastRefresh >= DISPLAY_PRESENCE_HEARTBEAT_MS;
+    if (!shouldRefresh) {
+      return;
+    }
+    const payload = {
+      status: "active",
+      lastSeenAt: entry.lastSeenAt || entry.clientTimestamp || now,
+      expiresAt: now + DISPLAY_SESSION_TTL_MS,
+      lastPresenceReason: reason,
+      lastPresenceUid: uid,
+      lastPresenceClientTimestamp: entry.clientTimestamp || now,
+      presenceUpdatedAt: now
+    };
+    if (!session?.eventId && entry.eventId) {
+      payload.eventId = entry.eventId;
+    }
+    if (!session?.scheduleId && entry.scheduleId) {
+      payload.scheduleId = entry.scheduleId;
+    }
+    update(displaySessionRef, payload).catch((error) => {
+      console.debug("Failed to extend display session TTL:", error);
+    });
+    this.displayPresenceLastRefreshAt = now;
+  }
+
+  /**
+   * presence情報の定期的なクリーンアップを予約します。
+   */
+  scheduleDisplayPresenceCleanup() {
+    if (this.displayPresenceCleanupTimer) {
+      return;
+    }
+    const timerHost = getTimerHost();
+    this.displayPresenceCleanupTimer = timerHost.setTimeout(() => {
+      this.displayPresenceCleanupTimer = 0;
+      this.performDisplayPresenceCleanup();
+    }, DISPLAY_PRESENCE_CLEANUP_INTERVAL_MS);
+  }
+
+  /**
+   * 古いpresenceエントリの削除やセッション失効処理を実行します。
+   */
+  performDisplayPresenceCleanup(options = {}) {
+    const { scheduleNext = true, reason = "presence-cleanup" } = options || {};
+    const entries = Array.isArray(this.displayPresenceEntries) ? this.displayPresenceEntries : [];
+    const now = Date.now();
+    entries.forEach((entry) => {
+      if (!entry || !entry.uid || !entry.isStale) {
+        return;
+      }
+      const staleFor = now - (entry.freshTimestamp || 0);
+      if (staleFor > DISPLAY_PRESENCE_STALE_THRESHOLD_MS * 1.5) {
+        remove(getDisplayPresenceEntryRef(entry.uid)).catch(() => {});
+      }
+    });
+    this.evaluateDisplaySessionActivity(reason);
+    if (scheduleNext) {
+      this.scheduleDisplayPresenceCleanup();
+    }
+  }
+
+  /**
+   * presenceが確認できない場合にセッションを失効状態としてマークします。
+   * @param {string} reason
+   */
+  markDisplaySessionInactive(reason = "presence-missing") {
+    const session = this.state.displaySession || null;
+    if (!session) {
+      return;
+    }
+    const sessionId = String(session.sessionId || "").trim();
+    const uid = String(session.uid || "").trim();
+    if (!sessionId || !uid) {
+      return;
+    }
+    const now = Date.now();
+    if (now - this.displayPresenceLastInactiveAt < DISPLAY_PRESENCE_HEARTBEAT_MS) {
+      return;
+    }
+    const currentStatus = String(session.status || "").trim();
+    if (currentStatus && currentStatus !== "active") {
+      this.displayPresenceLastInactiveAt = now;
+      return;
+    }
+    const payload = {
+      status: "inactive",
+      expiresAt: now,
+      presenceUpdatedAt: now,
+      lastPresenceReason: reason,
+      lastPresenceUid: uid
+    };
+    update(displaySessionRef, payload).catch(() => {});
+    this.displayPresenceLastInactiveAt = now;
   }
 
   /**

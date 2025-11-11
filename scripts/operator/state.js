@@ -32,6 +32,7 @@ export function createInitialState(autoScroll = true) {
     displaySession: null,
     displaySessionActive: false,
     displaySessionLastActive: null,
+    displayPresenceEntries: [],
     autoLockAttemptKey: "",
     autoLockAttemptAt: 0,
     operatorPresenceEventId: "",

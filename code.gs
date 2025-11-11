@@ -1033,29 +1033,41 @@ function beginDisplaySession_(principal) {
   const now = Date.now();
   const current = fetchRtdb_('render/session', token);
   const updates = {};
+  const principalUid = normalizeKey_(principal && principal.uid);
+  if (!principalUid) {
+    throw new Error('Missing display uid for session start');
+  }
 
+  const previousUid = normalizeKey_(current && current.uid);
   if (current && current.sessionId) {
+    const normalizedCurrentUid = normalizeKey_(current.uid);
     const currentExpires = Number(current.expiresAt || 0);
-    if (current.uid && current.uid !== principal.uid) {
-      updates[`screens/approved/${current.uid}`] = null;
-      updates[`screens/sessions/${current.uid}`] = Object.assign({}, current, {
-        status: currentExpires && currentExpires <= now ? 'expired' : 'superseded',
+    const currentExpired = currentExpires && currentExpires <= now;
+    if (normalizedCurrentUid && normalizedCurrentUid !== principalUid) {
+      updates[`screens/approved/${normalizedCurrentUid}`] = null;
+      updates[`screens/sessions/${normalizedCurrentUid}`] = Object.assign({}, current, {
+        status: currentExpired ? 'expired' : 'superseded',
         endedAt: now,
         expiresAt: now,
         lastSeenAt: Number(current.lastSeenAt || now)
       });
-    } else if (current.uid === principal.uid && currentExpires && currentExpires <= now) {
-      updates[`screens/sessions/${current.uid}`] = Object.assign({}, current, {
+      updates[`render/displayPresence/${normalizedCurrentUid}`] = null;
+    } else if (normalizedCurrentUid && normalizedCurrentUid === principalUid && currentExpired) {
+      updates[`screens/sessions/${normalizedCurrentUid}`] = Object.assign({}, current, {
         status: 'expired',
         endedAt: now,
         expiresAt: now,
         lastSeenAt: Number(current.lastSeenAt || now)
       });
+      updates[`render/displayPresence/${normalizedCurrentUid}`] = null;
     }
     const previousActivePath = getActiveSchedulePathForSession_(current);
     if (previousActivePath) {
       updates[previousActivePath] = null;
     }
+  }
+  if (previousUid && previousUid !== principalUid) {
+    updates[`render/displayPresence/${previousUid}`] = null;
   }
 
   const sessionId = Utilities.getUuid();
@@ -1071,11 +1083,13 @@ function beginDisplaySession_(principal) {
       scheduleKey: buildScheduleKey_(preservedEvent, preservedSchedule)
     });
     if (!preservedAssignment.scheduleLabel) {
-      preservedAssignment.scheduleLabel = preservedSchedule === DEFAULT_SCHEDULE_KEY ? '未選択' : preservedSchedule || preservedEvent;
+      preservedAssignment.scheduleLabel = preservedSchedule === DEFAULT_SCHEDULE_KEY
+        ? '未選択'
+        : (preservedSchedule || preservedEvent);
     }
   }
   const session = {
-    uid: principal.uid,
+    uid: principalUid,
     sessionId,
     status: 'active',
     startedAt: now,
@@ -1094,11 +1108,12 @@ function beginDisplaySession_(principal) {
     if (current.scheduleLabel) session.scheduleLabel = String(current.scheduleLabel || '').trim();
   }
 
-  updates[`screens/approved/${principal.uid}`] = true;
-  updates[`screens/sessions/${principal.uid}`] = session;
+  updates[`screens/approved/${principalUid}`] = true;
+  updates[`screens/sessions/${principalUid}`] = session;
   updates['render/session'] = session;
+  updates[`render/displayPresence/${principalUid}`] = null;
   const activeSchedulePath = getActiveSchedulePathForSession_(session);
-  const activeRecord = buildActiveScheduleRecord_(session.assignment, session, principal.uid);
+  const activeRecord = buildActiveScheduleRecord_(session.assignment, session, principalUid);
   if (activeSchedulePath && activeRecord) {
     updates[activeSchedulePath] = activeRecord;
   }
@@ -1112,33 +1127,40 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
   const token = getFirebaseAccessToken_();
   const now = Date.now();
   const current = fetchRtdb_('render/session', token);
-  if (!current || current.uid !== principal.uid || current.sessionId !== sessionId) {
+  const principalUid = normalizeKey_(principal && principal.uid);
+  if (!principalUid) {
+    throw new Error('Missing display uid for heartbeat');
+  }
+  const currentUid = normalizeKey_(current && current.uid);
+  if (!current || currentUid !== principalUid || current.sessionId !== sessionId) {
+    const updates = {};
     if (current && Number(current.expiresAt || 0) <= now) {
-      const updates = {};
       updates['render/session'] = null;
-      if (current.uid) {
-        updates[`screens/approved/${current.uid}`] = null;
-        updates[`screens/sessions/${current.uid}`] = Object.assign({}, current, {
+      if (currentUid) {
+        updates[`screens/approved/${currentUid}`] = null;
+        updates[`screens/sessions/${currentUid}`] = Object.assign({}, current, {
           status: 'expired',
           endedAt: now,
           expiresAt: now,
           lastSeenAt: Number(current.lastSeenAt || now)
         });
+        updates[`render/displayPresence/${currentUid}`] = null;
       }
       const activePath = getActiveSchedulePathForSession_(current);
       if (activePath) {
         updates[activePath] = null;
       }
-      patchRtdb_(updates, token);
     }
+    updates[`render/displayPresence/${principalUid}`] = null;
+    patchRtdb_(updates, token);
     return { active: false };
   }
 
   if (Number(current.expiresAt || 0) <= now) {
     const updates = {};
     updates['render/session'] = null;
-    updates[`screens/approved/${current.uid}`] = null;
-    updates[`screens/sessions/${current.uid}`] = Object.assign({}, current, {
+    updates[`screens/approved/${currentUid}`] = null;
+    updates[`screens/sessions/${currentUid}`] = Object.assign({}, current, {
       status: 'expired',
       endedAt: now,
       expiresAt: now,
@@ -1148,6 +1170,7 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
     if (activePath) {
       updates[activePath] = null;
     }
+    updates[`render/displayPresence/${currentUid}`] = null;
     patchRtdb_(updates, token);
     return { active: false };
   }
@@ -1155,12 +1178,14 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
   const session = Object.assign({}, current, {
     status: 'active',
     lastSeenAt: now,
-    expiresAt: now + DISPLAY_SESSION_TTL_MS
+    expiresAt: now + DISPLAY_SESSION_TTL_MS,
+    uid: principalUid
   });
   const updates = {};
-  updates[`screens/approved/${principal.uid}`] = true;
-  updates[`screens/sessions/${principal.uid}`] = session;
+  updates[`screens/approved/${principalUid}`] = true;
+  updates[`screens/sessions/${principalUid}`] = session;
   updates['render/session'] = session;
+  updates[`render/displayPresence/${principalUid}`] = null;
   patchRtdb_(updates, token);
   return { active: true, session };
 }
@@ -1171,7 +1196,12 @@ function endDisplaySession_(principal, rawSessionId, reason) {
   const token = getFirebaseAccessToken_();
   const now = Date.now();
   const current = fetchRtdb_('render/session', token);
-  if (!current || current.uid !== principal.uid || current.sessionId !== sessionId) {
+  const principalUid = normalizeKey_(principal && principal.uid);
+  if (!principalUid) {
+    throw new Error('Missing display uid for session end');
+  }
+  const currentUid = normalizeKey_(current && current.uid);
+  if (!current || currentUid !== principalUid || current.sessionId !== sessionId) {
     return { ended: false };
   }
 
@@ -1180,12 +1210,14 @@ function endDisplaySession_(principal, rawSessionId, reason) {
     endedAt: now,
     expiresAt: now,
     lastSeenAt: now,
-    endedReason: reason || null
+    endedReason: reason || null,
+    uid: principalUid
   });
   const updates = {};
-  updates[`screens/approved/${principal.uid}`] = null;
-  updates[`screens/sessions/${principal.uid}`] = session;
+  updates[`screens/approved/${principalUid}`] = null;
+  updates[`screens/sessions/${principalUid}`] = session;
   updates['render/session'] = null;
+  updates[`render/displayPresence/${principalUid}`] = null;
   const activePath = getActiveSchedulePathForSession_(current);
   if (activePath) {
     updates[activePath] = null;
