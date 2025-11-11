@@ -394,7 +394,7 @@
   <!-- Firebase スクリプトは既存のまま（IDも同じ） -->
   <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getDatabase, ref, onValue, update, serverTimestamp, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+        import { getDatabase, ref, onValue, update, serverTimestamp, get, set, remove, onDisconnect } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
         import { getAuth, onAuthStateChanged, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getRenderStatePath, getNowShowingPath, parseChannelParams } from "./scripts/shared/channel-paths.js";
         import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn, error as logDisplayLinkError } from "./scripts/shared/display-link-logger.js";
@@ -428,6 +428,9 @@
         let nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
         const displaySessionRef = ref(database, "render/session");
         let nowShowingUnsubscribe = null;
+        let displayPresenceRef = null;
+        let displayPresenceUid = '';
+        let displayPresenceDisconnect = null;
 
         logDisplayLinkInfo('Display initialized', {
           eventId: channelEventId || null,
@@ -451,6 +454,7 @@
           renderRef = ref(database, getRenderStatePath(channelEventId, channelScheduleId));
           nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
           subscribeNowShowing();
+          syncDisplayPresence('channel-change').catch(() => {});
         }
 
         function applyChannelFromSession(session) {
@@ -532,6 +536,7 @@
             scheduleId: mergedSchedule
           };
           applyChannelFromSession(sessionInfo);
+          syncDisplayPresence('session-snapshot').catch(() => {});
         }
 
         function subscribeDisplaySession() {
@@ -540,6 +545,121 @@
           }
           logDisplayLinkInfo('Subscribing display session stream');
           displaySessionUnsubscribe = onValue(displaySessionRef, handleDisplaySessionSnapshot);
+        }
+
+        const ID_TOKEN_REFRESH_THRESHOLD_MS = 2 * 60 * 1000;
+
+        function getDisplayPresenceEntryRef(uid) {
+          const normalized = typeof uid === 'string' ? uid.trim() : '';
+          if (!normalized) {
+            return null;
+          }
+          if (displayPresenceRef && displayPresenceUid === normalized) {
+            return displayPresenceRef;
+          }
+          displayPresenceUid = normalized;
+          displayPresenceRef = ref(database, `render/displayPresence/${normalized}`);
+          return displayPresenceRef;
+        }
+
+        function releaseDisplayPresence() {
+          const entryRef = displayPresenceRef;
+          const uid = displayPresenceUid;
+          const disconnectHandle = displayPresenceDisconnect;
+          displayPresenceRef = null;
+          displayPresenceUid = '';
+          displayPresenceDisconnect = null;
+          if (!entryRef || !uid) {
+            if (disconnectHandle) {
+              disconnectHandle.cancel().catch(() => {});
+            }
+            return;
+          }
+          const finalize = () => {
+            if (disconnectHandle) {
+              disconnectHandle.cancel().catch(() => {});
+            }
+          };
+          remove(entryRef).then(finalize, finalize);
+        }
+
+        function registerDisplayPresenceDisconnect(entryRef) {
+          if (!entryRef || displayPresenceDisconnect) {
+            return;
+          }
+          try {
+            const handle = onDisconnect(entryRef);
+            displayPresenceDisconnect = handle;
+            handle.remove().catch(() => {});
+          } catch (err) {
+            logDisplayLinkWarn('Failed to register display presence disconnect', err);
+          }
+        }
+
+        async function syncDisplayPresence(reason = 'heartbeat') {
+          const user = auth.currentUser;
+          if (!user || !user.uid) {
+            return;
+          }
+          if (!sessionInfo || !sessionInfo.sessionId) {
+            return;
+          }
+          const entryRef = getDisplayPresenceEntryRef(user.uid);
+          if (!entryRef) {
+            return;
+          }
+          try {
+            const tokenManager = user.stsTokenManager || {};
+            const expiresRaw = tokenManager.expirationTime;
+            const expiresAt = typeof expiresRaw === 'number'
+              ? expiresRaw
+              : typeof expiresRaw === 'string'
+                ? Number(expiresRaw)
+                : 0;
+            const now = Date.now();
+            const shouldForceRefresh =
+              !latestIdToken || !expiresAt || expiresAt - now <= ID_TOKEN_REFRESH_THRESHOLD_MS;
+            const idToken = await user.getIdToken(shouldForceRefresh);
+            latestIdToken = idToken;
+          } catch (err) {
+            logDisplayLinkWarn('Failed to refresh idToken for presence sync', err);
+          }
+          const assignment = sessionInfo.assignment && typeof sessionInfo.assignment === 'object' ? sessionInfo.assignment : null;
+          const payload = {
+            uid: user.uid,
+            sessionId: sessionInfo.sessionId,
+            status: sessionActive ? 'active' : 'pending',
+            reason: typeof reason === 'string' ? reason : 'heartbeat',
+            updatedBy: 'display',
+            version: 'v2',
+            clientTimestamp: Date.now(),
+            lastSeenAt: serverTimestamp()
+          };
+
+          const assignString = (value, key) => {
+            if (typeof value !== 'string') {
+              return;
+            }
+            const trimmed = value.trim();
+            if (!trimmed) {
+              return;
+            }
+            payload[key] = trimmed;
+          };
+
+          assignString(sessionInfo.eventId, 'eventId');
+          assignString(sessionInfo.scheduleId, 'scheduleId');
+          assignString(assignment?.eventId, 'assignmentEventId');
+          assignString(assignment?.scheduleId, 'assignmentScheduleId');
+          assignString(channelEventId, 'channelEventId');
+          assignString(channelScheduleId, 'channelScheduleId');
+          try {
+            await set(entryRef, payload);
+            registerDisplayPresenceDisconnect(entryRef);
+            setSessionActive(true);
+          } catch (err) {
+            logDisplayLinkWarn('Display presence sync failed', err);
+          }
         }
 
         const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxYtklsVbr2OmtaMISPMw0x2u0shjiUdwkym2oTZW7Xk14pcWxXG1lTcVC2GZAzjobapQ/exec';
@@ -578,11 +698,14 @@
           }
         }
 
-        function startHeartbeat() {
+        function startHeartbeat(reason = 'session-start') {
           stopHeartbeat();
+          heartbeatDisplaySession(reason).catch(err => {
+            logDisplayLinkWarn('Display presence bootstrap failed', err);
+          });
           heartbeatTimer = setInterval(() => {
-            heartbeatDisplaySession().catch(err => {
-              logDisplayLinkWarn('Display heartbeat failed', err);
+            heartbeatDisplaySession('interval').catch(err => {
+              logDisplayLinkWarn('Display presence heartbeat failed', err);
             });
           }, HEARTBEAT_INTERVAL_MS);
         }
@@ -631,6 +754,8 @@
           clearPendingFlushTimer();
           clearSessionRetryTimer();
           stopHeartbeat();
+          releaseDisplayPresence();
+          latestIdToken = null;
           beginInFlight = null;
         }
 
@@ -696,26 +821,15 @@
           return beginInFlight;
         }
 
-        async function heartbeatDisplaySession() {
+        async function heartbeatDisplaySession(reason = 'heartbeat') {
           if (!sessionInfo || !sessionInfo.sessionId) {
             await beginDisplaySession();
             return;
           }
           try {
-            const result = await callGas('heartbeatDisplaySession', { sessionId: sessionInfo.sessionId });
-            if (result.active === false) {
-              logDisplayLinkWarn('Display session heartbeat rejected; restarting session.');
-              setSessionActive(false);
-              scheduleSessionRetry(2000);
-              return;
-            }
-            if (result.session && result.session.sessionId === sessionInfo.sessionId) {
-              sessionInfo = result.session;
-              applyChannelFromSession(sessionInfo);
-            }
-            setSessionActive(true);
+            await syncDisplayPresence(reason);
           } catch (err) {
-            logDisplayLinkWarn('Display heartbeat error', err);
+            logDisplayLinkWarn('Display presence heartbeat error', err);
           }
         }
 
@@ -725,6 +839,8 @@
             await callGas('endDisplaySession', { sessionId: sessionInfo.sessionId, reason });
           } catch (err) {
             logDisplayLinkWarn('Failed to end display session', err);
+          } finally {
+            releaseDisplayPresence();
           }
         }
 
@@ -772,10 +888,14 @@
 
         window.addEventListener('pagehide', () => {
           sendSessionEndBeacon('pagehide');
+          stopHeartbeat();
+          releaseDisplayPresence();
         });
 
         window.addEventListener('beforeunload', () => {
           sendSessionEndBeacon('beforeunload');
+          stopHeartbeat();
+          releaseDisplayPresence();
         });
 
         window.addEventListener('visibilitychange', () => {
