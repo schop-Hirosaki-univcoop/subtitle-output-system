@@ -544,7 +544,13 @@ export function switchGenre(app, genreKey) {
 }
 
 export async function handleDisplay(app) {
-  if (!app.state.displaySessionActive) {
+  const renderOnline = app.state.renderChannelOnline !== false;
+  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.displaySessionActive;
+  if (!renderOnline) {
+    app.toast("送出端末の表示画面が切断されています。", "error");
+    return;
+  }
+  if (!displayOnline) {
     app.toast("送出端末が接続されていません。", "error");
     return;
   }
@@ -624,7 +630,13 @@ export async function handleDisplay(app) {
 }
 
 export async function handleUnanswer(app) {
-  if (!app.state.displaySessionActive) {
+  const renderOnline = app.state.renderChannelOnline !== false;
+  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.displaySessionActive;
+  if (!renderOnline) {
+    app.toast("送出端末の表示画面が切断されています。", "error");
+    return;
+  }
+  if (!displayOnline) {
     app.toast("送出端末が接続されていません。", "error");
     return;
   }
@@ -665,7 +677,13 @@ export function handleSelectAll(app, event) {
 }
 
 export async function handleBatchUnanswer(app) {
-  if (!app.state.displaySessionActive) {
+  const renderOnline = app.state.renderChannelOnline !== false;
+  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.displaySessionActive;
+  if (!renderOnline) {
+    app.toast("送出端末の表示画面が切断されています。", "error");
+    return;
+  }
+  if (!displayOnline) {
     app.toast("送出端末が接続されていません。", "error");
     return;
   }
@@ -709,7 +727,13 @@ export async function handleBatchUnanswer(app) {
 }
 
 export async function clearNowShowing(app) {
-  if (!app.state.displaySessionActive) {
+  const renderOnline = app.state.renderChannelOnline !== false;
+  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.displaySessionActive;
+  if (!renderOnline) {
+    app.toast("送出端末の表示画面が切断されています。", "error");
+    return;
+  }
+  if (!displayOnline) {
     app.toast("送出端末が接続されていません。", "error");
     return;
   }
@@ -770,18 +794,20 @@ function setActionPanelMode(app, mode) {
 }
 
 export function updateActionAvailability(app) {
-  const active = !!app.state.displaySessionActive;
+  const renderOnline = app.state.renderChannelOnline !== false;
+  const sessionActive = !!app.state.displaySessionActive;
+  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : sessionActive;
   const assetChecked = app.state.displayAssetChecked === true;
   const assetAvailable = app.state.displayAssetAvailable !== false;
   const selection = app.state.selectedRowData;
   const checkedCount = getBatchSelectionCount(app);
-  const hasBatchSelection = active && checkedCount > 0;
+  const hasBatchSelection = displayOnline && checkedCount > 0;
   const channelAligned = typeof app.hasChannelMismatch === "function" ? !app.hasChannelMismatch() : true;
   const telopEnabled = typeof app.isTelopEnabled === "function" ? app.isTelopEnabled() : true;
   const mode =
     !assetAvailable && assetChecked
       ? "inactive"
-      : !active || !telopEnabled
+      : !displayOnline || !telopEnabled
         ? "inactive"
         : hasBatchSelection
           ? "multi"
@@ -795,7 +821,7 @@ export function updateActionAvailability(app) {
     if (button) button.disabled = true;
   });
   if (app.dom.clearButton) {
-    const canClear = assetAvailable && telopEnabled && active;
+    const canClear = assetAvailable && telopEnabled && displayOnline;
     app.dom.clearButton.disabled = !canClear;
   }
   if (!app.dom.selectedInfo) {
@@ -812,7 +838,12 @@ export function updateActionAvailability(app) {
     updateBatchButtonVisibility(app, 0);
     return;
   }
-  if (!active) {
+  if (!renderOnline) {
+    app.dom.selectedInfo.textContent = "送出端末の表示画面が切断されています";
+    updateBatchButtonVisibility(app, 0);
+    return;
+  }
+  if (!sessionActive) {
     app.dom.selectedInfo.textContent = "送出端末が接続されていません";
     updateBatchButtonVisibility(app, checkedCount);
     return;
@@ -848,13 +879,13 @@ export function updateActionAvailability(app) {
 
 export function updateBatchButtonVisibility(app, providedCount) {
   if (!app.dom.batchUnanswerBtn) return;
-  const active = !!app.state.displaySessionActive;
+  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.displaySessionActive;
   const telopEnabled = typeof app.isTelopEnabled === "function" ? app.isTelopEnabled() : true;
   const assetAvailable = app.state.displayAssetAvailable !== false;
   const assetChecked = app.state.displayAssetChecked === true;
-  const checkedCount = active ? providedCount ?? getBatchSelectionCount(app) : 0;
-  const disabled = !assetAvailable && assetChecked;
-  app.dom.batchUnanswerBtn.disabled = disabled || !active || !telopEnabled || checkedCount === 0;
+  const checkedCount = displayOnline ? providedCount ?? getBatchSelectionCount(app) : 0;
+  const disabled = assetChecked && !assetAvailable;
+  app.dom.batchUnanswerBtn.disabled = disabled || !displayOnline || !telopEnabled || checkedCount === 0;
 }
 
 export function syncSelectAllState(app) {

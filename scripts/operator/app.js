@@ -642,6 +642,38 @@ export class OperatorApp {
   }
 
   /**
+   * レンダリングチャンネルのリアルタイム更新が有効かどうかを確認します。
+   * presenceが有効でもレンダーが切断されている場合はfalseを返します。
+   * @returns {boolean}
+   */
+  isDisplayOnline() {
+    const renderOnline = this.state?.renderChannelOnline !== false;
+    return !!this.state?.displaySessionActive && renderOnline;
+  }
+
+  /**
+   * レンダリングチャンネルの到達状況を更新し、UIへ反映します。
+   * @param {boolean|null|undefined} status
+   */
+  updateRenderAvailability(status) {
+    if (!this.state) {
+      return;
+    }
+    const normalized = status === true ? true : status === false ? false : null;
+    if (this.state.renderChannelOnline === normalized) {
+      return;
+    }
+    this.state.renderChannelOnline = normalized;
+    if (typeof this.updateActionAvailability === "function") {
+      this.updateActionAvailability();
+    }
+    if (typeof this.updateBatchButtonVisibility === "function") {
+      this.updateBatchButtonVisibility();
+    }
+    this.renderChannelBanner();
+  }
+
+  /**
    * 送出端末のセッション状態から現在の割当情報を抽出します。
    * @returns {null|{ eventId: string, scheduleId: string, label: string, updatedAt?: number, lockedAt?: number }}
    */
@@ -776,6 +808,7 @@ export class OperatorApp {
       this.renderUnsubscribe = null;
     }
     this.currentRenderPath = path;
+    this.updateRenderAvailability(null);
     const channelRef = getRenderRef(eventId, scheduleId);
     this.renderUnsubscribe = onValue(
       channelRef,
@@ -1517,7 +1550,9 @@ export class OperatorApp {
     const statusEl = this.dom.channelStatus;
     const assignmentEl = this.dom.channelAssignment;
     const lockButton = this.dom.channelLockButton;
-    const displayActive = !!this.state.displaySessionActive;
+    const displaySessionActive = !!this.state.displaySessionActive;
+    const renderOnline = this.state.renderChannelOnline !== false;
+    const displayActive = this.isDisplayOnline();
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
     const channelAligned = !this.hasChannelMismatch();
     const telopEnabled = this.isTelopEnabled();
@@ -1531,7 +1566,10 @@ export class OperatorApp {
     } else if (!telopEnabled) {
       statusText = "テロップ操作なしモードです。送出・固定は行えません。";
       statusClass += " is-muted";
-    } else if (!displayActive) {
+    } else if (!renderOnline) {
+      statusText = "送出端末の表示画面が切断されています。";
+      statusClass += " is-alert";
+    } else if (!displaySessionActive) {
       statusText = "送出端末が接続されていません。";
       statusClass += " is-alert";
     } else if (!assignment || !assignment.eventId) {
@@ -2682,13 +2720,14 @@ export class OperatorApp {
       return this.displayAssetProbe;
     }
     const finalize = (available) => {
-      this.state.displayAssetAvailable = available === false ? false : Boolean(available);
+      const normalized = available === true ? true : available === false ? false : null;
+      this.state.displayAssetAvailable = normalized;
       this.state.displayAssetChecked = true;
       this.state.displayAssetChecking = false;
       this.displayAssetProbe = null;
       this.updateActionAvailability();
       this.renderChannelBanner();
-      return this.state.displayAssetAvailable;
+      return normalized;
     };
     if (!this.state.displayAssetChecking) {
       this.state.displayAssetChecking = true;
@@ -2711,37 +2750,36 @@ export class OperatorApp {
       return response;
     };
     const performProbe = async () => {
-      let response = null;
       try {
-        response = await fetchWithMethod("HEAD");
-        if (response.ok) {
-          return true;
-        }
-        if (response.status === 404) {
+        const headResponse = await fetchWithMethod("HEAD");
+        if (headResponse.status === 404) {
           return false;
         }
-        if (response.status !== 405 && response.status !== 501) {
-          return response.ok;
+        if (headResponse.ok) {
+          return true;
+        }
+        if (headResponse.status !== 405 && headResponse.status !== 501) {
+          return headResponse.ok ? true : null;
         }
       } catch (error) {
-        response = null;
+        // Fallback to GET probe below.
       }
       try {
-        response = await fetchWithMethod("GET");
-        if (response.ok) {
-          return true;
-        }
-        if (response.status === 404) {
+        const getResponse = await fetchWithMethod("GET");
+        if (getResponse.status === 404) {
           return false;
         }
-        return response.ok;
+        if (getResponse.ok) {
+          return true;
+        }
+        return null;
       } catch (error) {
-        return false;
+        return null;
       }
     };
     this.displayAssetProbe = performProbe()
       .then((available) => finalize(available))
-      .catch(() => finalize(false));
+      .catch(() => finalize(null));
     return this.displayAssetProbe;
   }
 

@@ -34,6 +34,7 @@ export function createInitialState(autoScroll = true) {
     displaySessionActive: false,
     displaySessionLastActive: null,
     displayPresenceEntries: [],
+    renderChannelOnline: null,
     displayAssetAvailable: null,
     displayAssetChecked: false,
     displayAssetChecking: false,
