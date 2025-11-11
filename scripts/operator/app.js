@@ -315,6 +315,7 @@ export class OperatorApp {
     this.displayPresenceLastRefreshAt = 0;
     this.displayPresenceLastInactiveAt = 0;
     this.displaySessionStatusFromSnapshot = false;
+    this.displayAssetProbe = null;
     this.updateTriggerUnsubscribe = null;
     this.renderUnsubscribe = null;
     this.currentRenderPath = null;
@@ -1520,9 +1521,14 @@ export class OperatorApp {
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
     const channelAligned = !this.hasChannelMismatch();
     const telopEnabled = this.isTelopEnabled();
+    const assetChecked = this.state.displayAssetChecked === true;
+    const assetAvailable = this.state.displayAssetAvailable !== false;
     let statusText = "";
     let statusClass = "channel-banner__status";
-    if (!telopEnabled) {
+    if (assetChecked && !assetAvailable) {
+      statusText = "表示端末ページ（display.html）が見つかりません。";
+      statusClass += " is-alert";
+    } else if (!telopEnabled) {
       statusText = "テロップ操作なしモードです。送出・固定は行えません。";
       statusClass += " is-muted";
     } else if (!displayActive) {
@@ -1547,7 +1553,10 @@ export class OperatorApp {
       assignmentEl.textContent = summary || "—";
     }
     if (lockButton) {
-      if (!telopEnabled) {
+      if (assetChecked && !assetAvailable) {
+        lockButton.textContent = "ページ未配置";
+        lockButton.disabled = true;
+      } else if (!telopEnabled) {
         lockButton.textContent = "テロップ操作なし";
         lockButton.disabled = true;
       } else {
@@ -1828,6 +1837,18 @@ export class OperatorApp {
     const label = String(scheduleLabel || "").trim();
     const fromModal = options?.fromModal === true;
     const silent = options?.silent === true;
+    const assetChecked = this.state.displayAssetChecked === true;
+    const assetAvailable = this.state.displayAssetAvailable !== false;
+    if (assetChecked && !assetAvailable) {
+      const message = "表示端末ページ（display.html）が配置されていないため固定できません。";
+      if (fromModal && this.dom.conflictError) {
+        this.dom.conflictError.textContent = message;
+        this.dom.conflictError.hidden = false;
+      } else if (!silent) {
+        this.toast(message, "error");
+      }
+      return;
+    }
     if (!this.isTelopEnabled()) {
       const message = "テロップ操作なしモードでは固定できません。";
       if (fromModal && this.dom.conflictError) {
@@ -2642,6 +2663,7 @@ export class OperatorApp {
     this.applyInitialDictionaryState();
     this.applyInitialLogsState();
     this.updateCopyrightYear();
+    this.probeDisplayAssetAvailability().catch(() => {});
     onAuthStateChanged(auth, (user) => {
       if (this.authFlow === "prompting") {
         this.pendingAuthUser = user || null;
@@ -2649,6 +2671,78 @@ export class OperatorApp {
       }
       this.handleAuthState(user);
     });
+  }
+
+  /**
+   * display.html の存在可否を確認し、送出機能の利用可否と整合させます。
+   * @returns {Promise<boolean>}
+   */
+  probeDisplayAssetAvailability() {
+    if (this.displayAssetProbe) {
+      return this.displayAssetProbe;
+    }
+    const finalize = (available) => {
+      this.state.displayAssetAvailable = available === false ? false : Boolean(available);
+      this.state.displayAssetChecked = true;
+      this.state.displayAssetChecking = false;
+      this.displayAssetProbe = null;
+      this.updateActionAvailability();
+      this.renderChannelBanner();
+      return this.state.displayAssetAvailable;
+    };
+    if (!this.state.displayAssetChecking) {
+      this.state.displayAssetChecking = true;
+    }
+    if (typeof window === "undefined" || typeof fetch !== "function") {
+      return Promise.resolve(finalize(true));
+    }
+    let assetUrl;
+    try {
+      assetUrl = new URL("display.html", window.location.href);
+    } catch (error) {
+      return Promise.resolve(finalize(true));
+    }
+    const fetchWithMethod = async (method) => {
+      const response = await fetch(assetUrl.toString(), {
+        method,
+        cache: "no-store",
+        credentials: "same-origin"
+      });
+      return response;
+    };
+    const performProbe = async () => {
+      let response = null;
+      try {
+        response = await fetchWithMethod("HEAD");
+        if (response.ok) {
+          return true;
+        }
+        if (response.status === 404) {
+          return false;
+        }
+        if (response.status !== 405 && response.status !== 501) {
+          return response.ok;
+        }
+      } catch (error) {
+        response = null;
+      }
+      try {
+        response = await fetchWithMethod("GET");
+        if (response.ok) {
+          return true;
+        }
+        if (response.status === 404) {
+          return false;
+        }
+        return response.ok;
+      } catch (error) {
+        return false;
+      }
+    };
+    this.displayAssetProbe = performProbe()
+      .then((available) => finalize(available))
+      .catch(() => finalize(false));
+    return this.displayAssetProbe;
   }
 
   /**
@@ -3681,7 +3775,10 @@ export class OperatorApp {
     const presenceEntries = Array.isArray(this.displayPresenceEntries) ? this.displayPresenceEntries : [];
     const presenceEntry = presenceEntries.find((entry) => entry.uid === sessionUid) || null;
     const presenceActive = !!presenceEntry && !presenceEntry.isStale && presenceEntry.sessionId === sessionId;
-    const nextActive = presenceActive || !!this.displaySessionStatusFromSnapshot;
+    const assetChecked = this.state.displayAssetChecked === true;
+    const assetAvailable = this.state.displayAssetAvailable !== false;
+    const allowActive = !assetChecked || assetAvailable;
+    const nextActive = allowActive && (presenceActive || !!this.displaySessionStatusFromSnapshot);
     this.state.displaySessionActive = nextActive;
 
     if (presenceActive) {
