@@ -777,16 +777,24 @@ export class OperatorApp {
    */
   hasChannelMismatch() {
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
-    const { eventId, scheduleId } = this.getActiveChannel();
-    const normalizedEvent = String(eventId || "").trim();
     if (!assignment || !assignment.eventId) {
       return true;
     }
+
+    const assignedEvent = String(assignment.eventId || "").trim();
+    const assignedSchedule = normalizeScheduleId(assignment.scheduleId || "");
+    const assignedKey = `${assignedEvent}::${assignedSchedule}`;
+
+    const currentKey = String(this.getCurrentScheduleKey() || "").trim();
+    if (currentKey) {
+      return currentKey !== assignedKey;
+    }
+
+    const { eventId, scheduleId } = this.getActiveChannel();
+    const normalizedEvent = String(eventId || "").trim();
     if (!normalizedEvent) {
       return true;
     }
-    const assignedEvent = String(assignment.eventId || "").trim();
-    const assignedSchedule = normalizeScheduleId(assignment.scheduleId || "");
     const currentSchedule = normalizeScheduleId(scheduleId);
     return assignedEvent !== normalizedEvent || assignedSchedule !== currentSchedule;
   }
