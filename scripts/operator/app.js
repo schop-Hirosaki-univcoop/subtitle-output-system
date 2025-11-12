@@ -91,6 +91,14 @@ const DOM_EVENT_BINDINGS = [
   }
 ];
 
+function sanitizePresenceLabel(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  return raw.replace(/\s+/g, " ").replace(/::/g, "／");
+}
+
 const ACTION_BUTTON_BINDINGS = [
   { index: 0, handler: "handleDisplay" },
   { index: 1, handler: "handleUnanswer" },
@@ -787,7 +795,48 @@ export class OperatorApp {
 
     const currentKey = String(this.getCurrentScheduleKey() || "").trim();
     if (currentKey) {
-      return currentKey !== assignedKey;
+      if (currentKey === assignedKey) {
+        return false;
+      }
+      const assignmentLabelKey = this.derivePresenceScheduleKey(
+        assignedEvent,
+        { scheduleLabel: assignment.scheduleLabel },
+        ""
+      );
+      if (assignmentLabelKey && assignmentLabelKey === currentKey) {
+        return false;
+      }
+      const labelMatch = currentKey.match(/^(.*)::label::(.+)$/);
+      if (labelMatch) {
+        const [, currentEventPart = "", labelPart = ""] = labelMatch;
+        const currentEvent = String(currentEventPart || "").trim();
+        if (!currentEvent || currentEvent === assignedEvent) {
+          const labelValue = String(labelPart || "").trim();
+          if (labelValue) {
+            const normalizedAssignmentLabel = sanitizePresenceLabel(assignment.scheduleLabel);
+            if (normalizedAssignmentLabel && normalizedAssignmentLabel === labelValue) {
+              return false;
+            }
+            const metadataMap =
+              this.state?.scheduleMetadata instanceof Map ? this.state.scheduleMetadata : null;
+            if (metadataMap) {
+              for (const [metaKey, metaValue] of metadataMap.entries()) {
+                if (!metaKey.startsWith(`${assignedEvent}::`)) {
+                  continue;
+                }
+                const candidateLabel = sanitizePresenceLabel(metaValue?.label);
+                if (candidateLabel && candidateLabel === labelValue) {
+                  if (metaKey === assignedKey) {
+                    return false;
+                  }
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+      return true;
     }
 
     const { eventId, scheduleId } = this.getActiveChannel();
