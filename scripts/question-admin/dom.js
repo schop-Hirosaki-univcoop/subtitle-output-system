@@ -91,6 +91,7 @@ const dom = {
   participantManagePanel: resolve("participant-tabpanel-manage"),
   participantCsvPanel: resolve("participant-tabpanel-csv"),
   downloadParticipantTemplateButton: resolve("download-participant-template"),
+  sendMailButton: resolve("send-mail-button"),
   csvInput: resolve("csv-input"),
   downloadTeamTemplateButton: resolve("download-team-template"),
   teamCsvInput: resolve("team-csv-input"),

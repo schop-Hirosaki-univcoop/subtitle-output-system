@@ -65,7 +65,8 @@ import {
   signatureForEntries,
   snapshotParticipantList,
   diffParticipantLists,
-  normalizeGroupNumberValue
+  normalizeGroupNumberValue,
+  isMailDeliveryPending
 } from "./participants.js";
 
 let redirectingToIndex = false;
@@ -3207,6 +3208,7 @@ function syncClearButtonState() {
   const hasParticipants = hasSelection && state.participants.length > 0;
   dom.clearParticipantsButton.disabled = !hasSelection || !hasParticipants || state.saving;
   updateParticipantActionPanelState();
+  syncMailActionState();
 }
 
 function syncTemplateButtons() {
@@ -3232,6 +3234,8 @@ function syncTemplateButtons() {
       dom.downloadTeamTemplateButton.setAttribute("title", "参加者リストを読み込むとダウンロードできます。");
     }
   }
+
+  syncMailActionState();
 }
 
 function setActionButtonState(button, disabled) {
@@ -3244,6 +3248,48 @@ function setActionButtonState(button, disabled) {
   } else {
     button.removeAttribute("aria-disabled");
   }
+}
+
+function getPendingMailCount() {
+  if (!state.participants || !state.participants.length) {
+    return 0;
+  }
+  return state.participants.filter(entry => isMailDeliveryPending(entry)).length;
+}
+
+function syncMailActionState() {
+  const button = dom.sendMailButton;
+  if (!button) {
+    return;
+  }
+  if (!button.dataset.defaultLabel) {
+    button.dataset.defaultLabel = button.textContent ? button.textContent.trim() : "参加者へ案内メール送信";
+  }
+
+  const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
+  const hasParticipantsWithEmail = hasSelection
+    ? state.participants.some(entry => String(entry?.email || "").trim())
+    : false;
+  const pendingCount = hasSelection ? getPendingMailCount() : 0;
+  const disabled =
+    state.mailSending ||
+    state.saving ||
+    !hasSelection ||
+    !hasParticipantsWithEmail ||
+    pendingCount === 0;
+
+  setActionButtonState(button, disabled);
+
+  if (state.mailSending) {
+    button.textContent = "メール送信中…";
+    button.setAttribute("aria-busy", "true");
+  } else {
+    const baseLabel = button.dataset.defaultLabel || "参加者へ案内メール送信";
+    button.textContent = pendingCount > 0 ? `${baseLabel}（${pendingCount}件）` : baseLabel;
+    button.removeAttribute("aria-busy");
+  }
+
+  button.dataset.pendingCount = String(pendingCount);
 }
 
 function updateParticipantActionPanelState() {
@@ -3542,6 +3588,7 @@ async function loadParticipants(options = {}) {
 
   state.selectedEventId = eventId || null;
   state.selectedScheduleId = scheduleId || null;
+  state.mailSending = false;
 
   if (eventId) {
     loadGlDataForEvent(eventId).catch(error => console.error(error));
@@ -3562,6 +3609,7 @@ async function loadParticipants(options = {}) {
     renderParticipants();
     updateParticipantContext();
     syncSaveButtonState();
+    syncMailActionState();
     emitParticipantSyncEvent({
       success: false,
       eventId,
@@ -3691,10 +3739,12 @@ async function loadParticipants(options = {}) {
     state.participantTokenMap = new Map();
     state.duplicateMatches = new Map();
     state.duplicateGroups = new Map();
+    state.mailSending = false;
     setUploadStatus(error.message || "参加者リストの読み込みに失敗しました。", "error");
     renderParticipants();
     updateParticipantContext();
     syncSaveButtonState();
+    syncMailActionState();
     emitParticipantSyncEvent({
       success: false,
       eventId,
@@ -4475,6 +4525,19 @@ async function handleSave(options = {}) {
       const isRelocated = entry.isRelocated === true || status === "relocated";
       const legacyIdRaw = String(entry.legacyParticipantId || "").trim();
       const legacyParticipantId = legacyIdRaw && legacyIdRaw !== participantId ? legacyIdRaw : "";
+      const mailStatus = String(entry.mailStatus || "");
+      const mailSentAtValue = Number(entry.mailSentAt || 0);
+      const mailSentAt = Number.isFinite(mailSentAtValue) && mailSentAtValue >= 0 ? mailSentAtValue : 0;
+      const mailError = String(entry.mailError || "");
+      const mailLastSubject = String(entry.mailLastSubject || "");
+      const mailLastMessageId = String(entry.mailLastMessageId || "");
+      const mailSentBy = String(entry.mailSentBy || "");
+      const mailLastAttemptAtValue = Number(entry.mailLastAttemptAt || 0);
+      const mailLastAttemptAt =
+        Number.isFinite(mailLastAttemptAtValue) && mailLastAttemptAtValue >= 0
+          ? mailLastAttemptAtValue
+          : 0;
+      const mailLastAttemptBy = String(entry.mailLastAttemptBy || "");
 
       participantsPayload[participantId] = {
         participantId,
@@ -4499,6 +4562,14 @@ async function handleSave(options = {}) {
         relocationDestinationScheduleId: String(entry.relocationDestinationScheduleId || ""),
         relocationDestinationScheduleLabel: String(entry.relocationDestinationScheduleLabel || ""),
         relocationDestinationTeamNumber: String(entry.relocationDestinationTeamNumber || ""),
+        mailStatus,
+        mailSentAt,
+        mailError,
+        mailLastSubject,
+        mailLastMessageId,
+        mailSentBy,
+        mailLastAttemptAt,
+        mailLastAttemptBy,
         updatedAt: now
       };
 
@@ -4739,6 +4810,161 @@ async function handleSave(options = {}) {
   }
 }
 
+function buildMailStatusMessage({
+  sent = 0,
+  failed = 0,
+  skippedMissingEmail = 0,
+  skippedAlreadySent = 0
+} = {}) {
+  const parts = [];
+  if (sent > 0) {
+    parts.push(`${sent}件のメールを送信しました。`);
+  }
+  if (failed > 0) {
+    parts.push(`${failed}件でエラーが発生しました。`);
+  }
+  if (skippedMissingEmail > 0) {
+    parts.push(`${skippedMissingEmail}件はメールアドレス未設定のため除外しました。`);
+  }
+  if (skippedAlreadySent > 0) {
+    parts.push(`${skippedAlreadySent}件は送信済みのためスキップしました。`);
+  }
+  if (!parts.length) {
+    return "送信対象の参加者が見つかりませんでした。";
+  }
+  return parts.join(" ");
+}
+
+function applyMailSendResults(results = []) {
+  if (!Array.isArray(results) || !results.length) {
+    syncMailActionState();
+    return 0;
+  }
+
+  const resultMap = new Map();
+  results.forEach(item => {
+    const key = normalizeKey(item?.participantId || item?.uid || "");
+    if (!key) {
+      return;
+    }
+    resultMap.set(key, {
+      mailStatus: item.mailStatus,
+      mailSentAt: item.mailSentAt,
+      mailError: item.mailError,
+      mailLastSubject: item.mailLastSubject,
+      mailLastMessageId: item.mailLastMessageId,
+      mailSentBy: item.mailSentBy,
+      mailLastAttemptAt: item.mailLastAttemptAt,
+      mailLastAttemptBy: item.mailLastAttemptBy
+    });
+  });
+
+  if (!resultMap.size) {
+    syncMailActionState();
+    return 0;
+  }
+
+  let updatedCount = 0;
+  state.participants = state.participants.map(entry => {
+    const key = resolveParticipantUid(entry) || String(entry.participantId || "").trim();
+    if (!key || !resultMap.has(key)) {
+      return entry;
+    }
+    const patch = resultMap.get(key);
+    const nextEntry = { ...entry };
+
+    if (patch.mailStatus !== undefined) {
+      nextEntry.mailStatus = String(patch.mailStatus || "");
+    }
+    if (patch.mailSentAt !== undefined) {
+      const value = Number(patch.mailSentAt);
+      if (Number.isFinite(value) && value >= 0) {
+        nextEntry.mailSentAt = value;
+      }
+    }
+    if (patch.mailError !== undefined) {
+      nextEntry.mailError = String(patch.mailError || "");
+    }
+    if (patch.mailLastSubject !== undefined) {
+      nextEntry.mailLastSubject = String(patch.mailLastSubject || "");
+    }
+    if (patch.mailLastMessageId !== undefined) {
+      nextEntry.mailLastMessageId = String(patch.mailLastMessageId || "");
+    }
+    if (patch.mailSentBy !== undefined) {
+      nextEntry.mailSentBy = String(patch.mailSentBy || "");
+    }
+    if (patch.mailLastAttemptAt !== undefined) {
+      const attemptValue = Number(patch.mailLastAttemptAt);
+      if (Number.isFinite(attemptValue) && attemptValue >= 0) {
+        nextEntry.mailLastAttemptAt = attemptValue;
+      }
+    }
+    if (patch.mailLastAttemptBy !== undefined) {
+      nextEntry.mailLastAttemptBy = String(patch.mailLastAttemptBy || "");
+    }
+
+    updatedCount += 1;
+    return nextEntry;
+  });
+
+  state.savedParticipants = snapshotParticipantList(state.participants);
+  state.lastSavedSignature = signatureForEntries(state.participants);
+  renderParticipants();
+  syncMailActionState();
+  return updatedCount;
+}
+
+async function handleSendParticipantMail() {
+  const eventId = state.selectedEventId ? String(state.selectedEventId) : "";
+  const scheduleId = state.selectedScheduleId ? String(state.selectedScheduleId) : "";
+  if (!eventId || !scheduleId) {
+    setUploadStatus(getSelectionRequiredMessage("メールを送信するには"), "error");
+    syncMailActionState();
+    return;
+  }
+
+  const pendingCount = getPendingMailCount();
+  if (pendingCount === 0) {
+    setUploadStatus("送信対象の参加者が見つかりません。", "error");
+    syncMailActionState();
+    return;
+  }
+
+  state.mailSending = true;
+  syncMailActionState();
+  setUploadStatus("メール送信を開始しています…");
+
+  try {
+    const response = await api.apiPost({
+      action: "sendParticipantMail",
+      eventId,
+      scheduleId
+    });
+    const summary = response?.summary || {};
+    const results = Array.isArray(response?.results) ? response.results : [];
+    const messageText = String(response?.message || "").trim();
+
+    applyMailSendResults(results);
+
+    const sent = Number(summary.sent || 0);
+    const failed = Number(summary.failed || 0);
+    const skippedMissingEmail = Number(summary.skippedMissingEmail || 0);
+    const skippedAlreadySent = Number(summary.skippedAlreadySent || 0);
+    const statusMessage =
+      messageText ||
+      buildMailStatusMessage({ sent, failed, skippedMissingEmail, skippedAlreadySent });
+    const variant = failed > 0 ? "error" : sent > 0 ? "success" : "info";
+    setUploadStatus(statusMessage, variant === "info" ? "" : variant);
+  } catch (error) {
+    console.error(error);
+    setUploadStatus(error?.message || "メール送信に失敗しました。", "error");
+  } finally {
+    state.mailSending = false;
+    syncMailActionState();
+  }
+}
+
 async function handleRevertParticipants() {
   if (!hasUnsavedChanges()) {
     setUploadStatus("取り消す変更はありません。");
@@ -4925,6 +5151,7 @@ function resetState() {
   state.savedParticipants = [];
   state.selectedEventId = null;
   state.selectedScheduleId = null;
+  state.mailSending = false;
   lastSelectionBroadcastSignature = "";
   state.lastSavedSignature = "";
   state.participantTokenMap = new Map();
@@ -4956,6 +5183,7 @@ function resetState() {
   renderUserSummary(null);
   syncTemplateButtons();
   syncSaveButtonState();
+  syncMailActionState();
 }
 
 function handleParticipantCardListClick(event) {
@@ -5568,6 +5796,34 @@ function attachEventHandlers() {
   if (dom.downloadTeamTemplateButton) {
     dom.downloadTeamTemplateButton.addEventListener("click", () => {
       downloadTeamTemplate();
+    });
+  }
+
+  if (dom.sendMailButton) {
+    dom.sendMailButton.addEventListener("click", async () => {
+      if (dom.sendMailButton.disabled || state.mailSending) {
+        return;
+      }
+      const pendingCount = getPendingMailCount();
+      if (!state.selectedEventId || !state.selectedScheduleId) {
+        setUploadStatus(getSelectionRequiredMessage("メールを送信するには"), "error");
+        return;
+      }
+      if (pendingCount === 0) {
+        setUploadStatus("送信対象の参加者が見つかりません。", "error");
+        return;
+      }
+      const confirmed = await confirmAction({
+        title: "案内メール送信の確認",
+        description: `未送信の参加者 ${pendingCount} 名にHTMLメールを送信します。よろしいですか？`,
+        confirmLabel: "送信する",
+        cancelLabel: "キャンセル",
+        tone: "primary"
+      });
+      if (!confirmed) {
+        return;
+      }
+      await handleSendParticipantMail();
     });
   }
 
