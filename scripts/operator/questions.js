@@ -69,15 +69,20 @@ async function ensureChannelAligned(app) {
   }
 
   const session = app?.state?.displaySession || null;
-  const sessionEvent = String(session?.eventId || "").trim();
-  const sessionSchedule = normalizeScheduleId(session?.scheduleId || "");
+  const sessionAssignment = session && typeof session.assignment === "object" ? session.assignment : null;
+  const sessionEvent = String(session?.eventId || sessionAssignment?.eventId || "").trim();
+  const sessionSchedule = normalizeScheduleId(
+    session?.scheduleId || sessionAssignment?.scheduleId || ""
+  );
   if (sessionEvent && sessionSchedule && sessionEvent === normalizedEvent && sessionSchedule === normalizedSchedule) {
     const assignment =
-      (session && typeof session.assignment === "object" && session.assignment) || {
+      sessionAssignment || {
         eventId: sessionEvent,
         scheduleId: sessionSchedule,
         scheduleLabel: String(session?.scheduleLabel || "").trim(),
-        scheduleKey: `${sessionEvent}::${sessionSchedule}`
+        scheduleKey: `${sessionEvent}::${sessionSchedule}`,
+        canonicalScheduleKey: `${sessionEvent}::${sessionSchedule}`,
+        canonicalScheduleId: sessionSchedule
       };
     if (typeof app.applyAssignmentLocally === "function") {
       app.applyAssignmentLocally(assignment);
@@ -793,6 +798,93 @@ function setActionPanelMode(app, mode) {
   app.dom.actionPanel.dataset.selection = normalized;
 }
 
+function readActionButtonState(button) {
+  if (!button) {
+    return null;
+  }
+  const text = typeof button.textContent === "string" ? button.textContent.trim() : "";
+  return {
+    id: button.id || "",
+    text,
+    disabled: button.disabled === true,
+    mode: button.dataset?.mode || "",
+    hidden: Boolean(button.hidden)
+  };
+}
+
+function readButtonSummary(state) {
+  if (!state) {
+    return "";
+  }
+  const parts = [];
+  const name = state.id || state.text || "(unnamed)";
+  parts.push(name);
+  parts.push(state.disabled ? "disabled" : "enabled");
+  if (state.hidden) {
+    parts.push("hidden");
+  }
+  if (state.mode) {
+    parts.push(`mode=${state.mode}`);
+  }
+  return parts.join(" ");
+}
+
+function buildActionPanelDebug(app, base = {}) {
+  const getText = (node) => (node && typeof node.textContent === "string" ? node.textContent.trim() : "");
+  const actionButtons = Array.isArray(app.dom.actionButtons)
+    ? app.dom.actionButtons.map((button) => readActionButtonState(button)).filter(Boolean)
+    : [];
+  const clearButton = readActionButtonState(app.dom.clearButton);
+  const batchButton = readActionButtonState(app.dom.batchUnanswerBtn);
+  return {
+    ...base,
+    panelMode: app.dom.actionPanel ? String(app.dom.actionPanel.dataset.selection || "").trim() : "",
+    selectedInfoText: getText(app.dom.selectedInfo),
+    selectedInfoPresent: Boolean(app.dom.selectedInfo),
+    actionButtons,
+    clearButton,
+    batchUnanswerButton: batchButton
+  };
+}
+
+function summarizeActionPanelDebug(debug) {
+  const reason = debug.reason || "";
+  const mode = debug.mode || debug.panelMode || "";
+  const summaryParts = [];
+  if (reason) summaryParts.push(`reason=${reason}`);
+  if (mode) summaryParts.push(`mode=${mode}`);
+  summaryParts.push(`displayOnline=${debug.displayOnline}`);
+  summaryParts.push(`sessionActive=${debug.sessionActive}`);
+  summaryParts.push(`channelAligned=${debug.channelAligned}`);
+  summaryParts.push(`telopEnabled=${debug.telopEnabled}`);
+  summaryParts.push(`assetAvailable=${debug.assetAvailable}`);
+  summaryParts.push(`selection=${debug.selectionUid || "(none)"}`);
+  summaryParts.push(`checked=${debug.checkedCount || 0}`);
+  const buttonSummaries = Array.isArray(debug.actionButtons)
+    ? debug.actionButtons.map((button) => readButtonSummary(button)).join(", ")
+    : "";
+  if (buttonSummaries) {
+    summaryParts.push(`buttons=[${buttonSummaries}]`);
+  }
+  const clearSummary = readButtonSummary(debug.clearButton);
+  if (clearSummary) {
+    summaryParts.push(`clear=${clearSummary}`);
+  }
+  const batchSummary = readButtonSummary(debug.batchUnanswerButton);
+  if (batchSummary) {
+    summaryParts.push(`batch=${batchSummary}`);
+  }
+  return {
+    message: summaryParts.join(" "),
+    details: {
+      selectedInfoText: debug.selectedInfoText,
+      actionButtons: debug.actionButtons,
+      clearButton: debug.clearButton,
+      batchUnanswerButton: debug.batchUnanswerButton
+    }
+  };
+}
+
 export function updateActionAvailability(app) {
   const renderOnline = app.state.renderChannelOnline !== false;
   const sessionActive = !!app.state.displaySessionActive;
@@ -817,6 +909,34 @@ export function updateActionAvailability(app) {
 
   setActionPanelMode(app, mode);
 
+  const debugBase = {
+    renderOnline,
+    sessionActive,
+    displayOnline,
+    assetChecked,
+    assetAvailable,
+    channelAligned,
+    telopEnabled,
+    hasSelection: Boolean(selection),
+    hasBatchSelection,
+    checkedCount,
+    mode,
+    selectionUid: selection ? String(selection.uid || "").trim() : "",
+    selectionIsAnswered: Boolean(selection?.isAnswered),
+    selectionConfirmed: app.state?.selectionConfirmed === true
+  };
+  const logAvailability = (reason, extra = {}) => {
+    const payload = { ...debugBase, reason, ...extra };
+    const panelDebug = buildActionPanelDebug(app, payload);
+    if (typeof app.logScheduleDebug === "function") {
+      app.logScheduleDebug("updateActionAvailability", panelDebug);
+    }
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      const { message, details } = summarizeActionPanelDebug(panelDebug);
+      console.log(`[Operator] action-availability ${message}`, details);
+    }
+  };
+
   app.dom.actionButtons.forEach((button) => {
     if (button) button.disabled = true;
   });
@@ -826,26 +946,31 @@ export function updateActionAvailability(app) {
   }
   if (!app.dom.selectedInfo) {
     updateBatchButtonVisibility(app, checkedCount);
+    logAvailability("missing-selected-info");
     return;
   }
   if (assetChecked && !assetAvailable) {
     app.dom.selectedInfo.textContent = "表示端末ページ（display.html）が見つかりません";
     updateBatchButtonVisibility(app, 0);
+    logAvailability("asset-unavailable", { effectiveCheckedCount: 0 });
     return;
   }
   if (!telopEnabled) {
     app.dom.selectedInfo.textContent = "テロップ操作なしモードです";
     updateBatchButtonVisibility(app, 0);
+    logAvailability("telop-disabled", { effectiveCheckedCount: 0 });
     return;
   }
   if (!renderOnline) {
     app.dom.selectedInfo.textContent = "送出端末の表示画面が切断されています";
     updateBatchButtonVisibility(app, 0);
+    logAvailability("render-offline", { effectiveCheckedCount: 0 });
     return;
   }
   if (!sessionActive) {
     app.dom.selectedInfo.textContent = "送出端末が接続されていません";
     updateBatchButtonVisibility(app, checkedCount);
+    logAvailability("display-session-inactive");
     return;
   }
   if (!channelAligned) {
@@ -854,16 +979,19 @@ export function updateActionAvailability(app) {
       ? `ディスプレイは${summary}に固定されています。`
       : "ディスプレイの日程が未確定です";
     updateBatchButtonVisibility(app, 0);
+    logAvailability("channel-mismatch", { assignmentSummary: summary, effectiveCheckedCount: 0 });
     return;
   }
   if (hasBatchSelection) {
     app.dom.selectedInfo.textContent = `${checkedCount}件の質問を選択中`;
     updateBatchButtonVisibility(app, checkedCount);
+    logAvailability("batch-selection", { effectiveCheckedCount: checkedCount });
     return;
   }
   if (!selection) {
     app.dom.selectedInfo.textContent = "行を選択してください";
     updateBatchButtonVisibility(app, checkedCount);
+    logAvailability("no-selection");
     return;
   }
 
@@ -875,6 +1003,7 @@ export function updateActionAvailability(app) {
   const safeName = formatOperatorName(selection.name) || "—";
   app.dom.selectedInfo.textContent = `選択中: ${safeName}`;
   updateBatchButtonVisibility(app, checkedCount);
+  logAvailability("ready-single-selection", { effectiveCheckedCount: checkedCount });
 }
 
 export function updateBatchButtonVisibility(app, providedCount) {
