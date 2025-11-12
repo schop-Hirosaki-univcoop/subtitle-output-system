@@ -4908,8 +4908,6 @@ function applyMailSendResults(results = []) {
     return nextEntry;
   });
 
-  state.savedParticipants = snapshotParticipantList(state.participants);
-  state.lastSavedSignature = signatureForEntries(state.participants);
   renderParticipants();
   syncMailActionState();
   return updatedCount;
