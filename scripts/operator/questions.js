@@ -812,6 +812,23 @@ function readActionButtonState(button) {
   };
 }
 
+function readButtonSummary(state) {
+  if (!state) {
+    return "";
+  }
+  const parts = [];
+  const name = state.id || state.text || "(unnamed)";
+  parts.push(name);
+  parts.push(state.disabled ? "disabled" : "enabled");
+  if (state.hidden) {
+    parts.push("hidden");
+  }
+  if (state.mode) {
+    parts.push(`mode=${state.mode}`);
+  }
+  return parts.join(" ");
+}
+
 function buildActionPanelDebug(app, base = {}) {
   const getText = (node) => (node && typeof node.textContent === "string" ? node.textContent.trim() : "");
   const actionButtons = Array.isArray(app.dom.actionButtons)
@@ -827,6 +844,44 @@ function buildActionPanelDebug(app, base = {}) {
     actionButtons,
     clearButton,
     batchUnanswerButton: batchButton
+  };
+}
+
+function summarizeActionPanelDebug(debug) {
+  const reason = debug.reason || "";
+  const mode = debug.mode || debug.panelMode || "";
+  const summaryParts = [];
+  if (reason) summaryParts.push(`reason=${reason}`);
+  if (mode) summaryParts.push(`mode=${mode}`);
+  summaryParts.push(`displayOnline=${debug.displayOnline}`);
+  summaryParts.push(`sessionActive=${debug.sessionActive}`);
+  summaryParts.push(`channelAligned=${debug.channelAligned}`);
+  summaryParts.push(`telopEnabled=${debug.telopEnabled}`);
+  summaryParts.push(`assetAvailable=${debug.assetAvailable}`);
+  summaryParts.push(`selection=${debug.selectionUid || "(none)"}`);
+  summaryParts.push(`checked=${debug.checkedCount || 0}`);
+  const buttonSummaries = Array.isArray(debug.actionButtons)
+    ? debug.actionButtons.map((button) => readButtonSummary(button)).join(", ")
+    : "";
+  if (buttonSummaries) {
+    summaryParts.push(`buttons=[${buttonSummaries}]`);
+  }
+  const clearSummary = readButtonSummary(debug.clearButton);
+  if (clearSummary) {
+    summaryParts.push(`clear=${clearSummary}`);
+  }
+  const batchSummary = readButtonSummary(debug.batchUnanswerButton);
+  if (batchSummary) {
+    summaryParts.push(`batch=${batchSummary}`);
+  }
+  return {
+    message: summaryParts.join(" "),
+    details: {
+      selectedInfoText: debug.selectedInfoText,
+      actionButtons: debug.actionButtons,
+      clearButton: debug.clearButton,
+      batchUnanswerButton: debug.batchUnanswerButton
+    }
   };
 }
 
@@ -871,11 +926,15 @@ export function updateActionAvailability(app) {
     selectionConfirmed: app.state?.selectionConfirmed === true
   };
   const logAvailability = (reason, extra = {}) => {
-    if (typeof app.logScheduleDebug !== "function") {
-      return;
-    }
     const payload = { ...debugBase, reason, ...extra };
-    app.logScheduleDebug("updateActionAvailability", buildActionPanelDebug(app, payload));
+    const panelDebug = buildActionPanelDebug(app, payload);
+    if (typeof app.logScheduleDebug === "function") {
+      app.logScheduleDebug("updateActionAvailability", panelDebug);
+    }
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      const { message, details } = summarizeActionPanelDebug(panelDebug);
+      console.log(`[Operator] action-availability ${message}`, details);
+    }
   };
 
   app.dom.actionButtons.forEach((button) => {
