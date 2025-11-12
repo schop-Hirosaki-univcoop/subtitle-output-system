@@ -91,6 +91,14 @@ const DOM_EVENT_BINDINGS = [
   }
 ];
 
+function sanitizePresenceLabel(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  return raw.replace(/\s+/g, " ").replace(/::/g, "／");
+}
+
 const ACTION_BUTTON_BINDINGS = [
   { index: 0, handler: "handleDisplay" },
   { index: 1, handler: "handleUnanswer" },
@@ -777,16 +785,65 @@ export class OperatorApp {
    */
   hasChannelMismatch() {
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
-    const { eventId, scheduleId } = this.getActiveChannel();
-    const normalizedEvent = String(eventId || "").trim();
     if (!assignment || !assignment.eventId) {
       return true;
     }
+
+    const assignedEvent = String(assignment.eventId || "").trim();
+    const assignedSchedule = normalizeScheduleId(assignment.scheduleId || "");
+    const assignedKey = `${assignedEvent}::${assignedSchedule}`;
+
+    const currentKey = String(this.getCurrentScheduleKey() || "").trim();
+    if (currentKey) {
+      if (currentKey === assignedKey) {
+        return false;
+      }
+      const assignmentLabelKey = this.derivePresenceScheduleKey(
+        assignedEvent,
+        { scheduleLabel: assignment.scheduleLabel },
+        ""
+      );
+      if (assignmentLabelKey && assignmentLabelKey === currentKey) {
+        return false;
+      }
+      const labelMatch = currentKey.match(/^(.*)::label::(.+)$/);
+      if (labelMatch) {
+        const [, currentEventPart = "", labelPart = ""] = labelMatch;
+        const currentEvent = String(currentEventPart || "").trim();
+        if (!currentEvent || currentEvent === assignedEvent) {
+          const labelValue = String(labelPart || "").trim();
+          if (labelValue) {
+            const normalizedAssignmentLabel = sanitizePresenceLabel(assignment.scheduleLabel);
+            if (normalizedAssignmentLabel && normalizedAssignmentLabel === labelValue) {
+              return false;
+            }
+            const metadataMap =
+              this.state?.scheduleMetadata instanceof Map ? this.state.scheduleMetadata : null;
+            if (metadataMap) {
+              for (const [metaKey, metaValue] of metadataMap.entries()) {
+                if (!metaKey.startsWith(`${assignedEvent}::`)) {
+                  continue;
+                }
+                const candidateLabel = sanitizePresenceLabel(metaValue?.label);
+                if (candidateLabel && candidateLabel === labelValue) {
+                  if (metaKey === assignedKey) {
+                    return false;
+                  }
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+      return true;
+    }
+
+    const { eventId, scheduleId } = this.getActiveChannel();
+    const normalizedEvent = String(eventId || "").trim();
     if (!normalizedEvent) {
       return true;
     }
-    const assignedEvent = String(assignment.eventId || "").trim();
-    const assignedSchedule = normalizeScheduleId(assignment.scheduleId || "");
     const currentSchedule = normalizeScheduleId(scheduleId);
     return assignedEvent !== normalizedEvent || assignedSchedule !== currentSchedule;
   }
@@ -3839,6 +3896,10 @@ export class OperatorApp {
     const snapshotActive = snapshotFallbackAllowed && !!this.displaySessionStatusFromSnapshot;
     const nextActive = allowActive && (presenceActive || snapshotActive);
     this.state.displaySessionActive = nextActive;
+
+    if (nextActive && this.state.renderChannelOnline === false) {
+      this.updateRenderAvailability(null);
+    }
 
     if (presenceActive) {
       this.refreshDisplaySessionFromPresence(session, presenceEntry, reason);
