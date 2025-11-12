@@ -80,7 +80,9 @@ async function ensureChannelAligned(app) {
         eventId: sessionEvent,
         scheduleId: sessionSchedule,
         scheduleLabel: String(session?.scheduleLabel || "").trim(),
-        scheduleKey: `${sessionEvent}::${sessionSchedule}`
+        scheduleKey: `${sessionEvent}::${sessionSchedule}`,
+        canonicalScheduleKey: `${sessionEvent}::${sessionSchedule}`,
+        canonicalScheduleId: sessionSchedule
       };
     if (typeof app.applyAssignmentLocally === "function") {
       app.applyAssignmentLocally(assignment);
