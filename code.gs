@@ -6,6 +6,10 @@
  * @returns {GoogleAppsScript.Content.TextOutput}
  */
 function doGet(e) {
+  const view = e && e.parameter ? String(e.parameter.view || '').trim() : '';
+  if (view === 'participantMail') {
+    return renderParticipantMailPage_(e);
+  }
   return withCors_(
     ContentService
       .createTextOutput(JSON.stringify({ success: false, error: 'GET not allowed' }))
@@ -123,6 +127,10 @@ function formatQuestionTimestamp_(value) {
   return Utilities.formatDate(date, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss');
 }
 
+function include_(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
 
 function doPost(e) {
   let requestOrigin = getRequestOrigin_(e);
@@ -215,6 +223,8 @@ function doPost(e) {
       case 'clearScheduleRotation':
         assertOperator_(principal);
         return ok(clearScheduleRotation_(principal, req.eventId));
+      case 'sendParticipantMail':
+        return ok(sendParticipantMail_(principal, req));
       case 'logAction':
         assertOperator_(principal);
         return ok(logAction_(principal, req.action_type, req.details));
@@ -588,6 +598,427 @@ function restoreRealtimeDatabase_() {
   putRtdb_('', data, token);
   const timestamp = rawTimestamp instanceof Date ? toIsoJst_(rawTimestamp) : String(rawTimestamp || '');
   return { timestamp };
+}
+
+function getWebAppBaseUrl_() {
+  const properties = PropertiesService.getScriptProperties();
+  const propertyKeys = ['PUBLIC_WEB_APP_URL', 'WEB_APP_BASE_URL'];
+  for (let i = 0; i < propertyKeys.length; i += 1) {
+    const value = String(properties.getProperty(propertyKeys[i]) || '').trim();
+    if (value) {
+      return value;
+    }
+  }
+  if (typeof ScriptApp !== 'undefined' && ScriptApp.getService) {
+    try {
+      const service = ScriptApp.getService();
+      if (service && typeof service.getUrl === 'function') {
+        const url = service.getUrl();
+        if (url) {
+          return String(url).trim();
+        }
+      }
+    } catch (error) {
+      // ignore and fall back
+    }
+  }
+  return '';
+}
+
+function getParticipantMailSettings_() {
+  const properties = PropertiesService.getScriptProperties();
+  return {
+    contactEmail: String(properties.getProperty('PARTICIPANT_MAIL_CONTACT') || '').trim(),
+    senderName: String(properties.getProperty('PARTICIPANT_MAIL_SENDER_NAME') || '').trim(),
+    subjectTemplate: String(properties.getProperty('PARTICIPANT_MAIL_SUBJECT') || '').trim(),
+    noteHtml: properties.getProperty('PARTICIPANT_MAIL_NOTE_HTML') || '',
+    noteText: properties.getProperty('PARTICIPANT_MAIL_NOTE_TEXT') || '',
+    location: String(properties.getProperty('PARTICIPANT_MAIL_LOCATION') || '').trim()
+  };
+}
+
+function buildParticipantMailViewUrl_(baseUrl, params) {
+  const trimmed = String(baseUrl || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  const segments = [
+    'view=participantMail',
+    `eventId=${encodeURIComponent(params.eventId)}`,
+    `scheduleId=${encodeURIComponent(params.scheduleId)}`,
+    `participantId=${encodeURIComponent(params.participantId)}`
+  ];
+  if (params.token) {
+    segments.push(`token=${encodeURIComponent(params.token)}`);
+  }
+  let separator = '?';
+  if (trimmed.includes('?')) {
+    separator = trimmed.endsWith('?') || trimmed.endsWith('&') ? '' : '&';
+  }
+  return `${trimmed}${separator}${segments.join('&')}`;
+}
+
+function formatMailDateWithWeekday_(date) {
+  if (!(date instanceof Date) || isNaN(date)) {
+    return '';
+  }
+  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+  const weekday = weekdays[date.getDay()] || '';
+  return `${date.getMonth() + 1}月${date.getDate()}日(${weekday})`;
+}
+
+function formatMailTimeLabel_(date) {
+  if (!(date instanceof Date) || isNaN(date)) {
+    return '';
+  }
+  return Utilities.formatDate(date, 'Asia/Tokyo', 'H:mm');
+}
+
+function buildParticipantMailContext_(eventId, scheduleId, participantRecord, eventRecord, scheduleRecord, settings, baseUrl) {
+  const participantId = String((participantRecord && (participantRecord.participantId || participantRecord.uid)) || '').trim();
+  const participantName = String(participantRecord && participantRecord.name || '').trim();
+  const eventName = String(eventRecord && eventRecord.name || eventId || '').trim();
+  const scheduleLabel = String(
+    (scheduleRecord && scheduleRecord.label) ||
+      formatScheduleLabel_(scheduleRecord && scheduleRecord.startAt, scheduleRecord && scheduleRecord.endAt) ||
+      scheduleId
+  ).trim();
+  const startDate = parseDateCell_(scheduleRecord && (scheduleRecord.startAt || scheduleRecord.date));
+  const endDate = parseDateCell_(scheduleRecord && scheduleRecord.endAt);
+  const scheduleDateLabel = formatMailDateWithWeekday_(startDate);
+  const startTimeLabel = formatMailTimeLabel_(startDate);
+  const endTimeLabel = formatMailTimeLabel_(endDate);
+  let scheduleTimeRange = '';
+  if (startTimeLabel && endTimeLabel) {
+    scheduleTimeRange = `${startTimeLabel}〜${endTimeLabel}`;
+  } else if (startTimeLabel) {
+    scheduleTimeRange = `${startTimeLabel}〜`;
+  }
+  const scheduleRangeLabel = scheduleDateLabel
+    ? scheduleTimeRange
+      ? `${scheduleDateLabel} ${scheduleTimeRange}`
+      : scheduleDateLabel
+    : scheduleLabel;
+  const token = String(participantRecord && participantRecord.token || '').trim();
+  const webViewUrl = buildParticipantMailViewUrl_(baseUrl, {
+    eventId,
+    scheduleId,
+    participantId,
+    token
+  });
+  return {
+    eventId,
+    scheduleId,
+    participantId,
+    participantName,
+    participantEmail: String(participantRecord && participantRecord.email || '').trim(),
+    eventName,
+    scheduleLabel,
+    scheduleDateLabel,
+    scheduleTimeRange,
+    scheduleRangeLabel,
+    contactEmail: String(settings.contactEmail || '').trim(),
+    senderName: String(settings.senderName || '').trim(),
+    additionalHtml: settings.noteHtml || '',
+    additionalText: settings.noteText || '',
+    location: String(settings.location || '').trim(),
+    guidance: String(participantRecord && participantRecord.guidance || '').trim(),
+    webViewUrl,
+    token
+  };
+}
+
+function buildParticipantMailSubject_(context, settings) {
+  const template = String(settings.subjectTemplate || '').trim();
+  const eventName = context.eventName || context.eventId || '';
+  const scheduleLabel = context.scheduleLabel || context.scheduleRangeLabel || '';
+  const participantName = context.participantName || '';
+  if (template) {
+    return template
+      .replace(/\{\{\s*eventName\s*\}\}/g, eventName)
+      .replace(/\{\{\s*scheduleLabel\s*\}\}/g, scheduleLabel)
+      .replace(/\{\{\s*participantName\s*\}\}/g, participantName);
+  }
+  return `【${eventName || 'イベント'}】参加日時のご案内`;
+}
+
+function createParticipantMailTemplateOutput_(context, mode) {
+  const template = HtmlService.createTemplateFromFile('email-participant-shell');
+  template.context = Object.assign({}, context, { mode });
+  return template.evaluate();
+}
+
+function renderParticipantMailPlainText_(context) {
+  const lines = [];
+  if (context.participantName) {
+    lines.push(`${context.participantName} 様`, '');
+  }
+  lines.push(`「${context.eventName}」にご参加いただきありがとうございます。`);
+  if (context.scheduleRangeLabel) {
+    lines.push('', `ご参加予定日時: ${context.scheduleRangeLabel}`);
+  } else if (context.scheduleLabel) {
+    lines.push('', `ご参加予定: ${context.scheduleLabel}`);
+  }
+  if (context.location) {
+    lines.push('', `会場: ${context.location}`);
+  }
+  if (context.guidance) {
+    lines.push('', context.guidance);
+  }
+  if (context.additionalText) {
+    lines.push('', context.additionalText);
+  }
+  if (context.webViewUrl) {
+    lines.push('', `メールが正しく表示されない場合: ${context.webViewUrl}`);
+  }
+  if (context.contactEmail) {
+    lines.push('', `お問い合わせ先: ${context.contactEmail}`);
+  }
+  lines.push('', context.senderName || 'イベント運営チーム');
+  return lines.join('\n');
+}
+
+function sendParticipantMail_(principal, req) {
+  const eventId = normalizeEventId_(req && req.eventId);
+  const scheduleId = normalizeKey_(req && req.scheduleId);
+  if (!eventId) {
+    throw new Error('eventId is required.');
+  }
+  if (!scheduleId) {
+    throw new Error('scheduleId is required.');
+  }
+  assertOperatorForEvent_(principal, eventId);
+
+  const force = req && req.force === true;
+  const accessToken = getFirebaseAccessToken_();
+  const eventRecord = fetchRtdb_(`questionIntake/events/${eventId}`, accessToken) || {};
+  const scheduleRecord = fetchRtdb_(`questionIntake/schedules/${eventId}/${scheduleId}`, accessToken) || {};
+  if (!scheduleRecord || typeof scheduleRecord !== 'object') {
+    throw new Error('指定された日程が見つかりません。');
+  }
+  const participantsBranch = fetchRtdb_(`questionIntake/participants/${eventId}/${scheduleId}`, accessToken) || {};
+  const settings = getParticipantMailSettings_();
+  const baseUrl = getWebAppBaseUrl_();
+  const normalizedPrincipalEmail = normalizeEmail_(principal && principal.email);
+  const contactEmail = settings.contactEmail || normalizedPrincipalEmail || '';
+  const senderName = settings.senderName || String(eventRecord && eventRecord.name || '').trim() || 'イベント運営チーム';
+
+  const recipients = [];
+  let skippedMissingEmail = 0;
+  let skippedAlreadySent = 0;
+
+  Object.keys(participantsBranch || {}).forEach(participantKey => {
+    const value = participantsBranch[participantKey];
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+    const email = String(value.email || '').trim();
+    if (!email) {
+      skippedMissingEmail += 1;
+      return;
+    }
+    const status = String(value.mailStatus || '').trim().toLowerCase();
+    const mailSentAt = Number(value.mailSentAt || 0);
+    const mailError = String(value.mailError || '').trim();
+    if (!force && status === 'sent' && !mailError && mailSentAt > 0) {
+      skippedAlreadySent += 1;
+      return;
+    }
+    recipients.push({ id: participantKey, record: value, email });
+  });
+
+  if (!recipients.length) {
+    return {
+      summary: {
+        total: 0,
+        sent: 0,
+        failed: 0,
+        skippedMissingEmail,
+        skippedAlreadySent
+      },
+      results: [],
+      message: '送信対象の参加者が見つかりませんでした。'
+    };
+  }
+
+  const remainingQuota = MailApp.getRemainingDailyQuota();
+  if (remainingQuota < recipients.length) {
+    throw new Error(`本日の残り送信可能数（${remainingQuota}件）を超えるため送信できません。`);
+  }
+
+  const updates = {};
+  const results = [];
+  let sentCount = 0;
+  let failedCount = 0;
+
+  recipients.forEach(({ id, record, email }) => {
+    const participantRecord = Object.assign({}, record, { participantId: id });
+    const context = buildParticipantMailContext_(
+      eventId,
+      scheduleId,
+      participantRecord,
+      eventRecord,
+      scheduleRecord,
+      settings,
+      baseUrl
+    );
+    context.contactEmail = contactEmail;
+    context.senderName = senderName;
+    const subject = buildParticipantMailSubject_(context, settings);
+    context.subject = subject;
+    const htmlBody = createParticipantMailTemplateOutput_(context, 'email').getContent();
+    const textBody = renderParticipantMailPlainText_(context);
+    const attemptAt = Date.now();
+    try {
+      MailApp.sendEmail({
+        to: email,
+        subject,
+        htmlBody,
+        body: textBody,
+        name: senderName || context.eventName || '',
+        replyTo: contactEmail || undefined
+      });
+      sentCount += 1;
+      updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailStatus`] = 'sent';
+      updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailSentAt`] = attemptAt;
+      updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailLastSubject`] = subject;
+      updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailLastMessageId`] = '';
+      updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailError`] = null;
+      updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailSentBy`] =
+        normalizedPrincipalEmail || contactEmail || '';
+      updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailLastAttemptAt`] = attemptAt;
+      updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailLastAttemptBy`] =
+        normalizedPrincipalEmail || contactEmail || '';
+      results.push({
+        participantId: id,
+        mailStatus: 'sent',
+        mailSentAt: attemptAt,
+        mailLastSubject: subject,
+        mailLastMessageId: '',
+        mailError: '',
+        mailSentBy: normalizedPrincipalEmail || contactEmail || '',
+        mailLastAttemptAt: attemptAt,
+        mailLastAttemptBy: normalizedPrincipalEmail || contactEmail || ''
+      });
+    } catch (error) {
+      failedCount += 1;
+      const message = String(error && error.message || error || '送信に失敗しました。');
+      updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailStatus`] = 'error';
+      updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailError`] = message;
+      updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailLastSubject`] = subject;
+      updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailLastAttemptAt`] = attemptAt;
+      updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailLastAttemptBy`] =
+        normalizedPrincipalEmail || contactEmail || '';
+      results.push({
+        participantId: id,
+        mailStatus: 'error',
+        mailError: message,
+        mailLastSubject: subject,
+        mailLastAttemptAt: attemptAt,
+        mailLastAttemptBy: normalizedPrincipalEmail || contactEmail || ''
+      });
+    }
+  });
+
+  if (Object.keys(updates).length) {
+    const timestamp = Date.now();
+    updates[`questionIntake/schedules/${eventId}/${scheduleId}/updatedAt`] = timestamp;
+    updates[`questionIntake/events/${eventId}/updatedAt`] = timestamp;
+    patchRtdb_(updates, accessToken);
+  }
+
+  const summary = {
+    total: recipients.length,
+    sent: sentCount,
+    failed: failedCount,
+    skippedMissingEmail,
+    skippedAlreadySent
+  };
+
+  const messageParts = [];
+  if (sentCount > 0) {
+    messageParts.push(`${sentCount}件のメールを送信しました。`);
+  }
+  if (failedCount > 0) {
+    messageParts.push(`${failedCount}件でエラーが発生しました。`);
+  }
+  if (!messageParts.length) {
+    messageParts.push('送信対象の参加者が見つかりませんでした。');
+  }
+
+  const logDetails = [
+    `event=${eventId}`,
+    `schedule=${scheduleId}`,
+    `sent=${sentCount}`,
+    `failed=${failedCount}`,
+    `skipped_missing_email=${skippedMissingEmail}`,
+    `skipped_sent=${skippedAlreadySent}`
+  ].join(', ');
+  logAction_(principal, 'sendParticipantMail', logDetails);
+
+  return {
+    summary,
+    results,
+    message: messageParts.join(' ')
+  };
+}
+
+function renderParticipantMailErrorPage_() {
+  const output = HtmlService.createHtmlOutput(
+    "<!DOCTYPE html><html lang='ja'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>リンクが無効です</title></head><body><main style=\"font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:24px;max-width:560px;margin:0 auto;\"><h1>リンクが無効です</h1><p>アクセスされたリンクは無効、または期限が切れています。</p></main></body></html>"
+  );
+  output.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  return output;
+}
+
+function renderParticipantMailPage_(e) {
+  const eventId = normalizeEventId_(e && e.parameter && e.parameter.eventId);
+  const scheduleId = normalizeKey_(e && e.parameter && e.parameter.scheduleId);
+  const participantId = normalizeKey_(e && e.parameter && (e.parameter.participantId || e.parameter.uid));
+  const tokenParam = normalizeKey_(e && e.parameter && e.parameter.token);
+  if (!eventId || !scheduleId || !participantId) {
+    return renderParticipantMailErrorPage_();
+  }
+  try {
+    const accessToken = getFirebaseAccessToken_();
+    const participant = fetchRtdb_(`questionIntake/participants/${eventId}/${scheduleId}/${participantId}`, accessToken);
+    if (!participant || typeof participant !== 'object') {
+      return renderParticipantMailErrorPage_();
+    }
+    const storedToken = String(participant.token || '').trim();
+    if (storedToken) {
+      const normalizedParam = String(tokenParam || '').trim();
+      if (!normalizedParam || normalizedParam !== storedToken) {
+        return renderParticipantMailErrorPage_();
+      }
+    }
+    const eventRecord = fetchRtdb_(`questionIntake/events/${eventId}`, accessToken) || {};
+    const scheduleRecord = fetchRtdb_(`questionIntake/schedules/${eventId}/${scheduleId}`, accessToken) || {};
+    const settings = getParticipantMailSettings_();
+    const baseUrl = getWebAppBaseUrl_();
+    const context = buildParticipantMailContext_(
+      eventId,
+      scheduleId,
+      Object.assign({}, participant, { participantId }),
+      eventRecord,
+      scheduleRecord,
+      settings,
+      baseUrl
+    );
+    const subject = buildParticipantMailSubject_(context, settings);
+    context.subject = subject;
+    context.contactEmail = context.contactEmail || settings.contactEmail || '';
+    context.senderName = context.senderName || settings.senderName || '';
+    const output = createParticipantMailTemplateOutput_(context, 'web');
+    output.setTitle(`${context.eventName || 'ご案内'} - ${context.scheduleLabel || ''}`);
+    output.addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    output.addMetaTag('referrer', 'no-referrer');
+    output.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    return output;
+  } catch (error) {
+    console.error('renderParticipantMailPage_ failed', error);
+    return renderParticipantMailErrorPage_();
+  }
 }
 
 function parseBody_(e) {

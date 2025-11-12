@@ -1,0 +1,66 @@
+<? const ctx = this.context || {}; ?>
+<? const highlightLabel = ctx.scheduleRangeLabel || ctx.scheduleLabel || ''; ?>
+<div class="mail-container">
+  <header class="mail-header">
+    <h1 class="mail-header__title"><?= ctx.eventName || 'イベントのご案内' ?></h1>
+    <? if (highlightLabel) { ?>
+      <p class="mail-header__date"><?= highlightLabel ?></p>
+    <? } ?>
+  </header>
+  <? if (ctx.participantName) { ?>
+    <p class="mail-greeting"><?= ctx.participantName ?> 様</p>
+  <? } ?>
+  <p class="mail-intro">
+    「<?= ctx.eventName || 'イベント' ?>」にお申し込みいただきありがとうございます。以下の内容をご確認ください。
+  </p>
+
+  <? if (highlightLabel) { ?>
+    <section class="mail-section">
+      <h2 class="mail-section__title">ご参加日時</h2>
+      <p class="mail-section__highlight"><?= highlightLabel ?></p>
+    </section>
+  <? } ?>
+
+  <? if (ctx.location) { ?>
+    <section class="mail-section">
+      <h2 class="mail-section__title">会場</h2>
+      <p class="mail-section__text"><?= ctx.location ?></p>
+    </section>
+  <? } ?>
+
+  <? if (ctx.guidance) { ?>
+    <section class="mail-section">
+      <h2 class="mail-section__title">当日の流れ・ご案内</h2>
+      <p class="mail-section__text"><?= ctx.guidance ?></p>
+    </section>
+  <? } ?>
+
+  <? if (ctx.additionalHtml || ctx.additionalText) { ?>
+    <section class="mail-section">
+      <h2 class="mail-section__title">補足情報</h2>
+      <? if (ctx.additionalHtml) { ?>
+        <div class="mail-section__text"><?!= ctx.additionalHtml ?></div>
+      <? } ?>
+      <? if (ctx.additionalText) { ?>
+        <p class="mail-section__text"><?= ctx.additionalText ?></p>
+      <? } ?>
+    </section>
+  <? } ?>
+
+  <? if (ctx.mode !== 'web' && ctx.webViewUrl) { ?>
+    <div class="mail-view-link">
+      <a href="<?= ctx.webViewUrl ?>" target="_blank" rel="noopener">ブラウザで表示する</a>
+    </div>
+  <? } ?>
+
+  <footer class="mail-footer">
+    <? if (ctx.contactEmail) { ?>
+      <p>お問い合わせ先: <a href="mailto:<?= ctx.contactEmail ?>"><?= ctx.contactEmail ?></a></p>
+    <? } ?>
+    <p><?= ctx.senderName || 'イベント運営チーム' ?></p>
+  </footer>
+</div>
+
+<? if (ctx.mode === 'web' && ctx.webViewUrl) { ?>
+  <p class="mail-web-note">このページのURLは参加者向けメールにも記載されています。共有の際はリンクの取り扱いにご注意ください。</p>
+<? } ?>

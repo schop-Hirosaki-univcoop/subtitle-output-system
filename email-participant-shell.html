@@ -1,0 +1,110 @@
+<? const ctx = this.context || {}; ?>
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8">
+    <? if (ctx.mode === 'web') { ?>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+    <? } ?>
+    <title><?= ctx.subject || `${ctx.eventName || 'ご案内'} - ${ctx.scheduleLabel || ''}` ?></title>
+    <style>
+      body {
+        margin: 0;
+        background: #f5f7fa;
+        color: #1f2933;
+        font-family: 'Segoe UI', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+        line-height: 1.6;
+      }
+      .mail-body.mail-body--email {
+        padding: 24px;
+      }
+      .mail-body.mail-body--web {
+        padding: 32px 16px 64px;
+      }
+      .mail-container {
+        max-width: 640px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 16px;
+        padding: 32px 28px;
+        box-shadow: 0 16px 48px rgba(15, 23, 42, 0.08);
+      }
+      .mail-header__title {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        color: #111827;
+      }
+      .mail-header__date {
+        margin: 4px 0 0;
+        font-size: 16px;
+        font-weight: 500;
+        color: #2563eb;
+      }
+      .mail-section {
+        margin-top: 24px;
+      }
+      .mail-section__title {
+        margin: 0 0 8px;
+        font-size: 15px;
+        font-weight: 600;
+        color: #0f172a;
+      }
+      .mail-section__highlight {
+        margin: 0;
+        padding: 16px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%);
+        color: #1d4ed8;
+        font-size: 20px;
+        font-weight: 600;
+        text-align: center;
+      }
+      .mail-section__text {
+        margin: 0;
+        white-space: pre-wrap;
+      }
+      .mail-greeting {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 500;
+      }
+      .mail-intro {
+        margin: 16px 0 0;
+      }
+      .mail-view-link {
+        margin: 24px 0 0;
+        text-align: center;
+      }
+      .mail-view-link a {
+        display: inline-block;
+        padding: 12px 20px;
+        border-radius: 999px;
+        background: #2563eb;
+        color: #ffffff !important;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .mail-footer {
+        margin-top: 32px;
+        border-top: 1px solid #e5e7eb;
+        padding-top: 16px;
+        font-size: 14px;
+        color: #475569;
+      }
+      .mail-web-note {
+        max-width: 640px;
+        margin: 24px auto 0;
+        font-size: 13px;
+        color: #475569;
+        text-align: center;
+      }
+      a {
+        color: #2563eb;
+      }
+    </style>
+  </head>
+  <body class="mail-body mail-body--<?= ctx.mode === 'web' ? 'web' : 'email' ?>">
+    <?!= include_('email-participant-body') ?>
+  </body>
+</html>
