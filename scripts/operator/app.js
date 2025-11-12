@@ -835,13 +835,177 @@ export class OperatorApp {
     return "「指定された日程」";
   }
 
+  createScheduleDebugSnapshot() {
+    const ensureString = (value) => {
+      if (typeof value === "string") {
+        return value;
+      }
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return String(value);
+      }
+      if (value === null || value === undefined) {
+        return "";
+      }
+      return String(value);
+    };
+    const transformForLog = (value) => {
+      if (value instanceof Map) {
+        return Array.from(value.entries()).map(([key, entry]) => ({
+          key,
+          value: transformForLog(entry)
+        }));
+      }
+      if (Array.isArray(value)) {
+        return value.map((item) => transformForLog(item));
+      }
+      if (value && typeof value === "object") {
+        const result = {};
+        Object.entries(value).forEach(([entryKey, entryValue]) => {
+          if (typeof entryValue === "function") {
+            return;
+          }
+          result[entryKey] = transformForLog(entryValue);
+        });
+        return result;
+      }
+      return value;
+    };
+
+    const state = this.state || {};
+    const activeChannel =
+      typeof this.getActiveChannel === "function" ? this.getActiveChannel() : { eventId: "", scheduleId: "" };
+    const currentScheduleKey =
+      typeof this.getCurrentScheduleKey === "function" ? String(this.getCurrentScheduleKey() || "") : "";
+    const channelAssignment = state.channelAssignment || this.getDisplayAssignment();
+    const displaySession = state.displaySession || null;
+    const sessionAssignment =
+      displaySession && typeof displaySession.assignment === "object" ? displaySession.assignment : null;
+    const presenceSelf = state.operatorPresenceSelf || null;
+
+    const scheduleState = {};
+    Object.entries(state).forEach(([key, value]) => {
+      if (/(event|schedule)/i.test(key) || key === "channelAssignment" || key === "operatorPresenceSelf") {
+        scheduleState[key] = transformForLog(value);
+      }
+    });
+
+    const operatorPresenceEventId = String(state.operatorPresenceEventId || "").trim();
+    const presenceSessionId = String(this.operatorPresenceSessionId || "").trim();
+    const presenceEntryKey = String(this.operatorPresenceEntryKey || "").trim();
+    let derivedPresenceKey = "";
+    if (presenceSelf && typeof this.derivePresenceScheduleKey === "function") {
+      const presenceEventId = String(
+        presenceSelf.eventId || operatorPresenceEventId || activeChannel.eventId || ""
+      ).trim();
+      const presenceSession = String(presenceSelf.sessionId || presenceSessionId || "").trim();
+      derivedPresenceKey = this.derivePresenceScheduleKey(presenceEventId, presenceSelf, presenceSession);
+    }
+
+    return {
+      activeChannel,
+      currentScheduleKey,
+      pageContext: this.pageContext
+        ? {
+            eventId: ensureString(this.pageContext.eventId),
+            scheduleId: ensureString(this.pageContext.scheduleId),
+            scheduleKey: ensureString(this.pageContext.scheduleKey),
+            scheduleLabel: ensureString(this.pageContext.scheduleLabel),
+            selectionConfirmed: this.pageContext.selectionConfirmed === true
+          }
+        : null,
+      scheduleState,
+      channelAssignment: channelAssignment
+        ? {
+            eventId: ensureString(channelAssignment.eventId),
+            scheduleId: ensureString(channelAssignment.scheduleId),
+            scheduleLabel: ensureString(channelAssignment.scheduleLabel),
+            scheduleKey: ensureString(channelAssignment.scheduleKey),
+            canonicalScheduleId: ensureString(channelAssignment.canonicalScheduleId),
+            canonicalScheduleKey: ensureString(channelAssignment.canonicalScheduleKey),
+            lockedByUid: ensureString(channelAssignment.lockedByUid),
+            lockedByName: ensureString(channelAssignment.lockedByName),
+            lockedAt: channelAssignment.lockedAt ?? null,
+            updatedAt: channelAssignment.updatedAt ?? null
+          }
+        : null,
+      displaySession: displaySession
+        ? {
+            eventId: ensureString(displaySession.eventId),
+            scheduleId: ensureString(displaySession.scheduleId),
+            scheduleLabel: ensureString(displaySession.scheduleLabel),
+            scheduleKey: ensureString(displaySession.scheduleKey),
+            canonicalScheduleId: ensureString(displaySession.canonicalScheduleId),
+            canonicalScheduleKey: ensureString(displaySession.canonicalScheduleKey),
+            startAt: ensureString(displaySession.startAt),
+            endAt: ensureString(displaySession.endAt),
+            updatedAt: displaySession.updatedAt ?? null,
+            nowShowing: transformForLog(displaySession.nowShowing),
+            assignment: sessionAssignment
+              ? {
+                  eventId: ensureString(sessionAssignment.eventId),
+                  scheduleId: ensureString(sessionAssignment.scheduleId),
+                  scheduleLabel: ensureString(sessionAssignment.scheduleLabel),
+                  scheduleKey: ensureString(sessionAssignment.scheduleKey),
+                  canonicalScheduleId: ensureString(sessionAssignment.canonicalScheduleId),
+                  canonicalScheduleKey: ensureString(sessionAssignment.canonicalScheduleKey),
+                  lockedByUid: ensureString(sessionAssignment.lockedByUid),
+                  lockedByName: ensureString(sessionAssignment.lockedByName),
+                  lockedAt: sessionAssignment.lockedAt ?? null,
+                  updatedAt: sessionAssignment.updatedAt ?? null
+                }
+              : null
+          }
+        : null,
+      operatorPresence: {
+        eventId: operatorPresenceEventId,
+        sessionId: presenceSessionId,
+        entryKey: presenceEntryKey,
+        derivedKey: derivedPresenceKey,
+        self: transformForLog(presenceSelf)
+      }
+    };
+  }
+
+  logScheduleDebug(context, details = {}) {
+    if (typeof console === "undefined" || typeof console.log !== "function") {
+      return;
+    }
+    const snapshot = this.createScheduleDebugSnapshot();
+    const payload = {
+      timestamp: new Date().toISOString(),
+      context,
+      schedule: snapshot
+    };
+    if (details && typeof details === "object" && Object.keys(details).length > 0) {
+      payload.details = details;
+    }
+    console.log("[Operator] schedule-debug", payload);
+  }
+
   /**
    * 表示端末がロックしているチャンネルとオペレーターの選択が矛盾しているか判定します。
    * @returns {boolean}
    */
   hasChannelMismatch() {
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
+    const debugAssignment = assignment
+      ? {
+          eventId: String(assignment.eventId || "").trim(),
+          scheduleId: String(assignment.scheduleId || "").trim(),
+          scheduleKey: String(assignment.scheduleKey || "").trim(),
+          canonicalScheduleKey: String(assignment.canonicalScheduleKey || "").trim(),
+          canonicalScheduleId: String(assignment.canonicalScheduleId || "").trim(),
+          scheduleLabel: String(assignment.scheduleLabel || "").trim()
+        }
+      : null;
+    const activeChannel = this.getActiveChannel();
     if (!assignment || (!assignment.eventId && !assignment.scheduleKey && !assignment.canonicalScheduleKey)) {
+      this.logScheduleDebug("hasChannelMismatch", {
+        assignment: debugAssignment,
+        activeChannel,
+        reason: "missing-assignment",
+        result: true
+      });
       return true;
     }
 
@@ -852,9 +1016,7 @@ export class OperatorApp {
       assignment.scheduleId || assignment.canonicalScheduleId || parsedKey.scheduleId || ""
     ).trim();
     const assignedEvent = String(assignment.eventId || parsedKey.eventId || "").trim();
-    const normalizedAssignedSchedule = assignmentScheduleId
-      ? normalizeScheduleId(assignmentScheduleId)
-      : "";
+    const normalizedAssignedSchedule = assignmentScheduleId ? normalizeScheduleId(assignmentScheduleId) : "";
     const normalizedCanonicalKey =
       assignedEvent && normalizedAssignedSchedule ? `${assignedEvent}::${normalizedAssignedSchedule}` : "";
 
@@ -882,76 +1044,114 @@ export class OperatorApp {
     }
 
     const currentKey = String(this.getCurrentScheduleKey() || "").trim();
+    const details = {
+      assignment: debugAssignment,
+      assignedEvent,
+      assignmentScheduleId,
+      normalizedAssignedSchedule,
+      normalizedCanonicalKey,
+      candidateKeys: Array.from(candidateKeys),
+      currentKey,
+      metadataMatch: null,
+      labelMatch: null
+    };
+
+    let mismatch = true;
+    let reason = "no-match";
+
     if (currentKey) {
       if (candidateKeys.has(currentKey)) {
-        return false;
-      }
-      const assignmentLabelKey = this.derivePresenceScheduleKey(
-        assignedEvent,
-        { scheduleLabel: assignment.scheduleLabel },
-        ""
-      );
-      if (assignmentLabelKey && assignmentLabelKey === currentKey) {
-        return false;
-      }
-      const labelMatch = currentKey.match(/^(.*)::label::(.+)$/);
-      if (labelMatch) {
-        const [, currentEventPart = "", labelPart = ""] = labelMatch;
-        const currentEvent = String(currentEventPart || "").trim();
-        if (!currentEvent || currentEvent === assignedEvent) {
-          const labelValue = String(labelPart || "").trim();
-          if (labelValue) {
-            const normalizedAssignmentLabel = sanitizePresenceLabel(assignment.scheduleLabel);
-            if (normalizedAssignmentLabel && normalizedAssignmentLabel === labelValue) {
-              return false;
-            }
-            const metadataMap =
-              this.state?.scheduleMetadata instanceof Map ? this.state.scheduleMetadata : null;
-            if (metadataMap) {
-              const acceptableMetaKeys = new Set();
-              if (normalizedCanonicalKey) {
-                acceptableMetaKeys.add(normalizedCanonicalKey);
-              }
-              if (
-                canonicalScheduleKey &&
-                !canonicalScheduleKey.includes("::label::") &&
-                !canonicalScheduleKey.includes("::session::")
-              ) {
-                acceptableMetaKeys.add(canonicalScheduleKey);
-              }
-              for (const [metaKey, metaValue] of metadataMap.entries()) {
-                if (!assignedEvent || !metaKey.startsWith(`${assignedEvent}::`)) {
-                  continue;
-                }
-                const candidateLabel = sanitizePresenceLabel(metaValue?.label);
-                if (candidateLabel && candidateLabel === labelValue) {
-                  if (!acceptableMetaKeys.size || acceptableMetaKeys.has(metaKey)) {
-                    return false;
+        mismatch = false;
+        reason = "current-key";
+      } else {
+        const assignmentLabelKey = this.derivePresenceScheduleKey(
+          assignedEvent,
+          { scheduleLabel: assignment.scheduleLabel },
+          ""
+        );
+        details.assignmentLabelKey = assignmentLabelKey || "";
+        if (assignmentLabelKey && assignmentLabelKey === currentKey) {
+          mismatch = false;
+          reason = "assignment-label-key";
+        } else {
+          const labelMatch = currentKey.match(/^(.*)::label::(.+)$/);
+          details.labelMatch = labelMatch ? { eventPart: labelMatch[1] || "", labelPart: labelMatch[2] || "" } : null;
+          if (labelMatch) {
+            const [, currentEventPart = "", labelPart = ""] = labelMatch;
+            const currentEvent = String(currentEventPart || "").trim();
+            if (!currentEvent || currentEvent === assignedEvent) {
+              const labelValue = String(labelPart || "").trim();
+              if (labelValue) {
+                const normalizedAssignmentLabel = sanitizePresenceLabel(assignment.scheduleLabel);
+                details.assignmentLabelNormalized = normalizedAssignmentLabel;
+                if (normalizedAssignmentLabel && normalizedAssignmentLabel === labelValue) {
+                  mismatch = false;
+                  reason = "normalized-label";
+                } else {
+                  const metadataMap =
+                    this.state?.scheduleMetadata instanceof Map ? this.state.scheduleMetadata : null;
+                  if (metadataMap) {
+                    const acceptableMetaKeys = new Set();
+                    if (normalizedCanonicalKey) {
+                      acceptableMetaKeys.add(normalizedCanonicalKey);
+                    }
+                    if (
+                      canonicalScheduleKey &&
+                      !canonicalScheduleKey.includes("::label::") &&
+                      !canonicalScheduleKey.includes("::session::")
+                    ) {
+                      acceptableMetaKeys.add(canonicalScheduleKey);
+                    }
+                    for (const [metaKey, metaValue] of metadataMap.entries()) {
+                      if (!assignedEvent || !metaKey.startsWith(`${assignedEvent}::`)) {
+                        continue;
+                      }
+                      const candidateLabel = sanitizePresenceLabel(metaValue?.label);
+                      if (candidateLabel && candidateLabel === labelValue) {
+                        details.metadataMatch = { key: metaKey, label: candidateLabel };
+                        if (!acceptableMetaKeys.size || acceptableMetaKeys.has(metaKey)) {
+                          mismatch = false;
+                          reason = "metadata-label";
+                        }
+                        break;
+                      }
+                    }
                   }
-                  break;
                 }
               }
             }
           }
         }
       }
-      return true;
     }
 
-    const { eventId, scheduleId } = this.getActiveChannel();
-    const normalizedEvent = String(eventId || "").trim();
-    if (!normalizedEvent) {
-      return true;
+    details.activeChannel = activeChannel;
+
+    if (mismatch) {
+      const normalizedEvent = String(activeChannel?.eventId || "").trim();
+      const currentSchedule = normalizeScheduleId(activeChannel?.scheduleId);
+      const activeKey = normalizedEvent ? `${normalizedEvent}::${currentSchedule}` : "";
+      details.activeKey = activeKey;
+      if (!normalizedEvent) {
+        reason = "missing-active-event";
+        mismatch = true;
+      } else if (activeKey && candidateKeys.has(activeKey)) {
+        mismatch = false;
+        reason = "active-key";
+      } else if (assignedEvent && normalizedAssignedSchedule) {
+        mismatch = assignedEvent !== normalizedEvent || normalizedAssignedSchedule !== currentSchedule;
+        reason = mismatch ? "active-mismatch" : "active-match";
+      } else {
+        reason = "incomplete-assignment";
+        mismatch = true;
+      }
     }
-    const currentSchedule = normalizeScheduleId(scheduleId);
-    const activeKey = normalizedEvent ? `${normalizedEvent}::${currentSchedule}` : "";
-    if (activeKey && candidateKeys.has(activeKey)) {
-      return false;
-    }
-    if (assignedEvent && normalizedAssignedSchedule) {
-      return assignedEvent !== normalizedEvent || normalizedAssignedSchedule !== currentSchedule;
-    }
-    return true;
+
+    details.reason = reason;
+    details.result = mismatch;
+
+    this.logScheduleDebug("hasChannelMismatch", details);
+    return mismatch;
   }
 
   /**
@@ -1505,24 +1705,6 @@ export class OperatorApp {
       reason,
       source: "operator"
     };
-
-    if (typeof console !== "undefined" && typeof console.log === "function") {
-      const timestamp = new Date().toISOString();
-      const operatorName = String(payload.displayName || payload.email || uid || "").trim() || uid || "(unknown)";
-      const eventLabel = String(eventId || payload.eventId || "").trim() || "(none)";
-      const scheduleIdLabel = String(scheduleId || payload.scheduleId || "").trim();
-      const scheduleNameLabel = String(scheduleLabel || payload.scheduleLabel || "").trim();
-      let scheduleSummary = scheduleNameLabel || scheduleIdLabel;
-      if (scheduleNameLabel && scheduleIdLabel && scheduleNameLabel !== scheduleIdLabel) {
-        scheduleSummary = `${scheduleNameLabel} (${scheduleIdLabel})`;
-      }
-      if (!scheduleSummary) {
-        scheduleSummary = "(none)";
-      }
-      console.log(
-        `[OperatorPresence] ${timestamp} operator=${operatorName} event=${eventLabel} schedule=${scheduleSummary}`
-      );
-    }
 
     set(entryRef, payload).catch(() => {});
 
