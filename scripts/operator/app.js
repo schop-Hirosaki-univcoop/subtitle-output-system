@@ -622,12 +622,51 @@ export class OperatorApp {
         this.state?.currentSchedule || (contextConfirmed ? context.scheduleKey : "") || ""
       );
       if (scheduleKey) {
-        const [eventPart = "", schedulePart = ""] = scheduleKey.split("::");
-        if (!eventId && eventPart) {
-          eventId = ensure(eventPart);
+        const parts = extractScheduleKeyParts(scheduleKey);
+        if (!eventId && parts.eventId) {
+          eventId = ensure(parts.eventId);
         }
-        if (!scheduleId && schedulePart) {
-          scheduleId = ensure(schedulePart);
+        if (!scheduleId && parts.scheduleId) {
+          scheduleId = ensure(parts.scheduleId);
+        }
+        if (!scheduleId && parts.label) {
+          const normalizedLabel = sanitizePresenceLabel(parts.label);
+          const metadataMap = this.state?.scheduleMetadata instanceof Map ? this.state.scheduleMetadata : null;
+          if (metadataMap && normalizedLabel) {
+            for (const [metaKey, metaValue] of metadataMap.entries()) {
+              if (eventId) {
+                if (!metaKey.startsWith(`${eventId}::`)) {
+                  continue;
+                }
+              }
+              const candidateLabel = sanitizePresenceLabel(metaValue?.label);
+              if (candidateLabel && candidateLabel === normalizedLabel) {
+                const resolved = extractScheduleKeyParts(metaKey);
+                if (resolved.scheduleId) {
+                  scheduleId = ensure(resolved.scheduleId);
+                }
+                if (!eventId && resolved.eventId) {
+                  eventId = ensure(resolved.eventId);
+                }
+                if (scheduleId) {
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!eventId || !scheduleId) {
+      const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
+      if (assignment) {
+        const assignmentKey = extractScheduleKeyParts(assignment.canonicalScheduleKey || assignment.scheduleKey);
+        if (!eventId) {
+          eventId = ensure(assignment.eventId || assignmentKey.eventId);
+        }
+        if (!scheduleId) {
+          scheduleId = ensure(assignment.scheduleId || assignmentKey.scheduleId);
         }
       }
     }
