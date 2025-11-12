@@ -86,7 +86,22 @@ function resolveParticipantUid(entry, fallback = "") {
 
 function normalizeGroupNumberValue(value) {
   const normalized = normalizeText(value);
-  return normalized;
+  if (!normalized) {
+    return "";
+  }
+
+  const withoutSpaces = normalized.replace(/[\s\u3000]+/g, "");
+  if (!withoutSpaces) {
+    return "";
+  }
+
+  const asciiDigits = withoutSpaces.replace(/[０-９]/g, digit => String.fromCharCode(digit.charCodeAt(0) - 0xfee0));
+  const digitMatch = asciiDigits.match(/^(\d+)(?:班)?$/);
+  if (digitMatch) {
+    return `${digitMatch[1]}班`;
+  }
+
+  return asciiDigits;
 }
 
 function isCancellationValue(value) {
@@ -318,6 +333,9 @@ function updateDuplicateMatches() {
         rowKey: String(entry?.rowKey || entry?.key || `${cacheScheduleId}#${entryIndex}`)
       };
       const isCurrentSchedule = record.scheduleId === String(scheduleId);
+      if (isCurrentSchedule && !record.isCurrent) {
+        return;
+      }
       if (isCurrentSchedule && record.isCurrent) {
         return;
       }
@@ -828,9 +846,12 @@ function getGroupSortInfo(entry) {
   if (!groupValue) {
     return { bucket: 2, number: Number.POSITIVE_INFINITY, text: "" };
   }
-  const numeric = Number(groupValue);
-  if (!Number.isNaN(numeric)) {
-    return { bucket: 0, number: numeric, text: groupValue };
+  const numericMatch = groupValue.match(/^(\d+)/);
+  if (numericMatch) {
+    const numeric = Number(numericMatch[1]);
+    if (!Number.isNaN(numeric)) {
+      return { bucket: 0, number: numeric, text: groupValue };
+    }
   }
   return { bucket: 1, number: Number.POSITIVE_INFINITY, text: groupValue };
 }
@@ -1026,6 +1047,7 @@ export {
   formatParticipantIdDisplay,
   snapshotParticipantList,
   diffParticipantLists,
-  diffParticipantFields
+  diffParticipantFields,
+  normalizeGroupNumberValue
 };
 

@@ -64,7 +64,8 @@ import {
   sortParticipants,
   signatureForEntries,
   snapshotParticipantList,
-  diffParticipantLists
+  diffParticipantLists,
+  normalizeGroupNumberValue
 } from "./participants.js";
 
 let redirectingToIndex = false;
@@ -1428,7 +1429,7 @@ function handleRelocationFormSubmit(event) {
     const rowKey = row.dataset.rowKey || "";
     const uid = row.dataset.uid || participantId || "";
     const scheduleId = String(select?.value || "").trim();
-    const teamNumber = String(teamInput?.value || "").trim();
+    const teamNumber = normalizeGroupNumberValue(teamInput?.value || "");
     const selectable = Boolean(select && !select.disabled);
     if (selectable) {
       hasSelectableSchedule = true;
@@ -2009,23 +2010,31 @@ async function copyShareLink(token) {
 function getParticipantGroupKey(entry) {
   const raw = entry && (entry.teamNumber ?? entry.groupNumber);
   const value = raw != null ? String(raw).trim() : "";
-  return value ? value : NO_TEAM_GROUP_KEY;
+  if (!value) {
+    return NO_TEAM_GROUP_KEY;
+  }
+  if (value === CANCEL_LABEL || value === RELOCATE_LABEL || value === GL_STAFF_GROUP_KEY) {
+    return value;
+  }
+  const normalized = normalizeGroupNumberValue(value);
+  return normalized || NO_TEAM_GROUP_KEY;
 }
 
 function describeParticipantGroup(groupKey) {
-  const normalized = String(groupKey || "").trim();
-  if (!normalized || normalized === NO_TEAM_GROUP_KEY) {
+  const raw = String(groupKey || "").trim();
+  if (!raw || raw === NO_TEAM_GROUP_KEY) {
     return { label: "班番号", value: "未設定" };
   }
-  if (normalized === CANCEL_LABEL) {
+  if (raw === CANCEL_LABEL) {
     return { label: "ステータス", value: CANCEL_LABEL };
   }
-  if (normalized === RELOCATE_LABEL) {
+  if (raw === RELOCATE_LABEL) {
     return { label: "ステータス", value: RELOCATE_LABEL };
   }
-  if (normalized === GL_STAFF_GROUP_KEY) {
+  if (raw === GL_STAFF_GROUP_KEY) {
     return { label: "ステータス", value: GL_STAFF_LABEL };
   }
+  const normalized = normalizeGroupNumberValue(raw) || raw;
   return { label: "班番号", value: normalized };
 }
 
@@ -5201,7 +5210,7 @@ function saveParticipantEdits() {
   const phonetic = String(dom.participantPhoneticInput?.value || "").trim();
   const gender = String(dom.participantGenderInput?.value || "").trim();
   const department = String(dom.participantDepartmentInput?.value || "").trim();
-  const teamNumber = String(dom.participantTeamInput?.value || "").trim();
+  const teamNumber = normalizeGroupNumberValue(dom.participantTeamInput?.value || "");
   const phone = String(dom.participantPhoneInput?.value || "").trim();
   const email = String(dom.participantEmailInput?.value || "").trim();
 
