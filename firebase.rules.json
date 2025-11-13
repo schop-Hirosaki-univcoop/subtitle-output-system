@@ -531,6 +531,14 @@
               "relocationDestinationScheduleId": { ".validate": "newData.isString() || !newData.exists()" },
               "relocationDestinationScheduleLabel": { ".validate": "newData.isString() || !newData.exists()" },
               "relocationDestinationTeamNumber": { ".validate": "newData.isString() || !newData.exists()" },
+              "mailStatus": { ".validate": "newData.isString() || !newData.exists()" },
+              "mailSentAt": { ".validate": "newData.isNumber() || !newData.exists()" },
+              "mailError": { ".validate": "newData.isString() || !newData.exists()" },
+              "mailLastSubject": { ".validate": "newData.isString() || !newData.exists()" },
+              "mailLastMessageId": { ".validate": "newData.isString() || !newData.exists()" },
+              "mailSentBy": { ".validate": "newData.isString() || !newData.exists()" },
+              "mailLastAttemptAt": { ".validate": "newData.isNumber() || !newData.exists()" },
+              "mailLastAttemptBy": { ".validate": "newData.isString() || !newData.exists()" },
               "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
               "$other": { ".validate": false }
             }

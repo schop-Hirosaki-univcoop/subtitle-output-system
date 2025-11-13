@@ -703,6 +703,21 @@ function normalizeParticipantRecord(entry, fallbackId = "") {
   const relocationDestinationTeamNumber = normalizeGroupNumberValue(
     entry?.relocationDestinationTeamNumber || entry?.destinationTeamNumber || ""
   );
+  const mailStatus = normalizeText(entry?.mailStatus);
+  const mailError = normalizeText(entry?.mailError);
+  const mailLastSubject = normalizeText(entry?.mailLastSubject);
+  const mailLastMessageId = normalizeText(entry?.mailLastMessageId);
+  const mailSentBy = normalizeText(entry?.mailSentBy);
+  const mailLastAttemptBy = normalizeText(entry?.mailLastAttemptBy);
+  let mailSentAt = Number(entry?.mailSentAt);
+  if (!Number.isFinite(mailSentAt)) {
+    const alt = Number(entry?.mailSentTimestamp || entry?.mailSentAt || 0);
+    mailSentAt = Number.isFinite(alt) ? alt : 0;
+  }
+  let mailLastAttemptAt = Number(entry?.mailLastAttemptAt);
+  if (!Number.isFinite(mailLastAttemptAt)) {
+    mailLastAttemptAt = 0;
+  }
   return ensureRowKey({
     uid,
     participantId,
@@ -726,8 +741,33 @@ function normalizeParticipantRecord(entry, fallbackId = "") {
     relocationDestinationScheduleId,
     relocationDestinationScheduleLabel,
     relocationDestinationTeamNumber,
+    mailStatus,
+    mailSentAt,
+    mailError,
+    mailLastSubject,
+    mailLastMessageId,
+    mailSentBy,
+    mailLastAttemptAt,
+    mailLastAttemptBy,
     rowKey: String(entry?.rowKey || "")
   }, "record");
+}
+
+function isMailDeliveryPending(entry) {
+  if (!entry || typeof entry !== "object") {
+    return false;
+  }
+  const email = normalizeText(entry.email);
+  if (!email) {
+    return false;
+  }
+  const status = normalizeText(entry.mailStatus).toLowerCase();
+  const hasError = normalizeText(entry.mailError);
+  const mailSentAt = Number(entry.mailSentAt || 0);
+  if (status === "sent" && !hasError && mailSentAt > 0) {
+    return false;
+  }
+  return true;
 }
 
 function assignParticipantIds(entries, existingParticipants = [], options = {}) {
@@ -1048,6 +1088,7 @@ export {
   snapshotParticipantList,
   diffParticipantLists,
   diffParticipantFields,
-  normalizeGroupNumberValue
+  normalizeGroupNumberValue,
+  isMailDeliveryPending
 };
 
