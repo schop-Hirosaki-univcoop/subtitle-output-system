@@ -18,13 +18,13 @@
   var contactLabel = ctx.contactLinkLabel || '';
 ?>
 <div class="mail-container">
-  <? if (ctx.mode !== 'web' && ctx.webViewUrl) { ?>
-    <div class="mail-browser-link"><a href="<?= ctx.webViewUrl ?>" target="_blank" rel="noopener">ブラウザで表示する</a></div>
+  <? if (bodyCtx.mode !== 'web' && bodyCtx.webViewUrl) { ?>
+    <div class="mail-browser-link"><a href="<?= bodyCtx.webViewUrl ?>" target="_blank" rel="noopener">ブラウザで表示する</a></div>
   <? } ?>
   <div class="mail-card">
     <header class="mail-header">
-      <? if (ctx.tagline) { ?>
-        <p class="mail-header__tagline"><?= ctx.tagline ?></p>
+      <? if (bodyCtx.tagline) { ?>
+        <p class="mail-header__tagline"><?= bodyCtx.tagline ?></p>
       <? } ?>
       <h1 class="mail-header__title"><?= eventName ?> ご参加案内</h1>
       <? if (highlightLabel && (highlightDate || highlightTime)) { ?>
@@ -35,13 +35,13 @@
     </header>
 
     <section class="mail-section mail-section--intro">
-      <? if (ctx.participantName) { ?>
-        <p class="mail-greeting"><?= ctx.participantName ?> 様</p>
+      <? if (bodyCtx.participantName) { ?>
+        <p class="mail-greeting"><?= bodyCtx.participantName ?> 様</p>
       <? } ?>
       <p class="mail-intro">このたびは「<?= eventName ?>」へお申し込みいただきありがとうございます。以下の内容をご確認ください。</p>
     </section>
 
-    <? if (highlightLabel || highlightDate || highlightTime || ctx.arrivalNote) { ?>
+    <? if (highlightLabel || highlightDate || highlightTime || bodyCtx.arrivalNote) { ?>
       <section class="mail-section mail-section--highlight">
         <h2 class="mail-section__title">ご参加日時</h2>
         <div class="mail-highlight">
@@ -55,39 +55,39 @@
             <p class="mail-highlight__label"><?= fallbackHighlight ?></p>
           <? } ?>
         </div>
-        <? if (ctx.arrivalNote) { ?>
-          <p class="mail-section__note"><?= ctx.arrivalNote ?></p>
+        <? if (bodyCtx.arrivalNote) { ?>
+          <p class="mail-section__note"><?= bodyCtx.arrivalNote ?></p>
         <? } ?>
       </section>
     <? } ?>
 
-    <? if (ctx.location) { ?>
+    <? if (bodyCtx.location) { ?>
       <section class="mail-section mail-section--location">
         <h2 class="mail-section__title">会場</h2>
-        <p class="mail-section__text"><?= ctx.location ?></p>
+        <p class="mail-section__text"><?= bodyCtx.location ?></p>
       </section>
     <? } ?>
 
-    <? if (ctx.guidance) { ?>
+    <? if (bodyCtx.guidance) { ?>
       <section class="mail-section mail-section--guidance">
         <h2 class="mail-section__title">当日の流れ</h2>
-        <p class="mail-section__text"><?= ctx.guidance ?></p>
+        <p class="mail-section__text"><?= bodyCtx.guidance ?></p>
       </section>
     <? } ?>
 
-    <? if (ctx.additionalHtml || ctx.additionalText) { ?>
+    <? if (bodyCtx.additionalHtml || bodyCtx.additionalText) { ?>
       <section class="mail-section mail-section--additional">
         <h2 class="mail-section__title">補足情報</h2>
-        <? if (ctx.additionalHtml) { ?>
-          <div class="mail-section__text"><?!= ctx.additionalHtml ?></div>
+        <? if (bodyCtx.additionalHtml) { ?>
+          <div class="mail-section__text"><?!= bodyCtx.additionalHtml ?></div>
         <? } ?>
-        <? if (ctx.additionalText) { ?>
-          <p class="mail-section__text"><?= ctx.additionalText ?></p>
+        <? if (bodyCtx.additionalText) { ?>
+          <p class="mail-section__text"><?= bodyCtx.additionalText ?></p>
         <? } ?>
       </section>
     <? } ?>
 
-    <? if ((contactUrl && contactLabel) || ctx.contactEmail) { ?>
+    <? if ((contactUrl && contactLabel) || bodyCtx.contactEmail) { ?>
       <section class="mail-section mail-section--cta">
         <h2 class="mail-section__title">お問い合わせ</h2>
         <? if (contactUrl && contactLabel) { ?>
@@ -95,24 +95,27 @@
             <a href="<?= contactUrl ?>" class="mail-button" target="_blank" rel="noopener"><?= contactLabel ?></a>
           </p>
         <? } ?>
-        <? if (ctx.contactEmail) { ?>
-          <p class="mail-section__text mail-section__text--muted">メール: <a href="mailto:<?= ctx.contactEmail ?>"><?= ctx.contactEmail ?></a></p>
+        <? if (bodyCtx.contactEmail) { ?>
+          <p class="mail-section__text mail-section__text--muted">メール: <a href="mailto:<?= bodyCtx.contactEmail ?>"><?= bodyCtx.contactEmail ?></a></p>
         <? } ?>
       </section>
     <? } ?>
 
-    <? if (ctx.footerNote) { ?>
+    <? if (bodyCtx.footerNote) { ?>
       <section class="mail-section mail-section--footer-note">
-        <p class="mail-section__text"><?= ctx.footerNote ?></p>
+        <p class="mail-section__text"><?= bodyCtx.footerNote ?></p>
       </section>
     <? } ?>
 
     <footer class="mail-footer">
-      <p class="mail-footer__signature"><?= ctx.senderName || 'イベント運営チーム' ?></p>
+      <p class="mail-footer__signature"><?= bodyCtx.senderName || 'イベント運営チーム' ?></p>
     </footer>
   </div>
 </div>
 
-<? if (ctx.mode === 'web' && ctx.webViewUrl) { ?>
+<? if (bodyCtx.mode === 'web' && bodyCtx.webViewUrl) { ?>
   <p class="mail-web-note">このページのURLは参加者向けメールにも記載されています。共有の際はリンクの取り扱いにご注意ください。</p>
 <? } ?>
+<?
+  })(typeof context !== 'undefined' ? context : null);
+?>

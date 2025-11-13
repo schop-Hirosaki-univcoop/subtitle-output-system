@@ -12,7 +12,7 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8">
-    <? if (ctx.mode === 'web') { ?>
+    <? if (shellCtx.mode === 'web') { ?>
       <meta name="viewport" content="width=device-width, initial-scale=1">
     <? } ?>
     <title><?= resolvedSubject ?></title>
@@ -245,10 +245,14 @@
       }
     </style>
   </head>
-  <body class="mail-body mail-body--<?= ctx.mode === 'web' ? 'web' : 'email' ?>">
-    <span class="mail-preheader"><?= ctx.previewText || `${resolvedEventName}のご案内です。` ?></span>
+  <body class="mail-body mail-body--<?= shellCtx.mode === 'web' ? 'web' : 'email' ?>">
+    <span class="mail-preheader"><?= shellCtx.previewText || `${resolvedEventName}のご案内です。` ?></span>
     <div class="mail-background">
       <!-- @@INJECT:email-participant-body.html@@ -->
+      <?= body ?>
     </div>
   </body>
 </html>
+<?
+  })(typeof context !== 'undefined' ? context : null);
+?>
