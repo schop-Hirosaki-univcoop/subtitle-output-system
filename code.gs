@@ -26,39 +26,116 @@ const ALLOWED_ORIGINS = [
 ];
 
 
-function logMail_(message, details) {
-  const prefix = `[Mail] ${message}`;
-  if (typeof console !== 'undefined' && typeof console.log === 'function') {
-    if (details !== undefined) {
-      console.log(prefix, details);
-    } else {
-      console.log(prefix);
+function stringifyLogPayload_(payload) {
+  const seen = [];
+  return JSON.stringify(payload, function(key, value) {
+    if (typeof value === 'bigint') {
+      return value.toString();
     }
-  } else {
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    if (value instanceof Error) {
+      return {
+        name: value.name || 'Error',
+        message: value.message || String(value),
+        stack: value.stack || ''
+      };
+    }
+    if (typeof value === 'function') {
+      return `<Function ${value.name || 'anonymous'}>`;
+    }
+    if (typeof value === 'symbol') {
+      return value.toString();
+    }
+    if (value && typeof value === 'object') {
+      if (seen.indexOf(value) !== -1) {
+        return '<Circular>';
+      }
+      seen.push(value);
+    }
+    return value;
+  });
+}
+
+function stringifyLogValueFallback_(value) {
+  if (value === undefined) return 'undefined';
+  if (value === null) return 'null';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (value instanceof Error) {
+    const parts = [];
+    if (value.name) parts.push(value.name);
+    if (value.message) parts.push(value.message);
+    if (value.stack) parts.push(value.stack);
+    return parts.join(' | ') || String(value);
+  }
+  try {
+    return stringifyLogPayload_(value);
+  } catch (err) {
+    return `${Object.prototype.toString.call(value)} (stringify failed: ${err && err.message ? err.message : err})`;
+  }
+}
+
+function writeMailLog_(severity, message, error, details) {
+  const prefix = `[Mail][${severity}] ${message}`;
+  if (typeof console !== 'undefined') {
+    const method = severity === 'ERROR' ? 'error' : severity === 'WARN' ? 'warn' : 'log';
+    const consoleTarget = (typeof console[method] === 'function' ? console[method] : console.log) || null;
+    if (consoleTarget) {
+      const consoleArgs = [prefix];
+      if (error !== undefined && error !== null) {
+        consoleArgs.push(error);
+      }
+      if (details !== undefined) {
+        consoleArgs.push(details);
+      }
+      try {
+        consoleTarget.apply(console, consoleArgs);
+      } catch (consoleError) {
+        try {
+          if (typeof console.log === 'function') {
+            console.log(`${prefix} (console logging failed: ${consoleError && consoleError.message ? consoleError.message : consoleError})`);
+          }
+        } catch (ignore) {
+          // ignore logging failures
+        }
+      }
+    }
+  }
+
+  if (typeof Logger !== 'undefined' && typeof Logger.log === 'function') {
+    const payload = {
+      severity,
+      message,
+      timestamp: toIsoJst_(new Date())
+    };
+    if (error !== undefined && error !== null) {
+      payload.error = error;
+    }
     if (details !== undefined) {
-      Logger.log(`${prefix}: ${JSON.stringify(details)}`);
-    } else {
-      Logger.log(prefix);
+      payload.details = details;
+    }
+    try {
+      Logger.log(stringifyLogPayload_(payload));
+    } catch (serializationError) {
+      Logger.log(`${prefix}${error ? ` | error=${stringifyLogValueFallback_(error)}` : ''}${details !== undefined ? ` | details=${stringifyLogValueFallback_(details)}` : ''}`);
+      Logger.log(`[Mail][WARN] ログ詳細のJSON化に失敗しました: ${serializationError && serializationError.message ? serializationError.message : serializationError}`);
     }
   }
 }
 
+function logMail_(message, details) {
+  writeMailLog_('INFO', message, null, details);
+}
+
 function logMailError_(message, error, details) {
-  const prefix = `[Mail] ${message}`;
-  if (typeof console !== 'undefined' && typeof console.error === 'function') {
-    if (details !== undefined) {
-      console.error(prefix, error, details);
-    } else if (error !== undefined) {
-      console.error(prefix, error);
-    } else {
-      console.error(prefix);
-    }
-  } else {
-    Logger.log(`${prefix}: ${error}`);
-    if (details !== undefined) {
-      Logger.log(`${prefix} details: ${JSON.stringify(details)}`);
-    }
-  }
+  writeMailLog_('ERROR', message, error, details);
 }
 
 
@@ -272,6 +349,11 @@ function doPost(e) {
     const req = parseBody_(e);
     requestOrigin = getRequestOrigin_(e, req) || requestOrigin;
     const { action, idToken } = req;
+    logMail_('Apps Script doPost リクエストを受信しました', {
+      action: action || '',
+      origin: requestOrigin || '',
+      hasIdToken: !!idToken
+    });
     if (!action) throw new Error('Missing action');
 
     const displayActions = new Set(['beginDisplaySession', 'heartbeatDisplaySession', 'endDisplaySession']);
@@ -824,7 +906,12 @@ function formatMailTimeLabel_(date) {
 function buildParticipantMailContext_(eventId, scheduleId, participantRecord, eventRecord, scheduleRecord, settings, baseUrl) {
   const participantId = String((participantRecord && (participantRecord.participantId || participantRecord.uid)) || '').trim();
   const participantName = String(participantRecord && participantRecord.name || '').trim();
-  const eventName = coalesceStrings_(eventRecord && eventRecord.name, eventId);
+  const eventName = coalesceStrings_(
+    participantRecord && (participantRecord.eventName || participantRecord.eventLabel || participantRecord.eventTitle),
+    scheduleRecord && (scheduleRecord.eventName || scheduleRecord.eventLabel),
+    eventRecord && (eventRecord.name || eventRecord.title),
+    eventId
+  );
   const participantScheduleLabel = coalesceStrings_(
     participantRecord && participantRecord.scheduleLabel,
     participantRecord && participantRecord.schedule,
@@ -989,9 +1076,49 @@ function buildParticipantMailPreviewText_(context, settings) {
   return 'ご参加に関する大切なお知らせです。';
 }
 
+function extractSubjectEventName_(subject) {
+  if (!subject) {
+    return '';
+  }
+  const text = String(subject);
+  const match = text.match(/【([^】]+)】/);
+  return match ? match[1].trim() : '';
+}
+
 function enrichParticipantMailContext_(context, settings) {
   if (!context || typeof context !== 'object') {
     return context;
+  }
+  if (!context.eventName) {
+    const fallbackSources = [
+      ['eventLabel', context.eventLabel],
+      ['eventId', context.eventId],
+      ['subject', extractSubjectEventName_(context.subject)]
+    ];
+    let fallbackEventName = '';
+    let fallbackSource = '';
+    for (let i = 0; i < fallbackSources.length; i += 1) {
+      const [source, value] = fallbackSources[i];
+      const candidate = coalesceStrings_(value);
+      if (candidate) {
+        fallbackEventName = candidate;
+        fallbackSource = source;
+        break;
+      }
+    }
+    if (fallbackEventName) {
+      context.eventName = fallbackEventName;
+      logMail_('イベント名をフォールバックから補完しました', {
+        fallbackSource,
+        fallbackEventName
+      });
+    } else {
+      logMailError_('イベント名を特定できませんでした', null, {
+        eventId: context.eventId || '',
+        eventLabel: context.eventLabel || '',
+        subject: context.subject || ''
+      });
+    }
   }
   const effectiveArrival = coalesceStrings_(context.arrivalNote, settings && settings.arrivalNote);
   if (effectiveArrival) {
@@ -1063,7 +1190,13 @@ function renderParticipantMailPlainText_(context) {
   if (context.participantName) {
     lines.push(`${context.participantName} 様`, '');
   }
-  const eventName = coalesceStrings_(context.eventName, context.eventId, 'イベント');
+  const eventName = coalesceStrings_(
+    context.eventName,
+    context.eventLabel,
+    context.eventId,
+    extractSubjectEventName_(context.subject),
+    'イベント'
+  );
   lines.push(`「${eventName}」にご参加いただきありがとうございます。`);
   if (context.tagline) {
     lines.push('', context.tagline);
@@ -1130,6 +1263,21 @@ function sendParticipantMail_(principal, req) {
   if (!scheduleRecord || typeof scheduleRecord !== 'object') {
     throw new Error('指定された日程が見つかりません。');
   }
+  const eventRecordName = coalesceStrings_(
+    eventRecord && (eventRecord.name || eventRecord.title || eventRecord.eventName || eventRecord.eventLabel),
+    ''
+  );
+  const scheduleRecordLabel = coalesceStrings_(
+    scheduleRecord && (scheduleRecord.label || scheduleRecord.scheduleLabel),
+    formatScheduleLabel_(scheduleRecord && scheduleRecord.startAt, scheduleRecord && scheduleRecord.endAt),
+    ''
+  );
+  logMail_('イベント・日程情報の取得結果を確認しました', {
+    eventId,
+    scheduleId,
+    eventRecordName,
+    scheduleRecordLabel
+  });
   const participantsBranch = fetchRtdb_(`questionIntake/participants/${eventId}/${scheduleId}`, accessToken) || {};
   logMail_('参加者情報を取得しました', {
     eventId,
@@ -1230,9 +1378,23 @@ function sendParticipantMail_(principal, req) {
     );
     context.contactEmail = coalesceStrings_(context.contactEmail, fallbackContactEmail);
     context.senderName = senderName;
-    enrichParticipantMailContext_(context, settings);
+    const eventNameBeforeSubject = context.eventName || '';
     const subject = buildParticipantMailSubject_(context, settings);
     context.subject = subject;
+    const subjectEventName = extractSubjectEventName_(subject);
+    enrichParticipantMailContext_(context, settings);
+    logMail_('参加者メール用コンテキストを検証しました', {
+      participantId: id,
+      email,
+      eventNameBeforeSubject,
+      eventNameAfterEnrich: context.eventName || '',
+      eventLabel: context.eventLabel || '',
+      eventId: context.eventId || '',
+      subject,
+      subjectEventName,
+      scheduleLabel: context.scheduleLabel || '',
+      scheduleRangeLabel: context.scheduleRangeLabel || ''
+    });
     const htmlBody = createParticipantMailTemplateOutput_(context, 'email').getContent();
     const textBody = renderParticipantMailPlainText_(context);
     const contactEmail = String(context.contactEmail || '').trim();
