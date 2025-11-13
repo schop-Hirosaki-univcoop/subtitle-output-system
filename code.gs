@@ -365,6 +365,18 @@ function getParticipantMailTemplateMarkup_() {
 
 
 function doPost(e) {
+  try {
+    ensureMailLogSheet_();
+  } catch (sheetInitError) {
+    try {
+      if (typeof console !== 'undefined' && typeof console.error === 'function') {
+        console.error('[Mail][WARN] ensureMailLogSheet_ failed during doPost bootstrap', sheetInitError);
+      }
+    } catch (ignoreConsoleError) {
+      // ignore logging failures
+    }
+  }
+
   let requestOrigin = getRequestOrigin_(e);
   try {
     const req = parseBody_(e);
@@ -2943,16 +2955,33 @@ function getFirebaseAccessToken_() {
   return responseData.access_token;
 }
 
-function notifyUpdate(kind) {
+function notifyUpdate(kind, maybeKind) {
+  let resolvedKind = 'misc';
+  if (typeof kind === 'string') {
+    resolvedKind = kind.trim() || 'misc';
+  } else if (kind && typeof kind === 'object') {
+    if (typeof maybeKind === 'string' && maybeKind.trim()) {
+      resolvedKind = maybeKind.trim();
+    } else if (typeof kind.kind === 'string' && kind.kind.trim()) {
+      resolvedKind = kind.kind.trim();
+    } else if (kind.parameter && typeof kind.parameter.kind === 'string' && kind.parameter.kind.trim()) {
+      resolvedKind = kind.parameter.kind.trim();
+    }
+  }
+
   const lock = LockService.getScriptLock();
   if (lock.tryLock(10000)) {
     try {
       const properties = PropertiesService.getScriptProperties();
       const FIREBASE_DB_URL = properties.getProperty('FIREBASE_DB_URL');
+      if (!FIREBASE_DB_URL) {
+        throw new Error('FIREBASE_DB_URL script property is not configured.');
+      }
       const accessToken = getFirebaseAccessToken_();
 
-      const signalKey = kind ? `signals/${kind}` : 'signals/misc';
-      const url = `${FIREBASE_DB_URL}/${signalKey}.json`;
+      const signalKey = resolvedKind ? `signals/${encodeURIComponent(resolvedKind)}` : 'signals/misc';
+      const baseUrl = FIREBASE_DB_URL.replace(/\/+$/, '');
+      const url = `${baseUrl}/${signalKey}.json`;
       const payload = { triggeredAt: new Date().getTime() };
 
       const options = {
