@@ -1,4 +1,4 @@
-<?
+<? return (function (context) {
   var bodyCtx = typeof context !== 'undefined' && context ? context : {};
   var bodySubjectEventNameMatch = bodyCtx.subject ? String(bodyCtx.subject).match(/【([^】]+)】/) : null;
   var bodySubjectEventName = bodySubjectEventNameMatch ? bodySubjectEventNameMatch[1].trim() : '';

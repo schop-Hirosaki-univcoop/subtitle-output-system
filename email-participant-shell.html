@@ -1,4 +1,4 @@
-<?
+<? return (function (context) {
   var shellCtx = typeof context !== 'undefined' && context ? context : {};
   var shellSubjectEventNameMatch = shellCtx.subject ? String(shellCtx.subject).match(/【([^】]+)】/) : null;
   var shellSubjectEventName = shellSubjectEventNameMatch ? shellSubjectEventNameMatch[1].trim() : '';
