@@ -331,6 +331,29 @@ function fetchParticipantMailTemplateFile_(filename) {
   }
 }
 
+function namespaceParticipantMailTemplateMarkup_(html, namespace) {
+  if (!html || typeof html !== 'string') {
+    return html;
+  }
+  if (!/\bctx\b/.test(html)) {
+    return html;
+  }
+  const ns = typeof namespace === 'string' ? namespace.trim() : '';
+  const upperNs = ns ? ns.charAt(0).toUpperCase() + ns.slice(1) : 'Template';
+  const replacement = `participantMail${upperNs}Ctx`;
+  const rewritten = html.replace(/\bctx\b/g, replacement);
+  if (rewritten !== html) {
+    logMail_(
+      'メールテンプレートのコンテキスト識別子を再マッピングしました',
+      {
+        namespace: ns || 'default',
+        replacement
+      }
+    );
+  }
+  return rewritten;
+}
+
 function getParticipantMailTemplateMarkup_(options) {
   const forceRefresh = Boolean(options && options.forceRefresh);
   const cache = CacheService.getScriptCache();
@@ -345,8 +368,14 @@ function getParticipantMailTemplateMarkup_(options) {
     }
     logMail_('メールテンプレートマークアップのキャッシュが見つからないため、取得を行います');
   }
-  const shellHtml = fetchParticipantMailTemplateFile_('email-participant-shell.html');
-  const bodyHtml = fetchParticipantMailTemplateFile_('email-participant-body.html');
+  const shellHtml = namespaceParticipantMailTemplateMarkup_(
+    fetchParticipantMailTemplateFile_('email-participant-shell.html'),
+    'shell'
+  );
+  const bodyHtml = namespaceParticipantMailTemplateMarkup_(
+    fetchParticipantMailTemplateFile_('email-participant-body.html'),
+    'body'
+  );
   if (!PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER.test(shellHtml)) {
     logMailError_('メールテンプレートに差し込みプレースホルダーが見つかりません', null, {
       placeholder: PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER.source
