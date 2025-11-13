@@ -1,20 +1,12 @@
 <?
-  (function(participantMailRawContext) {
-    const shellCtx =
-      participantMailRawContext && typeof participantMailRawContext === 'object'
-        ? participantMailRawContext
-        : {};
-    const subjectEventNameMatch = shellCtx.subject ? String(shellCtx.subject).match(/【([^】]+)】/) : null;
-    const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
-    const resolvedEventName =
-      shellCtx.eventName || shellCtx.eventLabel || shellCtx.eventId || subjectEventName || 'イベント';
-    const resolvedScheduleLabel = shellCtx.scheduleLabel || shellCtx.scheduleRangeLabel || '';
-    const resolvedSubject =
-      shellCtx.subject || `${resolvedEventName || 'ご案内'} - ${resolvedScheduleLabel}`;
-
-    shellCtx.__participantMailResolvedEventName = resolvedEventName;
-    shellCtx.__participantMailResolvedScheduleLabel = resolvedScheduleLabel;
-    shellCtx.__participantMailResolvedSubject = resolvedSubject;
+  var ctx = typeof context !== 'undefined' && context ? context : {};
+  var subjectEventNameMatch = ctx.subject ? String(ctx.subject).match(/【([^】]+)】/) : null;
+  var subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
+  var resolvedEventName =
+    ctx.eventName || ctx.eventLabel || ctx.eventId || subjectEventName || 'イベント';
+  var resolvedScheduleLabel = ctx.scheduleLabel || ctx.scheduleRangeLabel || '';
+  var resolvedSubject =
+    ctx.subject || `${resolvedEventName || 'ご案内'} - ${resolvedScheduleLabel}`;
 ?>
 <!DOCTYPE html>
 <html lang="ja">

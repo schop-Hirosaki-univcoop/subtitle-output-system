@@ -1,28 +1,21 @@
 <?
-  (function(participantMailRawContext) {
-    const bodyCtx =
-      participantMailRawContext && typeof participantMailRawContext === 'object'
-        ? participantMailRawContext
-        : {};
-    const existingResolvedEventName =
-      bodyCtx.__participantMailResolvedEventName ||
-      bodyCtx.resolvedEventName ||
-      (typeof resolvedEventName !== 'undefined' ? resolvedEventName : '');
-    const subjectEventNameMatch = bodyCtx.subject ? String(bodyCtx.subject).match(/【([^】]+)】/) : null;
-    const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
-    const eventName =
-      existingResolvedEventName ||
-      bodyCtx.eventName ||
-      bodyCtx.eventLabel ||
-      bodyCtx.eventId ||
-      subjectEventName ||
-      'イベント';
-    const highlightLabel = bodyCtx.scheduleRangeLabel || bodyCtx.scheduleLabel || '';
-    const highlightDate = bodyCtx.scheduleDateDisplay || '';
-    const highlightTime = bodyCtx.scheduleTimeDisplay || '';
-    const fallbackHighlight = !highlightDate && !highlightTime ? highlightLabel : '';
-    const contactUrl = bodyCtx.contactLinkUrl || '';
-    const contactLabel = bodyCtx.contactLinkLabel || '';
+  var ctx = typeof context !== 'undefined' && context ? context : {};
+  var existingResolvedEventName = typeof resolvedEventName !== 'undefined' ? resolvedEventName : '';
+  var subjectEventNameMatch = ctx.subject ? String(ctx.subject).match(/【([^】]+)】/) : null;
+  var subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
+  var eventName =
+    existingResolvedEventName ||
+    ctx.eventName ||
+    ctx.eventLabel ||
+    ctx.eventId ||
+    subjectEventName ||
+    'イベント';
+  var highlightLabel = ctx.scheduleRangeLabel || ctx.scheduleLabel || '';
+  var highlightDate = ctx.scheduleDateDisplay || '';
+  var highlightTime = ctx.scheduleTimeDisplay || '';
+  var fallbackHighlight = !highlightDate && !highlightTime ? highlightLabel : '';
+  var contactUrl = ctx.contactLinkUrl || '';
+  var contactLabel = ctx.contactLinkLabel || '';
 ?>
 <div class="mail-container">
   <? if (bodyCtx.mode !== 'web' && bodyCtx.webViewUrl) { ?>

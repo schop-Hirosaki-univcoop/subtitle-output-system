@@ -337,29 +337,6 @@ function fetchParticipantMailTemplateFile_(filename) {
   }
 }
 
-function namespaceParticipantMailTemplateMarkup_(html, namespace) {
-  if (!html || typeof html !== 'string') {
-    return html;
-  }
-  if (!/\bctx\b/.test(html)) {
-    return html;
-  }
-  const ns = typeof namespace === 'string' ? namespace.trim() : '';
-  const upperNs = ns ? ns.charAt(0).toUpperCase() + ns.slice(1) : 'Template';
-  const replacement = `participantMail${upperNs}Ctx`;
-  const rewritten = html.replace(/\bctx\b/g, replacement);
-  if (rewritten !== html) {
-    logMail_(
-      'メールテンプレートのコンテキスト識別子を再マッピングしました',
-      {
-        namespace: ns || 'default',
-        replacement
-      }
-    );
-  }
-  return rewritten;
-}
-
 function getParticipantMailTemplateMarkup_(options) {
   const forceRefresh = Boolean(options && options.forceRefresh);
   const cache = CacheService.getScriptCache();
