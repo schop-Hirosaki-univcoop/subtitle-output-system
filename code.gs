@@ -292,7 +292,7 @@ function include_(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v2';
+const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v3';
 const PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER = /<!--\s*@@INJECT:email-participant-body\.html@@\s*-->/;
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
 
@@ -346,8 +346,20 @@ function getParticipantMailTemplateMarkup_(options) {
   if (cache && !forceRefresh) {
     const cached = cache.get(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY);
     if (cached) {
-      logMail_('キャッシュされたメールテンプレートマークアップを使用します');
-      return cached;
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.shellHtml && parsed.bodyHtml) {
+          logMail_('キャッシュされたメールテンプレートマークアップを使用します');
+          return parsed;
+        }
+        logMailError_('メールテンプレートキャッシュの形式が無効です', null, {
+          hasShell: Boolean(parsed && parsed.shellHtml),
+          hasBody: Boolean(parsed && parsed.bodyHtml)
+        });
+      } catch (cacheParseError) {
+        logMailError_('メールテンプレートキャッシュの解析に失敗しました', cacheParseError);
+      }
+      cache.remove(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY);
     }
     logMail_('メールテンプレートマークアップのキャッシュが見つからないため、取得を行います');
   }
@@ -365,18 +377,34 @@ function getParticipantMailTemplateMarkup_(options) {
     });
     throw new Error('メールテンプレートに参加者本文の差し込みプレースホルダーが見つかりません。');
   }
-  const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyHtml);
   logMail_('メールテンプレートマークアップの組み立てが完了しました', {
     shellLength: shellHtml.length,
     bodyLength: bodyHtml.length
   });
+  const payload = { shellHtml, bodyHtml };
   if (cache) {
-    cache.put(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY, composed, 6 * 60 * 60);
-    logMail_('メールテンプレートマークアップをキャッシュしました', {
-      ttlSeconds: 6 * 60 * 60
-    });
+    try {
+      cache.put(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY, JSON.stringify(payload), 6 * 60 * 60);
+      logMail_('メールテンプレートマークアップをキャッシュしました', {
+        ttlSeconds: 6 * 60 * 60
+      });
+    } catch (cacheWriteError) {
+      logMailError_('メールテンプレートマークアップのキャッシュ保存に失敗しました', cacheWriteError);
+    }
   }
-  return composed;
+  return payload;
+}
+
+function shouldRefreshParticipantMailTemplateCache_(error) {
+  if (!error) {
+    return false;
+  }
+  const message = String(error && error.message ? error.message : error);
+  const name = String(error && error.name ? error.name : '');
+  if (name === 'SyntaxError') {
+    return true;
+  }
+  return /Identifier '\w+' has already been declared/.test(message);
 }
 
 function shouldRefreshParticipantMailTemplateCache_(error) {
@@ -1223,8 +1251,34 @@ function enrichParticipantMailContext_(context, settings) {
   return context;
 }
 
+function deriveParticipantMailTemplateSharedValues_(context) {
+  const ctx = context && typeof context === 'object' ? context : {};
+  const subjectText = ctx.subject ? String(ctx.subject) : '';
+  const subjectEventNameMatch = subjectText.match(/【([^】]+)】/);
+  const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
+  const resolvedEventName = coalesceStrings_(
+    ctx.eventName,
+    ctx.eventLabel,
+    ctx.eventId,
+    subjectEventName,
+    'イベント'
+  );
+  const resolvedScheduleLabel = coalesceStrings_(
+    ctx.scheduleLabel,
+    ctx.scheduleRangeLabel,
+    ''
+  );
+  const fallbackSubjectBase = resolvedEventName || 'ご案内';
+  const resolvedSubject = ctx.subject || `${fallbackSubjectBase} - ${resolvedScheduleLabel}`;
+  return {
+    resolvedEventName,
+    resolvedScheduleLabel,
+    resolvedSubject
+  };
+}
+
 function createParticipantMailTemplateOutput_(context, mode) {
-  function evaluateTemplate(markup) {
+  function evaluateTemplate(markup, injectedVars) {
     const template = HtmlService.createTemplate(markup);
     const safeContext = context && typeof context === 'object'
       ? Object.assign({}, context)
@@ -1232,10 +1286,11 @@ function createParticipantMailTemplateOutput_(context, mode) {
     safeContext.mode = mode;
     template.context = safeContext;
     template.mode = mode;
-    if (context && typeof context === 'object') {
-      Object.keys(context).forEach(key => {
+    if (injectedVars && typeof injectedVars === 'object') {
+      Object.keys(injectedVars).forEach(key => {
+        safeContext[key] = injectedVars[key];
         try {
-          template[key] = context[key];
+          template[key] = injectedVars[key];
         } catch (error) {
           logMailError_('テンプレートプロパティの設定に失敗しました', error, { key });
         }
@@ -1245,16 +1300,24 @@ function createParticipantMailTemplateOutput_(context, mode) {
   }
 
   try {
-    const markup = getParticipantMailTemplateMarkup_();
-    return evaluateTemplate(markup);
+    const { shellHtml, bodyHtml } = getParticipantMailTemplateMarkup_();
+    const sharedValues = deriveParticipantMailTemplateSharedValues_(context);
+    const bodyOutput = evaluateTemplate(bodyHtml, sharedValues);
+    const bodyMarkup = bodyOutput.getContent();
+    const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyMarkup);
+    return evaluateTemplate(composed, sharedValues);
   } catch (error) {
     if (!shouldRefreshParticipantMailTemplateCache_(error)) {
       throw error;
     }
     logMailError_('メールテンプレートの評価に失敗したため、キャッシュを更新します', error);
     try {
-      const refreshedMarkup = getParticipantMailTemplateMarkup_({ forceRefresh: true });
-      return evaluateTemplate(refreshedMarkup);
+      const { shellHtml, bodyHtml } = getParticipantMailTemplateMarkup_({ forceRefresh: true });
+      const sharedValues = deriveParticipantMailTemplateSharedValues_(context);
+      const bodyOutput = evaluateTemplate(bodyHtml, sharedValues);
+      const bodyMarkup = bodyOutput.getContent();
+      const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyMarkup);
+      return evaluateTemplate(composed, sharedValues);
     } catch (retryError) {
       logMailError_('メールテンプレートの再評価に失敗しました', retryError);
       throw retryError;
