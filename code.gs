@@ -128,6 +128,27 @@ function writeMailLog_(severity, message, error, details) {
       Logger.log(`[Mail][WARN] ログ詳細のJSON化に失敗しました: ${serializationError && serializationError.message ? serializationError.message : serializationError}`);
     }
   }
+
+  try {
+    const sheet = ensureMailLogSheet_();
+    const timestamp = new Date();
+    const row = [
+      timestamp,
+      severity,
+      message,
+      error !== undefined && error !== null ? stringifyLogValueFallback_(error) : '',
+      details !== undefined ? stringifyLogValueFallback_(details) : ''
+    ];
+    sheet.appendRow(row);
+  } catch (sheetLoggingError) {
+    try {
+      if (typeof console !== 'undefined' && typeof console.error === 'function') {
+        console.error('[Mail][WARN] メールログのシート書き込みに失敗しました', sheetLoggingError);
+      }
+    } catch (ignoreConsoleError) {
+      // ignore logging failures
+    }
+  }
 }
 
 function logMail_(message, details) {
@@ -344,6 +365,18 @@ function getParticipantMailTemplateMarkup_() {
 
 
 function doPost(e) {
+  try {
+    ensureMailLogSheet_();
+  } catch (sheetInitError) {
+    try {
+      if (typeof console !== 'undefined' && typeof console.error === 'function') {
+        console.error('[Mail][WARN] ensureMailLogSheet_ failed during doPost bootstrap', sheetInitError);
+      }
+    } catch (ignoreConsoleError) {
+      // ignore logging failures
+    }
+  }
+
   let requestOrigin = getRequestOrigin_(e);
   try {
     const req = parseBody_(e);
@@ -778,6 +811,19 @@ function ensureBackupSheet_() {
   }
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(['Timestamp', 'Data']);
+  }
+  return sheet;
+}
+
+function ensureMailLogSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = 'mail_logs';
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Timestamp', 'Severity', 'Message', 'Error', 'Details']);
   }
   return sheet;
 }
@@ -2909,17 +2955,48 @@ function getFirebaseAccessToken_() {
   return responseData.access_token;
 }
 
-function notifyUpdate(kind) {
+function notifyUpdate(kind, maybeKind) {
+  function coerceKind(value) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed || '';
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    return '';
+  }
+
+  let resolvedKind = coerceKind(kind);
+  if (!resolvedKind) {
+    resolvedKind = coerceKind(maybeKind);
+  }
+  if (!resolvedKind && kind && typeof kind === 'object') {
+    resolvedKind =
+      coerceKind(kind.kind) ||
+      coerceKind(kind.parameter && kind.parameter.kind) ||
+      coerceKind(kind.namedValues && kind.namedValues.kind);
+  }
+  if (!resolvedKind) {
+    resolvedKind = 'misc';
+  }
+
+  const sanitizedKind = resolvedKind.replace(/[^A-Za-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const safeKind = sanitizedKind || 'misc';
+
   const lock = LockService.getScriptLock();
   if (lock.tryLock(10000)) {
     try {
       const properties = PropertiesService.getScriptProperties();
       const FIREBASE_DB_URL = properties.getProperty('FIREBASE_DB_URL');
+      if (!FIREBASE_DB_URL) {
+        throw new Error('FIREBASE_DB_URL script property is not configured.');
+      }
       const accessToken = getFirebaseAccessToken_();
 
-      const signalKey = kind ? `signals/${kind}` : 'signals/misc';
-      const url = `${FIREBASE_DB_URL}/${signalKey}.json`;
-      const payload = { triggeredAt: new Date().getTime() };
+      const baseUrl = FIREBASE_DB_URL.replace(/\/+$/, '');
+      const url = `${baseUrl}/signals/${encodeURIComponent(safeKind)}.json`;
+      const payload = { triggeredAt: new Date().getTime(), resolvedKind: safeKind };
 
       const options = {
         method: 'put',
