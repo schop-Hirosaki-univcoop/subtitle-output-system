@@ -294,6 +294,7 @@ function include_(filename) {
 
 const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v3';
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
+const PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL = 'https://schop-hirosaki-univcoop.github.io/subtitle-output-system/index.html';
 
 function namespaceParticipantMailTemplateMarkup_(markup, namespace) {
   if (!markup) {
@@ -934,12 +935,15 @@ function restoreRealtimeDatabase_() {
 
 function getWebAppBaseUrl_() {
   const properties = PropertiesService.getScriptProperties();
-  const propertyKeys = ['PUBLIC_WEB_APP_URL', 'WEB_APP_BASE_URL'];
+  const propertyKeys = ['PARTICIPANT_MAIL_WEB_VIEW_BASE_URL', 'PUBLIC_WEB_APP_URL', 'WEB_APP_BASE_URL'];
   for (let i = 0; i < propertyKeys.length; i += 1) {
     const value = String(properties.getProperty(propertyKeys[i]) || '').trim();
     if (value) {
       return value;
     }
+  }
+  if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
+    return PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL;
   }
   if (typeof ScriptApp !== 'undefined' && ScriptApp.getService) {
     try {

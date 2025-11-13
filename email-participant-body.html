@@ -30,74 +30,177 @@
   var closingMessage = bodyCtx.closingMessage || 'それでは、みなさんに会えるのをお待ちしています！';
   var signaturePrimary = bodyCtx.signaturePrimary || bodyCtx.senderName || '弘前大学生協学生委員会';
   var signatureSecondary = bodyCtx.signatureSecondary || (eventName ? eventName + '運営チーム' : '運営チーム');
+
+  function joinStyles() {
+    var styles = [];
+    for (var i = 0; i < arguments.length; i += 1) {
+      var value = arguments[i];
+      if (!value) {
+        continue;
+      }
+      if (Array.isArray && Array.isArray(value)) {
+        var nested = joinStyles.apply(null, value);
+        if (nested) {
+          styles.push(nested);
+        }
+        continue;
+      }
+      if (typeof value === 'string') {
+        styles.push(value);
+      }
+    }
+    return styles.join('; ');
+  }
+
+  var containerStyle = joinStyles(
+    'background:#e0e0e0',
+    'padding:20px',
+    'border-radius:10px',
+    'box-shadow:0 2px 10px rgba(0, 0, 0, 0.1)'
+  );
+  var headerStyle = joinStyles(
+    'font-size:20px',
+    'font-weight:bold',
+    'color:#0077cc',
+    'text-align:center',
+    'margin:0 0 20px'
+  );
+  var infoStyle = joinStyles(
+    'font-size:16px',
+    'margin:0 0 12px',
+    'white-space:pre-line'
+  );
+  var highlightStyle = joinStyles(
+    infoStyle,
+    'font-size:18px',
+    'font-weight:bold',
+    'color:#cc0000'
+  );
+  var dateBoxStyle = joinStyles(
+    'background:#f0f0f0',
+    'color:#ee2222',
+    'font-size:32px',
+    'font-weight:bold',
+    'text-align:center',
+    'padding:16px',
+    'border-radius:8px',
+    'margin:20px auto',
+    'width:80%'
+  );
+  var dateBoxSecondaryStyle = joinStyles(
+    'display:block',
+    'font-size:20px',
+    'margin-top:6px'
+  );
+  var hrStyle = joinStyles(
+    'border:none',
+    'border-top:1px solid #d4d4d8',
+    'margin:24px 0'
+  );
+  var buttonStyle = joinStyles(
+    'display:inline-block',
+    'background:#44bbff',
+    'color:#eeeeee !important',
+    'padding:12px 20px',
+    'text-decoration:none',
+    'border-radius:5px',
+    'font-size:16px',
+    'font-weight:bold'
+  );
+  var mutedStyle = joinStyles(
+    'color:#555555',
+    'font-size:14px'
+  );
+  var footerStyle = joinStyles(
+    'font-size:14px',
+    'text-align:center',
+    'margin:20px 0 0',
+    'color:#555555'
+  );
+  var browserLinkStyle = joinStyles(
+    'text-align:right',
+    'font-size:12px',
+    'margin-bottom:12px',
+    'color:#555555'
+  );
+  var browserLinkAnchorStyle = joinStyles(
+    'color:#0077cc',
+    'text-decoration:none'
+  );
+  var linkStyle = joinStyles(
+    'color:#0077cc',
+    'text-decoration:none'
+  );
 ?>
-<div class="container">
+<div class="container" style="<?= containerStyle ?>">
   <? if (bodyCtx.mode !== 'web' && bodyCtx.webViewUrl) { ?>
-    <p class="browser-link"><a href="<?= bodyCtx.webViewUrl ?>" target="_blank" rel="noopener">メールが正しく表示されない場合はこちら</a></p>
+    <p class="browser-link" style="<?= browserLinkStyle ?>"><a href="<?= bodyCtx.webViewUrl ?>" target="_blank" rel="noopener" style="<?= browserLinkAnchorStyle ?>">メールが正しく表示されない場合はこちら</a></p>
   <? } ?>
-  <p class="header"><?= eventName ?>参加日時の確認</p>
+  <p class="header" style="<?= headerStyle ?>"><?= eventName ?>参加日時の確認</p>
   <? if (participantName) { ?>
-    <p class="info">こんにちは！ <?= participantName ?> 様</p>
+    <p class="info" style="<?= infoStyle ?>">こんにちは！ <?= participantName ?> 様</p>
   <? } ?>
   <? if (bodyCtx.tagline) { ?>
-    <p class="info highlight"><?= bodyCtx.tagline ?></p>
+    <p class="info highlight" style="<?= highlightStyle ?>"><?= bodyCtx.tagline ?></p>
   <? } ?>
-  <p class="info">今回は<strong>「<?= eventName ?>」</strong>にご参加いただきありがとうございます！</p>
-  <p class="info"><strong><?= participantName ? participantName + ' 様の' : '' ?>参加日は以下の通りです：</strong></p>
+  <p class="info" style="<?= infoStyle ?>">今回は<strong>「<?= eventName ?>」</strong>にご参加いただきありがとうございます！</p>
+  <p class="info" style="<?= infoStyle ?>"><strong><?= participantName ? participantName + ' 様の' : '' ?>参加日は以下の通りです：</strong></p>
   <? if (primaryScheduleLabel || secondaryScheduleLabel) { ?>
-    <div class="date-box">
+    <div class="date-box" style="<?= dateBoxStyle ?>">
       <? if (primaryScheduleLabel) { ?>
-        <span><?= primaryScheduleLabel ?></span>
+        <span style="display:block; font-size:inherit; font-weight:inherit; color:inherit; line-height:1.3;">
+          <?= primaryScheduleLabel ?>
+        </span>
       <? } ?>
       <? if (secondaryScheduleLabel) { ?>
-        <span class="date-box__secondary"><?= secondaryScheduleLabel ?></span>
+        <span class="date-box__secondary" style="<?= dateBoxSecondaryStyle ?>"><?= secondaryScheduleLabel ?></span>
       <? } ?>
     </div>
   <? } ?>
   <? if (bodyCtx.location || bodyCtx.arrivalNote) { ?>
-    <p class="info">
+    <p class="info" style="<?= infoStyle ?>">
       当日は<? if (bodyCtx.location) { ?><strong><?= bodyCtx.location ?></strong><? } else { ?>会場にて<? } ?>開催します。<br>
       <? if (bodyCtx.arrivalNote) { ?><strong><?= bodyCtx.arrivalNote ?></strong><? } ?>
     </p>
   <? } ?>
-  <hr>
-  <p class="info">
+  <hr style="<?= hrStyle ?>">
+  <p class="info" style="<?= infoStyle ?>">
     受付の際に本人確認のため、<strong>本メール画面</strong>を見せていただく場合がございます。<br>
     あらかじめ<strong>スクリーンショットのご用意</strong>をお願いします。
   </p>
   <? if (bodyCtx.guidance) { ?>
-    <hr>
-    <p class="info"><?= bodyCtx.guidance ?></p>
+    <hr style="<?= hrStyle ?>">
+    <p class="info" style="<?= infoStyle ?>"><?= bodyCtx.guidance ?></p>
   <? } ?>
   <? if (bodyCtx.additionalHtml || bodyCtx.additionalText) { ?>
-    <hr>
+    <hr style="<?= hrStyle ?>">
     <? if (bodyCtx.additionalHtml) { ?>
-      <div class="info"><?!= bodyCtx.additionalHtml ?></div>
+      <div class="info" style="<?= infoStyle ?>"><?!= bodyCtx.additionalHtml ?></div>
     <? } ?>
     <? if (bodyCtx.additionalText) { ?>
-      <p class="info"><?= bodyCtx.additionalText ?></p>
+      <p class="info" style="<?= infoStyle ?>"><?= bodyCtx.additionalText ?></p>
     <? } ?>
   <? } ?>
   <? if ((contactUrl && contactLabel) || bodyCtx.contactEmail) { ?>
-    <hr>
-    <p class="info">
+    <hr style="<?= hrStyle ?>">
+    <p class="info" style="<?= infoStyle ?>">
       事情があって会に参加できなくなった場合や、質問がある場合は、下のボタンからお問い合わせください。
     </p>
     <? if (contactUrl && contactLabel) { ?>
-      <p style="text-align: center;">
-        <a href="<?= contactUrl ?>" class="button" target="_blank" rel="noopener"><?= contactLabel ?></a>
+      <p style="text-align:center; margin:0 0 12px;">
+        <a href="<?= contactUrl ?>" class="button" target="_blank" rel="noopener" style="<?= buttonStyle ?>"><?= contactLabel ?></a>
       </p>
     <? } ?>
     <? if (bodyCtx.contactEmail) { ?>
-      <p class="info muted">メール: <a href="mailto:<?= bodyCtx.contactEmail ?>"><?= bodyCtx.contactEmail ?></a></p>
+      <p class="info muted" style="<?= joinStyles(infoStyle, mutedStyle) ?>">メール: <a href="mailto:<?= bodyCtx.contactEmail ?>" style="<?= linkStyle ?>"><?= bodyCtx.contactEmail ?></a></p>
     <? } ?>
   <? } ?>
   <? if (bodyCtx.footerNote) { ?>
-    <hr>
-    <p class="info"><?= bodyCtx.footerNote ?></p>
+    <hr style="<?= hrStyle ?>">
+    <p class="info" style="<?= infoStyle ?>"><?= bodyCtx.footerNote ?></p>
   <? } ?>
-  <p class="footer"><?= closingMessage ?></p>
-  <p class="footer">
+  <p class="footer" style="<?= footerStyle ?>"><?= closingMessage ?></p>
+  <p class="footer" style="<?= footerStyle ?>">
     <?= signaturePrimary ?><br>
     <?= signatureSecondary ?>
   </p>
