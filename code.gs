@@ -1025,7 +1025,21 @@ function enrichParticipantMailContext_(context, settings) {
 function createParticipantMailTemplateOutput_(context, mode) {
   const templateMarkup = getParticipantMailTemplateMarkup_();
   const template = HtmlService.createTemplate(templateMarkup);
-  template.context = Object.assign({}, context, { mode });
+  const safeContext = context && typeof context === 'object'
+    ? Object.assign({}, context)
+    : {};
+  safeContext.mode = mode;
+  template.context = safeContext;
+  template.mode = mode;
+  if (context && typeof context === 'object') {
+    Object.keys(context).forEach(key => {
+      try {
+        template[key] = context[key];
+      } catch (error) {
+        logMailError_('テンプレートプロパティの設定に失敗しました', error, { key });
+      }
+    });
+  }
   return template.evaluate();
 }
 
