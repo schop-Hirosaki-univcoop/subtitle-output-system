@@ -1116,6 +1116,7 @@ function sendParticipantMail_(principal, req) {
     context.subject = subject;
     const htmlBody = createParticipantMailTemplateOutput_(context, 'email').getContent();
     const textBody = renderParticipantMailPlainText_(context);
+    const contactEmail = String(context.contactEmail || '').trim();
     const attemptAt = Date.now();
     try {
       MailApp.sendEmail({
