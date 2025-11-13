@@ -824,7 +824,12 @@ function formatMailTimeLabel_(date) {
 function buildParticipantMailContext_(eventId, scheduleId, participantRecord, eventRecord, scheduleRecord, settings, baseUrl) {
   const participantId = String((participantRecord && (participantRecord.participantId || participantRecord.uid)) || '').trim();
   const participantName = String(participantRecord && participantRecord.name || '').trim();
-  const eventName = coalesceStrings_(eventRecord && eventRecord.name, eventId);
+  const eventName = coalesceStrings_(
+    participantRecord && (participantRecord.eventName || participantRecord.eventLabel || participantRecord.eventTitle),
+    scheduleRecord && (scheduleRecord.eventName || scheduleRecord.eventLabel),
+    eventRecord && (eventRecord.name || eventRecord.title),
+    eventId
+  );
   const participantScheduleLabel = coalesceStrings_(
     participantRecord && participantRecord.scheduleLabel,
     participantRecord && participantRecord.schedule,
@@ -989,9 +994,28 @@ function buildParticipantMailPreviewText_(context, settings) {
   return 'ご参加に関する大切なお知らせです。';
 }
 
+function extractSubjectEventName_(subject) {
+  if (!subject) {
+    return '';
+  }
+  const text = String(subject);
+  const match = text.match(/【([^】]+)】/);
+  return match ? match[1].trim() : '';
+}
+
 function enrichParticipantMailContext_(context, settings) {
   if (!context || typeof context !== 'object') {
     return context;
+  }
+  if (!context.eventName) {
+    const fallbackEventName = coalesceStrings_(
+      context.eventLabel,
+      context.eventId,
+      extractSubjectEventName_(context.subject)
+    );
+    if (fallbackEventName) {
+      context.eventName = fallbackEventName;
+    }
   }
   const effectiveArrival = coalesceStrings_(context.arrivalNote, settings && settings.arrivalNote);
   if (effectiveArrival) {
@@ -1063,7 +1087,13 @@ function renderParticipantMailPlainText_(context) {
   if (context.participantName) {
     lines.push(`${context.participantName} 様`, '');
   }
-  const eventName = coalesceStrings_(context.eventName, context.eventId, 'イベント');
+  const eventName = coalesceStrings_(
+    context.eventName,
+    context.eventLabel,
+    context.eventId,
+    extractSubjectEventName_(context.subject),
+    'イベント'
+  );
   lines.push(`「${eventName}」にご参加いただきありがとうございます。`);
   if (context.tagline) {
     lines.push('', context.tagline);

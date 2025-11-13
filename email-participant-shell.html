@@ -1,4 +1,13 @@
-<? const ctx = typeof context !== 'undefined' && context ? context : {}; ?>
+<?
+  const ctx = typeof context !== 'undefined' && context ? context : {};
+  const subjectEventNameMatch = ctx.subject ? String(ctx.subject).match(/【([^】]+)】/) : null;
+  const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
+  const resolvedEventName =
+    ctx.eventName || ctx.eventLabel || ctx.eventId || subjectEventName || 'イベント';
+  const resolvedScheduleLabel = ctx.scheduleLabel || ctx.scheduleRangeLabel || '';
+  const resolvedSubject =
+    ctx.subject || `${resolvedEventName || 'ご案内'} - ${resolvedScheduleLabel}`;
+?>
 <!DOCTYPE html>
 <html lang="ja">
   <head>
@@ -6,7 +15,7 @@
     <? if (ctx.mode === 'web') { ?>
       <meta name="viewport" content="width=device-width, initial-scale=1">
     <? } ?>
-    <title><?= ctx.subject || `${ctx.eventName || 'ご案内'} - ${ctx.scheduleLabel || ''}` ?></title>
+    <title><?= resolvedSubject ?></title>
     <style>
       body {
         margin: 0;
@@ -237,7 +246,7 @@
     </style>
   </head>
   <body class="mail-body mail-body--<?= ctx.mode === 'web' ? 'web' : 'email' ?>">
-    <span class="mail-preheader"><?= ctx.previewText || `${ctx.eventName || 'イベント'}のご案内です。` ?></span>
+    <span class="mail-preheader"><?= ctx.previewText || `${resolvedEventName}のご案内です。` ?></span>
     <div class="mail-background">
       <!-- @@INJECT:email-participant-body.html@@ -->
     </div>
