@@ -1,21 +1,21 @@
 <?
-  const ctx = typeof context !== 'undefined' && context ? context : {};
-  const existingResolvedEventName = typeof resolvedEventName !== 'undefined' ? resolvedEventName : '';
-  const subjectEventNameMatch = ctx.subject ? String(ctx.subject).match(/【([^】]+)】/) : null;
-  const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
-  const eventName =
+  var ctx = typeof context !== 'undefined' && context ? context : {};
+  var existingResolvedEventName = typeof resolvedEventName !== 'undefined' ? resolvedEventName : '';
+  var subjectEventNameMatch = ctx.subject ? String(ctx.subject).match(/【([^】]+)】/) : null;
+  var subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
+  var eventName =
     existingResolvedEventName ||
     ctx.eventName ||
     ctx.eventLabel ||
     ctx.eventId ||
     subjectEventName ||
     'イベント';
-  const highlightLabel = ctx.scheduleRangeLabel || ctx.scheduleLabel || '';
-  const highlightDate = ctx.scheduleDateDisplay || '';
-  const highlightTime = ctx.scheduleTimeDisplay || '';
-  const fallbackHighlight = !highlightDate && !highlightTime ? highlightLabel : '';
-  const contactUrl = ctx.contactLinkUrl || '';
-  const contactLabel = ctx.contactLinkLabel || '';
+  var highlightLabel = ctx.scheduleRangeLabel || ctx.scheduleLabel || '';
+  var highlightDate = ctx.scheduleDateDisplay || '';
+  var highlightTime = ctx.scheduleTimeDisplay || '';
+  var fallbackHighlight = !highlightDate && !highlightTime ? highlightLabel : '';
+  var contactUrl = ctx.contactLinkUrl || '';
+  var contactLabel = ctx.contactLinkLabel || '';
 ?>
 <div class="mail-container">
   <? if (ctx.mode !== 'web' && ctx.webViewUrl) { ?>

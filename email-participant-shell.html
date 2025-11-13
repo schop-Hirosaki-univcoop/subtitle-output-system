@@ -1,11 +1,11 @@
 <?
-  const ctx = typeof context !== 'undefined' && context ? context : {};
-  const subjectEventNameMatch = ctx.subject ? String(ctx.subject).match(/【([^】]+)】/) : null;
-  const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
-  const resolvedEventName =
+  var ctx = typeof context !== 'undefined' && context ? context : {};
+  var subjectEventNameMatch = ctx.subject ? String(ctx.subject).match(/【([^】]+)】/) : null;
+  var subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
+  var resolvedEventName =
     ctx.eventName || ctx.eventLabel || ctx.eventId || subjectEventName || 'イベント';
-  const resolvedScheduleLabel = ctx.scheduleLabel || ctx.scheduleRangeLabel || '';
-  const resolvedSubject =
+  var resolvedScheduleLabel = ctx.scheduleLabel || ctx.scheduleRangeLabel || '';
+  var resolvedSubject =
     ctx.subject || `${resolvedEventName || 'ご案内'} - ${resolvedScheduleLabel}`;
 ?>
 <!DOCTYPE html>
