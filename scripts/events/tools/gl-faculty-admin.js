@@ -18,12 +18,8 @@ function createSignature(list) {
 
 export class GlFacultyAdminManager {
   constructor(app) {
-    // ▼▼▼ ログ追加 ▼▼▼
-    console.log("[FacultyAdmin] constructor: 初期化が開始されました。");
     this.app = app;
     this.dom = app.dom;
-    // ▼▼▼ ログ追加 ▼▼▼
-    console.log("[FacultyAdmin] constructor: GlFacultyBuilder を作成します。");
     this.builder = new GlFacultyBuilder(this.dom);
     this.catalogUnsubscribe = null;
     this.originalFaculties = [];
@@ -34,49 +30,29 @@ export class GlFacultyAdminManager {
     this.bindDom();
     this.observeBuilder();
     this.showLoading(true);
-    // ▼▼▼ ログ追加 ▼▼▼
-    console.log("[FacultyAdmin] constructor: showLoading(true) を実行しました。");
-//    this.attachListeners();
-    // ▼▼▼ 修正: selectionListener (間違い) を削除し、onAuthStateChanged (正しい) に変更 ▼▼▼
-    console.log("[FacultyAdmin] constructor: onAuthStateChanged リスナーを登録します。");
-    this.app.auth.onAuthStateChanged((user) => {
-      console.log(`[FacultyAdmin] onAuthStateChanged: 状態が変化しました。 User: ${user?.uid}`);
-      // ユーザーがログインしており、かつリスナーがまだ登録されていない場合のみ実行
-      if (user && !this.catalogUnsubscribe) {
-        console.log("[FacultyAdmin] onAuthStateChanged: ユーザーがおり、リスナーは未登録です。attachListeners() を呼び出します。");
-        this.attachListeners();
-      }
-    });
-    // ▼▼▼ ログ追加 ▼▼▼
-//    console.log("[FacultyAdmin] constructor: selectionListener を登録しました。");  //削除
+    this.app.auth.onAuthStateChanged((user) => {
+      if (user && !this.catalogUnsubscribe) {
+        this.attachListeners();
+      }
+    });
   }
 
   attachListeners() {
-    // ▼▼▼ ログ ▼▼▼
-    console.log("[FacultyAdmin] attachListeners: メソッドが呼び出されました。");
     if (this.catalogUnsubscribe) {
       console.warn("[FacultyAdmin] attachListeners: 既にリスナーが登録済みのため、処理を中断します。");
-      return; 
+      return;
     }
-    console.log("[FacultyAdmin] attachListeners: onValue リスナーを glIntakeFacultyCatalogRef に登録します...");
-    // ▲▲▲ ログ ▲▲▲
-
     this.catalogUnsubscribe = onValue(
       glIntakeFacultyCatalogRef,
       (snapshot) => {
-        // ▼▼▼ ログ ▼▼▼
-        console.log("[FacultyAdmin] onValue (Success): データを受信しました。applyCatalog を呼び出します。", snapshot.val());
-        // ▲▲▲ ログ ▼▼▲
         const value = snapshot.val() || {};
         this.applyCatalog(value);
       },
       (error) => {
-        // ▼▼▼ ログ（エラーハンドラ追加） ▼▼▼
         console.error("[FacultyAdmin] onValue (Error): データ受信に失敗しました。", error);
         logError("Failed to fetch faculty catalog", error);
         this.setStatus("共通設定の読み込みに失敗しました。", "error");
         this.showLoading(false);
-        // ▲▲▲ ログ（エラーハンドラ追加） ▲▲▲
       }
     );
   }
@@ -118,12 +94,7 @@ export class GlFacultyAdminManager {
   }
 
   showLoading(flag) {
-    // ▼▼▼ ログ追加 ▼▼▼
-    console.log(`[FacultyAdmin] showLoading: 状態を ${!flag} に切り替えます。`, {
-      loadingElement: this.dom.glFacultyAdminLoading,
-      contentElement: this.dom.glFacultyAdminContent
-    });
-      if (this.dom.glFacultyAdminLoading) {
+    if (this.dom.glFacultyAdminLoading) {
       this.dom.glFacultyAdminLoading.hidden = !flag;
     }
     if (this.dom.glFacultyAdminContent) {
@@ -164,8 +135,6 @@ export class GlFacultyAdminManager {
   }
 
   applyCatalog(raw) {
-    // ▼▼▼ ログ追加 ▼▼▼
-    console.log("[FacultyAdmin] applyCatalog: カタログデータを適用します。showLoading(false) を実行します。");
     const faculties = normalizeFacultyList(raw);
     const meta = raw && typeof raw === "object" ? raw : {};
     this.originalFaculties = faculties;

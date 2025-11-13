@@ -26,6 +26,42 @@ const ALLOWED_ORIGINS = [
 ];
 
 
+function logMail_(message, details) {
+  const prefix = `[Mail] ${message}`;
+  if (typeof console !== 'undefined' && typeof console.log === 'function') {
+    if (details !== undefined) {
+      console.log(prefix, details);
+    } else {
+      console.log(prefix);
+    }
+  } else {
+    if (details !== undefined) {
+      Logger.log(`${prefix}: ${JSON.stringify(details)}`);
+    } else {
+      Logger.log(prefix);
+    }
+  }
+}
+
+function logMailError_(message, error, details) {
+  const prefix = `[Mail] ${message}`;
+  if (typeof console !== 'undefined' && typeof console.error === 'function') {
+    if (details !== undefined) {
+      console.error(prefix, error, details);
+    } else if (error !== undefined) {
+      console.error(prefix, error);
+    } else {
+      console.error(prefix);
+    }
+  } else {
+    Logger.log(`${prefix}: ${error}`);
+    if (details !== undefined) {
+      Logger.log(`${prefix} details: ${JSON.stringify(details)}`);
+    }
+  }
+}
+
+
 /**
  * Spreadsheetセル値をDateオブジェクトに変換します。
  * 数値シリアル値・UNIX秒・ISO文字列をサポートし、不正値はnullを返します。
@@ -168,18 +204,31 @@ function getParticipantMailTemplateBaseUrl_() {
 function fetchParticipantMailTemplateFile_(filename) {
   const baseUrl = getParticipantMailTemplateBaseUrl_();
   const url = `${baseUrl}${filename}`;
+  logMail_('メールテンプレートファイルの取得を開始します', { filename, url });
+  let status = 0;
   try {
     const response = UrlFetchApp.fetch(url, {
       followRedirects: true,
       muteHttpExceptions: true,
       validateHttpsCertificates: true
     });
-    const status = response.getResponseCode();
+    status = response.getResponseCode();
     if (status >= 200 && status < 300) {
-      return response.getContentText();
+      const content = response.getContentText();
+      logMail_('メールテンプレートファイルの取得に成功しました', {
+        filename,
+        status,
+        length: content.length
+      });
+      return content;
     }
     throw new Error(`HTTP ${status}`);
   } catch (error) {
+    logMailError_('メールテンプレートファイルの取得に失敗しました', error, {
+      filename,
+      url,
+      status
+    });
     throw new Error(`メールテンプレート「${filename}」を取得できませんでした (${url}): ${error}`);
   }
 }
@@ -189,17 +238,29 @@ function getParticipantMailTemplateMarkup_() {
   if (cache) {
     const cached = cache.get(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY);
     if (cached) {
+      logMail_('キャッシュされたメールテンプレートマークアップを使用します');
       return cached;
     }
+    logMail_('メールテンプレートマークアップのキャッシュが見つからないため、取得を行います');
   }
   const shellHtml = fetchParticipantMailTemplateFile_('email-participant-shell.html');
   const bodyHtml = fetchParticipantMailTemplateFile_('email-participant-body.html');
   if (!PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER.test(shellHtml)) {
+    logMailError_('メールテンプレートに差し込みプレースホルダーが見つかりません', null, {
+      placeholder: PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER.source
+    });
     throw new Error('メールテンプレートに参加者本文の差し込みプレースホルダーが見つかりません。');
   }
   const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyHtml);
+  logMail_('メールテンプレートマークアップの組み立てが完了しました', {
+    shellLength: shellHtml.length,
+    bodyLength: bodyHtml.length
+  });
   if (cache) {
     cache.put(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY, composed, 6 * 60 * 60);
+    logMail_('メールテンプレートマークアップをキャッシュしました', {
+      ttlSeconds: 6 * 60 * 60
+    });
   }
   return composed;
 }
@@ -700,7 +761,7 @@ function getWebAppBaseUrl_() {
 
 function getParticipantMailSettings_() {
   const properties = PropertiesService.getScriptProperties();
-  return {
+  const settings = {
     contactEmail: String(properties.getProperty('PARTICIPANT_MAIL_CONTACT') || '').trim(),
     senderName: String(properties.getProperty('PARTICIPANT_MAIL_SENDER_NAME') || '').trim(),
     subjectTemplate: String(properties.getProperty('PARTICIPANT_MAIL_SUBJECT') || '').trim(),
@@ -714,6 +775,13 @@ function getParticipantMailSettings_() {
     footerNote: String(properties.getProperty('PARTICIPANT_MAIL_FOOTER_NOTE') || '').trim(),
     previewTextTemplate: String(properties.getProperty('PARTICIPANT_MAIL_PREVIEW_TEXT') || '').trim()
   };
+  logMail_('参加者メール設定を読み込みました', {
+    hasContactEmail: Boolean(settings.contactEmail),
+    hasSenderName: Boolean(settings.senderName),
+    hasSubjectTemplate: Boolean(settings.subjectTemplate),
+    hasPreviewTextTemplate: Boolean(settings.previewTextTemplate)
+  });
+  return settings;
 }
 
 function buildParticipantMailViewUrl_(baseUrl, params) {
@@ -1037,6 +1105,11 @@ function sendParticipantMail_(principal, req) {
   assertOperatorForEvent_(principal, eventId);
 
   const force = req && req.force === true;
+  logMail_('参加者メール送信処理を開始します', {
+    eventId,
+    scheduleId,
+    force
+  });
   const accessToken = getFirebaseAccessToken_();
   const eventRecord = fetchRtdb_(`questionIntake/events/${eventId}`, accessToken) || {};
   const scheduleRecord = fetchRtdb_(`questionIntake/schedules/${eventId}/${scheduleId}`, accessToken) || {};
@@ -1044,6 +1117,11 @@ function sendParticipantMail_(principal, req) {
     throw new Error('指定された日程が見つかりません。');
   }
   const participantsBranch = fetchRtdb_(`questionIntake/participants/${eventId}/${scheduleId}`, accessToken) || {};
+  logMail_('参加者情報を取得しました', {
+    eventId,
+    scheduleId,
+    participantCount: Object.keys(participantsBranch || {}).length
+  });
   const settings = getParticipantMailSettings_();
   const baseUrl = getWebAppBaseUrl_();
   const normalizedPrincipalEmail = normalizeEmail_(principal && principal.email);
@@ -1074,7 +1152,22 @@ function sendParticipantMail_(principal, req) {
     recipients.push({ id: participantKey, record: value, email });
   });
 
+  logMail_('メール送信対象の参加者を抽出しました', {
+    eventId,
+    scheduleId,
+    totalParticipants: Object.keys(participantsBranch || {}).length,
+    recipients: recipients.length,
+    skippedMissingEmail,
+    skippedAlreadySent
+  });
+
   if (!recipients.length) {
+    logMail_('送信対象が存在しないためメール送信を終了します', {
+      eventId,
+      scheduleId,
+      skippedMissingEmail,
+      skippedAlreadySent
+    });
     return {
       summary: {
         total: 0,
@@ -1089,7 +1182,15 @@ function sendParticipantMail_(principal, req) {
   }
 
   const remainingQuota = MailApp.getRemainingDailyQuota();
+  logMail_('残りのメール送信枠を確認しました', {
+    remainingQuota,
+    required: recipients.length
+  });
   if (remainingQuota < recipients.length) {
+    logMailError_('メール送信枠が不足しています', null, {
+      remainingQuota,
+      required: recipients.length
+    });
     throw new Error(`本日の残り送信可能数（${remainingQuota}件）を超えるため送信できません。`);
   }
 
@@ -1100,6 +1201,10 @@ function sendParticipantMail_(principal, req) {
 
   recipients.forEach(({ id, record, email }) => {
     const participantRecord = Object.assign({}, record, { participantId: id });
+    logMail_('参加者へのメール送信を試行します', {
+      participantId: id,
+      email
+    });
     const context = buildParticipantMailContext_(
       eventId,
       scheduleId,
@@ -1128,6 +1233,12 @@ function sendParticipantMail_(principal, req) {
         replyTo: contactEmail || undefined
       });
       sentCount += 1;
+      logMail_('参加者へのメール送信に成功しました', {
+        participantId: id,
+        email,
+        attemptAt,
+        subject
+      });
       updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailStatus`] = 'sent';
       updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailSentAt`] = attemptAt;
       updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailLastSubject`] = subject;
@@ -1152,6 +1263,13 @@ function sendParticipantMail_(principal, req) {
     } catch (error) {
       failedCount += 1;
       const message = String(error && error.message || error || '送信に失敗しました。');
+      logMailError_('参加者へのメール送信でエラーが発生しました', error, {
+        participantId: id,
+        email,
+        attemptAt,
+        subject,
+        message
+      });
       updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailStatus`] = 'error';
       updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailError`] = message;
       updates[`questionIntake/participants/${eventId}/${scheduleId}/${id}/mailLastSubject`] = subject;
@@ -1174,6 +1292,16 @@ function sendParticipantMail_(principal, req) {
     updates[`questionIntake/schedules/${eventId}/${scheduleId}/updatedAt`] = timestamp;
     updates[`questionIntake/events/${eventId}/updatedAt`] = timestamp;
     patchRtdb_(updates, accessToken);
+    logMail_('メール送信結果をRealtime Databaseへ反映しました', {
+      eventId,
+      scheduleId,
+      updatedPaths: Object.keys(updates).length
+    });
+  } else {
+    logMail_('Realtime Databaseへの更新はありませんでした', {
+      eventId,
+      scheduleId
+    });
   }
 
   const summary = {
@@ -1205,10 +1333,21 @@ function sendParticipantMail_(principal, req) {
   ].join(', ');
   logAction_(principal, 'sendParticipantMail', logDetails);
 
+  const message = messageParts.join(' ');
+  logMail_('参加者メール送信処理が完了しました', {
+    eventId,
+    scheduleId,
+    sent: sentCount,
+    failed: failedCount,
+    skippedMissingEmail,
+    skippedAlreadySent,
+    message
+  });
+
   return {
     summary,
     results,
-    message: messageParts.join(' ')
+    message
   };
 }
 
@@ -1228,6 +1367,11 @@ function renderParticipantMailPage_(e) {
   if (!eventId || !scheduleId || !participantId) {
     return renderParticipantMailErrorPage_();
   }
+  logMail_('参加者メールプレビューページのレンダリングを開始します', {
+    eventId,
+    scheduleId,
+    participantId
+  });
   try {
     const accessToken = getFirebaseAccessToken_();
     const participant = fetchRtdb_(`questionIntake/participants/${eventId}/${scheduleId}/${participantId}`, accessToken);
@@ -1264,8 +1408,18 @@ function renderParticipantMailPage_(e) {
     output.addMetaTag('viewport', 'width=device-width, initial-scale=1');
     output.addMetaTag('referrer', 'no-referrer');
     output.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    logMail_('参加者メールプレビューページのレンダリングが完了しました', {
+      eventId,
+      scheduleId,
+      participantId
+    });
     return output;
   } catch (error) {
+    logMailError_('参加者メールプレビューページのレンダリングに失敗しました', error, {
+      eventId,
+      scheduleId,
+      participantId
+    });
     console.error('renderParticipantMailPage_ failed', error);
     return renderParticipantMailErrorPage_();
   }

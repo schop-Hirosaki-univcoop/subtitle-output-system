@@ -3257,9 +3257,56 @@ function getPendingMailCount() {
   return state.participants.filter(entry => isMailDeliveryPending(entry)).length;
 }
 
+const MAIL_LOG_PREFIX = "[Mail]";
+
+function logMailInfo(message, details) {
+  if (typeof console === "undefined") {
+    return;
+  }
+  const log = typeof console.info === "function" ? console.info.bind(console) : console.log.bind(console);
+  if (details !== undefined) {
+    log(`${MAIL_LOG_PREFIX} ${message}`, details);
+  } else {
+    log(`${MAIL_LOG_PREFIX} ${message}`);
+  }
+}
+
+function logMailWarn(message, details) {
+  if (typeof console === "undefined") {
+    return;
+  }
+  const log = typeof console.warn === "function" ? console.warn.bind(console) : console.log.bind(console);
+  if (details !== undefined) {
+    log(`${MAIL_LOG_PREFIX} ${message}`, details);
+  } else {
+    log(`${MAIL_LOG_PREFIX} ${message}`);
+  }
+}
+
+function logMailError(message, error, details) {
+  if (typeof console === "undefined") {
+    return;
+  }
+  const log = typeof console.error === "function" ? console.error.bind(console) : console.log.bind(console);
+  if (details !== undefined) {
+    log(`${MAIL_LOG_PREFIX} ${message}`, error, details);
+  } else if (error !== undefined) {
+    log(`${MAIL_LOG_PREFIX} ${message}`, error);
+  } else {
+    log(`${MAIL_LOG_PREFIX} ${message}`);
+  }
+}
+
+let mailActionButtonMissingLogged = false;
+let lastMailActionStateSignature = "";
+
 function syncMailActionState() {
   const button = dom.sendMailButton;
   if (!button) {
+    if (!mailActionButtonMissingLogged) {
+      mailActionButtonMissingLogged = true;
+      logMailWarn("send-mail-button が見つからないため、メールアクションの状態を同期できませんでした。");
+    }
     return;
   }
   if (!button.dataset.defaultLabel) {
@@ -3290,6 +3337,24 @@ function syncMailActionState() {
   }
 
   button.dataset.pendingCount = String(pendingCount);
+
+  const signature = JSON.stringify({
+    hasSelection,
+    hasParticipantsWithEmail,
+    pendingCount,
+    mailSending: state.mailSending,
+    disabled
+  });
+  if (signature !== lastMailActionStateSignature) {
+    lastMailActionStateSignature = signature;
+    logMailInfo("メールアクションの状態を更新しました", {
+      hasSelection,
+      hasParticipantsWithEmail,
+      pendingCount,
+      mailSending: state.mailSending,
+      disabled
+    });
+  }
 }
 
 function updateParticipantActionPanelState() {
@@ -4830,13 +4895,32 @@ function buildMailStatusMessage({
     parts.push(`${skippedAlreadySent}件は送信済みのためスキップしました。`);
   }
   if (!parts.length) {
-    return "送信対象の参加者が見つかりませんでした。";
+    const message = "送信対象の参加者が見つかりませんでした。";
+    logMailInfo("メール送信結果メッセージを生成しました", {
+      sent,
+      failed,
+      skippedMissingEmail,
+      skippedAlreadySent,
+      message
+    });
+    return message;
   }
-  return parts.join(" ");
+  const message = parts.join(" ");
+  logMailInfo("メール送信結果メッセージを生成しました", {
+    sent,
+    failed,
+    skippedMissingEmail,
+    skippedAlreadySent,
+    message
+  });
+  return message;
 }
 
 function applyMailSendResults(results = []) {
+  const count = Array.isArray(results) ? results.length : 0;
+  logMailInfo("メール送信結果の適用を開始します", { count });
   if (!Array.isArray(results) || !results.length) {
+    logMailInfo("適用可能なメール送信結果がありません");
     syncMailActionState();
     return 0;
   }
@@ -4860,6 +4944,7 @@ function applyMailSendResults(results = []) {
   });
 
   if (!resultMap.size) {
+    logMailInfo("適用すべきメール送信結果がありませんでした");
     syncMailActionState();
     return 0;
   }
@@ -4907,9 +4992,13 @@ function applyMailSendResults(results = []) {
     updatedCount += 1;
     return nextEntry;
   });
-
+  
   renderParticipants();
   syncMailActionState();
+  logMailInfo("メール送信結果の適用が完了しました", {
+    updatedCount,
+    totalParticipants: state.participants.length
+  });
   return updatedCount;
 }
 
@@ -4917,13 +5006,26 @@ async function handleSendParticipantMail() {
   const eventId = state.selectedEventId ? String(state.selectedEventId) : "";
   const scheduleId = state.selectedScheduleId ? String(state.selectedScheduleId) : "";
   if (!eventId || !scheduleId) {
+    logMailWarn("メール送信を開始できません。イベントまたは日程が未選択です。", {
+      eventId,
+      scheduleId
+    });
     setUploadStatus(getSelectionRequiredMessage("メールを送信するには"), "error");
     syncMailActionState();
     return;
   }
 
   const pendingCount = getPendingMailCount();
+  logMailInfo("送信対象の参加者数を集計しました", {
+    eventId,
+    scheduleId,
+    pendingCount
+  });
   if (pendingCount === 0) {
+    logMailWarn("送信対象の参加者が見つかりませんでした", {
+      eventId,
+      scheduleId
+    });
     setUploadStatus("送信対象の参加者が見つかりません。", "error");
     syncMailActionState();
     return;
@@ -4932,8 +5034,17 @@ async function handleSendParticipantMail() {
   state.mailSending = true;
   syncMailActionState();
   setUploadStatus("メール送信を開始しています…");
+  logMailInfo("参加者メール送信処理を開始します", {
+    eventId,
+    scheduleId,
+    pendingCount
+  });
 
   try {
+    logMailInfo("Apps Script にメール送信リクエストを送信します", {
+      eventId,
+      scheduleId
+    });
     const response = await api.apiPost({
       action: "sendParticipantMail",
       eventId,
@@ -4942,8 +5053,25 @@ async function handleSendParticipantMail() {
     const summary = response?.summary || {};
     const results = Array.isArray(response?.results) ? response.results : [];
     const messageText = String(response?.message || "").trim();
+    logMailInfo("メール送信APIから応答を受信しました", {
+      eventId,
+      scheduleId,
+      summary: {
+        total: Number(summary.total || 0),
+        sent: Number(summary.sent || 0),
+        failed: Number(summary.failed || 0),
+        skippedMissingEmail: Number(summary.skippedMissingEmail || 0),
+        skippedAlreadySent: Number(summary.skippedAlreadySent || 0)
+      },
+      resultsCount: results.length
+    });
 
-    applyMailSendResults(results);
+    const appliedCount = applyMailSendResults(results);
+    logMailInfo("メール送信結果を状態に反映しました", {
+      eventId,
+      scheduleId,
+      appliedCount
+    });
 
     const sent = Number(summary.sent || 0);
     const failed = Number(summary.failed || 0);
@@ -4954,12 +5082,30 @@ async function handleSendParticipantMail() {
       buildMailStatusMessage({ sent, failed, skippedMissingEmail, skippedAlreadySent });
     const variant = failed > 0 ? "error" : sent > 0 ? "success" : "info";
     setUploadStatus(statusMessage, variant === "info" ? "" : variant);
+    logMailInfo("メール送信処理が完了しました", {
+      eventId,
+      scheduleId,
+      sent,
+      failed,
+      skippedMissingEmail,
+      skippedAlreadySent,
+      statusMessage,
+      variant
+    });
   } catch (error) {
+    logMailError("メール送信リクエストでエラーが発生しました", error, {
+      eventId,
+      scheduleId
+    });
     console.error(error);
     setUploadStatus(error?.message || "メール送信に失敗しました。", "error");
   } finally {
     state.mailSending = false;
     syncMailActionState();
+    logMailInfo("メール送信処理を終了しました", {
+      eventId,
+      scheduleId
+    });
   }
 }
 
