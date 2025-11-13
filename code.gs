@@ -82,49 +82,25 @@ function stringifyLogValueFallback_(value) {
   }
 }
 
-function buildMailLogRecord_(severity, message, error, details) {
-  const record = {
-    severity,
-    message,
-    timestamp: toIsoJst_(new Date())
-  };
-  if (error !== undefined && error !== null) {
-    record.error = error;
-  }
-  if (details !== undefined) {
-    record.details = details;
-  }
-  return record;
-}
-
-function formatMailLogLine_(record) {
-  const parts = [`[Mail][${record.severity}] ${record.message}`];
-  if (record.error !== undefined) {
-    parts.push(`error=${stringifyLogValueFallback_(record.error)}`);
-  }
-  if (record.details !== undefined) {
-    parts.push(`details=${stringifyLogValueFallback_(record.details)}`);
-  }
-  if (record.timestamp) {
-    parts.push(`timestamp=${record.timestamp}`);
-  }
-  return parts.join(' | ');
-}
-
 function writeMailLog_(severity, message, error, details) {
-  const record = buildMailLogRecord_(severity, message, error, details);
-  const line = formatMailLogLine_(record);
-
-  if (typeof console !== 'undefined' && console) {
+  const prefix = `[Mail][${severity}] ${message}`;
+  if (typeof console !== 'undefined') {
     const method = severity === 'ERROR' ? 'error' : severity === 'WARN' ? 'warn' : 'log';
-    const consoleTarget = typeof console[method] === 'function' ? console[method] : (typeof console.log === 'function' ? console.log : null);
+    const consoleTarget = (typeof console[method] === 'function' ? console[method] : console.log) || null;
     if (consoleTarget) {
+      const consoleArgs = [prefix];
+      if (error !== undefined && error !== null) {
+        consoleArgs.push(error);
+      }
+      if (details !== undefined) {
+        consoleArgs.push(details);
+      }
       try {
-        consoleTarget.call(console, line);
+        consoleTarget.apply(console, consoleArgs);
       } catch (consoleError) {
         try {
           if (typeof console.log === 'function') {
-            console.log(`${line} (console logging failed: ${consoleError && consoleError.message ? consoleError.message : consoleError})`);
+            console.log(`${prefix} (console logging failed: ${consoleError && consoleError.message ? consoleError.message : consoleError})`);
           }
         } catch (ignore) {
           // ignore logging failures
@@ -134,19 +110,22 @@ function writeMailLog_(severity, message, error, details) {
   }
 
   if (typeof Logger !== 'undefined' && typeof Logger.log === 'function') {
+    const payload = {
+      severity,
+      message,
+      timestamp: toIsoJst_(new Date())
+    };
+    if (error !== undefined && error !== null) {
+      payload.error = error;
+    }
+    if (details !== undefined) {
+      payload.details = details;
+    }
     try {
-      Logger.log(stringifyLogPayload_(record));
+      Logger.log(stringifyLogPayload_(payload));
     } catch (serializationError) {
-      try {
-        Logger.log(line);
-      } catch (ignore) {
-        // ignore logging failures
-      }
-      try {
-        Logger.log(`[Mail][WARN] ログ詳細のJSON化に失敗しました: ${serializationError && serializationError.message ? serializationError.message : serializationError}`);
-      } catch (ignore) {
-        // ignore logging failures
-      }
+      Logger.log(`${prefix}${error ? ` | error=${stringifyLogValueFallback_(error)}` : ''}${details !== undefined ? ` | details=${stringifyLogValueFallback_(details)}` : ''}`);
+      Logger.log(`[Mail][WARN] ログ詳細のJSON化に失敗しました: ${serializationError && serializationError.message ? serializationError.message : serializationError}`);
     }
   }
 }
@@ -286,7 +265,7 @@ function include_(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v2';
+const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v1';
 const PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER = /<!--\s*@@INJECT:email-participant-body\.html@@\s*-->/;
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
 
