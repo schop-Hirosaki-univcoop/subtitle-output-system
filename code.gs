@@ -6,9 +6,15 @@
  * @returns {GoogleAppsScript.Content.TextOutput}
  */
 function doGet(e) {
-  const view = e && e.parameter ? String(e.parameter.view || '').trim() : '';
-  if (view === 'participantMail') {
+  const viewParam = e && e.parameter ? String(e.parameter.view || '').trim() : '';
+  const pathInfo = e && typeof e.pathInfo === 'string' ? e.pathInfo.trim() : '';
+  const view = viewParam || pathInfo;
+  const normalizedView = view ? view.replace(/[^a-z0-9]/gi, '').toLowerCase() : '';
+  if (normalizedView === 'participantmail') {
     return renderParticipantMailPage_(e);
+  }
+  if (normalizedView === 'qauploadstatus') {
+    return renderQaUploadStatusResponse_(e);
   }
   return withCors_(
     ContentService
@@ -126,6 +132,27 @@ function writeMailLog_(severity, message, error, details) {
     } catch (serializationError) {
       Logger.log(`${prefix}${error ? ` | error=${stringifyLogValueFallback_(error)}` : ''}${details !== undefined ? ` | details=${stringifyLogValueFallback_(details)}` : ''}`);
       Logger.log(`[Mail][WARN] ログ詳細のJSON化に失敗しました: ${serializationError && serializationError.message ? serializationError.message : serializationError}`);
+    }
+  }
+
+  try {
+    const sheet = ensureMailLogSheet_();
+    const timestamp = new Date();
+    const row = [
+      timestamp,
+      severity,
+      message,
+      error !== undefined && error !== null ? stringifyLogValueFallback_(error) : '',
+      details !== undefined ? stringifyLogValueFallback_(details) : ''
+    ];
+    sheet.appendRow(row);
+  } catch (sheetLoggingError) {
+    try {
+      if (typeof console !== 'undefined' && typeof console.error === 'function') {
+        console.error('[Mail][WARN] メールログのシート書き込みに失敗しました', sheetLoggingError);
+      }
+    } catch (ignoreConsoleError) {
+      // ignore logging failures
     }
   }
 }
@@ -265,9 +292,48 @@ function include_(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v1';
+const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v3';
 const PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER = /<!--\s*@@INJECT:email-participant-body\.html@@\s*-->/;
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
+
+function namespaceParticipantMailTemplateMarkup_(markup, namespace) {
+  if (!markup) {
+    return '';
+  }
+  const ns = typeof namespace === 'string' ? namespace.trim() : '';
+  if (!ns) {
+    return String(markup);
+  }
+  try {
+    let result = String(markup);
+    const identifierMap = [
+      ['ctx', `${ns}Ctx`],
+      ['subjectEventNameMatch', `${ns}SubjectEventNameMatch`],
+      ['subjectEventName', `${ns}SubjectEventName`],
+      ['highlightLabel', `${ns}HighlightLabel`],
+      ['highlightDate', `${ns}HighlightDate`],
+      ['highlightTime', `${ns}HighlightTime`],
+      ['fallbackHighlight', `${ns}FallbackHighlight`],
+      ['contactUrl', `${ns}ContactUrl`],
+      ['contactLabel', `${ns}ContactLabel`]
+    ];
+    identifierMap.forEach(([from, to]) => {
+      const declarationPattern = new RegExp(`\\b(var|let|const)\\s+${from}\\b`, 'g');
+      const usagePattern = new RegExp(`\\b${from}\\b`, 'g');
+      result = result.replace(declarationPattern, (_, keyword) => `${keyword} ${to}`);
+      result = result.replace(usagePattern, match => {
+        if (match === 'context' || match === 'namespace') {
+          return match;
+        }
+        return to;
+      });
+    });
+    return result;
+  } catch (error) {
+    logMailError_('メールテンプレートマークアップの名前空間化に失敗しました', error, { namespace: ns });
+    return String(markup);
+  }
+}
 
 function getParticipantMailTemplateBaseUrl_() {
   const properties = PropertiesService.getScriptProperties();
@@ -310,13 +376,29 @@ function fetchParticipantMailTemplateFile_(filename) {
   }
 }
 
-function getParticipantMailTemplateMarkup_() {
+function getParticipantMailTemplateMarkup_(options) {
+  const forceRefresh = Boolean(options && options.forceRefresh);
   const cache = CacheService.getScriptCache();
-  if (cache) {
+  if (cache && forceRefresh) {
+    cache.remove(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY);
+  }
+  if (cache && !forceRefresh) {
     const cached = cache.get(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY);
     if (cached) {
-      logMail_('キャッシュされたメールテンプレートマークアップを使用します');
-      return cached;
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.shellHtml && parsed.bodyHtml) {
+          logMail_('キャッシュされたメールテンプレートマークアップを使用します');
+          return parsed;
+        }
+        logMailError_('メールテンプレートキャッシュの形式が無効です', null, {
+          hasShell: Boolean(parsed && parsed.shellHtml),
+          hasBody: Boolean(parsed && parsed.bodyHtml)
+        });
+      } catch (cacheParseError) {
+        logMailError_('メールテンプレートキャッシュの解析に失敗しました', cacheParseError);
+      }
+      cache.remove(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY);
     }
     logMail_('メールテンプレートマークアップのキャッシュが見つからないため、取得を行います');
   }
@@ -328,22 +410,50 @@ function getParticipantMailTemplateMarkup_() {
     });
     throw new Error('メールテンプレートに参加者本文の差し込みプレースホルダーが見つかりません。');
   }
-  const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyHtml);
   logMail_('メールテンプレートマークアップの組み立てが完了しました', {
     shellLength: shellHtml.length,
     bodyLength: bodyHtml.length
   });
+  const payload = { shellHtml, bodyHtml };
   if (cache) {
-    cache.put(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY, composed, 6 * 60 * 60);
-    logMail_('メールテンプレートマークアップをキャッシュしました', {
-      ttlSeconds: 6 * 60 * 60
-    });
+    try {
+      cache.put(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY, JSON.stringify(payload), 6 * 60 * 60);
+      logMail_('メールテンプレートマークアップをキャッシュしました', {
+        ttlSeconds: 6 * 60 * 60
+      });
+    } catch (cacheWriteError) {
+      logMailError_('メールテンプレートマークアップのキャッシュ保存に失敗しました', cacheWriteError);
+    }
   }
-  return composed;
+  return payload;
+}
+
+function shouldRefreshParticipantMailTemplateCache_(error) {
+  if (!error) {
+    return false;
+  }
+  const message = String(error && error.message ? error.message : error);
+  const name = String(error && error.name ? error.name : '');
+  if (name === 'SyntaxError') {
+    return true;
+  }
+  return /Identifier '\w+' has already been declared/.test(message);
 }
 
 
 function doPost(e) {
+  try {
+    ensureMailLogSheet_();
+  } catch (sheetInitError) {
+    try {
+      if (typeof console !== 'undefined' && typeof console.error === 'function') {
+        console.error('[Mail][WARN] ensureMailLogSheet_ failed during doPost bootstrap', sheetInitError);
+      }
+    } catch (ignoreConsoleError) {
+      // ignore logging failures
+    }
+  }
+
   let requestOrigin = getRequestOrigin_(e);
   try {
     const req = parseBody_(e);
@@ -782,6 +892,19 @@ function ensureBackupSheet_() {
   return sheet;
 }
 
+function ensureMailLogSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = 'mail_logs';
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Timestamp', 'Severity', 'Message', 'Error', 'Details']);
+  }
+  return sheet;
+}
+
 function backupRealtimeDatabase_() {
   const token = getFirebaseAccessToken_();
   const snapshot = fetchRtdb_('', token) || {};
@@ -1149,25 +1272,78 @@ function enrichParticipantMailContext_(context, settings) {
   return context;
 }
 
+function deriveParticipantMailTemplateSharedValues_(context) {
+  const ctx = context && typeof context === 'object' ? context : {};
+  const subjectText = ctx.subject ? String(ctx.subject) : '';
+  const subjectEventNameMatch = subjectText.match(/【([^】]+)】/);
+  const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
+  const resolvedEventName = coalesceStrings_(
+    ctx.eventName,
+    ctx.eventLabel,
+    ctx.eventId,
+    subjectEventName,
+    'イベント'
+  );
+  const resolvedScheduleLabel = coalesceStrings_(
+    ctx.scheduleLabel,
+    ctx.scheduleRangeLabel,
+    ''
+  );
+  const fallbackSubjectBase = resolvedEventName || 'ご案内';
+  const resolvedSubject = ctx.subject || `${fallbackSubjectBase} - ${resolvedScheduleLabel}`;
+  return {
+    resolvedEventName,
+    resolvedScheduleLabel,
+    resolvedSubject
+  };
+}
+
 function createParticipantMailTemplateOutput_(context, mode) {
-  const templateMarkup = getParticipantMailTemplateMarkup_();
-  const template = HtmlService.createTemplate(templateMarkup);
-  const safeContext = context && typeof context === 'object'
-    ? Object.assign({}, context)
-    : {};
-  safeContext.mode = mode;
-  template.context = safeContext;
-  template.mode = mode;
-  if (context && typeof context === 'object') {
-    Object.keys(context).forEach(key => {
-      try {
-        template[key] = context[key];
-      } catch (error) {
-        logMailError_('テンプレートプロパティの設定に失敗しました', error, { key });
-      }
-    });
+  function evaluateTemplate(markup, injectedVars) {
+    const template = HtmlService.createTemplate(markup);
+    const safeContext = context && typeof context === 'object'
+      ? Object.assign({}, context)
+      : {};
+    safeContext.mode = mode;
+    template.context = safeContext;
+    template.mode = mode;
+    if (injectedVars && typeof injectedVars === 'object') {
+      Object.keys(injectedVars).forEach(key => {
+        safeContext[key] = injectedVars[key];
+        try {
+          template[key] = injectedVars[key];
+        } catch (error) {
+          logMailError_('テンプレートプロパティの設定に失敗しました', error, { key });
+        }
+      });
+    }
+    return template.evaluate();
   }
-  return template.evaluate();
+
+  try {
+    const { shellHtml, bodyHtml } = getParticipantMailTemplateMarkup_();
+    const sharedValues = deriveParticipantMailTemplateSharedValues_(context);
+    const bodyOutput = evaluateTemplate(bodyHtml, sharedValues);
+    const bodyMarkup = bodyOutput.getContent();
+    const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyMarkup);
+    return evaluateTemplate(composed, sharedValues);
+  } catch (error) {
+    if (!shouldRefreshParticipantMailTemplateCache_(error)) {
+      throw error;
+    }
+    logMailError_('メールテンプレートの評価に失敗したため、キャッシュを更新します', error);
+    try {
+      const { shellHtml, bodyHtml } = getParticipantMailTemplateMarkup_({ forceRefresh: true });
+      const sharedValues = deriveParticipantMailTemplateSharedValues_(context);
+      const bodyOutput = evaluateTemplate(bodyHtml, sharedValues);
+      const bodyMarkup = bodyOutput.getContent();
+      const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyMarkup);
+      return evaluateTemplate(composed, sharedValues);
+    } catch (retryError) {
+      logMailError_('メールテンプレートの再評価に失敗しました', retryError);
+      throw retryError;
+    }
+  }
 }
 
 function stripHtmlToPlainText_(input) {
@@ -1525,6 +1701,20 @@ function sendParticipantMail_(principal, req) {
     results,
     message
   };
+}
+
+function renderQaUploadStatusResponse_(e) {
+  const payload = {
+    success: true,
+    status: 'ok',
+    timestamp: toIsoJst_(new Date())
+  };
+  return withCors_(
+    ContentService
+      .createTextOutput(JSON.stringify(payload))
+      .setMimeType(ContentService.MimeType.JSON),
+    getRequestOrigin_(e)
+  );
 }
 
 function renderParticipantMailErrorPage_() {
@@ -2909,17 +3099,48 @@ function getFirebaseAccessToken_() {
   return responseData.access_token;
 }
 
-function notifyUpdate(kind) {
+function notifyUpdate(kind, maybeKind) {
+  function coerceKind(value) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed || '';
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    return '';
+  }
+
+  let resolvedKind = coerceKind(kind);
+  if (!resolvedKind) {
+    resolvedKind = coerceKind(maybeKind);
+  }
+  if (!resolvedKind && kind && typeof kind === 'object') {
+    resolvedKind =
+      coerceKind(kind.kind) ||
+      coerceKind(kind.parameter && kind.parameter.kind) ||
+      coerceKind(kind.namedValues && kind.namedValues.kind);
+  }
+  if (!resolvedKind) {
+    resolvedKind = 'misc';
+  }
+
+  const sanitizedKind = resolvedKind.replace(/[^A-Za-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const safeKind = sanitizedKind || 'misc';
+
   const lock = LockService.getScriptLock();
   if (lock.tryLock(10000)) {
     try {
       const properties = PropertiesService.getScriptProperties();
       const FIREBASE_DB_URL = properties.getProperty('FIREBASE_DB_URL');
+      if (!FIREBASE_DB_URL) {
+        throw new Error('FIREBASE_DB_URL script property is not configured.');
+      }
       const accessToken = getFirebaseAccessToken_();
 
-      const signalKey = kind ? `signals/${kind}` : 'signals/misc';
-      const url = `${FIREBASE_DB_URL}/${signalKey}.json`;
-      const payload = { triggeredAt: new Date().getTime() };
+      const baseUrl = FIREBASE_DB_URL.replace(/\/+$/, '');
+      const url = `${baseUrl}/signals/${encodeURIComponent(safeKind)}.json`;
+      const payload = { triggeredAt: new Date().getTime(), resolvedKind: safeKind };
 
       const options = {
         method: 'put',
