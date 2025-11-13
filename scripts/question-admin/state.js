@@ -8,6 +8,7 @@ const state = {
   lastSavedSignature: "",
   user: null,
   saving: false,
+  mailSending: false,
   tokenRecords: {},
   knownTokens: new Set(),
   participantTokenMap: new Map(),
