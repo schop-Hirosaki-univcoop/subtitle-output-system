@@ -11,23 +11,12 @@ export const FACULTY_LEVEL_SUGGESTIONS = [
 
 export class GlFacultyBuilder {
   constructor(dom) {
-    // ▼▼▼ ログ追加 ▼▼▼
-    console.log("[FacultyBuilder_New] constructor: (New Version) 初期化が開始されました。");
     this.list = dom?.glFacultyList ?? null;
     this.emptyState = dom?.glFacultyEmpty ?? null;
     this.addButton = dom?.glFacultyAddButton ?? null;
     this.facultyTemplate = dom?.glFacultyTemplate ?? null;
     this.levelTemplate = dom?.glFacultyLevelTemplate ?? null;
     this.optionTemplate = dom?.glFacultyOptionTemplate ?? null;
-    // ▼▼▼ ログ追加 ▼▼▼
-    console.log("[FacultyBuilder_New] constructor: DOM要素の参照を確認します。", {
-      list: this.list,
-      emptyState: this.emptyState,
-      addButton: this.addButton,
-      facultyTemplate: this.facultyTemplate,
-      levelTemplate: this.levelTemplate,
-      optionTemplate: this.optionTemplate
-    });
     this.boundHandleAdd = () => {
       const card = this.addFaculty();
       const input = card?.querySelector("[data-faculty-name]");
@@ -36,7 +25,6 @@ export class GlFacultyBuilder {
     if (this.addButton) {
       this.addButton.addEventListener("click", this.boundHandleAdd);
     } else {
-      // ▼▼▼ ログ追加 ▼▼▼
       console.warn("[FacultyBuilder_New] constructor: addButton (glFacultyAddButton) が見つかりませんでした。");
     }
     this.updateEmptyState();
@@ -73,12 +61,8 @@ export class GlFacultyBuilder {
   }
 
   setFaculties(faculties) {
-    // ▼▼▼ ログ追加 ▼▼▼
-    console.log("[FacultyBuilder_New] setFaculties: データセットが呼び出されました。", faculties);
     this.clear();
     if (!Array.isArray(faculties) || !faculties.length) {
-      // ▼▼▼ ログ追加 ▼▼▼
-      console.log("[FacultyBuilder_New] setFaculties: データが空のため処理を終了します。");
       return;
     }
     faculties.forEach((entry) => {
@@ -88,17 +72,13 @@ export class GlFacultyBuilder {
   }
 
   addFaculty(raw = {}) {
-    // ▼▼▼ ログ追加 ▼▼▼
-    console.log("[FacultyBuilder_New] addFaculty: 学部カードを追加します。", raw);
     if (!this.list || !this.facultyTemplate) {
-      // ▼▼▼ ログ追加 ▼▼▼
       console.error("[FacultyBuilder_New] addFaculty: list または facultyTemplate が null のため中断します。");
       return null;
     }
     const fragment = this.facultyTemplate.content.cloneNode(true);
     const card = fragment.querySelector("[data-faculty-card]");
     if (!card) {
-      // ▼▼▼ ログ追加 ▼▼▼
       console.error("[FacultyBuilder_New] addFaculty: テンプレートから [data-faculty-card] が見つかりません。");
       return null;
     }
