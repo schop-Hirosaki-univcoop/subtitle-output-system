@@ -294,7 +294,7 @@ function include_(filename) {
 
 const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v3';
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
-const PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL = 'https://schop-hirosaki-univcoop.github.io/subtitle-output-system/index.html';
+const PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL = 'https://schop-hirosaki-univcoop.github.io/subtitle-output-system/email-participant-shell.html';
 
 function namespaceParticipantMailTemplateMarkup_(markup, namespace) {
   if (!markup) {
