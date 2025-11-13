@@ -295,6 +295,45 @@ function include_(filename) {
 const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v3';
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
 
+function namespaceParticipantMailTemplateMarkup_(markup, namespace) {
+  if (!markup) {
+    return '';
+  }
+  const ns = typeof namespace === 'string' ? namespace.trim() : '';
+  if (!ns) {
+    return String(markup);
+  }
+  try {
+    let result = String(markup);
+    const identifierMap = [
+      ['ctx', `${ns}Ctx`],
+      ['subjectEventNameMatch', `${ns}SubjectEventNameMatch`],
+      ['subjectEventName', `${ns}SubjectEventName`],
+      ['highlightLabel', `${ns}HighlightLabel`],
+      ['highlightDate', `${ns}HighlightDate`],
+      ['highlightTime', `${ns}HighlightTime`],
+      ['fallbackHighlight', `${ns}FallbackHighlight`],
+      ['contactUrl', `${ns}ContactUrl`],
+      ['contactLabel', `${ns}ContactLabel`]
+    ];
+    identifierMap.forEach(([from, to]) => {
+      const declarationPattern = new RegExp(`\\b(var|let|const)\\s+${from}\\b`, 'g');
+      const usagePattern = new RegExp(`\\b${from}\\b`, 'g');
+      result = result.replace(declarationPattern, (_, keyword) => `${keyword} ${to}`);
+      result = result.replace(usagePattern, match => {
+        if (match === 'context' || match === 'namespace') {
+          return match;
+        }
+        return to;
+      });
+    });
+    return result;
+  } catch (error) {
+    logMailError_('メールテンプレートマークアップの名前空間化に失敗しました', error, { namespace: ns });
+    return String(markup);
+  }
+}
+
 function getParticipantMailTemplateBaseUrl_() {
   const properties = PropertiesService.getScriptProperties();
   const value = String(properties.getProperty('PARTICIPANT_MAIL_TEMPLATE_BASE_URL') || '').trim();

@@ -119,3 +119,6 @@
 <? if (bodyCtx.mode === 'web' && bodyCtx.webViewUrl) { ?>
   <p class="mail-web-note">このページのURLは参加者向けメールにも記載されています。共有の際はリンクの取り扱いにご注意ください。</p>
 <? } ?>
+<?
+  })(typeof context !== 'undefined' ? context : null);
+?>
