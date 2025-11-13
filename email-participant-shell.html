@@ -1,18 +1,35 @@
 <?
-  const ctx = typeof context !== 'undefined' && context ? context : {};
-  const subjectEventNameMatch = ctx.subject ? String(ctx.subject).match(/【([^】]+)】/) : null;
-  const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
-  const resolvedEventName =
-    ctx.eventName || ctx.eventLabel || ctx.eventId || subjectEventName || 'イベント';
-  const resolvedScheduleLabel = ctx.scheduleLabel || ctx.scheduleRangeLabel || '';
-  const resolvedSubject =
-    ctx.subject || `${resolvedEventName || 'ご案内'} - ${resolvedScheduleLabel}`;
+  var shellCtx = typeof context !== 'undefined' && context ? context : {};
+  var shellSubjectEventNameMatch = shellCtx.subject ? String(shellCtx.subject).match(/【([^】]+)】/) : null;
+  var shellSubjectEventName = shellSubjectEventNameMatch ? shellSubjectEventNameMatch[1].trim() : '';
+  var resolvedEventName =
+    shellCtx.resolvedEventName ||
+    shellCtx.eventName ||
+    shellCtx.eventLabel ||
+    shellCtx.eventId ||
+    shellSubjectEventName ||
+    'イベント';
+  var resolvedScheduleLabel =
+    shellCtx.resolvedScheduleLabel ||
+    shellCtx.scheduleLabel ||
+    shellCtx.scheduleRangeLabel ||
+    '';
+  var resolvedSubject = shellCtx.subject ? String(shellCtx.subject) : '';
+  if (!resolvedSubject) {
+    resolvedSubject = resolvedScheduleLabel
+      ? (resolvedEventName || 'ご案内') + ' - ' + resolvedScheduleLabel
+      : (resolvedEventName || 'ご案内');
+  }
+  if (shellCtx.resolvedSubject && !shellCtx.subject) {
+    resolvedSubject = String(shellCtx.resolvedSubject);
+  }
+  var preheaderFallback = resolvedEventName ? resolvedEventName + 'のご案内です。' : 'ご案内です。';
 ?>
 <!DOCTYPE html>
 <html lang="ja">
   <head>
     <meta charset="UTF-8">
-    <? if (ctx.mode === 'web') { ?>
+    <? if (shellCtx.mode === 'web') { ?>
       <meta name="viewport" content="width=device-width, initial-scale=1">
     <? } ?>
     <title><?= resolvedSubject ?></title>
@@ -245,10 +262,15 @@
       }
     </style>
   </head>
-  <body class="mail-body mail-body--<?= ctx.mode === 'web' ? 'web' : 'email' ?>">
-    <span class="mail-preheader"><?= ctx.previewText || `${resolvedEventName}のご案内です。` ?></span>
+  <body class="mail-body mail-body--<?= shellCtx.mode === 'web' ? 'web' : 'email' ?>">
+    <? if (shellCtx.mode !== 'web' && shellCtx.webViewUrl) { ?>
+      <span class="mail-preheader"><?= shellCtx.previewText || preheaderFallback ?></span>
+    <? } ?>
     <div class="mail-background">
-      <!-- @@INJECT:email-participant-body.html@@ -->
+      <?!= typeof bodyMarkup !== 'undefined' ? bodyMarkup : '' ?>
     </div>
+    <? if (shellCtx.mode === 'web') { ?>
+      <p class="mail-web-note">このページのURLは参加者向けメールにも記載されています。共有の際はリンクの取り扱いにご注意ください。</p>
+    <? } ?>
   </body>
 </html>
