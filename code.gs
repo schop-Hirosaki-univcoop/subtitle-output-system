@@ -26,51 +26,116 @@ const ALLOWED_ORIGINS = [
 ];
 
 
-function logMail_(message, details) {
-  const prefix = `[Mail] ${message}`;
-  if (typeof console !== 'undefined' && typeof console.log === 'function') {
-    if (details !== undefined) {
-      console.log(prefix, details);
-    } else {
-      console.log(prefix);
+function stringifyLogPayload_(payload) {
+  const seen = [];
+  return JSON.stringify(payload, function(key, value) {
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    if (value instanceof Error) {
+      return {
+        name: value.name || 'Error',
+        message: value.message || String(value),
+        stack: value.stack || ''
+      };
+    }
+    if (typeof value === 'function') {
+      return `<Function ${value.name || 'anonymous'}>`;
+    }
+    if (typeof value === 'symbol') {
+      return value.toString();
+    }
+    if (value && typeof value === 'object') {
+      if (seen.indexOf(value) !== -1) {
+        return '<Circular>';
+      }
+      seen.push(value);
+    }
+    return value;
+  });
+}
+
+function stringifyLogValueFallback_(value) {
+  if (value === undefined) return 'undefined';
+  if (value === null) return 'null';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (value instanceof Error) {
+    const parts = [];
+    if (value.name) parts.push(value.name);
+    if (value.message) parts.push(value.message);
+    if (value.stack) parts.push(value.stack);
+    return parts.join(' | ') || String(value);
+  }
+  try {
+    return stringifyLogPayload_(value);
+  } catch (err) {
+    return `${Object.prototype.toString.call(value)} (stringify failed: ${err && err.message ? err.message : err})`;
+  }
+}
+
+function writeMailLog_(severity, message, error, details) {
+  const prefix = `[Mail][${severity}] ${message}`;
+  if (typeof console !== 'undefined') {
+    const method = severity === 'ERROR' ? 'error' : severity === 'WARN' ? 'warn' : 'log';
+    const consoleTarget = (typeof console[method] === 'function' ? console[method] : console.log) || null;
+    if (consoleTarget) {
+      const consoleArgs = [prefix];
+      if (error !== undefined && error !== null) {
+        consoleArgs.push(error);
+      }
+      if (details !== undefined) {
+        consoleArgs.push(details);
+      }
+      try {
+        consoleTarget.apply(console, consoleArgs);
+      } catch (consoleError) {
+        try {
+          if (typeof console.log === 'function') {
+            console.log(`${prefix} (console logging failed: ${consoleError && consoleError.message ? consoleError.message : consoleError})`);
+          }
+        } catch (ignore) {
+          // ignore logging failures
+        }
+      }
     }
   }
+
   if (typeof Logger !== 'undefined' && typeof Logger.log === 'function') {
+    const payload = {
+      severity,
+      message,
+      timestamp: toIsoJst_(new Date())
+    };
+    if (error !== undefined && error !== null) {
+      payload.error = error;
+    }
     if (details !== undefined) {
-      try {
-        Logger.log(`${prefix}: ${JSON.stringify(details)}`);
-      } catch (error) {
-        Logger.log(prefix);
-        Logger.log(`[Mail] ログ詳細のJSON化に失敗しました: ${error && error.message ? error.message : error}`);
-      }
-    } else {
-      Logger.log(prefix);
+      payload.details = details;
+    }
+    try {
+      Logger.log(stringifyLogPayload_(payload));
+    } catch (serializationError) {
+      Logger.log(`${prefix}${error ? ` | error=${stringifyLogValueFallback_(error)}` : ''}${details !== undefined ? ` | details=${stringifyLogValueFallback_(details)}` : ''}`);
+      Logger.log(`[Mail][WARN] ログ詳細のJSON化に失敗しました: ${serializationError && serializationError.message ? serializationError.message : serializationError}`);
     }
   }
 }
 
+function logMail_(message, details) {
+  writeMailLog_('INFO', message, null, details);
+}
+
 function logMailError_(message, error, details) {
-  const prefix = `[Mail] ${message}`;
-  if (typeof console !== 'undefined' && typeof console.error === 'function') {
-    if (details !== undefined) {
-      console.error(prefix, error, details);
-    } else if (error !== undefined) {
-      console.error(prefix, error);
-    } else {
-      console.error(prefix);
-    }
-  }
-  if (typeof Logger !== 'undefined' && typeof Logger.log === 'function') {
-    Logger.log(`${prefix}: ${error}`);
-    if (details !== undefined) {
-      try {
-        Logger.log(`${prefix} details: ${JSON.stringify(details)}`);
-      } catch (jsonError) {
-        Logger.log(`${prefix} details: <JSON serialization failed>`);
-        Logger.log(`[Mail] ログ詳細のJSON化に失敗しました: ${jsonError && jsonError.message ? jsonError.message : jsonError}`);
-      }
-    }
-  }
+  writeMailLog_('ERROR', message, error, details);
 }
 
 
@@ -284,6 +349,11 @@ function doPost(e) {
     const req = parseBody_(e);
     requestOrigin = getRequestOrigin_(e, req) || requestOrigin;
     const { action, idToken } = req;
+    logMail_('Apps Script doPost リクエストを受信しました', {
+      action: action || '',
+      origin: requestOrigin || '',
+      hasIdToken: !!idToken
+    });
     if (!action) throw new Error('Missing action');
 
     const displayActions = new Set(['beginDisplaySession', 'heartbeatDisplaySession', 'endDisplaySession']);
