@@ -1,5 +1,8 @@
 <?
   var shellCtx = typeof context !== 'undefined' && context ? context : {};
+  var injectedBodyMarkup = typeof bodyMarkup !== 'undefined' && bodyMarkup !== null
+    ? bodyMarkup
+    : (shellCtx.bodyMarkup || '');
   var shellSubjectEventNameMatch = shellCtx.subject ? String(shellCtx.subject).match(/【([^】]+)】/) : null;
   var shellSubjectEventName = shellSubjectEventNameMatch ? shellSubjectEventNameMatch[1].trim() : '';
   var resolvedEventName =
@@ -36,32 +39,21 @@
     <style>
       body {
         margin: 0;
-        background: #f3f4f6;
-        color: #111827;
-        font-family: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif;
-        line-height: 1.7;
+        padding: 0;
+        background: #f9f9f9;
+        color: #333333;
+        font-family: 'Arial', 'Helvetica', 'Meiryo', 'sans-serif';
+        line-height: 1.6;
         -webkit-font-smoothing: antialiased;
       }
 
       a {
-        color: #2563eb;
+        color: #44bbff;
         text-decoration: none;
       }
 
       a:hover {
         text-decoration: underline;
-      }
-
-      .mail-body {
-        background: #f3f4f6;
-      }
-
-      .mail-body.mail-body--email {
-        padding: 24px 12px;
-      }
-
-      .mail-body.mail-body--web {
-        padding: 56px 16px 96px;
       }
 
       .mail-preheader {
@@ -74,206 +66,145 @@
         width: 0 !important;
       }
 
-      .mail-background {
-        margin: 0 auto;
-        max-width: 720px;
-      }
-
-      .mail-container {
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(241, 245, 249, 0.95) 100%);
-        border-radius: 24px;
-        padding: 18px;
-        box-shadow: 0 30px 60px rgba(15, 23, 42, 0.12);
-        border: 1px solid rgba(148, 163, 184, 0.3);
-      }
-
-      .mail-card {
-        background: #ffffff;
-        border-radius: 18px;
-        padding: 32px 28px;
-      }
-
-      .mail-header {
-        text-align: left;
-      }
-
-      .mail-header__tagline {
-        margin: 0 0 12px;
-        font-size: 13px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: #2563eb;
-        font-weight: 600;
-      }
-
-      .mail-header__title {
-        margin: 0;
-        font-size: 24px;
-        font-weight: 700;
-        color: #0f172a;
-      }
-
-      .mail-header__subtitle {
-        margin: 8px 0 0;
-        font-size: 18px;
-        font-weight: 600;
-        color: #1d4ed8;
-      }
-
-      .mail-section {
-        margin-top: 28px;
-      }
-
-      .mail-section:first-of-type {
-        margin-top: 24px;
-      }
-
-      .mail-section__title {
-        margin: 0 0 12px;
-        font-size: 16px;
-        font-weight: 700;
-        color: #111827;
-      }
-
-      .mail-greeting {
-        margin: 0;
-        font-size: 16px;
-        font-weight: 600;
-        color: #111827;
-      }
-
-      .mail-intro {
-        margin: 12px 0 0;
-        font-size: 15px;
-      }
-
-      .mail-highlight {
-        margin-top: 16px;
-        border-radius: 18px;
-        padding: 20px 18px;
-        text-align: center;
-        background: linear-gradient(135deg, #fff5f5 0%, #fee2e2 100%);
-        border: 1px solid rgba(248, 113, 113, 0.35);
-      }
-
-      .mail-highlight__date {
-        margin: 0;
-        font-size: 18px;
-        font-weight: 600;
-        color: #b91c1c;
-      }
-
-      .mail-highlight__time {
-        margin: 6px 0 0;
-        font-size: 32px;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-        color: #dc2626;
-      }
-
-      .mail-highlight__label {
-        margin: 0;
-        font-size: 20px;
-        font-weight: 600;
-        color: #dc2626;
-      }
-
-      .mail-section__note {
-        margin: 16px 0 0;
-        font-size: 15px;
-        color: #1f2937;
-        white-space: pre-line;
-      }
-
-      .mail-section__text {
-        margin: 0;
-        font-size: 15px;
-        line-height: 1.8;
-        color: #1f2937;
-        white-space: pre-line;
-      }
-
-      .mail-section__text--muted {
-        color: #475569;
-      }
-
-      .mail-section__cta {
-        margin: 0 0 16px;
-        text-align: center;
-      }
-
-      .mail-button {
-        display: inline-block;
-        padding: 12px 28px;
-        border-radius: 999px;
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-        color: #ffffff !important;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-      }
-
-      .mail-footer {
-        margin-top: 36px;
-        border-top: 1px solid rgba(203, 213, 225, 0.6);
-        padding-top: 18px;
-      }
-
-      .mail-footer__signature {
-        margin: 0;
-        font-size: 14px;
-        color: #475569;
-      }
-
-      .mail-web-note {
-        margin: 24px auto 0;
+      .mail-wrapper {
         max-width: 640px;
-        font-size: 13px;
-        color: #475569;
-        text-align: center;
+        margin: 0 auto;
+        padding: 24px 16px 80px;
       }
 
-      .mail-browser-link {
+      .mail-wrapper--web {
+        padding: 56px 16px 120px;
+      }
+
+      .container {
+        background: #e0e0e0;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .header {
+        font-size: 20px;
+        font-weight: bold;
+        color: #0077cc;
+        text-align: center;
+        margin: 0 0 20px;
+      }
+
+      .info {
+        font-size: 16px;
+        margin: 0 0 12px;
+        white-space: pre-line;
+      }
+
+      .highlight {
+        font-size: 18px;
+        font-weight: bold;
+        color: #cc0000;
+      }
+
+      .date-box {
+        background: #f0f0f0;
+        color: #ee2222;
+        font-size: 32px;
+        font-weight: bold;
+        text-align: center;
+        padding: 16px;
+        border-radius: 8px;
+        margin: 20px auto;
+        width: 80%;
+      }
+
+      .date-box span {
+        display: block;
+      }
+
+      .date-box__secondary {
+        font-size: 20px;
+        margin-top: 6px;
+      }
+
+      hr {
+        border: none;
+        border-top: 1px solid #d4d4d8;
+        margin: 24px 0;
+      }
+
+      .button {
+        display: inline-block;
+        background: #44bbff;
+        color: #eeeeee !important;
+        padding: 12px 20px;
+        text-decoration: none;
+        border-radius: 5px;
+        font-size: 16px;
+        font-weight: bold;
+      }
+
+      .button:hover {
+        background: #005fa3;
+      }
+
+      .muted {
+        color: #555555;
+        font-size: 14px;
+      }
+
+      .footer {
+        font-size: 14px;
+        text-align: center;
+        margin: 20px 0 0;
+        color: #555555;
+      }
+
+      .browser-link {
         text-align: right;
         font-size: 12px;
-        color: #475569;
-        margin-bottom: 16px;
+        margin-bottom: 12px;
+        color: #555555;
       }
 
-      .mail-browser-link a {
-        color: #2563eb;
+      .browser-link a {
+        color: #0077cc;
+      }
+
+      .web-note {
+        max-width: 640px;
+        margin: 32px auto 0;
+        font-size: 13px;
+        color: #555555;
+        text-align: center;
       }
 
       @media (max-width: 640px) {
-        .mail-body.mail-body--email {
-          padding: 16px 8px;
+        .mail-wrapper {
+          padding: 16px 12px 64px;
         }
 
-        .mail-container {
-          padding: 12px;
+        .container {
+          padding: 16px;
         }
 
-        .mail-card {
-          padding: 28px 20px;
-        }
-
-        .mail-highlight__time {
+        .date-box {
+          width: 100%;
           font-size: 28px;
+        }
+
+        .date-box__secondary {
+          font-size: 18px;
         }
       }
     </style>
   </head>
-  <body class="mail-body mail-body--<?= shellCtx.mode === 'web' ? 'web' : 'email' ?>">
-    <? if (shellCtx.mode !== 'web' && shellCtx.webViewUrl) { ?>
+  <body>
+    <? if (shellCtx.mode !== 'web') { ?>
       <span class="mail-preheader"><?= shellCtx.previewText || preheaderFallback ?></span>
     <? } ?>
-    <div class="mail-background">
-      <?!= typeof bodyMarkup !== 'undefined' ? bodyMarkup : '' ?>
+    <div class="mail-wrapper mail-wrapper--<?= shellCtx.mode === 'web' ? 'web' : 'email' ?>">
+      <?!= injectedBodyMarkup ?>
     </div>
     <? if (shellCtx.mode === 'web') { ?>
-      <p class="mail-web-note">このページのURLは参加者向けメールにも記載されています。共有の際はリンクの取り扱いにご注意ください。</p>
+      <p class="web-note">このページのURLは参加者向けメールにも記載されています。共有の際はリンクの取り扱いにご注意ください。</p>
     <? } ?>
   </body>
 </html>
-<?
-  })(typeof context !== 'undefined' ? context : null);
-?>
