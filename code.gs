@@ -427,7 +427,7 @@ function shouldRefreshParticipantMailTemplateCache_(error) {
   }
   const message = String(error && error.message ? error.message : error);
   const name = String(error && error.name ? error.name : '');
-  if (name === 'SyntaxError') {
+  if (name === 'SyntaxError' || name === 'TemplateCompilationError' || name === 'TemplateRenderingError') {
     return true;
   }
   return /Identifier '\w+' has already been declared/.test(message);
@@ -1298,30 +1298,108 @@ function deriveParticipantMailTemplateSharedValues_(context) {
   };
 }
 
+function escapeHtmlForTemplate_(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  const stringValue = String(value);
+  if (!stringValue) {
+    return stringValue;
+  }
+  return stringValue
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderHtmlTemplateMarkup_(markup, state) {
+  const templateSource = typeof markup === 'string' ? markup : String(markup || '');
+  const evaluationState = Object.assign(Object.create(null), state && typeof state === 'object' ? state : {});
+  const scriptletPattern = /<\?([\s\S]*?)\?>/g;
+  let cursor = 0;
+  const fnBody = ['const __output = [];', 'let __temp;'];
+
+  let match;
+  while ((match = scriptletPattern.exec(templateSource)) !== null) {
+    const preceding = templateSource.slice(cursor, match.index);
+    if (preceding) {
+      fnBody.push(`__output.push(${JSON.stringify(preceding)});`);
+    }
+    const rawScriptlet = match[1] || '';
+    const trimmedStart = rawScriptlet.replace(/^\s+/, '');
+    if (!trimmedStart) {
+      cursor = match.index + match[0].length;
+      continue;
+    }
+    if (trimmedStart.startsWith('!=')) {
+      const expression = trimmedStart.slice(2).trim();
+      if (expression) {
+        fnBody.push(`__temp = (${expression});`);
+        fnBody.push('if (__temp !== undefined && __temp !== null) {');
+        fnBody.push('  __output.push(String(__temp));');
+        fnBody.push('}');
+      }
+    } else if (trimmedStart.startsWith('=')) {
+      const expression = trimmedStart.slice(1).trim();
+      if (expression) {
+        fnBody.push(`__temp = (${expression});`);
+        fnBody.push('if (__temp !== undefined && __temp !== null) {');
+        fnBody.push('  __output.push(__escape(String(__temp)));');
+        fnBody.push('}');
+      }
+    } else {
+      fnBody.push(rawScriptlet);
+    }
+    cursor = match.index + match[0].length;
+  }
+
+  const remainder = templateSource.slice(cursor);
+  if (remainder) {
+    fnBody.push(`__output.push(${JSON.stringify(remainder)});`);
+  }
+  fnBody.push('return __output.join("");');
+
+  const body = `with (__state) {\n${fnBody.join('\n')}\n}`;
+  let renderer;
+  try {
+    renderer = new Function('__state', '__escape', body);
+  } catch (compilationError) {
+    const error = new Error(`テンプレートのコンパイルに失敗しました: ${compilationError && compilationError.message ? compilationError.message : compilationError}`);
+    error.name = 'TemplateCompilationError';
+    error.cause = compilationError;
+    throw error;
+  }
+
+  try {
+    return renderer(evaluationState, escapeHtmlForTemplate_);
+  } catch (runtimeError) {
+    const error = runtimeError instanceof Error ? runtimeError : new Error(String(runtimeError));
+    if (!error.name || error.name === 'Error') {
+      error.name = 'TemplateRenderingError';
+    }
+    error.message = `テンプレートのレンダリングに失敗しました: ${error.message}`;
+    throw error;
+  }
+}
+
 function createParticipantMailTemplateOutput_(context, mode) {
-  function evaluateTemplate(markup, injectedVars, options) {
-    const template = HtmlService.createTemplate(markup);
-    const safeContext = context && typeof context === 'object'
-      ? Object.assign({}, context)
-      : {};
-    safeContext.mode = mode;
-    template.context = safeContext;
-    template.mode = mode;
-    if (injectedVars && typeof injectedVars === 'object') {
-      Object.keys(injectedVars).forEach(key => {
-        safeContext[key] = injectedVars[key];
-        try {
-          template[key] = injectedVars[key];
-        } catch (error) {
-          logMailError_('テンプレートプロパティの設定に失敗しました', error, { key });
-        }
-      });
-    }
-    const output = template.evaluate();
-    if (options && options.returnContent) {
-      return output.getContent();
-    }
-    return output;
+  const safeContext = context && typeof context === 'object'
+    ? Object.assign({}, context)
+    : {};
+  safeContext.mode = mode;
+
+  function evaluateTemplate(markup, injectedVars) {
+    const vars = injectedVars && typeof injectedVars === 'object' ? injectedVars : {};
+    Object.keys(vars).forEach(key => {
+      safeContext[key] = vars[key];
+    });
+    const evaluationState = Object.assign(Object.create(null), vars, {
+      context: safeContext,
+      mode
+    });
+    return renderHtmlTemplateMarkup_(markup, evaluationState);
   }
 
   try {
@@ -1329,13 +1407,14 @@ function createParticipantMailTemplateOutput_(context, mode) {
     const sharedValues = deriveParticipantMailTemplateSharedValues_(context);
     const bodyMarkup = evaluateTemplate(
       bodyHtml,
-      Object.assign({}, sharedValues),
-      { returnContent: true }
+      Object.assign({}, sharedValues)
     );
+    safeContext.bodyMarkup = bodyMarkup;
     const shellInjectedVars = Object.assign({}, sharedValues, {
       bodyMarkup
     });
-    return evaluateTemplate(shellHtml, shellInjectedVars);
+    const shellMarkup = evaluateTemplate(shellHtml, shellInjectedVars);
+    return HtmlService.createHtmlOutput(shellMarkup);
   } catch (error) {
     if (!shouldRefreshParticipantMailTemplateCache_(error)) {
       throw error;
@@ -1346,13 +1425,14 @@ function createParticipantMailTemplateOutput_(context, mode) {
       const sharedValues = deriveParticipantMailTemplateSharedValues_(context);
       const bodyMarkup = evaluateTemplate(
         bodyHtml,
-        Object.assign({}, sharedValues),
-        { returnContent: true }
+        Object.assign({}, sharedValues)
       );
+      safeContext.bodyMarkup = bodyMarkup;
       const shellInjectedVars = Object.assign({}, sharedValues, {
         bodyMarkup
       });
-      return evaluateTemplate(shellHtml, shellInjectedVars);
+      const shellMarkup = evaluateTemplate(shellHtml, shellInjectedVars);
+      return HtmlService.createHtmlOutput(shellMarkup);
     } catch (retryError) {
       logMailError_('メールテンプレートの再評価に失敗しました', retryError);
       throw retryError;
