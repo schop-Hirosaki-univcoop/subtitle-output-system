@@ -128,6 +128,27 @@ function writeMailLog_(severity, message, error, details) {
       Logger.log(`[Mail][WARN] ログ詳細のJSON化に失敗しました: ${serializationError && serializationError.message ? serializationError.message : serializationError}`);
     }
   }
+
+  try {
+    const sheet = ensureMailLogSheet_();
+    const timestamp = new Date();
+    const row = [
+      timestamp,
+      severity,
+      message,
+      error !== undefined && error !== null ? stringifyLogValueFallback_(error) : '',
+      details !== undefined ? stringifyLogValueFallback_(details) : ''
+    ];
+    sheet.appendRow(row);
+  } catch (sheetLoggingError) {
+    try {
+      if (typeof console !== 'undefined' && typeof console.error === 'function') {
+        console.error('[Mail][WARN] メールログのシート書き込みに失敗しました', sheetLoggingError);
+      }
+    } catch (ignoreConsoleError) {
+      // ignore logging failures
+    }
+  }
 }
 
 function logMail_(message, details) {
@@ -778,6 +799,19 @@ function ensureBackupSheet_() {
   }
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(['Timestamp', 'Data']);
+  }
+  return sheet;
+}
+
+function ensureMailLogSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = 'mail_logs';
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Timestamp', 'Severity', 'Message', 'Error', 'Details']);
   }
   return sheet;
 }
