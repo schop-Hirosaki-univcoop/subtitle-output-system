@@ -286,7 +286,7 @@ function include_(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v1';
+const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v2';
 const PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER = /<!--\s*@@INJECT:email-participant-body\.html@@\s*-->/;
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
 
@@ -331,9 +331,13 @@ function fetchParticipantMailTemplateFile_(filename) {
   }
 }
 
-function getParticipantMailTemplateMarkup_() {
+function getParticipantMailTemplateMarkup_(options) {
+  const forceRefresh = Boolean(options && options.forceRefresh);
   const cache = CacheService.getScriptCache();
-  if (cache) {
+  if (cache && forceRefresh) {
+    cache.remove(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY);
+  }
+  if (cache && !forceRefresh) {
     const cached = cache.get(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY);
     if (cached) {
       logMail_('キャッシュされたメールテンプレートマークアップを使用します');
@@ -361,6 +365,18 @@ function getParticipantMailTemplateMarkup_() {
     });
   }
   return composed;
+}
+
+function shouldRefreshParticipantMailTemplateCache_(error) {
+  if (!error) {
+    return false;
+  }
+  const message = String(error && error.message ? error.message : error);
+  const name = String(error && error.name ? error.name : '');
+  if (name === 'SyntaxError') {
+    return true;
+  }
+  return /Identifier '\w+' has already been declared/.test(message);
 }
 
 
@@ -1196,24 +1212,42 @@ function enrichParticipantMailContext_(context, settings) {
 }
 
 function createParticipantMailTemplateOutput_(context, mode) {
-  const templateMarkup = getParticipantMailTemplateMarkup_();
-  const template = HtmlService.createTemplate(templateMarkup);
-  const safeContext = context && typeof context === 'object'
-    ? Object.assign({}, context)
-    : {};
-  safeContext.mode = mode;
-  template.context = safeContext;
-  template.mode = mode;
-  if (context && typeof context === 'object') {
-    Object.keys(context).forEach(key => {
-      try {
-        template[key] = context[key];
-      } catch (error) {
-        logMailError_('テンプレートプロパティの設定に失敗しました', error, { key });
-      }
-    });
+  function evaluateTemplate(markup) {
+    const template = HtmlService.createTemplate(markup);
+    const safeContext = context && typeof context === 'object'
+      ? Object.assign({}, context)
+      : {};
+    safeContext.mode = mode;
+    template.context = safeContext;
+    template.mode = mode;
+    if (context && typeof context === 'object') {
+      Object.keys(context).forEach(key => {
+        try {
+          template[key] = context[key];
+        } catch (error) {
+          logMailError_('テンプレートプロパティの設定に失敗しました', error, { key });
+        }
+      });
+    }
+    return template.evaluate();
   }
-  return template.evaluate();
+
+  try {
+    const markup = getParticipantMailTemplateMarkup_();
+    return evaluateTemplate(markup);
+  } catch (error) {
+    if (!shouldRefreshParticipantMailTemplateCache_(error)) {
+      throw error;
+    }
+    logMailError_('メールテンプレートの評価に失敗したため、キャッシュを更新します', error);
+    try {
+      const refreshedMarkup = getParticipantMailTemplateMarkup_({ forceRefresh: true });
+      return evaluateTemplate(refreshedMarkup);
+    } catch (retryError) {
+      logMailError_('メールテンプレートの再評価に失敗しました', retryError);
+      throw retryError;
+    }
+  }
 }
 
 function stripHtmlToPlainText_(input) {
