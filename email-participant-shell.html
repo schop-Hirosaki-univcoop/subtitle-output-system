@@ -1,12 +1,20 @@
 <?
-  const shellCtx = typeof context !== 'undefined' && context ? context : {};
-  const subjectEventNameMatch = shellCtx.subject ? String(shellCtx.subject).match(/【([^】]+)】/) : null;
-  const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
-  const resolvedEventName =
-    shellCtx.eventName || shellCtx.eventLabel || shellCtx.eventId || subjectEventName || 'イベント';
-  const resolvedScheduleLabel = shellCtx.scheduleLabel || shellCtx.scheduleRangeLabel || '';
-  const resolvedSubject =
-    shellCtx.subject || `${resolvedEventName || 'ご案内'} - ${resolvedScheduleLabel}`;
+  (function(participantMailRawContext) {
+    const shellCtx =
+      participantMailRawContext && typeof participantMailRawContext === 'object'
+        ? participantMailRawContext
+        : {};
+    const subjectEventNameMatch = shellCtx.subject ? String(shellCtx.subject).match(/【([^】]+)】/) : null;
+    const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
+    const resolvedEventName =
+      shellCtx.eventName || shellCtx.eventLabel || shellCtx.eventId || subjectEventName || 'イベント';
+    const resolvedScheduleLabel = shellCtx.scheduleLabel || shellCtx.scheduleRangeLabel || '';
+    const resolvedSubject =
+      shellCtx.subject || `${resolvedEventName || 'ご案内'} - ${resolvedScheduleLabel}`;
+
+    shellCtx.__participantMailResolvedEventName = resolvedEventName;
+    shellCtx.__participantMailResolvedScheduleLabel = resolvedScheduleLabel;
+    shellCtx.__participantMailResolvedSubject = resolvedSubject;
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -249,6 +257,10 @@
     <span class="mail-preheader"><?= shellCtx.previewText || `${resolvedEventName}のご案内です。` ?></span>
     <div class="mail-background">
       <!-- @@INJECT:email-participant-body.html@@ -->
+      <?= body ?>
     </div>
   </body>
 </html>
+<?
+  })(typeof context !== 'undefined' ? context : null);
+?>

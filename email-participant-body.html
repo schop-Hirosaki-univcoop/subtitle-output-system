@@ -1,21 +1,28 @@
 <?
-  const bodyCtx = typeof context !== 'undefined' && context ? context : {};
-  const existingResolvedEventName = typeof resolvedEventName !== 'undefined' ? resolvedEventName : '';
-  const subjectEventNameMatch = bodyCtx.subject ? String(bodyCtx.subject).match(/【([^】]+)】/) : null;
-  const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
-  const eventName =
-    existingResolvedEventName ||
-    bodyCtx.eventName ||
-    bodyCtx.eventLabel ||
-    bodyCtx.eventId ||
-    subjectEventName ||
-    'イベント';
-  const highlightLabel = bodyCtx.scheduleRangeLabel || bodyCtx.scheduleLabel || '';
-  const highlightDate = bodyCtx.scheduleDateDisplay || '';
-  const highlightTime = bodyCtx.scheduleTimeDisplay || '';
-  const fallbackHighlight = !highlightDate && !highlightTime ? highlightLabel : '';
-  const contactUrl = bodyCtx.contactLinkUrl || '';
-  const contactLabel = bodyCtx.contactLinkLabel || '';
+  (function(participantMailRawContext) {
+    const bodyCtx =
+      participantMailRawContext && typeof participantMailRawContext === 'object'
+        ? participantMailRawContext
+        : {};
+    const existingResolvedEventName =
+      bodyCtx.__participantMailResolvedEventName ||
+      bodyCtx.resolvedEventName ||
+      (typeof resolvedEventName !== 'undefined' ? resolvedEventName : '');
+    const subjectEventNameMatch = bodyCtx.subject ? String(bodyCtx.subject).match(/【([^】]+)】/) : null;
+    const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
+    const eventName =
+      existingResolvedEventName ||
+      bodyCtx.eventName ||
+      bodyCtx.eventLabel ||
+      bodyCtx.eventId ||
+      subjectEventName ||
+      'イベント';
+    const highlightLabel = bodyCtx.scheduleRangeLabel || bodyCtx.scheduleLabel || '';
+    const highlightDate = bodyCtx.scheduleDateDisplay || '';
+    const highlightTime = bodyCtx.scheduleTimeDisplay || '';
+    const fallbackHighlight = !highlightDate && !highlightTime ? highlightLabel : '';
+    const contactUrl = bodyCtx.contactLinkUrl || '';
+    const contactLabel = bodyCtx.contactLinkLabel || '';
 ?>
 <div class="mail-container">
   <? if (bodyCtx.mode !== 'web' && bodyCtx.webViewUrl) { ?>
@@ -116,3 +123,6 @@
 <? if (bodyCtx.mode === 'web' && bodyCtx.webViewUrl) { ?>
   <p class="mail-web-note">このページのURLは参加者向けメールにも記載されています。共有の際はリンクの取り扱いにご注意ください。</p>
 <? } ?>
+<?
+  })(typeof context !== 'undefined' ? context : null);
+?>

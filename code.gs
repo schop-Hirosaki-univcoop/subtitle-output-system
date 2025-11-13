@@ -6,9 +6,15 @@
  * @returns {GoogleAppsScript.Content.TextOutput}
  */
 function doGet(e) {
-  const view = e && e.parameter ? String(e.parameter.view || '').trim() : '';
-  if (view === 'participantMail') {
+  const viewParam = e && e.parameter ? String(e.parameter.view || '').trim() : '';
+  const pathInfo = e && typeof e.pathInfo === 'string' ? e.pathInfo.trim() : '';
+  const view = viewParam || pathInfo;
+  const normalizedView = view ? view.replace(/[^a-z0-9]/gi, '').toLowerCase() : '';
+  if (normalizedView === 'participantmail') {
     return renderParticipantMailPage_(e);
+  }
+  if (normalizedView === 'qauploadstatus') {
+    return renderQaUploadStatusResponse_(e);
   }
   return withCors_(
     ContentService
@@ -1634,6 +1640,20 @@ function sendParticipantMail_(principal, req) {
     results,
     message
   };
+}
+
+function renderQaUploadStatusResponse_(e) {
+  const payload = {
+    success: true,
+    status: 'ok',
+    timestamp: toIsoJst_(new Date())
+  };
+  return withCors_(
+    ContentService
+      .createTextOutput(JSON.stringify(payload))
+      .setMimeType(ContentService.MimeType.JSON),
+    getRequestOrigin_(e)
+  );
 }
 
 function renderParticipantMailErrorPage_() {
