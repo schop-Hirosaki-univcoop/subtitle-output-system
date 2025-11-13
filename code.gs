@@ -351,8 +351,14 @@ function getParticipantMailTemplateMarkup_(options) {
     }
     logMail_('メールテンプレートマークアップのキャッシュが見つからないため、取得を行います');
   }
-  const shellHtml = fetchParticipantMailTemplateFile_('email-participant-shell.html');
-  const bodyHtml = fetchParticipantMailTemplateFile_('email-participant-body.html');
+  const shellHtml = namespaceParticipantMailTemplateMarkup_(
+    fetchParticipantMailTemplateFile_('email-participant-shell.html'),
+    'shell'
+  );
+  const bodyHtml = namespaceParticipantMailTemplateMarkup_(
+    fetchParticipantMailTemplateFile_('email-participant-body.html'),
+    'body'
+  );
   if (!PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER.test(shellHtml)) {
     logMailError_('メールテンプレートに差し込みプレースホルダーが見つかりません', null, {
       placeholder: PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER.source
