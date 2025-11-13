@@ -106,6 +106,27 @@ function formatScheduleLabel_(startValue, endValue) {
   return startLabel || endLabel || '';
 }
 
+function coalesceStrings_(...values) {
+  for (let i = 0; i < values.length; i += 1) {
+    const value = values[i];
+    if (value == null) continue;
+    const text = typeof value === 'string' ? value : String(value);
+    const trimmed = text.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return '';
+}
+
+function truncateString_(value, maxLength) {
+  const text = typeof value === 'string' ? value : String(value || '');
+  if (!maxLength || text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
 /**
  * セル値を真偽値に変換します。文字列や数値の一般的な truthy 記法にも対応します。
  * @param {any} value
@@ -685,7 +706,13 @@ function getParticipantMailSettings_() {
     subjectTemplate: String(properties.getProperty('PARTICIPANT_MAIL_SUBJECT') || '').trim(),
     noteHtml: properties.getProperty('PARTICIPANT_MAIL_NOTE_HTML') || '',
     noteText: properties.getProperty('PARTICIPANT_MAIL_NOTE_TEXT') || '',
-    location: String(properties.getProperty('PARTICIPANT_MAIL_LOCATION') || '').trim()
+    location: String(properties.getProperty('PARTICIPANT_MAIL_LOCATION') || '').trim(),
+    arrivalNote: String(properties.getProperty('PARTICIPANT_MAIL_ARRIVAL_NOTE') || '').trim(),
+    tagline: String(properties.getProperty('PARTICIPANT_MAIL_TAGLINE') || '').trim(),
+    contactLinkLabel: String(properties.getProperty('PARTICIPANT_MAIL_CONTACT_LINK_LABEL') || '').trim(),
+    contactLinkUrl: String(properties.getProperty('PARTICIPANT_MAIL_CONTACT_LINK_URL') || '').trim(),
+    footerNote: String(properties.getProperty('PARTICIPANT_MAIL_FOOTER_NOTE') || '').trim(),
+    previewTextTemplate: String(properties.getProperty('PARTICIPANT_MAIL_PREVIEW_TEXT') || '').trim()
   };
 }
 
@@ -729,12 +756,31 @@ function formatMailTimeLabel_(date) {
 function buildParticipantMailContext_(eventId, scheduleId, participantRecord, eventRecord, scheduleRecord, settings, baseUrl) {
   const participantId = String((participantRecord && (participantRecord.participantId || participantRecord.uid)) || '').trim();
   const participantName = String(participantRecord && participantRecord.name || '').trim();
-  const eventName = String(eventRecord && eventRecord.name || eventId || '').trim();
-  const scheduleLabel = String(
-    (scheduleRecord && scheduleRecord.label) ||
-      formatScheduleLabel_(scheduleRecord && scheduleRecord.startAt, scheduleRecord && scheduleRecord.endAt) ||
-      scheduleId
-  ).trim();
+  const eventName = coalesceStrings_(eventRecord && eventRecord.name, eventId);
+  const participantScheduleLabel = coalesceStrings_(
+    participantRecord && participantRecord.scheduleLabel,
+    participantRecord && participantRecord.schedule,
+    participantRecord && participantRecord.scheduleName
+  );
+  const participantScheduleDate = coalesceStrings_(
+    participantRecord && participantRecord.scheduleDate,
+    participantRecord && participantRecord.date
+  );
+  const participantScheduleTime = coalesceStrings_(
+    participantRecord && participantRecord.scheduleTime,
+    participantRecord && participantRecord.time
+  );
+  const participantScheduleRange = coalesceStrings_(
+    participantRecord && participantRecord.scheduleRange,
+    participantRecord && participantRecord.timeRange
+  );
+  const scheduleLabel = coalesceStrings_(
+    scheduleRecord && scheduleRecord.label,
+    formatScheduleLabel_(scheduleRecord && scheduleRecord.startAt, scheduleRecord && scheduleRecord.endAt),
+    participantScheduleLabel,
+    participantScheduleDate,
+    scheduleId
+  );
   const startDate = parseDateCell_(scheduleRecord && (scheduleRecord.startAt || scheduleRecord.date));
   const endDate = parseDateCell_(scheduleRecord && scheduleRecord.endAt);
   const scheduleDateLabel = formatMailDateWithWeekday_(startDate);
@@ -746,11 +792,19 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
   } else if (startTimeLabel) {
     scheduleTimeRange = `${startTimeLabel}〜`;
   }
-  const scheduleRangeLabel = scheduleDateLabel
-    ? scheduleTimeRange
-      ? `${scheduleDateLabel} ${scheduleTimeRange}`
-      : scheduleDateLabel
-    : scheduleLabel;
+  const resolvedScheduleDateLabel = coalesceStrings_(scheduleDateLabel, participantScheduleDate, scheduleLabel);
+  const resolvedScheduleTimeRange = coalesceStrings_(scheduleTimeRange, participantScheduleTime);
+  const scheduleRangeLabel = coalesceStrings_(
+    resolvedScheduleDateLabel && resolvedScheduleTimeRange
+      ? `${resolvedScheduleDateLabel} ${resolvedScheduleTimeRange}`
+      : '',
+    participantScheduleRange,
+    participantScheduleLabel && resolvedScheduleTimeRange
+      ? `${participantScheduleLabel} ${resolvedScheduleTimeRange}`
+      : '',
+    resolvedScheduleDateLabel,
+    scheduleLabel
+  );
   const token = String(participantRecord && participantRecord.token || '').trim();
   const webViewUrl = buildParticipantMailViewUrl_(baseUrl, {
     eventId,
@@ -758,6 +812,34 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
     participantId,
     token
   });
+  const guidance = String(participantRecord && participantRecord.guidance || '').trim();
+  const location = coalesceStrings_(
+    participantRecord && (participantRecord.location || participantRecord.venue),
+    scheduleRecord && (scheduleRecord.location || scheduleRecord.venue || scheduleRecord.place),
+    eventRecord && (eventRecord.location || eventRecord.venue),
+    settings.location
+  );
+  const contactEmail = coalesceStrings_(
+    participantRecord && participantRecord.contactEmail,
+    scheduleRecord && scheduleRecord.contactEmail,
+    eventRecord && eventRecord.contactEmail
+  );
+  const arrivalNote = coalesceStrings_(
+    participantRecord && (participantRecord.arrivalNote || participantRecord.arrivalWindow || participantRecord.checkinNote),
+    scheduleRecord && (scheduleRecord.arrivalNote || scheduleRecord.arrivalWindow || scheduleRecord.checkinNote)
+  );
+  const tagline = coalesceStrings_(
+    participantRecord && participantRecord.mailTagline,
+    scheduleRecord && (scheduleRecord.mailTagline || scheduleRecord.tagline),
+    eventRecord && (eventRecord.mailTagline || eventRecord.tagline),
+    settings.tagline
+  );
+  const footerNote = coalesceStrings_(
+    participantRecord && participantRecord.mailFooter,
+    scheduleRecord && scheduleRecord.mailFooter,
+    eventRecord && eventRecord.mailFooter,
+    settings.footerNote
+  );
   return {
     eventId,
     scheduleId,
@@ -766,17 +848,25 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
     participantEmail: String(participantRecord && participantRecord.email || '').trim(),
     eventName,
     scheduleLabel,
-    scheduleDateLabel,
-    scheduleTimeRange,
+    scheduleDateLabel: resolvedScheduleDateLabel,
+    scheduleTimeRange: resolvedScheduleTimeRange,
     scheduleRangeLabel,
-    contactEmail: String(settings.contactEmail || '').trim(),
+    contactEmail,
     senderName: String(settings.senderName || '').trim(),
     additionalHtml: settings.noteHtml || '',
     additionalText: settings.noteText || '',
-    location: String(settings.location || '').trim(),
-    guidance: String(participantRecord && participantRecord.guidance || '').trim(),
+    location,
+    guidance,
     webViewUrl,
-    token
+    token,
+    arrivalNote,
+    contactLinkLabel: settings.contactLinkLabel || '',
+    contactLinkUrl: settings.contactLinkUrl || '',
+    footerNote,
+    tagline,
+    previewText: '',
+    scheduleDateDisplay: resolvedScheduleDateLabel,
+    scheduleTimeDisplay: resolvedScheduleTimeRange
   };
 }
 
@@ -794,6 +884,76 @@ function buildParticipantMailSubject_(context, settings) {
   return `【${eventName || 'イベント'}】参加日時のご案内`;
 }
 
+function buildParticipantMailPreviewText_(context, settings) {
+  const template = settings && settings.previewTextTemplate ? String(settings.previewTextTemplate).trim() : '';
+  const eventName = coalesceStrings_(context && context.eventName, context && context.eventId);
+  const scheduleLabel = coalesceStrings_(context && context.scheduleRangeLabel, context && context.scheduleLabel);
+  const participantName = coalesceStrings_(context && context.participantName);
+  const arrivalNote = coalesceStrings_(context && context.arrivalNote);
+  const location = coalesceStrings_(context && context.location);
+  if (template) {
+    return truncateString_(
+      template
+        .replace(/\{\{\s*eventName\s*\}\}/g, eventName)
+        .replace(/\{\{\s*scheduleLabel\s*\}\}/g, scheduleLabel)
+        .replace(/\{\{\s*participantName\s*\}\}/g, participantName)
+        .replace(/\{\{\s*arrivalNote\s*\}\}/g, arrivalNote)
+        .replace(/\{\{\s*location\s*\}\}/g, location),
+      160
+    );
+  }
+  const fragments = [];
+  if (eventName) {
+    fragments.push(`${eventName}のご案内`);
+  }
+  if (scheduleLabel) {
+    fragments.push(scheduleLabel);
+  }
+  if (arrivalNote) {
+    fragments.push(arrivalNote);
+  } else if (location) {
+    fragments.push(location);
+  }
+  const joined = fragments.filter(Boolean).join('｜');
+  if (joined) {
+    return truncateString_(joined, 160);
+  }
+  return 'ご参加に関する大切なお知らせです。';
+}
+
+function enrichParticipantMailContext_(context, settings) {
+  if (!context || typeof context !== 'object') {
+    return context;
+  }
+  const effectiveArrival = coalesceStrings_(context.arrivalNote, settings && settings.arrivalNote);
+  if (effectiveArrival) {
+    context.arrivalNote = effectiveArrival;
+  }
+  const effectiveTagline = coalesceStrings_(context.tagline, settings && settings.tagline);
+  if (effectiveTagline) {
+    context.tagline = effectiveTagline;
+  }
+  const effectiveFooter = coalesceStrings_(context.footerNote, settings && settings.footerNote);
+  if (effectiveFooter) {
+    context.footerNote = effectiveFooter;
+  }
+  const contactLabel = coalesceStrings_(
+    context.contactLinkLabel,
+    settings && settings.contactLinkLabel,
+    context.contactEmail ? 'お問い合わせする' : ''
+  );
+  if (contactLabel) {
+    context.contactLinkLabel = contactLabel;
+  }
+  let contactLinkUrl = coalesceStrings_(context.contactLinkUrl, settings && settings.contactLinkUrl);
+  if (!contactLinkUrl && context.contactEmail) {
+    contactLinkUrl = `mailto:${context.contactEmail}`;
+  }
+  context.contactLinkUrl = contactLinkUrl;
+  context.previewText = buildParticipantMailPreviewText_(context, settings);
+  return context;
+}
+
 function createParticipantMailTemplateOutput_(context, mode) {
   const templateMarkup = getParticipantMailTemplateMarkup_();
   const template = HtmlService.createTemplate(templateMarkup);
@@ -801,12 +961,31 @@ function createParticipantMailTemplateOutput_(context, mode) {
   return template.evaluate();
 }
 
+function stripHtmlToPlainText_(input) {
+  if (!input) {
+    return '';
+  }
+  return String(input)
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|section|h[1-6])>/gi, '\n')
+    .replace(/<\s*li\s*>/gi, '\n・')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\r/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function renderParticipantMailPlainText_(context) {
   const lines = [];
   if (context.participantName) {
     lines.push(`${context.participantName} 様`, '');
   }
-  lines.push(`「${context.eventName}」にご参加いただきありがとうございます。`);
+  const eventName = coalesceStrings_(context.eventName, context.eventId, 'イベント');
+  lines.push(`「${eventName}」にご参加いただきありがとうございます。`);
+  if (context.tagline) {
+    lines.push('', context.tagline);
+  }
   if (context.scheduleRangeLabel) {
     lines.push('', `ご参加予定日時: ${context.scheduleRangeLabel}`);
   } else if (context.scheduleLabel) {
@@ -815,17 +994,32 @@ function renderParticipantMailPlainText_(context) {
   if (context.location) {
     lines.push('', `会場: ${context.location}`);
   }
+  if (context.arrivalNote) {
+    lines.push('', context.arrivalNote);
+  }
   if (context.guidance) {
     lines.push('', context.guidance);
   }
   if (context.additionalText) {
     lines.push('', context.additionalText);
   }
+  if (context.additionalHtml) {
+    const htmlText = stripHtmlToPlainText_(context.additionalHtml);
+    if (htmlText) {
+      lines.push('', htmlText);
+    }
+  }
   if (context.webViewUrl) {
     lines.push('', `メールが正しく表示されない場合: ${context.webViewUrl}`);
   }
+  if (context.contactLinkUrl && !/^mailto:/i.test(context.contactLinkUrl)) {
+    lines.push('', `お問い合わせフォーム: ${context.contactLinkUrl}`);
+  }
   if (context.contactEmail) {
     lines.push('', `お問い合わせ先: ${context.contactEmail}`);
+  }
+  if (context.footerNote) {
+    lines.push('', context.footerNote);
   }
   lines.push('', context.senderName || 'イベント運営チーム');
   return lines.join('\n');
@@ -853,7 +1047,7 @@ function sendParticipantMail_(principal, req) {
   const settings = getParticipantMailSettings_();
   const baseUrl = getWebAppBaseUrl_();
   const normalizedPrincipalEmail = normalizeEmail_(principal && principal.email);
-  const contactEmail = settings.contactEmail || normalizedPrincipalEmail || '';
+  const fallbackContactEmail = coalesceStrings_(settings.contactEmail, normalizedPrincipalEmail);
   const senderName = settings.senderName || String(eventRecord && eventRecord.name || '').trim() || 'イベント運営チーム';
 
   const recipients = [];
@@ -915,8 +1109,9 @@ function sendParticipantMail_(principal, req) {
       settings,
       baseUrl
     );
-    context.contactEmail = contactEmail;
+    context.contactEmail = coalesceStrings_(context.contactEmail, fallbackContactEmail);
     context.senderName = senderName;
+    enrichParticipantMailContext_(context, settings);
     const subject = buildParticipantMailSubject_(context, settings);
     context.subject = subject;
     const htmlBody = createParticipantMailTemplateOutput_(context, 'email').getContent();
@@ -1060,8 +1255,9 @@ function renderParticipantMailPage_(e) {
     );
     const subject = buildParticipantMailSubject_(context, settings);
     context.subject = subject;
-    context.contactEmail = context.contactEmail || settings.contactEmail || '';
-    context.senderName = context.senderName || settings.senderName || '';
+    context.contactEmail = coalesceStrings_(context.contactEmail, settings.contactEmail);
+    context.senderName = coalesceStrings_(context.senderName, settings.senderName);
+    enrichParticipantMailContext_(context, settings);
     const output = createParticipantMailTemplateOutput_(context, 'web');
     output.setTitle(`${context.eventName || 'ご案内'} - ${context.scheduleLabel || ''}`);
     output.addMetaTag('viewport', 'width=device-width, initial-scale=1');

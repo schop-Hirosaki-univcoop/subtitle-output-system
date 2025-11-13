@@ -10,101 +10,236 @@
     <style>
       body {
         margin: 0;
-        background: #f5f7fa;
-        color: #1f2933;
-        font-family: 'Segoe UI', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
-        line-height: 1.6;
+        background: #f3f4f6;
+        color: #111827;
+        font-family: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif;
+        line-height: 1.7;
+        -webkit-font-smoothing: antialiased;
       }
+
+      a {
+        color: #2563eb;
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .mail-body {
+        background: #f3f4f6;
+      }
+
       .mail-body.mail-body--email {
-        padding: 24px;
+        padding: 24px 12px;
       }
+
       .mail-body.mail-body--web {
-        padding: 32px 16px 64px;
+        padding: 56px 16px 96px;
       }
-      .mail-container {
-        max-width: 640px;
+
+      .mail-preheader {
+        display: none !important;
+        max-height: 0 !important;
+        opacity: 0 !important;
+        overflow: hidden !important;
+        color: transparent !important;
+        height: 0 !important;
+        width: 0 !important;
+      }
+
+      .mail-background {
         margin: 0 auto;
-        background: #ffffff;
-        border-radius: 16px;
-        padding: 32px 28px;
-        box-shadow: 0 16px 48px rgba(15, 23, 42, 0.08);
+        max-width: 720px;
       }
+
+      .mail-container {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(241, 245, 249, 0.95) 100%);
+        border-radius: 24px;
+        padding: 18px;
+        box-shadow: 0 30px 60px rgba(15, 23, 42, 0.12);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+      }
+
+      .mail-card {
+        background: #ffffff;
+        border-radius: 18px;
+        padding: 32px 28px;
+      }
+
+      .mail-header {
+        text-align: left;
+      }
+
+      .mail-header__tagline {
+        margin: 0 0 12px;
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #2563eb;
+        font-weight: 600;
+      }
+
       .mail-header__title {
         margin: 0;
-        font-size: 20px;
-        font-weight: 600;
-        color: #111827;
-      }
-      .mail-header__date {
-        margin: 4px 0 0;
-        font-size: 16px;
-        font-weight: 500;
-        color: #2563eb;
-      }
-      .mail-section {
-        margin-top: 24px;
-      }
-      .mail-section__title {
-        margin: 0 0 8px;
-        font-size: 15px;
-        font-weight: 600;
+        font-size: 24px;
+        font-weight: 700;
         color: #0f172a;
       }
-      .mail-section__highlight {
-        margin: 0;
-        padding: 16px;
-        border-radius: 12px;
-        background: linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%);
-        color: #1d4ed8;
-        font-size: 20px;
+
+      .mail-header__subtitle {
+        margin: 8px 0 0;
+        font-size: 18px;
         font-weight: 600;
-        text-align: center;
+        color: #1d4ed8;
       }
-      .mail-section__text {
-        margin: 0;
-        white-space: pre-wrap;
+
+      .mail-section {
+        margin-top: 28px;
       }
+
+      .mail-section:first-of-type {
+        margin-top: 24px;
+      }
+
+      .mail-section__title {
+        margin: 0 0 12px;
+        font-size: 16px;
+        font-weight: 700;
+        color: #111827;
+      }
+
       .mail-greeting {
         margin: 0;
         font-size: 16px;
-        font-weight: 500;
+        font-weight: 600;
+        color: #111827;
       }
+
       .mail-intro {
-        margin: 16px 0 0;
+        margin: 12px 0 0;
+        font-size: 15px;
       }
-      .mail-view-link {
-        margin: 24px 0 0;
+
+      .mail-highlight {
+        margin-top: 16px;
+        border-radius: 18px;
+        padding: 20px 18px;
+        text-align: center;
+        background: linear-gradient(135deg, #fff5f5 0%, #fee2e2 100%);
+        border: 1px solid rgba(248, 113, 113, 0.35);
+      }
+
+      .mail-highlight__date {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: #b91c1c;
+      }
+
+      .mail-highlight__time {
+        margin: 6px 0 0;
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        color: #dc2626;
+      }
+
+      .mail-highlight__label {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        color: #dc2626;
+      }
+
+      .mail-section__note {
+        margin: 16px 0 0;
+        font-size: 15px;
+        color: #1f2937;
+        white-space: pre-line;
+      }
+
+      .mail-section__text {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.8;
+        color: #1f2937;
+        white-space: pre-line;
+      }
+
+      .mail-section__text--muted {
+        color: #475569;
+      }
+
+      .mail-section__cta {
+        margin: 0 0 16px;
         text-align: center;
       }
-      .mail-view-link a {
+
+      .mail-button {
         display: inline-block;
-        padding: 12px 20px;
+        padding: 12px 28px;
         border-radius: 999px;
-        background: #2563eb;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
         color: #ffffff !important;
-        text-decoration: none;
-        font-weight: 600;
+        font-weight: 700;
+        letter-spacing: 0.02em;
       }
+
       .mail-footer {
-        margin-top: 32px;
-        border-top: 1px solid #e5e7eb;
-        padding-top: 16px;
+        margin-top: 36px;
+        border-top: 1px solid rgba(203, 213, 225, 0.6);
+        padding-top: 18px;
+      }
+
+      .mail-footer__signature {
+        margin: 0;
         font-size: 14px;
         color: #475569;
       }
+
       .mail-web-note {
-        max-width: 640px;
         margin: 24px auto 0;
+        max-width: 640px;
         font-size: 13px;
         color: #475569;
         text-align: center;
       }
-      a {
+
+      .mail-browser-link {
+        text-align: right;
+        font-size: 12px;
+        color: #475569;
+        margin-bottom: 16px;
+      }
+
+      .mail-browser-link a {
         color: #2563eb;
+      }
+
+      @media (max-width: 640px) {
+        .mail-body.mail-body--email {
+          padding: 16px 8px;
+        }
+
+        .mail-container {
+          padding: 12px;
+        }
+
+        .mail-card {
+          padding: 28px 20px;
+        }
+
+        .mail-highlight__time {
+          font-size: 28px;
+        }
       }
     </style>
   </head>
   <body class="mail-body mail-body--<?= ctx.mode === 'web' ? 'web' : 'email' ?>">
-    <!-- @@INJECT:email-participant-body.html@@ -->
+    <span class="mail-preheader"><?= ctx.previewText || `${ctx.eventName || 'イベント'}のご案内です。` ?></span>
+    <div class="mail-background">
+      <!-- @@INJECT:email-participant-body.html@@ -->
+    </div>
   </body>
 </html>
