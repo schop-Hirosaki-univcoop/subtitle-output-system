@@ -1,16 +1,19 @@
 <?
   var bodyCtx = typeof context !== 'undefined' && context ? context : {};
-  var existingResolvedEventName = typeof resolvedEventName !== 'undefined' ? resolvedEventName : '';
   var bodySubjectEventNameMatch = bodyCtx.subject ? String(bodyCtx.subject).match(/【([^】]+)】/) : null;
   var bodySubjectEventName = bodySubjectEventNameMatch ? bodySubjectEventNameMatch[1].trim() : '';
   var eventName =
-    existingResolvedEventName ||
+    bodyCtx.resolvedEventName ||
     bodyCtx.eventName ||
     bodyCtx.eventLabel ||
     bodyCtx.eventId ||
     bodySubjectEventName ||
     'イベント';
-  var highlightLabel = bodyCtx.scheduleRangeLabel || bodyCtx.scheduleLabel || '';
+  var highlightLabel =
+    bodyCtx.resolvedScheduleLabel ||
+    bodyCtx.scheduleRangeLabel ||
+    bodyCtx.scheduleLabel ||
+    '';
   var highlightDate = bodyCtx.scheduleDateDisplay || '';
   var highlightTime = bodyCtx.scheduleTimeDisplay || '';
   var fallbackHighlight = !highlightDate && !highlightTime ? highlightLabel : '';

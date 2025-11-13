@@ -293,7 +293,6 @@ function include_(filename) {
 }
 
 const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v3';
-const PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER = /<!--\s*@@INJECT:email-participant-body\.html@@\s*-->/;
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
 
 function namespaceParticipantMailTemplateMarkup_(markup, namespace) {
@@ -402,20 +401,8 @@ function getParticipantMailTemplateMarkup_(options) {
     }
     logMail_('メールテンプレートマークアップのキャッシュが見つからないため、取得を行います');
   }
-  const shellHtml = namespaceParticipantMailTemplateMarkup_(
-    fetchParticipantMailTemplateFile_('email-participant-shell.html'),
-    'shell'
-  );
-  const bodyHtml = namespaceParticipantMailTemplateMarkup_(
-    fetchParticipantMailTemplateFile_('email-participant-body.html'),
-    'body'
-  );
-  if (!PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER.test(shellHtml)) {
-    logMailError_('メールテンプレートに差し込みプレースホルダーが見つかりません', null, {
-      placeholder: PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER.source
-    });
-    throw new Error('メールテンプレートに参加者本文の差し込みプレースホルダーが見つかりません。');
-  }
+  const shellHtml = fetchParticipantMailTemplateFile_('email-participant-shell.html');
+  const bodyHtml = fetchParticipantMailTemplateFile_('email-participant-body.html');
   logMail_('メールテンプレートマークアップの組み立てが完了しました', {
     shellLength: shellHtml.length,
     bodyLength: bodyHtml.length
@@ -1284,6 +1271,7 @@ function deriveParticipantMailTemplateSharedValues_(context) {
   const subjectEventNameMatch = subjectText.match(/【([^】]+)】/);
   const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
   const resolvedEventName = coalesceStrings_(
+    ctx.resolvedEventName,
     ctx.eventName,
     ctx.eventLabel,
     ctx.eventId,
@@ -1291,12 +1279,18 @@ function deriveParticipantMailTemplateSharedValues_(context) {
     'イベント'
   );
   const resolvedScheduleLabel = coalesceStrings_(
+    ctx.resolvedScheduleLabel,
     ctx.scheduleLabel,
     ctx.scheduleRangeLabel,
     ''
   );
   const fallbackSubjectBase = resolvedEventName || 'ご案内';
-  const resolvedSubject = ctx.subject || `${fallbackSubjectBase} - ${resolvedScheduleLabel}`;
+  let resolvedSubject = ctx.subject ? String(ctx.subject) : '';
+  if (!resolvedSubject) {
+    resolvedSubject = resolvedScheduleLabel
+      ? fallbackSubjectBase + ' - ' + resolvedScheduleLabel
+      : fallbackSubjectBase;
+  }
   return {
     resolvedEventName,
     resolvedScheduleLabel,
@@ -1305,7 +1299,7 @@ function deriveParticipantMailTemplateSharedValues_(context) {
 }
 
 function createParticipantMailTemplateOutput_(context, mode) {
-  function evaluateTemplate(markup, injectedVars) {
+  function evaluateTemplate(markup, injectedVars, options) {
     const template = HtmlService.createTemplate(markup);
     const safeContext = context && typeof context === 'object'
       ? Object.assign({}, context)
@@ -1323,14 +1317,25 @@ function createParticipantMailTemplateOutput_(context, mode) {
         }
       });
     }
-    return template.evaluate();
+    const output = template.evaluate();
+    if (options && options.returnContent) {
+      return output.getContent();
+    }
+    return output;
   }
 
   try {
     const { shellHtml, bodyHtml } = getParticipantMailTemplateMarkup_();
     const sharedValues = deriveParticipantMailTemplateSharedValues_(context);
-    const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyHtml);
-    return evaluateTemplate(composed, sharedValues);
+    const bodyMarkup = evaluateTemplate(
+      bodyHtml,
+      Object.assign({}, sharedValues),
+      { returnContent: true }
+    );
+    const shellInjectedVars = Object.assign({}, sharedValues, {
+      bodyMarkup
+    });
+    return evaluateTemplate(shellHtml, shellInjectedVars);
   } catch (error) {
     if (!shouldRefreshParticipantMailTemplateCache_(error)) {
       throw error;
@@ -1339,8 +1344,15 @@ function createParticipantMailTemplateOutput_(context, mode) {
     try {
       const { shellHtml, bodyHtml } = getParticipantMailTemplateMarkup_({ forceRefresh: true });
       const sharedValues = deriveParticipantMailTemplateSharedValues_(context);
-      const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyHtml);
-      return evaluateTemplate(composed, sharedValues);
+      const bodyMarkup = evaluateTemplate(
+        bodyHtml,
+        Object.assign({}, sharedValues),
+        { returnContent: true }
+      );
+      const shellInjectedVars = Object.assign({}, sharedValues, {
+        bodyMarkup
+      });
+      return evaluateTemplate(shellHtml, shellInjectedVars);
     } catch (retryError) {
       logMailError_('メールテンプレートの再評価に失敗しました', retryError);
       throw retryError;

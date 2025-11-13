@@ -3,10 +3,27 @@
   var shellSubjectEventNameMatch = shellCtx.subject ? String(shellCtx.subject).match(/【([^】]+)】/) : null;
   var shellSubjectEventName = shellSubjectEventNameMatch ? shellSubjectEventNameMatch[1].trim() : '';
   var resolvedEventName =
-    shellCtx.eventName || shellCtx.eventLabel || shellCtx.eventId || shellSubjectEventName || 'イベント';
-  var resolvedScheduleLabel = shellCtx.scheduleLabel || shellCtx.scheduleRangeLabel || '';
-  var resolvedSubject =
-    shellCtx.subject || `${resolvedEventName || 'ご案内'} - ${resolvedScheduleLabel}`;
+    shellCtx.resolvedEventName ||
+    shellCtx.eventName ||
+    shellCtx.eventLabel ||
+    shellCtx.eventId ||
+    shellSubjectEventName ||
+    'イベント';
+  var resolvedScheduleLabel =
+    shellCtx.resolvedScheduleLabel ||
+    shellCtx.scheduleLabel ||
+    shellCtx.scheduleRangeLabel ||
+    '';
+  var resolvedSubject = shellCtx.subject ? String(shellCtx.subject) : '';
+  if (!resolvedSubject) {
+    resolvedSubject = resolvedScheduleLabel
+      ? (resolvedEventName || 'ご案内') + ' - ' + resolvedScheduleLabel
+      : (resolvedEventName || 'ご案内');
+  }
+  if (shellCtx.resolvedSubject && !shellCtx.subject) {
+    resolvedSubject = String(shellCtx.resolvedSubject);
+  }
+  var preheaderFallback = resolvedEventName ? resolvedEventName + 'のご案内です。' : 'ご案内です。';
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -247,11 +264,10 @@
   </head>
   <body class="mail-body mail-body--<?= shellCtx.mode === 'web' ? 'web' : 'email' ?>">
     <? if (shellCtx.mode !== 'web' && shellCtx.webViewUrl) { ?>
-      <span class="mail-preheader"><?= shellCtx.previewText || `${resolvedEventName}のご案内です。` ?></span>
+      <span class="mail-preheader"><?= shellCtx.previewText || preheaderFallback ?></span>
     <? } ?>
     <div class="mail-background">
-      <!-- @@INJECT:email-participant-body.html@@ -->
-      <?= body ?>
+      <?!= typeof bodyMarkup !== 'undefined' ? bodyMarkup : '' ?>
     </div>
     <? if (shellCtx.mode === 'web') { ?>
       <p class="mail-web-note">このページのURLは参加者向けメールにも記載されています。共有の際はリンクの取り扱いにご注意ください。</p>
