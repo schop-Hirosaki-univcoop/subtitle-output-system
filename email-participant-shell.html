@@ -251,9 +251,13 @@
     <? } ?>
     <div class="mail-background">
       <!-- @@INJECT:email-participant-body.html@@ -->
+      <?= body ?>
     </div>
     <? if (shellCtx.mode === 'web') { ?>
       <p class="mail-web-note">このページのURLは参加者向けメールにも記載されています。共有の際はリンクの取り扱いにご注意ください。</p>
     <? } ?>
   </body>
 </html>
+<?
+  })(typeof context !== 'undefined' ? context : null);
+?>
