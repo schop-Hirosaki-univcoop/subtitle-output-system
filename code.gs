@@ -1482,6 +1482,11 @@ function renderParticipantMailPlainText_(context) {
   if (context.arrivalNote) {
     lines.push('', context.arrivalNote);
   }
+  const screenshotNote = coalesceStrings_(
+    context.screenshotNote,
+    '受付の際に本人確認のため、本メール画面をご提示いただく場合がございます。あらかじめスクリーンショットのご用意をお願いします。'
+  );
+  lines.push('', screenshotNote);
   if (context.guidance) {
     lines.push('', context.guidance);
   }
@@ -1497,16 +1502,45 @@ function renderParticipantMailPlainText_(context) {
   if (context.webViewUrl) {
     lines.push('', `メールが正しく表示されない場合: ${context.webViewUrl}`);
   }
-  if (context.contactLinkUrl && !/^mailto:/i.test(context.contactLinkUrl)) {
-    lines.push('', `お問い合わせフォーム: ${context.contactLinkUrl}`);
-  }
-  if (context.contactEmail) {
-    lines.push('', `お問い合わせ先: ${context.contactEmail}`);
+  const hasContactLink = context.contactLinkUrl && !/^mailto:/i.test(context.contactLinkUrl);
+  const hasContactEmail = !!context.contactEmail;
+  if (hasContactLink || hasContactEmail) {
+    const contactPrompt = coalesceStrings_(
+      context.contactPrompt,
+      '事情があって会に参加できなくなった場合や、質問がある場合はお問い合わせください。'
+    );
+    lines.push('', contactPrompt);
+    if (hasContactLink) {
+      lines.push('', `お問い合わせフォーム: ${context.contactLinkUrl}`);
+    }
+    if (hasContactEmail) {
+      lines.push('', `お問い合わせ先: ${context.contactEmail}`);
+    }
   }
   if (context.footerNote) {
     lines.push('', context.footerNote);
   }
-  lines.push('', context.senderName || 'イベント運営チーム');
+  const closingMessage = coalesceStrings_(
+    context.closingMessage,
+    'それでは、みなさんに会えるのをお待ちしています！'
+  );
+  lines.push('', closingMessage);
+  const signaturePrimary = coalesceStrings_(
+    context.signaturePrimary,
+    context.senderName,
+    '弘前大学生協学生委員会'
+  );
+  if (signaturePrimary) {
+    lines.push('', signaturePrimary);
+  }
+  const signatureSecondary = coalesceStrings_(
+    context.signatureSecondary,
+    context.senderTeam,
+    context.eventName ? `${context.eventName}運営チーム` : ''
+  );
+  if (signatureSecondary) {
+    lines.push(signatureSecondary);
+  }
   return lines.join('\n');
 }
 
