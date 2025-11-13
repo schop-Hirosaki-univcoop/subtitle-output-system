@@ -131,6 +131,58 @@ function include_(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
+const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v1';
+const PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER = /<!--\s*@@INJECT:email-participant-body\.html@@\s*-->/;
+const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
+
+function getParticipantMailTemplateBaseUrl_() {
+  const properties = PropertiesService.getScriptProperties();
+  const value = String(properties.getProperty('PARTICIPANT_MAIL_TEMPLATE_BASE_URL') || '').trim();
+  if (value) {
+    return value.replace(/\/+$/, '') + '/';
+  }
+  return PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL;
+}
+
+function fetchParticipantMailTemplateFile_(filename) {
+  const baseUrl = getParticipantMailTemplateBaseUrl_();
+  const url = `${baseUrl}${filename}`;
+  try {
+    const response = UrlFetchApp.fetch(url, {
+      followRedirects: true,
+      muteHttpExceptions: true,
+      validateHttpsCertificates: true
+    });
+    const status = response.getResponseCode();
+    if (status >= 200 && status < 300) {
+      return response.getContentText();
+    }
+    throw new Error(`HTTP ${status}`);
+  } catch (error) {
+    throw new Error(`メールテンプレート「${filename}」を取得できませんでした (${url}): ${error}`);
+  }
+}
+
+function getParticipantMailTemplateMarkup_() {
+  const cache = CacheService.getScriptCache();
+  if (cache) {
+    const cached = cache.get(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY);
+    if (cached) {
+      return cached;
+    }
+  }
+  const shellHtml = fetchParticipantMailTemplateFile_('email-participant-shell.html');
+  const bodyHtml = fetchParticipantMailTemplateFile_('email-participant-body.html');
+  if (!PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER.test(shellHtml)) {
+    throw new Error('メールテンプレートに参加者本文の差し込みプレースホルダーが見つかりません。');
+  }
+  const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyHtml);
+  if (cache) {
+    cache.put(PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY, composed, 6 * 60 * 60);
+  }
+  return composed;
+}
+
 
 function doPost(e) {
   let requestOrigin = getRequestOrigin_(e);
@@ -743,7 +795,8 @@ function buildParticipantMailSubject_(context, settings) {
 }
 
 function createParticipantMailTemplateOutput_(context, mode) {
-  const template = HtmlService.createTemplateFromFile('email-participant-shell');
+  const templateMarkup = getParticipantMailTemplateMarkup_();
+  const template = HtmlService.createTemplate(templateMarkup);
   template.context = Object.assign({}, context, { mode });
   return template.evaluate();
 }

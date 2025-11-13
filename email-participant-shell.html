@@ -105,6 +105,6 @@
     </style>
   </head>
   <body class="mail-body mail-body--<?= ctx.mode === 'web' ? 'web' : 'email' ?>">
-    <?!= include_('email-participant-body') ?>
+    <!-- @@INJECT:email-participant-body.html@@ -->
   </body>
 </html>
