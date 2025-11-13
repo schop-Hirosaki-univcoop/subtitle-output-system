@@ -1,5 +1,5 @@
 <?
-  const ctx = this.context || {};
+  const ctx = typeof context !== 'undefined' && context ? context : {};
   const eventName = ctx.eventName || ctx.eventId || 'イベント';
   const highlightLabel = ctx.scheduleRangeLabel || ctx.scheduleLabel || '';
   const highlightDate = ctx.scheduleDateDisplay || '';
