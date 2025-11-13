@@ -1329,9 +1329,7 @@ function createParticipantMailTemplateOutput_(context, mode) {
   try {
     const { shellHtml, bodyHtml } = getParticipantMailTemplateMarkup_();
     const sharedValues = deriveParticipantMailTemplateSharedValues_(context);
-    const bodyOutput = evaluateTemplate(bodyHtml, sharedValues);
-    const bodyMarkup = bodyOutput.getContent();
-    const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyMarkup);
+    const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyHtml);
     return evaluateTemplate(composed, sharedValues);
   } catch (error) {
     if (!shouldRefreshParticipantMailTemplateCache_(error)) {
@@ -1341,9 +1339,7 @@ function createParticipantMailTemplateOutput_(context, mode) {
     try {
       const { shellHtml, bodyHtml } = getParticipantMailTemplateMarkup_({ forceRefresh: true });
       const sharedValues = deriveParticipantMailTemplateSharedValues_(context);
-      const bodyOutput = evaluateTemplate(bodyHtml, sharedValues);
-      const bodyMarkup = bodyOutput.getContent();
-      const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyMarkup);
+      const composed = shellHtml.replace(PARTICIPANT_MAIL_TEMPLATE_BODY_PLACEHOLDER, bodyHtml);
       return evaluateTemplate(composed, sharedValues);
     } catch (retryError) {
       logMailError_('メールテンプレートの再評価に失敗しました', retryError);
