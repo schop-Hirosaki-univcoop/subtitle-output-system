@@ -1,6 +1,15 @@
 <?
   const ctx = typeof context !== 'undefined' && context ? context : {};
-  const eventName = ctx.eventName || ctx.eventId || 'イベント';
+  const existingResolvedEventName = typeof resolvedEventName !== 'undefined' ? resolvedEventName : '';
+  const subjectEventNameMatch = ctx.subject ? String(ctx.subject).match(/【([^】]+)】/) : null;
+  const subjectEventName = subjectEventNameMatch ? subjectEventNameMatch[1].trim() : '';
+  const eventName =
+    existingResolvedEventName ||
+    ctx.eventName ||
+    ctx.eventLabel ||
+    ctx.eventId ||
+    subjectEventName ||
+    'イベント';
   const highlightLabel = ctx.scheduleRangeLabel || ctx.scheduleLabel || '';
   const highlightDate = ctx.scheduleDateDisplay || '';
   const highlightTime = ctx.scheduleTimeDisplay || '';
