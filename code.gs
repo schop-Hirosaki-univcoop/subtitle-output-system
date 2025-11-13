@@ -824,7 +824,12 @@ function formatMailTimeLabel_(date) {
 function buildParticipantMailContext_(eventId, scheduleId, participantRecord, eventRecord, scheduleRecord, settings, baseUrl) {
   const participantId = String((participantRecord && (participantRecord.participantId || participantRecord.uid)) || '').trim();
   const participantName = String(participantRecord && participantRecord.name || '').trim();
-  const eventName = coalesceStrings_(eventRecord && eventRecord.name, eventId);
+  const eventName = coalesceStrings_(
+    participantRecord && (participantRecord.eventName || participantRecord.eventLabel || participantRecord.eventTitle),
+    scheduleRecord && (scheduleRecord.eventName || scheduleRecord.eventLabel),
+    eventRecord && (eventRecord.name || eventRecord.title),
+    eventId
+  );
   const participantScheduleLabel = coalesceStrings_(
     participantRecord && participantRecord.scheduleLabel,
     participantRecord && participantRecord.schedule,
@@ -989,9 +994,49 @@ function buildParticipantMailPreviewText_(context, settings) {
   return 'ご参加に関する大切なお知らせです。';
 }
 
+function extractSubjectEventName_(subject) {
+  if (!subject) {
+    return '';
+  }
+  const text = String(subject);
+  const match = text.match(/【([^】]+)】/);
+  return match ? match[1].trim() : '';
+}
+
 function enrichParticipantMailContext_(context, settings) {
   if (!context || typeof context !== 'object') {
     return context;
+  }
+  if (!context.eventName) {
+    const fallbackSources = [
+      ['eventLabel', context.eventLabel],
+      ['eventId', context.eventId],
+      ['subject', extractSubjectEventName_(context.subject)]
+    ];
+    let fallbackEventName = '';
+    let fallbackSource = '';
+    for (let i = 0; i < fallbackSources.length; i += 1) {
+      const [source, value] = fallbackSources[i];
+      const candidate = coalesceStrings_(value);
+      if (candidate) {
+        fallbackEventName = candidate;
+        fallbackSource = source;
+        break;
+      }
+    }
+    if (fallbackEventName) {
+      context.eventName = fallbackEventName;
+      logMail_('イベント名をフォールバックから補完しました', {
+        fallbackSource,
+        fallbackEventName
+      });
+    } else {
+      logMailError_('イベント名を特定できませんでした', null, {
+        eventId: context.eventId || '',
+        eventLabel: context.eventLabel || '',
+        subject: context.subject || ''
+      });
+    }
   }
   const effectiveArrival = coalesceStrings_(context.arrivalNote, settings && settings.arrivalNote);
   if (effectiveArrival) {
@@ -1063,7 +1108,13 @@ function renderParticipantMailPlainText_(context) {
   if (context.participantName) {
     lines.push(`${context.participantName} 様`, '');
   }
-  const eventName = coalesceStrings_(context.eventName, context.eventId, 'イベント');
+  const eventName = coalesceStrings_(
+    context.eventName,
+    context.eventLabel,
+    context.eventId,
+    extractSubjectEventName_(context.subject),
+    'イベント'
+  );
   lines.push(`「${eventName}」にご参加いただきありがとうございます。`);
   if (context.tagline) {
     lines.push('', context.tagline);
@@ -1130,6 +1181,21 @@ function sendParticipantMail_(principal, req) {
   if (!scheduleRecord || typeof scheduleRecord !== 'object') {
     throw new Error('指定された日程が見つかりません。');
   }
+  const eventRecordName = coalesceStrings_(
+    eventRecord && (eventRecord.name || eventRecord.title || eventRecord.eventName || eventRecord.eventLabel),
+    ''
+  );
+  const scheduleRecordLabel = coalesceStrings_(
+    scheduleRecord && (scheduleRecord.label || scheduleRecord.scheduleLabel),
+    formatScheduleLabel_(scheduleRecord && scheduleRecord.startAt, scheduleRecord && scheduleRecord.endAt),
+    ''
+  );
+  logMail_('イベント・日程情報の取得結果を確認しました', {
+    eventId,
+    scheduleId,
+    eventRecordName,
+    scheduleRecordLabel
+  });
   const participantsBranch = fetchRtdb_(`questionIntake/participants/${eventId}/${scheduleId}`, accessToken) || {};
   logMail_('参加者情報を取得しました', {
     eventId,
@@ -1230,9 +1296,23 @@ function sendParticipantMail_(principal, req) {
     );
     context.contactEmail = coalesceStrings_(context.contactEmail, fallbackContactEmail);
     context.senderName = senderName;
-    enrichParticipantMailContext_(context, settings);
+    const eventNameBeforeSubject = context.eventName || '';
     const subject = buildParticipantMailSubject_(context, settings);
     context.subject = subject;
+    const subjectEventName = extractSubjectEventName_(subject);
+    enrichParticipantMailContext_(context, settings);
+    logMail_('参加者メール用コンテキストを検証しました', {
+      participantId: id,
+      email,
+      eventNameBeforeSubject,
+      eventNameAfterEnrich: context.eventName || '',
+      eventLabel: context.eventLabel || '',
+      eventId: context.eventId || '',
+      subject,
+      subjectEventName,
+      scheduleLabel: context.scheduleLabel || '',
+      scheduleRangeLabel: context.scheduleRangeLabel || ''
+    });
     const htmlBody = createParticipantMailTemplateOutput_(context, 'email').getContent();
     const textBody = renderParticipantMailPlainText_(context);
     const contactEmail = String(context.contactEmail || '').trim();
