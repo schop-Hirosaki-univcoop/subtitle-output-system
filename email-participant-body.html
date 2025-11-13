@@ -31,73 +31,74 @@
   var signaturePrimary = bodyCtx.signaturePrimary || bodyCtx.senderName || '弘前大学生協学生委員会';
   var signatureSecondary = bodyCtx.signatureSecondary || (eventName ? eventName + '運営チーム' : '運営チーム');
 ?>
-<div class="mail-container">
+<div class="container">
   <? if (bodyCtx.mode !== 'web' && bodyCtx.webViewUrl) { ?>
-    <div class="mail-browser-link"><a href="<?= bodyCtx.webViewUrl ?>" target="_blank" rel="noopener">ブラウザで表示する</a></div>
+    <p class="browser-link"><a href="<?= bodyCtx.webViewUrl ?>" target="_blank" rel="noopener">メールが正しく表示されない場合はこちら</a></p>
   <? } ?>
-  <div class="mail-card">
-    <p class="mail-header"><?= eventName ?>参加日時の確認</p>
-    <? if (participantName) { ?>
-      <p class="mail-info mail-info--greeting">こんにちは！ <?= participantName ?> 様</p>
+  <p class="header"><?= eventName ?>参加日時の確認</p>
+  <? if (participantName) { ?>
+    <p class="info">こんにちは！ <?= participantName ?> 様</p>
+  <? } ?>
+  <? if (bodyCtx.tagline) { ?>
+    <p class="info highlight"><?= bodyCtx.tagline ?></p>
+  <? } ?>
+  <p class="info">今回は<strong>「<?= eventName ?>」</strong>にご参加いただきありがとうございます！</p>
+  <p class="info"><strong><?= participantName ? participantName + ' 様の' : '' ?>参加日は以下の通りです：</strong></p>
+  <? if (primaryScheduleLabel || secondaryScheduleLabel) { ?>
+    <div class="date-box">
+      <? if (primaryScheduleLabel) { ?>
+        <span><?= primaryScheduleLabel ?></span>
+      <? } ?>
+      <? if (secondaryScheduleLabel) { ?>
+        <span class="date-box__secondary"><?= secondaryScheduleLabel ?></span>
+      <? } ?>
+    </div>
+  <? } ?>
+  <? if (bodyCtx.location || bodyCtx.arrivalNote) { ?>
+    <p class="info">
+      当日は<? if (bodyCtx.location) { ?><strong><?= bodyCtx.location ?></strong><? } else { ?>会場にて<? } ?>開催します。<br>
+      <? if (bodyCtx.arrivalNote) { ?><strong><?= bodyCtx.arrivalNote ?></strong><? } ?>
+    </p>
+  <? } ?>
+  <hr>
+  <p class="info">
+    受付の際に本人確認のため、<strong>本メール画面</strong>を見せていただく場合がございます。<br>
+    あらかじめ<strong>スクリーンショットのご用意</strong>をお願いします。
+  </p>
+  <? if (bodyCtx.guidance) { ?>
+    <hr>
+    <p class="info"><?= bodyCtx.guidance ?></p>
+  <? } ?>
+  <? if (bodyCtx.additionalHtml || bodyCtx.additionalText) { ?>
+    <hr>
+    <? if (bodyCtx.additionalHtml) { ?>
+      <div class="info"><?!= bodyCtx.additionalHtml ?></div>
     <? } ?>
-    <p class="mail-info">今回は<strong>「<?= eventName ?>」</strong>にご参加いただきありがとうございます！</p>
-    <p class="mail-info"><strong><?= participantName ? participantName + ' 様の' : '' ?>参加日は以下の通りです：</strong></p>
-    <? if (primaryScheduleLabel || secondaryScheduleLabel) { ?>
-      <div class="mail-date-box">
-        <? if (primaryScheduleLabel) { ?>
-          <span><?= primaryScheduleLabel ?></span>
-        <? } ?>
-        <? if (secondaryScheduleLabel) { ?>
-          <span class="mail-date-box__secondary"><?= secondaryScheduleLabel ?></span>
-        <? } ?>
-      </div>
+    <? if (bodyCtx.additionalText) { ?>
+      <p class="info"><?= bodyCtx.additionalText ?></p>
     <? } ?>
-    <? if (bodyCtx.location || bodyCtx.arrivalNote) { ?>
-      <p class="mail-info">
-        当日は<? if (bodyCtx.location) { ?><strong><?= bodyCtx.location ?></strong><? } else { ?>会場にて<? } ?>開催します。
-        <? if (bodyCtx.arrivalNote) { ?><br><strong><?= bodyCtx.arrivalNote ?></strong><? } ?>
+  <? } ?>
+  <? if ((contactUrl && contactLabel) || bodyCtx.contactEmail) { ?>
+    <hr>
+    <p class="info">
+      事情があって会に参加できなくなった場合や、質問がある場合は、下のボタンからお問い合わせください。
+    </p>
+    <? if (contactUrl && contactLabel) { ?>
+      <p style="text-align: center;">
+        <a href="<?= contactUrl ?>" class="button" target="_blank" rel="noopener"><?= contactLabel ?></a>
       </p>
     <? } ?>
-    <hr class="mail-divider">
-    <p class="mail-info">
-      受付の際に本人確認のため、<strong>本メール画面</strong>を見せていただく場合がございます。<br>
-      あらかじめ<strong>スクリーンショットのご用意</strong>をお願いします。
-    </p>
-    <? if (bodyCtx.guidance) { ?>
-      <hr class="mail-divider">
-      <p class="mail-info"><?= bodyCtx.guidance ?></p>
+    <? if (bodyCtx.contactEmail) { ?>
+      <p class="info muted">メール: <a href="mailto:<?= bodyCtx.contactEmail ?>"><?= bodyCtx.contactEmail ?></a></p>
     <? } ?>
-    <? if (bodyCtx.additionalHtml || bodyCtx.additionalText) { ?>
-      <hr class="mail-divider">
-      <? if (bodyCtx.additionalHtml) { ?>
-        <div class="mail-info"><?!= bodyCtx.additionalHtml ?></div>
-      <? } ?>
-      <? if (bodyCtx.additionalText) { ?>
-        <p class="mail-info"><?= bodyCtx.additionalText ?></p>
-      <? } ?>
-    <? } ?>
-    <? if ((contactUrl && contactLabel) || bodyCtx.contactEmail) { ?>
-      <hr class="mail-divider">
-      <p class="mail-info">
-        事情があって会に参加できなくなった場合や、質問がある場合は、下のボタンからお問い合わせください。
-      </p>
-      <? if (contactUrl && contactLabel) { ?>
-        <p class="mail-cta">
-          <a href="<?= contactUrl ?>" class="mail-button" target="_blank" rel="noopener"><?= contactLabel ?></a>
-        </p>
-      <? } ?>
-      <? if (bodyCtx.contactEmail) { ?>
-        <p class="mail-info mail-info--muted">メール: <a href="mailto:<?= bodyCtx.contactEmail ?>"><?= bodyCtx.contactEmail ?></a></p>
-      <? } ?>
-    <? } ?>
-    <? if (bodyCtx.footerNote) { ?>
-      <hr class="mail-divider">
-      <p class="mail-info"><?= bodyCtx.footerNote ?></p>
-    <? } ?>
-    <p class="mail-footer"><?= closingMessage ?></p>
-    <p class="mail-footer">
-      <?= signaturePrimary ?><br>
-      <?= signatureSecondary ?>
-    </p>
-  </div>
+  <? } ?>
+  <? if (bodyCtx.footerNote) { ?>
+    <hr>
+    <p class="info"><?= bodyCtx.footerNote ?></p>
+  <? } ?>
+  <p class="footer"><?= closingMessage ?></p>
+  <p class="footer">
+    <?= signaturePrimary ?><br>
+    <?= signatureSecondary ?>
+  </p>
 </div>
