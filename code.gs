@@ -34,9 +34,15 @@ function logMail_(message, details) {
     } else {
       console.log(prefix);
     }
-  } else {
+  }
+  if (typeof Logger !== 'undefined' && typeof Logger.log === 'function') {
     if (details !== undefined) {
-      Logger.log(`${prefix}: ${JSON.stringify(details)}`);
+      try {
+        Logger.log(`${prefix}: ${JSON.stringify(details)}`);
+      } catch (error) {
+        Logger.log(prefix);
+        Logger.log(`[Mail] ログ詳細のJSON化に失敗しました: ${error && error.message ? error.message : error}`);
+      }
     } else {
       Logger.log(prefix);
     }
@@ -53,10 +59,16 @@ function logMailError_(message, error, details) {
     } else {
       console.error(prefix);
     }
-  } else {
+  }
+  if (typeof Logger !== 'undefined' && typeof Logger.log === 'function') {
     Logger.log(`${prefix}: ${error}`);
     if (details !== undefined) {
-      Logger.log(`${prefix} details: ${JSON.stringify(details)}`);
+      try {
+        Logger.log(`${prefix} details: ${JSON.stringify(details)}`);
+      } catch (jsonError) {
+        Logger.log(`${prefix} details: <JSON serialization failed>`);
+        Logger.log(`[Mail] ログ詳細のJSON化に失敗しました: ${jsonError && jsonError.message ? jsonError.message : jsonError}`);
+      }
     }
   }
 }
