@@ -1,4 +1,4 @@
-<?
+<? return (function (context) {
   var shellCtx = typeof context !== 'undefined' && context ? context : {};
   var injectedBodyMarkup = typeof bodyMarkup !== 'undefined' && bodyMarkup !== null
     ? bodyMarkup
@@ -191,6 +191,10 @@
         }
 
         .date-box__secondary {
+          font-size: 18px;
+        }
+
+        .mail-date-box__secondary {
           font-size: 18px;
         }
       }
