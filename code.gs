@@ -2956,18 +2956,33 @@ function getFirebaseAccessToken_() {
 }
 
 function notifyUpdate(kind, maybeKind) {
-  let resolvedKind = 'misc';
-  if (typeof kind === 'string') {
-    resolvedKind = kind.trim() || 'misc';
-  } else if (kind && typeof kind === 'object') {
-    if (typeof maybeKind === 'string' && maybeKind.trim()) {
-      resolvedKind = maybeKind.trim();
-    } else if (typeof kind.kind === 'string' && kind.kind.trim()) {
-      resolvedKind = kind.kind.trim();
-    } else if (kind.parameter && typeof kind.parameter.kind === 'string' && kind.parameter.kind.trim()) {
-      resolvedKind = kind.parameter.kind.trim();
+  function coerceKind(value) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed || '';
     }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    return '';
   }
+
+  let resolvedKind = coerceKind(kind);
+  if (!resolvedKind) {
+    resolvedKind = coerceKind(maybeKind);
+  }
+  if (!resolvedKind && kind && typeof kind === 'object') {
+    resolvedKind =
+      coerceKind(kind.kind) ||
+      coerceKind(kind.parameter && kind.parameter.kind) ||
+      coerceKind(kind.namedValues && kind.namedValues.kind);
+  }
+  if (!resolvedKind) {
+    resolvedKind = 'misc';
+  }
+
+  const sanitizedKind = resolvedKind.replace(/[^A-Za-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const safeKind = sanitizedKind || 'misc';
 
   const lock = LockService.getScriptLock();
   if (lock.tryLock(10000)) {
@@ -2979,10 +2994,9 @@ function notifyUpdate(kind, maybeKind) {
       }
       const accessToken = getFirebaseAccessToken_();
 
-      const signalKey = resolvedKind ? `signals/${encodeURIComponent(resolvedKind)}` : 'signals/misc';
       const baseUrl = FIREBASE_DB_URL.replace(/\/+$/, '');
-      const url = `${baseUrl}/${signalKey}.json`;
-      const payload = { triggeredAt: new Date().getTime() };
+      const url = `${baseUrl}/signals/${encodeURIComponent(safeKind)}.json`;
+      const payload = { triggeredAt: new Date().getTime(), resolvedKind: safeKind };
 
       const options = {
         method: 'put',
