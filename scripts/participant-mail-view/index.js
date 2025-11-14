@@ -7,9 +7,6 @@ const elements = {
   errorMessage: document.getElementById("error-message"),
   metaCard: document.getElementById("meta-card"),
   metaSubject: document.getElementById("meta-subject"),
-  metaParticipant: document.getElementById("meta-participant"),
-  metaEvent: document.getElementById("meta-event"),
-  metaSchedule: document.getElementById("meta-schedule"),
   mailCard: document.getElementById("mail-card"),
   mailFrame: document.getElementById("mail-frame"),
   statusCard: document.getElementById("status-card")
@@ -51,28 +48,63 @@ function showError(message) {
   elements.errorMessage.hidden = false;
 }
 
-function buildScheduleSummary(context = {}) {
-  const parts = [];
-  if (context.scheduleDateLabel) {
-    parts.push(context.scheduleDateLabel);
-  }
-  if (context.scheduleLabel && context.scheduleLabel !== context.scheduleDateLabel) {
-    parts.push(context.scheduleLabel);
-  }
-  if (context.scheduleTimeRange) {
-    parts.push(context.scheduleTimeRange);
-  }
-  const summary = parts.filter(Boolean).join(" / ");
-  return summary || "-";
-}
-
-function setMetadata({ subject = "", context = {} }) {
+function setMetadata({ subject = "" }) {
   if (!elements.metaCard) return;
   elements.metaSubject.textContent = subject || "-";
-  elements.metaParticipant.textContent = context.participantName || "-";
-  elements.metaEvent.textContent = context.eventName || "-";
-  elements.metaSchedule.textContent = buildScheduleSummary(context);
   elements.metaCard.hidden = false;
+}
+
+function prepareMailHtml(html) {
+  if (typeof html !== "string" || !html.trim()) {
+    return html;
+  }
+
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(html, "text/html");
+  } catch (error) {
+    console.warn("Failed to parse mail HTML. Fallback to raw HTML.", error);
+    return html;
+  }
+
+  if (!doc) {
+    return html;
+  }
+
+  const anchors = doc.querySelectorAll("a[href]");
+  for (const anchor of anchors) {
+    const href = anchor.getAttribute("href");
+    if (!href || href.startsWith("#") || href.startsWith("javascript:")) {
+      continue;
+    }
+    anchor.setAttribute("target", "_blank");
+    anchor.setAttribute("rel", "noreferrer noopener");
+  }
+
+  const forms = doc.querySelectorAll("form");
+  for (const form of forms) {
+    form.setAttribute("target", "_blank");
+  }
+
+  const serialized = doc.documentElement ? doc.documentElement.outerHTML : html;
+  if (!doc.doctype) {
+    return serialized;
+  }
+
+  const { name, publicId, systemId } = doc.doctype;
+  let doctype = `<!DOCTYPE ${name}`;
+  if (publicId) {
+    doctype += ` PUBLIC "${publicId}"`;
+  }
+  if (!publicId && systemId) {
+    doctype += " SYSTEM";
+  }
+  if (systemId) {
+    doctype += ` "${systemId}"`;
+  }
+  doctype += ">";
+
+  return `${doctype}${serialized}`;
 }
 
 function renderMailHtml(html) {
@@ -81,7 +113,7 @@ function renderMailHtml(html) {
     showError("メール本文の取得に失敗しました。時間をおいて再度お試しください。");
     return;
   }
-  elements.mailFrame.srcdoc = html;
+  elements.mailFrame.srcdoc = prepareMailHtml(html);
   elements.mailCard.hidden = false;
 }
 
@@ -130,14 +162,14 @@ async function bootstrap() {
 
   try {
     const payload = await fetchMailPayload(token);
-    const { subject = "", html = "", context = {} } = payload;
+    const { subject = "", html = "" } = payload;
 
     clearError();
     setStatus("メール本文を表示しています。", { busy: false });
     if (subject) {
       document.title = `${subject} | 参加者メール閲覧ページ`;
     }
-    setMetadata({ subject, context });
+    setMetadata({ subject });
     renderMailHtml(html);
   } catch (error) {
     console.error("Failed to load participant mail", error);
