@@ -54,31 +54,76 @@ function setMetadata({ subject = "" }) {
   elements.metaCard.hidden = false;
 }
 
+function safeDecodeURIComponent(value) {
+  if (typeof value !== "string" || !value) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(value);
+  } catch (error) {
+    console.warn("Failed to decode potential mailto href", error);
+    return null;
+  }
+}
+
 function extractMailtoHref(href) {
   if (!href) {
     return null;
   }
 
-  const trimmed = href.trim();
-  if (!trimmed) {
-    return null;
-  }
+  const queue = [href];
+  const visited = new Set();
 
-  if (trimmed.startsWith("mailto:")) {
-    return trimmed;
-  }
-
-  let decoded = trimmed;
-  for (let i = 0; i < 3; i += 1) {
-    const match = decoded.match(/mailto:[^\s"'<>]+/i);
-    if (match && match[0]) {
-      return match[0];
+  while (queue.length > 0) {
+    const candidate = queue.shift();
+    if (typeof candidate !== "string") {
+      continue;
     }
+
+    const trimmed = candidate.trim();
+    if (!trimmed || visited.has(trimmed)) {
+      continue;
+    }
+    visited.add(trimmed);
+
+    if (trimmed.startsWith("mailto:")) {
+      return trimmed;
+    }
+
+    const mailtoMatch = trimmed.match(/mailto:[^\s"'<>]+/i);
+    if (mailtoMatch && mailtoMatch[0]) {
+      return mailtoMatch[0];
+    }
+
+    const decoded = safeDecodeURIComponent(trimmed);
+    if (decoded && decoded !== trimmed) {
+      queue.push(decoded);
+    }
+
+    let url;
     try {
-      decoded = decodeURIComponent(decoded);
+      url = new URL(trimmed, window.location.origin);
     } catch (error) {
-      console.warn("Failed to decode potential mailto href", error);
-      break;
+      url = null;
+    }
+
+    if (!url) {
+      continue;
+    }
+
+    if (url.hash && url.hash.length > 1) {
+      queue.push(url.hash.slice(1));
+    }
+
+    for (const value of url.searchParams.values()) {
+      if (value && !visited.has(value)) {
+        queue.push(value);
+      }
+      const decodedValue = safeDecodeURIComponent(value);
+      if (decodedValue && decodedValue !== value) {
+        queue.push(decodedValue);
+      }
     }
   }
 
