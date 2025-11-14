@@ -83,20 +83,12 @@
         color: #b91c1c;
         font-size: 14px;
       }
-      dl.meta-list {
-        display: grid;
-        grid-template-columns: minmax(120px, 200px) 1fr;
-        gap: 8px 16px;
-        margin: 0;
-        font-size: 14px;
-      }
-      dl.meta-list dt {
+      .meta-subject {
+        margin: 8px 0 0;
+        font-size: 16px;
         font-weight: 600;
         color: #1f2933;
-      }
-      dl.meta-list dd {
-        margin: 0;
-        color: #4b5563;
+        word-break: break-word;
       }
       .mail-frame-wrapper {
         position: relative;
@@ -131,6 +123,15 @@
         font-size: 13px;
         color: #6b7280;
       }
+      .gmail-notice {
+        margin: 12px 0 0;
+        padding: 12px 16px;
+        font-size: 13px;
+        line-height: 1.7;
+        border-radius: 8px;
+        background: #eff6ff;
+        color: #1d4ed8;
+      }
       @media (max-width: 640px) {
         .mail-frame-wrapper {
           padding-top: 70vh;
@@ -155,23 +156,22 @@
         <p class="error-message" id="error-message" role="alert" hidden></p>
       </section>
       <section class="card" id="meta-card" hidden>
-        <h2>メール概要</h2>
-        <dl class="meta-list">
-          <dt>件名</dt>
-          <dd id="meta-subject">-</dd>
-          <dt>参加者</dt>
-          <dd id="meta-participant">-</dd>
-          <dt>イベント</dt>
-          <dd id="meta-event">-</dd>
-          <dt>日程</dt>
-          <dd id="meta-schedule">-</dd>
-        </dl>
+        <h2>メール件名</h2>
+        <p id="meta-subject" class="meta-subject">-</p>
         <p class="caution">表示内容は参加者本人専用です。第三者への共有や転載はお控えください。</p>
+        <p class="gmail-notice" id="gmail-notice" hidden>
+          Gmailで提供される「お問い合わせ」などのボタンは、この閲覧ページからは開けない仕様です。<br />
+          お手数ですが、元のメール画面で同じボタンを押すか、メールアプリから直接ご連絡ください。
+        </p>
       </section>
       <section class="card" id="mail-card" hidden>
         <h2>メール本文</h2>
         <div class="mail-frame-wrapper">
-          <iframe id="mail-frame" title="参加者向けメール本文" sandbox="allow-same-origin"></iframe>
+          <iframe
+            id="mail-frame"
+            title="参加者向けメール本文"
+            sandbox="allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+          ></iframe>
         </div>
       </section>
     </main>
