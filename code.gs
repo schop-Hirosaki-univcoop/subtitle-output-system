@@ -1040,6 +1040,30 @@ function getWebAppBaseUrl_() {
       // ignore and fall back
     }
   }
+  if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
+    return normalizeParticipantMailViewBaseUrl_(PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL);
+  }
+  return '';
+}
+
+function getQuestionFormBaseUrl_() {
+  const properties = PropertiesService.getScriptProperties();
+  const propertyKeys = ['QUESTION_FORM_BASE_URL', 'PUBLIC_WEB_APP_URL'];
+  for (let i = 0; i < propertyKeys.length; i += 1) {
+    const value = String(properties.getProperty(propertyKeys[i]) || '').trim();
+    if (value) {
+      return normalizeQuestionFormBaseUrl_(value);
+    }
+  }
+  if (PUBLIC_WEB_APP_FALLBACK_BASE_URL) {
+    return normalizeQuestionFormBaseUrl_(PUBLIC_WEB_APP_FALLBACK_BASE_URL);
+  }
+  if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
+    const derived = PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL.replace(/email-participant-shell\.html?.*$/i, QUESTION_FORM_PAGE_FILENAME);
+    if (derived) {
+      return normalizeQuestionFormBaseUrl_(derived);
+    }
+  }
   return '';
 }
 
