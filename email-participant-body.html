@@ -27,6 +27,9 @@
   }
   var contactUrl = bodyCtx.contactLinkUrl || (bodyCtx.contactEmail ? 'mailto:' + bodyCtx.contactEmail : '');
   var contactLabel = bodyCtx.contactLinkLabel || (bodyCtx.contactEmail ? 'お問い合わせする' : '');
+  var questionFormUrl = bodyCtx.questionFormUrl || '';
+  var questionFormLabel = bodyCtx.questionFormLabel || (questionFormUrl ? '質問フォームを開く' : '');
+  var questionFormPrompt = bodyCtx.questionFormPrompt || '';
   var closingMessage = bodyCtx.closingMessage || 'それでは、みなさんに会えるのをお待ちしています！';
   var signaturePrimary = bodyCtx.signaturePrimary || bodyCtx.senderName || '弘前大学生協学生委員会';
   var signatureSecondary = bodyCtx.signatureSecondary || (eventName ? eventName + '運営チーム' : '運営チーム');
@@ -180,6 +183,19 @@
     <? if (bodyCtx.additionalText) { ?>
       <p class="info" style="<?= infoStyle ?>"><?= bodyCtx.additionalText ?></p>
     <? } ?>
+  <? } ?>
+  <? if (questionFormUrl) { ?>
+    <hr style="<?= hrStyle ?>">
+    <p class="info" style="<?= infoStyle ?>"><?
+      if (questionFormPrompt) { ?>
+        <?= questionFormPrompt ?>
+      <? } else { ?>
+        事前のご質問や相談は、下のフォームから投稿いただけます。
+      <? } ?>
+    </p>
+    <p style="text-align:center; margin:0 0 12px;">
+      <a href="<?= questionFormUrl ?>" class="button" target="_blank" rel="noopener" style="<?= buttonStyle ?>"><?= questionFormLabel || '質問フォームを開く' ?></a>
+    </p>
   <? } ?>
   <? if ((contactUrl && contactLabel) || bodyCtx.contactEmail) { ?>
     <hr style="<?= hrStyle ?>">
