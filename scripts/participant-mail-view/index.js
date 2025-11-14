@@ -54,6 +54,37 @@ function setMetadata({ subject = "" }) {
   elements.metaCard.hidden = false;
 }
 
+function extractMailtoHref(href) {
+  if (!href) {
+    return null;
+  }
+
+  const trimmed = href.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("mailto:")) {
+    return trimmed;
+  }
+
+  let decoded = trimmed;
+  for (let i = 0; i < 3; i += 1) {
+    const match = decoded.match(/mailto:[^\s"'<>]+/i);
+    if (match && match[0]) {
+      return match[0];
+    }
+    try {
+      decoded = decodeURIComponent(decoded);
+    } catch (error) {
+      console.warn("Failed to decode potential mailto href", error);
+      break;
+    }
+  }
+
+  return null;
+}
+
 function prepareMailHtml(html) {
   if (typeof html !== "string" || !html.trim()) {
     return html;
@@ -77,6 +108,40 @@ function prepareMailHtml(html) {
     if (!href || href.startsWith("#") || href.startsWith("javascript:")) {
       continue;
     }
+
+    let url;
+    try {
+      url = new URL(href, window.location.origin);
+    } catch (error) {
+      url = null;
+    }
+
+    const mailtoHref = extractMailtoHref(href);
+    const isHttpLike = url && (url.protocol === "http:" || url.protocol === "https:");
+    const shouldUnwrapMailto =
+      mailtoHref &&
+      (!isHttpLike ||
+        anchor.hasAttribute("data-saferedirecturl") ||
+        (url &&
+          url.hostname &&
+          /(?:^|\.)((?:accounts|mail)\.google\.com)$/i.test(url.hostname)));
+
+    if (shouldUnwrapMailto) {
+      anchor.setAttribute("href", mailtoHref);
+      anchor.setAttribute("target", "_top");
+      anchor.removeAttribute("rel");
+      anchor.removeAttribute("data-saferedirecturl");
+      continue;
+    }
+
+    if (url && (url.protocol === "mailto:" || url.protocol === "tel:")) {
+      anchor.setAttribute("href", url.href);
+      anchor.setAttribute("target", "_top");
+      anchor.removeAttribute("rel");
+      anchor.removeAttribute("data-saferedirecturl");
+      continue;
+    }
+
     anchor.setAttribute("target", "_blank");
     anchor.setAttribute("rel", "noreferrer noopener");
   }
