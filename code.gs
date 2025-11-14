@@ -996,11 +996,32 @@ function normalizeQuestionFormBaseUrl_(value) {
 function getWebAppBaseUrl_() {
   const properties = PropertiesService.getScriptProperties();
   const propertyKeys = ['PARTICIPANT_MAIL_WEB_VIEW_BASE_URL', 'WEB_APP_BASE_URL'];
+  let appsScriptCandidate = '';
   for (let i = 0; i < propertyKeys.length; i += 1) {
     const value = String(properties.getProperty(propertyKeys[i]) || '').trim();
     if (value) {
-      return normalizeParticipantMailViewBaseUrl_(value);
+      const normalized = normalizeParticipantMailViewBaseUrl_(value);
+      if (!normalized) {
+        continue;
+      }
+      const isAppsScriptEndpoint = /script\.google(?:usercontent)?\.com\/macros\//i.test(normalized);
+      const isExecEndpoint = /\/(exec|dev)(?:\/)?$/i.test(normalized);
+      if (!isAppsScriptEndpoint || !isExecEndpoint) {
+        return normalized;
+      }
+      if (!appsScriptCandidate) {
+        appsScriptCandidate = normalized;
+      }
     }
+  }
+  if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
+    const fallback = normalizeParticipantMailViewBaseUrl_(PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL);
+    if (fallback) {
+      return fallback;
+    }
+  }
+  if (appsScriptCandidate) {
+    return appsScriptCandidate;
   }
   if (typeof ScriptApp !== 'undefined' && ScriptApp.getService) {
     try {
