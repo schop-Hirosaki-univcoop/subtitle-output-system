@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<!-- participant-mail-view.html: メールが正しく表示されない場合に参加者へ提供する閲覧用ページです。 -->
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>参加者メール閲覧ページ</title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      *, *::before, *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Noto Sans JP", "Hiragino Sans", "Meiryo", system-ui, sans-serif;
+        background: #f5f5f7;
+        color: #1f2933;
+        line-height: 1.6;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        padding: 24px 16px 12px;
+        text-align: center;
+      }
+      header h1 {
+        margin: 0;
+        font-size: clamp(20px, 4vw, 28px);
+        font-weight: 700;
+        color: #0b3d91;
+      }
+      header p {
+        margin: 8px 0 0;
+        font-size: 14px;
+        color: #4b5563;
+      }
+      main {
+        width: min(960px, 100%);
+        margin: 0 auto;
+        padding: 0 16px 48px;
+        flex: 1;
+      }
+      .card {
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+        padding: 24px;
+        margin-top: 24px;
+      }
+      .card h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+        color: #0b3d91;
+      }
+      .status-message {
+        margin: 0;
+        font-size: 15px;
+      }
+      .status-message[aria-busy="true"]::after {
+        content: "";
+        display: inline-block;
+        width: 1em;
+        height: 1em;
+        border: 2px solid rgba(15, 23, 42, 0.2);
+        border-top-color: #0b3d91;
+        border-radius: 50%;
+        margin-left: 8px;
+        animation: spin 1s linear infinite;
+        vertical-align: -0.2em;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      .error-message {
+        margin-top: 12px;
+        padding: 12px 16px;
+        border-radius: 8px;
+        background: #fee2e2;
+        color: #b91c1c;
+        font-size: 14px;
+      }
+      dl.meta-list {
+        display: grid;
+        grid-template-columns: minmax(120px, 200px) 1fr;
+        gap: 8px 16px;
+        margin: 0;
+        font-size: 14px;
+      }
+      dl.meta-list dt {
+        font-weight: 600;
+        color: #1f2933;
+      }
+      dl.meta-list dd {
+        margin: 0;
+        color: #4b5563;
+      }
+      .mail-frame-wrapper {
+        position: relative;
+        padding-top: min(60vh, 520px);
+        background: #0f172a;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .mail-frame-wrapper iframe {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: #ffffff;
+      }
+      .mail-frame-wrapper::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(180deg, rgba(255,255,255,0.08), transparent 35%);
+      }
+      footer {
+        text-align: center;
+        font-size: 12px;
+        color: #6b7280;
+        padding: 24px 12px 32px;
+      }
+      .caution {
+        margin-top: 16px;
+        font-size: 13px;
+        color: #6b7280;
+      }
+      @media (max-width: 640px) {
+        .mail-frame-wrapper {
+          padding-top: 70vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>
+      <div style="margin:0; padding:16px; background:#fee2e2; color:#b91c1c; text-align:center; font-weight:600;">
+        このページを表示するにはブラウザの JavaScript を有効にしてください。
+      </div>
+    </noscript>
+    <header>
+      <h1>参加者メール閲覧ページ</h1>
+      <p>メールが正しく表示されない場合の確認用リンクです。URLの共有はお控えください。</p>
+    </header>
+    <main>
+      <section class="card" id="status-card">
+        <h2>読み込みステータス</h2>
+        <p class="status-message" id="status-message" aria-live="polite" aria-busy="true">アクセス情報を確認しています…</p>
+        <p class="error-message" id="error-message" role="alert" hidden></p>
+      </section>
+      <section class="card" id="meta-card" hidden>
+        <h2>メール概要</h2>
+        <dl class="meta-list">
+          <dt>件名</dt>
+          <dd id="meta-subject">-</dd>
+          <dt>参加者</dt>
+          <dd id="meta-participant">-</dd>
+          <dt>イベント</dt>
+          <dd id="meta-event">-</dd>
+          <dt>日程</dt>
+          <dd id="meta-schedule">-</dd>
+        </dl>
+        <p class="caution">表示内容は参加者本人専用です。第三者への共有や転載はお控えください。</p>
+      </section>
+      <section class="card" id="mail-card" hidden>
+        <h2>メール本文</h2>
+        <div class="mail-frame-wrapper">
+          <iframe id="mail-frame" title="参加者向けメール本文" sandbox="allow-same-origin"></iframe>
+        </div>
+      </section>
+    </main>
+    <footer>
+      このページは弘前大学生協学生委員会が参加者へのご案内として提供しています。
+    </footer>
+    <script type="module" src="./scripts/participant-mail-view/index.js"></script>
+  </body>
+</html>
