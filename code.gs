@@ -294,6 +294,7 @@ function include_(filename) {
 
 const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v3';
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
+const PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL = 'https://schop-hirosaki-univcoop.github.io/subtitle-output-system/email-participant-shell.html';
 
 function namespaceParticipantMailTemplateMarkup_(markup, namespace) {
   if (!markup) {
@@ -932,14 +933,41 @@ function restoreRealtimeDatabase_() {
   return { timestamp };
 }
 
+function normalizeParticipantMailViewBaseUrl_(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  const queryIndex = trimmed.indexOf('?');
+  const basePart = queryIndex === -1 ? trimmed : trimmed.slice(0, queryIndex);
+  const queryPart = queryIndex === -1 ? '' : trimmed.slice(queryIndex);
+  let normalizedBase = basePart.replace(/\s+$/, '');
+  if (!normalizedBase) {
+    normalizedBase = 'email-participant-shell.html';
+  }
+  if (/email-participant-(shell|body)\.html?$/i.test(normalizedBase)) {
+    normalizedBase = normalizedBase.replace(/email-participant-body\.html?$/i, 'email-participant-shell.html');
+  } else if (/\/index(?:\.html?)?$/i.test(normalizedBase)) {
+    normalizedBase = normalizedBase.replace(/\/index(?:\.html?)?$/i, '/email-participant-shell.html');
+  } else if (/\/$/.test(normalizedBase)) {
+    normalizedBase = normalizedBase.replace(/\/+$/, '') + '/email-participant-shell.html';
+  } else if (!/\.html?$/i.test(normalizedBase)) {
+    normalizedBase = normalizedBase.replace(/\/+$/, '') + '/email-participant-shell.html';
+  }
+  return normalizedBase + queryPart;
+}
+
 function getWebAppBaseUrl_() {
   const properties = PropertiesService.getScriptProperties();
-  const propertyKeys = ['PUBLIC_WEB_APP_URL', 'WEB_APP_BASE_URL'];
+  const propertyKeys = ['PARTICIPANT_MAIL_WEB_VIEW_BASE_URL', 'PUBLIC_WEB_APP_URL', 'WEB_APP_BASE_URL'];
   for (let i = 0; i < propertyKeys.length; i += 1) {
     const value = String(properties.getProperty(propertyKeys[i]) || '').trim();
     if (value) {
-      return value;
+      return normalizeParticipantMailViewBaseUrl_(value);
     }
+  }
+  if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
+    return normalizeParticipantMailViewBaseUrl_(PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL);
   }
   if (typeof ScriptApp !== 'undefined' && ScriptApp.getService) {
     try {
@@ -947,7 +975,7 @@ function getWebAppBaseUrl_() {
       if (service && typeof service.getUrl === 'function') {
         const url = service.getUrl();
         if (url) {
-          return String(url).trim();
+          return normalizeParticipantMailViewBaseUrl_(url);
         }
       }
     } catch (error) {
@@ -1544,6 +1572,103 @@ function renderParticipantMailPlainText_(context) {
   return lines.join('\n');
 }
 
+function isGmailAdvancedServiceAvailable_() {
+  return typeof Gmail !== 'undefined' &&
+    Gmail &&
+    Gmail.Users &&
+    Gmail.Users.Messages &&
+    typeof Gmail.Users.Messages.send === 'function';
+}
+
+function encodeMailHeaderTextBase64_(value) {
+  const stringValue = String(value || '');
+  if (!stringValue) {
+    return '';
+  }
+  const encoded = Utilities.base64Encode(Utilities.newBlob(stringValue, 'text/plain').getBytes());
+  return `=?UTF-8?B?${encoded}?=`;
+}
+
+function buildParticipantMailRawMessage_(options) {
+  const boundary = '=_ParticipantMail_' + Utilities.getUuid().replace(/-/g, '');
+  const headers = [];
+  headers.push(`To: ${options.to}`);
+  if (options.fromHeader) {
+    headers.push(`From: ${options.fromHeader}`);
+  }
+  if (options.replyTo) {
+    headers.push(`Reply-To: ${options.replyTo}`);
+  }
+  headers.push(`Subject: ${options.subjectHeader}`);
+  headers.push('MIME-Version: 1.0');
+  headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+  headers.push('');
+
+  headers.push(`--${boundary}`);
+  headers.push('Content-Type: text/plain; charset=UTF-8');
+  headers.push('Content-Transfer-Encoding: base64');
+  headers.push('');
+  headers.push(Utilities.base64Encode(Utilities.newBlob(String(options.plainBody || ''), 'text/plain').getBytes()));
+  headers.push('');
+
+  headers.push(`--${boundary}`);
+  headers.push('Content-Type: text/html; charset=UTF-8');
+  headers.push('Content-Transfer-Encoding: base64');
+  headers.push('');
+  headers.push(Utilities.base64Encode(Utilities.newBlob(String(options.htmlBody || ''), 'text/html').getBytes()));
+  headers.push('');
+
+  headers.push(`--${boundary}--`);
+  headers.push('');
+
+  return headers.join('\r\n');
+}
+
+function sendParticipantMailMessage_(options) {
+  const to = String(options.to || '').trim();
+  if (!to) {
+    throw new Error('宛先メールアドレスが指定されていません。');
+  }
+  const subject = String(options.subject || '');
+  const htmlBody = String(options.htmlBody || '');
+  const plainBody = options.textBody !== undefined && options.textBody !== null
+    ? String(options.textBody)
+    : stripHtmlToPlainText_(htmlBody);
+  const senderName = String(options.senderName || '').trim();
+  const replyTo = String(options.replyTo || '').trim();
+  const fromEmail = String(options.fromEmail || '').trim();
+
+  if (isGmailAdvancedServiceAvailable_()) {
+    const subjectHeader = encodeMailHeaderTextBase64_(subject);
+    let fromHeader = '';
+    if (fromEmail) {
+      fromHeader = senderName
+        ? `${encodeMailHeaderTextBase64_(senderName)} <${fromEmail}>`
+        : fromEmail;
+    }
+    const rawMessage = buildParticipantMailRawMessage_({
+      to,
+      fromHeader,
+      replyTo,
+      subjectHeader,
+      plainBody,
+      htmlBody
+    });
+    const encodedRaw = Utilities.base64EncodeWebSafe(Utilities.newBlob(rawMessage).getBytes()).replace(/=+$/, '');
+    Gmail.Users.Messages.send({ raw: encodedRaw }, 'me');
+    return;
+  }
+
+  MailApp.sendEmail({
+    to,
+    subject,
+    htmlBody,
+    body: plainBody,
+    name: senderName || undefined,
+    replyTo: replyTo || undefined
+  });
+}
+
 function sendParticipantMail_(principal, req) {
   const eventId = normalizeEventId_(req && req.eventId);
   const scheduleId = normalizeKey_(req && req.scheduleId);
@@ -1704,13 +1829,14 @@ function sendParticipantMail_(principal, req) {
     const contactEmail = String(context.contactEmail || '').trim();
     const attemptAt = Date.now();
     try {
-      MailApp.sendEmail({
+      sendParticipantMailMessage_({
         to: email,
         subject,
         htmlBody,
-        body: textBody,
-        name: senderName || context.eventName || '',
-        replyTo: contactEmail || undefined
+        textBody,
+        senderName: senderName || context.eventName || '',
+        replyTo: contactEmail,
+        fromEmail: normalizedPrincipalEmail || contactEmail || ''
       });
       sentCount += 1;
       logMail_('参加者へのメール送信に成功しました', {
