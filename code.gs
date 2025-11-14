@@ -27,6 +27,10 @@ function doGet(e) {
 const DISPLAY_SESSION_TTL_MS = 60 * 1000;
 const DEFAULT_SCHEDULE_KEY = '__default_schedule__';
 const ALLOWED_ORIGINS = [
+  'https://gakui-hirosaki.github.io',
+  'https://gakui-hirosaki.github.io/',
+  'https://gakui-hirosaki-univcoop.github.io',
+  'https://gakui-hirosaki-univcoop.github.io/',
   'https://schop-hirosaki-univcoop.github.io',
   'https://schop-hirosaki-univcoop.github.io/'
 ];
@@ -294,9 +298,9 @@ function include_(filename) {
 
 const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v3';
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
-const PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL = 'https://schop-hirosaki-univcoop.github.io/subtitle-output-system/participant-mail-view.html';
+const PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL = 'https://gakui-hirosaki.github.io/subtitle-output-system/participant-mail-view.html';
 const PARTICIPANT_MAIL_CONTACT_EMAIL = 'gakui.hirosaki@gmail.com';
-const PUBLIC_WEB_APP_FALLBACK_BASE_URL = 'https://schop-hirosaki-univcoop.github.io/subtitle-output-system/';
+const PUBLIC_WEB_APP_FALLBACK_BASE_URL = 'https://gakui-hirosaki.github.io/subtitle-output-system/';
 const QUESTION_FORM_PAGE_FILENAME = 'question-form.html';
 
 function namespaceParticipantMailTemplateMarkup_(markup, namespace) {
@@ -1038,6 +1042,27 @@ function getWebAppBaseUrl_() {
   }
   if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
     return normalizeParticipantMailViewBaseUrl_(PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL);
+  }
+  return '';
+}
+
+function getQuestionFormBaseUrl_() {
+  const properties = PropertiesService.getScriptProperties();
+  const propertyKeys = ['QUESTION_FORM_BASE_URL', 'PUBLIC_WEB_APP_URL'];
+  for (let i = 0; i < propertyKeys.length; i += 1) {
+    const value = String(properties.getProperty(propertyKeys[i]) || '').trim();
+    if (value) {
+      return normalizeQuestionFormBaseUrl_(value);
+    }
+  }
+  if (PUBLIC_WEB_APP_FALLBACK_BASE_URL) {
+    return normalizeQuestionFormBaseUrl_(PUBLIC_WEB_APP_FALLBACK_BASE_URL);
+  }
+  if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
+    const derived = PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL.replace(/email-participant-shell\.html?.*$/i, QUESTION_FORM_PAGE_FILENAME);
+    if (derived) {
+      return normalizeQuestionFormBaseUrl_(derived);
+    }
   }
   return '';
 }
