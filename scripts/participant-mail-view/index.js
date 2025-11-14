@@ -54,13 +54,66 @@ function setMetadata({ subject = "" }) {
   elements.metaCard.hidden = false;
 }
 
+function prepareMailHtml(html) {
+  if (typeof html !== "string" || !html.trim()) {
+    return html;
+  }
+
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(html, "text/html");
+  } catch (error) {
+    console.warn("Failed to parse mail HTML. Fallback to raw HTML.", error);
+    return html;
+  }
+
+  if (!doc) {
+    return html;
+  }
+
+  const anchors = doc.querySelectorAll("a[href]");
+  for (const anchor of anchors) {
+    const href = anchor.getAttribute("href");
+    if (!href || href.startsWith("#") || href.startsWith("javascript:")) {
+      continue;
+    }
+    anchor.setAttribute("target", "_blank");
+    anchor.setAttribute("rel", "noreferrer noopener");
+  }
+
+  const forms = doc.querySelectorAll("form");
+  for (const form of forms) {
+    form.setAttribute("target", "_blank");
+  }
+
+  const serialized = doc.documentElement ? doc.documentElement.outerHTML : html;
+  if (!doc.doctype) {
+    return serialized;
+  }
+
+  const { name, publicId, systemId } = doc.doctype;
+  let doctype = `<!DOCTYPE ${name}`;
+  if (publicId) {
+    doctype += ` PUBLIC "${publicId}"`;
+  }
+  if (!publicId && systemId) {
+    doctype += " SYSTEM";
+  }
+  if (systemId) {
+    doctype += ` "${systemId}"`;
+  }
+  doctype += ">";
+
+  return `${doctype}${serialized}`;
+}
+
 function renderMailHtml(html) {
   if (!elements.mailFrame || !elements.mailCard) return;
   if (!html) {
     showError("メール本文の取得に失敗しました。時間をおいて再度お試しください。");
     return;
   }
-  elements.mailFrame.srcdoc = html;
+  elements.mailFrame.srcdoc = prepareMailHtml(html);
   elements.mailCard.hidden = false;
 }
 
