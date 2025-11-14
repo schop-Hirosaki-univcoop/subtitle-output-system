@@ -173,11 +173,15 @@ function prepareMailHtml(html) {
       url.hostname &&
       /(?:^|\.)((?:accounts|mail)\.google\.com)$/i.test(url.hostname);
 
+    if (isGmailRedirectHost) {
+      encounteredGmailRedirect = true;
+    }
+
     const shouldUnwrapMailto =
       mailtoHref &&
       (!isHttpLike ||
-        anchor.hasAttribute("data-saferedirecturl") ||
-        isGmailRedirectHost);
+        (!isGmailRedirectHost &&
+          anchor.hasAttribute("data-saferedirecturl")));
 
     if (shouldUnwrapMailto) {
       anchor.setAttribute("href", mailtoHref);
@@ -193,10 +197,6 @@ function prepareMailHtml(html) {
       anchor.removeAttribute("rel");
       anchor.removeAttribute("data-saferedirecturl");
       continue;
-    }
-
-    if (isGmailRedirectHost) {
-      encounteredGmailRedirect = true;
     }
 
     anchor.setAttribute("target", "_blank");
