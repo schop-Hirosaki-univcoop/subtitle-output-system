@@ -294,7 +294,7 @@ function include_(filename) {
 
 const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v3';
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
-const PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL = 'https://schop-hirosaki-univcoop.github.io/subtitle-output-system/email-participant-shell.html';
+const PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL = 'https://schop-hirosaki-univcoop.github.io/subtitle-output-system/participant-mail-view.html';
 const PUBLIC_WEB_APP_FALLBACK_BASE_URL = 'https://schop-hirosaki-univcoop.github.io/subtitle-output-system/';
 const QUESTION_FORM_PAGE_FILENAME = 'question-form.html';
 
@@ -463,7 +463,7 @@ function doPost(e) {
     if (!action) throw new Error('Missing action');
 
     const displayActions = new Set(['beginDisplaySession', 'heartbeatDisplaySession', 'endDisplaySession']);
-    const noAuthActions = new Set(['submitQuestion', 'processQuestionQueueForToken']);
+    const noAuthActions = new Set(['submitQuestion', 'processQuestionQueueForToken', 'resolveParticipantMail']);
     let principal = null;
     if (!noAuthActions.has(action)) {
       principal = requireAuth_(idToken, displayActions.has(action) ? { allowAnonymous: true } : {});
@@ -487,6 +487,8 @@ function doPost(e) {
         return ok(processQuestionSubmissionQueue_());
       case 'processQuestionQueueForToken':
         return ok(processQuestionQueueForToken_(req.token));
+      case 'resolveParticipantMail':
+        return ok(resolveParticipantMailForToken_(req));
       case 'fetchSheet':
         assertOperator_(principal);
         if (String(req.sheet || '').trim().toLowerCase() !== 'users') {
@@ -1098,14 +1100,42 @@ function buildParticipantMailViewUrl_(baseUrl, params) {
   if (!trimmed) {
     return '';
   }
-  const segments = [
-    'view=participantMail',
-    `eventId=${encodeURIComponent(params.eventId)}`,
-    `scheduleId=${encodeURIComponent(params.scheduleId)}`,
-    `participantId=${encodeURIComponent(params.participantId)}`
-  ];
-  if (params.token) {
-    segments.push(`token=${encodeURIComponent(params.token)}`);
+  const token = params && params.token ? String(params.token).trim() : '';
+  const eventId = params && params.eventId ? String(params.eventId).trim() : '';
+  const scheduleId = params && params.scheduleId ? String(params.scheduleId).trim() : '';
+  const participantId = params && params.participantId ? String(params.participantId).trim() : '';
+  const isAppsScriptEndpoint = /script\.google(?:usercontent)?\.com\/macros\//i.test(trimmed);
+  const segments = [];
+  if (isAppsScriptEndpoint) {
+    segments.push('view=participantMail');
+    if (eventId) {
+      segments.push(`eventId=${encodeURIComponent(eventId)}`);
+    }
+    if (scheduleId) {
+      segments.push(`scheduleId=${encodeURIComponent(scheduleId)}`);
+    }
+    if (participantId) {
+      segments.push(`participantId=${encodeURIComponent(participantId)}`);
+    }
+    if (token) {
+      segments.push(`token=${encodeURIComponent(token)}`);
+    }
+  } else {
+    if (token) {
+      segments.push(`token=${encodeURIComponent(token)}`);
+    }
+    if (eventId) {
+      segments.push(`eventId=${encodeURIComponent(eventId)}`);
+    }
+    if (scheduleId) {
+      segments.push(`scheduleId=${encodeURIComponent(scheduleId)}`);
+    }
+    if (participantId) {
+      segments.push(`participantId=${encodeURIComponent(participantId)}`);
+    }
+  }
+  if (!segments.length) {
+    return trimmed;
   }
   let separator = '?';
   if (trimmed.includes('?')) {
@@ -2112,6 +2142,189 @@ function renderParticipantMailErrorPage_() {
   );
   output.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   return output;
+}
+
+function resolveParticipantMailForToken_(req) {
+  const rawToken = normalizeKey_(req && (req.token || req.accessToken));
+  if (!rawToken) {
+    throw new Error('メールの表示に必要なアクセスキーが見つかりませんでした。配布された最新のリンクからアクセスしてください。');
+  }
+  if (!/^[A-Za-z0-9_-]{12,128}$/.test(rawToken)) {
+    throw new Error('アクセスリンクが無効です。最新のURLからアクセスしてください。');
+  }
+  const logContext = {
+    tokenSuffix: rawToken.slice(-6)
+  };
+  logMail_('参加者メールのWeb表示リクエストを受信しました', logContext);
+
+  try {
+    let accessToken;
+    try {
+      accessToken = getFirebaseAccessToken_();
+    } catch (error) {
+      throw new Error('アクセス情報の確認に失敗しました。時間をおいて再度お試しください。');
+    }
+
+    let tokenRecord;
+    try {
+      tokenRecord = fetchRtdb_('questionIntake/tokens/' + rawToken, accessToken);
+    } catch (error) {
+      throw new Error('アクセス情報の確認に失敗しました。時間をおいて再度お試しください。');
+    }
+
+    if (!tokenRecord || typeof tokenRecord !== 'object') {
+      throw new Error('このリンクは無効化されています。運営までお問い合わせください。');
+    }
+    if (tokenRecord.revoked) {
+      throw new Error('このリンクは無効化されています。運営までお問い合わせください。');
+    }
+    const expiresAt = Number(tokenRecord.expiresAt || 0);
+    if (expiresAt && Date.now() > expiresAt) {
+      throw new Error('このリンクの有効期限が切れています。運営までお問い合わせください。');
+    }
+
+    const eventId = normalizeEventId_(tokenRecord.eventId);
+    const scheduleId = normalizeScheduleId_(tokenRecord.scheduleId);
+    const participantId = normalizeKey_(tokenRecord.participantId || tokenRecord.participantUid);
+    if (!eventId || !scheduleId || !participantId) {
+      throw new Error('アクセスに必要な情報が不足しています。運営までお問い合わせください。');
+    }
+
+    logContext.eventId = eventId;
+    logContext.scheduleId = scheduleId;
+    logContext.participantId = participantId;
+
+    let participantRecord;
+    try {
+      participantRecord = fetchRtdb_(`questionIntake/participants/${eventId}/${scheduleId}/${participantId}`, accessToken);
+    } catch (error) {
+      participantRecord = null;
+    }
+
+    if (!participantRecord || typeof participantRecord !== 'object') {
+      logMail_('参加者レコードが見つからなかったためトークン情報を利用して補完します', logContext);
+      participantRecord = {
+        participantId,
+        token: rawToken,
+        name: String(tokenRecord.displayName || '').trim(),
+        displayName: String(tokenRecord.displayName || '').trim(),
+        scheduleLabel: String(tokenRecord.scheduleLabel || '').trim(),
+        scheduleDate: String(tokenRecord.scheduleDate || '').trim(),
+        scheduleStart: String(tokenRecord.scheduleStart || '').trim(),
+        scheduleEnd: String(tokenRecord.scheduleEnd || '').trim(),
+        guidance: String(tokenRecord.guidance || '').trim(),
+        eventName: String(tokenRecord.eventName || '').trim(),
+        eventLabel: String(tokenRecord.eventName || '').trim(),
+        groupNumber: String(tokenRecord.groupNumber || tokenRecord.teamNumber || '').trim(),
+        teamNumber: String(tokenRecord.teamNumber || '').trim()
+      };
+    }
+
+    let eventRecord = {};
+    let scheduleRecord = {};
+    try {
+      eventRecord = fetchRtdb_(`questionIntake/events/${eventId}`, accessToken) || {};
+    } catch (ignoreEventError) {
+      eventRecord = {};
+    }
+    try {
+      scheduleRecord = fetchRtdb_(`questionIntake/schedules/${eventId}/${scheduleId}`, accessToken) || {};
+    } catch (ignoreScheduleError) {
+      scheduleRecord = {};
+    }
+
+    const participantContextRecord = Object.assign(
+      {
+        participantId,
+        token: rawToken,
+        name: String(tokenRecord.displayName || '').trim(),
+        displayName: String(tokenRecord.displayName || '').trim(),
+        eventName: String(tokenRecord.eventName || '').trim(),
+        eventLabel: String(tokenRecord.eventName || '').trim(),
+        scheduleLabel: String(tokenRecord.scheduleLabel || '').trim(),
+        scheduleDate: String(tokenRecord.scheduleDate || '').trim(),
+        scheduleTime: String(tokenRecord.scheduleTime || '').trim(),
+        scheduleRange: String(tokenRecord.scheduleRange || '').trim(),
+        guidance: String(tokenRecord.guidance || '').trim(),
+        groupNumber: String(tokenRecord.groupNumber || tokenRecord.teamNumber || '').trim(),
+        teamNumber: String(tokenRecord.teamNumber || '').trim()
+      },
+      participantRecord || {}
+    );
+    participantContextRecord.participantId = participantId;
+    participantContextRecord.token = coalesceStrings_(participantContextRecord.token, rawToken);
+    if (!participantContextRecord.name && tokenRecord && tokenRecord.displayName) {
+      participantContextRecord.name = String(tokenRecord.displayName || '').trim();
+    }
+    if (!participantContextRecord.eventName && tokenRecord && tokenRecord.eventName) {
+      participantContextRecord.eventName = String(tokenRecord.eventName || '').trim();
+    }
+    if (!participantContextRecord.scheduleLabel && tokenRecord && tokenRecord.scheduleLabel) {
+      participantContextRecord.scheduleLabel = String(tokenRecord.scheduleLabel || '').trim();
+    }
+    if (!participantContextRecord.scheduleDate && tokenRecord && tokenRecord.scheduleDate) {
+      participantContextRecord.scheduleDate = String(tokenRecord.scheduleDate || '').trim();
+    }
+    if (!participantContextRecord.scheduleTime) {
+      const start = String(tokenRecord.scheduleStart || '').trim();
+      const end = String(tokenRecord.scheduleEnd || '').trim();
+      if (start || end) {
+        participantContextRecord.scheduleTime = start && end ? `${start}〜${end}` : (start || end);
+      }
+    }
+    if (!participantContextRecord.scheduleRange && tokenRecord && tokenRecord.scheduleRange) {
+      participantContextRecord.scheduleRange = String(tokenRecord.scheduleRange || '').trim();
+    }
+    if (!participantContextRecord.guidance && tokenRecord && tokenRecord.guidance) {
+      participantContextRecord.guidance = String(tokenRecord.guidance || '').trim();
+    }
+
+    const settings = getParticipantMailSettings_();
+    const baseUrl = getWebAppBaseUrl_();
+    const questionFormBaseUrl = getQuestionFormBaseUrl_();
+
+    const context = buildParticipantMailContext_(
+      eventId,
+      scheduleId,
+      participantContextRecord,
+      eventRecord,
+      scheduleRecord,
+      settings,
+      baseUrl,
+      questionFormBaseUrl
+    );
+    const subject = buildParticipantMailSubject_(context, settings);
+    context.subject = subject;
+    context.contactEmail = coalesceStrings_(context.contactEmail, settings.contactEmail);
+    context.senderName = coalesceStrings_(context.senderName, settings.senderName);
+    enrichParticipantMailContext_(context, settings);
+
+    const htmlOutput = createParticipantMailTemplateOutput_(context, 'web');
+    const html = htmlOutput.getContent();
+    const plainText = renderParticipantMailPlainText_(context);
+
+    logMail_('参加者メールのWeb表示用HTMLを生成しました', logContext);
+
+    return {
+      subject,
+      html,
+      plainText,
+      context: {
+        eventName: context.eventName || '',
+        scheduleLabel: context.scheduleLabel || context.scheduleRangeLabel || '',
+        scheduleDateLabel: context.scheduleDateLabel || '',
+        scheduleTimeRange: context.scheduleTimeRange || '',
+        participantName: context.participantName || '',
+        questionFormUrl: context.questionFormUrl || '',
+        contactLinkUrl: context.contactLinkUrl || '',
+        contactEmail: context.contactEmail || '',
+        footerNote: context.footerNote || ''
+      }
+    };
+  } catch (error) {
+    logMailError_('参加者メールのWeb表示生成に失敗しました', error, logContext);
+    throw error;
+  }
 }
 
 function renderParticipantMailPage_(e) {
