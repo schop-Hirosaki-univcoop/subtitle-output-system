@@ -123,6 +123,15 @@
         font-size: 13px;
         color: #6b7280;
       }
+      .gmail-notice {
+        margin: 12px 0 0;
+        padding: 12px 16px;
+        font-size: 13px;
+        line-height: 1.7;
+        border-radius: 8px;
+        background: #eff6ff;
+        color: #1d4ed8;
+      }
       @media (max-width: 640px) {
         .mail-frame-wrapper {
           padding-top: 70vh;
@@ -150,6 +159,10 @@
         <h2>メール件名</h2>
         <p id="meta-subject" class="meta-subject">-</p>
         <p class="caution">表示内容は参加者本人専用です。第三者への共有や転載はお控えください。</p>
+        <p class="gmail-notice" id="gmail-notice" hidden>
+          Gmailで提供される「お問い合わせ」などのボタンは、この閲覧ページでは正しく開けない場合があります。<br />
+          その際はお手元のメールアプリやブラウザで元のメールから操作してください。
+        </p>
       </section>
       <section class="card" id="mail-card" hidden>
         <h2>メール本文</h2>

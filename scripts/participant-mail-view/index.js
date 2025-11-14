@@ -7,10 +7,13 @@ const elements = {
   errorMessage: document.getElementById("error-message"),
   metaCard: document.getElementById("meta-card"),
   metaSubject: document.getElementById("meta-subject"),
+  gmailNotice: document.getElementById("gmail-notice"),
   mailCard: document.getElementById("mail-card"),
   mailFrame: document.getElementById("mail-frame"),
   statusCard: document.getElementById("status-card")
 };
+
+let encounteredGmailRedirect = false;
 
 function extractToken(search = window.location.search, tokenKeys = TOKEN_PARAM_KEYS) {
   const params = new URLSearchParams(search || "");
@@ -135,6 +138,8 @@ function prepareMailHtml(html) {
     return html;
   }
 
+  encounteredGmailRedirect = false;
+
   let doc;
   try {
     doc = new DOMParser().parseFromString(html, "text/html");
@@ -163,13 +168,16 @@ function prepareMailHtml(html) {
 
     const mailtoHref = extractMailtoHref(href);
     const isHttpLike = url && (url.protocol === "http:" || url.protocol === "https:");
+    const isGmailRedirectHost =
+      url &&
+      url.hostname &&
+      /(?:^|\.)((?:accounts|mail)\.google\.com)$/i.test(url.hostname);
+
     const shouldUnwrapMailto =
       mailtoHref &&
       (!isHttpLike ||
         anchor.hasAttribute("data-saferedirecturl") ||
-        (url &&
-          url.hostname &&
-          /(?:^|\.)((?:accounts|mail)\.google\.com)$/i.test(url.hostname)));
+        isGmailRedirectHost);
 
     if (shouldUnwrapMailto) {
       anchor.setAttribute("href", mailtoHref);
@@ -185,6 +193,10 @@ function prepareMailHtml(html) {
       anchor.removeAttribute("rel");
       anchor.removeAttribute("data-saferedirecturl");
       continue;
+    }
+
+    if (isGmailRedirectHost) {
+      encounteredGmailRedirect = true;
     }
 
     anchor.setAttribute("target", "_blank");
@@ -223,8 +235,15 @@ function renderMailHtml(html) {
     showError("メール本文の取得に失敗しました。時間をおいて再度お試しください。");
     return;
   }
+  if (elements.gmailNotice) {
+    elements.gmailNotice.hidden = true;
+  }
   elements.mailFrame.srcdoc = prepareMailHtml(html);
   elements.mailCard.hidden = false;
+
+  if (encounteredGmailRedirect && elements.gmailNotice) {
+    elements.gmailNotice.hidden = false;
+  }
 }
 
 async function fetchMailPayload(token) {
