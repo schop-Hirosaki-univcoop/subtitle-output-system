@@ -295,6 +295,8 @@ function include_(filename) {
 const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v3';
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
 const PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL = 'https://schop-hirosaki-univcoop.github.io/subtitle-output-system/email-participant-shell.html';
+const PUBLIC_WEB_APP_FALLBACK_BASE_URL = 'https://schop-hirosaki-univcoop.github.io/subtitle-output-system/';
+const QUESTION_FORM_PAGE_FILENAME = 'question-form.html';
 
 function namespaceParticipantMailTemplateMarkup_(markup, namespace) {
   if (!markup) {
@@ -945,6 +947,11 @@ function normalizeParticipantMailViewBaseUrl_(value) {
   if (!normalizedBase) {
     normalizedBase = 'email-participant-shell.html';
   }
+  const isAppsScriptEndpoint = /script\.google(?:usercontent)?\.com\/macros\//i.test(normalizedBase);
+  const isExecEndpoint = /\/(exec|dev)(?:\/)?$/i.test(normalizedBase);
+  if (isAppsScriptEndpoint && isExecEndpoint) {
+    return normalizedBase + queryPart;
+  }
   if (/email-participant-(shell|body)\.html?$/i.test(normalizedBase)) {
     normalizedBase = normalizedBase.replace(/email-participant-body\.html?$/i, 'email-participant-shell.html');
   } else if (/\/index(?:\.html?)?$/i.test(normalizedBase)) {
@@ -957,17 +964,40 @@ function normalizeParticipantMailViewBaseUrl_(value) {
   return normalizedBase + queryPart;
 }
 
+function normalizeQuestionFormBaseUrl_(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  const hashIndex = trimmed.indexOf('#');
+  let hashPart = '';
+  let withoutHash = trimmed;
+  if (hashIndex !== -1) {
+    hashPart = trimmed.slice(hashIndex);
+    withoutHash = trimmed.slice(0, hashIndex);
+  }
+  const queryIndex = withoutHash.indexOf('?');
+  const basePart = queryIndex === -1 ? withoutHash : withoutHash.slice(0, queryIndex);
+  const queryPart = queryIndex === -1 ? '' : withoutHash.slice(queryIndex);
+  let normalizedBase = basePart.replace(/\s+$/, '');
+  if (!normalizedBase) {
+    return '';
+  }
+  if (/\.html?$/i.test(normalizedBase)) {
+    return normalizedBase + queryPart + hashPart;
+  }
+  normalizedBase = normalizedBase.replace(/\/+$/, '') + '/' + QUESTION_FORM_PAGE_FILENAME;
+  return normalizedBase + queryPart + hashPart;
+}
+
 function getWebAppBaseUrl_() {
   const properties = PropertiesService.getScriptProperties();
-  const propertyKeys = ['PARTICIPANT_MAIL_WEB_VIEW_BASE_URL', 'PUBLIC_WEB_APP_URL', 'WEB_APP_BASE_URL'];
+  const propertyKeys = ['PARTICIPANT_MAIL_WEB_VIEW_BASE_URL', 'WEB_APP_BASE_URL'];
   for (let i = 0; i < propertyKeys.length; i += 1) {
     const value = String(properties.getProperty(propertyKeys[i]) || '').trim();
     if (value) {
       return normalizeParticipantMailViewBaseUrl_(value);
     }
-  }
-  if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
-    return normalizeParticipantMailViewBaseUrl_(PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL);
   }
   if (typeof ScriptApp !== 'undefined' && ScriptApp.getService) {
     try {
@@ -982,7 +1012,58 @@ function getWebAppBaseUrl_() {
       // ignore and fall back
     }
   }
+  if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
+    return normalizeParticipantMailViewBaseUrl_(PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL);
+  }
   return '';
+}
+
+function getQuestionFormBaseUrl_() {
+  const properties = PropertiesService.getScriptProperties();
+  const propertyKeys = ['QUESTION_FORM_BASE_URL', 'PUBLIC_WEB_APP_URL'];
+  for (let i = 0; i < propertyKeys.length; i += 1) {
+    const value = String(properties.getProperty(propertyKeys[i]) || '').trim();
+    if (value) {
+      return normalizeQuestionFormBaseUrl_(value);
+    }
+  }
+  if (PUBLIC_WEB_APP_FALLBACK_BASE_URL) {
+    return normalizeQuestionFormBaseUrl_(PUBLIC_WEB_APP_FALLBACK_BASE_URL);
+  }
+  if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
+    const derived = PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL.replace(/email-participant-shell\.html?.*$/i, QUESTION_FORM_PAGE_FILENAME);
+    if (derived) {
+      return normalizeQuestionFormBaseUrl_(derived);
+    }
+  }
+  return '';
+}
+
+function buildQuestionFormUrl_(baseUrl, params) {
+  const trimmed = String(baseUrl || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  const token = params && params.token ? String(params.token).trim() : '';
+  const segments = [];
+  if (token) {
+    segments.push(`token=${encodeURIComponent(token)}`);
+  }
+  if (!segments.length) {
+    return trimmed;
+  }
+  const hashIndex = trimmed.indexOf('#');
+  let hashPart = '';
+  let baseWithoutHash = trimmed;
+  if (hashIndex !== -1) {
+    hashPart = trimmed.slice(hashIndex);
+    baseWithoutHash = trimmed.slice(0, hashIndex);
+  }
+  let separator = '?';
+  if (baseWithoutHash.includes('?')) {
+    separator = baseWithoutHash.endsWith('?') || baseWithoutHash.endsWith('&') ? '' : '&';
+  }
+  return `${baseWithoutHash}${separator}${segments.join('&')}${hashPart}`;
 }
 
 function getParticipantMailSettings_() {
@@ -998,6 +1079,8 @@ function getParticipantMailSettings_() {
     tagline: String(properties.getProperty('PARTICIPANT_MAIL_TAGLINE') || '').trim(),
     contactLinkLabel: String(properties.getProperty('PARTICIPANT_MAIL_CONTACT_LINK_LABEL') || '').trim(),
     contactLinkUrl: String(properties.getProperty('PARTICIPANT_MAIL_CONTACT_LINK_URL') || '').trim(),
+    questionFormLinkLabel: String(properties.getProperty('PARTICIPANT_MAIL_QUESTION_FORM_LINK_LABEL') || '').trim(),
+    questionFormPrompt: String(properties.getProperty('PARTICIPANT_MAIL_QUESTION_FORM_PROMPT') || '').trim(),
     footerNote: String(properties.getProperty('PARTICIPANT_MAIL_FOOTER_NOTE') || '').trim(),
     previewTextTemplate: String(properties.getProperty('PARTICIPANT_MAIL_PREVIEW_TEXT') || '').trim()
   };
@@ -1047,7 +1130,7 @@ function formatMailTimeLabel_(date) {
   return Utilities.formatDate(date, 'Asia/Tokyo', 'H:mm');
 }
 
-function buildParticipantMailContext_(eventId, scheduleId, participantRecord, eventRecord, scheduleRecord, settings, baseUrl) {
+function buildParticipantMailContext_(eventId, scheduleId, participantRecord, eventRecord, scheduleRecord, settings, baseUrl, questionFormBaseUrl) {
   const participantId = String((participantRecord && (participantRecord.participantId || participantRecord.uid)) || '').trim();
   const participantName = String(participantRecord && participantRecord.name || '').trim();
   const eventName = coalesceStrings_(
@@ -1111,6 +1194,9 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
     participantId,
     token
   });
+  const questionFormUrl = token && questionFormBaseUrl
+    ? buildQuestionFormUrl_(questionFormBaseUrl, { token, eventId, scheduleId, participantId })
+    : '';
   const guidance = String(participantRecord && participantRecord.guidance || '').trim();
   const location = coalesceStrings_(
     participantRecord && (participantRecord.location || participantRecord.venue),
@@ -1139,6 +1225,18 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
     eventRecord && eventRecord.mailFooter,
     settings.footerNote
   );
+  const questionFormLabel = coalesceStrings_(
+    participantRecord && (participantRecord.questionFormLabel || participantRecord.questionFormButtonLabel),
+    scheduleRecord && (scheduleRecord.questionFormLabel || scheduleRecord.questionFormButtonLabel),
+    eventRecord && (eventRecord.questionFormLabel || eventRecord.questionFormButtonLabel),
+    settings.questionFormLinkLabel
+  );
+  const questionFormPrompt = coalesceStrings_(
+    participantRecord && (participantRecord.questionFormPrompt || participantRecord.questionPrompt),
+    scheduleRecord && (scheduleRecord.questionFormPrompt || scheduleRecord.questionPrompt),
+    eventRecord && (eventRecord.questionFormPrompt || eventRecord.questionPrompt),
+    settings.questionFormPrompt
+  );
   return {
     eventId,
     scheduleId,
@@ -1158,6 +1256,9 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
     guidance,
     webViewUrl,
     token,
+    questionFormUrl,
+    questionFormLabel,
+    questionFormPrompt,
     arrivalNote,
     contactLinkLabel: settings.contactLinkLabel || '',
     contactLinkUrl: settings.contactLinkUrl || '',
@@ -1275,6 +1376,24 @@ function enrichParticipantMailContext_(context, settings) {
   const effectiveFooter = coalesceStrings_(context.footerNote, settings && settings.footerNote);
   if (effectiveFooter) {
     context.footerNote = effectiveFooter;
+  }
+  if (context.questionFormUrl) {
+    const questionFormLabel = coalesceStrings_(
+      context.questionFormLabel,
+      settings && settings.questionFormLinkLabel,
+      '質問フォームを開く'
+    );
+    if (questionFormLabel) {
+      context.questionFormLabel = questionFormLabel;
+    }
+    const questionFormPrompt = coalesceStrings_(
+      context.questionFormPrompt,
+      settings && settings.questionFormPrompt,
+      '事前のご質問や相談はこちらのフォームからお送りください。'
+    );
+    if (questionFormPrompt) {
+      context.questionFormPrompt = questionFormPrompt;
+    }
   }
   const contactLabel = coalesceStrings_(
     context.contactLinkLabel,
@@ -1530,6 +1649,20 @@ function renderParticipantMailPlainText_(context) {
   if (context.webViewUrl) {
     lines.push('', `メールが正しく表示されない場合: ${context.webViewUrl}`);
   }
+  if (context.questionFormUrl) {
+    const questionPrompt = coalesceStrings_(
+      context.questionFormPrompt,
+      '質問フォームはこちらからご投稿いただけます。'
+    );
+    if (questionPrompt) {
+      lines.push('', questionPrompt);
+    }
+    const questionLabel = coalesceStrings_(
+      context.questionFormLabel,
+      '質問フォーム'
+    );
+    lines.push('', `${questionLabel}: ${context.questionFormUrl}`);
+  }
   const hasContactLink = context.contactLinkUrl && !/^mailto:/i.test(context.contactLinkUrl);
   const hasContactEmail = !!context.contactEmail;
   if (hasContactLink || hasContactEmail) {
@@ -1715,6 +1848,7 @@ function sendParticipantMail_(principal, req) {
   });
   const settings = getParticipantMailSettings_();
   const baseUrl = getWebAppBaseUrl_();
+  const questionFormBaseUrl = getQuestionFormBaseUrl_();
   const normalizedPrincipalEmail = normalizeEmail_(principal && principal.email);
   const fallbackContactEmail = coalesceStrings_(settings.contactEmail, normalizedPrincipalEmail);
   const senderName = settings.senderName || String(eventRecord && eventRecord.name || '').trim() || 'イベント運営チーム';
@@ -1803,7 +1937,8 @@ function sendParticipantMail_(principal, req) {
       eventRecord,
       scheduleRecord,
       settings,
-      baseUrl
+      baseUrl,
+      questionFormBaseUrl
     );
     context.contactEmail = coalesceStrings_(context.contactEmail, fallbackContactEmail);
     context.senderName = senderName;
@@ -2009,6 +2144,7 @@ function renderParticipantMailPage_(e) {
     const scheduleRecord = fetchRtdb_(`questionIntake/schedules/${eventId}/${scheduleId}`, accessToken) || {};
     const settings = getParticipantMailSettings_();
     const baseUrl = getWebAppBaseUrl_();
+    const questionFormBaseUrl = getQuestionFormBaseUrl_();
     const context = buildParticipantMailContext_(
       eventId,
       scheduleId,
@@ -2016,7 +2152,8 @@ function renderParticipantMailPage_(e) {
       eventRecord,
       scheduleRecord,
       settings,
-      baseUrl
+      baseUrl,
+      questionFormBaseUrl
     );
     const subject = buildParticipantMailSubject_(context, settings);
     context.subject = subject;
