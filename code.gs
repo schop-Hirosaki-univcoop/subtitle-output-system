@@ -1002,9 +1002,6 @@ function getWebAppBaseUrl_() {
       return normalizeParticipantMailViewBaseUrl_(value);
     }
   }
-  if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
-    return normalizeParticipantMailViewBaseUrl_(PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL);
-  }
   if (typeof ScriptApp !== 'undefined' && ScriptApp.getService) {
     try {
       const service = ScriptApp.getService();
@@ -1017,6 +1014,9 @@ function getWebAppBaseUrl_() {
     } catch (error) {
       // ignore and fall back
     }
+  }
+  if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
+    return normalizeParticipantMailViewBaseUrl_(PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL);
   }
   return '';
 }
