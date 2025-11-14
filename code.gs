@@ -295,6 +295,7 @@ function include_(filename) {
 const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = 'participantMailTemplate:v3';
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL = 'https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/';
 const PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL = 'https://schop-hirosaki-univcoop.github.io/subtitle-output-system/participant-mail-view.html';
+const PARTICIPANT_MAIL_CONTACT_EMAIL = 'gakui.hirosaki@gmail.com';
 const PUBLIC_WEB_APP_FALLBACK_BASE_URL = 'https://schop-hirosaki-univcoop.github.io/subtitle-output-system/';
 const QUESTION_FORM_PAGE_FILENAME = 'question-form.html';
 
@@ -1071,7 +1072,7 @@ function buildQuestionFormUrl_(baseUrl, params) {
 function getParticipantMailSettings_() {
   const properties = PropertiesService.getScriptProperties();
   const settings = {
-    contactEmail: String(properties.getProperty('PARTICIPANT_MAIL_CONTACT') || '').trim(),
+    contactEmail: PARTICIPANT_MAIL_CONTACT_EMAIL,
     senderName: String(properties.getProperty('PARTICIPANT_MAIL_SENDER_NAME') || '').trim(),
     subjectTemplate: String(properties.getProperty('PARTICIPANT_MAIL_SUBJECT') || '').trim(),
     noteHtml: properties.getProperty('PARTICIPANT_MAIL_NOTE_HTML') || '',
@@ -1234,11 +1235,7 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
     eventRecord && (eventRecord.location || eventRecord.venue),
     settings.location
   );
-  const contactEmail = coalesceStrings_(
-    participantRecord && participantRecord.contactEmail,
-    scheduleRecord && scheduleRecord.contactEmail,
-    eventRecord && eventRecord.contactEmail
-  );
+  const contactEmail = PARTICIPANT_MAIL_CONTACT_EMAIL;
   const arrivalNote = coalesceStrings_(
     participantRecord && (participantRecord.arrivalNote || participantRecord.arrivalWindow || participantRecord.checkinNote),
     scheduleRecord && (scheduleRecord.arrivalNote || scheduleRecord.arrivalWindow || scheduleRecord.checkinNote)
