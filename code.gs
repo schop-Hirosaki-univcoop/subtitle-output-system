@@ -1036,6 +1036,9 @@ function getWebAppBaseUrl_() {
       // ignore and fall back
     }
   }
+  if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
+    return normalizeParticipantMailViewBaseUrl_(PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL);
+  }
   return '';
 }
 
