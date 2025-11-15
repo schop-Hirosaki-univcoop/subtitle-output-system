@@ -1118,7 +1118,6 @@ function getParticipantMailSettings_() {
   const properties = PropertiesService.getScriptProperties();
   const settings = {
     contactEmail: PARTICIPANT_MAIL_CONTACT_EMAIL,
-    senderName: String(properties.getProperty('PARTICIPANT_MAIL_SENDER_NAME') || '').trim(),
     subjectTemplate: String(properties.getProperty('PARTICIPANT_MAIL_SUBJECT') || '').trim(),
     noteHtml: properties.getProperty('PARTICIPANT_MAIL_NOTE_HTML') || '',
     noteText: properties.getProperty('PARTICIPANT_MAIL_NOTE_TEXT') || '',
@@ -1134,7 +1133,6 @@ function getParticipantMailSettings_() {
   };
   logMail_('参加者メール設定を読み込みました', {
     hasContactEmail: Boolean(settings.contactEmail),
-    hasSenderName: Boolean(settings.senderName),
     hasSubjectTemplate: Boolean(settings.subjectTemplate),
     hasPreviewTextTemplate: Boolean(settings.previewTextTemplate)
   });
@@ -1204,6 +1202,14 @@ function formatMailTimeLabel_(date) {
     return '';
   }
   return Utilities.formatDate(date, 'Asia/Tokyo', 'H:mm');
+}
+
+function buildParticipantMailSenderName_(eventName) {
+  const trimmedEventName = String(eventName || '').trim();
+  if (trimmedEventName) {
+    return `弘前大学生協学生委員会 ${trimmedEventName} 運営チーム`;
+  }
+  return '弘前大学生協学生委員会 運営チーム';
 }
 
 function buildParticipantMailContext_(eventId, scheduleId, participantRecord, eventRecord, scheduleRecord, settings, baseUrl, questionFormBaseUrl) {
@@ -1318,6 +1324,7 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
     eventRecord && (eventRecord.questionFormPrompt || eventRecord.questionPrompt),
     settings.questionFormPrompt
   );
+  const senderName = buildParticipantMailSenderName_(eventName);
   return {
     eventId,
     scheduleId,
@@ -1330,7 +1337,7 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
     scheduleTimeRange: resolvedScheduleTimeRange,
     scheduleRangeLabel,
     contactEmail,
-    senderName: String(settings.senderName || '').trim(),
+    senderName,
     additionalHtml: settings.noteHtml || '',
     additionalText: settings.noteText || '',
     location,
@@ -1942,7 +1949,7 @@ function sendParticipantMail_(principal, req) {
   const questionFormBaseUrl = getQuestionFormBaseUrl_();
   const normalizedPrincipalEmail = normalizeEmail_(principal && principal.email);
   const fallbackContactEmail = coalesceStrings_(settings.contactEmail, normalizedPrincipalEmail);
-  const senderName = settings.senderName || String(eventRecord && eventRecord.name || '').trim() || 'イベント運営チーム';
+  const senderName = buildParticipantMailSenderName_(eventRecordName);
 
   const recipients = [];
   let skippedMissingEmail = 0;
@@ -2362,7 +2369,10 @@ function resolveParticipantMailForToken_(req) {
     const subject = buildParticipantMailSubject_(context, settings);
     context.subject = subject;
     context.contactEmail = coalesceStrings_(context.contactEmail, settings.contactEmail);
-    context.senderName = coalesceStrings_(context.senderName, settings.senderName);
+    context.senderName = coalesceStrings_(
+      context.senderName,
+      buildParticipantMailSenderName_(context.eventName || '')
+    );
     enrichParticipantMailContext_(context, settings);
 
     const htmlOutput = createParticipantMailTemplateOutput_(context, 'web');
@@ -2437,7 +2447,10 @@ function renderParticipantMailPage_(e) {
     const subject = buildParticipantMailSubject_(context, settings);
     context.subject = subject;
     context.contactEmail = coalesceStrings_(context.contactEmail, settings.contactEmail);
-    context.senderName = coalesceStrings_(context.senderName, settings.senderName);
+    context.senderName = coalesceStrings_(
+      context.senderName,
+      buildParticipantMailSenderName_(context.eventName || '')
+    );
     enrichParticipantMailContext_(context, settings);
     const output = createParticipantMailTemplateOutput_(context, 'web');
     output.setTitle(`${context.eventName || 'ご案内'} - ${context.scheduleLabel || ''}`);
