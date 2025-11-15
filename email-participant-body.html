@@ -38,8 +38,8 @@
   var questionFormLabel = bodyCtx.questionFormLabel || (questionFormUrl ? '質問フォームを開く' : '');
   var questionFormPrompt = bodyCtx.questionFormPrompt || '';
   var closingMessage = bodyCtx.closingMessage || 'それでは、みなさんに会えるのをお待ちしています！';
-  var signaturePrimary = bodyCtx.signaturePrimary || bodyCtx.senderName || '弘前大学生協学生委員会';
-  var signatureSecondary = bodyCtx.signatureSecondary || (eventName ? eventName + '運営チーム' : '運営チーム');
+  var signaturePrimary = '弘前大学生協学生委員会';
+  var signatureSecondary = bodyCtx.signatureSecondary || (eventName ? eventName + ' 運営チーム' : ' 運営チーム');
   var resolvedLocation = asTrimmedString(bodyCtx.location) || asTrimmedString(bodyCtx.scheduleLocation);
   var resolvedArrival = asTrimmedString(bodyCtx.arrivalNote);
 
@@ -174,14 +174,15 @@
   <? } ?>
   <? if (resolvedLocation || resolvedArrival) { ?>
     <p class="info" style="<?= infoStyle ?>">
-      当日は<? if (resolvedLocation) { ?><strong><?= resolvedLocation ?></strong><? } else { ?>会場にて<? } ?>開催します。<br>
+      当日は<? if (resolvedLocation) { ?><strong><?= resolvedLocation ?></strong><? } else { ?>会場<? } ?>にて開催します。<br>
       <? if (resolvedArrival) { ?><strong><?= resolvedArrival ?></strong><? } ?>
     </p>
   <? } ?>
   <hr style="<?= hrStyle ?>">
   <p class="info" style="<?= infoStyle ?>">
-    受付の際に本人確認のため、<strong>本メール画面</strong>を見せていただく場合がございます。<br>
-    あらかじめ<strong>スクリーンショットのご用意</strong>をお願いします。
+    受付の際に本人確認のため、<strong>本メール画面</strong>、<br>
+    または、<strong>メールのスクリーンショット<strong>を見せていただく場合がございます。<br>
+    あらかじめ<strong>画面のご用意</strong>をお願いします。
   </p>
   <? if (bodyCtx.guidance) { ?>
     <hr style="<?= hrStyle ?>">
@@ -202,7 +203,8 @@
       if (questionFormPrompt) { ?>
         <?= questionFormPrompt ?>
       <? } else { ?>
-        事前のご質問や相談は、下のフォームから投稿いただけます。
+        会の最中に、<strong>大学生活に関する<strong>皆様からのご質問や相談に回答する企画を行います。<br>
+        ご質問や相談は、下のフォームから投稿いただけます。<strong>是非、ご投稿ください！<strong>
       <? } ?>
     </p>
     <p style="text-align:center; margin:0 0 12px;">
@@ -212,7 +214,7 @@
   <? if ((contactUrl && contactLabel) || bodyCtx.contactEmail) { ?>
     <hr style="<?= hrStyle ?>">
     <p class="info" style="<?= infoStyle ?>">
-      事情があって会に参加できなくなった場合や、質問がある場合は、下のボタンからお問い合わせください。
+      事情があって<strong>会に参加できなくなった場合<strong>や、<strong>会に対する質問がある場合<strong>は、下のボタンからお問い合わせください。
     </p>
     <? if (contactUrl && contactLabel) { ?>
       <p style="text-align:center; margin:0 0 12px;">
