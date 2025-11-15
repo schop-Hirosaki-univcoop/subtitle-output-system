@@ -236,7 +236,7 @@ function renderMailHtml(html) {
     return;
   }
   if (elements.gmailNotice) {
-    elements.gmailNotice.hidden = true;
+    elements.gmailNotice.hidden = false;
   }
   elements.mailFrame.srcdoc = prepareMailHtml(html);
   elements.mailCard.hidden = false;
