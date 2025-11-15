@@ -42,8 +42,7 @@ import {
   normalizeKey,
   readFileAsText,
   parseCsv,
-  parseDateTimeLocal,
-  combineDateAndTime
+  parseDateTimeLocal
 } from "./utils.js";
 import {
   normalizeEventParticipantCache,
@@ -636,6 +635,8 @@ import {
   bindDialogDismiss,
   setFormError
 } from "./dialog.js";
+// combineDateAndTime などの時間結合ヘルパーは calendar.js に集約しており、
+// 印刷ビューでも同じロジックを共有するため utils.js からは import しない。
 import {
   formatDatePart,
   normalizeDateInputValue,
@@ -1929,7 +1930,8 @@ async function confirmAction({
   description = "",
   confirmLabel = "実行する",
   cancelLabel = "キャンセル",
-  tone = "danger"
+  tone = "danger",
+  showCancel = true
 } = {}) {
   if (!dom.confirmDialog) {
     console.warn("Confirm dialog is unavailable; skipping confirmation.");
@@ -1953,6 +1955,7 @@ async function confirmAction({
   }
   if (dom.confirmCancelButton) {
     dom.confirmCancelButton.textContent = cancelLabel || "キャンセル";
+    dom.confirmCancelButton.hidden = !showCancel;
   }
 
   openDialog(dom.confirmDialog);
@@ -3324,6 +3327,31 @@ function buildParticipantPrintHtml({
 
 let participantPrintInProgress = false;
 
+const PRINT_POPUP_BLOCKED_MESSAGE = [
+  "ブラウザや拡張機能によって印刷用のウィンドウを開けませんでした。",
+  "",
+  "▼対処方法",
+  "1. アドレスバー付近のポップアップブロックのアイコンをクリックする",
+  "2. 現在のサイトでポップアップを許可する（\"常に許可\" などを選択する）",
+  "3. 必要に応じてページを再読み込みしてから、再度「印刷」ボタンを押す"
+].join("\n");
+
+async function showPrintPopupBlockedGuidance() {
+  if (dom.confirmDialog && dom.confirmDialogMessage && dom.confirmAcceptButton) {
+    await confirmAction({
+      title: "印刷用ウィンドウを開けませんでした",
+      description: PRINT_POPUP_BLOCKED_MESSAGE,
+      confirmLabel: "閉じる",
+      cancelLabel: "",
+      tone: "primary",
+      showCancel: false
+    });
+    return;
+  }
+
+  window.alert(`${PRINT_POPUP_BLOCKED_MESSAGE}\n\nポップアップを許可してから再度お試しください。`);
+}
+
 async function openParticipantPrintView() {
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
@@ -3346,7 +3374,7 @@ async function openParticipantPrintView() {
   try {
     printWindow = window.open("", "_blank", "noopener,noreferrer");
     if (!printWindow) {
-      window.alert("印刷用のウィンドウを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
+      await showPrintPopupBlockedGuidance();
       return;
     }
 
