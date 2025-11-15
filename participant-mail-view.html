@@ -24,7 +24,7 @@
         flex-direction: column;
       }
       header {
-        padding: 24px 16px 12px;
+        padding: 12px 8px 6px;
         text-align: center;
       }
       header h1 {
@@ -34,25 +34,25 @@
         color: #0b3d91;
       }
       header p {
-        margin: 8px 0 0;
+        margin: 4px 0 0;
         font-size: 14px;
         color: #4b5563;
       }
       main {
         width: min(960px, 100%);
         margin: 0 auto;
-        padding: 0 16px 48px;
+        padding: 0 8px 24px;
         flex: 1;
       }
       .card {
         background: #ffffff;
         border-radius: 12px;
         box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
-        padding: 24px;
-        margin-top: 24px;
+        padding: 12px;
+        margin-top: 12px;
       }
       .card h2 {
-        margin: 0 0 12px;
+        margin: 0 0 6px;
         font-size: 18px;
         color: #0b3d91;
       }
@@ -68,7 +68,7 @@
         border: 2px solid rgba(15, 23, 42, 0.2);
         border-top-color: #0b3d91;
         border-radius: 50%;
-        margin-left: 8px;
+        margin-left: 4px;
         animation: spin 1s linear infinite;
         vertical-align: -0.2em;
       }
@@ -76,15 +76,15 @@
         to { transform: rotate(360deg); }
       }
       .error-message {
-        margin-top: 12px;
-        padding: 12px 16px;
+        margin-top: 6px;
+        padding: 6px 8px;
         border-radius: 8px;
         background: #fee2e2;
         color: #b91c1c;
         font-size: 14px;
       }
       .meta-subject {
-        margin: 8px 0 0;
+        margin: 4px 0 0;
         font-size: 16px;
         font-weight: 600;
         color: #1f2933;
@@ -92,7 +92,7 @@
       }
       .mail-frame-wrapper {
         position: relative;
-        padding-top: min(60vh, 520px);
+        padding-top: min(30vh, 260px);
         background: #0f172a;
         border-radius: 10px;
         overflow: hidden;
@@ -116,16 +116,16 @@
         text-align: center;
         font-size: 12px;
         color: #6b7280;
-        padding: 24px 12px 32px;
+        padding: 12px 6px 16px;
       }
       .caution {
-        margin-top: 16px;
+        margin-top: 8px;
         font-size: 13px;
         color: #6b7280;
       }
       .gmail-notice {
-        margin: 12px 0 0;
-        padding: 12px 16px;
+        margin: 6px 0 0;
+        padding: 6px 8px;
         font-size: 13px;
         line-height: 1.7;
         border-radius: 8px;
@@ -134,7 +134,7 @@
       }
       @media (max-width: 640px) {
         .mail-frame-wrapper {
-          padding-top: 70vh;
+          padding-top: 35vh;
         }
       }
     </style>
@@ -153,7 +153,7 @@
       <section class="card" id="status-card">
         <h2>読み込みステータス</h2>
         <p class="status-message" id="status-message" aria-live="polite" aria-busy="true">アクセス情報を確認しています…</p>
-        <p class="error-message" id="error-message" role="alert" hidden></p>
+        <p class="error-message" id="error-message" role="alert"></p>
       </section>
       <section class="card" id="meta-card" hidden>
         <h2>メール件名</h2>
