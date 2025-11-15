@@ -36,7 +36,6 @@
   var contactLabel = bodyCtx.contactLinkLabel || (bodyCtx.contactEmail ? 'お問い合わせする' : '');
   var questionFormUrl = bodyCtx.questionFormUrl || '';
   var questionFormLabel = bodyCtx.questionFormLabel || (questionFormUrl ? '質問フォームを開く' : '');
-  var questionFormPrompt = bodyCtx.questionFormPrompt || '';
   var closingMessage = bodyCtx.closingMessage || 'それでは、みなさんに会えるのをお待ちしています！';
   var signaturePrimary = '弘前大学生協学生委員会';
   var signatureSecondary = bodyCtx.signatureSecondary || (eventName ? eventName + ' 運営チーム' : ' 運営チーム');
@@ -198,13 +197,9 @@
   <? } ?>
   <? if (questionFormUrl) { ?>
     <hr style="<?= hrStyle ?>">
-    <p class="info" style="<?= infoStyle ?>"><?
-      if (questionFormPrompt) { ?>
-        <?= questionFormPrompt ?>
-      <? } else { ?>
+    <p class="info" style="<?= infoStyle ?>">
         会の最中に、<strong>大学生活に関する</strong>皆様からのご質問や相談に回答する企画を行います。<br>
         ご質問や相談は、下のフォームから投稿いただけます。<strong>是非、ご投稿ください！</strong>
-      <? } ?>
     </p>
     <p style="text-align:center; margin:0 0 12px;">
       <a href="<?= questionFormUrl ?>" class="button" target="_blank" rel="noopener" style="<?= buttonStyle ?>"><?= questionFormLabel || '質問フォームを開く' ?></a>
