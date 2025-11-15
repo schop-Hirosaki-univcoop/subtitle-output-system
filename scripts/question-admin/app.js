@@ -7087,10 +7087,19 @@ function applyHostSelectionFromDataset() {
     return;
   }
   const signature = hostSelectionSignature(selection);
-  if (
+  const selectedEventKey = normalizeKey(state.selectedEventId || "");
+  const selectedScheduleKey = normalizeKey(state.selectedScheduleId || "");
+  const matchesCurrentSelection = Boolean(
+    normalizeKey(selection.eventId || "") === selectedEventKey &&
+    normalizeKey(selection.scheduleId || "") === selectedScheduleKey &&
+    selectedEventKey &&
+    selectedScheduleKey
+  );
+  const signatureUnchanged = Boolean(
     signature &&
     (signature === hostSelectionBridge.lastSignature || signature === hostSelectionBridge.pendingSignature)
-  ) {
+  );
+  if (signatureUnchanged && matchesCurrentSelection) {
     return;
   }
   hostSelectionBridge.pendingSignature = signature;
