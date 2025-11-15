@@ -1204,6 +1204,11 @@ function formatMailTimeLabel_(date) {
   return Utilities.formatDate(date, 'Asia/Tokyo', 'H:mm');
 }
 
+function buildArrivalWindowMessage_(windowLabel) {
+  const label = coalesceStrings_(windowLabel);
+  return label ? `${label}までの間にお越しください！` : '';
+}
+
 function buildParticipantMailSenderName_(eventName) {
   const trimmedEventName = String(eventName || '').trim();
   if (trimmedEventName) {
@@ -1250,12 +1255,12 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
   const scheduleDateLabel = formatMailDateWithWeekday_(startDate);
   const startTimeLabel = formatMailTimeLabel_(startDate);
   const endTimeLabel = formatMailTimeLabel_(endDate);
-  let defaultArrivalNote = '';
+  let defaultArrivalWindow = '';
   if (startDate instanceof Date && !isNaN(startDate) && startTimeLabel) {
     const arrivalStartDate = new Date(startDate.getTime() - 30 * 60 * 1000);
     const arrivalStartTimeLabel = formatMailTimeLabel_(arrivalStartDate);
     if (arrivalStartTimeLabel) {
-      defaultArrivalNote = `<strong>${arrivalStartTimeLabel}-${startTimeLabel}</strong>までの間にお越しください！`;
+      defaultArrivalWindow = `${arrivalStartTimeLabel}-${startTimeLabel}`;
     }
   }
   let scheduleTimeRange = '';
@@ -1304,10 +1309,15 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
     settings.location
   );
   const contactEmail = PARTICIPANT_MAIL_CONTACT_EMAIL;
+  const arrivalWindow = coalesceStrings_(
+    participantRecord && (participantRecord.arrivalWindow || participantRecord.checkinWindow),
+    scheduleRecord && (scheduleRecord.arrivalWindow || scheduleRecord.checkinWindow),
+    defaultArrivalWindow
+  );
   const arrivalNote = coalesceStrings_(
-    participantRecord && (participantRecord.arrivalNote || participantRecord.arrivalWindow || participantRecord.checkinNote),
-    scheduleRecord && (scheduleRecord.arrivalNote || scheduleRecord.arrivalWindow || scheduleRecord.checkinNote),
-    defaultArrivalNote
+    participantRecord && (participantRecord.arrivalNote || participantRecord.checkinNote),
+    scheduleRecord && (scheduleRecord.arrivalNote || scheduleRecord.checkinNote),
+    buildArrivalWindowMessage_(arrivalWindow)
   );
   const tagline = coalesceStrings_(
     participantRecord && participantRecord.mailTagline,
@@ -1358,6 +1368,7 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
     questionFormLabel,
     questionFormPrompt,
     arrivalNote,
+    arrivalWindow,
     contactLinkLabel: settings.contactLinkLabel || '',
     contactLinkUrl: settings.contactLinkUrl || '',
     footerNote,
@@ -1471,9 +1482,15 @@ function enrichParticipantMailContext_(context, settings) {
   if (effectiveLocation) {
     context.location = effectiveLocation;
   }
+  const effectiveArrivalWindow = coalesceStrings_(context.arrivalWindow, settings && settings.arrivalWindow);
+  if (effectiveArrivalWindow) {
+    context.arrivalWindow = effectiveArrivalWindow;
+  }
   const effectiveArrival = coalesceStrings_(context.arrivalNote, settings && settings.arrivalNote);
   if (effectiveArrival) {
     context.arrivalNote = effectiveArrival;
+  } else if (context.arrivalWindow) {
+    context.arrivalNote = buildArrivalWindowMessage_(context.arrivalWindow);
   }
   const effectiveTagline = coalesceStrings_(context.tagline, settings && settings.tagline);
   if (effectiveTagline) {

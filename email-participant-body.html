@@ -40,7 +40,10 @@
   var signaturePrimary = '弘前大学生協学生委員会';
   var signatureSecondary = bodyCtx.signatureSecondary || (eventName ? eventName + ' 運営チーム' : ' 運営チーム');
   var resolvedLocation = asTrimmedString(bodyCtx.location) || asTrimmedString(bodyCtx.scheduleLocation);
-  var resolvedArrival = asTrimmedString(bodyCtx.arrivalNote);
+  var resolvedArrivalWindow = asTrimmedString(bodyCtx.arrivalWindow || bodyCtx.arrivalWindowLabel);
+  var resolvedArrivalNote = asTrimmedString(bodyCtx.arrivalNote);
+  var defaultArrivalMessage = resolvedArrivalWindow ? resolvedArrivalWindow + 'までの間にお越しください！' : '';
+  var isDefaultArrivalNote = resolvedArrivalWindow && resolvedArrivalNote === defaultArrivalMessage;
 
   function joinStyles() {
     var styles = [];
@@ -170,10 +173,10 @@
       <? } ?>
     </div>
   <? } ?>
-  <? if (resolvedLocation || resolvedArrival) { ?>
+  <? if (resolvedLocation || resolvedArrivalWindow || resolvedArrivalNote) { ?>
     <p class="info" style="<?= infoStyle ?>">
       当日は<? if (resolvedLocation) { ?><strong><?= resolvedLocation ?></strong><? } else { ?>会場<? } ?>にて開催します。<br>
-      <? if (resolvedArrival) { ?><strong><?= resolvedArrival ?></strong><? } ?>
+      <? if (resolvedArrivalWindow) { ?>受付は<strong><?= resolvedArrivalWindow ?></strong>までの間にお越しください！<? if (resolvedArrivalNote && !isDefaultArrivalNote) { ?><br><?= resolvedArrivalNote ?><? } ?><? } else if (resolvedArrivalNote) { ?><?= resolvedArrivalNote ?><? } ?>
     </p>
   <? } ?>
   <hr style="<?= hrStyle ?>">
