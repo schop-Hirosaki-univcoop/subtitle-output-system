@@ -1250,6 +1250,14 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
   const scheduleDateLabel = formatMailDateWithWeekday_(startDate);
   const startTimeLabel = formatMailTimeLabel_(startDate);
   const endTimeLabel = formatMailTimeLabel_(endDate);
+  let defaultArrivalNote = '';
+  if (startDate instanceof Date && !isNaN(startDate) && startTimeLabel) {
+    const arrivalStartDate = new Date(startDate.getTime() - 30 * 60 * 1000);
+    const arrivalStartTimeLabel = formatMailTimeLabel_(arrivalStartDate);
+    if (arrivalStartTimeLabel) {
+      defaultArrivalNote = `<strong>${arrivalStartTimeLabel}-${startTimeLabel}</strong>までの間にお越しください！`;
+    }
+  }
   let scheduleTimeRange = '';
   if (startTimeLabel && endTimeLabel) {
     scheduleTimeRange = `${startTimeLabel}〜${endTimeLabel}`;
@@ -1298,7 +1306,8 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
   const contactEmail = PARTICIPANT_MAIL_CONTACT_EMAIL;
   const arrivalNote = coalesceStrings_(
     participantRecord && (participantRecord.arrivalNote || participantRecord.arrivalWindow || participantRecord.checkinNote),
-    scheduleRecord && (scheduleRecord.arrivalNote || scheduleRecord.arrivalWindow || scheduleRecord.checkinNote)
+    scheduleRecord && (scheduleRecord.arrivalNote || scheduleRecord.arrivalWindow || scheduleRecord.checkinNote),
+    defaultArrivalNote
   );
   const tagline = coalesceStrings_(
     participantRecord && participantRecord.mailTagline,
