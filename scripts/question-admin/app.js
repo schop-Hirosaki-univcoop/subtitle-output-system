@@ -121,11 +121,13 @@ function cloneParticipantEntry(entry) {
   }
 }
 
-function captureParticipantBaseline(entries = state.participants) {
+function captureParticipantBaseline(entries = state.participants, options = {}) {
+  const { ready = true } = options || {};
   const list = Array.isArray(entries) ? entries : [];
   state.savedParticipantEntries = list.map(entry => cloneParticipantEntry(entry));
   state.savedParticipants = snapshotParticipantList(list);
   state.lastSavedSignature = signatureForEntries(list);
+  state.participantBaselineReady = Boolean(ready);
 }
 
 let embedReadyDeferred = null;
@@ -4302,7 +4304,7 @@ async function loadParticipants(options = {}) {
     state.participantTokenMap = new Map();
     state.duplicateMatches = new Map();
     state.duplicateGroups = new Map();
-    captureParticipantBaseline([]);
+    captureParticipantBaseline([], { ready: false });
     renderParticipants();
     updateParticipantContext();
     syncSaveButtonState();
@@ -4434,7 +4436,7 @@ async function loadParticipants(options = {}) {
     state.duplicateMatches = new Map();
     state.duplicateGroups = new Map();
     state.mailSending = false;
-    captureParticipantBaseline([]);
+    captureParticipantBaseline([], { ready: false });
     setUploadStatus(error.message || "参加者リストの読み込みに失敗しました。", "error");
     renderParticipants();
     updateParticipantContext();
@@ -4486,7 +4488,7 @@ function selectEvent(eventId, options = {}) {
   state.participantTokenMap = new Map();
   state.duplicateMatches = new Map();
   state.duplicateGroups = new Map();
-  captureParticipantBaseline([]);
+  captureParticipantBaseline([], { ready: false });
   if (state.eventParticipantCache instanceof Map && previousEventId) {
     state.eventParticipantCache.delete(previousEventId);
   }
@@ -4542,9 +4544,11 @@ function selectSchedule(scheduleId, options = {}) {
     state.participantTokenMap = new Map();
     state.duplicateMatches = new Map();
     state.duplicateGroups = new Map();
-    captureParticipantBaseline([]);
+    captureParticipantBaseline([], { ready: false });
     renderParticipants();
     syncSaveButtonState();
+  } else if (shouldReload) {
+    captureParticipantBaseline([], { ready: false });
   }
 
   updateParticipantContext({ preserveStatus });
@@ -4552,7 +4556,7 @@ function selectSchedule(scheduleId, options = {}) {
   const needsParticipantLoad = Boolean(
     normalizedId &&
     !suppressParticipantLoad &&
-    (shouldReload || state.lastSavedSignature === "")
+    (shouldReload || !state.participantBaselineReady)
   );
 
   if (needsParticipantLoad) {
@@ -4767,7 +4771,7 @@ async function handleDeleteEvent(eventId, eventName) {
       state.participantTokenMap = new Map();
       state.duplicateMatches = new Map();
       state.duplicateGroups = new Map();
-      captureParticipantBaseline([]);
+      captureParticipantBaseline([], { ready: false });
     }
 
     if (state.eventParticipantCache instanceof Map) {
@@ -4922,7 +4926,7 @@ async function handleDeleteSchedule(scheduleId, scheduleLabel) {
       state.participantTokenMap = new Map();
       state.duplicateMatches = new Map();
       state.duplicateGroups = new Map();
-      captureParticipantBaseline([]);
+      captureParticipantBaseline([], { ready: false });
     }
 
     if (state.eventParticipantCache instanceof Map) {
@@ -5907,6 +5911,7 @@ async function handleClearParticipants() {
   const previousSavedEntries = Array.isArray(state.savedParticipantEntries)
     ? state.savedParticipantEntries.map(entry => cloneParticipantEntry(entry))
     : [];
+  const previousBaselineReady = state.participantBaselineReady;
 
   state.participants = [];
   state.participantTokenMap = new Map();
@@ -5922,6 +5927,7 @@ async function handleClearParticipants() {
     state.lastSavedSignature = previousSignature;
     state.savedParticipants = previousSavedParticipants;
     state.savedParticipantEntries = previousSavedEntries;
+    state.participantBaselineReady = previousBaselineReady;
     updateDuplicateMatches();
     renderParticipants();
   }
@@ -6035,7 +6041,7 @@ function resetState() {
   state.participantTokenMap = new Map();
   state.duplicateMatches = new Map();
   state.duplicateGroups = new Map();
-  captureParticipantBaseline([]);
+  captureParticipantBaseline([], { ready: false });
   state.eventParticipantCache = new Map();
   state.teamAssignments = new Map();
   state.scheduleContextOverrides = new Map();
