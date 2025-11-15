@@ -120,11 +120,13 @@ function cloneParticipantEntry(entry) {
   }
 }
 
-function captureParticipantBaseline(entries = state.participants) {
+function captureParticipantBaseline(entries = state.participants, options = {}) {
+  const { ready = true } = options || {};
   const list = Array.isArray(entries) ? entries : [];
   state.savedParticipantEntries = list.map(entry => cloneParticipantEntry(entry));
   state.savedParticipants = snapshotParticipantList(list);
   state.lastSavedSignature = signatureForEntries(list);
+  state.participantBaselineReady = Boolean(ready);
 }
 
 let embedReadyDeferred = null;
@@ -2360,23 +2362,14 @@ function resolveScheduleAssignment(entry, scheduleId) {
   return entry.fallback || null;
 }
 
-function renderGroupGlAssignments(group, { eventId, rosterMap, assignmentsMap, scheduleId }) {
-  if (!group || !group.leadersContainer || !group.leadersList) {
-    return;
-  }
-  const container = group.leadersContainer;
-  const list = group.leadersList;
-  list.innerHTML = "";
-  container.hidden = true;
-  container.dataset.count = "0";
-
+function collectGroupGlLeaders(groupKey, { eventId, rosterMap, assignmentsMap, scheduleId }) {
   const assignments = assignmentsMap instanceof Map ? assignmentsMap : getEventGlAssignmentsMap(eventId);
   const roster = rosterMap instanceof Map ? rosterMap : getEventGlRoster(eventId);
   if (!(assignments instanceof Map) || !(roster instanceof Map)) {
-    return;
+    return [];
   }
 
-  const rawGroupKey = String(group.key || "").trim();
+  const rawGroupKey = String(groupKey || "").trim();
   const normalizedGroupKey = normalizeKey(rawGroupKey);
   const normalizedCancelLabel = normalizeKey(CANCEL_LABEL);
   const normalizedStaffLabel = normalizeKey(GL_STAFF_LABEL);
@@ -2418,15 +2411,31 @@ function renderGroupGlAssignments(group, { eventId, rosterMap, assignmentsMap, s
     if (profile.department && profile.department !== profile.faculty) {
       metaParts.push(profile.department);
     }
-    const meta = metaParts.join(" / ");
-    leaders.push({ name, meta });
+    leaders.push({
+      name,
+      meta: metaParts.join(" / ")
+    });
   });
 
+  leaders.sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true }));
+  return leaders;
+}
+
+function renderGroupGlAssignments(group, context) {
+  if (!group || !group.leadersContainer || !group.leadersList) {
+    return;
+  }
+  const container = group.leadersContainer;
+  const list = group.leadersList;
+  list.innerHTML = "";
+  container.hidden = true;
+  container.dataset.count = "0";
+
+  const leaders = collectGroupGlLeaders(group.key, context);
   if (!leaders.length) {
     return;
   }
 
-  leaders.sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true }));
   leaders.forEach(leader => {
     const item = document.createElement("span");
     item.className = "participant-group-gl";
@@ -3006,6 +3015,428 @@ function renderParticipants() {
   updateParticipantActionPanelState();
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatPrintCell(value, { placeholder = "&nbsp;" } = {}) {
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return placeholder;
+  }
+  return escapeHtml(text).replace(/\n/g, "<br>");
+}
+
+function formatMetaDisplay(primary, id) {
+  const primaryText = String(primary ?? "").trim();
+  const idText = String(id ?? "").trim();
+  if (primaryText && idText && primaryText !== idText) {
+    return `${primaryText}（ID: ${idText}）`;
+  }
+  return primaryText || idText;
+}
+
+function formatPrintDateTimeRange(startAt, endAt) {
+  const start = startAt ? new Date(startAt) : null;
+  const end = endAt ? new Date(endAt) : null;
+  const startValid = start && !Number.isNaN(start.getTime());
+  const endValid = end && !Number.isNaN(end.getTime());
+  if (!startValid && !endValid) {
+    return "";
+  }
+
+  const dateFormatter = new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+  const timeFormatter = new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+
+  if (startValid && endValid) {
+    const sameDay =
+      start.getFullYear() === end.getFullYear() &&
+      start.getMonth() === end.getMonth() &&
+      start.getDate() === end.getDate();
+    const startText = dateFormatter.format(start);
+    if (sameDay) {
+      return `${startText} 〜 ${timeFormatter.format(end)}`;
+    }
+    return `${startText} 〜 ${dateFormatter.format(end)}`;
+  }
+
+  if (startValid) {
+    return `${dateFormatter.format(start)} 〜`;
+  }
+  return `〜 ${dateFormatter.format(end)}`;
+}
+
+function buildParticipantPrintGroups({ eventId, scheduleId }) {
+  const participants = sortParticipants(state.participants);
+  const rosterMap = getEventGlRoster(eventId);
+  const assignmentsMap = getEventGlAssignmentsMap(eventId);
+  const groupsByKey = new Map();
+
+  participants.forEach(entry => {
+    const groupKey = getParticipantGroupKey(entry);
+    let group = groupsByKey.get(groupKey);
+    if (!group) {
+      const { label, value } = describeParticipantGroup(groupKey);
+      group = {
+        key: groupKey,
+        label,
+        value,
+        participants: []
+      };
+      groupsByKey.set(groupKey, group);
+    }
+    group.participants.push(entry);
+  });
+
+  return Array.from(groupsByKey.values())
+    .filter(group => Array.isArray(group.participants) && group.participants.length > 0)
+    .map(group => ({
+      ...group,
+      glLeaders: collectGroupGlLeaders(group.key, {
+        eventId,
+        scheduleId,
+        rosterMap,
+        assignmentsMap
+      })
+    }));
+}
+
+function buildParticipantPrintHtml({
+  eventId,
+  scheduleId,
+  eventName,
+  scheduleLabel,
+  scheduleLocation,
+  scheduleRange,
+  groups,
+  totalCount,
+  generatedAt
+}) {
+  const eventDisplayRaw = formatMetaDisplay(eventName, eventId);
+  const scheduleDisplayRaw = formatMetaDisplay(scheduleLabel, scheduleId);
+  const locationDisplayRaw = String(scheduleLocation || "").trim();
+  const rangeDisplayRaw = String(scheduleRange || "").trim();
+  const generatedAtText = generatedAt instanceof Date && !Number.isNaN(generatedAt.getTime())
+    ? generatedAt.toLocaleString("ja-JP", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      })
+    : new Date().toLocaleString("ja-JP", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      });
+  const totalValue = Number.isFinite(totalCount)
+    ? totalCount
+    : groups.reduce((sum, group) => sum + (group.participants?.length || 0), 0);
+
+  const titleParts = [eventDisplayRaw, scheduleDisplayRaw]
+    .map(part => String(part || "").trim())
+    .filter(Boolean);
+  const headingText = titleParts.length
+    ? `${titleParts.join(" / ")} の参加者リスト`
+    : "参加者リスト";
+  const docTitle = titleParts.length
+    ? `${titleParts.join(" / ")} - 参加者リスト`
+    : "参加者リスト";
+
+  const metaItems = [];
+  if (eventDisplayRaw) {
+    metaItems.push(
+      `<li class="print-meta__item"><span class="print-meta__label">イベント:</span> <span class="print-meta__value">${escapeHtml(eventDisplayRaw)}</span></li>`
+    );
+  }
+  if (scheduleDisplayRaw) {
+    metaItems.push(
+      `<li class="print-meta__item"><span class="print-meta__label">日程:</span> <span class="print-meta__value">${escapeHtml(scheduleDisplayRaw)}</span></li>`
+    );
+  }
+  if (locationDisplayRaw) {
+    metaItems.push(
+      `<li class="print-meta__item"><span class="print-meta__label">会場:</span> <span class="print-meta__value">${escapeHtml(locationDisplayRaw)}</span></li>`
+    );
+  }
+  if (rangeDisplayRaw) {
+    metaItems.push(
+      `<li class="print-meta__item"><span class="print-meta__label">時間:</span> <span class="print-meta__value">${escapeHtml(rangeDisplayRaw)}</span></li>`
+    );
+  }
+  metaItems.push(
+    `<li class="print-meta__item"><span class="print-meta__label">参加者数:</span> <span class="print-meta__value">${escapeHtml(`${totalValue}名`)}</span></li>`
+  );
+  metaItems.push(
+    `<li class="print-meta__item"><span class="print-meta__label">出力日時:</span> <span class="print-meta__value">${escapeHtml(generatedAtText)}</span></li>`
+  );
+
+  const groupsMarkup = groups
+    .map(group => {
+      const labelText = group.label || "班番号";
+      const rawValue = String(group.value || "").trim();
+      const displayValue = rawValue || (labelText === "班番号" ? "未設定" : "");
+      const safeLabel = escapeHtml(labelText);
+      const safeValue = displayValue ? escapeHtml(displayValue) : "—";
+      const accessibleLabel = [labelText, displayValue].filter(Boolean).join(" ").trim();
+      const tableAriaLabel = escapeHtml(accessibleLabel ? `${accessibleLabel} の参加者一覧` : "参加者一覧");
+      const groupKeyAttr = escapeHtml(String(group.key || ""));
+      const glRows = group.glLeaders && group.glLeaders.length
+        ? group.glLeaders
+            .map(leader => {
+              const nameCell = formatPrintCell(leader.name, { placeholder: "—" });
+              const metaCell = formatPrintCell(leader.meta, { placeholder: "—" });
+              return `<tr><td>${nameCell}</td><td>${metaCell}</td></tr>`;
+            })
+            .join("\n")
+        : '<tr><td colspan="2" class="print-group__gl-empty">—</td></tr>';
+      const participantRows = group.participants && group.participants.length
+        ? group.participants
+            .map((entry, index) => {
+              const phonetic = entry?.phonetic || entry?.furigana || "";
+              const department = entry?.department || "";
+              const phone = entry?.phone || "";
+              const email = entry?.email || "";
+              return `<tr><td class="print-table__index">${index + 1}</td><td class="print-table__name">${formatPrintCell(entry?.name)}</td><td class="print-table__phonetic">${formatPrintCell(phonetic)}</td><td class="print-table__department">${formatPrintCell(department)}</td><td class="print-table__contact">${formatPrintCell(phone)}</td><td class="print-table__contact">${formatPrintCell(email)}</td></tr>`;
+            })
+            .join("\n")
+        : '<tr class="print-table__empty"><td colspan="6">参加者がいません</td></tr>';
+
+      return `<section class="print-group" data-group-key="${groupKeyAttr}">
+        <div class="print-group__header">
+          <div class="print-group__meta">
+            <div class="print-group__label">${safeLabel}</div>
+            <div class="print-group__value">${safeValue}</div>
+          </div>
+          <div class="print-group__gl">
+            <table class="print-group__gl-table" aria-label="GL情報">
+              <thead>
+                <tr><th scope="col">GL名前</th><th scope="col">GL学部学科</th></tr>
+              </thead>
+              <tbody>
+                ${glRows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <table class="print-table" aria-label="${tableAriaLabel}">
+          <thead>
+            <tr>
+              <th scope="col" class="print-table__index">No.</th>
+              <th scope="col">参加者名</th>
+              <th scope="col">参加者フリガナ</th>
+              <th scope="col">参加者学部学科</th>
+              <th scope="col">参加者電話番号</th>
+              <th scope="col">参加者メールアドレス</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${participantRows}
+          </tbody>
+        </table>
+      </section>`;
+    })
+    .join("\n\n");
+
+  const metaMarkup = metaItems.length
+    ? `<ul class="print-meta">${metaItems.join("\n")}</ul>`
+    : "";
+  const sectionsMarkup = groupsMarkup || '<p class="print-empty">参加者リストが登録されていません。</p>';
+
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(docTitle)}</title>
+  <style>
+    :root { color-scheme: light; }
+    @page { margin: 12mm; }
+    body { margin: 12mm; font-family: "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 11pt; line-height: 1.5; color: #000; background: #fff; }
+    .print-controls { margin-bottom: 6mm; }
+    .print-controls__button { border: 0.25mm solid #000; background: #fff; color: #000; padding: 4px 12px; font-size: 10pt; cursor: pointer; }
+    .print-controls__button:focus { outline: 1px solid #000; outline-offset: 2px; }
+    .print-header { margin-bottom: 8mm; }
+    .print-title { font-size: 18pt; margin: 0 0 4mm; }
+    .print-meta { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2mm 12mm; font-size: 10pt; }
+    .print-meta__label { font-weight: 600; margin-right: 2mm; }
+    .print-group { border: 0.3mm solid #000; padding: 5mm; margin-bottom: 12mm; background: #fff; page-break-inside: avoid; break-inside: avoid; }
+    .print-group__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 5mm; margin-bottom: 4mm; }
+    .print-group__meta { min-width: 40mm; }
+    .print-group__label { font-size: 9pt; color: #555; letter-spacing: 0.08em; margin-bottom: 1mm; text-transform: uppercase; }
+    .print-group__value { font-size: 16pt; font-weight: 600; }
+    .print-group__gl { flex: 1 1 auto; }
+    .print-group__gl-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+    .print-group__gl-table th, .print-group__gl-table td { border: 0.25mm solid #000; padding: 1.5mm 2mm; text-align: left; }
+    .print-group__gl-table th { background: #f0f0f0; }
+    .print-group__gl-empty { text-align: center; color: #555; }
+    .print-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+    .print-table th, .print-table td { border: 0.25mm solid #000; padding: 1.5mm 2mm; text-align: left; vertical-align: top; }
+    .print-table th { background: #f5f5f5; }
+    .print-table__index { width: 12mm; text-align: right; }
+    .print-table__phonetic { font-size: 9pt; }
+    .print-table__contact { white-space: nowrap; }
+    .print-table__empty td { text-align: center; color: #555; }
+    .print-empty { font-size: 11pt; margin: 0; }
+    @media print {
+      body { margin: 10mm; }
+      .print-controls { display: none; }
+      .print-group { break-inside: avoid-page; }
+      .print-group__gl-table th, .print-table th { background: #e0e0e0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-controls">
+    <button type="button" class="print-controls__button" onclick="window.print()">このリストを印刷</button>
+  </div>
+  <header class="print-header">
+    <h1 class="print-title">${escapeHtml(headingText)}</h1>
+    ${metaMarkup}
+  </header>
+  ${sectionsMarkup}
+</body>
+</html>`;
+}
+
+let participantPrintInProgress = false;
+
+async function openParticipantPrintView() {
+  const eventId = state.selectedEventId;
+  const scheduleId = state.selectedScheduleId;
+  if (!eventId || !scheduleId) {
+    window.alert("印刷するにはイベントと日程を選択してください。");
+    return;
+  }
+
+  if (!Array.isArray(state.participants) || state.participants.length === 0) {
+    window.alert("印刷できる参加者がまだ登録されていません。");
+    return;
+  }
+
+  if (participantPrintInProgress) {
+    return;
+  }
+
+  participantPrintInProgress = true;
+  let printWindow = null;
+  try {
+    printWindow = window.open("", "_blank", "noopener,noreferrer");
+    if (!printWindow) {
+      window.alert("印刷用のウィンドウを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
+      return;
+    }
+
+    try {
+      await loadGlDataForEvent(eventId);
+    } catch (error) {
+      if (typeof console !== "undefined" && typeof console.error === "function") {
+        console.error("[Print] GLデータの取得に失敗しました。最新の情報が反映されない場合があります。", error);
+      }
+    }
+
+    const groups = buildParticipantPrintGroups({ eventId, scheduleId });
+    if (!groups.length) {
+      window.alert("印刷できる参加者がまだ登録されていません。");
+      if (printWindow && !printWindow.closed) {
+        try {
+          printWindow.close();
+        } catch (closeError) {
+          // Ignore close errors
+        }
+      }
+      return;
+    }
+
+    const selectedEvent = state.events.find(evt => evt.id === eventId) || null;
+    const schedule = selectedEvent?.schedules?.find(s => s.id === scheduleId) || null;
+    const eventName = selectedEvent?.name || "";
+    const scheduleLabel = schedule?.label || "";
+    const scheduleLocation = schedule?.location || schedule?.place || "";
+    let startAt = schedule?.startAt || "";
+    let endAt = schedule?.endAt || "";
+    const scheduleDate = String(schedule?.date || "").trim();
+    if (scheduleDate) {
+      if (!startAt && schedule?.startTime) {
+        startAt = combineDateAndTime(scheduleDate, schedule.startTime);
+      }
+      if (!endAt && schedule?.endTime) {
+        endAt = combineDateAndTime(scheduleDate, schedule.endTime);
+      }
+    }
+    const scheduleRange = formatPrintDateTimeRange(startAt, endAt);
+    const totalCount = state.participants.length;
+    const generatedAt = new Date();
+
+    const html = buildParticipantPrintHtml({
+      eventId,
+      scheduleId,
+      eventName,
+      scheduleLabel,
+      scheduleLocation,
+      scheduleRange,
+      groups,
+      totalCount,
+      generatedAt
+    });
+
+    if (printWindow.closed) {
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+
+    try {
+      const titleParts = [eventName || eventId || "", scheduleLabel || scheduleId || ""].filter(Boolean);
+      const docTitle = titleParts.length ? `${titleParts.join(" / ")} - 参加者リスト` : "参加者リスト";
+      printWindow.document.title = docTitle;
+    } catch (error) {
+      // Ignore title assignment errors
+    }
+
+    try {
+      printWindow.focus();
+    } catch (error) {
+      // Ignore focus errors
+    }
+  } catch (error) {
+    if (printWindow && !printWindow.closed) {
+      try {
+        printWindow.close();
+      } catch (closeError) {
+        // Ignore close errors
+      }
+    }
+    throw error;
+  } finally {
+    participantPrintInProgress = false;
+  }
+}
+
 function participantChangeKey(entry, fallbackIndex = 0) {
   if (!entry) {
     return `__row${fallbackIndex}`;
@@ -3363,6 +3794,7 @@ function syncClearButtonState() {
   dom.clearParticipantsButton.disabled = !hasSelection || !hasParticipants || state.saving;
   updateParticipantActionPanelState();
   syncMailActionState();
+  syncPrintViewButtonState();
 }
 
 function syncTemplateButtons() {
@@ -3390,6 +3822,7 @@ function syncTemplateButtons() {
   }
 
   syncMailActionState();
+  syncPrintViewButtonState();
 }
 
 function setActionButtonState(button, disabled) {
@@ -3409,6 +3842,49 @@ function getPendingMailCount() {
     return 0;
   }
   return state.participants.filter(entry => isMailDeliveryPending(entry)).length;
+}
+
+let printActionButtonMissingLogged = false;
+
+function syncPrintViewButtonState() {
+  const button = dom.openPrintViewButton;
+  if (!button) {
+    if (!printActionButtonMissingLogged) {
+      printActionButtonMissingLogged = true;
+      if (typeof console !== "undefined" && typeof console.warn === "function") {
+        console.warn("[Print] open-print-view-button が見つからないため、印刷アクションの状態を同期できませんでした。");
+      }
+    }
+    return;
+  }
+
+  if (!button.dataset.defaultLabel) {
+    button.dataset.defaultLabel = button.textContent ? button.textContent.trim() : "印刷用リスト";
+  }
+
+  if (button.dataset.printing === "true") {
+    setActionButtonState(button, true);
+    const busyLabel = button.dataset.printingLabel || "印刷準備中…";
+    if (!button.dataset.printingLabel) {
+      button.dataset.printingLabel = busyLabel;
+    }
+    if (button.textContent !== busyLabel) {
+      button.textContent = busyLabel;
+    }
+    return;
+  }
+
+  const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
+  const hasParticipants = hasSelection && state.participants.length > 0;
+  const disabled = !hasSelection || !hasParticipants;
+
+  setActionButtonState(button, disabled);
+
+  const baseLabel = button.dataset.defaultLabel || "印刷用リスト";
+  if (button.textContent !== baseLabel) {
+    button.textContent = baseLabel;
+  }
+
 }
 
 const MAIL_LOG_PREFIX = "[Mail]";
@@ -3827,7 +4303,7 @@ async function loadParticipants(options = {}) {
     state.participantTokenMap = new Map();
     state.duplicateMatches = new Map();
     state.duplicateGroups = new Map();
-    captureParticipantBaseline([]);
+    captureParticipantBaseline([], { ready: false });
     renderParticipants();
     updateParticipantContext();
     syncSaveButtonState();
@@ -3959,7 +4435,7 @@ async function loadParticipants(options = {}) {
     state.duplicateMatches = new Map();
     state.duplicateGroups = new Map();
     state.mailSending = false;
-    captureParticipantBaseline([]);
+    captureParticipantBaseline([], { ready: false });
     setUploadStatus(error.message || "参加者リストの読み込みに失敗しました。", "error");
     renderParticipants();
     updateParticipantContext();
@@ -4011,7 +4487,7 @@ function selectEvent(eventId, options = {}) {
   state.participantTokenMap = new Map();
   state.duplicateMatches = new Map();
   state.duplicateGroups = new Map();
-  captureParticipantBaseline([]);
+  captureParticipantBaseline([], { ready: false });
   if (state.eventParticipantCache instanceof Map && previousEventId) {
     state.eventParticipantCache.delete(previousEventId);
   }
@@ -4067,9 +4543,11 @@ function selectSchedule(scheduleId, options = {}) {
     state.participantTokenMap = new Map();
     state.duplicateMatches = new Map();
     state.duplicateGroups = new Map();
-    captureParticipantBaseline([]);
+    captureParticipantBaseline([], { ready: false });
     renderParticipants();
     syncSaveButtonState();
+  } else if (shouldReload) {
+    captureParticipantBaseline([], { ready: false });
   }
 
   updateParticipantContext({ preserveStatus });
@@ -4077,7 +4555,7 @@ function selectSchedule(scheduleId, options = {}) {
   const needsParticipantLoad = Boolean(
     normalizedId &&
     !suppressParticipantLoad &&
-    (shouldReload || state.lastSavedSignature === "")
+    (shouldReload || !state.participantBaselineReady)
   );
 
   if (needsParticipantLoad) {
@@ -4292,7 +4770,7 @@ async function handleDeleteEvent(eventId, eventName) {
       state.participantTokenMap = new Map();
       state.duplicateMatches = new Map();
       state.duplicateGroups = new Map();
-      captureParticipantBaseline([]);
+      captureParticipantBaseline([], { ready: false });
     }
 
     if (state.eventParticipantCache instanceof Map) {
@@ -4447,7 +4925,7 @@ async function handleDeleteSchedule(scheduleId, scheduleLabel) {
       state.participantTokenMap = new Map();
       state.duplicateMatches = new Map();
       state.duplicateGroups = new Map();
-      captureParticipantBaseline([]);
+      captureParticipantBaseline([], { ready: false });
     }
 
     if (state.eventParticipantCache instanceof Map) {
@@ -5432,6 +5910,7 @@ async function handleClearParticipants() {
   const previousSavedEntries = Array.isArray(state.savedParticipantEntries)
     ? state.savedParticipantEntries.map(entry => cloneParticipantEntry(entry))
     : [];
+  const previousBaselineReady = state.participantBaselineReady;
 
   state.participants = [];
   state.participantTokenMap = new Map();
@@ -5447,6 +5926,7 @@ async function handleClearParticipants() {
     state.lastSavedSignature = previousSignature;
     state.savedParticipants = previousSavedParticipants;
     state.savedParticipantEntries = previousSavedEntries;
+    state.participantBaselineReady = previousBaselineReady;
     updateDuplicateMatches();
     renderParticipants();
   }
@@ -5560,7 +6040,7 @@ function resetState() {
   state.participantTokenMap = new Map();
   state.duplicateMatches = new Map();
   state.duplicateGroups = new Map();
-  captureParticipantBaseline([]);
+  captureParticipantBaseline([], { ready: false });
   state.eventParticipantCache = new Map();
   state.teamAssignments = new Map();
   state.scheduleContextOverrides = new Map();
@@ -6233,6 +6713,29 @@ function attachEventHandlers() {
     });
   }
 
+  if (dom.openPrintViewButton) {
+    dom.openPrintViewButton.addEventListener("click", () => {
+      const button = dom.openPrintViewButton;
+      if (!button || button.disabled || button.dataset.printing === "true") {
+        return;
+      }
+      button.dataset.printing = "true";
+      syncPrintViewButtonState();
+
+      openParticipantPrintView()
+        .catch(error => {
+          if (typeof console !== "undefined" && typeof console.error === "function") {
+            console.error("[Print] 印刷用リストの生成に失敗しました。", error);
+          }
+          window.alert("印刷用リストの生成中にエラーが発生しました。時間をおいて再度お試しください。");
+        })
+        .finally(() => {
+          delete button.dataset.printing;
+          syncPrintViewButtonState();
+        });
+    });
+  }
+
   if (dom.sendMailButton) {
     dom.sendMailButton.addEventListener("click", async () => {
       if (dom.sendMailButton.disabled || state.mailSending) {
@@ -6583,10 +7086,19 @@ function applyHostSelectionFromDataset() {
     return;
   }
   const signature = hostSelectionSignature(selection);
-  if (
+  const selectedEventKey = normalizeKey(state.selectedEventId || "");
+  const selectedScheduleKey = normalizeKey(state.selectedScheduleId || "");
+  const matchesCurrentSelection = Boolean(
+    normalizeKey(selection.eventId || "") === selectedEventKey &&
+    normalizeKey(selection.scheduleId || "") === selectedScheduleKey &&
+    selectedEventKey &&
+    selectedScheduleKey
+  );
+  const signatureUnchanged = Boolean(
     signature &&
     (signature === hostSelectionBridge.lastSignature || signature === hostSelectionBridge.pendingSignature)
-  ) {
+  );
+  if (signatureUnchanged && matchesCurrentSelection) {
     return;
   }
   hostSelectionBridge.pendingSignature = signature;
