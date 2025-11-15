@@ -27,9 +27,10 @@
     resolvedSubject = String(shellCtx.resolvedSubject);
   }
   var preheaderFallback = resolvedEventName ? resolvedEventName + 'のご案内です。' : 'ご案内です。';
+  var bodyPadding = shellCtx.mode === 'web' ? 'padding:0' : 'padding:20px';
   var bodyStyle = [
     'margin:0',
-    'padding:0',
+    bodyPadding,
     'background:#f9f9f9',
     'color:#333333',
     "font-family:\'Arial\',\'Helvetica\',\'Meiryo\',\'sans-serif\'",
@@ -38,9 +39,9 @@
   ].join('; ');
   var wrapperPadding = shellCtx.mode === 'web'
     ? 'padding:56px 16px 120px'
-    : 'padding:24px 16px 80px';
+    : 'padding:0';
   var wrapperStyle = [
-    'max-width:640px',
+    'max-width:600px',
     'margin:0 auto',
     wrapperPadding
   ].join('; ');
