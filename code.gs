@@ -1278,10 +1278,19 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
     ? buildQuestionFormUrl_(questionFormBaseUrl, { token, eventId, scheduleId, participantId })
     : '';
   const guidance = String(participantRecord && participantRecord.guidance || '').trim();
+  const scheduleLocation = coalesceStrings_(
+    participantRecord && (participantRecord.scheduleLocation || participantRecord.location || participantRecord.venue),
+    scheduleRecord && (
+      scheduleRecord.scheduleLocation ||
+      scheduleRecord.location ||
+      scheduleRecord.venue ||
+      scheduleRecord.place
+    ),
+    eventRecord && (eventRecord.scheduleLocation || eventRecord.location || eventRecord.venue)
+  );
   const location = coalesceStrings_(
     participantRecord && (participantRecord.location || participantRecord.venue),
-    scheduleRecord && (scheduleRecord.location || scheduleRecord.venue || scheduleRecord.place),
-    eventRecord && (eventRecord.location || eventRecord.venue),
+    scheduleLocation,
     settings.location
   );
   const contactEmail = PARTICIPANT_MAIL_CONTACT_EMAIL;
@@ -1329,6 +1338,7 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
     additionalHtml: settings.noteHtml || '',
     additionalText: settings.noteText || '',
     location,
+    scheduleLocation,
     guidance,
     webViewUrl,
     token,
@@ -1366,7 +1376,7 @@ function buildParticipantMailPreviewText_(context, settings) {
   const scheduleLabel = coalesceStrings_(context && context.scheduleRangeLabel, context && context.scheduleLabel);
   const participantName = coalesceStrings_(context && context.participantName);
   const arrivalNote = coalesceStrings_(context && context.arrivalNote);
-  const location = coalesceStrings_(context && context.location);
+  const location = coalesceStrings_(context && context.location, context && context.scheduleLocation);
   if (template) {
     return truncateString_(
       template
@@ -1440,6 +1450,14 @@ function enrichParticipantMailContext_(context, settings) {
         subject: context.subject || ''
       });
     }
+  }
+  const effectiveLocation = coalesceStrings_(
+    context.location,
+    context.scheduleLocation,
+    settings && settings.location
+  );
+  if (effectiveLocation) {
+    context.location = effectiveLocation;
   }
   const effectiveArrival = coalesceStrings_(context.arrivalNote, settings && settings.arrivalNote);
   if (effectiveArrival) {
@@ -1699,8 +1717,9 @@ function renderParticipantMailPlainText_(context) {
   } else if (context.scheduleLabel) {
     lines.push('', `ご参加予定: ${context.scheduleLabel}`);
   }
-  if (context.location) {
-    lines.push('', `会場: ${context.location}`);
+  const locationText = coalesceStrings_(context.location, context.scheduleLocation);
+  if (locationText) {
+    lines.push('', `会場: ${locationText}`);
   }
   if (context.arrivalNote) {
     lines.push('', context.arrivalNote);

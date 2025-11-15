@@ -10,6 +10,13 @@
     bodySubjectEventName ||
     'イベント';
   var participantName = bodyCtx.participantName || '';
+  function asTrimmedString(value) {
+    if (value == null) {
+      return '';
+    }
+    var text = typeof value === 'string' ? value : String(value);
+    return text.trim();
+  }
   var primaryScheduleLabel =
     bodyCtx.scheduleDateDisplay ||
     bodyCtx.scheduleRangeLabel ||
@@ -33,6 +40,8 @@
   var closingMessage = bodyCtx.closingMessage || 'それでは、みなさんに会えるのをお待ちしています！';
   var signaturePrimary = bodyCtx.signaturePrimary || bodyCtx.senderName || '弘前大学生協学生委員会';
   var signatureSecondary = bodyCtx.signatureSecondary || (eventName ? eventName + '運営チーム' : '運営チーム');
+  var resolvedLocation = asTrimmedString(bodyCtx.location) || asTrimmedString(bodyCtx.scheduleLocation);
+  var resolvedArrival = asTrimmedString(bodyCtx.arrivalNote);
 
   function joinStyles() {
     var styles = [];
@@ -160,10 +169,10 @@
       <? } ?>
     </div>
   <? } ?>
-  <? if (bodyCtx.location || bodyCtx.arrivalNote) { ?>
+  <? if (resolvedLocation || resolvedArrival) { ?>
     <p class="info" style="<?= infoStyle ?>">
-      当日は<? if (bodyCtx.location) { ?><strong><?= bodyCtx.location ?></strong><? } else { ?>会場にて<? } ?>開催します。<br>
-      <? if (bodyCtx.arrivalNote) { ?><strong><?= bodyCtx.arrivalNote ?></strong><? } ?>
+      当日は<? if (resolvedLocation) { ?><strong><?= resolvedLocation ?></strong><? } else { ?>会場にて<? } ?>開催します。<br>
+      <? if (resolvedArrival) { ?><strong><?= resolvedArrival ?></strong><? } ?>
     </p>
   <? } ?>
   <hr style="<?= hrStyle ?>">
