@@ -1479,7 +1479,7 @@ function enrichParticipantMailContext_(context, settings) {
     const questionFormPrompt = coalesceStrings_(
       context.questionFormPrompt,
       settings && settings.questionFormPrompt,
-      '会の最中に、<strong>大学生活に関する</strong>皆様からのご質問や相談に回答する企画を行います。<br>ご質問や相談は、下のフォームから投稿いただけます。<strong>是非、ご投稿ください！</strong>'
+      '事前のご質問や相談はこちらのフォームからお送りください。'
     );
     if (questionFormPrompt) {
       context.questionFormPrompt = questionFormPrompt;
