@@ -4,6 +4,13 @@ import { normalizeKey, ensureCrypto } from "./utils.js";
 
 const STRING_COLLATOR = new Intl.Collator("ja", { numeric: true, sensitivity: "base" });
 
+const MAIL_STATUS_LABEL_MAP = {
+  sent: "メール送信済",
+  error: "メール送信失敗",
+  pending: "メール未送信",
+  missing: "メール未設定"
+};
+
 function normalizeText(value) {
   return String(value ?? "").trim();
 }
@@ -753,21 +760,85 @@ function normalizeParticipantRecord(entry, fallbackId = "") {
   }, "record");
 }
 
-function isMailDeliveryPending(entry) {
+function resolveMailStatusKey(entry) {
   if (!entry || typeof entry !== "object") {
-    return false;
+    return "missing";
   }
   const email = normalizeText(entry.email);
   if (!email) {
-    return false;
+    return "missing";
   }
   const status = normalizeText(entry.mailStatus).toLowerCase();
   const hasError = normalizeText(entry.mailError);
   const mailSentAt = Number(entry.mailSentAt || 0);
   if (status === "sent" && !hasError && mailSentAt > 0) {
-    return false;
+    return "sent";
   }
-  return true;
+  if (status === "error" || hasError) {
+    return "error";
+  }
+  return "pending";
+}
+
+function formatMailTimestamp(value) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  try {
+    return date.toLocaleString("ja-JP", { hour12: false });
+  } catch (error) {
+    console.warn("Failed to format mail status timestamp", error);
+  }
+  return date.toLocaleString();
+}
+
+function resolveMailStatusInfo(entry) {
+  const email = normalizeText(entry?.email);
+  const key = resolveMailStatusKey(entry);
+  const mailSentAt = Number(entry?.mailSentAt || 0);
+  const mailLastAttemptAt = Number(entry?.mailLastAttemptAt || 0);
+  const mailError = normalizeText(entry?.mailError);
+
+  let description = "";
+  if (key === "missing") {
+    description = "メールアドレスが登録されていません。";
+  } else if (key === "sent") {
+    const formatted = formatMailTimestamp(mailSentAt);
+    description = formatted ? `最終送信: ${formatted}` : "送信済みとしてマークされています。";
+  } else if (key === "error") {
+    if (mailError) {
+      description = mailError;
+    } else {
+      const formatted = formatMailTimestamp(mailLastAttemptAt);
+      description = formatted ? `直近の試行: ${formatted}` : "直近の送信でエラーが発生しました。";
+    }
+  } else {
+    const formatted = formatMailTimestamp(mailLastAttemptAt);
+    description = formatted ? `直近の試行: ${formatted}` : "まだ送信が完了していません。";
+  }
+
+  const label = MAIL_STATUS_LABEL_MAP[key] || "メール状態不明";
+  const ariaLabel = description ? `${label}（${description}）` : label;
+
+  return {
+    key,
+    label,
+    description,
+    ariaLabel,
+    email,
+    mailSentAt,
+    mailLastAttemptAt,
+    mailError
+  };
+}
+
+function isMailDeliveryPending(entry) {
+  const key = resolveMailStatusKey(entry);
+  return key === "pending" || key === "error";
 }
 
 function assignParticipantIds(entries, existingParticipants = [], options = {}) {
@@ -952,7 +1023,8 @@ const PARTICIPANT_DIFF_FIELDS = [
   { key: "department", label: "学部学科" },
   { key: "teamNumber", label: "班番号" },
   { key: "phone", label: "携帯電話" },
-  { key: "email", label: "メールアドレス" }
+  { key: "email", label: "メールアドレス" },
+  { key: "mailStatusLabel", label: "メール送信状態" }
 ];
 
 function snapshotParticipant(entry) {
@@ -966,9 +1038,11 @@ function snapshotParticipant(entry) {
       teamNumber: "",
       phone: "",
       email: "",
+      mailStatusLabel: MAIL_STATUS_LABEL_MAP.missing,
       rowKey: ""
     };
   }
+  const mailStatusInfo = resolveMailStatusInfo(entry);
   return {
     participantId: String(entry.participantId || entry.id || ""),
     name: String(entry.name || ""),
@@ -978,6 +1052,7 @@ function snapshotParticipant(entry) {
     teamNumber: String(entry.teamNumber || entry.groupNumber || ""),
     phone: String(entry.phone || ""),
     email: String(entry.email || ""),
+    mailStatusLabel: mailStatusInfo.label,
     rowKey: String(entry.rowKey || "")
   };
 }
@@ -1059,7 +1134,11 @@ function signatureForEntries(entries) {
     entry.teamNumber || entry.groupNumber || "",
     entry.department || entry.groupNumber || "",
     entry.phone || "",
-    entry.email || ""
+    entry.email || "",
+    normalizeText(entry.mailStatus || ""),
+    String(Number(entry.mailSentAt || 0) || 0),
+    normalizeText(entry.mailError || ""),
+    resolveMailStatusKey(entry)
   ]));
 }
 
@@ -1089,6 +1168,8 @@ export {
   diffParticipantLists,
   diffParticipantFields,
   normalizeGroupNumberValue,
-  isMailDeliveryPending
+  isMailDeliveryPending,
+  resolveMailStatusInfo,
+  resolveMailStatusKey
 };
 

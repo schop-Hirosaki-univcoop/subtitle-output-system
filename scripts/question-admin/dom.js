@@ -134,6 +134,7 @@ dom.participantRelocationSummary = resolve("participant-relocation-summary");
 dom.participantRelocationSummaryText = resolve("participant-relocation-summary-text");
 dom.participantPhoneInput = resolve("participant-phone-input");
 dom.participantEmailInput = resolve("participant-email-input");
+dom.participantMailSentInput = resolve("participant-mail-sent-input");
 
 dom.relocationDialog = resolve("relocation-dialog");
 dom.relocationForm = resolve("relocation-form");

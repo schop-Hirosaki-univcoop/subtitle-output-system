@@ -66,7 +66,8 @@ import {
   snapshotParticipantList,
   diffParticipantLists,
   normalizeGroupNumberValue,
-  isMailDeliveryPending
+  isMailDeliveryPending,
+  resolveMailStatusInfo
 } from "./participants.js";
 
 let redirectingToIndex = false;
@@ -2500,6 +2501,47 @@ function createParticipantBadge(label, value, { hideLabel = false } = {}) {
   return badge;
 }
 
+const MAIL_STATUS_ICON_SVG = {
+  sent:
+    "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M13.854 4.146a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3-3a.5.5 0 0 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0Z\"/></svg>",
+  pending:
+    "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13Zm0 1a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Zm.5 2a.5.5 0 0 0-1 0v3.25a.5.5 0 0 0 .252.434l2 1.143a.5.5 0 0 0 .496-.868L8.5 7.667V4.5Z\"/></svg>",
+  error:
+    "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13Zm0 2a.75.75 0 0 0-.75.75v3.5a.75.75 0 1 0 1.5 0v-3.5A.75.75 0 0 0 8 3.5Zm0 6a.875.875 0 1 0 0 1.75.875.875 0 0 0 0-1.75Z\"/></svg>",
+  missing:
+    "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13Zm3.5 6a.5.5 0 0 0-.5-.5h-6a.5.5 0 0 0 0 1h6a.5.5 0 0 0 .5-.5Z\"/></svg>",
+  default:
+    "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M2.75 3A1.75 1.75 0 0 0 1 4.75v6.5A1.75 1.75 0 0 0 2.75 13h10.5A1.75 1.75 0 0 0 15 11.25v-6.5A1.75 1.75 0 0 0 13.25 3H2.75Zm.25 1.5h9.5a.25.25 0 0 1 .163.438L8.46 8.735a.75.75 0 0 1-.92 0L2.587 4.938A.25.25 0 0 1 3 4.5ZM2.5 5.809v5.441c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25V5.81l-4.62 3.696a2.25 2.25 0 0 1-2.76 0L2.5 5.809Z\"/></svg>"
+};
+
+function createMailStatusBadge(entry) {
+  const info = resolveMailStatusInfo(entry);
+  const badge = document.createElement("span");
+  badge.className = "participant-badge participant-mail-badge";
+  const statusKey = info.key || "unknown";
+  badge.dataset.mailStatus = statusKey;
+  badge.classList.add(`participant-mail-badge--${statusKey}`);
+  if (info.description) {
+    badge.title = info.description;
+  } else {
+    badge.removeAttribute("title");
+  }
+  badge.setAttribute("role", "text");
+  badge.setAttribute("aria-label", info.ariaLabel || info.label);
+
+  const icon = document.createElement("span");
+  icon.className = "participant-mail-badge__icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = MAIL_STATUS_ICON_SVG[statusKey] || MAIL_STATUS_ICON_SVG.default;
+
+  const text = document.createElement("span");
+  text.className = "participant-badge__value participant-mail-badge__text";
+  text.textContent = info.label;
+
+  badge.append(icon, text);
+  return { badge, info };
+}
+
 function getEntryIdentifiers(entry) {
   const rowKey = entry && entry.rowKey != null ? String(entry.rowKey) : "";
   const participantId = entry && entry.participantId != null ? String(entry.participantId) : "";
@@ -2645,7 +2687,15 @@ function buildParticipantCard(entry, index, { changeInfo, duplicateMap, eventId,
   const genderBadge = createParticipantBadge("性別", genderText, { hideLabel: true });
   badgeRow.appendChild(genderBadge);
 
+  const { badge: mailBadge, info: mailStatusInfo } = createMailStatusBadge(entry);
+  badgeRow.appendChild(mailBadge);
+
   headerMain.appendChild(badgeRow);
+
+  if (mailStatusInfo?.key) {
+    card.dataset.mailStatus = mailStatusInfo.key;
+    card.classList.add(`participant-card--mail-${mailStatusInfo.key}`);
+  }
 
   const nameWrapper = document.createElement("span");
   nameWrapper.className = "participant-card__name participant-name";
@@ -5627,6 +5677,12 @@ function openParticipantEditor(participantId, rowKey) {
   if (dom.participantTeamInput) dom.participantTeamInput.value = entry.teamNumber || entry.groupNumber || "";
   if (dom.participantPhoneInput) dom.participantPhoneInput.value = entry.phone || "";
   if (dom.participantEmailInput) dom.participantEmailInput.value = entry.email || "";
+  if (dom.participantMailSentInput) {
+    const mailInfo = resolveMailStatusInfo(entry);
+    dom.participantMailSentInput.checked = mailInfo.key === "sent";
+    dom.participantMailSentInput.indeterminate = mailInfo.key === "missing";
+    dom.participantMailSentInput.disabled = false;
+  }
 
   const currentStatus = entry.status || resolveParticipantStatus(entry, entry.teamNumber || entry.groupNumber || "");
   const isCancelled = currentStatus === "cancelled";
@@ -5688,6 +5744,8 @@ function saveParticipantEdits() {
   const email = String(dom.participantEmailInput?.value || "").trim();
 
   const existing = state.participants[index];
+  const mailSentControl = dom.participantMailSentInput;
+  const mailSentChecked = Boolean(mailSentControl && mailSentControl.checked && !mailSentControl.indeterminate);
   const updated = {
     ...existing,
     name,
@@ -5700,6 +5758,26 @@ function saveParticipantEdits() {
     phone,
     email
   };
+  const existingMailSentAt = Number(existing?.mailSentAt || 0);
+  if (!email) {
+    updated.mailStatus = "";
+    updated.mailSentAt = 0;
+    updated.mailError = "";
+  } else if (mailSentChecked) {
+    const resolvedSentAt = existingMailSentAt > 0 ? existingMailSentAt : Date.now();
+    updated.mailStatus = "sent";
+    updated.mailSentAt = resolvedSentAt;
+    updated.mailError = "";
+    const existingAttempt = Number(existing?.mailLastAttemptAt || 0);
+    const nextAttempt = Number.isFinite(existingAttempt) && existingAttempt > 0
+      ? Math.max(existingAttempt, resolvedSentAt)
+      : resolvedSentAt;
+    updated.mailLastAttemptAt = nextAttempt;
+  } else {
+    updated.mailStatus = "";
+    updated.mailSentAt = 0;
+    updated.mailError = "";
+  }
   const nextStatus = resolveParticipantStatus(updated, teamNumber);
   updated.status = nextStatus;
   updated.isCancelled = nextStatus === "cancelled";
