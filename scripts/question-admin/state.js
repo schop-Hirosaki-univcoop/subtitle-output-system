@@ -7,6 +7,7 @@ const state = {
   savedParticipants: [],
   savedParticipantEntries: [],
   lastSavedSignature: "",
+  participantBaselineReady: false,
   user: null,
   saving: false,
   mailSending: false,
