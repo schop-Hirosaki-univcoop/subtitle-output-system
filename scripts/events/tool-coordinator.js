@@ -46,6 +46,7 @@ export class ToolCoordinator {
         scheduleId: "",
         eventName: "",
         scheduleLabel: "",
+        location: "",
         startAt: "",
         endAt: "",
         operatorMode: this.app.operatorMode
@@ -148,6 +149,7 @@ export class ToolCoordinator {
       ensure(context.scheduleKey),
       ensure(context.eventName),
       ensure(context.scheduleLabel),
+      ensure(context.location),
       ensure(context.startAt),
       ensure(context.endAt),
       ensure(context.committedScheduleId),
@@ -181,6 +183,7 @@ export class ToolCoordinator {
     populateIfMissing("scheduleId");
     populateIfMissing("scheduleKey");
     populateIfMissing("scheduleLabel");
+    populateIfMissing("location");
     populateIfMissing("startAt");
     populateIfMissing("endAt");
     populateIfMissing("committedScheduleId");
@@ -220,6 +223,9 @@ export class ToolCoordinator {
           ensure(committedSchedule?.label) ||
           committedScheduleId;
       }
+      if (!ensure(baseContext.location)) {
+        baseContext.location = ensure(selectionContext.location) || ensure(committedSchedule?.location);
+      }
       if (!ensure(baseContext.startAt) && committedSchedule?.startAt) {
         baseContext.startAt = committedSchedule.startAt;
       }
@@ -254,6 +260,12 @@ export class ToolCoordinator {
           { scheduleId: scheduleIdForKey, scheduleLabel: scheduleLabelForKey },
           ensure(this.app?.hostPresenceSessionId)
         );
+      }
+    }
+    if (ensure(baseContext.scheduleId) && !ensure(baseContext.location)) {
+      const scheduleDetail = getScheduleDetail(ensure(baseContext.scheduleId));
+      if (scheduleDetail) {
+        baseContext.location = ensure(scheduleDetail.location);
       }
     }
     baseContext.operatorMode = normalizeOperatorMode(

@@ -42,6 +42,10 @@ export function buildContextDescription(baseDescription, event, schedule) {
     if (range) {
       segments.push(`時間: ${range}`);
     }
+    const location = String(schedule.location || "").trim();
+    if (location) {
+      segments.push(`場所: ${location}`);
+    }
   }
   if (!segments.length) {
     return baseDescription;

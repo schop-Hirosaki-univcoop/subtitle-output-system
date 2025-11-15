@@ -211,6 +211,7 @@ export function generateQuestionUid({ crypto: cryptoOverride, random = Math.rand
 export function buildQuestionRecord({ uid, token, submission, context, timestamp }) {
   const coalescedGroup = coalesceTrimmed(submission.groupNumber, context?.groupNumber);
   const scheduleLabel = coalesceTrimmed(submission.scheduleLabel, context?.scheduleLabel);
+  const scheduleLocation = coalesceTrimmed(submission.scheduleLocation, context?.scheduleLocation);
   const scheduleStart = coalesceTrimmed(submission.scheduleStart, context?.scheduleStart);
   const scheduleEnd = coalesceTrimmed(submission.scheduleEnd, context?.scheduleEnd);
   const participantId = coalesceTrimmed(submission.participantId, context?.participantId);
@@ -226,6 +227,7 @@ export function buildQuestionRecord({ uid, token, submission, context, timestamp
     group: coalescedGroup,
     genre: coalesceTrimmed(submission.genre) || "その他",
     schedule: scheduleLabel,
+    scheduleLocation,
     scheduleStart,
     scheduleEnd,
     scheduleDate: coalesceTrimmed(submission.scheduleDate, context?.scheduleDate),

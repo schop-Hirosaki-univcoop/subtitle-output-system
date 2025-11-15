@@ -145,6 +145,7 @@
             <span class="flow-selection-summary__item"><span class="flow-selection-summary__label">イベント</span><span id="flow-schedule-summary-event">—</span></span>
             <span class="flow-selection-summary__item"><span class="flow-selection-summary__label">日程</span><span id="flow-schedule-summary-label">—</span></span>
             <span class="flow-selection-summary__item" id="flow-schedule-summary-range-row" hidden><span class="flow-selection-summary__label">時間</span><span id="flow-schedule-summary-range">—</span></span>
+            <span class="flow-selection-summary__item" id="flow-schedule-summary-location-row" hidden><span class="flow-selection-summary__label">場所</span><span id="flow-schedule-summary-location">—</span></span>
           </span>
           <span id="flow-schedule-summary-empty" class="sidebar-card__placeholder">イベントと日程を選択してください。</span>
         </button>
@@ -1298,8 +1299,59 @@
             <input id="flow-schedule-label-input" name="schedule-label" class="input" type="text" autocomplete="off" required data-autofocus>
           </div>
           <div class="modal-field">
+            <label for="flow-schedule-location-input">場所</label>
+            <input
+              id="flow-schedule-location-input"
+              name="schedule-location"
+              class="input"
+              type="text"
+              list="flow-schedule-location-list"
+              autocomplete="off"
+              placeholder="会場や集合場所など"
+            >
+            <datalist id="flow-schedule-location-list"></datalist>
+          </div>
+          <div class="modal-field">
             <label for="flow-schedule-date-input">日付</label>
             <input id="flow-schedule-date-input" name="schedule-date" class="input" type="date" required>
+          </div>
+          <div class="modal-field">
+            <div id="flow-schedule-dialog-calendar" class="dialog-calendar" aria-hidden="false">
+              <div class="dialog-calendar-header">
+                <button
+                  id="flow-schedule-dialog-calendar-prev"
+                  class="dialog-calendar-nav"
+                  type="button"
+                  aria-label="前の月を表示"
+                >
+                  <span aria-hidden="true">‹</span>
+                </button>
+                <div id="flow-schedule-dialog-calendar-title" class="dialog-calendar-title" aria-live="polite"></div>
+                <button
+                  id="flow-schedule-dialog-calendar-next"
+                  class="dialog-calendar-nav"
+                  type="button"
+                  aria-label="次の月を表示"
+                >
+                  <span aria-hidden="true">›</span>
+                </button>
+              </div>
+              <div class="dialog-calendar-weekdays" aria-hidden="true">
+                <span>日</span>
+                <span>月</span>
+                <span>火</span>
+                <span>水</span>
+                <span>木</span>
+                <span>金</span>
+                <span>土</span>
+              </div>
+              <div
+                id="flow-schedule-dialog-calendar-grid"
+                class="dialog-calendar-grid"
+                role="grid"
+                aria-label="日付を選択"
+              ></div>
+            </div>
           </div>
           <div class="modal-field">
             <label for="flow-schedule-start-input">開始時刻</label>

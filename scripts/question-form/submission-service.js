@@ -91,6 +91,7 @@ export function buildSubmissionPayload({
     teamNumber: snapshot.teamNumber,
     scheduleLabel: snapshot.scheduleLabel,
     scheduleDate: snapshot.scheduleDate,
+    scheduleLocation: snapshot.scheduleLocation,
     scheduleStart: snapshot.scheduleStart,
     scheduleEnd: snapshot.scheduleEnd,
     eventId: snapshot.eventId,

@@ -586,6 +586,7 @@ function submitQuestion_(payload) {
   const payloadTeamNumber = String(payload.teamNumber || payload.team || '').trim();
   const rawGenre = String(payload.genre || '').trim();
   const payloadScheduleLabel = String(payload.schedule || payload.date || '').trim();
+  const payloadScheduleLocation = String(payload.scheduleLocation || '').trim();
   const payloadScheduleStart = String(payload.scheduleStart || '').trim();
   const payloadScheduleEnd = String(payload.scheduleEnd || '').trim();
   const payloadEventId = String(payload.eventId || '').trim();
@@ -652,6 +653,7 @@ function submitQuestion_(payload) {
   const participantId = tokenParticipantId;
   const eventName = String(tokenRecord.eventName || payloadEventName || '').trim();
   const scheduleLabel = String(tokenRecord.scheduleLabel || payloadScheduleLabel || '').trim();
+  const scheduleLocation = String(tokenRecord.scheduleLocation || payloadScheduleLocation || '').trim();
   const scheduleDate = String(tokenRecord.scheduleDate || payloadScheduleDate || '').trim();
   const scheduleStartRaw = String(tokenRecord.scheduleStart || payloadScheduleStart || '').trim();
   const scheduleEndRaw = String(tokenRecord.scheduleEnd || payloadScheduleEnd || '').trim();
@@ -676,6 +678,7 @@ function submitQuestion_(payload) {
     groupNumber,
     teamNumber: groupNumber,
     scheduleLabel,
+    scheduleLocation,
     scheduleDate,
     scheduleStart: scheduleStartRaw,
     scheduleEnd: scheduleEndRaw,
@@ -2252,6 +2255,7 @@ function resolveParticipantMailForToken_(req) {
         name: String(tokenRecord.displayName || '').trim(),
         displayName: String(tokenRecord.displayName || '').trim(),
         scheduleLabel: String(tokenRecord.scheduleLabel || '').trim(),
+        scheduleLocation: String(tokenRecord.scheduleLocation || '').trim(),
         scheduleDate: String(tokenRecord.scheduleDate || '').trim(),
         scheduleStart: String(tokenRecord.scheduleStart || '').trim(),
         scheduleEnd: String(tokenRecord.scheduleEnd || '').trim(),
@@ -2285,6 +2289,7 @@ function resolveParticipantMailForToken_(req) {
         eventName: String(tokenRecord.eventName || '').trim(),
         eventLabel: String(tokenRecord.eventName || '').trim(),
         scheduleLabel: String(tokenRecord.scheduleLabel || '').trim(),
+        scheduleLocation: String(tokenRecord.scheduleLocation || '').trim(),
         scheduleDate: String(tokenRecord.scheduleDate || '').trim(),
         scheduleTime: String(tokenRecord.scheduleTime || '').trim(),
         scheduleRange: String(tokenRecord.scheduleRange || '').trim(),
@@ -2304,6 +2309,9 @@ function resolveParticipantMailForToken_(req) {
     }
     if (!participantContextRecord.scheduleLabel && tokenRecord && tokenRecord.scheduleLabel) {
       participantContextRecord.scheduleLabel = String(tokenRecord.scheduleLabel || '').trim();
+    }
+    if (!participantContextRecord.scheduleLocation && tokenRecord && tokenRecord.scheduleLocation) {
+      participantContextRecord.scheduleLocation = String(tokenRecord.scheduleLocation || '').trim();
     }
     if (!participantContextRecord.scheduleDate && tokenRecord && tokenRecord.scheduleDate) {
       participantContextRecord.scheduleDate = String(tokenRecord.scheduleDate || '').trim();

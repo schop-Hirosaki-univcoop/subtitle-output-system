@@ -69,6 +69,8 @@ const dom = {
   scheduleDialog: resolve("schedule-dialog"),
   scheduleForm: resolve("schedule-form"),
   scheduleLabelInput: resolve("schedule-label-input"),
+  scheduleLocationInput: resolve("schedule-location-input"),
+  scheduleLocationList: resolve("schedule-location-list"),
   scheduleDateInput: resolve("schedule-date-input"),
   scheduleStartTimeInput: resolve("schedule-start-time-input"),
   scheduleEndTimeInput: resolve("schedule-end-time-input"),
@@ -143,6 +145,7 @@ dom.eventDialogForm = dom.eventForm;
 
 dom.scheduleDialogFields = {
   label: dom.scheduleLabelInput,
+  location: dom.scheduleLocationInput,
   date: dom.scheduleDateInput,
   start: dom.scheduleStartTimeInput,
   end: dom.scheduleEndTimeInput

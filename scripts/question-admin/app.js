@@ -210,6 +210,78 @@ function cloneHostEvent(event) {
   };
 }
 
+function refreshScheduleLocationHistory() {
+  const history = new Set();
+  if (Array.isArray(state.events)) {
+    state.events.forEach((event) => {
+      if (!Array.isArray(event?.schedules)) {
+        return;
+      }
+      event.schedules.forEach((schedule) => {
+        const location = typeof schedule?.location === "string"
+          ? schedule.location.trim()
+          : String(schedule?.location || "").trim();
+        if (location) {
+          history.add(location);
+        }
+      });
+    });
+  }
+  if (state.scheduleContextOverrides instanceof Map) {
+    state.scheduleContextOverrides.forEach((override) => {
+      const location = typeof override?.location === "string"
+        ? override.location.trim()
+        : String(override?.location || "").trim();
+      if (location) {
+        history.add(location);
+      }
+    });
+  }
+  state.scheduleLocationHistory = history;
+}
+
+function populateScheduleLocationOptions(preferred = "") {
+  const list = dom.scheduleLocationList;
+  if (!list) {
+    return;
+  }
+  const normalize = (value) => (value == null ? "" : String(value).trim());
+  const options = new Set();
+
+  if (state.scheduleLocationHistory instanceof Set) {
+    state.scheduleLocationHistory.forEach((value) => {
+      const location = normalize(value);
+      if (location) {
+        options.add(location);
+      }
+    });
+  }
+
+  const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
+  if (selectedEvent?.schedules) {
+    selectedEvent.schedules.forEach((schedule) => {
+      const location = normalize(schedule?.location);
+      if (location) {
+        options.add(location);
+      }
+    });
+  }
+
+  const preferredLocation = normalize(preferred);
+  if (preferredLocation) {
+    options.add(preferredLocation);
+  }
+
+  list.innerHTML = "";
+  Array.from(options)
+    .sort((a, b) => a.localeCompare(b, "ja", { numeric: true, sensitivity: "base" }))
+    .forEach((value) => {
+      const option = document.createElement("option");
+      option.value = value;
+      list.appendChild(option);
+    });
+}
+
 function finalizeEventLoad({
   preserveSelection = true,
   previousEventId = null,
@@ -232,6 +304,7 @@ function finalizeEventLoad({
       scheduleId,
       scheduleLabel,
       eventLabel,
+      location: initialLocation = null,
       startAt: initialStartAt = null,
       endAt: initialEndAt = null
     } = state.initialSelection;
@@ -256,6 +329,7 @@ function finalizeEventLoad({
             eventName: eventLabel || targetEvent.name || eventId,
             scheduleId,
             scheduleLabel: scheduleLabel || scheduleId,
+            location: initialLocation || "",
             startAt: initialStartAt || "",
             endAt: initialEndAt || ""
           };
@@ -295,6 +369,7 @@ function finalizeEventLoad({
             eventName: previousEvent?.name || previousEventId,
             scheduleId: previousScheduleId,
             scheduleLabel: previousSchedule.label || previousScheduleId,
+            location: previousSchedule.location || "",
             startAt: previousSchedule.startAt || "",
             endAt: previousSchedule.endAt || ""
           };
@@ -313,6 +388,9 @@ function finalizeEventLoad({
     state.selectedEventId = null;
     state.selectedScheduleId = null;
   }
+
+  refreshScheduleLocationHistory();
+  populateScheduleLocationOptions(dom.scheduleLocationInput?.value || "");
 
   state.initialSelectionNotice = selectionNotice;
   renderEvents();
@@ -3554,6 +3632,7 @@ async function loadEvents({ preserveSelection = true } = {}) {
     const scheduleList = Object.entries(scheduleBranch).map(([scheduleId, scheduleValue]) => ({
       id: String(scheduleId),
       label: String(scheduleValue?.label || ""),
+      location: String(scheduleValue?.location || ""),
       date: String(scheduleValue?.date || ""),
       startAt: String(scheduleValue?.startAt || ""),
       endAt: String(scheduleValue?.endAt || ""),
@@ -3629,6 +3708,7 @@ async function loadParticipants(options = {}) {
         const scheduleRecord = parentEvent?.schedules?.find(s => s.id === hostScheduleId) || null;
         if (scheduleRecord) {
           if (hostSelection.scheduleLabel) scheduleRecord.label = hostSelection.scheduleLabel;
+          if (hostSelection.location) scheduleRecord.location = hostSelection.location;
           if (hostSelection.startAt) scheduleRecord.startAt = hostSelection.startAt;
           if (hostSelection.endAt) scheduleRecord.endAt = hostSelection.endAt;
         }
@@ -3643,6 +3723,7 @@ async function loadParticipants(options = {}) {
           override.eventName = hostSelection.eventName || override.eventName || selectedEvent?.name || eventId;
           override.scheduleId = scheduleId;
           override.scheduleLabel = hostSelection.scheduleLabel || override.scheduleLabel || scheduleId;
+          override.location = hostSelection.location || override.location || "";
           override.startAt = hostSelection.startAt || override.startAt || "";
           override.endAt = hostSelection.endAt || override.endAt || "";
           state.scheduleContextOverrides.set(overrideKey, override);
@@ -3937,11 +4018,13 @@ function selectSchedule(scheduleId, options = {}) {
   broadcastSelectionChange({ source });
 }
 
-function resolveScheduleFormValues({ label, date, startTime, endTime }) {
+function resolveScheduleFormValues({ label, location, date, startTime, endTime }) {
   const trimmedLabel = normalizeKey(label || "");
   if (!trimmedLabel) {
     throw new Error("日程の表示名を入力してください。");
   }
+
+  const normalizedLocation = String(location || "").trim();
 
   const normalizedDate = normalizeDateInputValue(date);
   if (!normalizedDate) {
@@ -3971,6 +4054,7 @@ function resolveScheduleFormValues({ label, date, startTime, endTime }) {
 
   return {
     label: trimmedLabel,
+    location: normalizedLocation,
     date: normalizedDate,
     startValue,
     endValue,
@@ -4012,9 +4096,12 @@ function openScheduleForm({ mode = "create", schedule = null } = {}) {
     submitButton.textContent = mode === "edit" ? "保存" : "追加";
   }
 
+  populateScheduleLocationOptions(schedule?.location || "");
+
   const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
   if (mode === "edit" && schedule) {
     if (dom.scheduleLabelInput) dom.scheduleLabelInput.value = schedule.label || "";
+    if (dom.scheduleLocationInput) dom.scheduleLocationInput.value = schedule.location || "";
     const dateValue = schedule.date || (schedule.startAt ? String(schedule.startAt).slice(0, 10) : "");
     if (dom.scheduleDateInput) dom.scheduleDateInput.value = normalizeDateInputValue(dateValue);
     const startTime = schedule.startAt ? String(schedule.startAt).slice(11, 16) : "";
@@ -4025,6 +4112,9 @@ function openScheduleForm({ mode = "create", schedule = null } = {}) {
   } else {
     if (dom.scheduleLabelInput) {
       dom.scheduleLabelInput.value = selectedEvent?.name ? `${selectedEvent.name}` : "";
+    }
+    if (dom.scheduleLocationInput) {
+      dom.scheduleLocationInput.value = "";
     }
     if (dom.scheduleDateInput) {
       dom.scheduleDateInput.value = calendarState.pickedDate || "";
@@ -4155,14 +4245,15 @@ async function handleDeleteEvent(eventId, eventName) {
   }
 }
 
-async function handleAddSchedule({ label, date, startTime, endTime }) {
+async function handleAddSchedule({ label, location, date, startTime, endTime }) {
   const eventId = state.selectedEventId;
   if (!eventId) {
     throw new Error("イベントを選択してください。");
   }
 
-  const { label: trimmedLabel, date: normalizedDate, startValue, endValue } = resolveScheduleFormValues({
+  const { label: trimmedLabel, location: normalizedLocation, date: normalizedDate, startValue, endValue } = resolveScheduleFormValues({
     label,
+    location,
     date,
     startTime,
     endTime
@@ -4180,6 +4271,7 @@ async function handleAddSchedule({ label, date, startTime, endTime }) {
     await update(rootDbRef(), {
       [`questionIntake/schedules/${eventId}/${scheduleId}`]: {
         label: trimmedLabel,
+        location: normalizedLocation,
         date: normalizedDate,
         startAt: startValue,
         endAt: endValue,
@@ -4200,7 +4292,7 @@ async function handleAddSchedule({ label, date, startTime, endTime }) {
   }
 }
 
-async function handleUpdateSchedule(scheduleId, { label, date, startTime, endTime }) {
+async function handleUpdateSchedule(scheduleId, { label, location, date, startTime, endTime }) {
   const eventId = state.selectedEventId;
   if (!eventId) {
     throw new Error("イベントを選択してください。");
@@ -4209,8 +4301,9 @@ async function handleUpdateSchedule(scheduleId, { label, date, startTime, endTim
     throw new Error("日程IDが不明です。");
   }
 
-  const { label: trimmedLabel, date: normalizedDate, startValue, endValue } = resolveScheduleFormValues({
+  const { label: trimmedLabel, location: normalizedLocation, date: normalizedDate, startValue, endValue } = resolveScheduleFormValues({
     label,
+    location,
     date,
     startTime,
     endTime
@@ -4220,6 +4313,7 @@ async function handleUpdateSchedule(scheduleId, { label, date, startTime, endTim
     const now = Date.now();
     await update(rootDbRef(), {
       [`questionIntake/schedules/${eventId}/${scheduleId}/label`]: trimmedLabel,
+      [`questionIntake/schedules/${eventId}/${scheduleId}/location`]: normalizedLocation,
       [`questionIntake/schedules/${eventId}/${scheduleId}/date`]: normalizedDate,
       [`questionIntake/schedules/${eventId}/${scheduleId}/startAt`]: startValue,
       [`questionIntake/schedules/${eventId}/${scheduleId}/endAt`]: endValue,
@@ -4551,6 +4645,7 @@ async function handleSave(options = {}) {
     const scheduleDateText = schedule.date || (schedule.startAt ? String(schedule.startAt).slice(0, 10) : "");
     const scheduleStartAt = schedule.startAt || "";
     const scheduleEndAt = schedule.endAt || "";
+    const scheduleLocationText = schedule.location || "";
 
     const now = Date.now();
     const previousTokens = new Map(state.participantTokenMap || []);
@@ -4644,6 +4739,7 @@ async function handleSave(options = {}) {
         eventName: event.name || existingTokenRecord.eventName || "",
         scheduleId,
         scheduleLabel: schedule.label || existingTokenRecord.scheduleLabel || "",
+        scheduleLocation: scheduleLocationText || existingTokenRecord.scheduleLocation || "",
         scheduleDate: scheduleDateText || existingTokenRecord.scheduleDate || "",
         scheduleStart: scheduleStartAt || existingTokenRecord.scheduleStart || "",
         scheduleEnd: scheduleEndAt || existingTokenRecord.scheduleEnd || "",
@@ -4717,6 +4813,7 @@ async function handleSave(options = {}) {
       const destinationDate = destinationSchedule.date || "";
       const destinationStart = destinationSchedule.startAt || "";
       const destinationEnd = destinationSchedule.endAt || "";
+      const destinationLocation = destinationSchedule.location || "";
       const destinationTeam = String(relocation.destinationTeamNumber || "");
       const token = nextTokenMap.get(uid) || "";
       const legacyId = String(originEntry.legacyParticipantId || "").trim();
@@ -4771,6 +4868,7 @@ async function handleSave(options = {}) {
           eventName: event.name || existingTokenRecord.eventName || "",
           scheduleId: destinationScheduleId,
           scheduleLabel: destinationLabel || existingTokenRecord.scheduleLabel || "",
+          scheduleLocation: destinationLocation || existingTokenRecord.scheduleLocation || "",
           scheduleDate: destinationDate || existingTokenRecord.scheduleDate || "",
           scheduleStart: destinationStart || existingTokenRecord.scheduleStart || "",
           scheduleEnd: destinationEnd || existingTokenRecord.scheduleEnd || "",
@@ -4796,6 +4894,7 @@ async function handleSave(options = {}) {
         updatedQuestion.scheduleStart = destinationStart || updatedQuestion.scheduleStart || "";
         updatedQuestion.scheduleEnd = destinationEnd || updatedQuestion.scheduleEnd || "";
         updatedQuestion.scheduleDate = destinationDate || updatedQuestion.scheduleDate || "";
+        updatedQuestion.scheduleLocation = destinationLocation || updatedQuestion.scheduleLocation || "";
         if (destinationTeam) {
           updatedQuestion.group = destinationTeam;
         }
@@ -5304,6 +5403,7 @@ function resetState() {
   state.eventParticipantCache = new Map();
   state.teamAssignments = new Map();
   state.scheduleContextOverrides = new Map();
+  state.scheduleLocationHistory = new Set();
   state.editingParticipantId = null;
   state.editingRowKey = null;
   state.selectedParticipantId = "";
@@ -5321,6 +5421,7 @@ function resetState() {
   renderParticipants();
   updateParticipantContext();
   setUploadStatus(getMissingSelectionStatusMessage());
+  populateScheduleLocationOptions();
   if (dom.fileLabel) dom.fileLabel.textContent = "参加者CSVをアップロード";
   if (dom.teamCsvInput) dom.teamCsvInput.value = "";
   if (dom.csvInput) dom.csvInput.value = "";
@@ -6032,6 +6133,7 @@ function attachEventHandlers() {
         const scheduleId = dom.scheduleForm.dataset.scheduleId || "";
         const payload = {
           label: dom.scheduleLabelInput?.value,
+          location: dom.scheduleLocationInput?.value,
           date: dom.scheduleDateInput?.value,
           startTime: dom.scheduleStartTimeInput?.value,
           endTime: dom.scheduleEndTimeInput?.value
@@ -6250,9 +6352,10 @@ function hostSelectionSignature(selection = {}) {
   const scheduleId = normalizeKey(selection.scheduleId || "");
   const eventName = selection.eventName != null ? String(selection.eventName) : "";
   const scheduleLabel = selection.scheduleLabel != null ? String(selection.scheduleLabel) : "";
+  const scheduleLocation = selection.location != null ? String(selection.location) : "";
   const startAt = selection.startAt != null ? String(selection.startAt) : "";
   const endAt = selection.endAt != null ? String(selection.endAt) : "";
-  return [eventId, scheduleId, eventName, scheduleLabel, startAt, endAt].join("::");
+  return [eventId, scheduleId, eventName, scheduleLabel, scheduleLocation, startAt, endAt].join("::");
 }
 
 function getHostSelectionElement() {
@@ -6274,6 +6377,7 @@ function readHostSelectionDataset(target) {
     scheduleId: normalizeKey(dataset.expectedScheduleId || ""),
     eventName: dataset.expectedEventName ? String(dataset.expectedEventName) : "",
     scheduleLabel: dataset.expectedScheduleLabel ? String(dataset.expectedScheduleLabel) : "",
+    location: dataset.expectedScheduleLocation ? String(dataset.expectedScheduleLocation) : "",
     startAt: dataset.expectedStartAt ? String(dataset.expectedStartAt) : "",
     endAt: dataset.expectedEndAt ? String(dataset.expectedEndAt) : ""
   };
@@ -6347,6 +6451,7 @@ async function applySelectionContext(selection = {}) {
     scheduleId = "",
     eventName = "",
     scheduleLabel = "",
+    location = "",
     startAt = "",
     endAt = ""
   } = selection || {};
@@ -6366,6 +6471,7 @@ async function applySelectionContext(selection = {}) {
         eventId: trimmedEventId,
         scheduleId: trimmedScheduleId || null,
         scheduleLabel: scheduleLabel || null,
+        location: location || null,
         eventLabel: eventName || null,
         startAt: startAt || null,
         endAt: endAt || null
@@ -6376,6 +6482,7 @@ async function applySelectionContext(selection = {}) {
         scheduleId: trimmedScheduleId,
         eventName,
         scheduleLabel,
+        location,
         startAt,
         endAt
       });
@@ -6410,6 +6517,7 @@ async function applySelectionContext(selection = {}) {
 
     const effectiveEventName = selectedEvent?.name || eventName || trimmedEventId;
     let effectiveScheduleLabel = scheduleLabel || (trimmedScheduleId ? trimmedScheduleId : "");
+    let effectiveLocation = location || "";
     let effectiveStartAt = startAt || "";
     let effectiveEndAt = endAt || "";
 
@@ -6417,9 +6525,11 @@ async function applySelectionContext(selection = {}) {
       const schedule = selectedEvent?.schedules?.find(item => item.id === trimmedScheduleId) || null;
       if (schedule) {
         if (scheduleLabel) schedule.label = scheduleLabel;
+        if (location) schedule.location = location;
         if (startAt) schedule.startAt = startAt;
         if (endAt) schedule.endAt = endAt;
         effectiveScheduleLabel = schedule.label || trimmedScheduleId;
+        effectiveLocation = schedule.location || "";
         effectiveStartAt = schedule.startAt || "";
         effectiveEndAt = schedule.endAt || "";
         if (state.scheduleContextOverrides instanceof Map) {
@@ -6431,11 +6541,13 @@ async function applySelectionContext(selection = {}) {
           eventName: effectiveEventName,
           scheduleId: trimmedScheduleId,
           scheduleLabel: scheduleLabel || trimmedScheduleId,
+          location: location || "",
           startAt: startAt || "",
           endAt: endAt || ""
         };
         state.scheduleContextOverrides.set(`${trimmedEventId}::${trimmedScheduleId}`, override);
         effectiveScheduleLabel = override.scheduleLabel;
+        effectiveLocation = override.location || "";
         effectiveStartAt = override.startAt;
         effectiveEndAt = override.endAt;
       }
@@ -6448,11 +6560,15 @@ async function applySelectionContext(selection = {}) {
       updateParticipantContext({ preserveStatus: true });
     }
 
+    refreshScheduleLocationHistory();
+    populateScheduleLocationOptions(dom.scheduleLocationInput?.value || "");
+
     hostSelectionBridge.lastSignature = hostSelectionSignature({
       eventId: trimmedEventId,
       scheduleId: trimmedScheduleId,
       eventName: effectiveEventName,
       scheduleLabel: effectiveScheduleLabel,
+      location: effectiveLocation,
       startAt: effectiveStartAt,
       endAt: effectiveEndAt
     });
