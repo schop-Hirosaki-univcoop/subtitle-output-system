@@ -101,6 +101,32 @@ function isEmbeddedMode() {
   return Boolean(getEmbedPrefix());
 }
 
+function cloneParticipantEntry(entry) {
+  if (!entry || typeof entry !== "object") {
+    return {};
+  }
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(entry);
+    } catch (error) {
+      console.warn("Failed to structuredClone participant entry, falling back to JSON", error);
+    }
+  }
+  try {
+    return JSON.parse(JSON.stringify(entry));
+  } catch (error) {
+    console.warn("Failed to JSON-clone participant entry", error);
+    return { ...entry };
+  }
+}
+
+function captureParticipantBaseline(entries = state.participants) {
+  const list = Array.isArray(entries) ? entries : [];
+  state.savedParticipantEntries = list.map(entry => cloneParticipantEntry(entry));
+  state.savedParticipants = snapshotParticipantList(list);
+  state.lastSavedSignature = signatureForEntries(list);
+}
+
 let embedReadyDeferred = null;
 
 const HOST_SELECTION_ATTRIBUTE_KEYS = [
@@ -3798,10 +3824,10 @@ async function loadParticipants(options = {}) {
 
   if (!eventId || !scheduleId) {
     state.participants = [];
-    state.savedParticipants = snapshotParticipantList([]);
     state.participantTokenMap = new Map();
     state.duplicateMatches = new Map();
     state.duplicateGroups = new Map();
+    captureParticipantBaseline([]);
     renderParticipants();
     updateParticipantContext();
     syncSaveButtonState();
@@ -3840,7 +3866,6 @@ async function loadParticipants(options = {}) {
     state.eventParticipantCache.set(eventId, normalizeEventParticipantCache(eventBranch));
 
     let participants = sortParticipants(normalized);
-    const savedSignature = signatureForEntries(participants);
     const assignmentMap = getTeamAssignmentMap(eventId);
     if (assignmentMap?.size) {
       const applyResult = applyAssignmentsToEntries(participants, assignmentMap);
@@ -3850,8 +3875,7 @@ async function loadParticipants(options = {}) {
     state.participants = participants;
     state.pendingRelocations = new Map();
     state.relocationDraftOriginals = new Map();
-    state.lastSavedSignature = savedSignature;
-    state.savedParticipants = snapshotParticipantList(participants);
+    captureParticipantBaseline(participants);
     state.participantTokenMap = new Map(
       state.participants.map(entry => {
         const key = resolveParticipantUid(entry) || String(entry.participantId || "").trim();
@@ -3931,11 +3955,11 @@ async function loadParticipants(options = {}) {
   } catch (error) {
     console.error(error);
     state.participants = [];
-    state.savedParticipants = snapshotParticipantList([]);
     state.participantTokenMap = new Map();
     state.duplicateMatches = new Map();
     state.duplicateGroups = new Map();
     state.mailSending = false;
+    captureParticipantBaseline([]);
     setUploadStatus(error.message || "参加者リストの読み込みに失敗しました。", "error");
     renderParticipants();
     updateParticipantContext();
@@ -3985,10 +4009,9 @@ function selectEvent(eventId, options = {}) {
   setCalendarPickedDate("", { updateInput: true });
   state.participants = [];
   state.participantTokenMap = new Map();
-  state.lastSavedSignature = "";
-  state.savedParticipants = [];
   state.duplicateMatches = new Map();
   state.duplicateGroups = new Map();
+  captureParticipantBaseline([]);
   if (state.eventParticipantCache instanceof Map && previousEventId) {
     state.eventParticipantCache.delete(previousEventId);
   }
@@ -4041,16 +4064,12 @@ function selectSchedule(scheduleId, options = {}) {
 
   if (!normalizedId) {
     state.participants = [];
-    state.savedParticipants = snapshotParticipantList([]);
     state.participantTokenMap = new Map();
-    state.lastSavedSignature = "";
     state.duplicateMatches = new Map();
     state.duplicateGroups = new Map();
+    captureParticipantBaseline([]);
     renderParticipants();
     syncSaveButtonState();
-  } else if (shouldReload) {
-    state.savedParticipants = [];
-    state.lastSavedSignature = "";
   }
 
   updateParticipantContext({ preserveStatus });
@@ -4271,9 +4290,9 @@ async function handleDeleteEvent(eventId, eventName) {
       state.selectedScheduleId = null;
       state.participants = [];
       state.participantTokenMap = new Map();
-      state.lastSavedSignature = "";
       state.duplicateMatches = new Map();
       state.duplicateGroups = new Map();
+      captureParticipantBaseline([]);
     }
 
     if (state.eventParticipantCache instanceof Map) {
@@ -4426,9 +4445,9 @@ async function handleDeleteSchedule(scheduleId, scheduleLabel) {
       state.selectedScheduleId = null;
       state.participants = [];
       state.participantTokenMap = new Map();
-      state.lastSavedSignature = "";
       state.duplicateMatches = new Map();
       state.duplicateGroups = new Map();
+      captureParticipantBaseline([]);
     }
 
     if (state.eventParticipantCache instanceof Map) {
@@ -5004,8 +5023,7 @@ async function handleSave(options = {}) {
     }
 
     state.participantTokenMap = nextTokenMap;
-    state.lastSavedSignature = signatureForEntries(state.participants);
-    state.savedParticipants = snapshotParticipantList(state.participants);
+    captureParticipantBaseline(state.participants);
     setUploadStatus(successMessage || "参加者リストを更新しました。", "success");
     await loadEvents({ preserveSelection: true });
     await loadParticipants();
@@ -5074,6 +5092,7 @@ function applyMailSendResults(results = []) {
     return 0;
   }
 
+  const hadUnsavedChangesBefore = hasUnsavedChanges();
   const resultMap = new Map();
   results.forEach(item => {
     const key = normalizeKey(item?.participantId || item?.uid || "");
@@ -5099,6 +5118,8 @@ function applyMailSendResults(results = []) {
   }
 
   let updatedCount = 0;
+  const updatedRowKeys = new Set();
+  const updatedParticipantKeys = new Set();
   state.participants = state.participants.map(entry => {
     const key = resolveParticipantUid(entry) || String(entry.participantId || "").trim();
     if (!key || !resultMap.has(key)) {
@@ -5139,9 +5160,93 @@ function applyMailSendResults(results = []) {
     }
 
     updatedCount += 1;
+    updatedParticipantKeys.add(key);
+    const rowKey = String(nextEntry.rowKey || entry.rowKey || "");
+    if (rowKey) {
+      updatedRowKeys.add(rowKey);
+    }
     return nextEntry;
   });
-  
+
+  if (updatedCount > 0) {
+    if (!hadUnsavedChangesBefore) {
+      captureParticipantBaseline(state.participants);
+    } else {
+      if (Array.isArray(state.savedParticipantEntries) && state.savedParticipantEntries.length) {
+        const baselineByParticipant = new Map();
+        const baselineByRowKey = new Map();
+        state.savedParticipantEntries.forEach(entry => {
+          const participantKey =
+            resolveParticipantUid(entry) || String(entry.participantId || "").trim();
+          const rowKey = String(entry?.rowKey || "");
+          if (participantKey) {
+            baselineByParticipant.set(participantKey, entry);
+          }
+          if (rowKey) {
+            baselineByRowKey.set(rowKey, entry);
+          }
+        });
+        updatedParticipantKeys.forEach(key => {
+          const baseline = baselineByParticipant.get(key);
+          const patch = resultMap.get(key);
+          if (!baseline || !patch) {
+            return;
+          }
+          if (patch.mailStatus !== undefined) {
+            baseline.mailStatus = String(patch.mailStatus || "");
+          }
+          if (patch.mailSentAt !== undefined) {
+            const value = Number(patch.mailSentAt);
+            if (Number.isFinite(value) && value >= 0) {
+              baseline.mailSentAt = value;
+            }
+          }
+          if (patch.mailError !== undefined) {
+            baseline.mailError = String(patch.mailError || "");
+          }
+          if (patch.mailLastSubject !== undefined) {
+            baseline.mailLastSubject = String(patch.mailLastSubject || "");
+          }
+          if (patch.mailLastMessageId !== undefined) {
+            baseline.mailLastMessageId = String(patch.mailLastMessageId || "");
+          }
+          if (patch.mailSentBy !== undefined) {
+            baseline.mailSentBy = String(patch.mailSentBy || "");
+          }
+          if (patch.mailLastAttemptAt !== undefined) {
+            const attemptValue = Number(patch.mailLastAttemptAt);
+            if (Number.isFinite(attemptValue) && attemptValue >= 0) {
+              baseline.mailLastAttemptAt = attemptValue;
+            }
+          }
+          if (patch.mailLastAttemptBy !== undefined) {
+            baseline.mailLastAttemptBy = String(patch.mailLastAttemptBy || "");
+          }
+        });
+        state.lastSavedSignature = signatureForEntries(state.savedParticipantEntries);
+
+        if (
+          Array.isArray(state.savedParticipants) &&
+          state.savedParticipants.length &&
+          updatedRowKeys.size
+        ) {
+          state.savedParticipants = state.savedParticipants.map(snapshot => {
+            const rowKey = String(snapshot?.rowKey || "");
+            if (!rowKey || !updatedRowKeys.has(rowKey)) {
+              return snapshot;
+            }
+            const baseline = baselineByRowKey.get(rowKey);
+            if (!baseline) {
+              return snapshot;
+            }
+            const [nextSnapshot] = snapshotParticipantList([baseline]);
+            return nextSnapshot || snapshot;
+          });
+        }
+      }
+    }
+  }
+
   renderParticipants();
   syncMailActionState();
   logMailInfo("メール送信結果の適用が完了しました", {
@@ -5321,13 +5426,18 @@ async function handleClearParticipants() {
   const previousParticipants = state.participants.slice();
   const previousTokenMap = new Map(state.participantTokenMap);
   const previousSignature = state.lastSavedSignature;
+  const previousSavedParticipants = Array.isArray(state.savedParticipants)
+    ? state.savedParticipants.slice()
+    : [];
+  const previousSavedEntries = Array.isArray(state.savedParticipantEntries)
+    ? state.savedParticipantEntries.map(entry => cloneParticipantEntry(entry))
+    : [];
 
   state.participants = [];
   state.participantTokenMap = new Map();
-  state.lastSavedSignature = signatureForEntries(state.participants);
-  state.savedParticipants = snapshotParticipantList(state.participants);
   state.duplicateMatches = new Map();
   state.duplicateGroups = new Map();
+  captureParticipantBaseline(state.participants);
   renderParticipants();
 
   const success = await handleSave({ allowEmpty: true, successMessage: "参加者リストを全て削除しました。" });
@@ -5335,6 +5445,8 @@ async function handleClearParticipants() {
     state.participants = previousParticipants;
     state.participantTokenMap = previousTokenMap;
     state.lastSavedSignature = previousSignature;
+    state.savedParticipants = previousSavedParticipants;
+    state.savedParticipantEntries = previousSavedEntries;
     updateDuplicateMatches();
     renderParticipants();
   }
@@ -5441,15 +5553,14 @@ function maybeFocusInitialSection() {
 function resetState() {
   state.events = [];
   state.participants = [];
-  state.savedParticipants = [];
   state.selectedEventId = null;
   state.selectedScheduleId = null;
   state.mailSending = false;
   lastSelectionBroadcastSignature = "";
-  state.lastSavedSignature = "";
   state.participantTokenMap = new Map();
   state.duplicateMatches = new Map();
   state.duplicateGroups = new Map();
+  captureParticipantBaseline([]);
   state.eventParticipantCache = new Map();
   state.teamAssignments = new Map();
   state.scheduleContextOverrides = new Map();

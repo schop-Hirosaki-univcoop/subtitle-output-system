@@ -5,6 +5,7 @@ const state = {
   selectedScheduleId: null,
   participants: [],
   savedParticipants: [],
+  savedParticipantEntries: [],
   lastSavedSignature: "",
   user: null,
   saving: false,
