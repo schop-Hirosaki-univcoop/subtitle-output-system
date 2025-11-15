@@ -226,6 +226,7 @@ export class ParticipantToolManager {
       delete tool.dataset.expectedEventName;
       delete tool.dataset.expectedScheduleId;
       delete tool.dataset.expectedScheduleLabel;
+      delete tool.dataset.expectedScheduleLocation;
       delete tool.dataset.expectedStartAt;
       delete tool.dataset.expectedEndAt;
       delete tool.dataset.syncedEventId;
@@ -245,6 +246,7 @@ export class ParticipantToolManager {
     tool.dataset.expectedEventName = context.eventName || context.eventId;
     tool.dataset.expectedScheduleId = context.scheduleId;
     tool.dataset.expectedScheduleLabel = context.scheduleLabel || context.scheduleId;
+    tool.dataset.expectedScheduleLocation = context.location || "";
     tool.dataset.expectedStartAt = context.startAt || "";
     tool.dataset.expectedEndAt = context.endAt || "";
     this.logParticipantAction("参加者ツールの期待コンテキストを更新しました", context);

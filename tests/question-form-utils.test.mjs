@@ -178,6 +178,7 @@ test('buildQuestionRecord merges submission data with context defaults', () => {
       groupNumber: '',
       genre: '活動',
       scheduleLabel: '',
+      scheduleLocation: '',
       scheduleDate: '',
       scheduleStart: '',
       scheduleEnd: '',
@@ -192,6 +193,7 @@ test('buildQuestionRecord merges submission data with context defaults', () => {
     context: {
       groupNumber: 'A-1',
       scheduleLabel: '昼の部',
+      scheduleLocation: 'メイン会場',
       scheduleDate: '2025-05-10',
       scheduleStart: '2025-05-10T10:00',
       scheduleEnd: '2025-05-10T12:00',
@@ -211,6 +213,7 @@ test('buildQuestionRecord merges submission data with context defaults', () => {
   assert.equal(record.question, '質問');
   assert.equal(record.group, 'A-1');
   assert.equal(record.schedule, '昼の部');
+  assert.equal(record.scheduleLocation, 'メイン会場');
   assert.equal(record.scheduleStart, '2025-05-10T10:00');
   assert.equal(record.scheduleEnd, '2025-05-10T12:00');
   assert.equal(record.scheduleDate, '2025-05-10');
@@ -238,6 +241,7 @@ test('buildSubmissionPayload merges snapshot values and trims metadata', () => {
       teamNumber: ' T1 ',
       scheduleLabel: ' 午前 ',
       scheduleDate: '2025-01-01',
+      scheduleLocation: ' メイン会場 ',
       scheduleStart: '2025-01-01T09:00',
       scheduleEnd: '2025-01-01T10:00',
       eventId: ' event-1 ',
@@ -263,6 +267,7 @@ test('buildSubmissionPayload merges snapshot values and trims metadata', () => {
   assert.equal(submission.genre, '活動');
   assert.equal(submission.groupNumber, 'G1');
   assert.equal(submission.scheduleLabel, '午前');
+  assert.equal(submission.scheduleLocation, 'メイン会場');
   assert.equal(submission.eventName, '朝会');
   assert.equal(submission.formVersion, 'test@1');
   assert.equal(submission.language, 'ja-JP');

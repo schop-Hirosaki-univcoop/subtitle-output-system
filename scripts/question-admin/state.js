@@ -16,6 +16,7 @@ const state = {
   duplicateMatches: new Map(),
   duplicateGroups: new Map(),
   scheduleContextOverrides: new Map(),
+  scheduleLocationHistory: new Set(),
   teamAssignments: new Map(),
   glRoster: new Map(),
   glAssignments: new Map(),

@@ -66,6 +66,7 @@ function normalizeContextData(rawContext) {
     scheduleId: ensureTrimmedString(rawContext.scheduleId),
     scheduleLabel: ensureTrimmedString(rawContext.scheduleLabel),
     scheduleDate: ensureTrimmedString(rawContext.scheduleDate),
+    scheduleLocation: ensureTrimmedString(rawContext.scheduleLocation),
     scheduleStart: ensureTrimmedString(rawContext.scheduleStart),
     scheduleEnd: ensureTrimmedString(rawContext.scheduleEnd),
     participantId: ensureTrimmedString(rawContext.participantId),
@@ -195,6 +196,7 @@ export class QuestionFormApp {
       scheduleId: context.scheduleId,
       scheduleLabel: context.scheduleLabel,
       scheduleDate: context.scheduleDate,
+      scheduleLocation: context.scheduleLocation,
       participantId: context.participantId,
       groupNumber: context.groupNumber
     });
@@ -208,7 +210,8 @@ export class QuestionFormApp {
       start: context.scheduleStart,
       end: context.scheduleEnd
     });
-    const scheduleText = `あなたの参加日程：${scheduleSummary}`;
+    const locationNote = context.scheduleLocation ? `（会場：${context.scheduleLocation}）` : "";
+    const scheduleText = `あなたの参加日程：${scheduleSummary}${locationNote}`;
     const descriptionText = buildContextDescription(context.eventName);
 
     this.view.setContextBanner({
@@ -419,6 +422,7 @@ export class QuestionFormApp {
     const groupNumber = coalesceTrimmed(this.view.getGroupNumber(), context.groupNumber);
     const scheduleLabel = coalesceTrimmed(this.view.getScheduleLabel(), context.scheduleLabel);
     const scheduleDate = coalesceTrimmed(this.view.getScheduleDate(), context.scheduleDate);
+    const scheduleLocation = coalesceTrimmed(this.view.getScheduleLocation(), context.scheduleLocation);
     const eventId = coalesceTrimmed(this.view.getEventId(), context.eventId);
     const eventName = coalesceTrimmed(this.view.getEventName(), context.eventName);
     const scheduleId = coalesceTrimmed(this.view.getScheduleId(), context.scheduleId);
@@ -429,6 +433,7 @@ export class QuestionFormApp {
       teamNumber: groupNumber,
       scheduleLabel,
       scheduleDate,
+      scheduleLocation,
       scheduleStart: context.scheduleStart,
       scheduleEnd: context.scheduleEnd,
       eventId,

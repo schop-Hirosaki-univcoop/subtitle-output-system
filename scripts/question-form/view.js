@@ -20,6 +20,7 @@ export class FormView {
     this.groupInput = doc.getElementById("group-number");
     this.scheduleInput = doc.getElementById("schedule");
     this.scheduleDateInput = doc.getElementById("schedule-date");
+    this.scheduleLocationInput = doc.getElementById("schedule-location");
     this.eventIdInput = doc.getElementById("event-id");
     this.eventNameInput = doc.getElementById("event-name");
     this.scheduleIdInput = doc.getElementById("schedule-id");
@@ -233,6 +234,7 @@ export class FormView {
     scheduleId = "",
     scheduleLabel = "",
     scheduleDate = "",
+    scheduleLocation = "",
     participantId = "",
     groupNumber = ""
   } = {}) {
@@ -241,6 +243,7 @@ export class FormView {
     if (this.scheduleIdInput) this.scheduleIdInput.value = scheduleId;
     if (this.scheduleInput) this.scheduleInput.value = scheduleLabel;
     if (this.scheduleDateInput) this.scheduleDateInput.value = scheduleDate;
+    if (this.scheduleLocationInput) this.scheduleLocationInput.value = scheduleLocation;
     if (this.participantIdInput) this.participantIdInput.value = participantId;
     if (this.groupInput) this.groupInput.value = groupNumber;
   }
@@ -379,6 +382,14 @@ export class FormView {
    */
   getScheduleDate() {
     return this.scheduleDateInput ? this.scheduleDateInput.value.trim() : "";
+  }
+
+  /**
+   * 日程場所 hiddenフィールドの値を返します。
+   * @returns {string}
+   */
+  getScheduleLocation() {
+    return this.scheduleLocationInput ? this.scheduleLocationInput.value.trim() : "";
   }
 
   /**

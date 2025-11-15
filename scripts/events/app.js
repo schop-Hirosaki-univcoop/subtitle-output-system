@@ -33,6 +33,10 @@ import {
   collectParticipantTokens
 } from "./helpers.js";
 import {
+  createScheduleDialogCalendarController,
+  normalizeDateInputValue
+} from "./schedule-calendar.js";
+import {
   OPERATOR_MODE_TELOP,
   OPERATOR_MODE_SUPPORT,
   normalizeOperatorMode,
@@ -104,6 +108,15 @@ function parseCssPixels(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function extractTimePart(value) {
+  const text = ensureString(value).trim();
+  if (!text) {
+    return "";
+  }
+  const match = text.match(/(\d{2}:\d{2})/);
+  return match ? match[1] : "";
+}
+
 /**
  * イベント管理画面全体を統括するアプリケーションクラスです。
  * Firebaseの認証・Realtime Database・埋め込みツールを連携し
@@ -112,11 +125,16 @@ function parseCssPixels(value) {
 export class EventAdminApp {
   constructor() {
     this.dom = queryDom();
+    this.scheduleCalendar = createScheduleDialogCalendarController(this.dom);
     this.api = createApiClient(auth, onAuthStateChanged);
-    this.auth = auth; // Firebase auth サービスをインスタンスにアタッチ
+    this.auth = auth; // Firebase auth サービスをインスタンスにアタッチ
     this.authUnsubscribe = null;
     this.currentUser = null;
     this.events = [];
+    this.scheduleLocationHistory = new Set();
+    this.lastScheduleLocation = "";
+    this.lastScheduleStartTime = "";
+    this.lastScheduleEndTime = "";
     this.selectedEventId = "";
     this.schedules = [];
     this.selectedScheduleId = "";
@@ -1196,6 +1214,7 @@ export class EventAdminApp {
       const schedules = Object.entries(scheduleBranch).map(([scheduleId, scheduleValue]) => ({
         id: ensureString(scheduleId),
         label: ensureString(scheduleValue?.label),
+        location: ensureString(scheduleValue?.location),
         date: ensureString(scheduleValue?.date || ""),
         startAt: ensureString(scheduleValue?.startAt || scheduleValue?.date),
         endAt: ensureString(scheduleValue?.endAt || ""),
@@ -1231,7 +1250,21 @@ export class EventAdminApp {
     const previousEventId = this.selectedEventId;
     const previousScheduleId = this.selectedScheduleId;
 
+    const locationHistory = new Set();
+    normalized.forEach((event) => {
+      if (!Array.isArray(event?.schedules)) {
+        return;
+      }
+      event.schedules.forEach((schedule) => {
+        const location = ensureString(schedule?.location).trim();
+        if (location) {
+          locationHistory.add(location);
+        }
+      });
+    });
+
     this.events = normalized;
+    this.scheduleLocationHistory = locationHistory;
     this.tools.resetContext();
     this.updateMetaNote();
     this.updateDocumentTitle();
@@ -1508,6 +1541,7 @@ export class EventAdminApp {
     const scheduleLabel = ensureString(schedule?.label) || committedScheduleLabel || scheduleId;
     const startAt = ensureString(schedule?.startAt) || ensureString(committedSchedule?.startAt);
     const endAt = ensureString(schedule?.endAt) || ensureString(committedSchedule?.endAt);
+    const location = ensureString(schedule?.location) || ensureString(committedSchedule?.location);
     const committedScheduleKey = committedScheduleId
       ? this.derivePresenceScheduleKey(
           ensureString(event?.id || ""),
@@ -1527,6 +1561,7 @@ export class EventAdminApp {
       scheduleLabel,
       startAt,
       endAt,
+      location,
       operatorMode: this.operatorMode,
       committedScheduleId,
       committedScheduleLabel,
@@ -1568,6 +1603,7 @@ export class EventAdminApp {
       ? ensureString(selectedSchedule.label) || selectedScheduleId
       : selectedScheduleId;
     const scheduleRange = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
+    const scheduleLocation = schedule ? ensureString(schedule.location) : "";
     const scheduleKey = resolvedScheduleId
       ? this.derivePresenceScheduleKey(
           normalizedEventId,
@@ -1580,6 +1616,7 @@ export class EventAdminApp {
       scheduleId: resolvedScheduleId,
       scheduleLabel,
       scheduleRange,
+      location: scheduleLocation,
       scheduleKey,
       schedule,
       committedScheduleId,
@@ -2041,6 +2078,9 @@ export class EventAdminApp {
 
     this.selectedScheduleId = normalized;
     const changed = previous !== normalized;
+    const selectedSchedule = this.getSelectedSchedule();
+    this.rememberLastScheduleLocation(selectedSchedule?.location);
+    this.rememberLastScheduleTimeRange(selectedSchedule?.startAt, selectedSchedule?.endAt);
     if (changed) {
       this.logFlowState("日程選択を更新しました", {
         scheduleId: normalized || "",
@@ -2076,6 +2116,8 @@ export class EventAdminApp {
       preferredScheduleId
     });
     this.ensureSelectedSchedule(preferredScheduleId);
+    const selectedSchedule = this.getSelectedSchedule();
+    this.rememberLastScheduleLocation(selectedSchedule?.location);
     this.renderScheduleList();
     this.updateScheduleSummary();
     this.updateStageHeader();
@@ -2165,6 +2207,8 @@ export class EventAdminApp {
       const rangeText = formatScheduleRange(schedule.startAt, schedule.endAt);
       const metaParts = [];
       if (rangeText) metaParts.push(rangeText);
+      const locationText = ensureString(schedule.location).trim();
+      if (locationText) metaParts.push(`会場 ${locationText}`);
       metaParts.push(`参加者 ${formatParticipantCount(schedule.participantCount)}`);
       metaEl.textContent = metaParts.join(" / ");
 
@@ -2278,6 +2322,16 @@ export class EventAdminApp {
       } else {
         this.dom.scheduleSummaryRangeRow.hidden = true;
         this.dom.scheduleSummaryRange.textContent = "";
+      }
+    }
+    const locationText = ensureString(schedule.location).trim();
+    if (this.dom.scheduleSummaryLocationRow && this.dom.scheduleSummaryLocation) {
+      if (locationText) {
+        this.dom.scheduleSummaryLocationRow.hidden = false;
+        this.dom.scheduleSummaryLocation.textContent = locationText;
+      } else {
+        this.dom.scheduleSummaryLocationRow.hidden = true;
+        this.dom.scheduleSummaryLocation.textContent = "";
       }
     }
     this.syncOperatorModeUi();
@@ -7986,6 +8040,16 @@ export class EventAdminApp {
     this.dom.scheduleForm.dataset.mode = mode;
     this.dom.scheduleForm.dataset.scheduleId = schedule?.id || "";
     this.setFormError(this.dom.scheduleError, "");
+    const selectedSchedule = this.getSelectedSchedule();
+    const rememberedLocation = ensureString(this.lastScheduleLocation);
+    const initialLocation =
+      mode === "edit" && schedule
+        ? ensureString(schedule.location)
+        : rememberedLocation || ensureString(selectedSchedule?.location);
+    this.populateScheduleLocationOptions(initialLocation);
+    if (this.dom.scheduleLocationInput) {
+      this.dom.scheduleLocationInput.value = initialLocation;
+    }
 
     if (this.dom.scheduleDialogTitle) {
       this.dom.scheduleDialogTitle.textContent = mode === "edit" ? "日程を編集" : "日程を追加";
@@ -7994,17 +8058,91 @@ export class EventAdminApp {
     if (submitButton) {
       submitButton.textContent = mode === "edit" ? "保存" : "追加";
     }
+    const lastPickedDate = ensureString(this.scheduleCalendar?.calendarState?.pickedDate);
+    let initialDateValue = lastPickedDate;
     if (mode === "edit" && schedule) {
       if (this.dom.scheduleLabelInput) this.dom.scheduleLabelInput.value = schedule.label || "";
-      if (this.dom.scheduleDateInput)
-        this.dom.scheduleDateInput.value = schedule.startAt ? String(schedule.startAt).slice(0, 10) : schedule.date || "";
-      if (this.dom.scheduleStartInput)
-        this.dom.scheduleStartInput.value = schedule.startAt ? String(schedule.startAt).slice(11, 16) : "";
-      if (this.dom.scheduleEndInput)
-        this.dom.scheduleEndInput.value = schedule.endAt ? String(schedule.endAt).slice(11, 16) : "";
+      const scheduleDateSource = schedule?.startAt || schedule?.date || lastPickedDate;
+      const normalizedDate = normalizeDateInputValue(scheduleDateSource);
+      if (this.dom.scheduleDateInput) {
+        this.dom.scheduleDateInput.value = normalizedDate;
+      }
+      initialDateValue = normalizedDate || lastPickedDate;
+      if (this.dom.scheduleStartInput) {
+        this.dom.scheduleStartInput.value = extractTimePart(schedule.startAt);
+      }
+      if (this.dom.scheduleEndInput) {
+        this.dom.scheduleEndInput.value = extractTimePart(schedule.endAt);
+      }
+    } else {
+      let normalizedLastPicked = normalizeDateInputValue(lastPickedDate);
+      if (!normalizedLastPicked) {
+        const fallbackSource =
+          ensureString(selectedSchedule?.date) ||
+          ensureString(selectedSchedule?.startAt) ||
+          ensureString(selectedSchedule?.endAt) ||
+          new Date().toISOString();
+        normalizedLastPicked = normalizeDateInputValue(fallbackSource);
+      }
+      if (this.dom.scheduleDateInput) {
+        this.dom.scheduleDateInput.value = normalizedLastPicked;
+      }
+      initialDateValue = this.dom.scheduleDateInput?.value || normalizedLastPicked;
+      const startSeed = ensureString(this.lastScheduleStartTime) || extractTimePart(selectedSchedule?.startAt);
+      const endSeed = ensureString(this.lastScheduleEndTime) || extractTimePart(selectedSchedule?.endAt);
+      if (this.dom.scheduleStartInput) {
+        this.dom.scheduleStartInput.value = startSeed;
+      }
+      if (this.dom.scheduleEndInput) {
+        this.dom.scheduleEndInput.value = endSeed || startSeed;
+      }
+    }
+
+    const normalizedInitialDate = normalizeDateInputValue(initialDateValue);
+    if (this.scheduleCalendar) {
+      this.scheduleCalendar.setCalendarPickedDate(normalizedInitialDate, { updateInput: true });
+      this.scheduleCalendar.prepareScheduleDialogCalendar(normalizedInitialDate);
+      this.scheduleCalendar.syncScheduleEndMin();
     }
 
     this.openDialog(this.dom.scheduleDialog);
+  }
+
+  populateScheduleLocationOptions(preferred = "") {
+    const list = this.dom.scheduleLocationList;
+    if (!list) {
+      return;
+    }
+    const normalize = (value) => ensureString(value).trim();
+    const options = new Set();
+    if (this.scheduleLocationHistory instanceof Set) {
+      this.scheduleLocationHistory.forEach((value) => {
+        const location = normalize(value);
+        if (location) {
+          options.add(location);
+        }
+      });
+    }
+    if (Array.isArray(this.schedules)) {
+      this.schedules.forEach((schedule) => {
+        const location = normalize(schedule?.location);
+        if (location) {
+          options.add(location);
+        }
+      });
+    }
+    const preferredLocation = normalize(preferred);
+    if (preferredLocation) {
+      options.add(preferredLocation);
+    }
+    list.innerHTML = "";
+    Array.from(options)
+      .sort((a, b) => a.localeCompare(b, "ja", { numeric: true, sensitivity: "base" }))
+      .forEach((value) => {
+        const option = document.createElement("option");
+        option.value = value;
+        list.appendChild(option);
+      });
   }
 
   async handleScheduleFormSubmit() {
@@ -8016,8 +8154,10 @@ export class EventAdminApp {
     try {
       const mode = this.dom.scheduleForm.dataset.mode || "create";
       const scheduleId = this.dom.scheduleForm.dataset.scheduleId || "";
+      const locationValue = ensureString(this.dom.scheduleLocationInput?.value).trim();
       const payload = {
         label: this.dom.scheduleLabelInput?.value,
+        location: locationValue,
         date: this.dom.scheduleDateInput?.value,
         start: this.dom.scheduleStartInput?.value,
         end: this.dom.scheduleEndInput?.value
@@ -8027,6 +8167,8 @@ export class EventAdminApp {
       } else {
         await this.createSchedule(payload);
       }
+      this.rememberLastScheduleLocation(locationValue);
+      this.rememberLastScheduleTimeRange(payload.start, payload.end);
       this.dom.scheduleForm.reset();
       this.closeDialog(this.dom.scheduleDialog);
     } catch (error) {
@@ -8036,13 +8178,34 @@ export class EventAdminApp {
     }
   }
 
-  resolveScheduleFormValues({ label, date, start, end }) {
+  rememberLastScheduleLocation(value) {
+    const normalized = ensureString(value).trim();
+    this.lastScheduleLocation = normalized;
+    if (normalized && this.scheduleLocationHistory instanceof Set) {
+      this.scheduleLocationHistory.add(normalized);
+    }
+  }
+
+  rememberLastScheduleTimeRange(start, end) {
+    const startPart = extractTimePart(start);
+    const endPart = extractTimePart(end);
+    if (startPart) {
+      this.lastScheduleStartTime = startPart;
+    }
+    if (endPart) {
+      this.lastScheduleEndTime = endPart;
+    }
+  }
+
+  resolveScheduleFormValues({ label, location, date, start, end }) {
     const trimmedLabel = normalizeKey(label || "");
     if (!trimmedLabel) {
       throw new Error("日程の表示名を入力してください。");
     }
 
-    const normalizedDate = ensureString(date);
+    const normalizedLocation = ensureString(location).trim();
+
+    const normalizedDate = normalizeDateInputValue(date);
     if (!normalizedDate) {
       throw new Error("日付を入力してください。");
     }
@@ -8068,6 +8231,7 @@ export class EventAdminApp {
 
     return {
       label: trimmedLabel,
+      location: normalizedLocation,
       date: normalizedDate,
       startValue,
       endValue
@@ -8080,7 +8244,7 @@ export class EventAdminApp {
       throw new Error("イベントを選択してください。");
     }
 
-    const { label, date, startValue, endValue } = this.resolveScheduleFormValues(payload);
+    const { label, location, date, startValue, endValue } = this.resolveScheduleFormValues(payload);
     let scheduleId = generateShortId("sch_");
     const existingIds = new Set(this.schedules.map((schedule) => schedule.id));
     while (existingIds.has(scheduleId)) {
@@ -8092,6 +8256,7 @@ export class EventAdminApp {
     try {
       await set(ref(database, `questionIntake/schedules/${eventId}/${scheduleId}`), {
         label,
+        location,
         date,
         startAt: startValue,
         endAt: endValue,
@@ -8120,12 +8285,13 @@ export class EventAdminApp {
       throw new Error("日程IDが不明です。");
     }
 
-    const { label, date, startValue, endValue } = this.resolveScheduleFormValues(payload);
+    const { label, location, date, startValue, endValue } = this.resolveScheduleFormValues(payload);
     const now = Date.now();
     this.beginScheduleLoading("日程を更新しています…");
     try {
       await update(ref(database), {
         [`questionIntake/schedules/${eventId}/${scheduleId}/label`]: label,
+        [`questionIntake/schedules/${eventId}/${scheduleId}/location`]: location,
         [`questionIntake/schedules/${eventId}/${scheduleId}/date`]: date,
         [`questionIntake/schedules/${eventId}/${scheduleId}/startAt`]: startValue,
         [`questionIntake/schedules/${eventId}/${scheduleId}/endAt`]: endValue,

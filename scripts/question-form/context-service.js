@@ -62,6 +62,7 @@ export async function fetchContextFromToken(database, token) {
     scheduleId: String(data.scheduleId || ""),
     scheduleLabel: String(data.scheduleLabel || ""),
     scheduleDate: String(data.scheduleDate || ""),
+    scheduleLocation: String(data.scheduleLocation || ""),
     scheduleStart: String(data.scheduleStart || ""),
     scheduleEnd: String(data.scheduleEnd || ""),
     participantId: String(data.participantId || ""),
