@@ -176,7 +176,7 @@
   <? if (resolvedLocation || resolvedArrivalWindow || resolvedArrivalNote) { ?>
     <p class="info" style="<?= infoStyle ?>">
       当日は<? if (resolvedLocation) { ?><strong><?= resolvedLocation ?></strong><? } else { ?>会場<? } ?>にて開催します。<br>
-      <? if (resolvedArrivalWindow) { ?>受付は<strong><?= resolvedArrivalWindow ?></strong>までの間にお越しください！<? if (resolvedArrivalNote && !isDefaultArrivalNote) { ?><br><?= resolvedArrivalNote ?><? } ?><? } else if (resolvedArrivalNote) { ?><?= resolvedArrivalNote ?><? } ?>
+      <? if (resolvedArrivalWindow) { ?>受付には<strong><?= resolvedArrivalWindow ?></strong>までの間にお越しください！<? if (resolvedArrivalNote && !isDefaultArrivalNote) { ?><br><?= resolvedArrivalNote ?><? } ?><? } else if (resolvedArrivalNote) { ?><?= resolvedArrivalNote ?><? } ?>
     </p>
   <? } ?>
   <hr style="<?= hrStyle ?>">
