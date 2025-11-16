@@ -1930,7 +1930,8 @@ async function confirmAction({
   description = "",
   confirmLabel = "実行する",
   cancelLabel = "キャンセル",
-  tone = "danger"
+  tone = "danger",
+  showCancel = true
 } = {}) {
   if (!dom.confirmDialog) {
     console.warn("Confirm dialog is unavailable; skipping confirmation.");
@@ -1954,6 +1955,7 @@ async function confirmAction({
   }
   if (dom.confirmCancelButton) {
     dom.confirmCancelButton.textContent = cancelLabel || "キャンセル";
+    dom.confirmCancelButton.hidden = !showCancel;
   }
 
   openDialog(dom.confirmDialog);
