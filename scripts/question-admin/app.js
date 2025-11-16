@@ -3546,7 +3546,7 @@ function buildParticipantPrintHtml({
     }
     .print-surface .print-controls { display: none; }
     .print-surface .print-group { break-inside: avoid-page; }
-    .print-surface .print-footer { position: sticky; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); margin-top: auto; }
+    .print-surface .print-footer { position: fixed; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); margin-top: auto; }
     .print-surface .print-footer__page-number::after { content: counter(page); }
     .print-surface .print-footer__page { margin-left: auto; }
     ${printSettings.repeatHeader ? `.print-surface .print-header--repeat { background: #fff; position: sticky; top: 0; }` : ""}
