@@ -3532,6 +3532,8 @@ function buildParticipantPrintHtml({
       -webkit-print-color-adjust: exact;
       background: #fff;
       margin: 24px auto;
+      display: flex;
+      flex-direction: column;
       box-sizing: border-box;
       aspect-ratio: calc(var(--page-width) / var(--page-height));
       height: auto;
@@ -3544,13 +3546,14 @@ function buildParticipantPrintHtml({
     }
     .print-surface .print-controls { display: none; }
     .print-surface .print-group { break-inside: avoid-page; }
-    .print-surface .print-footer { position: sticky; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); }
+    .print-surface .print-footer { position: sticky; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); margin-top: auto; }
     .print-surface .print-footer__page-number::after { content: counter(page); }
     .print-surface .print-footer__page { margin-left: auto; }
     ${printSettings.repeatHeader ? `.print-surface .print-header--repeat { background: #fff; position: sticky; top: 0; }` : ""}
     @media print {
       body { -webkit-print-color-adjust: exact; margin: 0; background: #fff; }
       .print-surface {
+        display: block;
         margin: 0 auto;
         padding: 0;
         box-shadow: none;
