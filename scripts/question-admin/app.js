@@ -3541,6 +3541,46 @@ function resolvePrintMarginPx(doc, printSettings = state.printSettings) {
   return pxFromValueInDocument(doc, normalizePrintSettings(printSettings).margin || "0mm");
 }
 
+function measurePrintContentHeight(doc) {
+  if (!doc?.documentElement) {
+    return 0;
+  }
+
+  const { documentElement: html, body } = doc;
+  const printControls = doc.querySelector(".print-controls");
+
+  const previousDisplay = printControls?.style?.display;
+  const previousBodyMargin = body?.style?.margin;
+
+  try {
+    if (printControls) {
+      printControls.style.display = "none";
+    }
+    if (body) {
+      body.style.margin = "0";
+    }
+
+    const htmlHeight = html.scrollHeight || 0;
+    const bodyHeight = body?.scrollHeight || 0;
+    return Math.max(htmlHeight, bodyHeight, 0);
+  } finally {
+    if (body) {
+      if (previousBodyMargin !== undefined) {
+        body.style.margin = previousBodyMargin;
+      } else {
+        body.style.removeProperty("margin");
+      }
+    }
+    if (printControls) {
+      if (previousDisplay !== undefined) {
+        printControls.style.display = previousDisplay;
+      } else {
+        printControls.style.removeProperty("display");
+      }
+    }
+  }
+}
+
 function computePrintTotalPages(doc, printSettings = state.printSettings) {
   if (!doc?.documentElement) {
     return 1;
@@ -3548,7 +3588,7 @@ function computePrintTotalPages(doc, printSettings = state.printSettings) {
   const pageHeight = resolvePrintPageHeightPx(doc, printSettings);
   const margin = resolvePrintMarginPx(doc, printSettings);
   const usableHeight = Math.max(0, pageHeight - margin * 2);
-  const contentHeight = doc.documentElement.scrollHeight || doc.body?.scrollHeight || 0;
+  const contentHeight = measurePrintContentHeight(doc);
   return usableHeight > 0 ? Math.max(1, Math.ceil(contentHeight / usableHeight)) : 1;
 }
 
