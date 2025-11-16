@@ -3413,11 +3413,11 @@ function buildParticipantPrintHtml({
     printSettings.showTime ? generatedTimeText : ""
   ].filter(Boolean).join(" ");
   const footerItems = [];
-  if (printSettings.showPageNumbers) {
-    footerItems.push('<span class="print-footer__item print-footer__page" aria-label="ページ番号"><span class="print-footer__page-number" aria-hidden="true"></span></span>');
-  }
   if (footerTimestamp) {
     footerItems.push(`<span class="print-footer__item">${escapeHtml(footerTimestamp)}</span>`);
+  }
+  if (printSettings.showPageNumbers) {
+    footerItems.push('<span class="print-footer__item print-footer__page" aria-label="ページ番号"><span class="print-footer__page-number" aria-hidden="true"></span></span>');
   }
   const footerMarkup = footerItems.length
     ? `<footer class="print-footer"><div class="print-footer__items">${footerItems.join("")}</div></footer>`
@@ -3464,6 +3464,7 @@ function buildParticipantPrintHtml({
     .print-empty { font-size: 8.8pt; margin: 0; }
     .print-footer { margin-top: 6mm; font-size: 8pt; color: #000; }
     .print-footer__items { display: flex; gap: 6mm; align-items: center; }
+    .print-footer__page { margin-left: auto; }
     .print-footer__item { white-space: nowrap; }
     @media print {
       body { -webkit-print-color-adjust: exact; margin: 0; }
