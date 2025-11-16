@@ -3561,10 +3561,107 @@ let participantPrintPreviewCache = {
   html: "",
   title: "",
   metaText: "",
+  printSettings: null,
   forcePopupFallback: false
 };
 
 let participantPrintPreviewLoadAbort = null;
+let participantPrintPreviewPageCountCleanup = null;
+
+const PRINT_PAGE_DIMENSIONS_MM = {
+  A4: { width: 210, height: 297 },
+  A3: { width: 297, height: 420 },
+  Letter: { width: 215.9, height: 279.4 }
+};
+
+function pxFromValueInDocument(doc, value) {
+  if (!doc?.body || !value) {
+    return 0;
+  }
+  const probe = doc.createElement("div");
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  probe.style.height = value;
+  doc.body.appendChild(probe);
+  const px = probe.getBoundingClientRect().height;
+  probe.remove();
+  return px || 0;
+}
+
+function resolvePrintPageHeightPx(doc, printSettings = state.printSettings) {
+  const normalized = normalizePrintSettings(printSettings);
+  const base = PRINT_PAGE_DIMENSIONS_MM[normalized.paperSize] || PRINT_PAGE_DIMENSIONS_MM.A4;
+  const heightMm = normalized.orientation === "landscape" ? base.width : base.height;
+  return pxFromValueInDocument(doc, `${heightMm}mm`);
+}
+
+function resolvePrintMarginPx(doc, printSettings = state.printSettings) {
+  return pxFromValueInDocument(doc, normalizePrintSettings(printSettings).margin || "0mm");
+}
+
+function computePrintTotalPages(doc, printSettings = state.printSettings) {
+  if (!doc?.documentElement) {
+    return 1;
+  }
+  const pageHeight = resolvePrintPageHeightPx(doc, printSettings);
+  const margin = resolvePrintMarginPx(doc, printSettings);
+  const usableHeight = Math.max(0, pageHeight - margin * 2);
+  const contentHeight = doc.documentElement.scrollHeight || doc.body?.scrollHeight || 0;
+  return usableHeight > 0 ? Math.max(1, Math.ceil(contentHeight / usableHeight)) : 1;
+}
+
+function applyPrintPageCount(targetDocument, printSettings = state.printSettings) {
+  if (!targetDocument?.documentElement) {
+    return 1;
+  }
+  const totalPages = computePrintTotalPages(targetDocument, printSettings);
+  try {
+    targetDocument.documentElement.style.setProperty("--print-page-count", String(totalPages));
+  } catch (error) {
+    // Ignore style application errors
+  }
+  return totalPages;
+}
+
+function setupPrintPageCountTracking(frame, printSettings = state.printSettings) {
+  const doc = frame?.contentDocument;
+  const win = frame?.contentWindow;
+  if (!doc) {
+    return null;
+  }
+
+  const normalizedSettings = normalizePrintSettings(printSettings);
+  const updatePageCount = () => applyPrintPageCount(doc, normalizedSettings);
+
+  updatePageCount();
+
+  const handleResize = () => updatePageCount();
+  if (win?.addEventListener) {
+    win.addEventListener("resize", handleResize);
+  }
+
+  let fontReadyPromise = null;
+  if (doc.fonts?.ready) {
+    fontReadyPromise = doc.fonts.ready.then(() => updatePageCount()).catch(() => updatePageCount());
+  }
+
+  return () => {
+    if (win?.removeEventListener) {
+      try {
+        win.removeEventListener("resize", handleResize);
+      } catch (error) {
+        // Ignore listener cleanup errors
+      }
+    }
+    if (fontReadyPromise?.cancel && typeof fontReadyPromise.cancel === "function") {
+      try {
+        fontReadyPromise.cancel();
+      } catch (error) {
+        // Ignore font promise cancellation errors
+      }
+    }
+  };
+}
 
 function normalizeLivePoliteness(value, { defaultValue = "" } = {}) {
   const normalize = (input) => {
@@ -3583,7 +3680,7 @@ function normalizeLiveRegionRole(value) {
 }
 
 function cacheParticipantPrintPreview(
-  { html = "", title = "", metaText = "", forcePopupFallback } = {},
+  { html = "", title = "", metaText = "", printSettings = null, forcePopupFallback } = {},
   { preserveFallbackFlag = false } = {}
 ) {
   const nextForcePopupFallback =
@@ -3597,6 +3694,7 @@ function cacheParticipantPrintPreview(
     html: html || "",
     title: title || "",
     metaText: metaText || "",
+    printSettings: printSettings ? normalizePrintSettings(printSettings) : participantPrintPreviewCache.printSettings,
     forcePopupFallback: nextForcePopupFallback
   };
 }
@@ -3761,6 +3859,14 @@ function resetPrintPreview(options = {}) {
   if (dom.printPreviewFrame) {
     dom.printPreviewFrame.srcdoc = "";
   }
+  if (participantPrintPreviewPageCountCleanup) {
+    try {
+      participantPrintPreviewPageCountCleanup();
+    } catch (error) {
+      // Ignore cleanup errors
+    }
+    participantPrintPreviewPageCountCleanup = null;
+  }
   if (dom.printPreview) {
     dom.printPreview.classList.remove("print-preview--fallback");
   }
@@ -3827,7 +3933,7 @@ function renderPreviewFallbackNote(message, metaText = "") {
   }
 }
 
-function openPopupPrintWindow(html, docTitle) {
+function openPopupPrintWindow(html, docTitle, printSettings = state.printSettings) {
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
     return false;
@@ -3855,6 +3961,28 @@ function openPopupPrintWindow(html, docTitle) {
     // Ignore title assignment errors
   }
 
+  const refreshPageCount = () => {
+    try {
+      applyPrintPageCount(printWindow.document, printSettings);
+    } catch (error) {
+      // Ignore page count errors
+    }
+  };
+
+  refreshPageCount();
+
+  if (printWindow.addEventListener) {
+    try {
+      printWindow.addEventListener("resize", refreshPageCount);
+    } catch (error) {
+      // Ignore resize listener errors
+    }
+  }
+
+  if (printWindow.document?.fonts?.ready) {
+    printWindow.document.fonts.ready.then(() => refreshPageCount()).catch(() => refreshPageCount());
+  }
+
   window.setTimeout(() => {
     try {
       printWindow.print();
@@ -3870,13 +3998,18 @@ function renderParticipantPrintPreview({
   html,
   metaText,
   title,
-  autoPrint = false
+  autoPrint = false,
+  printSettings
 } = {}) {
   if (!dom.printPreview || !dom.printPreviewFrame) {
     return false;
   }
 
   setPrintPreviewBusy(true);
+
+  const normalizedPrintSettings = normalizePrintSettings(
+    printSettings || participantPrintPreviewCache.printSettings || state.printSettings
+  );
 
   if (participantPrintPreviewCache.forcePopupFallback) {
     renderPreviewFallbackNote(
@@ -3887,7 +4020,8 @@ function renderParticipantPrintPreview({
     if (autoPrint && participantPrintPreviewCache.html) {
       const fallbackOpened = openPopupPrintWindow(
         participantPrintPreviewCache.html,
-        participantPrintPreviewCache.title
+        participantPrintPreviewCache.title,
+        normalizedPrintSettings
       );
       if (!fallbackOpened) {
         window.alert("印刷用のポップアップを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
@@ -3913,7 +4047,7 @@ function renderParticipantPrintPreview({
     delete dom.printPreviewPrintButton.dataset.popupFallback;
   }
 
-  cacheParticipantPrintPreview({ html, title, metaText }, { preserveFallbackFlag: true });
+  cacheParticipantPrintPreview({ html, title, metaText, printSettings: normalizedPrintSettings }, { preserveFallbackFlag: true });
   participantPrintAutoPrintPending = Boolean(autoPrint);
   clearParticipantPrintPreviewLoader();
 
@@ -3960,12 +4094,19 @@ function renderParticipantPrintPreview({
       );
 
       if (autoPrint && html) {
-        const fallbackOpened = openPopupPrintWindow(html, title);
+        const fallbackOpened = openPopupPrintWindow(html, title, normalizedPrintSettings);
         if (!fallbackOpened) {
           window.alert("印刷用のポップアップを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
         }
       }
       return;
+    }
+
+    if (dom.printPreviewFrame) {
+      participantPrintPreviewPageCountCleanup = setupPrintPageCountTracking(
+        dom.printPreviewFrame,
+        normalizedPrintSettings
+      );
     }
 
     if (dom.printPreviewPrintButton) {
@@ -4004,12 +4145,21 @@ function renderParticipantPrintPreview({
     );
 
     if (autoPrint && html) {
-      const fallbackOpened = openPopupPrintWindow(html, title);
+      const fallbackOpened = openPopupPrintWindow(html, title, normalizedPrintSettings);
       if (!fallbackOpened) {
         window.alert("印刷用のポップアップを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
       }
     }
   };
+
+  if (participantPrintPreviewPageCountCleanup) {
+    try {
+      participantPrintPreviewPageCountCleanup();
+    } catch (error) {
+      // Ignore previous cleanup errors
+    }
+    participantPrintPreviewPageCountCleanup = null;
+  }
 
   dom.printPreviewFrame.addEventListener("load", handleLoad);
   dom.printPreviewFrame.addEventListener("error", handleError);
@@ -4028,7 +4178,7 @@ function renderParticipantPrintPreview({
     );
 
     if (autoPrint && html) {
-      const fallbackOpened = openPopupPrintWindow(html, title);
+      const fallbackOpened = openPopupPrintWindow(html, title, normalizedPrintSettings);
       if (!fallbackOpened) {
         window.alert("印刷用のポップアップを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
       }
@@ -4061,11 +4211,12 @@ function printParticipantPreview({ showAlertOnFailure = false } = {}) {
   const cachedHtml = participantPrintPreviewCache?.html || "";
   const cachedTitle = participantPrintPreviewCache?.title || "";
   const cachedMeta = participantPrintPreviewCache?.metaText || "";
+  const cachedSettings = participantPrintPreviewCache?.printSettings || state.printSettings;
 
   if (cachedHtml) {
     renderPreviewFallbackNote("ブラウザの印刷ダイアログを新しいタブで開いています。", cachedMeta);
 
-    const popupOpened = openPopupPrintWindow(cachedHtml, cachedTitle);
+    const popupOpened = openPopupPrintWindow(cachedHtml, cachedTitle, cachedSettings);
     if (popupOpened) {
       cacheParticipantPrintPreview({ ...participantPrintPreviewCache, forcePopupFallback: true });
       if (dom.printPreviewPrintButton) {
@@ -4229,7 +4380,7 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
         .join(" / ");
 
       cacheParticipantPrintPreview(
-        { html, title: docTitle, metaText },
+        { html, title: docTitle, metaText, printSettings },
         { preserveFallbackFlag: true }
       );
 
@@ -4237,7 +4388,8 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
         html,
         metaText,
         title: docTitle,
-        autoPrint
+        autoPrint,
+        printSettings
       });
 
       if (participantPrintPreviewCache.forcePopupFallback) {
@@ -4250,7 +4402,7 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
           metaText
         );
 
-        const fallbackOpened = openPopupPrintWindow(html, docTitle);
+        const fallbackOpened = openPopupPrintWindow(html, docTitle, printSettings);
         if (!fallbackOpened) {
           window.alert("印刷プレビューを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
           return false;
