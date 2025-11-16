@@ -4108,6 +4108,17 @@ function printParticipantPreview({ showAlertOnFailure = false } = {}) {
   const cachedTitle = participantPrintPreviewCache?.title || "";
   const cachedMeta = participantPrintPreviewCache?.metaText || "";
   const cachedSettings = participantPrintPreviewCache?.printSettings || state.printSettings;
+  const forcePopupFallback = participantPrintPreviewCache?.forcePopupFallback;
+
+  if (!forcePopupFallback) {
+    const printedInline = triggerPrintFromPreview();
+    if (printedInline) {
+      if (dom.printPreviewPrintButton) {
+        delete dom.printPreviewPrintButton.dataset.popupFallback;
+      }
+      return true;
+    }
+  }
 
   if (cachedHtml) {
     renderPreviewFallbackNote("ブラウザの印刷ダイアログを新しいタブで開いています。", cachedMeta);
@@ -4120,11 +4131,6 @@ function printParticipantPreview({ showAlertOnFailure = false } = {}) {
       }
       return true;
     }
-  }
-
-  const printedInline = triggerPrintFromPreview();
-  if (printedInline) {
-    return true;
   }
 
   if (showAlertOnFailure) {
