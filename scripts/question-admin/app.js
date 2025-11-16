@@ -3521,16 +3521,533 @@ function buildParticipantPrintHtml({
 </html>`;
 }
 
+const PRINT_PREVIEW_DEFAULT_NOTE = "印刷設定を選ぶとここに最新のプレビューが表示されます。";
+const PRINT_PREVIEW_LOAD_TIMEOUT_MS = 4000;
+
 let participantPrintInProgress = false;
 
-const PRINT_POPUP_BLOCKED_MESSAGE = [
-  "ブラウザや拡張機能によって印刷用のウィンドウを開けませんでした。",
-  "",
-  "▼対処方法",
-  "1. アドレスバー付近のポップアップブロックのアイコンをクリックする",
-  "2. 現在のサイトでポップアップを許可する（\"常に許可\" などを選択する）",
-  "3. 必要に応じてページを再読み込みしてから、再度「印刷」ボタンを押す"
-].join("\n");
+let participantPrintAutoPrintPending = false;
+
+let participantPrintPreviewCache = {
+  html: "",
+  title: "",
+  metaText: "",
+  forcePopupFallback: false
+};
+
+let participantPrintPreviewLoadAbort = null;
+
+function normalizeLivePoliteness(value, { defaultValue = "" } = {}) {
+  const normalize = (input) => {
+    const trimmed = (input || "").trim().toLowerCase();
+    return trimmed === "assertive" || trimmed === "polite" || trimmed === "off"
+      ? trimmed
+      : "";
+  };
+
+  return normalize(value) || normalize(defaultValue);
+}
+
+function normalizeLiveRegionRole(value) {
+  const trimmed = (value || "").trim().toLowerCase();
+  return trimmed === "status" || trimmed === "alert" ? trimmed : "";
+}
+
+function cacheParticipantPrintPreview(
+  { html = "", title = "", metaText = "", forcePopupFallback } = {},
+  { preserveFallbackFlag = false } = {}
+) {
+  const nextForcePopupFallback =
+    forcePopupFallback !== undefined
+      ? Boolean(forcePopupFallback)
+      : preserveFallbackFlag
+      ? Boolean(participantPrintPreviewCache.forcePopupFallback)
+      : false;
+
+  participantPrintPreviewCache = {
+    html: html || "",
+    title: title || "",
+    metaText: metaText || "",
+    forcePopupFallback: nextForcePopupFallback
+  };
+}
+
+function setPrintPreviewNote(text = PRINT_PREVIEW_DEFAULT_NOTE, options = {}) {
+  const { forceAnnounce = false, politeness, role } = options || {};
+  if (!dom.printPreviewNote) {
+    return;
+  }
+
+  const nextText = text || "";
+  const currentText = dom.printPreviewNote.textContent || "";
+  const rawCurrentLive = dom.printPreviewNote.getAttribute("aria-live");
+  const roleOverride = role !== undefined ? normalizeLiveRegionRole(role) : null;
+  const defaultPoliteness = roleOverride === "alert" ? "assertive" : "polite";
+  const nextLive = normalizeLivePoliteness(politeness, { defaultValue: defaultPoliteness });
+  const currentLive = normalizeLivePoliteness(rawCurrentLive, { defaultValue: "" });
+  let nextRole =
+    roleOverride !== null
+      ? roleOverride
+      : nextLive === "assertive"
+      ? "alert"
+      : nextLive === "polite"
+      ? "status"
+      : "";
+
+  if (nextLive === "off") {
+    nextRole = "";
+  }
+  const rawCurrentRole = dom.printPreviewNote.getAttribute("role");
+  const currentRole = normalizeLiveRegionRole(rawCurrentRole);
+  const liveChanged = nextLive !== currentLive;
+  const roleChanged = nextRole !== currentRole;
+  const liveNeedsClear = !nextLive && rawCurrentLive !== null;
+  const roleNeedsClear = !nextRole && rawCurrentRole !== null;
+
+  dom.printPreviewNote.classList.remove("print-preview__note--error");
+
+  const shouldAnnounce =
+    forceAnnounce || liveChanged || roleChanged || liveNeedsClear || roleNeedsClear;
+  const shouldUpdateRole = roleChanged || roleNeedsClear || forceAnnounce;
+  const shouldForceLiveReset = forceAnnounce && nextLive !== "off";
+  const shouldForceRoleReset = forceAnnounce && shouldUpdateRole;
+
+  const applyLive = (value) => {
+    if (!value || value === "off") {
+      dom.printPreviewNote.removeAttribute("aria-live");
+    } else {
+      dom.printPreviewNote.setAttribute("aria-live", value);
+    }
+  };
+
+  if (!shouldAnnounce && currentText === nextText) {
+    return;
+  }
+
+  if (shouldForceLiveReset) {
+    applyLive("off");
+  } else if (liveChanged || liveNeedsClear || nextLive === "off") {
+    applyLive(nextLive);
+  }
+
+  if (shouldForceRoleReset) {
+    dom.printPreviewNote.removeAttribute("role");
+  }
+
+  if (shouldUpdateRole && !shouldForceRoleReset) {
+    if (nextRole) {
+      dom.printPreviewNote.setAttribute("role", nextRole);
+    } else {
+      dom.printPreviewNote.removeAttribute("role");
+    }
+  }
+
+  dom.printPreviewNote.textContent = "";
+
+  const restoreLive = () => {
+    if (shouldForceLiveReset) {
+      applyLive(nextLive);
+    }
+  };
+
+  const renderText = () => {
+    if (shouldForceRoleReset) {
+      if (nextRole) {
+        dom.printPreviewNote.setAttribute("role", nextRole);
+      } else {
+        dom.printPreviewNote.removeAttribute("role");
+      }
+    }
+    restoreLive();
+    dom.printPreviewNote.textContent = nextText;
+  };
+
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(renderText);
+  } else {
+    renderText();
+  }
+}
+
+function setPrintPreviewVisibility(visible) {
+  if (!dom.printPreview) {
+    return false;
+  }
+  dom.printPreview.hidden = !visible;
+  return true;
+}
+
+function setPrintPreviewBusy(isBusy = false) {
+  if (!dom.printPreview) {
+    return;
+  }
+  dom.printPreview.setAttribute("aria-busy", isBusy ? "true" : "false");
+}
+
+function clearParticipantPrintPreviewLoader() {
+  if (!participantPrintPreviewLoadAbort) {
+    return;
+  }
+
+  const { loadHandler, errorHandler, timeoutId } = participantPrintPreviewLoadAbort;
+
+  if (timeoutId) {
+    window.clearTimeout(timeoutId);
+  }
+
+  if (loadHandler && dom.printPreviewFrame) {
+    try {
+      dom.printPreviewFrame.removeEventListener("load", loadHandler);
+    } catch (error) {
+      // Ignore listener cleanup errors
+    }
+  }
+
+  if (errorHandler && dom.printPreviewFrame) {
+    try {
+      dom.printPreviewFrame.removeEventListener("error", errorHandler);
+    } catch (error) {
+      // Ignore listener cleanup errors
+    }
+  }
+
+  participantPrintPreviewLoadAbort = null;
+}
+
+function resetPrintPreview() {
+  clearParticipantPrintPreviewLoader();
+  if (dom.printPreviewFrame) {
+    dom.printPreviewFrame.srcdoc = "";
+  }
+  if (dom.printPreview) {
+    dom.printPreview.classList.remove("print-preview--fallback");
+  }
+  setPrintPreviewBusy(false);
+  if (dom.printPreviewPrintButton) {
+    dom.printPreviewPrintButton.disabled = true;
+    delete dom.printPreviewPrintButton.dataset.popupFallback;
+  }
+  if (dom.printPreviewNote) {
+    dom.printPreviewNote.classList.remove("print-preview__note--error");
+  }
+  if (dom.printPreviewMeta) {
+    dom.printPreviewMeta.textContent = "";
+  }
+  cacheParticipantPrintPreview({ forcePopupFallback: false });
+  participantPrintAutoPrintPending = false;
+  setPrintPreviewNote();
+  setPrintPreviewVisibility(false);
+}
+
+function renderPreviewFallbackNote(message, metaText = "") {
+  clearParticipantPrintPreviewLoader();
+  if (dom.printPreviewFrame) {
+    dom.printPreviewFrame.srcdoc = "";
+  }
+  if (dom.printPreview) {
+    dom.printPreview.classList.add("print-preview--fallback");
+  }
+  const hasCachedHtml = Boolean(participantPrintPreviewCache?.html);
+  const popupHint = hasCachedHtml
+    ? " 画面右の「このリストを印刷」からポップアップ印刷を再試行できます。"
+    : "";
+  const noteText = `${message || "プレビューを表示できませんでした。"}${popupHint}`;
+  const nextMetaText = metaText || participantPrintPreviewCache.metaText || "";
+
+  setPrintPreviewVisibility(true);
+  setPrintPreviewNote(noteText, { forceAnnounce: true, politeness: "assertive" });
+  setPrintPreviewBusy(false);
+  cacheParticipantPrintPreview({
+    ...participantPrintPreviewCache,
+    metaText: nextMetaText,
+    forcePopupFallback: true
+  });
+  participantPrintAutoPrintPending = false;
+  if (dom.printPreviewMeta) {
+    dom.printPreviewMeta.textContent = nextMetaText;
+  }
+  if (dom.printPreviewPrintButton) {
+    dom.printPreviewPrintButton.disabled = !hasCachedHtml;
+    if (hasCachedHtml) {
+      dom.printPreviewPrintButton.dataset.popupFallback = "true";
+    } else {
+      delete dom.printPreviewPrintButton.dataset.popupFallback;
+    }
+  }
+  if (dom.printPreviewNote) {
+    dom.printPreviewNote.classList.add("print-preview__note--error");
+  }
+}
+
+function openPopupPrintWindow(html, docTitle) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    return false;
+  }
+
+  try {
+    printWindow.opener = null;
+  } catch (error) {
+    // Ignore opener errors
+  }
+
+  try {
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  } catch (error) {
+    // Ignore document write errors
+  }
+
+  try {
+    if (docTitle) {
+      printWindow.document.title = docTitle;
+    }
+  } catch (error) {
+    // Ignore title assignment errors
+  }
+
+  window.setTimeout(() => {
+    try {
+      printWindow.print();
+    } catch (error) {
+      // Ignore print errors
+    }
+  }, 150);
+
+  return true;
+}
+
+function renderParticipantPrintPreview({
+  html,
+  metaText,
+  title,
+  autoPrint = false
+} = {}) {
+  if (!dom.printPreview || !dom.printPreviewFrame) {
+    return false;
+  }
+
+  setPrintPreviewBusy(true);
+
+  if (participantPrintPreviewCache.forcePopupFallback) {
+    renderPreviewFallbackNote(
+      "プレビューを利用できないためポップアップ印刷を使用します。",
+      metaText || participantPrintPreviewCache.metaText || ""
+    );
+
+    if (autoPrint && participantPrintPreviewCache.html) {
+      const fallbackOpened = openPopupPrintWindow(
+        participantPrintPreviewCache.html,
+        participantPrintPreviewCache.title
+      );
+      if (!fallbackOpened) {
+        window.alert("印刷用のポップアップを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
+      }
+    }
+
+    return false;
+  }
+
+  setPrintPreviewVisibility(true);
+  if (dom.printPreview) {
+    dom.printPreview.classList.remove("print-preview--fallback");
+  }
+  setPrintPreviewNote(autoPrint ? "プレビューを準備しています…" : "プレビューを更新しています…");
+  if (dom.printPreviewNote) {
+    dom.printPreviewNote.classList.remove("print-preview__note--error");
+  }
+  if (dom.printPreviewMeta) {
+    dom.printPreviewMeta.textContent = metaText || "";
+  }
+  if (dom.printPreviewPrintButton) {
+    dom.printPreviewPrintButton.disabled = true;
+    delete dom.printPreviewPrintButton.dataset.popupFallback;
+  }
+
+  cacheParticipantPrintPreview({ html, title, metaText }, { preserveFallbackFlag: true });
+  participantPrintAutoPrintPending = Boolean(autoPrint);
+  clearParticipantPrintPreviewLoader();
+
+  let loadTimeoutId = null;
+  let settled = false;
+
+  const settleLoad = () => {
+    if (settled) {
+      return false;
+    }
+    settled = true;
+    if (loadTimeoutId) {
+      window.clearTimeout(loadTimeoutId);
+      loadTimeoutId = null;
+    }
+    if (dom.printPreviewFrame && participantPrintPreviewLoadAbort) {
+      try {
+        if (participantPrintPreviewLoadAbort.loadHandler) {
+          dom.printPreviewFrame.removeEventListener("load", participantPrintPreviewLoadAbort.loadHandler);
+        }
+        if (participantPrintPreviewLoadAbort.errorHandler) {
+          dom.printPreviewFrame.removeEventListener("error", participantPrintPreviewLoadAbort.errorHandler);
+        }
+      } catch (error) {
+        // Ignore listener cleanup errors
+      }
+    }
+    participantPrintPreviewLoadAbort = null;
+    setPrintPreviewBusy(false);
+    return true;
+  };
+
+  const handleLoad = () => {
+    if (!settleLoad()) {
+      return;
+    }
+    const hasWindow = Boolean(dom.printPreviewFrame?.contentWindow);
+    const hasDocument = Boolean(dom.printPreviewFrame?.contentDocument);
+
+    if (!hasWindow || !hasDocument) {
+      renderPreviewFallbackNote(
+        "プレビューの描画に失敗しました。ポップアップ印刷に切り替えました。",
+        metaText
+      );
+
+      if (autoPrint && html) {
+        const fallbackOpened = openPopupPrintWindow(html, title);
+        if (!fallbackOpened) {
+          window.alert("印刷用のポップアップを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
+        }
+      }
+      return;
+    }
+
+    if (dom.printPreviewPrintButton) {
+      dom.printPreviewPrintButton.disabled = false;
+    }
+    setPrintPreviewNote(
+      autoPrint
+        ? "プレビューを更新しました。印刷ダイアログを開きます。"
+        : "プレビューを更新しました。画面右のボタンから印刷できます。"
+    );
+
+    try {
+      if (title && dom.printPreviewFrame?.contentDocument) {
+        dom.printPreviewFrame.contentDocument.title = title;
+      }
+    } catch (error) {
+      // Ignore title assignment errors
+    }
+
+    if (participantPrintAutoPrintPending) {
+      participantPrintAutoPrintPending = false;
+      window.setTimeout(() => {
+        printParticipantPreview({ showAlertOnFailure: true });
+      }, 150);
+    }
+  };
+
+  const handleError = () => {
+    if (!settleLoad()) {
+      return;
+    }
+
+    renderPreviewFallbackNote(
+      "プレビューの読み込み中にエラーが発生しました。ポップアップ印刷に切り替えました。",
+      metaText
+    );
+
+    if (autoPrint && html) {
+      const fallbackOpened = openPopupPrintWindow(html, title);
+      if (!fallbackOpened) {
+        window.alert("印刷用のポップアップを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
+      }
+    }
+  };
+
+  dom.printPreviewFrame.addEventListener("load", handleLoad);
+  dom.printPreviewFrame.addEventListener("error", handleError);
+  participantPrintPreviewLoadAbort = { loadHandler: handleLoad, errorHandler: handleError };
+
+  dom.printPreviewFrame.srcdoc = html || "<!doctype html><title>プレビュー</title>";
+
+  const handleTimeout = () => {
+    if (!settleLoad()) {
+      return;
+    }
+
+    renderPreviewFallbackNote(
+      "プレビューの読み込みがタイムアウトしました。ポップアップ印刷に切り替えました。",
+      metaText
+    );
+
+    if (autoPrint && html) {
+      const fallbackOpened = openPopupPrintWindow(html, title);
+      if (!fallbackOpened) {
+        window.alert("印刷用のポップアップを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
+      }
+    }
+  };
+
+  loadTimeoutId = window.setTimeout(handleTimeout, PRINT_PREVIEW_LOAD_TIMEOUT_MS);
+  participantPrintPreviewLoadAbort.timeoutId = loadTimeoutId;
+  return true;
+}
+
+function triggerPrintFromPreview() {
+  if (!dom.printPreviewFrame) {
+    return false;
+  }
+  const printWindow = dom.printPreviewFrame.contentWindow;
+  if (!printWindow) {
+    return false;
+  }
+  try {
+    printWindow.focus();
+    printWindow.print();
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function printParticipantPreview({ showAlertOnFailure = false } = {}) {
+  const forcePopupFallback =
+    dom.printPreviewPrintButton?.dataset?.popupFallback === "true" ||
+    participantPrintPreviewCache.forcePopupFallback;
+
+  if (!forcePopupFallback) {
+    const printedInline = triggerPrintFromPreview();
+    if (printedInline) {
+      return true;
+    }
+  }
+
+  const cachedHtml = participantPrintPreviewCache?.html || "";
+  const cachedTitle = participantPrintPreviewCache?.title || "";
+  const cachedMeta = participantPrintPreviewCache?.metaText || "";
+
+  if (cachedHtml) {
+    const fallbackMessage = forcePopupFallback
+      ? "プレビューを利用できないためポップアップ印刷を使用します。"
+      : "プレビューから印刷を開始できませんでした。ポップアップ印刷に切り替えました。";
+
+    renderPreviewFallbackNote(fallbackMessage, cachedMeta);
+
+    const popupOpened = openPopupPrintWindow(cachedHtml, cachedTitle);
+    if (popupOpened) {
+      return true;
+    }
+  }
+
+  if (showAlertOnFailure) {
+    window.alert("プレビューから印刷を開始できませんでした。ブラウザのポップアップ設定をご確認ください。");
+  }
+
+  return false;
+}
+
+function closeParticipantPrintPreview() {
+  resetPrintPreview();
+}
 
 async function openParticipantPrintView() {
   const eventId = state.selectedEventId;
@@ -3570,24 +4087,7 @@ async function openParticipantPrintView() {
 
     setPrintButtonBusy(true);
     printInitialized = true;
-    let printWindow = null;
     try {
-      // Chrome の一部バージョンでは noopener フラグ付きの window.open で参照を取得できず、
-      // ポップアップ許可済みでも null が返ることがあるため、一旦フラグなしで開いてから
-      // opener を明示的に切り離す手順に変更する。
-      printWindow = window.open("", "_blank");
-      if (!printWindow) {
-        window.alert(`${PRINT_POPUP_BLOCKED_MESSAGE}\n\nポップアップを許可してから再度お試しください。`);
-        return;
-      }
-
-      try {
-        // opener を明示的に切り離し、既存ブラウザでも安全性を確保する
-        printWindow.opener = null;
-      } catch (error) {
-        // Ignore assignment errors
-      }
-
       try {
         await loadGlDataForEvent(eventId);
       } catch (error) {
@@ -3599,13 +4099,6 @@ async function openParticipantPrintView() {
       const groups = buildParticipantPrintGroups({ eventId, scheduleId });
       if (!groups.length) {
         window.alert("印刷できる参加者がまだ登録されていません。");
-        if (printWindow && !printWindow.closed) {
-          try {
-            printWindow.close();
-          } catch (closeError) {
-            // Ignore close errors
-          }
-        }
         return;
       }
 
@@ -3642,43 +4135,42 @@ async function openParticipantPrintView() {
         printOptions: printSettings
       });
 
-      if (printWindow.closed) {
+      const titleParts = [eventName || eventId || "", scheduleLabel || scheduleId || ""].filter(Boolean);
+      const docTitle = titleParts.length ? `${titleParts.join(" / ")} - 参加者リスト` : "参加者リスト";
+
+      const metaText = [eventName || eventId || "", scheduleLabel || scheduleId || "", `${totalCount}名`]
+        .filter(text => String(text || "").trim())
+        .join(" / ");
+
+      cacheParticipantPrintPreview(
+        { html, title: docTitle, metaText },
+        { preserveFallbackFlag: true }
+      );
+
+      const previewRendered = renderParticipantPrintPreview({
+        html,
+        metaText,
+        title: docTitle,
+        autoPrint: true
+      });
+
+      if (participantPrintPreviewCache.forcePopupFallback) {
         return;
       }
 
-      printWindow.document.open();
-      printWindow.document.write(html);
-      printWindow.document.close();
+      if (!previewRendered) {
+        renderPreviewFallbackNote(
+          "プレビュー枠を開けませんでした。ポップアップ許可後に再度お試しください。",
+          metaText
+        );
 
-      try {
-        const titleParts = [eventName || eventId || "", scheduleLabel || scheduleId || ""].filter(Boolean);
-        const docTitle = titleParts.length ? `${titleParts.join(" / ")} - 参加者リスト` : "参加者リスト";
-        printWindow.document.title = docTitle;
-      } catch (error) {
-        // Ignore title assignment errors
-      }
-
-      try {
-        printWindow.focus();
-      } catch (error) {
-        // Ignore focus errors
-      }
-
-      window.setTimeout(() => {
-        try {
-          printWindow.print();
-        } catch (error) {
-          // Ignore print errors
+        const fallbackOpened = openPopupPrintWindow(html, docTitle);
+        if (!fallbackOpened) {
+          window.alert("印刷プレビューを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
+          return;
         }
-      }, 150);
+      }
     } catch (error) {
-      if (printWindow && !printWindow.closed) {
-        try {
-          printWindow.close();
-        } catch (closeError) {
-          // Ignore close errors
-        }
-      }
       throw error;
     } finally {
       setPrintButtonBusy(false);
@@ -4145,6 +4637,10 @@ function syncPrintViewButtonState() {
   const disabled = !hasSelection || !hasParticipants;
 
   setActionButtonState(button, disabled);
+
+  if (disabled) {
+    closeParticipantPrintPreview();
+  }
 
   const baseLabel = button.dataset.defaultLabel || "印刷用リスト";
   if (button.textContent !== baseLabel) {
@@ -7004,6 +7500,21 @@ function attachEventHandlers() {
           }
           window.alert("印刷用リストの生成中にエラーが発生しました。時間をおいて再度お試しください。");
         });
+    });
+  }
+
+  if (dom.printPreviewCloseButton) {
+    dom.printPreviewCloseButton.addEventListener("click", () => {
+      closeParticipantPrintPreview();
+    });
+  }
+
+  if (dom.printPreviewPrintButton) {
+    dom.printPreviewPrintButton.addEventListener("click", () => {
+      if (dom.printPreviewPrintButton.disabled) {
+        return;
+      }
+      printParticipantPreview({ showAlertOnFailure: true });
     });
   }
 

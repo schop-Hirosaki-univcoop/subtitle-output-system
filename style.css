@@ -511,6 +511,82 @@ body.logs-open #logs-panel{ display:flex; }
 .log-stream::-webkit-scrollbar-thumb:hover{
   background:linear-gradient(180deg, rgba(46,141,255,.7), rgba(30,200,255,.5));
 }
+.print-preview{
+  margin-top:clamp(.6rem, 1.2vw, .9rem);
+  padding:clamp(.75rem, 1.5vw, 1.05rem);
+  border-radius:clamp(.8rem, 1.6vw, 1.2rem);
+  border:1px solid rgba(80,124,194,.35);
+  background:linear-gradient(145deg, rgba(10,18,32,.8), rgba(10,14,26,.9));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+  display:flex;
+  flex-direction:column;
+  gap:clamp(.55rem, 1.2vw, .9rem);
+}
+.print-preview__header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:clamp(.5rem, 1.1vw, .8rem);
+  flex-wrap:wrap;
+}
+.print-preview__title{
+  margin:0;
+  font-size:clamp(.95rem, 1.7vw, 1.1rem);
+  font-weight:700;
+  color:#e7f1ff;
+}
+.print-preview__meta{
+  margin:.1rem 0 0;
+  color:var(--muted);
+  font-size:.9rem;
+}
+.print-preview__meta:empty{ display:none; }
+.print-preview__actions{
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+}
+.print-preview__body{
+  display:flex;
+  gap:clamp(.6rem, 1.2vw, .9rem);
+  align-items:stretch;
+}
+.print-preview__frame{
+  flex:1 1 62%;
+  min-height:380px;
+  background:rgba(6,10,20,.8);
+  border-radius:clamp(.75rem, 1.5vw, 1.05rem);
+  border:1px solid rgba(68,100,160,.45);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.02);
+  overflow:hidden;
+}
+.print-preview--fallback .print-preview__frame{ display:none; }
+.print-preview__frame iframe{
+  width:100%;
+  height:100%;
+  border:0;
+  display:block;
+  background:#fff;
+}
+.print-preview__note{
+  flex:0 0 18rem;
+  align-self:stretch;
+  padding:clamp(.8rem, 1.4vw, 1.05rem);
+  border-radius:clamp(.75rem, 1.4vw, 1.1rem);
+  border:1px dashed rgba(108,132,168,.65);
+  background:rgba(16,24,40,.75);
+  color:var(--muted);
+  font-size:.92rem;
+  line-height:1.55;
+}
+.print-preview--fallback .print-preview__note{ flex:1 1 auto; }
+.print-preview__note--error{
+  border-style:solid;
+  border-color:rgba(255,140,140,.65);
+  background:linear-gradient(155deg, rgba(48,16,24,.9), rgba(32,12,24,.82));
+  color:#f7d7d7;
+}
+.print-preview__note strong{ color:#e7f1ff; }
 .dictionary-body{ position:relative; display:flex; flex-direction:column; gap:clamp(.9rem, 1.7vw, 1.3rem); }
 .dictionary-body .cards-scroll{ flex:1; min-height:0; overflow:auto; }
 .dictionary-toolbar{
