@@ -3240,7 +3240,7 @@ function setupPrintSettingsDialog() {
     event.preventDefault();
     const settings = readPrintSettingsFromForm();
     persistPrintSettings(settings);
-    updateParticipantPrintPreview({ autoPrint: true, forceReveal: true });
+    updateParticipantPrintPreview({ autoPrint: false, forceReveal: true });
   });
 
   applyPrintSettingsToForm(state.printSettings);
@@ -4042,6 +4042,27 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) {
+    clearParticipantPrintPreviewLoader();
+    if (dom.printPreview) {
+      dom.printPreview.classList.remove("print-preview--fallback");
+    }
+    if (dom.printPreviewFrame) {
+      dom.printPreviewFrame.srcdoc = "";
+    }
+    if (dom.printPreviewMeta) {
+      dom.printPreviewMeta.textContent = "";
+    }
+    cacheParticipantPrintPreview({ forcePopupFallback: false });
+    setPrintPreviewVisibility(true);
+    setPrintPreviewNote("印刷するにはイベントと日程を選択してください。", {
+      forceAnnounce: true,
+      politeness: "assertive",
+      role: "alert"
+    });
+    if (dom.printPreviewPrintButton) {
+      dom.printPreviewPrintButton.disabled = true;
+      delete dom.printPreviewPrintButton.dataset.popupFallback;
+    }
     if (!quiet) {
       window.alert("印刷するにはイベントと日程を選択してください。");
     }
@@ -4049,6 +4070,27 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
   }
 
   if (!Array.isArray(state.participants) || state.participants.length === 0) {
+    clearParticipantPrintPreviewLoader();
+    if (dom.printPreview) {
+      dom.printPreview.classList.remove("print-preview--fallback");
+    }
+    if (dom.printPreviewFrame) {
+      dom.printPreviewFrame.srcdoc = "";
+    }
+    if (dom.printPreviewMeta) {
+      dom.printPreviewMeta.textContent = "";
+    }
+    cacheParticipantPrintPreview({ forcePopupFallback: false });
+    setPrintPreviewVisibility(true);
+    setPrintPreviewNote("印刷できる参加者がまだ登録されていません。", {
+      forceAnnounce: true,
+      politeness: "assertive",
+      role: "alert"
+    });
+    if (dom.printPreviewPrintButton) {
+      dom.printPreviewPrintButton.disabled = true;
+      delete dom.printPreviewPrintButton.dataset.popupFallback;
+    }
     if (!quiet) {
       window.alert("印刷できる参加者がまだ登録されていません。");
     }
