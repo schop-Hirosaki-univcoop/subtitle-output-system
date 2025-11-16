@@ -3308,7 +3308,6 @@ function buildParticipantPrintHtml({
       body { margin: 10mm; }
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
-      .print-group__gl-table th, .print-table th { background: #e0e0e0; }
     }
   </style>
 </head>
