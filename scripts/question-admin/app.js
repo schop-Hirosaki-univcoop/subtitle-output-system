@@ -3999,36 +3999,30 @@ function triggerPrintFromPreview() {
 }
 
 function printParticipantPreview({ showAlertOnFailure = false } = {}) {
-  const forcePopupFallback =
-    dom.printPreviewPrintButton?.dataset?.popupFallback === "true" ||
-    participantPrintPreviewCache.forcePopupFallback;
-
-  if (!forcePopupFallback) {
-    const printedInline = triggerPrintFromPreview();
-    if (printedInline) {
-      return true;
-    }
-  }
-
   const cachedHtml = participantPrintPreviewCache?.html || "";
   const cachedTitle = participantPrintPreviewCache?.title || "";
   const cachedMeta = participantPrintPreviewCache?.metaText || "";
 
   if (cachedHtml) {
-    const fallbackMessage = forcePopupFallback
-      ? "プレビューを利用できないためポップアップ印刷を使用します。"
-      : "プレビューから印刷を開始できませんでした。ポップアップ印刷に切り替えました。";
-
-    renderPreviewFallbackNote(fallbackMessage, cachedMeta);
+    renderPreviewFallbackNote("ブラウザの印刷ダイアログを新しいタブで開いています。", cachedMeta);
 
     const popupOpened = openPopupPrintWindow(cachedHtml, cachedTitle);
     if (popupOpened) {
+      cacheParticipantPrintPreview({ ...participantPrintPreviewCache, forcePopupFallback: true });
+      if (dom.printPreviewPrintButton) {
+        dom.printPreviewPrintButton.dataset.popupFallback = "true";
+      }
       return true;
     }
   }
 
+  const printedInline = triggerPrintFromPreview();
+  if (printedInline) {
+    return true;
+  }
+
   if (showAlertOnFailure) {
-    window.alert("プレビューから印刷を開始できませんでした。ブラウザのポップアップ設定をご確認ください。");
+    window.alert("印刷を開始できませんでした。ブラウザのポップアップ設定をご確認ください。");
   }
 
   return false;
