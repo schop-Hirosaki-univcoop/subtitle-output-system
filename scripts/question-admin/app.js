@@ -3488,64 +3488,6 @@ function buildParticipantPrintHtml({
   </header>` : ""}
   ${sectionsMarkup}
   ${footerMarkup}
-  <script>
-    (() => {
-      const PRINT_PAGE_DIMENSIONS_MM = {
-        A4: { width: 210, height: 297 },
-        A3: { width: 297, height: 420 },
-        Letter: { width: 215.9, height: 279.4 }
-      };
-
-      const pageSettings = {
-        size: ${JSON.stringify(pageSize)},
-        orientation: ${JSON.stringify(pageOrientation)},
-        margin: ${JSON.stringify(pageMargin)}
-      };
-
-      const toPx = value => {
-        if (!value) return 0;
-        const probe = document.createElement("div");
-        probe.style.position = "absolute";
-        probe.style.visibility = "hidden";
-        probe.style.height = value;
-        document.body.appendChild(probe);
-        const px = probe.getBoundingClientRect().height;
-        probe.remove();
-        return px || 0;
-      };
-
-      const resolvePageHeightPx = () => {
-        const base = PRINT_PAGE_DIMENSIONS_MM[pageSettings.size] || PRINT_PAGE_DIMENSIONS_MM.A4;
-        if (!base) return 0;
-        const heightMm = pageSettings.orientation === "landscape" ? base.width : base.height;
-        return toPx(`${heightMm}mm`);
-      };
-
-      const resolveMarginPx = () => toPx(pageSettings.margin || "0mm");
-
-      const updatePageCount = () => {
-        const pageHeight = resolvePageHeightPx();
-        const margin = resolveMarginPx();
-        const usableHeight = Math.max(0, pageHeight - margin * 2);
-        const contentHeight = document.documentElement.scrollHeight;
-        const totalPages = usableHeight > 0
-          ? Math.max(1, Math.ceil(contentHeight / usableHeight))
-          : 1;
-        document.documentElement.style.setProperty("--print-page-count", String(totalPages));
-      };
-
-      if (document.readyState === "complete") {
-        updatePageCount();
-      } else {
-        window.addEventListener("load", updatePageCount, { once: true });
-      }
-
-      window.addEventListener("resize", updatePageCount);
-      if (document.fonts?.ready) {
-        document.fonts.ready.then(() => updatePageCount()).catch(() => updatePageCount());
-      }
-    })();
-  </script>
 </body>
 </html>`;
 }
