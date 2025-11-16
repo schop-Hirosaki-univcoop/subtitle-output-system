@@ -3356,10 +3356,20 @@ async function openParticipantPrintView() {
   participantPrintInProgress = true;
   let printWindow = null;
   try {
-    printWindow = window.open("", "_blank", "noopener,noreferrer");
+    // Safari 17 以降では noreferrer 指定時に window.open が null を返すことがあり、
+    // ポップアップ許可済みでもブロックされたと誤判定してしまう。
+    // 安全性を維持しつつ参照を得るため noopener のみに限定する。
+    printWindow = window.open("", "_blank", "noopener");
     if (!printWindow) {
       window.alert(`${PRINT_POPUP_BLOCKED_MESSAGE}\n\nポップアップを許可してから再度お試しください。`);
       return;
+    }
+
+    try {
+      // 念のため opener を明示的に切り離す（Chrome/Firefox 互換）
+      printWindow.opener = null;
+    } catch (error) {
+      // Ignore assignment errors
     }
 
     try {
