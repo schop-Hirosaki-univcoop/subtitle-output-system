@@ -3430,7 +3430,7 @@ function buildParticipantPrintHtml({
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(docTitle)}</title>
   <style>
-    :root { color-scheme: light; --page-margin: ${pageMargin}; --print-page-count: "?"; }
+    :root { color-scheme: light; --page-margin: ${pageMargin}; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
@@ -3470,7 +3470,7 @@ function buildParticipantPrintHtml({
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
       .print-footer { position: fixed; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); }
-      .print-footer__page-number::after { content: counter(page) " / " var(--print-page-count, "?"); }
+      .print-footer__page-number::after { content: counter(page); }
       ${printSettings.repeatHeader ? `.print-header--repeat { position: running(printHeader); }
       @page { @top-center { content: element(printHeader); } }
       .print-header--repeat { background: #fff; }
@@ -3508,176 +3508,6 @@ let participantPrintPreviewCache = {
 };
 
 let participantPrintPreviewLoadAbort = null;
-let participantPrintPreviewPageCountCleanup = null;
-
-const PRINT_PAGE_DIMENSIONS_MM = {
-  A4: { width: 210, height: 297 },
-  A3: { width: 297, height: 420 },
-  Letter: { width: 215.9, height: 279.4 }
-};
-
-function pxFromValueInDocument(doc, value) {
-  if (!doc?.body || !value) {
-    return 0;
-  }
-  const probe = doc.createElement("div");
-  probe.style.position = "absolute";
-  probe.style.visibility = "hidden";
-  probe.style.height = value;
-  doc.body.appendChild(probe);
-  const px = probe.getBoundingClientRect().height;
-  probe.remove();
-  return px || 0;
-}
-
-function resolvePrintPageHeightPx(doc, printSettings = state.printSettings) {
-  const normalized = normalizePrintSettings(printSettings);
-  const base = PRINT_PAGE_DIMENSIONS_MM[normalized.paperSize] || PRINT_PAGE_DIMENSIONS_MM.A4;
-  const heightMm = normalized.orientation === "landscape" ? base.width : base.height;
-  return pxFromValueInDocument(doc, `${heightMm}mm`);
-}
-
-function resolvePrintMarginPx(doc, printSettings = state.printSettings) {
-  return pxFromValueInDocument(doc, normalizePrintSettings(printSettings).margin || "0mm");
-}
-
-function measurePrintContentHeight(doc) {
-  if (!doc?.documentElement) {
-    return 0;
-  }
-
-  const { documentElement: html, body } = doc;
-  const printControls = doc.querySelector(".print-controls");
-
-  const previousDisplay = printControls?.style?.display;
-  const previousBodyMargin = body?.style?.margin;
-
-  try {
-    if (printControls) {
-      printControls.style.display = "none";
-    }
-    if (body) {
-      body.style.margin = "0";
-    }
-
-    const htmlHeight = html.scrollHeight || 0;
-    const bodyHeight = body?.scrollHeight || 0;
-    return Math.max(htmlHeight, bodyHeight, 0);
-  } finally {
-    if (body) {
-      if (previousBodyMargin !== undefined) {
-        body.style.margin = previousBodyMargin;
-      } else {
-        body.style.removeProperty("margin");
-      }
-    }
-    if (printControls) {
-      if (previousDisplay !== undefined) {
-        printControls.style.display = previousDisplay;
-      } else {
-        printControls.style.removeProperty("display");
-      }
-    }
-  }
-}
-
-function computePrintTotalPages(doc, printSettings = state.printSettings) {
-  if (!doc?.documentElement) {
-    return 1;
-  }
-  const pageHeight = resolvePrintPageHeightPx(doc, printSettings);
-  const margin = resolvePrintMarginPx(doc, printSettings);
-  const usableHeight = Math.max(0, pageHeight - margin * 2);
-  const contentHeight = measurePrintContentHeight(doc);
-  return usableHeight > 0 ? Math.max(1, Math.ceil(contentHeight / usableHeight)) : 1;
-}
-
-function applyPrintPageCount(targetDocument, printSettings = state.printSettings) {
-  if (!targetDocument?.documentElement) {
-    return 1;
-  }
-  const rawTotalPages = computePrintTotalPages(targetDocument, printSettings);
-  const totalPages =
-    typeof rawTotalPages === "number" && Number.isFinite(rawTotalPages) && rawTotalPages > 0
-      ? Math.max(1, Math.round(rawTotalPages))
-      : 1;
-  try {
-    const cssPageCount = `"${totalPages}"`;
-    targetDocument.documentElement.style.setProperty("--print-page-count", cssPageCount);
-  } catch (error) {
-    // Ignore style application errors
-  }
-  return totalPages;
-}
-
-function installPrintPageCountTracking(doc, win, printSettings = state.printSettings) {
-  if (!doc?.documentElement) {
-    return null;
-  }
-
-  const normalizedSettings = normalizePrintSettings(printSettings);
-  const updatePageCount = () => applyPrintPageCount(doc, normalizedSettings);
-
-  const cleanup = [];
-
-  if (doc.readyState === "complete") {
-    updatePageCount();
-  } else if (win?.addEventListener) {
-    const handleLoad = () => updatePageCount();
-    win.addEventListener("load", handleLoad, { once: true });
-    cleanup.push(() => {
-      try {
-        win.removeEventListener("load", handleLoad, { once: true });
-      } catch (error) {
-        // Ignore listener cleanup errors
-      }
-    });
-  }
-
-  const handleResize = () => updatePageCount();
-  if (win?.addEventListener) {
-    win.addEventListener("resize", handleResize);
-    cleanup.push(() => {
-      try {
-        win.removeEventListener("resize", handleResize);
-      } catch (error) {
-        // Ignore listener cleanup errors
-      }
-    });
-  }
-
-  let fontReadyPromise = null;
-  if (doc.fonts?.ready) {
-    fontReadyPromise = doc.fonts.ready.then(() => updatePageCount()).catch(() => updatePageCount());
-  }
-
-  cleanup.push(() => {
-    if (fontReadyPromise?.cancel && typeof fontReadyPromise.cancel === "function") {
-      try {
-        fontReadyPromise.cancel();
-      } catch (error) {
-        // Ignore font promise cancellation errors
-      }
-    }
-  });
-
-  return () => {
-    cleanup.forEach(fn => {
-      try {
-        fn();
-      } catch (error) {
-        // Ignore cleanup errors
-      }
-    });
-  };
-}
-
-function setupPrintPageCountTracking(frame, printSettings = state.printSettings) {
-  const doc = frame?.contentDocument;
-  const win = frame?.contentWindow;
-  return installPrintPageCountTracking(doc, win, printSettings);
-}
-
 function normalizeLivePoliteness(value, { defaultValue = "" } = {}) {
   const normalize = (input) => {
     const trimmed = (input || "").trim().toLowerCase();
@@ -3874,14 +3704,6 @@ function resetPrintPreview(options = {}) {
   if (dom.printPreviewFrame) {
     dom.printPreviewFrame.srcdoc = "";
   }
-  if (participantPrintPreviewPageCountCleanup) {
-    try {
-      participantPrintPreviewPageCountCleanup();
-    } catch (error) {
-      // Ignore cleanup errors
-    }
-    participantPrintPreviewPageCountCleanup = null;
-  }
   if (dom.printPreview) {
     dom.printPreview.classList.remove("print-preview--fallback");
   }
@@ -3974,26 +3796,6 @@ function openPopupPrintWindow(html, docTitle, printSettings = state.printSetting
     }
   } catch (error) {
     // Ignore title assignment errors
-  }
-
-  let cleanupPageCountTracking = null;
-  try {
-    cleanupPageCountTracking = installPrintPageCountTracking(
-      printWindow.document,
-      printWindow,
-      printSettings
-    );
-  } catch (error) {
-    // Ignore tracking setup errors
-  }
-
-  if (cleanupPageCountTracking && printWindow?.addEventListener) {
-    try {
-      const handleUnload = () => cleanupPageCountTracking();
-      printWindow.addEventListener("beforeunload", handleUnload, { once: true });
-    } catch (error) {
-      // Ignore cleanup registration errors
-    }
   }
 
   window.setTimeout(() => {
@@ -4115,13 +3917,6 @@ function renderParticipantPrintPreview({
       return;
     }
 
-    if (dom.printPreviewFrame) {
-      participantPrintPreviewPageCountCleanup = setupPrintPageCountTracking(
-        dom.printPreviewFrame,
-        normalizedPrintSettings
-      );
-    }
-
     if (dom.printPreviewPrintButton) {
       dom.printPreviewPrintButton.disabled = false;
     }
@@ -4164,15 +3959,6 @@ function renderParticipantPrintPreview({
       }
     }
   };
-
-  if (participantPrintPreviewPageCountCleanup) {
-    try {
-      participantPrintPreviewPageCountCleanup();
-    } catch (error) {
-      // Ignore previous cleanup errors
-    }
-    participantPrintPreviewPageCountCleanup = null;
-  }
 
   dom.printPreviewFrame.addEventListener("load", handleLoad);
   dom.printPreviewFrame.addEventListener("error", handleError);
