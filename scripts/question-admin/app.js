@@ -3434,7 +3434,7 @@ function buildParticipantPrintHtml({
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-    @page { size: ${pageSize} ${pageOrientation}; margin: ${pageMargin}; counter-increment: page; }
+    @page { size: ${pageSize} ${pageOrientation}; margin: ${pageMargin}; }
     body { margin: var(--page-margin); font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #fff; }
     .print-controls { margin-bottom: 6mm; }
     .print-controls__button { border: 0.25mm solid #000; background: #fff; color: #000; padding: 4px 12px; font-size: 8pt; cursor: pointer; }
@@ -3465,7 +3465,7 @@ function buildParticipantPrintHtml({
     .print-footer__items { display: flex; gap: 6mm; align-items: center; }
     .print-footer__item { white-space: nowrap; }
     @media print {
-      body { -webkit-print-color-adjust: exact; margin: 0; counter-reset: page 1; }
+      body { -webkit-print-color-adjust: exact; margin: 0; }
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
       .print-footer { position: fixed; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); }
