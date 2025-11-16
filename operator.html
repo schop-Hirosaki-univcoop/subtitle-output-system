@@ -427,9 +427,9 @@
                     </div>
                   </div>
 
-                  <div id="qa-print-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="qa-print-dialog-title" hidden>
+                  <div id="qa-print-dialog" class="modal modal--fullscreen" role="dialog" aria-modal="true" aria-labelledby="qa-print-dialog-title" hidden>
                     <div class="modal-backdrop" data-dialog-dismiss="true"></div>
-                    <div class="modal-panel modal-panel--print">
+                    <div class="modal-panel modal-panel--print modal-panel--fullscreen">
                       <div class="modal-header print-modal__header">
                         <div class="print-modal__headline">
                           <h2 id="qa-print-dialog-title">印刷</h2>
@@ -441,7 +441,7 @@
                         </div>
                       </div>
                       <div class="modal-body print-modal__body">
-                        <div id="qa-print-preview" class="print-preview">
+                        <div id="qa-print-preview" class="print-preview print-preview--immersive">
                           <div class="print-preview__body">
                             <div class="print-preview__panel">
                               <div class="print-preview__frame">
@@ -471,10 +471,57 @@
                                   <div class="modal-field">
                                     <label for="qa-print-paper-size">用紙サイズ</label>
                                     <select id="qa-print-paper-size" name="print-paper-size" class="input" data-autofocus>
-                                      <option value="A4">A4</option>
-                                      <option value="A3">A3</option>
-                                      <option value="Letter">USレター</option>
+                                      <option value="Letter">Letter (21.6cm × 27.9cm)</option>
+                                      <option value="Tabloid">Tabloid (27.9cm × 43.2cm)</option>
+                                      <option value="Legal">Legal (21.6cm × 35.6cm)</option>
+                                      <option value="Statement">Statement (14.0cm × 21.6cm)</option>
+                                      <option value="Executive">Executive (18.4cm × 26.7cm)</option>
+                                      <option value="Folio">Folio (21.6cm × 33.0cm)</option>
+                                      <option value="A3">A3 (29.7cm × 42.0cm)</option>
+                                      <option value="A4">A4 (21.0cm × 29.7cm)</option>
+                                      <option value="A5">A5 (14.8cm × 21.0cm)</option>
+                                      <option value="B4">B4 (25.0cm × 35.3cm)</option>
+                                      <option value="B5">B5 (17.6cm × 25.0cm)</option>
+                                      <option value="Custom">カスタムサイズ</option>
                                     </select>
+                                  </div>
+                                  <div id="qa-print-custom-size" class="modal-field print-settings__custom" hidden>
+                                    <div class="print-settings__custom-inputs">
+                                      <label class="print-settings__custom-field" for="qa-print-custom-width">
+                                        <span class="print-settings__custom-field-label">幅</span>
+                                        <div class="print-settings__custom-control">
+                                          <input
+                                            id="qa-print-custom-width"
+                                            name="print-custom-width"
+                                            class="input input--dense"
+                                            type="number"
+                                            min="10"
+                                            max="2000"
+                                            step="1"
+                                            inputmode="decimal"
+                                          >
+                                          <span class="print-settings__custom-suffix" aria-hidden="true">mm</span>
+                                        </div>
+                                      </label>
+                                      <span class="print-settings__custom-separator" aria-hidden="true">×</span>
+                                      <label class="print-settings__custom-field" for="qa-print-custom-height">
+                                        <span class="print-settings__custom-field-label">高さ</span>
+                                        <div class="print-settings__custom-control">
+                                          <input
+                                            id="qa-print-custom-height"
+                                            name="print-custom-height"
+                                            class="input input--dense"
+                                            type="number"
+                                            min="10"
+                                            max="2000"
+                                            step="1"
+                                            inputmode="decimal"
+                                          >
+                                          <span class="print-settings__custom-suffix" aria-hidden="true">mm</span>
+                                        </div>
+                                      </label>
+                                    </div>
+                                    <p class="modal-helper">用紙の縦横は「ページの向き」に合わせて自動で入れ替わります。</p>
                                   </div>
                                   <div class="modal-field">
                                     <label for="qa-print-orientation">ページの向き</label>
