@@ -3562,7 +3562,8 @@ function applyPrintPageCount(targetDocument, printSettings = state.printSettings
       ? Math.max(1, Math.round(rawTotalPages))
       : 1;
   try {
-    targetDocument.documentElement.style.setProperty("--print-page-count", String(totalPages));
+    const cssPageCount = `"${totalPages}"`;
+    targetDocument.documentElement.style.setProperty("--print-page-count", cssPageCount);
   } catch (error) {
     // Ignore style application errors
   }
