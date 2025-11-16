@@ -3237,7 +3237,7 @@ function buildParticipantPrintHtml({
           <div class="print-group__gl">
             <table class="print-group__gl-table" aria-label="GL情報">
               <thead>
-                <tr><th scope="col">GL名前</th><th scope="col">GL学部学科</th></tr>
+                <tr><th scope="col">GL名前</th><th scope="col">学年/学部学科</th></tr>
               </thead>
               <tbody>
                 ${glRows}
@@ -3250,10 +3250,10 @@ function buildParticipantPrintHtml({
             <tr>
               <th scope="col" class="print-table__index">No.</th>
               <th scope="col">参加者名</th>
-              <th scope="col">参加者フリガナ</th>
-              <th scope="col">参加者学部学科</th>
-              <th scope="col">参加者電話番号</th>
-              <th scope="col">参加者メールアドレス</th>
+              <th scope="col">フリガナ</th>
+              <th scope="col">学部学科</th>
+              <th scope="col">電話番号</th>
+              <th scope="col">メールアドレス</th>
             </tr>
           </thead>
           <tbody>
@@ -3289,7 +3289,7 @@ function buildParticipantPrintHtml({
     .print-title { font-size: 14.4pt; margin: 0 0 4mm; }
     .print-meta { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2mm 12mm; font-size: 8pt; }
     .print-meta__label { font-weight: 600; margin-right: 2mm; }
-    .print-group { border: 0.3mm solid #000; padding: 5mm; margin-bottom: 12mm; background: #fff; page-break-inside: avoid; break-inside: avoid; }
+    .print-group { border: 0.3mm solid #000; padding: 3mm; margin-bottom: 12mm; background: #fff; page-break-inside: avoid; break-inside: avoid; }
     .print-group__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 5mm; margin-bottom: 4mm; }
     .print-group__meta { min-width: 40mm; }
     .print-group__label { font-size: 7.2pt; color: #555; letter-spacing: 0.08em; margin-bottom: 1mm; text-transform: uppercase; }
