@@ -3305,7 +3305,7 @@ function buildParticipantPrintHtml({
     .print-table__empty td { text-align: center; color: #555; }
     .print-empty { font-size: 8.8pt; margin: 0; }
     @media print {
-      body { -webkit-print-color-adjust: exact; margin: 5mm; }
+      body { -webkit-print-color-adjust: exact; margin: 0; }
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
     }
