@@ -26,6 +26,8 @@ const state = {
     paperSize: "A4",
     orientation: "portrait",
     margin: "5mm",
+    customWidth: 210,
+    customHeight: 297,
     showHeader: true,
     repeatHeader: false,
     showPageNumbers: true,
