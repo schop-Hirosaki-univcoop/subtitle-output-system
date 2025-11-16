@@ -266,6 +266,37 @@
                           </button>
                         </div>
                       </div>
+                      <div id="qa-print-preview" class="print-preview" hidden>
+                        <div class="print-preview__header">
+                          <div>
+                            <p class="print-preview__title">印刷プレビュー</p>
+                            <p id="qa-print-preview-meta" class="print-preview__meta"></p>
+                          </div>
+                          <div class="print-preview__actions">
+                            <button id="qa-print-preview-print" class="btn btn-primary btn-sm" type="button" disabled>このリストを印刷</button>
+                            <button id="qa-print-preview-close" class="btn btn-ghost btn-sm" type="button">プレビューを閉じる</button>
+                          </div>
+                        </div>
+                        <div class="print-preview__body">
+                          <div class="print-preview__frame">
+                            <iframe
+                              id="qa-print-preview-frame"
+                              title="参加者リストの印刷プレビュー"
+                              sandbox="allow-same-origin allow-scripts"
+                              referrerpolicy="no-referrer"
+                            ></iframe>
+                          </div>
+                          <div
+                            id="qa-print-preview-note"
+                            class="print-preview__note"
+                            role="status"
+                            aria-live="polite"
+                            aria-atomic="true"
+                          >
+                            印刷設定を選ぶとここに最新のプレビューが表示されます。
+                          </div>
+                        </div>
+                      </div>
                       <div class="module-body">
                         <div class="qa-participant-card-switcher">
                           <div class="qa-participant-card-tabs">
