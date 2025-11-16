@@ -3465,7 +3465,7 @@ function buildParticipantPrintHtml({
     .print-footer__items { display: flex; gap: 6mm; align-items: center; }
     .print-footer__item { white-space: nowrap; }
     @media print {
-      body { -webkit-print-color-adjust: exact; margin: 0; counter-reset: page 0; }
+      body { -webkit-print-color-adjust: exact; margin: 0; counter-reset: page 1; }
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
       .print-footer { position: fixed; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); }
