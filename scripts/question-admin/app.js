@@ -2406,9 +2406,6 @@ function collectGroupGlLeaders(groupKey, { eventId, rosterMap, assignmentsMap, s
     } else if (status === "staff") {
       metaParts.push(GL_STAFF_LABEL);
     }
-    if (profile.grade) {
-      metaParts.push(profile.grade);
-    }
     if (profile.faculty) {
       metaParts.push(profile.faculty);
     }
@@ -3237,7 +3234,7 @@ function buildParticipantPrintHtml({
           <div class="print-group__gl">
             <table class="print-group__gl-table" aria-label="GL情報">
               <thead>
-                <tr><th scope="col">GL名前</th><th scope="col">学年/学部学科</th></tr>
+                <tr><th scope="col">GL名前</th><th scope="col">学部学科</th></tr>
               </thead>
               <tbody>
                 ${glRows}
