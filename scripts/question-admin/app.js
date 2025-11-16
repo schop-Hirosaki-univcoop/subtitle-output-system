@@ -3217,20 +3217,8 @@ function readPrintSettingsFromForm() {
   return normalizePrintSettings(settings);
 }
 
-const printSettingsDialogState = {
-  resolver: null
-};
-
-function resolvePrintSettingsDialog(result) {
-  const resolver = printSettingsDialogState.resolver;
-  printSettingsDialogState.resolver = null;
-  if (typeof resolver === "function") {
-    resolver(result);
-  }
-}
-
 function setupPrintSettingsDialog() {
-  if (!dom.printSettingsDialog || !dom.printSettingsForm) return;
+  if (!dom.printSettingsForm) return;
 
   const syncHeaderControls = () => {
     if (!dom.printShowHeaderInput || !dom.printRepeatHeaderInput) return;
@@ -3242,39 +3230,21 @@ function setupPrintSettingsDialog() {
   };
 
   dom.printShowHeaderInput?.addEventListener("change", syncHeaderControls);
+  dom.printSettingsForm.addEventListener("change", () => {
+    const settings = readPrintSettingsFromForm();
+    persistPrintSettings(settings);
+    updateParticipantPrintPreview({ autoPrint: false, forceReveal: true, quiet: true });
+  });
 
   dom.printSettingsForm.addEventListener("submit", event => {
     event.preventDefault();
     const settings = readPrintSettingsFromForm();
     persistPrintSettings(settings);
-    resolvePrintSettingsDialog(settings);
-    closeDialog(dom.printSettingsDialog, { reason: "submit" });
+    updateParticipantPrintPreview({ autoPrint: false, forceReveal: true });
   });
 
-  dom.printSettingsDialog.addEventListener("dialog:close", () => {
-    resolvePrintSettingsDialog(null);
-  });
-
-  if (dom.printSettingsCancelButton) {
-    dom.printSettingsCancelButton.addEventListener("click", event => {
-      event.preventDefault();
-      closeDialog(dom.printSettingsDialog, { reason: "cancel" });
-    });
-  }
-
-  bindDialogDismiss(dom.printSettingsDialog);
-  syncHeaderControls();
-}
-
-async function promptPrintSettings() {
-  if (!dom.printSettingsDialog || !dom.printSettingsForm) {
-    return normalizePrintSettings(state.printSettings);
-  }
   applyPrintSettingsToForm(state.printSettings);
-  openDialog(dom.printSettingsDialog);
-  return await new Promise(resolve => {
-    printSettingsDialogState.resolver = resolve;
-  });
+  syncHeaderControls();
 }
 
 function buildParticipantPrintHtml({
@@ -3464,7 +3434,7 @@ function buildParticipantPrintHtml({
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-    @page { size: ${pageSize} ${pageOrientation}; margin: ${pageMargin}; }
+    @page { size: ${pageSize} ${pageOrientation}; margin: ${pageMargin}; counter-increment: page; }
     body { margin: var(--page-margin); font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #fff; }
     .print-controls { margin-bottom: 6mm; }
     .print-controls__button { border: 0.25mm solid #000; background: #fff; color: #000; padding: 4px 12px; font-size: 8pt; cursor: pointer; }
@@ -3494,8 +3464,9 @@ function buildParticipantPrintHtml({
     .print-footer { margin-top: 6mm; font-size: 8pt; color: #000; }
     .print-footer__items { display: flex; gap: 6mm; align-items: center; }
     .print-footer__item { white-space: nowrap; }
+    .print-footer__page-number[data-page-total]::after { content: counter(page) " / " attr(data-page-total); }
     @media print {
-      body { -webkit-print-color-adjust: exact; margin: 0; }
+      body { -webkit-print-color-adjust: exact; margin: 0; counter-reset: page 1; }
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
       .print-footer { position: fixed; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); }
@@ -3517,6 +3488,49 @@ function buildParticipantPrintHtml({
   </header>` : ""}
   ${sectionsMarkup}
   ${footerMarkup}
+  <script>
+    (() => {
+      const footerPage = document.querySelector(".print-footer__page-number");
+      if (!footerPage) {
+        return;
+      }
+
+      const paperSizesMm = {
+        A4: { width: 210, height: 297 },
+        A3: { width: 297, height: 420 },
+        Letter: { width: 216, height: 279 }
+      };
+
+      const paper = paperSizesMm["${pageSize}"] || paperSizesMm.A4;
+      const marginText = "${pageMargin}" || "0mm";
+      const marginValue = Number.parseFloat(marginText) || 0;
+      const orientation = "${pageOrientation}";
+
+      const measurePx = value => {
+        const ruler = document.createElement("div");
+        ruler.style.position = "absolute";
+        ruler.style.visibility = "hidden";
+        ruler.style.height = value;
+        ruler.style.width = value;
+        document.body.appendChild(ruler);
+        const px = ruler.getBoundingClientRect().height;
+        ruler.remove();
+        return px || 0;
+      };
+
+      const pageHeightMm = orientation === "landscape" ? paper.width : paper.height;
+      const usableHeightMm = Math.max(pageHeightMm - marginValue * 2, 0);
+      const usableHeightPx = usableHeightMm ? measurePx(`${usableHeightMm}mm`) : 0;
+      const totalHeight = document.documentElement.scrollHeight;
+
+      if (!usableHeightPx || !totalHeight) {
+        return;
+      }
+
+      const totalPages = Math.max(1, Math.ceil(totalHeight / usableHeightPx));
+      footerPage.setAttribute("data-page-total", String(totalPages));
+    })();
+  </script>
 </body>
 </html>`;
 }
@@ -3670,11 +3684,23 @@ function setPrintPreviewNote(text = PRINT_PREVIEW_DEFAULT_NOTE, options = {}) {
 }
 
 function setPrintPreviewVisibility(visible) {
-  if (!dom.printPreview) {
-    return false;
+  const dialog = dom.printPreviewDialog;
+  if (dialog) {
+    if (visible) {
+      openDialog(dialog);
+      if (dom.printPreview) {
+        dom.printPreview.hidden = false;
+      }
+    } else {
+      closeDialog(dialog);
+    }
+    return true;
   }
-  dom.printPreview.hidden = !visible;
-  return true;
+  if (dom.printPreview) {
+    dom.printPreview.hidden = !visible;
+    return true;
+  }
+  return false;
 }
 
 function setPrintPreviewBusy(isBusy = false) {
@@ -3714,7 +3740,8 @@ function clearParticipantPrintPreviewLoader() {
   participantPrintPreviewLoadAbort = null;
 }
 
-function resetPrintPreview() {
+function resetPrintPreview(options = {}) {
+  const { skipCloseDialog = false } = options || {};
   clearParticipantPrintPreviewLoader();
   if (dom.printPreviewFrame) {
     dom.printPreviewFrame.srcdoc = "";
@@ -3736,7 +3763,13 @@ function resetPrintPreview() {
   cacheParticipantPrintPreview({ forcePopupFallback: false });
   participantPrintAutoPrintPending = false;
   setPrintPreviewNote();
-  setPrintPreviewVisibility(false);
+  if (skipCloseDialog) {
+    if (dom.printPreview) {
+      dom.printPreview.hidden = true;
+    }
+  } else {
+    setPrintPreviewVisibility(false);
+  }
 }
 
 function renderPreviewFallbackNote(message, metaText = "") {
@@ -4010,36 +4043,30 @@ function triggerPrintFromPreview() {
 }
 
 function printParticipantPreview({ showAlertOnFailure = false } = {}) {
-  const forcePopupFallback =
-    dom.printPreviewPrintButton?.dataset?.popupFallback === "true" ||
-    participantPrintPreviewCache.forcePopupFallback;
-
-  if (!forcePopupFallback) {
-    const printedInline = triggerPrintFromPreview();
-    if (printedInline) {
-      return true;
-    }
-  }
-
   const cachedHtml = participantPrintPreviewCache?.html || "";
   const cachedTitle = participantPrintPreviewCache?.title || "";
   const cachedMeta = participantPrintPreviewCache?.metaText || "";
 
   if (cachedHtml) {
-    const fallbackMessage = forcePopupFallback
-      ? "プレビューを利用できないためポップアップ印刷を使用します。"
-      : "プレビューから印刷を開始できませんでした。ポップアップ印刷に切り替えました。";
-
-    renderPreviewFallbackNote(fallbackMessage, cachedMeta);
+    renderPreviewFallbackNote("ブラウザの印刷ダイアログを新しいタブで開いています。", cachedMeta);
 
     const popupOpened = openPopupPrintWindow(cachedHtml, cachedTitle);
     if (popupOpened) {
+      cacheParticipantPrintPreview({ ...participantPrintPreviewCache, forcePopupFallback: true });
+      if (dom.printPreviewPrintButton) {
+        dom.printPreviewPrintButton.dataset.popupFallback = "true";
+      }
       return true;
     }
   }
 
+  const printedInline = triggerPrintFromPreview();
+  if (printedInline) {
+    return true;
+  }
+
   if (showAlertOnFailure) {
-    window.alert("プレビューから印刷を開始できませんでした。ブラウザのポップアップ設定をご確認ください。");
+    window.alert("印刷を開始できませんでした。ブラウザのポップアップ設定をご確認ください。");
   }
 
   return false;
@@ -4049,25 +4076,70 @@ function closeParticipantPrintPreview() {
   resetPrintPreview();
 }
 
-async function openParticipantPrintView() {
+async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = false, quiet = false } = {}) {
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) {
-    window.alert("印刷するにはイベントと日程を選択してください。");
-    return;
+    clearParticipantPrintPreviewLoader();
+    if (dom.printPreview) {
+      dom.printPreview.classList.remove("print-preview--fallback");
+    }
+    if (dom.printPreviewFrame) {
+      dom.printPreviewFrame.srcdoc = "";
+    }
+    if (dom.printPreviewMeta) {
+      dom.printPreviewMeta.textContent = "";
+    }
+    cacheParticipantPrintPreview({ forcePopupFallback: false });
+    setPrintPreviewVisibility(true);
+    setPrintPreviewNote("印刷するにはイベントと日程を選択してください。", {
+      forceAnnounce: true,
+      politeness: "assertive",
+      role: "alert"
+    });
+    if (dom.printPreviewPrintButton) {
+      dom.printPreviewPrintButton.disabled = true;
+      delete dom.printPreviewPrintButton.dataset.popupFallback;
+    }
+    if (!quiet) {
+      window.alert("印刷するにはイベントと日程を選択してください。");
+    }
+    return false;
   }
 
   if (!Array.isArray(state.participants) || state.participants.length === 0) {
-    window.alert("印刷できる参加者がまだ登録されていません。");
-    return;
+    clearParticipantPrintPreviewLoader();
+    if (dom.printPreview) {
+      dom.printPreview.classList.remove("print-preview--fallback");
+    }
+    if (dom.printPreviewFrame) {
+      dom.printPreviewFrame.srcdoc = "";
+    }
+    if (dom.printPreviewMeta) {
+      dom.printPreviewMeta.textContent = "";
+    }
+    cacheParticipantPrintPreview({ forcePopupFallback: false });
+    setPrintPreviewVisibility(true);
+    setPrintPreviewNote("印刷できる参加者がまだ登録されていません。", {
+      forceAnnounce: true,
+      politeness: "assertive",
+      role: "alert"
+    });
+    if (dom.printPreviewPrintButton) {
+      dom.printPreviewPrintButton.disabled = true;
+      delete dom.printPreviewPrintButton.dataset.popupFallback;
+    }
+    if (!quiet) {
+      window.alert("印刷できる参加者がまだ登録されていません。");
+    }
+    return false;
   }
 
   if (participantPrintInProgress) {
-    return;
+    return false;
   }
 
   const button = dom.openPrintViewButton;
-  let printInitialized = false;
   participantPrintInProgress = true;
 
   if (button) {
@@ -4075,18 +4147,15 @@ async function openParticipantPrintView() {
     syncPrintViewButtonState();
   }
 
+  if (forceReveal) {
+    setPrintPreviewVisibility(true);
+  }
+
+  const printSettings = readPrintSettingsFromForm();
+  persistPrintSettings(printSettings);
+
   try {
-    const printSettings = await promptPrintSettings();
-    if (!printSettings) {
-      return;
-    }
-
-    if (button) {
-      delete button.dataset.printLocked;
-    }
-
     setPrintButtonBusy(true);
-    printInitialized = true;
     try {
       try {
         await loadGlDataForEvent(eventId);
@@ -4098,8 +4167,10 @@ async function openParticipantPrintView() {
 
       const groups = buildParticipantPrintGroups({ eventId, scheduleId });
       if (!groups.length) {
-        window.alert("印刷できる参加者がまだ登録されていません。");
-        return;
+        if (!quiet) {
+          window.alert("印刷できる参加者がまだ登録されていません。");
+        }
+        return false;
       }
 
       const selectedEvent = state.events.find(evt => evt.id === eventId) || null;
@@ -4151,11 +4222,11 @@ async function openParticipantPrintView() {
         html,
         metaText,
         title: docTitle,
-        autoPrint: true
+        autoPrint
       });
 
       if (participantPrintPreviewCache.forcePopupFallback) {
-        return;
+        return true;
       }
 
       if (!previewRendered) {
@@ -4167,11 +4238,10 @@ async function openParticipantPrintView() {
         const fallbackOpened = openPopupPrintWindow(html, docTitle);
         if (!fallbackOpened) {
           window.alert("印刷プレビューを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
-          return;
+          return false;
         }
       }
-    } catch (error) {
-      throw error;
+      return true;
     } finally {
       setPrintButtonBusy(false);
     }
@@ -4180,10 +4250,30 @@ async function openParticipantPrintView() {
     if (button) {
       delete button.dataset.printLocked;
     }
-    if (!printInitialized) {
-      syncPrintViewButtonState();
-    }
+    syncPrintViewButtonState();
   }
+}
+
+async function openParticipantPrintView() {
+  const eventId = state.selectedEventId;
+  const scheduleId = state.selectedScheduleId;
+  if (!eventId || !scheduleId) {
+    window.alert("印刷するにはイベントと日程を選択してください。");
+    return;
+  }
+
+  if (!Array.isArray(state.participants) || state.participants.length === 0) {
+    window.alert("印刷できる参加者がまだ登録されていません。");
+    return;
+  }
+
+  if (participantPrintInProgress) {
+    return;
+  }
+
+  setPrintPreviewVisibility(true);
+  applyPrintSettingsToForm(state.printSettings);
+  await updateParticipantPrintPreview({ autoPrint: false, forceReveal: true });
 }
 
 function participantChangeKey(entry, fallbackIndex = 0) {
@@ -7550,10 +7640,17 @@ function attachEventHandlers() {
   bindDialogDismiss(dom.scheduleDialog);
   bindDialogDismiss(dom.participantDialog);
   bindDialogDismiss(dom.relocationDialog);
+  bindDialogDismiss(dom.printPreviewDialog);
   setupPrintSettingsDialog();
 
   if (dom.relocationDialog) {
     dom.relocationDialog.addEventListener("dialog:close", handleRelocationDialogClose);
+  }
+
+  if (dom.printPreviewDialog) {
+    dom.printPreviewDialog.addEventListener("dialog:close", () => {
+      resetPrintPreview({ skipCloseDialog: true });
+    });
   }
 
   if (dom.addEventButton) {
