@@ -259,42 +259,11 @@
                         </div>
                         <div class="module-actions">
                           <button id="qa-open-print-view-button" class="btn btn-ghost btn-sm" type="button" disabled>
-                            印刷用リスト
+                            印刷
                           </button>
                           <button id="qa-send-mail-button" class="btn btn-primary btn-sm" type="button" disabled>
                             参加者へ案内メール送信
                           </button>
-                        </div>
-                      </div>
-                      <div id="qa-print-preview" class="print-preview" hidden>
-                        <div class="print-preview__header">
-                          <div>
-                            <p class="print-preview__title">印刷プレビュー</p>
-                            <p id="qa-print-preview-meta" class="print-preview__meta"></p>
-                          </div>
-                          <div class="print-preview__actions">
-                            <button id="qa-print-preview-print" class="btn btn-primary btn-sm" type="button" disabled>このリストを印刷</button>
-                            <button id="qa-print-preview-close" class="btn btn-ghost btn-sm" type="button">プレビューを閉じる</button>
-                          </div>
-                        </div>
-                        <div class="print-preview__body">
-                          <div class="print-preview__frame">
-                            <iframe
-                              id="qa-print-preview-frame"
-                              title="参加者リストの印刷プレビュー"
-                              sandbox="allow-same-origin allow-scripts"
-                              referrerpolicy="no-referrer"
-                            ></iframe>
-                          </div>
-                          <div
-                            id="qa-print-preview-note"
-                            class="print-preview__note"
-                            role="status"
-                            aria-live="polite"
-                            aria-atomic="true"
-                          >
-                            印刷設定を選ぶとここに最新のプレビューが表示されます。
-                          </div>
                         </div>
                       </div>
                       <div class="module-body">
@@ -458,6 +427,109 @@
                     </div>
                   </div>
 
+                  <div id="qa-print-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="qa-print-dialog-title" hidden>
+                    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+                    <div class="modal-panel modal-panel--print">
+                      <div class="modal-header print-modal__header">
+                        <div class="print-modal__headline">
+                          <h2 id="qa-print-dialog-title">印刷</h2>
+                          <p id="qa-print-preview-meta" class="print-preview__meta"></p>
+                        </div>
+                        <div class="print-preview__actions">
+                          <button id="qa-print-preview-print" class="btn btn-primary btn-sm" type="button" disabled>印刷</button>
+                          <button id="qa-print-preview-close" class="btn btn-ghost btn-sm" type="button">閉じる</button>
+                        </div>
+                      </div>
+                      <div class="modal-body print-modal__body">
+                        <div id="qa-print-preview" class="print-preview">
+                          <div class="print-preview__body">
+                            <div class="print-preview__panel">
+                              <div class="print-preview__frame">
+                                <iframe
+                                  id="qa-print-preview-frame"
+                                  title="参加者リストの印刷プレビュー"
+                                  sandbox="allow-same-origin allow-scripts"
+                                  referrerpolicy="no-referrer"
+                                ></iframe>
+                              </div>
+                              <div
+                                id="qa-print-preview-note"
+                                class="print-preview__note"
+                                role="status"
+                                aria-live="polite"
+                                aria-atomic="true"
+                              >
+                                印刷設定を選ぶとここに最新のプレビューが表示されます。
+                              </div>
+                            </div>
+                            <div class="print-preview__settings" aria-labelledby="qa-print-settings-title">
+                              <form id="qa-print-settings-form" class="print-settings-form">
+                                <div class="print-settings-form__header">
+                                  <h3 id="qa-print-settings-title" class="print-settings-form__title">印刷設定</h3>
+                                  <p class="print-settings-form__helper">用紙やヘッダー/フッターを整えてから印刷してください。</p>
+                                </div>
+                                <div class="print-settings-form__fields">
+                                  <div class="modal-field">
+                                    <label for="qa-print-paper-size">用紙サイズ</label>
+                                    <select id="qa-print-paper-size" name="print-paper-size" class="input" data-autofocus>
+                                      <option value="A4">A4</option>
+                                      <option value="A3">A3</option>
+                                      <option value="Letter">USレター</option>
+                                    </select>
+                                  </div>
+                                  <div class="modal-field">
+                                    <label for="qa-print-orientation">ページの向き</label>
+                                    <select id="qa-print-orientation" name="print-orientation" class="input">
+                                      <option value="portrait">縦</option>
+                                      <option value="landscape">横</option>
+                                    </select>
+                                  </div>
+                                  <div class="modal-field">
+                                    <label for="qa-print-margin">余白</label>
+                                    <select id="qa-print-margin" name="print-margin" class="input">
+                                      <option value="5mm">せまめ (5mm)</option>
+                                      <option value="10mm">ふつう (10mm)</option>
+                                      <option value="15mm">ひろめ (15mm)</option>
+                                    </select>
+                                  </div>
+                                  <fieldset class="modal-field">
+                                    <legend class="modal-label">ヘッダー</legend>
+                                    <label class="chk">
+                                      <input id="qa-print-show-header" name="print-show-header" type="checkbox" checked>
+                                      <span>ヘッダー (タイトルとメタ情報) を表示する</span>
+                                    </label>
+                                    <label class="chk">
+                                      <input id="qa-print-repeat-header" name="print-repeat-header" type="checkbox">
+                                      <span>複数ページの先頭にヘッダーを繰り返す</span>
+                                    </label>
+                                  </fieldset>
+                                  <fieldset class="modal-field">
+                                    <legend class="modal-label">フッター</legend>
+                                    <label class="chk">
+                                      <input id="qa-print-show-page-number" name="print-show-page-number" type="checkbox" checked>
+                                      <span>ページ番号を表示する</span>
+                                    </label>
+                                    <label class="chk">
+                                      <input id="qa-print-show-date" name="print-show-date" type="checkbox" checked>
+                                      <span>現在の日付を表示する</span>
+                                    </label>
+                                    <label class="chk">
+                                      <input id="qa-print-show-time" name="print-show-time" type="checkbox" checked>
+                                      <span>現在の時刻を表示する</span>
+                                    </label>
+                                  </fieldset>
+                                </div>
+                                <div class="print-settings-form__footer">
+                                  <button type="submit" class="btn btn-primary btn-sm">プレビュー更新</button>
+                                </div>
+                              </form>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div id="qa-confirm-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="qa-confirm-dialog-title" hidden>
                     <div class="modal-backdrop" data-dialog-dismiss="true"></div>
                     <div class="modal-panel">
@@ -474,72 +546,6 @@
                     </div>
                   </div>
 
-                  <div id="qa-print-settings-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="qa-print-settings-title" hidden>
-                    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
-                    <div class="modal-panel">
-                      <form id="qa-print-settings-form" class="modal-form">
-                        <div class="modal-header">
-                          <h2 id="qa-print-settings-title">印刷設定</h2>
-                        </div>
-                        <div class="modal-body">
-                          <p class="modal-helper">用紙やヘッダー/フッターの表示を選んでから、ブラウザの印刷プレビューに進みます。</p>
-                          <div class="modal-field">
-                            <label for="qa-print-paper-size">用紙サイズ</label>
-                            <select id="qa-print-paper-size" name="print-paper-size" class="input" data-autofocus>
-                              <option value="A4">A4</option>
-                              <option value="A3">A3</option>
-                              <option value="Letter">USレター</option>
-                            </select>
-                          </div>
-                          <div class="modal-field">
-                            <label for="qa-print-orientation">ページの向き</label>
-                            <select id="qa-print-orientation" name="print-orientation" class="input">
-                              <option value="portrait">縦</option>
-                              <option value="landscape">横</option>
-                            </select>
-                          </div>
-                          <div class="modal-field">
-                            <label for="qa-print-margin">余白</label>
-                            <select id="qa-print-margin" name="print-margin" class="input">
-                              <option value="5mm">せまめ (5mm)</option>
-                              <option value="10mm">ふつう (10mm)</option>
-                              <option value="15mm">ひろめ (15mm)</option>
-                            </select>
-                          </div>
-                          <fieldset class="modal-field">
-                            <legend class="modal-label">ヘッダー</legend>
-                            <label class="chk">
-                              <input id="qa-print-show-header" name="print-show-header" type="checkbox" checked>
-                              <span>ヘッダー (タイトルとメタ情報) を表示する</span>
-                            </label>
-                            <label class="chk">
-                              <input id="qa-print-repeat-header" name="print-repeat-header" type="checkbox">
-                              <span>複数ページの先頭にヘッダーを繰り返す</span>
-                            </label>
-                          </fieldset>
-                          <fieldset class="modal-field">
-                            <legend class="modal-label">フッター</legend>
-                            <label class="chk">
-                              <input id="qa-print-show-page-number" name="print-show-page-number" type="checkbox" checked>
-                              <span>ページ番号を表示する</span>
-                            </label>
-                            <label class="chk">
-                              <input id="qa-print-show-date" name="print-show-date" type="checkbox" checked>
-                              <span>現在の日付を表示する</span>
-                            </label>
-                            <label class="chk">
-                              <input id="qa-print-show-time" name="print-show-time" type="checkbox" checked>
-                              <span>現在の時刻を表示する</span>
-                            </label>
-                          </fieldset>
-                        </div>
-                        <div class="modal-footer">
-                          <button type="button" class="btn btn-ghost" id="qa-print-settings-cancel" data-dialog-dismiss="true">キャンセル</button>
-                          <button type="submit" class="btn btn-primary">印刷プレビューへ</button>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
                 </div>
               </div>
         </section>
