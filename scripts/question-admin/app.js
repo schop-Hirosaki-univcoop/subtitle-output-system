@@ -3336,22 +3336,6 @@ const PRINT_POPUP_BLOCKED_MESSAGE = [
   "3. 必要に応じてページを再読み込みしてから、再度「印刷」ボタンを押す"
 ].join("\n");
 
-async function showPrintPopupBlockedGuidance() {
-  if (dom.confirmDialog && dom.confirmDialogMessage && dom.confirmAcceptButton) {
-    await confirmAction({
-      title: "印刷用ウィンドウを開けませんでした",
-      description: PRINT_POPUP_BLOCKED_MESSAGE,
-      confirmLabel: "閉じる",
-      cancelLabel: "",
-      tone: "primary",
-      showCancel: false
-    });
-    return;
-  }
-
-  window.alert(`${PRINT_POPUP_BLOCKED_MESSAGE}\n\nポップアップを許可してから再度お試しください。`);
-}
-
 async function openParticipantPrintView() {
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
@@ -3374,7 +3358,7 @@ async function openParticipantPrintView() {
   try {
     printWindow = window.open("", "_blank", "noopener,noreferrer");
     if (!printWindow) {
-      await showPrintPopupBlockedGuidance();
+      window.alert(`${PRINT_POPUP_BLOCKED_MESSAGE}\n\nポップアップを許可してから再度お試しください。`);
       return;
     }
 
