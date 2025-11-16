@@ -3356,10 +3356,20 @@ async function openParticipantPrintView() {
   participantPrintInProgress = true;
   let printWindow = null;
   try {
-    printWindow = window.open("", "_blank", "noopener,noreferrer");
+    // Chrome の一部バージョンでは noopener フラグ付きの window.open で参照を取得できず、
+    // ポップアップ許可済みでも null が返ることがあるため、一旦フラグなしで開いてから
+    // opener を明示的に切り離す手順に変更する。
+    printWindow = window.open("", "_blank");
     if (!printWindow) {
       window.alert(`${PRINT_POPUP_BLOCKED_MESSAGE}\n\nポップアップを許可してから再度お試しください。`);
       return;
+    }
+
+    try {
+      // opener を明示的に切り離し、既存ブラウザでも安全性を確保する
+      printWindow.opener = null;
+    } catch (error) {
+      // Ignore assignment errors
     }
 
     try {
