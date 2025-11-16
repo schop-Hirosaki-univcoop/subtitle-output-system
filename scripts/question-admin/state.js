@@ -22,6 +22,16 @@ const state = {
   teamAssignments: new Map(),
   glRoster: new Map(),
   glAssignments: new Map(),
+  printSettings: {
+    paperSize: "A4",
+    orientation: "portrait",
+    margin: "5mm",
+    showHeader: true,
+    repeatHeader: false,
+    showPageNumbers: true,
+    showDate: true,
+    showTime: true
+  },
   lastUploadStatusMessage: "",
   lastUploadStatusVariant: "",
   tokenSnapshotFetchedAt: 0,
