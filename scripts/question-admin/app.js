@@ -3556,7 +3556,11 @@ function applyPrintPageCount(targetDocument, printSettings = state.printSettings
   if (!targetDocument?.documentElement) {
     return 1;
   }
-  const totalPages = computePrintTotalPages(targetDocument, printSettings);
+  const rawTotalPages = computePrintTotalPages(targetDocument, printSettings);
+  const totalPages =
+    typeof rawTotalPages === "number" && Number.isFinite(rawTotalPages) && rawTotalPages > 0
+      ? Math.max(1, Math.round(rawTotalPages))
+      : 1;
   try {
     targetDocument.documentElement.style.setProperty("--print-page-count", String(totalPages));
   } catch (error) {
