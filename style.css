@@ -511,7 +511,7 @@ body.logs-open #logs-panel{ display:flex; }
 .log-stream::-webkit-scrollbar-thumb:hover{
   background:linear-gradient(180deg, rgba(46,141,255,.7), rgba(30,200,255,.5));
 }
-.print-preview{ 
+.print-preview{
   margin-top:clamp(.6rem, 1.2vw, .9rem);
   padding:clamp(.75rem, 1.5vw, 1.05rem);
   border-radius:clamp(.8rem, 1.6vw, 1.2rem);
@@ -521,6 +521,10 @@ body.logs-open #logs-panel{ display:flex; }
   display:flex;
   flex-direction:column;
   gap:clamp(.55rem, 1.2vw, .9rem);
+}
+.print-preview--immersive{
+  flex:1 1 auto;
+  min-height:0;
 }
 .modal-panel--print .print-preview{ margin-top:0; }
 .print-preview__header{
@@ -551,6 +555,8 @@ body.logs-open #logs-panel{ display:flex; }
   display:flex;
   gap:clamp(.6rem, 1.2vw, .9rem);
   align-items:stretch;
+  flex:1 1 auto;
+  min-height:0;
 }
 .print-preview__panel{
   flex:1 1 60%;
@@ -558,10 +564,12 @@ body.logs-open #logs-panel{ display:flex; }
   display:flex;
   flex-direction:column;
   gap:clamp(.5rem, 1vw, .8rem);
+  min-height:0;
 }
 .print-preview__frame{
   flex:1 1 auto;
   min-height:380px;
+  height:100%;
   background:rgba(6,10,20,.8);
   border-radius:clamp(.75rem, 1.5vw, 1.05rem);
   border:1px solid rgba(68,100,160,.45);
@@ -610,6 +618,14 @@ body.logs-open #logs-panel{ display:flex; }
 .print-settings-form__helper{ margin:0; color:var(--muted); font-size:.9rem; }
 .print-settings-form__fields{ display:flex; flex-direction:column; gap:.65rem; }
 .print-settings-form__footer{ display:flex; justify-content:flex-end; }
+.print-settings__custom{ display:flex; flex-direction:column; gap:.35rem; }
+.print-settings__custom-inputs{ display:flex; align-items:center; gap:.65rem; flex-wrap:wrap; }
+.print-settings__custom-field{ display:flex; align-items:center; gap:.35rem; }
+.print-settings__custom-field-label{ font-weight:600; color:#e7f1ff; font-size:.95rem; }
+.print-settings__custom-control{ display:flex; align-items:center; gap:.25rem; }
+.print-settings__custom-field .input{ width:6rem; }
+.print-settings__custom-suffix{ color:var(--muted); font-size:.9rem; }
+.print-settings__custom-separator{ color:var(--muted); font-size:1rem; }
 .dictionary-body{ position:relative; display:flex; flex-direction:column; gap:clamp(.9rem, 1.7vw, 1.3rem); }
 .dictionary-body .cards-scroll{ flex:1; min-height:0; overflow:auto; }
 .dictionary-toolbar{
@@ -2148,6 +2164,24 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   width:min(90rem, 96vw);
   max-height:90vh;
 }
+.modal--fullscreen{
+  align-items:stretch;
+  justify-content:stretch;
+}
+.modal--fullscreen .modal-panel{
+  width:100%;
+  max-width:none;
+  height:100%;
+  max-height:none;
+  border-radius:0;
+  margin:0;
+}
+.modal-panel--fullscreen{
+  padding:clamp(1rem, 2.4vw, 1.6rem);
+}
+.modal-panel--fullscreen.modal-panel--print{
+  padding:clamp(1.1rem, 2.8vw, 1.8rem);
+}
 
 .modal--inline{
   position:absolute;
@@ -2179,7 +2213,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 .print-modal__headline{ display:flex; flex-direction:column; gap:.2rem; }
 .print-modal__headline .print-preview__meta{ margin:0; }
-.print-modal__body{ display:flex; flex-direction:column; gap:clamp(.7rem, 1.1vw, .9rem); padding:0; }
+.print-modal__body{ display:flex; flex-direction:column; gap:clamp(.7rem, 1.1vw, .9rem); padding:0; flex:1 1 auto; min-height:0; }
 
 .modal-body{
   display:flex;

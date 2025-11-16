@@ -3119,15 +3119,42 @@ function buildParticipantPrintGroups({ eventId, scheduleId }) {
 }
 
 const PRINT_SETTING_STORAGE_KEY = "qa.printSettings.v1";
-const PRINT_PAPER_SIZES = new Set(["A4", "A3", "Letter"]);
+const DEFAULT_CUSTOM_PAGE_SIZE = { width: 210, height: 297 };
+const PRINT_PAPER_SIZE_MAP = {
+  Letter: { width: 216, height: 279 },
+  Tabloid: { width: 279, height: 432 },
+  Legal: { width: 216, height: 356 },
+  Statement: { width: 140, height: 216 },
+  Executive: { width: 184, height: 267 },
+  Folio: { width: 216, height: 330 },
+  A3: { width: 297, height: 420 },
+  A4: { width: 210, height: 297 },
+  A5: { width: 148, height: 210 },
+  B4: { width: 250, height: 353 },
+  B5: { width: 176, height: 250 },
+  Custom: null
+};
+const PRINT_PAPER_SIZES = new Set(Object.keys(PRINT_PAPER_SIZE_MAP));
 const PRINT_ORIENTATIONS = new Set(["portrait", "landscape"]);
 const PRINT_MARGINS = new Set(["5mm", "10mm", "15mm"]);
 
+function normalizePageDimension(value, fallback = DEFAULT_CUSTOM_PAGE_SIZE.width) {
+  const parsed = typeof value === "string" ? Number.parseFloat(value) : Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.min(Math.max(parsed, 10), 2000);
+}
+
 function normalizePrintSettings(settings = {}) {
+  const fallbackWidth = state.printSettings?.customWidth || DEFAULT_CUSTOM_PAGE_SIZE.width;
+  const fallbackHeight = state.printSettings?.customHeight || DEFAULT_CUSTOM_PAGE_SIZE.height;
   const normalized = {
     paperSize: PRINT_PAPER_SIZES.has(settings?.paperSize) ? settings.paperSize : state.printSettings.paperSize,
     orientation: PRINT_ORIENTATIONS.has(settings?.orientation) ? settings.orientation : state.printSettings.orientation,
     margin: PRINT_MARGINS.has(settings?.margin) ? settings.margin : state.printSettings.margin,
+    customWidth: normalizePageDimension(settings?.customWidth, fallbackWidth),
+    customHeight: normalizePageDimension(settings?.customHeight, fallbackHeight),
     showHeader: settings?.showHeader !== undefined ? Boolean(settings.showHeader) : state.printSettings.showHeader,
     repeatHeader: settings?.repeatHeader !== undefined ? Boolean(settings.repeatHeader) : state.printSettings.repeatHeader,
     showPageNumbers: settings?.showPageNumbers !== undefined ? Boolean(settings.showPageNumbers) : state.printSettings.showPageNumbers,
@@ -3139,7 +3166,22 @@ function normalizePrintSettings(settings = {}) {
     normalized.repeatHeader = false;
   }
 
+  if (normalized.paperSize !== "Custom") {
+    normalized.customWidth = fallbackWidth;
+    normalized.customHeight = fallbackHeight;
+  }
+
   return normalized;
+}
+
+function resolvePrintPageSize(printSettings = state.printSettings) {
+  const normalized = normalizePrintSettings(printSettings);
+  const base = PRINT_PAPER_SIZE_MAP[normalized.paperSize];
+  const width = base?.width || normalized.customWidth || DEFAULT_CUSTOM_PAGE_SIZE.width;
+  const height = base?.height || normalized.customHeight || DEFAULT_CUSTOM_PAGE_SIZE.height;
+  return normalized.orientation === "landscape"
+    ? { width: height, height: width }
+    : { width, height };
 }
 
 function hydratePrintSettingsFromStorage() {
@@ -3182,6 +3224,12 @@ function applyPrintSettingsToForm(settings = state.printSettings) {
   if (dom.printMarginInput) {
     dom.printMarginInput.value = normalized.margin;
   }
+  if (dom.printCustomWidthInput) {
+    dom.printCustomWidthInput.value = normalized.customWidth;
+  }
+  if (dom.printCustomHeightInput) {
+    dom.printCustomHeightInput.value = normalized.customHeight;
+  }
   if (dom.printShowHeaderInput) {
     dom.printShowHeaderInput.checked = normalized.showHeader;
   }
@@ -3205,6 +3253,8 @@ function readPrintSettingsFromForm() {
     paperSize: dom.printPaperSizeInput?.value,
     orientation: dom.printOrientationInput?.value,
     margin: dom.printMarginInput?.value,
+    customWidth: dom.printCustomWidthInput?.value,
+    customHeight: dom.printCustomHeightInput?.value,
     showHeader: dom.printShowHeaderInput ? dom.printShowHeaderInput.checked : undefined,
     repeatHeader: dom.printRepeatHeaderInput ? dom.printRepeatHeaderInput.checked : undefined,
     showPageNumbers: dom.printShowPageNumberInput ? dom.printShowPageNumberInput.checked : undefined,
@@ -3229,7 +3279,14 @@ function setupPrintSettingsDialog() {
     }
   };
 
+  const syncCustomSizeVisibility = () => {
+    if (!dom.printPaperSizeInput || !dom.printCustomSizeField) return;
+    const isCustom = dom.printPaperSizeInput.value === "Custom";
+    dom.printCustomSizeField.hidden = !isCustom;
+  };
+
   dom.printShowHeaderInput?.addEventListener("change", syncHeaderControls);
+  dom.printPaperSizeInput?.addEventListener("change", syncCustomSizeVisibility);
   dom.printSettingsForm.addEventListener("change", () => {
     const settings = readPrintSettingsFromForm();
     persistPrintSettings(settings);
@@ -3245,6 +3302,7 @@ function setupPrintSettingsDialog() {
 
   applyPrintSettingsToForm(state.printSettings);
   syncHeaderControls();
+  syncCustomSizeVisibility();
 }
 
 function buildParticipantPrintHtml({
@@ -3407,6 +3465,10 @@ function buildParticipantPrintHtml({
   const pageMargin = printSettings.margin || "5mm";
   const pageSize = printSettings.paperSize || "A4";
   const pageOrientation = printSettings.orientation || "portrait";
+  const { width: pageWidth, height: pageHeight } = resolvePrintPageSize(printSettings);
+  const pageSizeValue = pageSize === "Custom"
+    ? `${pageWidth}mm ${pageHeight}mm`
+    : `${pageSize} ${pageOrientation}`;
   const headerClass = printSettings.repeatHeader ? "print-header print-header--repeat" : "print-header";
   const footerTimestamp = [
     printSettings.showDate ? generatedDateText : "",
@@ -3430,13 +3492,13 @@ function buildParticipantPrintHtml({
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(docTitle)}</title>
   <style>
-    :root { color-scheme: light; --page-margin: ${pageMargin}; }
+    :root { color-scheme: light; --page-margin: ${pageMargin}; --page-width: ${pageWidth}mm; --page-height: ${pageHeight}mm; --page-content-width: calc(var(--page-width) - (2 * var(--page-margin))); --page-content-height: calc(var(--page-height) - (2 * var(--page-margin))); --preview-scale: 1; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-    @page { size: ${pageSize} ${pageOrientation}; margin: ${pageMargin}; counter-increment: page; }
+    @page { size: ${pageSizeValue}; margin: ${pageMargin}; counter-increment: page; }
     body { counter-reset: page 1; }
-    body { margin: var(--page-margin); font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #fff; }
+    body { margin: 0; font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #f6f7fb; }
     .print-controls { margin-bottom: 6mm; }
     .print-controls__button { border: 0.25mm solid #000; background: #fff; color: #000; padding: 4px 12px; font-size: 8pt; cursor: pointer; }
     .print-controls__button:focus { outline: 1px solid #000; outline-offset: 2px; }
@@ -3466,8 +3528,41 @@ function buildParticipantPrintHtml({
     .print-footer__items { display: flex; gap: 6mm; align-items: center; }
     .print-footer__page { margin-left: auto; }
     .print-footer__item { white-space: nowrap; }
+    .print-surface {
+      -webkit-print-color-adjust: exact;
+      background: #fff;
+      margin: 24px auto;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      aspect-ratio: calc(var(--page-width) / var(--page-height));
+      height: auto;
+      padding: var(--page-margin);
+      width: var(--page-width);
+      min-height: var(--page-height);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+      transform: scale(var(--preview-scale));
+      transform-origin: top center;
+    }
+    .print-surface .print-controls { display: none; }
+    .print-surface .print-group { break-inside: avoid-page; }
+    .print-surface .print-footer { position: sticky; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); margin-top: auto; }
+    .print-surface .print-footer__page-number::after { content: counter(page); }
+    .print-surface .print-footer__page { margin-left: auto; }
+    ${printSettings.repeatHeader ? `.print-surface .print-header--repeat { background: #fff; position: sticky; top: 0; }` : ""}
     @media print {
-      body { -webkit-print-color-adjust: exact; margin: 0; }
+      body { -webkit-print-color-adjust: exact; margin: 0; background: #fff; }
+      .print-surface {
+        display: block;
+        margin: 0 auto;
+        padding: 0;
+        box-shadow: none;
+        transform: none;
+        aspect-ratio: auto;
+        width: var(--page-content-width);
+        min-height: var(--page-content-height);
+        box-sizing: content-box;
+      }
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
       .print-footer { position: fixed; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); }
@@ -3480,7 +3575,7 @@ function buildParticipantPrintHtml({
     }
   </style>
 </head>
-<body>
+<body class="print-surface">
   <div class="print-controls">
     <button type="button" class="print-controls__button" onclick="window.print()">このリストを印刷</button>
   </div>
