@@ -3118,6 +3118,165 @@ function buildParticipantPrintGroups({ eventId, scheduleId }) {
     }));
 }
 
+const PRINT_SETTING_STORAGE_KEY = "qa.printSettings.v1";
+const PRINT_PAPER_SIZES = new Set(["A4", "A3", "Letter"]);
+const PRINT_ORIENTATIONS = new Set(["portrait", "landscape"]);
+const PRINT_MARGINS = new Set(["5mm", "10mm", "15mm"]);
+
+function normalizePrintSettings(settings = {}) {
+  const normalized = {
+    paperSize: PRINT_PAPER_SIZES.has(settings?.paperSize) ? settings.paperSize : state.printSettings.paperSize,
+    orientation: PRINT_ORIENTATIONS.has(settings?.orientation) ? settings.orientation : state.printSettings.orientation,
+    margin: PRINT_MARGINS.has(settings?.margin) ? settings.margin : state.printSettings.margin,
+    showHeader: settings?.showHeader !== undefined ? Boolean(settings.showHeader) : state.printSettings.showHeader,
+    repeatHeader: settings?.repeatHeader !== undefined ? Boolean(settings.repeatHeader) : state.printSettings.repeatHeader,
+    showPageNumbers: settings?.showPageNumbers !== undefined ? Boolean(settings.showPageNumbers) : state.printSettings.showPageNumbers,
+    showDate: settings?.showDate !== undefined ? Boolean(settings.showDate) : state.printSettings.showDate,
+    showTime: settings?.showTime !== undefined ? Boolean(settings.showTime) : state.printSettings.showTime
+  };
+
+  if (!normalized.showHeader) {
+    normalized.repeatHeader = false;
+  }
+
+  return normalized;
+}
+
+function hydratePrintSettingsFromStorage() {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+  try {
+    const stored = localStorage.getItem(PRINT_SETTING_STORAGE_KEY);
+    if (!stored) return;
+    const parsed = JSON.parse(stored);
+    const normalized = normalizePrintSettings(parsed);
+    state.printSettings = normalized;
+  } catch (error) {
+    console.warn("[Print] Failed to load print settings from storage", error);
+  }
+}
+
+function persistPrintSettings(settings) {
+  const normalized = normalizePrintSettings(settings);
+  state.printSettings = normalized;
+  if (typeof localStorage === "undefined") {
+    return normalized;
+  }
+  try {
+    localStorage.setItem(PRINT_SETTING_STORAGE_KEY, JSON.stringify(normalized));
+  } catch (error) {
+    console.warn("[Print] Failed to persist print settings", error);
+  }
+  return normalized;
+}
+
+function applyPrintSettingsToForm(settings = state.printSettings) {
+  const normalized = normalizePrintSettings(settings);
+  if (dom.printPaperSizeInput) {
+    dom.printPaperSizeInput.value = normalized.paperSize;
+  }
+  if (dom.printOrientationInput) {
+    dom.printOrientationInput.value = normalized.orientation;
+  }
+  if (dom.printMarginInput) {
+    dom.printMarginInput.value = normalized.margin;
+  }
+  if (dom.printShowHeaderInput) {
+    dom.printShowHeaderInput.checked = normalized.showHeader;
+  }
+  if (dom.printRepeatHeaderInput) {
+    dom.printRepeatHeaderInput.checked = normalized.repeatHeader && normalized.showHeader;
+    dom.printRepeatHeaderInput.disabled = !normalized.showHeader;
+  }
+  if (dom.printShowPageNumberInput) {
+    dom.printShowPageNumberInput.checked = normalized.showPageNumbers;
+  }
+  if (dom.printShowDateInput) {
+    dom.printShowDateInput.checked = normalized.showDate;
+  }
+  if (dom.printShowTimeInput) {
+    dom.printShowTimeInput.checked = normalized.showTime;
+  }
+}
+
+function readPrintSettingsFromForm() {
+  const settings = {
+    paperSize: dom.printPaperSizeInput?.value,
+    orientation: dom.printOrientationInput?.value,
+    margin: dom.printMarginInput?.value,
+    showHeader: dom.printShowHeaderInput ? dom.printShowHeaderInput.checked : undefined,
+    repeatHeader: dom.printRepeatHeaderInput ? dom.printRepeatHeaderInput.checked : undefined,
+    showPageNumbers: dom.printShowPageNumberInput ? dom.printShowPageNumberInput.checked : undefined,
+    showDate: dom.printShowDateInput ? dom.printShowDateInput.checked : undefined,
+    showTime: dom.printShowTimeInput ? dom.printShowTimeInput.checked : undefined
+  };
+  if (settings.showHeader === false) {
+    settings.repeatHeader = false;
+  }
+  return normalizePrintSettings(settings);
+}
+
+const printSettingsDialogState = {
+  resolver: null
+};
+
+function resolvePrintSettingsDialog(result) {
+  const resolver = printSettingsDialogState.resolver;
+  printSettingsDialogState.resolver = null;
+  if (typeof resolver === "function") {
+    resolver(result);
+  }
+}
+
+function setupPrintSettingsDialog() {
+  if (!dom.printSettingsDialog || !dom.printSettingsForm) return;
+
+  const syncHeaderControls = () => {
+    if (!dom.printShowHeaderInput || !dom.printRepeatHeaderInput) return;
+    const enabled = Boolean(dom.printShowHeaderInput.checked);
+    dom.printRepeatHeaderInput.disabled = !enabled;
+    if (!enabled) {
+      dom.printRepeatHeaderInput.checked = false;
+    }
+  };
+
+  dom.printShowHeaderInput?.addEventListener("change", syncHeaderControls);
+
+  dom.printSettingsForm.addEventListener("submit", event => {
+    event.preventDefault();
+    const settings = readPrintSettingsFromForm();
+    persistPrintSettings(settings);
+    resolvePrintSettingsDialog(settings);
+    closeDialog(dom.printSettingsDialog, { reason: "submit" });
+  });
+
+  dom.printSettingsDialog.addEventListener("dialog:close", () => {
+    resolvePrintSettingsDialog(null);
+  });
+
+  if (dom.printSettingsCancelButton) {
+    dom.printSettingsCancelButton.addEventListener("click", event => {
+      event.preventDefault();
+      closeDialog(dom.printSettingsDialog, { reason: "cancel" });
+    });
+  }
+
+  bindDialogDismiss(dom.printSettingsDialog);
+  syncHeaderControls();
+}
+
+async function promptPrintSettings() {
+  if (!dom.printSettingsDialog || !dom.printSettingsForm) {
+    return normalizePrintSettings(state.printSettings);
+  }
+  applyPrintSettingsToForm(state.printSettings);
+  openDialog(dom.printSettingsDialog);
+  return await new Promise(resolve => {
+    printSettingsDialogState.resolver = resolve;
+  });
+}
+
 function buildParticipantPrintHtml({
   eventId,
   scheduleId,
@@ -3127,31 +3286,30 @@ function buildParticipantPrintHtml({
   scheduleRange,
   groups,
   totalCount,
-  generatedAt
+  generatedAt,
+  printOptions
 }) {
+  const printSettings = normalizePrintSettings(printOptions);
   const eventDisplayRaw = formatMetaDisplay(eventName, eventId);
   const scheduleDisplayRaw = formatMetaDisplay(scheduleLabel, scheduleId);
   const locationDisplayRaw = String(scheduleLocation || "").trim();
   const rangeDisplayRaw = String(scheduleRange || "").trim();
-  const generatedAtText = generatedAt instanceof Date && !Number.isNaN(generatedAt.getTime())
-    ? generatedAt.toLocaleString("ja-JP", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false
-      })
-    : new Date().toLocaleString("ja-JP", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false
-      });
+  const generatedAtDate = generatedAt instanceof Date && !Number.isNaN(generatedAt.getTime())
+    ? generatedAt
+    : new Date();
+  const generatedDateFormatter = new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  const generatedTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+  const generatedDateText = generatedDateFormatter.format(generatedAtDate);
+  const generatedTimeText = generatedTimeFormatter.format(generatedAtDate);
   const totalValue = Number.isFinite(totalCount)
     ? totalCount
     : groups.reduce((sum, group) => sum + (group.participants?.length || 0), 0);
@@ -3190,9 +3348,20 @@ function buildParticipantPrintHtml({
   metaItems.push(
     `<li class="print-meta__item"><span class="print-meta__label">参加者数:</span> <span class="print-meta__value">${escapeHtml(`${totalValue}名`)}</span></li>`
   );
-  metaItems.push(
-    `<li class="print-meta__item"><span class="print-meta__label">出力日時:</span> <span class="print-meta__value">${escapeHtml(generatedAtText)}</span></li>`
-  );
+  if (printSettings.showDate || printSettings.showTime) {
+    const generatedParts = [
+      printSettings.showDate ? generatedDateText : "",
+      printSettings.showTime ? generatedTimeText : ""
+    ].filter(Boolean);
+    const generatedLabel = printSettings.showDate && printSettings.showTime
+      ? "出力日時"
+      : printSettings.showDate
+        ? "出力日"
+        : "出力時刻";
+    metaItems.push(
+      `<li class="print-meta__item"><span class="print-meta__label">${escapeHtml(generatedLabel)}:</span> <span class="print-meta__value">${escapeHtml(generatedParts.join(" "))}</span></li>`
+    );
+  }
 
   const groupsMarkup = groups
     .map(group => {
@@ -3259,12 +3428,30 @@ function buildParticipantPrintHtml({
         </table>
       </section>`;
     })
-    .join("\n\n");
+      .join("\n\n");
 
   const metaMarkup = metaItems.length
     ? `<ul class="print-meta">${metaItems.join("\n")}</ul>`
     : "";
   const sectionsMarkup = groupsMarkup || '<p class="print-empty">参加者リストが登録されていません。</p>';
+  const pageMargin = printSettings.margin || "5mm";
+  const pageSize = printSettings.paperSize || "A4";
+  const pageOrientation = printSettings.orientation || "portrait";
+  const headerClass = printSettings.repeatHeader ? "print-header print-header--repeat" : "print-header";
+  const footerTimestamp = [
+    printSettings.showDate ? generatedDateText : "",
+    printSettings.showTime ? generatedTimeText : ""
+  ].filter(Boolean).join(" ");
+  const footerItems = [];
+  if (printSettings.showPageNumbers) {
+    footerItems.push('<span class="print-footer__item print-footer__page" aria-label="ページ番号"><span class="print-footer__page-number" aria-hidden="true"></span></span>');
+  }
+  if (footerTimestamp) {
+    footerItems.push(`<span class="print-footer__item">${escapeHtml(footerTimestamp)}</span>`);
+  }
+  const footerMarkup = footerItems.length
+    ? `<footer class="print-footer"><div class="print-footer__items">${footerItems.join("")}</div></footer>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -3273,12 +3460,12 @@ function buildParticipantPrintHtml({
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(docTitle)}</title>
   <style>
-    :root { color-scheme: light; }
+    :root { color-scheme: light; --page-margin: ${pageMargin}; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-    @page { size: A4; margin: 5mm; }
-    body { margin: 5mm; font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #fff; }
+    @page { size: ${pageSize} ${pageOrientation}; margin: ${pageMargin}; }
+    body { margin: var(--page-margin); font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #fff; }
     .print-controls { margin-bottom: 6mm; }
     .print-controls__button { border: 0.25mm solid #000; background: #fff; color: #000; padding: 4px 12px; font-size: 8pt; cursor: pointer; }
     .print-controls__button:focus { outline: 1px solid #000; outline-offset: 2px; }
@@ -3289,7 +3476,7 @@ function buildParticipantPrintHtml({
     .print-group { border: 0.3mm solid #000; padding: 3mm; margin-bottom: 12mm; background: #fff; page-break-inside: avoid; break-inside: avoid; }
     .print-group__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 5mm; margin-bottom: 4mm; }
     .print-group__meta { min-width: 40mm; }
-    .print-group__label { font-size: 7.2pt; color: #555; letter-spacing: 0.08em; margin-bottom: 1mm; text-transform: uppercase; }
+    .print-group__label { font-size: 7.2pt; color: #555; letter-spacing: 0.08em; margin-bottom: 1mm; text-transform: uppercase;}
     .print-group__value { font-size: 12.8pt; font-weight: 600; }
     .print-group__gl { flex: 1 1 auto; }
     .print-group__gl-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
@@ -3304,10 +3491,19 @@ function buildParticipantPrintHtml({
     .print-table__contact { white-space: nowrap; }
     .print-table__empty td { text-align: center; color: #555; }
     .print-empty { font-size: 8.8pt; margin: 0; }
+    .print-footer { margin-top: 6mm; font-size: 8pt; color: #000; }
+    .print-footer__items { display: flex; gap: 6mm; align-items: center; }
+    .print-footer__item { white-space: nowrap; }
     @media print {
       body { -webkit-print-color-adjust: exact; margin: 0; }
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
+      .print-footer { position: fixed; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); }
+      .print-footer__page-number::after { content: counter(page) " / " counter(pages); }
+      ${printSettings.repeatHeader ? `.print-header--repeat { position: running(printHeader); }
+      @page { @top-center { content: element(printHeader); } }
+      .print-header--repeat { background: #fff; }
+      .print-header--repeat { position: sticky; top: 0; }` : ""}
     }
   </style>
 </head>
@@ -3315,11 +3511,12 @@ function buildParticipantPrintHtml({
   <div class="print-controls">
     <button type="button" class="print-controls__button" onclick="window.print()">このリストを印刷</button>
   </div>
-  <header class="print-header">
+  ${printSettings.showHeader ? `<header class="${headerClass}">
     <h1 class="print-title">${escapeHtml(headingText)}</h1>
     ${metaMarkup}
-  </header>
+  </header>` : ""}
   ${sectionsMarkup}
+  ${footerMarkup}
 </body>
 </html>`;
 }
@@ -3352,36 +3549,129 @@ async function openParticipantPrintView() {
     return;
   }
 
+  const button = dom.openPrintViewButton;
+  let printInitialized = false;
   participantPrintInProgress = true;
-  let printWindow = null;
+
+  if (button) {
+    button.dataset.printLocked = "true";
+    syncPrintViewButtonState();
+  }
+
   try {
-    // Chrome の一部バージョンでは noopener フラグ付きの window.open で参照を取得できず、
-    // ポップアップ許可済みでも null が返ることがあるため、一旦フラグなしで開いてから
-    // opener を明示的に切り離す手順に変更する。
-    printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      window.alert(`${PRINT_POPUP_BLOCKED_MESSAGE}\n\nポップアップを許可してから再度お試しください。`);
+    const printSettings = await promptPrintSettings();
+    if (!printSettings) {
       return;
     }
 
-    try {
-      // opener を明示的に切り離し、既存ブラウザでも安全性を確保する
-      printWindow.opener = null;
-    } catch (error) {
-      // Ignore assignment errors
+    if (button) {
+      delete button.dataset.printLocked;
     }
 
+    setPrintButtonBusy(true);
+    printInitialized = true;
+    let printWindow = null;
     try {
-      await loadGlDataForEvent(eventId);
-    } catch (error) {
-      if (typeof console !== "undefined" && typeof console.error === "function") {
-        console.error("[Print] GLデータの取得に失敗しました。最新の情報が反映されない場合があります。", error);
+      // Chrome の一部バージョンでは noopener フラグ付きの window.open で参照を取得できず、
+      // ポップアップ許可済みでも null が返ることがあるため、一旦フラグなしで開いてから
+      // opener を明示的に切り離す手順に変更する。
+      printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        window.alert(`${PRINT_POPUP_BLOCKED_MESSAGE}\n\nポップアップを許可してから再度お試しください。`);
+        return;
       }
-    }
 
-    const groups = buildParticipantPrintGroups({ eventId, scheduleId });
-    if (!groups.length) {
-      window.alert("印刷できる参加者がまだ登録されていません。");
+      try {
+        // opener を明示的に切り離し、既存ブラウザでも安全性を確保する
+        printWindow.opener = null;
+      } catch (error) {
+        // Ignore assignment errors
+      }
+
+      try {
+        await loadGlDataForEvent(eventId);
+      } catch (error) {
+        if (typeof console !== "undefined" && typeof console.error === "function") {
+          console.error("[Print] GLデータの取得に失敗しました。最新の情報が反映されない場合があります。", error);
+        }
+      }
+
+      const groups = buildParticipantPrintGroups({ eventId, scheduleId });
+      if (!groups.length) {
+        window.alert("印刷できる参加者がまだ登録されていません。");
+        if (printWindow && !printWindow.closed) {
+          try {
+            printWindow.close();
+          } catch (closeError) {
+            // Ignore close errors
+          }
+        }
+        return;
+      }
+
+      const selectedEvent = state.events.find(evt => evt.id === eventId) || null;
+      const schedule = selectedEvent?.schedules?.find(s => s.id === scheduleId) || null;
+      const eventName = selectedEvent?.name || "";
+      const scheduleLabel = schedule?.label || "";
+      const scheduleLocation = schedule?.location || schedule?.place || "";
+      let startAt = schedule?.startAt || "";
+      let endAt = schedule?.endAt || "";
+      const scheduleDate = String(schedule?.date || "").trim();
+      if (scheduleDate) {
+        if (!startAt && schedule?.startTime) {
+          startAt = combineDateAndTime(scheduleDate, schedule.startTime);
+        }
+        if (!endAt && schedule?.endTime) {
+          endAt = combineDateAndTime(scheduleDate, schedule.endTime);
+        }
+      }
+      const scheduleRange = formatPrintDateTimeRange(startAt, endAt);
+      const totalCount = state.participants.length;
+      const generatedAt = new Date();
+
+      const html = buildParticipantPrintHtml({
+        eventId,
+        scheduleId,
+        eventName,
+        scheduleLabel,
+        scheduleLocation,
+        scheduleRange,
+        groups,
+        totalCount,
+        generatedAt,
+        printOptions: printSettings
+      });
+
+      if (printWindow.closed) {
+        return;
+      }
+
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+
+      try {
+        const titleParts = [eventName || eventId || "", scheduleLabel || scheduleId || ""].filter(Boolean);
+        const docTitle = titleParts.length ? `${titleParts.join(" / ")} - 参加者リスト` : "参加者リスト";
+        printWindow.document.title = docTitle;
+      } catch (error) {
+        // Ignore title assignment errors
+      }
+
+      try {
+        printWindow.focus();
+      } catch (error) {
+        // Ignore focus errors
+      }
+
+      window.setTimeout(() => {
+        try {
+          printWindow.print();
+        } catch (error) {
+          // Ignore print errors
+        }
+      }, 150);
+    } catch (error) {
       if (printWindow && !printWindow.closed) {
         try {
           printWindow.close();
@@ -3389,73 +3679,18 @@ async function openParticipantPrintView() {
           // Ignore close errors
         }
       }
-      return;
+      throw error;
+    } finally {
+      setPrintButtonBusy(false);
     }
-
-    const selectedEvent = state.events.find(evt => evt.id === eventId) || null;
-    const schedule = selectedEvent?.schedules?.find(s => s.id === scheduleId) || null;
-    const eventName = selectedEvent?.name || "";
-    const scheduleLabel = schedule?.label || "";
-    const scheduleLocation = schedule?.location || schedule?.place || "";
-    let startAt = schedule?.startAt || "";
-    let endAt = schedule?.endAt || "";
-    const scheduleDate = String(schedule?.date || "").trim();
-    if (scheduleDate) {
-      if (!startAt && schedule?.startTime) {
-        startAt = combineDateAndTime(scheduleDate, schedule.startTime);
-      }
-      if (!endAt && schedule?.endTime) {
-        endAt = combineDateAndTime(scheduleDate, schedule.endTime);
-      }
-    }
-    const scheduleRange = formatPrintDateTimeRange(startAt, endAt);
-    const totalCount = state.participants.length;
-    const generatedAt = new Date();
-
-    const html = buildParticipantPrintHtml({
-      eventId,
-      scheduleId,
-      eventName,
-      scheduleLabel,
-      scheduleLocation,
-      scheduleRange,
-      groups,
-      totalCount,
-      generatedAt
-    });
-
-    if (printWindow.closed) {
-      return;
-    }
-
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
-
-    try {
-      const titleParts = [eventName || eventId || "", scheduleLabel || scheduleId || ""].filter(Boolean);
-      const docTitle = titleParts.length ? `${titleParts.join(" / ")} - 参加者リスト` : "参加者リスト";
-      printWindow.document.title = docTitle;
-    } catch (error) {
-      // Ignore title assignment errors
-    }
-
-    try {
-      printWindow.focus();
-    } catch (error) {
-      // Ignore focus errors
-    }
-  } catch (error) {
-    if (printWindow && !printWindow.closed) {
-      try {
-        printWindow.close();
-      } catch (closeError) {
-        // Ignore close errors
-      }
-    }
-    throw error;
   } finally {
     participantPrintInProgress = false;
+    if (button) {
+      delete button.dataset.printLocked;
+    }
+    if (!printInitialized) {
+      syncPrintViewButtonState();
+    }
   }
 }
 
@@ -3896,6 +4131,15 @@ function syncPrintViewButtonState() {
     return;
   }
 
+  if (button.dataset.printLocked === "true") {
+    setActionButtonState(button, true);
+    const defaultLabel = button.dataset.defaultLabel || "印刷用リスト";
+    if (button.textContent !== defaultLabel) {
+      button.textContent = defaultLabel;
+    }
+    return;
+  }
+
   const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
   const hasParticipants = hasSelection && state.participants.length > 0;
   const disabled = !hasSelection || !hasParticipants;
@@ -3907,6 +4151,17 @@ function syncPrintViewButtonState() {
     button.textContent = baseLabel;
   }
 
+}
+
+function setPrintButtonBusy(isBusy) {
+  const button = dom.openPrintViewButton;
+  if (!button) return;
+  if (isBusy) {
+    button.dataset.printing = "true";
+  } else {
+    delete button.dataset.printing;
+  }
+  syncPrintViewButtonState();
 }
 
 const MAIL_LOG_PREFIX = "[Mail]";
@@ -6741,8 +6996,6 @@ function attachEventHandlers() {
       if (!button || button.disabled || button.dataset.printing === "true") {
         return;
       }
-      button.dataset.printing = "true";
-      syncPrintViewButtonState();
 
       openParticipantPrintView()
         .catch(error => {
@@ -6750,10 +7003,6 @@ function attachEventHandlers() {
             console.error("[Print] 印刷用リストの生成に失敗しました。", error);
           }
           window.alert("印刷用リストの生成中にエラーが発生しました。時間をおいて再度お試しください。");
-        })
-        .finally(() => {
-          delete button.dataset.printing;
-          syncPrintViewButtonState();
         });
     });
   }
@@ -6790,6 +7039,7 @@ function attachEventHandlers() {
   bindDialogDismiss(dom.scheduleDialog);
   bindDialogDismiss(dom.participantDialog);
   bindDialogDismiss(dom.relocationDialog);
+  setupPrintSettingsDialog();
 
   if (dom.relocationDialog) {
     dom.relocationDialog.addEventListener("dialog:close", handleRelocationDialogClose);
@@ -7302,6 +7552,7 @@ async function applySelectionContext(selection = {}) {
 }
 
 function init() {
+  hydratePrintSettingsFromStorage();
   attachEventHandlers();
   setAuthUi(Boolean(state.user));
   initLoaderSteps(isEmbeddedMode() ? [] : STEP_LABELS);
