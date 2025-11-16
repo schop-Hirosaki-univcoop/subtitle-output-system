@@ -3407,6 +3407,16 @@ function buildParticipantPrintHtml({
   const pageMargin = printSettings.margin || "5mm";
   const pageSize = printSettings.paperSize || "A4";
   const pageOrientation = printSettings.orientation || "portrait";
+  const pageSizeMap = {
+    A3: { width: 297, height: 420 },
+    A4: { width: 210, height: 297 },
+    Letter: { width: 216, height: 279 }
+  };
+  const basePageSize = pageSizeMap[pageSize] || pageSizeMap.A4;
+  const [pageWidth, pageHeight] =
+    pageOrientation === "landscape"
+      ? [basePageSize.height, basePageSize.width]
+      : [basePageSize.width, basePageSize.height];
   const headerClass = printSettings.repeatHeader ? "print-header print-header--repeat" : "print-header";
   const footerTimestamp = [
     printSettings.showDate ? generatedDateText : "",
@@ -3430,13 +3440,13 @@ function buildParticipantPrintHtml({
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(docTitle)}</title>
   <style>
-    :root { color-scheme: light; --page-margin: ${pageMargin}; }
+    :root { color-scheme: light; --page-margin: ${pageMargin}; --page-width: ${pageWidth}mm; --page-height: ${pageHeight}mm; --page-content-width: calc(var(--page-width) - (2 * var(--page-margin))); --page-content-height: calc(var(--page-height) - (2 * var(--page-margin))); --preview-scale: 1; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
     @page { size: ${pageSize} ${pageOrientation}; margin: ${pageMargin}; counter-increment: page; }
     body { counter-reset: page 1; }
-    body { margin: var(--page-margin); font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #fff; }
+    body { margin: 0; font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #f6f7fb; }
     .print-controls { margin-bottom: 6mm; }
     .print-controls__button { border: 0.25mm solid #000; background: #fff; color: #000; padding: 4px 12px; font-size: 8pt; cursor: pointer; }
     .print-controls__button:focus { outline: 1px solid #000; outline-offset: 2px; }
@@ -3466,8 +3476,38 @@ function buildParticipantPrintHtml({
     .print-footer__items { display: flex; gap: 6mm; align-items: center; }
     .print-footer__page { margin-left: auto; }
     .print-footer__item { white-space: nowrap; }
+    .print-surface {
+      -webkit-print-color-adjust: exact;
+      background: #fff;
+      margin: 24px auto;
+      box-sizing: border-box;
+      aspect-ratio: calc(var(--page-width) / var(--page-height));
+      height: auto;
+      padding: var(--page-margin);
+      width: var(--page-width);
+      min-height: var(--page-height);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+      transform: scale(var(--preview-scale));
+      transform-origin: top center;
+    }
+    .print-surface .print-controls { display: none; }
+    .print-surface .print-group { break-inside: avoid-page; }
+    .print-surface .print-footer { position: sticky; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); }
+    .print-surface .print-footer__page-number::after { content: counter(page); }
+    .print-surface .print-footer__page { margin-left: auto; }
+    ${printSettings.repeatHeader ? `.print-surface .print-header--repeat { background: #fff; position: sticky; top: 0; }` : ""}
     @media print {
-      body { -webkit-print-color-adjust: exact; margin: 0; }
+      body { -webkit-print-color-adjust: exact; margin: 0; background: #fff; }
+      .print-surface {
+        margin: 0 auto;
+        padding: 0;
+        box-shadow: none;
+        transform: none;
+        aspect-ratio: auto;
+        width: var(--page-content-width);
+        min-height: var(--page-content-height);
+        box-sizing: content-box;
+      }
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
       .print-footer { position: fixed; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); }
@@ -3480,7 +3520,7 @@ function buildParticipantPrintHtml({
     }
   </style>
 </head>
-<body>
+<body class="print-surface">
   <div class="print-controls">
     <button type="button" class="print-controls__button" onclick="window.print()">このリストを印刷</button>
   </div>
