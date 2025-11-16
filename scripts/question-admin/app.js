@@ -3472,6 +3472,7 @@ function buildParticipantPrintHtml({
       .print-group { break-inside: avoid-page; }
       .print-footer { position: fixed; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); }
       .print-footer__page-number::after { content: counter(page); }
+      .print-footer__page { margin-left: auto; }
       ${printSettings.repeatHeader ? `.print-header--repeat { position: running(printHeader); }
       @page { @top-center { content: element(printHeader); } }
       .print-header--repeat { background: #fff; }
