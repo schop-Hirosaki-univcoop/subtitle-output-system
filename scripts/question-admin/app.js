@@ -3277,35 +3277,38 @@ function buildParticipantPrintHtml({
   <title>${escapeHtml(docTitle)}</title>
   <style>
     :root { color-scheme: light; }
-    @page { margin: 12mm; }
-    body { margin: 12mm; font-family: "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 11pt; line-height: 1.5; color: #000; background: #fff; }
+    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+    @page { size: A4; margin: 5mm; }
+    body { margin: 5mm; font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 9.9pt; line-height: 1.5; color: #000; background: #fff; }
     .print-controls { margin-bottom: 6mm; }
-    .print-controls__button { border: 0.25mm solid #000; background: #fff; color: #000; padding: 4px 12px; font-size: 10pt; cursor: pointer; }
+    .print-controls__button { border: 0.25mm solid #000; background: #fff; color: #000; padding: 4px 12px; font-size: 9pt; cursor: pointer; }
     .print-controls__button:focus { outline: 1px solid #000; outline-offset: 2px; }
     .print-header { margin-bottom: 8mm; }
-    .print-title { font-size: 18pt; margin: 0 0 4mm; }
-    .print-meta { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2mm 12mm; font-size: 10pt; }
+    .print-title { font-size: 16.2pt; margin: 0 0 4mm; }
+    .print-meta { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2mm 12mm; font-size: 9pt; }
     .print-meta__label { font-weight: 600; margin-right: 2mm; }
     .print-group { border: 0.3mm solid #000; padding: 5mm; margin-bottom: 12mm; background: #fff; page-break-inside: avoid; break-inside: avoid; }
     .print-group__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 5mm; margin-bottom: 4mm; }
     .print-group__meta { min-width: 40mm; }
-    .print-group__label { font-size: 9pt; color: #555; letter-spacing: 0.08em; margin-bottom: 1mm; text-transform: uppercase; }
-    .print-group__value { font-size: 16pt; font-weight: 600; }
+    .print-group__label { font-size: 8.1pt; color: #555; letter-spacing: 0.08em; margin-bottom: 1mm; text-transform: uppercase; }
+    .print-group__value { font-size: 14.4pt; font-weight: 600; }
     .print-group__gl { flex: 1 1 auto; }
-    .print-group__gl-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+    .print-group__gl-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
     .print-group__gl-table th, .print-group__gl-table td { border: 0.25mm solid #000; padding: 1.5mm 2mm; text-align: left; }
     .print-group__gl-table th { background: #f0f0f0; }
     .print-group__gl-empty { text-align: center; color: #555; }
-    .print-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+    .print-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
     .print-table th, .print-table td { border: 0.25mm solid #000; padding: 1.5mm 2mm; text-align: left; vertical-align: top; }
     .print-table th { background: #f5f5f5; }
     .print-table__index { width: 12mm; text-align: right; }
-    .print-table__phonetic { font-size: 9pt; }
+    .print-table__phonetic { font-size: 8.1pt; }
     .print-table__contact { white-space: nowrap; }
     .print-table__empty td { text-align: center; color: #555; }
-    .print-empty { font-size: 11pt; margin: 0; }
+    .print-empty { font-size: 9.9pt; margin: 0; }
     @media print {
-      body { margin: 10mm; }
+      body { margin: 5mm; }
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
     }
