@@ -3434,7 +3434,7 @@ function buildParticipantPrintHtml({
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
     @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-    @page { size: ${pageSize} ${pageOrientation}; margin: ${pageMargin}; counter-increment: page; }
+    @page { size: ${pageSize} ${pageOrientation}; margin: ${pageMargin}; }
     body { margin: var(--page-margin); font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #fff; }
     .print-controls { margin-bottom: 6mm; }
     .print-controls__button { border: 0.25mm solid #000; background: #fff; color: #000; padding: 4px 12px; font-size: 8pt; cursor: pointer; }
@@ -3464,9 +3464,8 @@ function buildParticipantPrintHtml({
     .print-footer { margin-top: 6mm; font-size: 8pt; color: #000; }
     .print-footer__items { display: flex; gap: 6mm; align-items: center; }
     .print-footer__item { white-space: nowrap; }
-    .print-footer__page-number[data-page-total]::after { content: counter(page) " / " attr(data-page-total); }
     @media print {
-      body { -webkit-print-color-adjust: exact; margin: 0; counter-reset: page 1; }
+      body { -webkit-print-color-adjust: exact; margin: 0; }
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
       .print-footer { position: fixed; bottom: var(--page-margin); left: var(--page-margin); right: var(--page-margin); }
@@ -3488,49 +3487,6 @@ function buildParticipantPrintHtml({
   </header>` : ""}
   ${sectionsMarkup}
   ${footerMarkup}
-  <script>
-    (() => {
-      const footerPage = document.querySelector(".print-footer__page-number");
-      if (!footerPage) {
-        return;
-      }
-
-      const paperSizesMm = {
-        A4: { width: 210, height: 297 },
-        A3: { width: 297, height: 420 },
-        Letter: { width: 216, height: 279 }
-      };
-
-      const paper = paperSizesMm["${pageSize}"] || paperSizesMm.A4;
-      const marginText = "${pageMargin}" || "0mm";
-      const marginValue = Number.parseFloat(marginText) || 0;
-      const orientation = "${pageOrientation}";
-
-      const measurePx = value => {
-        const ruler = document.createElement("div");
-        ruler.style.position = "absolute";
-        ruler.style.visibility = "hidden";
-        ruler.style.height = value;
-        ruler.style.width = value;
-        document.body.appendChild(ruler);
-        const px = ruler.getBoundingClientRect().height;
-        ruler.remove();
-        return px || 0;
-      };
-
-      const pageHeightMm = orientation === "landscape" ? paper.width : paper.height;
-      const usableHeightMm = Math.max(pageHeightMm - marginValue * 2, 0);
-      const usableHeightPx = usableHeightMm ? measurePx(`${usableHeightMm}mm`) : 0;
-      const totalHeight = document.documentElement.scrollHeight;
-
-      if (!usableHeightPx || !totalHeight) {
-        return;
-      }
-
-      const totalPages = Math.max(1, Math.ceil(totalHeight / usableHeightPx));
-      footerPage.setAttribute("data-page-total", String(totalPages));
-    })();
-  </script>
 </body>
 </html>`;
 }
