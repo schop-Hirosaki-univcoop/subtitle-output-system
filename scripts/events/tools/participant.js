@@ -209,6 +209,28 @@ export class ParticipantToolManager {
   }
 
   /**
+   * イベント一覧の印刷プレビューをホストから開きます。
+   * 参加者ツールの読み込みとイベント同期を保証した上で呼び出します。
+   * @param {{ autoPrint?: boolean, forceReveal?: boolean, quiet?: boolean }} [options]
+   * @returns {Promise<boolean>}
+   */
+  async openEventPrintPreview(options = {}) {
+    try {
+      const embed = await this.ensureReady();
+      if (!embed?.openEventPrintPreview) {
+        this.logParticipantAction("参加者ツールが印刷APIを公開していません", { options });
+        return false;
+      }
+
+      this.app.notifyEventListeners();
+      return Boolean(await embed.openEventPrintPreview(options));
+    } catch (error) {
+      logError("Failed to open event print preview via participants tool", error);
+      return false;
+    }
+  }
+
+  /**
    * 埋め込み iframe の data-* 属性を更新し、期待する選択状態を通知します。
    * 選択が不足している場合は属性をクリアして同期情報を破棄します。
    * @param {Record<string, any>|null} context
