@@ -3159,7 +3159,9 @@ function normalizePrintSettings(settings = {}) {
     repeatHeader: settings?.repeatHeader !== undefined ? Boolean(settings.repeatHeader) : state.printSettings.repeatHeader,
     showPageNumbers: settings?.showPageNumbers !== undefined ? Boolean(settings.showPageNumbers) : state.printSettings.showPageNumbers,
     showDate: settings?.showDate !== undefined ? Boolean(settings.showDate) : state.printSettings.showDate,
-    showTime: settings?.showTime !== undefined ? Boolean(settings.showTime) : state.printSettings.showTime
+    showTime: settings?.showTime !== undefined ? Boolean(settings.showTime) : state.printSettings.showTime,
+    showPhone: settings?.showPhone !== undefined ? Boolean(settings.showPhone) : state.printSettings.showPhone,
+    showEmail: settings?.showEmail !== undefined ? Boolean(settings.showEmail) : state.printSettings.showEmail
   };
 
   if (!normalized.showHeader) {
@@ -3246,6 +3248,12 @@ function applyPrintSettingsToForm(settings = state.printSettings) {
   if (dom.printShowTimeInput) {
     dom.printShowTimeInput.checked = normalized.showTime;
   }
+  if (dom.printShowPhoneInput) {
+    dom.printShowPhoneInput.checked = normalized.showPhone;
+  }
+  if (dom.printShowEmailInput) {
+    dom.printShowEmailInput.checked = normalized.showEmail;
+  }
 }
 
 function readPrintSettingsFromForm() {
@@ -3259,7 +3267,9 @@ function readPrintSettingsFromForm() {
     repeatHeader: dom.printRepeatHeaderInput ? dom.printRepeatHeaderInput.checked : undefined,
     showPageNumbers: dom.printShowPageNumberInput ? dom.printShowPageNumberInput.checked : undefined,
     showDate: dom.printShowDateInput ? dom.printShowDateInput.checked : undefined,
-    showTime: dom.printShowTimeInput ? dom.printShowTimeInput.checked : undefined
+    showTime: dom.printShowTimeInput ? dom.printShowTimeInput.checked : undefined,
+    showPhone: dom.printShowPhoneInput ? dom.printShowPhoneInput.checked : undefined,
+    showEmail: dom.printShowEmailInput ? dom.printShowEmailInput.checked : undefined
   };
   if (settings.showHeader === false) {
     settings.repeatHeader = false;
@@ -3410,17 +3420,62 @@ function buildParticipantPrintHtml({
             })
             .join("\n")
         : '<tr><td colspan="2" class="print-group__gl-empty">—</td></tr>';
+      const participantColumns = [
+        { key: "index", header: "No.", className: "print-table__index", getValue: (entry, idx) => idx + 1 },
+        { key: "name", header: "参加者名", className: "print-table__name", getValue: entry => formatPrintCell(entry?.name) },
+        {
+          key: "phonetic",
+          header: "フリガナ",
+          className: "print-table__phonetic",
+          getValue: entry => formatPrintCell(entry?.phonetic || entry?.furigana || "")
+        },
+        {
+          key: "department",
+          header: "学部学科",
+          className: "print-table__department",
+          getValue: entry => formatPrintCell(entry?.department || "")
+        }
+      ];
+
+      if (printSettings.showPhone) {
+        participantColumns.push({
+          key: "phone",
+          header: "電話番号",
+          className: "print-table__contact",
+          getValue: entry => formatPrintCell(entry?.phone || "")
+        });
+      }
+
+      if (printSettings.showEmail) {
+        participantColumns.push({
+          key: "email",
+          header: "メールアドレス",
+          className: "print-table__contact",
+          getValue: entry => formatPrintCell(entry?.email || "")
+        });
+      }
+
+      const participantHeaderCells = participantColumns
+        .map(column => {
+          const classAttr = column.className ? ` class="${column.className}"` : "";
+          return `<th scope="col"${classAttr}>${column.header}</th>`;
+        })
+        .join("");
+
       const participantRows = group.participants && group.participants.length
         ? group.participants
             .map((entry, index) => {
-              const phonetic = entry?.phonetic || entry?.furigana || "";
-              const department = entry?.department || "";
-              const phone = entry?.phone || "";
-              const email = entry?.email || "";
-              return `<tr><td class="print-table__index">${index + 1}</td><td class="print-table__name">${formatPrintCell(entry?.name)}</td><td class="print-table__phonetic">${formatPrintCell(phonetic)}</td><td class="print-table__department">${formatPrintCell(department)}</td><td class="print-table__contact">${formatPrintCell(phone)}</td><td class="print-table__contact">${formatPrintCell(email)}</td></tr>`;
+              const cells = participantColumns
+                .map(column => {
+                  const classAttr = column.className ? ` class="${column.className}"` : "";
+                  const value = column.getValue(entry, index);
+                  return `<td${classAttr}>${value}</td>`;
+                })
+                .join("");
+              return `<tr>${cells}</tr>`;
             })
             .join("\n")
-        : '<tr class="print-table__empty"><td colspan="6">参加者がいません</td></tr>';
+        : `<tr class="print-table__empty"><td colspan="${participantColumns.length}">参加者がいません</td></tr>`;
 
       return `<section class="print-group" data-group-key="${groupKeyAttr}">
         <div class="print-group__header">
@@ -3442,12 +3497,7 @@ function buildParticipantPrintHtml({
         <table class="print-table" aria-label="${tableAriaLabel}">
           <thead>
             <tr>
-              <th scope="col" class="print-table__index">No.</th>
-              <th scope="col">参加者名</th>
-              <th scope="col">フリガナ</th>
-              <th scope="col">学部学科</th>
-              <th scope="col">電話番号</th>
-              <th scope="col">メールアドレス</th>
+              ${participantHeaderCells}
             </tr>
           </thead>
           <tbody>
