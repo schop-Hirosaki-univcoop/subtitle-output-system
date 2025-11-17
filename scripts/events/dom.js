@@ -19,7 +19,6 @@ export function queryDom() {
     eventList: document.getElementById("flow-event-list"),
     eventEmpty: document.getElementById("flow-event-empty"),
     eventSelectionNote: document.getElementById("flow-event-selection-note"),
-    eventPrintButton: document.getElementById("flow-event-print-button"),
     addEventButton: document.getElementById("flow-add-event-button"),
     refreshButton: document.getElementById("flow-events-refresh-button"),
     backupButton: document.getElementById("events-backup-button"),
