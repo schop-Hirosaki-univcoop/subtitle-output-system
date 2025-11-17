@@ -135,7 +135,6 @@ export class EventAdminApp {
     this.lastScheduleLocation = "";
     this.lastScheduleStartTime = "";
     this.lastScheduleEndTime = "";
-    this.eventPrintInProgress = false;
     this.selectedEventId = "";
     this.schedules = [];
     this.selectedScheduleId = "";
@@ -524,7 +523,6 @@ export class EventAdminApp {
     this.eventsLoadingTracker.reset();
     this.scheduleLoadingTracker.reset();
     this.clearOperatorPresenceState();
-    this.eventPrintInProgress = false;
     this.eventCountNote = "";
     this.stageNote = "";
     this.forceSelectionBroadcast = true;
@@ -575,12 +573,6 @@ export class EventAdminApp {
           this.endEventsLoading();
           this.dom.refreshButton.disabled = false;
         }
-      });
-    }
-
-    if (this.dom.eventPrintButton) {
-      this.dom.eventPrintButton.addEventListener("click", () => {
-        void this.handleEventPrintClick();
       });
     }
 
@@ -1319,7 +1311,6 @@ export class EventAdminApp {
       list.removeAttribute("role");
       list.removeAttribute("aria-label");
       list.removeAttribute("aria-orientation");
-      this.updateFlowButtons();
       return;
     }
 
@@ -1413,7 +1404,6 @@ export class EventAdminApp {
     });
 
     list.appendChild(fragment);
-    this.updateFlowButtons();
   }
 
   ensureSelectedEvent(preferredId = "") {
@@ -2559,17 +2549,12 @@ export class EventAdminApp {
     const signedIn = Boolean(this.currentUser);
     const hasEvent = Boolean(this.selectedEventId);
     const hasSchedule = Boolean(this.selectedScheduleId);
-    const canPrintEvents =
-      signedIn && Array.isArray(this.events) && this.events.length > 0 && !this.eventPrintInProgress;
 
     if (this.dom.addEventButton) {
       this.dom.addEventButton.disabled = !signedIn;
     }
     if (this.dom.refreshButton) {
       this.dom.refreshButton.disabled = !signedIn;
-    }
-    if (this.dom.eventPrintButton) {
-      this.dom.eventPrintButton.disabled = !canPrintEvents;
     }
     if (this.dom.nextButton) {
       this.dom.nextButton.disabled = !signedIn || !hasEvent;
@@ -2584,37 +2569,6 @@ export class EventAdminApp {
       this.dom.scheduleNextButton.disabled = !signedIn || !hasSchedule;
     }
     this.updateNavigationButtons();
-  }
-
-  async handleEventPrintClick() {
-    if (this.eventPrintInProgress) {
-      return;
-    }
-
-    if (!Array.isArray(this.events) || this.events.length === 0) {
-      window.alert("印刷できるイベントがまだ登録されていません。");
-      return;
-    }
-
-    this.eventPrintInProgress = true;
-    this.updateFlowButtons();
-
-    try {
-      const success = await this.tools.participants.openEventPrintPreview({
-        forceReveal: true,
-        quiet: false
-      });
-
-      if (!success) {
-        this.showAlert("イベント一覧の印刷プレビューを開けませんでした。");
-      }
-    } catch (error) {
-      logError("Failed to open event print preview", error);
-      this.showAlert("イベント一覧の印刷プレビューを開けませんでした。");
-    } finally {
-      this.eventPrintInProgress = false;
-      this.updateFlowButtons();
-    }
   }
 
   updateSelectionNotes() {

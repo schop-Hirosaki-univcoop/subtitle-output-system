@@ -4746,13 +4746,11 @@ async function openParticipantPrintView() {
   await updateParticipantPrintPreview({ autoPrint: false, forceReveal: true });
 }
 
-async function openEventPrintView({ autoPrint = false, forceReveal = true, quiet = false } = {}) {
+async function openEventPrintView() {
   activePrintPreviewTarget = PRINT_TARGETS.EVENTS;
 
   if (!Array.isArray(state.events) || state.events.length === 0) {
-    if (!quiet) {
-      window.alert("印刷できるイベントがまだ登録されていません。");
-    }
+    window.alert("印刷できるイベントがまだ登録されていません。");
     return;
   }
 
@@ -4760,11 +4758,9 @@ async function openEventPrintView({ autoPrint = false, forceReveal = true, quiet
     return;
   }
 
-  if (forceReveal) {
-    setPrintPreviewVisibility(true);
-  }
+  setPrintPreviewVisibility(true);
   applyPrintSettingsToForm(state.printSettings);
-  await updateEventPrintPreview({ autoPrint, forceReveal, quiet });
+  await updateEventPrintPreview({ autoPrint: false, forceReveal: true });
 }
 
 function participantChangeKey(entry, fallbackIndex = 0) {
@@ -5175,6 +5171,7 @@ function getPendingMailCount() {
 }
 
 let printActionButtonMissingLogged = false;
+let eventPrintActionButtonMissingLogged = false;
 
 function syncPrintViewButtonState() {
   const button = dom.openPrintViewButton;
@@ -5234,7 +5231,15 @@ function syncPrintViewButtonState() {
 
 function syncEventPrintButtonState() {
   const button = dom.openEventPrintViewButton;
-  if (!button) return;
+  if (!button) {
+    if (!eventPrintActionButtonMissingLogged) {
+      eventPrintActionButtonMissingLogged = true;
+      if (typeof console !== "undefined" && typeof console.warn === "function") {
+        console.warn("[Print] open-event-print-view-button が見つからないため、イベント印刷アクションの状態を同期できませんでした。");
+      }
+    }
+    return;
+  }
 
   if (!button.dataset.defaultLabel) {
     button.dataset.defaultLabel = button.textContent ? button.textContent.trim() : "イベント一覧を印刷";
@@ -8786,14 +8791,6 @@ if (typeof window !== "undefined") {
         attachHost(controller);
       } catch (error) {
         console.error("questionAdminEmbed.attachHost failed", error);
-      }
-    },
-    openEventPrintPreview(options = {}) {
-      try {
-        return openEventPrintView(options);
-      } catch (error) {
-        console.error("questionAdminEmbed.openEventPrintPreview failed", error);
-        return Promise.reject(error);
       }
     },
     detachHost() {
