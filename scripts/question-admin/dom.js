@@ -113,6 +113,8 @@ const dom = {
   printShowPageNumberInput: resolve("print-show-page-number"),
   printShowDateInput: resolve("print-show-date"),
   printShowTimeInput: resolve("print-show-time"),
+  printShowPhoneInput: resolve("print-show-phone"),
+  printShowEmailInput: resolve("print-show-email"),
   printSettingsCancelButton: resolve("print-settings-cancel"),
   sendMailButton: resolve("send-mail-button"),
   csvInput: resolve("csv-input"),

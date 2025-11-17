@@ -32,7 +32,9 @@ const state = {
     repeatHeader: false,
     showPageNumbers: true,
     showDate: true,
-    showTime: true
+    showTime: true,
+    showPhone: true,
+    showEmail: true
   },
   lastUploadStatusMessage: "",
   lastUploadStatusVariant: "",
