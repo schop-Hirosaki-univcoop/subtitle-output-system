@@ -3553,7 +3553,8 @@ function buildParticipantPrintHtml({
     @media print {
       body { -webkit-print-color-adjust: exact; margin: 0; background: #fff; }
       .print-surface {
-        display: block;
+        display: flex;
+        flex-direction: column;
         margin: 0 auto;
         padding: 0;
         box-shadow: none;
@@ -3565,7 +3566,16 @@ function buildParticipantPrintHtml({
       }
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
-      .print-footer { position: fixed; bottom: 0; display: block; margin-top: auto; }
+      .print-footer {
+        position: fixed;
+        left: 50%;
+        bottom: var(--page-margin);
+        transform: translateX(-50%);
+        width: var(--page-content-width);
+        box-sizing: border-box;
+        display: block;
+        margin-top: auto;
+      }
       .print-footer__page-number::after { content: counter(page); }
       .print-footer__page { margin-left: auto; }
       ${printSettings.repeatHeader ? `.print-header--repeat { position: running(printHeader); }
