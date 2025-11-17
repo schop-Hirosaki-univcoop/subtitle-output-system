@@ -3567,14 +3567,9 @@ function buildParticipantPrintHtml({
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
       .print-footer {
-        position: fixed;
-        left: 50%;
-        bottom: var(--page-margin);
-        transform: translateX(-50%);
-        width: var(--page-content-width);
-        box-sizing: border-box;
         display: block;
         margin-top: auto;
+        margin-bottom: 0;
       }
       .print-footer__page-number::after { content: counter(page); }
       .print-footer__page { margin-left: auto; }
