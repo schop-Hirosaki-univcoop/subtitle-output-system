@@ -3570,6 +3570,7 @@ function buildParticipantPrintHtml({
         display: block;
         margin-top: auto;
         margin-bottom: 0;
+        padding: 0;
       }
       .print-footer__page-number::after { content: counter(page); }
       .print-footer__page { margin-left: auto; }
