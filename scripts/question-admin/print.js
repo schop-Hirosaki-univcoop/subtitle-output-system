@@ -1,15 +1,8 @@
 import { state } from "./state.js";
 import { dom } from "./dom.js";
 import { parseDateTimeLocal } from "./utils.js";
-import { combineDateAndTime, formatDatePart, formatTimePart } from "./calendar.js";
+import { formatDatePart, formatTimePart } from "./calendar.js";
 import { sortParticipants } from "./participants.js";
-import {
-  collectGroupGlLeaders,
-  describeParticipantGroup,
-  getEventGlAssignmentsMap,
-  getEventGlRoster,
-  getParticipantGroupKey
-} from "./groups.js";
 import {
   DEFAULT_CUSTOM_PAGE_SIZE,
   PRINT_MARGINS,
