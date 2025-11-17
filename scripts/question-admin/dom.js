@@ -94,7 +94,6 @@ const dom = {
   participantCsvPanel: resolve("participant-tabpanel-csv"),
   downloadParticipantTemplateButton: resolve("download-participant-template"),
   openPrintViewButton: resolve("open-print-view-button"),
-  openEventPrintViewButton: resolve("open-event-print-view-button"),
   printPreviewDialog: resolve("print-dialog"),
   printPreview: resolve("print-preview"),
   printPreviewFrame: resolve("print-preview-frame"),

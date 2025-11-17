@@ -424,7 +424,6 @@ function finalizeEventLoad({
   state.initialSelectionNotice = selectionNotice;
   renderEvents();
   renderSchedules();
-  syncPrintViewButtonState();
   updateParticipantContext({ preserveStatus });
 }
 
@@ -640,7 +639,6 @@ import {
 // 印刷ビューでも同じロジックを共有するため utils.js からは import しない。
 import {
   formatDatePart,
-  formatTimePart,
   normalizeDateInputValue,
   formatDateTimeLocal,
   combineDateAndTime,
@@ -3203,319 +3201,6 @@ function hydratePrintSettingsFromStorage() {
   }
 }
 
-function buildPrintStyleSheet(printSettings = state.printSettings) {
-  const normalized = normalizePrintSettings(printSettings);
-  const pageMargin = normalized.margin || "5mm";
-  const pageSize = normalized.paperSize || "A4";
-  const pageOrientation = normalized.orientation || "portrait";
-  const { width: pageWidth, height: pageHeight } = resolvePrintPageSize(normalized);
-  const pageSizeValue = pageSize === "Custom"
-    ? `${pageWidth}mm ${pageHeight}mm`
-    : `${pageSize} ${pageOrientation}`;
-
-  const stickyHeaderRule = normalized.repeatHeader
-    ? `.print-surface .print-header--repeat { background: #fff; position: sticky; top: 0; }`
-    : "";
-
-  const printHeaderRule = normalized.repeatHeader
-    ? `.print-header--repeat { position: running(printHeader); }
-      @page { @top-center { content: element(printHeader); } }
-      .print-header--repeat { background: #fff; }
-      .print-header--repeat { position: sticky; top: 0; }`
-    : "";
-
-  const css = `:root { color-scheme: light; --page-margin: ${pageMargin}; --page-width: ${pageWidth}mm; --page-height: ${pageHeight}mm; --page-content-width: calc(var(--page-width) - (2 * var(--page-margin))); --page-content-height: calc(var(--page-height) - (2 * var(--page-margin))); --preview-scale: 1; }
-    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
-    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-    @page { size: ${pageSizeValue}; margin: ${pageMargin}; counter-increment: page; }
-    body { counter-reset: page 1; }
-    body { margin: 0; font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #f6f7fb; }
-    .print-controls { margin-bottom: 6mm; }
-    .print-controls__button { border: 0.25mm solid #000; background: #fff; color: #000; padding: 4px 12px; font-size: 8pt; cursor: pointer; }
-    .print-controls__button:focus { outline: 1px solid #000; outline-offset: 2px; }
-    .print-header { margin-bottom: 8mm; }
-    .print-title { font-size: 14.4pt; margin: 0 0 4mm; }
-    .print-meta { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2mm 12mm; font-size: 8pt; }
-    .print-meta__label { font-weight: 600; margin-right: 2mm; }
-    .print-group { border: 0.3mm solid #000; padding: 3mm; margin-bottom: 12mm; background: #fff; page-break-inside: avoid; break-inside: avoid; }
-    .print-group__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 5mm; margin-bottom: 4mm; }
-    .print-group__meta { min-width: 40mm; }
-    .print-group__label { font-size: 7.2pt; color: #555; letter-spacing: 0.08em; margin-bottom: 1mm; text-transform: uppercase;}
-    .print-group__value { font-size: 12.8pt; font-weight: 600; }
-    .print-group__gl { flex: 1 1 auto; }
-    .print-group__gl-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
-    .print-group__gl-table th, .print-group__gl-table td { border: 0.25mm solid #000; padding: 1.5mm 2mm; text-align: left; }
-    .print-group__gl-table th { background: #f0f0f0; }
-    .print-group__gl-empty { text-align: center; color: #555; }
-    .print-group__stats { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2mm 6mm; font-size: 8pt; }
-    .print-group__stat { display: inline-flex; gap: 1.5mm; align-items: baseline; }
-    .print-group__stat-label { color: #555; }
-    .print-group__stat-value { font-weight: 600; }
-    .print-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
-    .print-table th, .print-table td { border: 0.25mm solid #000; padding: 1.5mm 2mm; text-align: left; vertical-align: top; }
-    .print-table th { background: #f5f5f5; }
-    .print-table__index { width: 12mm; text-align: right; }
-    .print-table__phonetic { font-size: 7.2pt; }
-    .print-table__contact { white-space: nowrap; }
-    .print-table__date { white-space: nowrap; }
-    .print-table__time { white-space: nowrap; }
-    .print-table__location { min-width: 25mm; }
-    .print-table__count { text-align: right; width: 16mm; }
-    .print-table__empty td { text-align: center; color: #555; }
-    .print-empty { font-size: 8.8pt; margin: 0; }
-    .print-footer { margin-top: 6mm; font-size: 8pt; color: #000; }
-    .print-footer__items { display: flex; gap: 6mm; align-items: center; }
-    .print-footer__page { margin-left: auto; }
-    .print-footer__item { white-space: nowrap; }
-    .print-surface {
-      -webkit-print-color-adjust: exact;
-      background: #fff;
-      margin: 24px auto;
-      display: flex;
-      flex-direction: column;
-      box-sizing: border-box;
-      aspect-ratio: calc(var(--page-width) / var(--page-height));
-      height: auto;
-      padding: var(--page-margin);
-      width: var(--page-width);
-      min-height: var(--page-height);
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
-      transform: scale(var(--preview-scale));
-      transform-origin: top center;
-    }
-    .print-surface .print-controls { display: none; }
-    .print-surface .print-group { break-inside: avoid-page; }
-    .print-surface .print-footer { display: block; margin-top: auto; }
-    .print-surface .print-footer__page-number::after { content: counter(page); }
-    .print-surface .print-footer__page { margin-left: auto; }
-    ${stickyHeaderRule}
-    @media print {
-      body { -webkit-print-color-adjust: exact; margin: 0; background: #fff; }
-      .print-surface {
-        display: flex;
-        flex-direction: column;
-        margin: 0 auto;
-        padding: 0;
-        box-shadow: none;
-        transform: none;
-        aspect-ratio: auto;
-        width: var(--page-content-width);
-        min-height: var(--page-content-height);
-        box-sizing: content-box;
-      }
-      .print-controls { display: none; }
-      .print-group { break-inside: avoid-page; }
-      .print-footer {
-        display: block;
-        margin-top: auto;
-        margin-bottom: 0;
-        padding: 0;
-      }
-      .print-footer__page-number::after { content: counter(page); }
-      .print-footer__page { margin-left: auto; }
-      .print-surface {
-        height: var(--page-content-height);
-      }
-      ${printHeaderRule}
-    }
-  `;
-
-  return { css };
-}
-
-function buildPrintFooterMarkup(printSettings, generatedDateText, generatedTimeText) {
-  const footerTimestamp = [
-    printSettings.showDate ? generatedDateText : "",
-    printSettings.showTime ? generatedTimeText : ""
-  ].filter(Boolean).join(" ");
-
-  const footerItems = [];
-  if (footerTimestamp) {
-    footerItems.push(`<span class="print-footer__item">${escapeHtml(footerTimestamp)}</span>`);
-  }
-  if (printSettings.showPageNumbers) {
-    footerItems.push('<span class="print-footer__item print-footer__page" aria-label="ページ番号"><span class="print-footer__page-number" aria-hidden="true"></span></span>');
-  }
-
-  return footerItems.length
-    ? `<footer class="print-footer"><div class="print-footer__items">${footerItems.join("")}</div></footer>`
-    : "";
-}
-
-function formatScheduleDateParts(schedule = {}) {
-  const startAt = parseDateTimeLocal(schedule.startAt || "");
-  const endAt = parseDateTimeLocal(schedule.endAt || "");
-  const startTimeText = startAt ? formatTimePart(startAt) : String(schedule.startTime || "").trim();
-  const endTimeText = endAt ? formatTimePart(endAt) : String(schedule.endTime || "").trim();
-  const dateText = String(schedule.date || "").trim()
-    || (startAt ? formatDatePart(startAt) : "")
-    || (endAt ? formatDatePart(endAt) : "");
-
-  return {
-    dateText: dateText || "—",
-    startTimeText: startTimeText || "—",
-    endTimeText: endTimeText || "—"
-  };
-}
-
-function buildEventPrintHtml({ events = [], generatedAt, printOptions } = {}) {
-  const printSettings = normalizePrintSettings(printOptions);
-  const { css: printStyleSheet } = buildPrintStyleSheet(printSettings);
-  const generatedAtDate = generatedAt instanceof Date && !Number.isNaN(generatedAt.getTime())
-    ? generatedAt
-    : new Date();
-  const generatedDateFormatter = new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  });
-  const generatedTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false
-  });
-  const generatedDateText = generatedDateFormatter.format(generatedAtDate);
-  const generatedTimeText = generatedTimeFormatter.format(generatedAtDate);
-
-  const totalSchedules = events.reduce(
-    (sum, event) => sum + (Array.isArray(event?.schedules) ? event.schedules.length : 0),
-    0
-  );
-  const totalParticipants = events.reduce((sum, event) => {
-    const scheduleSum = (event?.schedules || []).reduce(
-      (scheduleTotal, schedule) => scheduleTotal + (Number(schedule?.participantCount) || 0),
-      0
-    );
-    return sum + scheduleSum;
-  }, 0);
-
-  const headingText = "イベント・日程一覧";
-  const docTitle = `${headingText}`;
-
-  const metaItems = [
-    `<li class="print-meta__item"><span class="print-meta__label">イベント:</span> <span class="print-meta__value">${escapeHtml(`${events.length}件`)}</span></li>`,
-    `<li class="print-meta__item"><span class="print-meta__label">日程:</span> <span class="print-meta__value">${escapeHtml(`${totalSchedules}件`)}</span></li>`,
-    `<li class="print-meta__item"><span class="print-meta__label">参加者数:</span> <span class="print-meta__value">${escapeHtml(`${totalParticipants}名`)}</span></li>`
-  ];
-
-  if (printSettings.showDate || printSettings.showTime) {
-    const generatedParts = [
-      printSettings.showDate ? generatedDateText : "",
-      printSettings.showTime ? generatedTimeText : ""
-    ].filter(Boolean);
-    const generatedLabel = printSettings.showDate && printSettings.showTime
-      ? "出力日時"
-      : printSettings.showDate
-        ? "出力日"
-        : "出力時刻";
-    metaItems.push(
-      `<li class="print-meta__item"><span class="print-meta__label">${escapeHtml(generatedLabel)}:</span> <span class="print-meta__value">${escapeHtml(generatedParts.join(" "))}</span></li>`
-    );
-  }
-
-  const eventSections = events.length
-    ? events
-        .map((event) => {
-          const eventName = formatMetaDisplay(event?.name, event?.id);
-          const scheduleCount = Array.isArray(event?.schedules) ? event.schedules.length : 0;
-          const eventParticipants = (event?.schedules || []).reduce(
-            (scheduleTotal, schedule) => scheduleTotal + (Number(schedule?.participantCount) || 0),
-            0
-          );
-          const stats = [
-            { label: "日程数", value: `${scheduleCount}件` },
-            { label: "総参加者数", value: `${eventParticipants}名` }
-          ];
-          const tableAriaLabel = escapeHtml(eventName ? `${eventName} の日程一覧` : "日程一覧");
-          const scheduleRows = scheduleCount
-            ? event.schedules
-                .map((schedule) => {
-                  const { dateText, startTimeText, endTimeText } = formatScheduleDateParts(schedule);
-                  const scheduleLabel = formatPrintCell(schedule?.label || schedule?.name || schedule?.id || "", { placeholder: "—" });
-                  const scheduleDate = formatPrintCell(dateText, { placeholder: "—" });
-                  const startTimeCell = formatPrintCell(startTimeText, { placeholder: "—" });
-                  const endTimeCell = formatPrintCell(endTimeText, { placeholder: "—" });
-                  const locationText = String(schedule?.location || schedule?.place || "").trim();
-                  const locationCell = formatPrintCell(locationText, { placeholder: "—" });
-                  const participantCount = Number(schedule?.participantCount) || 0;
-                  const participantCell = formatPrintCell(`${participantCount}`, { placeholder: "0" });
-
-                  return `<tr>
-                    <td>${scheduleLabel}</td>
-                    <td class="print-table__date">${scheduleDate}</td>
-                    <td class="print-table__time">${startTimeCell}</td>
-                    <td class="print-table__time">${endTimeCell}</td>
-                    <td class="print-table__location">${locationCell}</td>
-                    <td class="print-table__count">${participantCell}</td>
-                  </tr>`;
-                })
-                .join("\n")
-            : '<tr class="print-table__empty"><td colspan="6">日程が登録されていません</td></tr>';
-
-          const statsMarkup = stats
-            .map((stat) =>
-              `<li class="print-group__stat"><span class="print-group__stat-label">${escapeHtml(stat.label)}:</span><span class="print-group__stat-value">${escapeHtml(stat.value)}</span></li>`
-            )
-            .join("");
-
-          return `<section class="print-group" data-event-id="${escapeHtml(String(event?.id || ""))}">
-            <div class="print-group__header">
-              <div class="print-group__meta">
-                <div class="print-group__label">イベント</div>
-                <div class="print-group__value">${eventName ? escapeHtml(eventName) : "—"}</div>
-              </div>
-              <ul class="print-group__stats">${statsMarkup}</ul>
-            </div>
-            <table class="print-table" aria-label="${tableAriaLabel}">
-              <thead>
-                <tr>
-                  <th scope="col">日程の表示名</th>
-                  <th scope="col">日付</th>
-                  <th scope="col">開始時刻</th>
-                  <th scope="col">終了時刻</th>
-                  <th scope="col">場所</th>
-                  <th scope="col" class="print-table__count">参加者数</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${scheduleRows}
-              </tbody>
-            </table>
-          </section>`;
-        })
-        .join("\n\n")
-    : '<p class="print-empty">イベントが登録されていません。</p>';
-
-  const headerClass = printSettings.repeatHeader ? "print-header print-header--repeat" : "print-header";
-  const metaMarkup = metaItems.length ? `<ul class="print-meta">${metaItems.join("\n")}</ul>` : "";
-  const footerMarkup = buildPrintFooterMarkup(printSettings, generatedDateText, generatedTimeText);
-
-  return `<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(docTitle)}</title>
-  <style>
-    ${printStyleSheet}
-  </style>
-</head>
-<body class="print-surface">
-  <div class="print-controls">
-    <button type="button" class="print-controls__button" onclick="window.print()">このリストを印刷</button>
-  </div>
-  ${printSettings.showHeader ? `<header class="${headerClass}">
-    <h1 class="print-title">${escapeHtml(headingText)}</h1>
-    ${metaMarkup}
-  </header>` : ""}
-  ${eventSections}
-  ${footerMarkup}
-</body>
-</html>`;
-}
-
 function persistPrintSettings(settings) {
   const normalized = normalizePrintSettings(settings);
   state.printSettings = normalized;
@@ -3615,14 +3300,14 @@ function setupPrintSettingsDialog() {
   dom.printSettingsForm.addEventListener("change", () => {
     const settings = readPrintSettingsFromForm();
     persistPrintSettings(settings);
-    updateActivePrintPreview({ autoPrint: false, forceReveal: true, quiet: true });
+    updateParticipantPrintPreview({ autoPrint: false, forceReveal: true, quiet: true });
   });
 
   dom.printSettingsForm.addEventListener("submit", event => {
     event.preventDefault();
     const settings = readPrintSettingsFromForm();
     persistPrintSettings(settings);
-    updateActivePrintPreview({ autoPrint: false, forceReveal: true });
+    updateParticipantPrintPreview({ autoPrint: false, forceReveal: true });
   });
 
   applyPrintSettingsToForm(state.printSettings);
@@ -3827,9 +3512,28 @@ function buildParticipantPrintHtml({
     ? `<ul class="print-meta">${metaItems.join("\n")}</ul>`
     : "";
   const sectionsMarkup = groupsMarkup || '<p class="print-empty">参加者リストが登録されていません。</p>';
-  const { css: printStyleSheet } = buildPrintStyleSheet(printSettings);
+  const pageMargin = printSettings.margin || "5mm";
+  const pageSize = printSettings.paperSize || "A4";
+  const pageOrientation = printSettings.orientation || "portrait";
+  const { width: pageWidth, height: pageHeight } = resolvePrintPageSize(printSettings);
+  const pageSizeValue = pageSize === "Custom"
+    ? `${pageWidth}mm ${pageHeight}mm`
+    : `${pageSize} ${pageOrientation}`;
   const headerClass = printSettings.repeatHeader ? "print-header print-header--repeat" : "print-header";
-  const footerMarkup = buildPrintFooterMarkup(printSettings, generatedDateText, generatedTimeText);
+  const footerTimestamp = [
+    printSettings.showDate ? generatedDateText : "",
+    printSettings.showTime ? generatedTimeText : ""
+  ].filter(Boolean).join(" ");
+  const footerItems = [];
+  if (footerTimestamp) {
+    footerItems.push(`<span class="print-footer__item">${escapeHtml(footerTimestamp)}</span>`);
+  }
+  if (printSettings.showPageNumbers) {
+    footerItems.push('<span class="print-footer__item print-footer__page" aria-label="ページ番号"><span class="print-footer__page-number" aria-hidden="true"></span></span>');
+  }
+  const footerMarkup = footerItems.length
+    ? `<footer class="print-footer"><div class="print-footer__items">${footerItems.join("")}</div></footer>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -3838,7 +3542,96 @@ function buildParticipantPrintHtml({
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(docTitle)}</title>
   <style>
-    ${printStyleSheet}
+    :root { color-scheme: light; --page-margin: ${pageMargin}; --page-width: ${pageWidth}mm; --page-height: ${pageHeight}mm; --page-content-width: calc(var(--page-width) - (2 * var(--page-margin))); --page-content-height: calc(var(--page-height) - (2 * var(--page-margin))); --preview-scale: 1; }
+    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+    @page { size: ${pageSizeValue}; margin: ${pageMargin}; counter-increment: page; }
+    body { counter-reset: page 1; }
+    body { margin: 0; font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #f6f7fb; }
+    .print-controls { margin-bottom: 6mm; }
+    .print-controls__button { border: 0.25mm solid #000; background: #fff; color: #000; padding: 4px 12px; font-size: 8pt; cursor: pointer; }
+    .print-controls__button:focus { outline: 1px solid #000; outline-offset: 2px; }
+    .print-header { margin-bottom: 8mm; }
+    .print-title { font-size: 14.4pt; margin: 0 0 4mm; }
+    .print-meta { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2mm 12mm; font-size: 8pt; }
+    .print-meta__label { font-weight: 600; margin-right: 2mm; }
+    .print-group { border: 0.3mm solid #000; padding: 3mm; margin-bottom: 12mm; background: #fff; page-break-inside: avoid; break-inside: avoid; }
+    .print-group__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 5mm; margin-bottom: 4mm; }
+    .print-group__meta { min-width: 40mm; }
+    .print-group__label { font-size: 7.2pt; color: #555; letter-spacing: 0.08em; margin-bottom: 1mm; text-transform: uppercase;}
+    .print-group__value { font-size: 12.8pt; font-weight: 600; }
+    .print-group__gl { flex: 1 1 auto; }
+    .print-group__gl-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+    .print-group__gl-table th, .print-group__gl-table td { border: 0.25mm solid #000; padding: 1.5mm 2mm; text-align: left; }
+    .print-group__gl-table th { background: #f0f0f0; }
+    .print-group__gl-empty { text-align: center; color: #555; }
+    .print-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+    .print-table th, .print-table td { border: 0.25mm solid #000; padding: 1.5mm 2mm; text-align: left; vertical-align: top; }
+    .print-table th { background: #f5f5f5; }
+    .print-table__index { width: 12mm; text-align: right; }
+    .print-table__phonetic { font-size: 7.2pt; }
+    .print-table__contact { white-space: nowrap; }
+    .print-table__empty td { text-align: center; color: #555; }
+    .print-empty { font-size: 8.8pt; margin: 0; }
+    .print-footer { margin-top: 6mm; font-size: 8pt; color: #000; }
+    .print-footer__items { display: flex; gap: 6mm; align-items: center; }
+    .print-footer__page { margin-left: auto; }
+    .print-footer__item { white-space: nowrap; }
+    .print-surface {
+      -webkit-print-color-adjust: exact;
+      background: #fff;
+      margin: 24px auto;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      aspect-ratio: calc(var(--page-width) / var(--page-height));
+      height: auto;
+      padding: var(--page-margin);
+      width: var(--page-width);
+      min-height: var(--page-height);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+      transform: scale(var(--preview-scale));
+      transform-origin: top center;
+    }
+    .print-surface .print-controls { display: none; }
+    .print-surface .print-group { break-inside: avoid-page; }
+    .print-surface .print-footer { display: block; margin-top: auto; }
+    .print-surface .print-footer__page-number::after { content: counter(page); }
+    .print-surface .print-footer__page { margin-left: auto; }
+    ${printSettings.repeatHeader ? `.print-surface .print-header--repeat { background: #fff; position: sticky; top: 0; }` : ""}
+    @media print {
+      body { -webkit-print-color-adjust: exact; margin: 0; background: #fff; }
+      .print-surface {
+        display: flex;
+        flex-direction: column;
+        margin: 0 auto;
+        padding: 0;
+        box-shadow: none;
+        transform: none;
+        aspect-ratio: auto;
+        width: var(--page-content-width);
+        min-height: var(--page-content-height);
+        box-sizing: content-box;
+      }
+      .print-controls { display: none; }
+      .print-group { break-inside: avoid-page; }
+      .print-footer {
+        display: block;
+        margin-top: auto;
+        margin-bottom: 0;
+        padding: 0;
+      }
+      .print-footer__page-number::after { content: counter(page); }
+      .print-footer__page { margin-left: auto; }
+      .print-surface {
+        height: var(--page-content-height);
+      }
+      ${printSettings.repeatHeader ? `.print-header--repeat { position: running(printHeader); }
+      @page { @top-center { content: element(printHeader); } }
+      .print-header--repeat { background: #fff; }
+      .print-header--repeat { position: sticky; top: 0; }` : ""}
+    }
   </style>
 </head>
 <body class="print-surface">
@@ -3857,18 +3650,20 @@ function buildParticipantPrintHtml({
 
 const PRINT_PREVIEW_DEFAULT_NOTE = "印刷設定を選ぶとここに最新のプレビューが表示されます。";
 const PRINT_PREVIEW_LOAD_TIMEOUT_MS = 4000;
-const PRINT_TARGETS = { PARTICIPANTS: "participants", EVENTS: "events" };
-let activePrintPreviewTarget = PRINT_TARGETS.PARTICIPANTS;
-let printPreviewInProgress = false;
-let printPreviewAutoPrintPending = false;
-let printPreviewCache = {
+
+let participantPrintInProgress = false;
+
+let participantPrintAutoPrintPending = false;
+
+let participantPrintPreviewCache = {
   html: "",
   title: "",
   metaText: "",
   printSettings: null,
   forcePopupFallback: false
 };
-let printPreviewLoadAbort = null;
+
+let participantPrintPreviewLoadAbort = null;
 function normalizeLivePoliteness(value, { defaultValue = "" } = {}) {
   const normalize = (input) => {
     const trimmed = (input || "").trim().toLowerCase();
@@ -3885,7 +3680,7 @@ function normalizeLiveRegionRole(value) {
   return trimmed === "status" || trimmed === "alert" ? trimmed : "";
 }
 
-function cachePrintPreview(
+function cacheParticipantPrintPreview(
   { html = "", title = "", metaText = "", printSettings = null, forcePopupFallback } = {},
   { preserveFallbackFlag = false } = {}
 ) {
@@ -3893,14 +3688,14 @@ function cachePrintPreview(
     forcePopupFallback !== undefined
       ? Boolean(forcePopupFallback)
       : preserveFallbackFlag
-      ? Boolean(printPreviewCache.forcePopupFallback)
+      ? Boolean(participantPrintPreviewCache.forcePopupFallback)
       : false;
 
-  printPreviewCache = {
+  participantPrintPreviewCache = {
     html: html || "",
     title: title || "",
     metaText: metaText || "",
-    printSettings: printSettings ? normalizePrintSettings(printSettings) : printPreviewCache.printSettings,
+    printSettings: printSettings ? normalizePrintSettings(printSettings) : participantPrintPreviewCache.printSettings,
     forcePopupFallback: nextForcePopupFallback
   };
 }
@@ -4029,12 +3824,12 @@ function setPrintPreviewBusy(isBusy = false) {
   dom.printPreview.setAttribute("aria-busy", isBusy ? "true" : "false");
 }
 
-function clearPrintPreviewLoader() {
-  if (!printPreviewLoadAbort) {
+function clearParticipantPrintPreviewLoader() {
+  if (!participantPrintPreviewLoadAbort) {
     return;
   }
 
-  const { loadHandler, errorHandler, timeoutId } = printPreviewLoadAbort;
+  const { loadHandler, errorHandler, timeoutId } = participantPrintPreviewLoadAbort;
 
   if (timeoutId) {
     window.clearTimeout(timeoutId);
@@ -4056,12 +3851,12 @@ function clearPrintPreviewLoader() {
     }
   }
 
-  printPreviewLoadAbort = null;
+  participantPrintPreviewLoadAbort = null;
 }
 
 function resetPrintPreview(options = {}) {
   const { skipCloseDialog = false } = options || {};
-  clearPrintPreviewLoader();
+  clearParticipantPrintPreviewLoader();
   if (dom.printPreviewFrame) {
     dom.printPreviewFrame.srcdoc = "";
   }
@@ -4079,8 +3874,8 @@ function resetPrintPreview(options = {}) {
   if (dom.printPreviewMeta) {
     dom.printPreviewMeta.textContent = "";
   }
-  cachePrintPreview({ forcePopupFallback: false });
-  printPreviewAutoPrintPending = false;
+  cacheParticipantPrintPreview({ forcePopupFallback: false });
+  participantPrintAutoPrintPending = false;
   setPrintPreviewNote();
   if (skipCloseDialog) {
     if (dom.printPreview) {
@@ -4092,29 +3887,29 @@ function resetPrintPreview(options = {}) {
 }
 
 function renderPreviewFallbackNote(message, metaText = "") {
-  clearPrintPreviewLoader();
+  clearParticipantPrintPreviewLoader();
   if (dom.printPreviewFrame) {
     dom.printPreviewFrame.srcdoc = "";
   }
   if (dom.printPreview) {
     dom.printPreview.classList.add("print-preview--fallback");
   }
-  const hasCachedHtml = Boolean(printPreviewCache?.html);
+  const hasCachedHtml = Boolean(participantPrintPreviewCache?.html);
   const popupHint = hasCachedHtml
     ? " 画面右の「このリストを印刷」からポップアップ印刷を再試行できます。"
     : "";
   const noteText = `${message || "プレビューを表示できませんでした。"}${popupHint}`;
-  const nextMetaText = metaText || printPreviewCache.metaText || "";
+  const nextMetaText = metaText || participantPrintPreviewCache.metaText || "";
 
   setPrintPreviewVisibility(true);
   setPrintPreviewNote(noteText, { forceAnnounce: true, politeness: "assertive" });
   setPrintPreviewBusy(false);
-  cachePrintPreview({
-    ...printPreviewCache,
+  cacheParticipantPrintPreview({
+    ...participantPrintPreviewCache,
     metaText: nextMetaText,
     forcePopupFallback: true
   });
-  printPreviewAutoPrintPending = false;
+  participantPrintAutoPrintPending = false;
   if (dom.printPreviewMeta) {
     dom.printPreviewMeta.textContent = nextMetaText;
   }
@@ -4170,7 +3965,7 @@ function openPopupPrintWindow(html, docTitle, printSettings = state.printSetting
   return true;
 }
 
-function renderPrintPreview({
+function renderParticipantPrintPreview({
   html,
   metaText,
   title,
@@ -4184,19 +3979,19 @@ function renderPrintPreview({
   setPrintPreviewBusy(true);
 
   const normalizedPrintSettings = normalizePrintSettings(
-    printSettings || printPreviewCache.printSettings || state.printSettings
+    printSettings || participantPrintPreviewCache.printSettings || state.printSettings
   );
 
-  if (printPreviewCache.forcePopupFallback) {
+  if (participantPrintPreviewCache.forcePopupFallback) {
     renderPreviewFallbackNote(
       "プレビューを利用できないためポップアップ印刷を使用します。",
-      metaText || printPreviewCache.metaText || ""
+      metaText || participantPrintPreviewCache.metaText || ""
     );
 
-    if (autoPrint && printPreviewCache.html) {
+    if (autoPrint && participantPrintPreviewCache.html) {
       const fallbackOpened = openPopupPrintWindow(
-        printPreviewCache.html,
-        printPreviewCache.title,
+        participantPrintPreviewCache.html,
+        participantPrintPreviewCache.title,
         normalizedPrintSettings
       );
       if (!fallbackOpened) {
@@ -4223,9 +4018,9 @@ function renderPrintPreview({
     delete dom.printPreviewPrintButton.dataset.popupFallback;
   }
 
-  cachePrintPreview({ html, title, metaText, printSettings: normalizedPrintSettings }, { preserveFallbackFlag: true });
-  printPreviewAutoPrintPending = Boolean(autoPrint);
-  clearPrintPreviewLoader();
+  cacheParticipantPrintPreview({ html, title, metaText, printSettings: normalizedPrintSettings }, { preserveFallbackFlag: true });
+  participantPrintAutoPrintPending = Boolean(autoPrint);
+  clearParticipantPrintPreviewLoader();
 
   let loadTimeoutId = null;
   let settled = false;
@@ -4239,19 +4034,19 @@ function renderPrintPreview({
       window.clearTimeout(loadTimeoutId);
       loadTimeoutId = null;
     }
-    if (dom.printPreviewFrame && printPreviewLoadAbort) {
+    if (dom.printPreviewFrame && participantPrintPreviewLoadAbort) {
       try {
-        if (printPreviewLoadAbort.loadHandler) {
-          dom.printPreviewFrame.removeEventListener("load", printPreviewLoadAbort.loadHandler);
+        if (participantPrintPreviewLoadAbort.loadHandler) {
+          dom.printPreviewFrame.removeEventListener("load", participantPrintPreviewLoadAbort.loadHandler);
         }
-        if (printPreviewLoadAbort.errorHandler) {
-          dom.printPreviewFrame.removeEventListener("error", printPreviewLoadAbort.errorHandler);
+        if (participantPrintPreviewLoadAbort.errorHandler) {
+          dom.printPreviewFrame.removeEventListener("error", participantPrintPreviewLoadAbort.errorHandler);
         }
       } catch (error) {
         // Ignore listener cleanup errors
       }
     }
-    printPreviewLoadAbort = null;
+    participantPrintPreviewLoadAbort = null;
     setPrintPreviewBusy(false);
     return true;
   };
@@ -4295,10 +4090,10 @@ function renderPrintPreview({
       // Ignore title assignment errors
     }
 
-    if (printPreviewAutoPrintPending) {
-      printPreviewAutoPrintPending = false;
+    if (participantPrintAutoPrintPending) {
+      participantPrintAutoPrintPending = false;
       window.setTimeout(() => {
-        printCachedPreview({ showAlertOnFailure: true });
+        printParticipantPreview({ showAlertOnFailure: true });
       }, 150);
     }
   };
@@ -4323,7 +4118,7 @@ function renderPrintPreview({
 
   dom.printPreviewFrame.addEventListener("load", handleLoad);
   dom.printPreviewFrame.addEventListener("error", handleError);
-  printPreviewLoadAbort = { loadHandler: handleLoad, errorHandler: handleError };
+  participantPrintPreviewLoadAbort = { loadHandler: handleLoad, errorHandler: handleError };
 
   dom.printPreviewFrame.srcdoc = html || "<!doctype html><title>プレビュー</title>";
 
@@ -4346,7 +4141,7 @@ function renderPrintPreview({
   };
 
   loadTimeoutId = window.setTimeout(handleTimeout, PRINT_PREVIEW_LOAD_TIMEOUT_MS);
-  printPreviewLoadAbort.timeoutId = loadTimeoutId;
+  participantPrintPreviewLoadAbort.timeoutId = loadTimeoutId;
   return true;
 }
 
@@ -4367,12 +4162,12 @@ function triggerPrintFromPreview() {
   }
 }
 
-function printCachedPreview({ showAlertOnFailure = false } = {}) {
-  const cachedHtml = printPreviewCache?.html || "";
-  const cachedTitle = printPreviewCache?.title || "";
-  const cachedMeta = printPreviewCache?.metaText || "";
-  const cachedSettings = printPreviewCache?.printSettings || state.printSettings;
-  const forcePopupFallback = printPreviewCache?.forcePopupFallback;
+function printParticipantPreview({ showAlertOnFailure = false } = {}) {
+  const cachedHtml = participantPrintPreviewCache?.html || "";
+  const cachedTitle = participantPrintPreviewCache?.title || "";
+  const cachedMeta = participantPrintPreviewCache?.metaText || "";
+  const cachedSettings = participantPrintPreviewCache?.printSettings || state.printSettings;
+  const forcePopupFallback = participantPrintPreviewCache?.forcePopupFallback;
 
   if (!forcePopupFallback) {
     const printedInline = triggerPrintFromPreview();
@@ -4389,7 +4184,7 @@ function printCachedPreview({ showAlertOnFailure = false } = {}) {
 
     const popupOpened = openPopupPrintWindow(cachedHtml, cachedTitle, cachedSettings);
     if (popupOpened) {
-      cachePrintPreview({ ...printPreviewCache, forcePopupFallback: true });
+      cacheParticipantPrintPreview({ ...participantPrintPreviewCache, forcePopupFallback: true });
       if (dom.printPreviewPrintButton) {
         dom.printPreviewPrintButton.dataset.popupFallback = "true";
       }
@@ -4404,23 +4199,15 @@ function printCachedPreview({ showAlertOnFailure = false } = {}) {
   return false;
 }
 
-function closePrintPreview() {
+function closeParticipantPrintPreview() {
   resetPrintPreview();
 }
 
-function updateActivePrintPreview(options = {}) {
-  if (activePrintPreviewTarget === PRINT_TARGETS.EVENTS) {
-    return updateEventPrintPreview(options);
-  }
-  return updateParticipantPrintPreview(options);
-}
-
 async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = false, quiet = false } = {}) {
-  activePrintPreviewTarget = PRINT_TARGETS.PARTICIPANTS;
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) {
-    clearPrintPreviewLoader();
+    clearParticipantPrintPreviewLoader();
     if (dom.printPreview) {
       dom.printPreview.classList.remove("print-preview--fallback");
     }
@@ -4430,7 +4217,7 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
     if (dom.printPreviewMeta) {
       dom.printPreviewMeta.textContent = "";
     }
-    cachePrintPreview({ forcePopupFallback: false });
+    cacheParticipantPrintPreview({ forcePopupFallback: false });
     setPrintPreviewVisibility(true);
     setPrintPreviewNote("印刷するにはイベントと日程を選択してください。", {
       forceAnnounce: true,
@@ -4448,7 +4235,7 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
   }
 
   if (!Array.isArray(state.participants) || state.participants.length === 0) {
-    clearPrintPreviewLoader();
+    clearParticipantPrintPreviewLoader();
     if (dom.printPreview) {
       dom.printPreview.classList.remove("print-preview--fallback");
     }
@@ -4458,7 +4245,7 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
     if (dom.printPreviewMeta) {
       dom.printPreviewMeta.textContent = "";
     }
-    cachePrintPreview({ forcePopupFallback: false });
+    cacheParticipantPrintPreview({ forcePopupFallback: false });
     setPrintPreviewVisibility(true);
     setPrintPreviewNote("印刷できる参加者がまだ登録されていません。", {
       forceAnnounce: true,
@@ -4475,12 +4262,12 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
     return false;
   }
 
-  if (printPreviewInProgress) {
+  if (participantPrintInProgress) {
     return false;
   }
 
   const button = dom.openPrintViewButton;
-  printPreviewInProgress = true;
+  participantPrintInProgress = true;
 
   if (button) {
     button.dataset.printLocked = "true";
@@ -4495,7 +4282,7 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
   persistPrintSettings(printSettings);
 
   try {
-    setParticipantPrintButtonBusy(true);
+    setPrintButtonBusy(true);
     try {
       try {
         await loadGlDataForEvent(eventId);
@@ -4553,12 +4340,12 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
         .filter(text => String(text || "").trim())
         .join(" / ");
 
-      cachePrintPreview(
+      cacheParticipantPrintPreview(
         { html, title: docTitle, metaText, printSettings },
         { preserveFallbackFlag: true }
       );
 
-      const previewRendered = renderPrintPreview({
+      const previewRendered = renderParticipantPrintPreview({
         html,
         metaText,
         title: docTitle,
@@ -4566,7 +4353,7 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
         printSettings
       });
 
-      if (printPreviewCache.forcePopupFallback) {
+      if (participantPrintPreviewCache.forcePopupFallback) {
         return true;
       }
 
@@ -4584,10 +4371,10 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
       }
       return true;
     } finally {
-      setParticipantPrintButtonBusy(false);
+      setPrintButtonBusy(false);
     }
   } finally {
-    printPreviewInProgress = false;
+    participantPrintInProgress = false;
     if (button) {
       delete button.dataset.printLocked;
     }
@@ -4595,136 +4382,7 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
   }
 }
 
-async function updateEventPrintPreview({ autoPrint = false, forceReveal = false, quiet = false } = {}) {
-  activePrintPreviewTarget = PRINT_TARGETS.EVENTS;
-
-  if (!Array.isArray(state.events) || state.events.length === 0) {
-    clearPrintPreviewLoader();
-    if (dom.printPreview) {
-      dom.printPreview.classList.remove("print-preview--fallback");
-    }
-    if (dom.printPreviewFrame) {
-      dom.printPreviewFrame.srcdoc = "";
-    }
-    if (dom.printPreviewMeta) {
-      dom.printPreviewMeta.textContent = "";
-    }
-    cachePrintPreview({ forcePopupFallback: false });
-    setPrintPreviewVisibility(true);
-    setPrintPreviewNote("印刷できるイベントがまだ登録されていません。", {
-      forceAnnounce: true,
-      politeness: "assertive",
-      role: "alert"
-    });
-    if (dom.printPreviewPrintButton) {
-      dom.printPreviewPrintButton.disabled = true;
-      delete dom.printPreviewPrintButton.dataset.popupFallback;
-    }
-    if (!quiet) {
-      window.alert("印刷できるイベントがまだ登録されていません。");
-    }
-    return false;
-  }
-
-  if (printPreviewInProgress) {
-    return false;
-  }
-
-  const button = dom.openEventPrintViewButton;
-  printPreviewInProgress = true;
-
-  if (button) {
-    button.dataset.printLocked = "true";
-    syncEventPrintButtonState();
-  }
-
-  if (forceReveal) {
-    setPrintPreviewVisibility(true);
-  }
-
-  const printSettings = readPrintSettingsFromForm();
-  persistPrintSettings(printSettings);
-
-  try {
-    setEventPrintButtonBusy(true);
-
-    const events = Array.isArray(state.events) ? state.events : [];
-    const totalSchedules = events.reduce(
-      (sum, event) => sum + (Array.isArray(event?.schedules) ? event.schedules.length : 0),
-      0
-    );
-    const totalParticipants = events.reduce((sum, event) => {
-      const scheduleSum = (event?.schedules || []).reduce(
-        (scheduleTotal, schedule) => scheduleTotal + (Number(schedule?.participantCount) || 0),
-        0
-      );
-      return sum + scheduleSum;
-    }, 0);
-
-    const generatedAt = new Date();
-    const docTitle = "イベント・日程一覧";
-    const html = buildEventPrintHtml({ events, generatedAt, printOptions: printSettings });
-    const metaText = [
-      `イベント ${events.length}件`,
-      `日程 ${totalSchedules}件`,
-      `参加者 ${totalParticipants}名`
-    ]
-      .filter(text => String(text || "").trim())
-      .join(" / ");
-
-    cachePrintPreview(
-      { html, title: docTitle, metaText, printSettings },
-      { preserveFallbackFlag: true }
-    );
-
-    const previewRendered = renderPrintPreview({
-      html,
-      metaText,
-      title: docTitle,
-      autoPrint,
-      printSettings
-    });
-
-    if (printPreviewCache.forcePopupFallback) {
-      return true;
-    }
-
-    if (!previewRendered) {
-      renderPreviewFallbackNote(
-        "プレビュー枠を開けませんでした。ポップアップ許可後に再度お試しください。",
-        metaText
-      );
-
-      const fallbackOpened = openPopupPrintWindow(html, docTitle, printSettings);
-      if (!fallbackOpened) {
-        window.alert("印刷プレビューを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
-        return false;
-      }
-    }
-
-    return true;
-  } catch (error) {
-    if (typeof console !== "undefined" && typeof console.error === "function") {
-      console.error("[Print] イベント一覧の印刷プレビューに失敗しました。", error);
-    }
-    setPrintPreviewNote("イベント一覧の印刷プレビューを更新できませんでした。", {
-      forceAnnounce: true,
-      politeness: "assertive",
-      role: "alert"
-    });
-    return false;
-  } finally {
-    setEventPrintButtonBusy(false);
-    printPreviewInProgress = false;
-    if (button) {
-      delete button.dataset.printLocked;
-    }
-    syncEventPrintButtonState();
-  }
-}
-
 async function openParticipantPrintView() {
-  activePrintPreviewTarget = PRINT_TARGETS.PARTICIPANTS;
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) {
@@ -4737,30 +4395,13 @@ async function openParticipantPrintView() {
     return;
   }
 
-  if (printPreviewInProgress) {
+  if (participantPrintInProgress) {
     return;
   }
 
   setPrintPreviewVisibility(true);
   applyPrintSettingsToForm(state.printSettings);
   await updateParticipantPrintPreview({ autoPrint: false, forceReveal: true });
-}
-
-async function openEventPrintView() {
-  activePrintPreviewTarget = PRINT_TARGETS.EVENTS;
-
-  if (!Array.isArray(state.events) || state.events.length === 0) {
-    window.alert("印刷できるイベントがまだ登録されていません。");
-    return;
-  }
-
-  if (printPreviewInProgress) {
-    return;
-  }
-
-  setPrintPreviewVisibility(true);
-  applyPrintSettingsToForm(state.printSettings);
-  await updateEventPrintPreview({ autoPrint: false, forceReveal: true });
 }
 
 function participantChangeKey(entry, fallbackIndex = 0) {
@@ -5171,7 +4812,6 @@ function getPendingMailCount() {
 }
 
 let printActionButtonMissingLogged = false;
-let eventPrintActionButtonMissingLogged = false;
 
 function syncPrintViewButtonState() {
   const button = dom.openPrintViewButton;
@@ -5216,8 +4856,8 @@ function syncPrintViewButtonState() {
 
   setActionButtonState(button, disabled);
 
-  if (disabled && activePrintPreviewTarget === PRINT_TARGETS.PARTICIPANTS) {
-    closePrintPreview();
+  if (disabled) {
+    closeParticipantPrintPreview();
   }
 
   const baseLabel = button.dataset.defaultLabel || "印刷用リスト";
@@ -5225,73 +4865,9 @@ function syncPrintViewButtonState() {
     button.textContent = baseLabel;
   }
 
-  syncEventPrintButtonState();
-
 }
 
-function syncEventPrintButtonState() {
-  const button = dom.openEventPrintViewButton;
-  if (!button) {
-    if (!eventPrintActionButtonMissingLogged) {
-      eventPrintActionButtonMissingLogged = true;
-      if (typeof console !== "undefined" && typeof console.warn === "function") {
-        console.warn("[Print] open-event-print-view-button が見つからないため、イベント印刷アクションの状態を同期できませんでした。");
-      }
-    }
-    return;
-  }
-
-  if (!button.dataset.defaultLabel) {
-    button.dataset.defaultLabel = button.textContent ? button.textContent.trim() : "イベント一覧を印刷";
-  }
-
-  if (button.dataset.printing === "true") {
-    setActionButtonState(button, true);
-    const busyLabel = button.dataset.printingLabel || "印刷準備中…";
-    if (!button.dataset.printingLabel) {
-      button.dataset.printingLabel = busyLabel;
-    }
-    if (button.textContent !== busyLabel) {
-      button.textContent = busyLabel;
-    }
-    return;
-  }
-
-  if (button.dataset.printLocked === "true") {
-    setActionButtonState(button, true);
-    const defaultLabel = button.dataset.defaultLabel || "イベント一覧を印刷";
-    if (button.textContent !== defaultLabel) {
-      button.textContent = defaultLabel;
-    }
-    return;
-  }
-
-  const hasEvents = Array.isArray(state.events) && state.events.length > 0;
-  const disabled = !hasEvents;
-  setActionButtonState(button, disabled);
-
-  if (disabled && activePrintPreviewTarget === PRINT_TARGETS.EVENTS) {
-    closePrintPreview();
-  }
-
-  const baseLabel = button.dataset.defaultLabel || "イベント一覧を印刷";
-  if (button.textContent !== baseLabel) {
-    button.textContent = baseLabel;
-  }
-}
-
-function setEventPrintButtonBusy(isBusy) {
-  const button = dom.openEventPrintViewButton;
-  if (!button) return;
-  if (isBusy) {
-    button.dataset.printing = "true";
-  } else {
-    delete button.dataset.printing;
-  }
-  syncEventPrintButtonState();
-}
-
-function setParticipantPrintButtonBusy(isBusy) {
+function setPrintButtonBusy(isBusy) {
   const button = dom.openPrintViewButton;
   if (!button) return;
   if (isBusy) {
@@ -8128,22 +7704,6 @@ function attachEventHandlers() {
     });
   }
 
-  if (dom.openEventPrintViewButton) {
-    dom.openEventPrintViewButton.addEventListener("click", () => {
-      const button = dom.openEventPrintViewButton;
-      if (!button || button.disabled || button.dataset.printing === "true") {
-        return;
-      }
-
-      openEventPrintView().catch(error => {
-        if (typeof console !== "undefined" && typeof console.error === "function") {
-          console.error("[Print] イベント一覧の生成に失敗しました。", error);
-        }
-        window.alert("イベント一覧の生成中にエラーが発生しました。時間をおいて再度お試しください。");
-      });
-    });
-  }
-
   if (dom.openPrintViewButton) {
     dom.openPrintViewButton.addEventListener("click", () => {
       const button = dom.openPrintViewButton;
@@ -8163,7 +7723,7 @@ function attachEventHandlers() {
 
   if (dom.printPreviewCloseButton) {
     dom.printPreviewCloseButton.addEventListener("click", () => {
-      closePrintPreview();
+      closeParticipantPrintPreview();
     });
   }
 
@@ -8172,7 +7732,7 @@ function attachEventHandlers() {
       if (dom.printPreviewPrintButton.disabled) {
         return;
       }
-      printCachedPreview({ showAlertOnFailure: true });
+      printParticipantPreview({ showAlertOnFailure: true });
     });
   }
 
