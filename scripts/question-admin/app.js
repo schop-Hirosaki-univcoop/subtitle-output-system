@@ -3574,6 +3574,9 @@ function buildParticipantPrintHtml({
       }
       .print-footer__page-number::after { content: counter(page); }
       .print-footer__page { margin-left: auto; }
+      .print-surface {
+        height: var(--page-content-height);
+      }
       ${printSettings.repeatHeader ? `.print-header--repeat { position: running(printHeader); }
       @page { @top-center { content: element(printHeader); } }
       .print-header--repeat { background: #fff; }
