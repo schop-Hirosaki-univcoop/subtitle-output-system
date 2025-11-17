@@ -3565,7 +3565,7 @@ function buildParticipantPrintHtml({
       }
       .print-controls { display: none; }
       .print-group { break-inside: avoid-page; }
-      .print-footer { display: block; margin-top: auto; }
+      .print-footer { position: fixed; bottom: 0; display: block; margin-top: auto; }
       .print-footer__page-number::after { content: counter(page); }
       .print-footer__page { margin-left: auto; }
       ${printSettings.repeatHeader ? `.print-header--repeat { position: running(printHeader); }
