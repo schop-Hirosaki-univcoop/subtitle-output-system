@@ -24,11 +24,6 @@ export const TEAM_TEMPLATE_HEADERS = [
   "班番号",
   "uid"
 ];
-export const CANCEL_LABEL = "キャンセル";
-export const RELOCATE_LABEL = "別日";
-export const GL_STAFF_GROUP_KEY = "__gl_staff__";
-export const GL_STAFF_LABEL = "運営待機";
-export const NO_TEAM_GROUP_KEY = "__no_team__";
 export const firebaseConfig = {
   apiKey: "AIzaSyBh54ZKsM6uNph61QrP-Ypu7bzU_PHbNcY",
   authDomain: "subtitle-output-system-9bc14.firebaseapp.com",
