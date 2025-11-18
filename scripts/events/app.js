@@ -60,6 +60,15 @@ import {
   preflightContextMatchesUser
 } from "../shared/auth-preflight.js";
 import { appendAuthDebugLog, replayAuthDebugLog } from "../shared/auth-debug-log.js";
+import {
+  DEFAULT_PRINT_SETTINGS,
+  PRINT_SETTING_STORAGE_KEY,
+  normalizePrintSettings,
+  buildEventSelectionPrintHtml,
+  logPrintInfo,
+  logPrintWarn
+} from "../shared/print-utils.js";
+import { defaultOpenPrintWindow } from "../shared/print-preview.js";
 
 const HOST_PRESENCE_HEARTBEAT_MS = 60_000;
 const SCHEDULE_CONSENSUS_TOAST_MS = 3_000;
@@ -176,6 +185,7 @@ export class EventAdminApp {
     this.backupInFlight = false;
     this.restoreInFlight = false;
     this.displayUrlCopyTimer = 0;
+    this.eventPrintSettings = DEFAULT_PRINT_SETTINGS;
     this.operatorPresenceEntries = [];
     this.operatorPresenceEventId = "";
     this.operatorPresenceUnsubscribe = null;
@@ -555,6 +565,12 @@ export class EventAdminApp {
   bindEvents() {
     if (this.dom.addEventButton) {
       this.dom.addEventButton.addEventListener("click", () => this.openEventDialog({ mode: "create" }));
+    }
+
+    if (this.dom.eventPrintButton) {
+      this.dom.eventPrintButton.addEventListener("click", () => {
+        this.handleEventPrint();
+      });
     }
 
     if (this.dom.refreshButton) {
@@ -1271,6 +1287,7 @@ export class EventAdminApp {
     this.ensureSelectedEvent(previousEventId);
     this.renderEvents();
     this.updateScheduleStateFromSelection(previousScheduleId);
+    this.updateFlowButtons();
 
     if (this.stage === "tabs") {
       const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
@@ -2556,6 +2573,10 @@ export class EventAdminApp {
     if (this.dom.refreshButton) {
       this.dom.refreshButton.disabled = !signedIn;
     }
+    if (this.dom.eventPrintButton) {
+      const hasEvents = this.events.length > 0;
+      this.dom.eventPrintButton.disabled = !signedIn || !hasEvents;
+    }
     if (this.dom.nextButton) {
       this.dom.nextButton.disabled = !signedIn || !hasEvent;
     }
@@ -2569,6 +2590,54 @@ export class EventAdminApp {
       this.dom.scheduleNextButton.disabled = !signedIn || !hasSchedule;
     }
     this.updateNavigationButtons();
+  }
+
+  loadEventPrintSettings() {
+    if (typeof localStorage === "undefined") {
+      this.eventPrintSettings = DEFAULT_PRINT_SETTINGS;
+      return this.eventPrintSettings;
+    }
+
+    try {
+      const stored = localStorage.getItem(PRINT_SETTING_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        this.eventPrintSettings = normalizePrintSettings(parsed, DEFAULT_PRINT_SETTINGS);
+        logPrintInfo("Event print settings loaded", {
+          paperSize: this.eventPrintSettings.paperSize,
+          margin: this.eventPrintSettings.margin
+        });
+      } else {
+        this.eventPrintSettings = DEFAULT_PRINT_SETTINGS;
+      }
+    } catch (error) {
+      logPrintWarn("Failed to load event print settings", error);
+      this.eventPrintSettings = DEFAULT_PRINT_SETTINGS;
+    }
+
+    return this.eventPrintSettings;
+  }
+
+  handleEventPrint() {
+    if (!Array.isArray(this.events) || !this.events.length) {
+      this.showAlert("印刷できるイベントがありません。まずはイベントを登録してください。");
+      return;
+    }
+
+    const settings = this.loadEventPrintSettings();
+    const { html, docTitle } = buildEventSelectionPrintHtml({
+      events: this.events,
+      generatedAt: new Date(),
+      printOptions: settings
+    });
+
+    const opened = defaultOpenPrintWindow(html, docTitle);
+    if (!opened) {
+      this.showAlert("印刷用のウィンドウを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
+      return;
+    }
+
+    logPrintInfo("Triggered event selection print", { eventCount: this.events.length });
   }
 
   updateSelectionNotes() {

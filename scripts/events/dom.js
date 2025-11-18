@@ -20,6 +20,7 @@ export function queryDom() {
     eventEmpty: document.getElementById("flow-event-empty"),
     eventSelectionNote: document.getElementById("flow-event-selection-note"),
     addEventButton: document.getElementById("flow-add-event-button"),
+    eventPrintButton: document.getElementById("flow-events-print-button"),
     refreshButton: document.getElementById("flow-events-refresh-button"),
     backupButton: document.getElementById("events-backup-button"),
     restoreButton: document.getElementById("events-restore-button"),
