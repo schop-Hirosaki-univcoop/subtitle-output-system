@@ -467,6 +467,19 @@ function buildParticipantPrintHtml({
       transform: scale(var(--preview-scale));
       transform-origin: top center;
     }
+    @media print {
+      body { background: #fff; }
+      .print-surface {
+        aspect-ratio: auto;
+        box-shadow: none;
+        margin: 0 auto;
+        padding: 0;
+        width: var(--page-content-width);
+        min-height: var(--page-content-height);
+        box-sizing: content-box;
+        transform: none;
+      }
+    }
     .print-surface .print-controls { display: none; }
     .print-surface .print-group { break-inside: avoid-page; }
     .print-surface .print-footer { display: block; margin-top: auto; }
