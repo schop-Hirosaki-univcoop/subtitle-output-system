@@ -393,6 +393,12 @@ function buildParticipantPrintHtml({
     ? `${pageWidth}mm ${pageHeight}mm`
     : `${pageSize} ${pageOrientation}`;
   const headerClass = printSettings.repeatHeader ? "print-header print-header--repeat" : "print-header";
+  const headerMarkup = printSettings.showHeader
+    ? `<header class="${headerClass}">
+      <h1 class="print-title">${escapeHtml(headingText)}</h1>
+      ${metaMarkup}
+    </header>`
+    : "";
   const footerTimestamp = [
     printSettings.showDate ? generatedDateText : "",
     printSettings.showTime ? generatedTimeText : ""
@@ -467,6 +473,19 @@ function buildParticipantPrintHtml({
       transform: scale(var(--preview-scale));
       transform-origin: top center;
     }
+    @media print {
+      body { background: #fff; }
+      .print-surface {
+        aspect-ratio: auto;
+        box-shadow: none;
+        margin: 0 auto;
+        padding: 0;
+        width: var(--page-content-width);
+        min-height: var(--page-content-height);
+        box-sizing: content-box;
+        transform: none;
+      }
+    }
     .print-surface .print-controls { display: none; }
     .print-surface .print-group { break-inside: avoid-page; }
     .print-surface .print-footer { display: block; margin-top: auto; }
@@ -478,10 +497,7 @@ function buildParticipantPrintHtml({
     <div class="print-controls" role="group" aria-label="印刷操作">
       <button type="button" class="print-controls__button" onclick="window.print()">印刷する</button>
     </div>
-    <header class="${headerClass}">
-      <h1 class="print-title">${escapeHtml(headingText)}</h1>
-      ${metaMarkup}
-    </header>
+    ${headerMarkup}
     <main>
       ${sectionsMarkup}
     </main>
