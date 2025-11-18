@@ -3234,6 +3234,8 @@ const participantPrintPreviewController = createPrintPreviewController({
   onCacheChange: (nextCache) => {
     participantPrintPreviewCache = nextCache;
   },
+  openDialog: (element) => openDialog(element),
+  closeDialog: (element) => closeDialog(element),
   openPopup: (html, title, settings) => openPopupPrintWindow(html, title, settings)
 });
 

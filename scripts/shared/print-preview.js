@@ -85,7 +85,9 @@ function createPrintPreviewController({
   normalizeSettings = (settings, fallback) => normalizePrintSettings(settings, fallback),
   onVisibilityChange,
   onCacheChange,
-  openPopup = defaultOpenPrintWindow
+  openPopup = defaultOpenPrintWindow,
+  openDialog,
+  closeDialog
 } = {}) {
   const resolveDefaultSettings = () =>
     typeof defaultSettings === "function" ? defaultSettings() : defaultSettings;
@@ -172,6 +174,14 @@ function createPrintPreviewController({
           // ignore dialog errors
         }
       }
+    } else if (previewDialog && (openDialog || closeDialog)) {
+      if (visible) {
+        openDialog?.(previewDialog);
+      } else {
+        closeDialog?.(previewDialog);
+      }
+    } else if (previewDialog instanceof HTMLElement) {
+      previewDialog.hidden = !visible;
     }
 
     if (previewContainer) {
