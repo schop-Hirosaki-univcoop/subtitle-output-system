@@ -4557,6 +4557,7 @@ async function loadParticipants(options = {}) {
     }, 100); // 100ms delay to ensure UI is responsive
     updateParticipantContext({ preserveStatus: true });
     syncSaveButtonState();
+    syncPrintViewButtonState();
     emitParticipantSyncEvent({
       success: true,
       eventId,
@@ -4579,6 +4580,7 @@ async function loadParticipants(options = {}) {
     updateParticipantContext();
     syncSaveButtonState();
     syncMailActionState();
+    syncPrintViewButtonState();
     emitParticipantSyncEvent({
       success: false,
       eventId,
