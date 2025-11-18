@@ -1,11 +1,20 @@
-import { normalizePrintSettings, DEFAULT_PRINT_SETTINGS } from "./print-utils.js";
+import {
+  normalizePrintSettings,
+  DEFAULT_PRINT_SETTINGS,
+  logPrintInfo,
+  logPrintWarn,
+  logPrintError,
+  logPrintDebug
+} from "./print-utils.js";
 
 const DEFAULT_PREVIEW_NOTE = "印刷設定を選ぶとここに最新のプレビューが表示されます。";
 const DEFAULT_LOAD_TIMEOUT_MS = 4000;
 
 function defaultOpenPrintWindow(html, docTitle) {
+  logPrintInfo("defaultOpenPrintWindow invoked", { hasHtml: Boolean(html), docTitle });
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
+    logPrintWarn("defaultOpenPrintWindow failed to open window");
     return false;
   }
 
@@ -20,6 +29,7 @@ function defaultOpenPrintWindow(html, docTitle) {
     printWindow.document.write(html);
     printWindow.document.close();
   } catch (error) {
+    logPrintError("defaultOpenPrintWindow document write failed", error);
     // Ignore document write errors
   }
 
@@ -28,6 +38,7 @@ function defaultOpenPrintWindow(html, docTitle) {
       printWindow.document.title = docTitle;
     }
   } catch (error) {
+    logPrintWarn("defaultOpenPrintWindow title set failed", error);
     // Ignore title errors
   }
 
@@ -35,9 +46,12 @@ function defaultOpenPrintWindow(html, docTitle) {
     try {
       printWindow.print();
     } catch (error) {
+      logPrintWarn("defaultOpenPrintWindow print failed", error);
       // Ignore print errors
     }
   }, 150);
+
+  logPrintInfo("defaultOpenPrintWindow completed", { docTitle });
 
   return true;
 }
@@ -100,6 +114,7 @@ function createPrintPreviewController({
     if (previewFrame && errorHandler) {
       previewFrame.removeEventListener("error", errorHandler);
     }
+    logPrintDebug("printPreview clearLoadHandlers", { hasLoadHandler: Boolean(loadHandler), hasErrorHandler: Boolean(errorHandler) });
     previewLoadAbort = null;
   };
 
@@ -107,6 +122,14 @@ function createPrintPreviewController({
     { html = "", title = "", metaText = "", printSettings = null, forcePopupFallback } = {},
     { preserveFallbackFlag = false } = {}
   ) => {
+    logPrintDebug("printPreview cachePreview called", {
+      hasHtml: Boolean(html),
+      title,
+      metaText,
+      printSettings,
+      forcePopupFallback,
+      preserveFallbackFlag
+    });
     const nextForcePopupFallback =
       forcePopupFallback !== undefined
         ? Boolean(forcePopupFallback)
@@ -128,10 +151,13 @@ function createPrintPreviewController({
       onCacheChange(previewCache);
     }
 
+    logPrintInfo("printPreview cache updated", previewCache);
+
     return previewCache;
   };
 
   const setVisibility = (visible) => {
+    logPrintInfo("printPreview setVisibility", { visible });
     if (previewDialog && typeof previewDialog.showModal === "function") {
       if (visible && !previewDialog.open) {
         try {
@@ -159,12 +185,14 @@ function createPrintPreviewController({
   };
 
   const setBusy = (isBusy) => {
+    logPrintDebug("printPreview setBusy", { isBusy });
     if (previewContainer) {
       previewContainer.setAttribute("aria-busy", isBusy ? "true" : "false");
     }
   };
 
   const setNote = (text = defaultNote, options = {}) => {
+    logPrintDebug("printPreview setNote", { text, options });
     const { forceAnnounce = false, politeness, role } = options || {};
     if (!previewNote) {
       return;
@@ -259,6 +287,7 @@ function createPrintPreviewController({
   };
 
   const reset = () => {
+    logPrintInfo("printPreview reset called");
     clearLoadHandlers();
     if (previewFrame) {
       previewFrame.srcdoc = "";
@@ -284,6 +313,7 @@ function createPrintPreviewController({
   };
 
   const renderPreviewFallbackNote = (message, metaText) => {
+    logPrintWarn("printPreview renderPreviewFallbackNote", { message, metaText, hasCachedHtml: Boolean(previewCache.html) });
     const hasCachedHtml = Boolean(previewCache.html || previewCache.forcePopupFallback);
     const popupHint = hasCachedHtml
       ? " 画面右の「このリストを印刷」からポップアップ印刷を再試行できます。"
@@ -317,7 +347,9 @@ function createPrintPreviewController({
   };
 
   const renderPreview = ({ html, metaText, title, autoPrint = false, printSettings } = {}) => {
+    logPrintInfo("printPreview renderPreview", { hasHtml: Boolean(html), metaText, title, autoPrint, printSettings });
     if (!previewContainer || !previewFrame) {
+      logPrintWarn("printPreview renderPreview missing container or frame");
       return false;
     }
 
@@ -337,6 +369,7 @@ function createPrintPreviewController({
       clearLoadHandlers();
       const hasWindow = Boolean(previewFrame?.contentWindow);
       const hasDocument = Boolean(previewFrame?.contentDocument);
+      logPrintDebug("printPreview frame load", { hasWindow, hasDocument });
       if (previewContainer) {
         previewContainer.classList.remove("print-preview--fallback");
       }
@@ -370,10 +403,12 @@ function createPrintPreviewController({
         try {
           const printWindow = previewFrame.contentWindow;
           if (printWindow) {
+            logPrintInfo("printPreview triggering auto print");
             printWindow.focus();
             printWindow.print();
           }
         } catch (error) {
+          logPrintWarn("printPreview auto print failed", error);
           renderPreviewFallbackNote(
             "印刷用のポップアップを開けませんでした。ブラウザのポップアップ設定をご確認ください。",
             metaText
@@ -384,6 +419,7 @@ function createPrintPreviewController({
 
     const handleError = () => {
       clearLoadHandlers();
+      logPrintWarn("printPreview frame error");
       renderPreviewFallbackNote("プレビューを読み込めませんでした。", metaText);
     };
 
@@ -393,10 +429,12 @@ function createPrintPreviewController({
 
     const handleTimeout = () => {
       clearLoadHandlers();
+      logPrintWarn("printPreview load timeout", { autoPrint, hasHtml: Boolean(html) });
       renderPreviewFallbackNote("プレビューの読み込みがタイムアウトしました。", metaText);
       if (autoPrint && html) {
         const fallbackOpened = openPopup(html, title, normalizedPrintSettings);
         if (!fallbackOpened) {
+          logPrintWarn("printPreview popup fallback failed on timeout");
           window.alert("印刷用のポップアップを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
         }
       }
@@ -410,19 +448,23 @@ function createPrintPreviewController({
   };
 
   const triggerInlinePrint = () => {
+    logPrintInfo("printPreview triggerInlinePrint");
     if (!previewFrame) return false;
     const printWindow = previewFrame.contentWindow;
     if (!printWindow) return false;
     try {
       printWindow.focus();
       printWindow.print();
+      logPrintInfo("printPreview triggerInlinePrint succeeded");
       return true;
     } catch (error) {
+      logPrintWarn("printPreview triggerInlinePrint failed", error);
       return false;
     }
   };
 
   const printPreview = ({ showAlertOnFailure = false } = {}) => {
+    logPrintInfo("printPreview printPreview invoked", { showAlertOnFailure });
     const cachedHtml = previewCache?.html || "";
     const cachedTitle = previewCache?.title || "";
     const cachedMeta = previewCache?.metaText || "";
@@ -435,6 +477,7 @@ function createPrintPreviewController({
         if (previewPrintButton) {
           delete previewPrintButton.dataset.popupFallback;
         }
+        logPrintInfo("printPreview printed inline");
         return true;
       }
     }
@@ -448,6 +491,7 @@ function createPrintPreviewController({
         if (previewPrintButton) {
           previewPrintButton.dataset.popupFallback = "true";
         }
+        logPrintInfo("printPreview popup opened from cache");
         return true;
       }
     }
@@ -455,6 +499,8 @@ function createPrintPreviewController({
     if (showAlertOnFailure) {
       window.alert("印刷を開始できませんでした。ブラウザのポップアップ設定をご確認ください。");
     }
+
+    logPrintWarn("printPreview printPreview failed", { hasHtml: Boolean(cachedHtml), forcePopupFallback });
 
     return false;
   };

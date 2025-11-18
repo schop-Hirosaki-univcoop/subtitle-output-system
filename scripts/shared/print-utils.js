@@ -1,5 +1,6 @@
 // print-utils.js: 印刷プレビュー用の共通ユーティリティを提供します。
 
+const PRINT_LOG_PREFIX = "[Print]";
 const PRINT_SETTING_STORAGE_KEY = "qa.printSettings.v1";
 
 const GEN_EI_FONT_BASE = new URL("../../assets/fonts/genei-gothic/", import.meta.url).href;
@@ -37,6 +38,32 @@ const PRINT_PAPER_SIZE_MAP = {
 const PRINT_PAPER_SIZES = new Set(Object.keys(PRINT_PAPER_SIZE_MAP));
 const PRINT_ORIENTATIONS = new Set(["portrait", "landscape"]);
 const PRINT_MARGINS = new Set(["5mm", "10mm", "15mm"]);
+
+function logPrint(level, message, details) {
+  if (typeof console === "undefined") return;
+  const logger = (console[level] || console.log).bind(console);
+  if (details !== undefined) {
+    logger(`${PRINT_LOG_PREFIX} ${message}`, details);
+  } else {
+    logger(`${PRINT_LOG_PREFIX} ${message}`);
+  }
+}
+
+function logPrintInfo(message, details) {
+  logPrint("info", message, details);
+}
+
+function logPrintWarn(message, details) {
+  logPrint("warn", message, details);
+}
+
+function logPrintError(message, details) {
+  logPrint("error", message, details);
+}
+
+function logPrintDebug(message, details) {
+  logPrint("debug", message, details);
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -114,6 +141,7 @@ function normalizePageDimension(value, fallback = DEFAULT_CUSTOM_PAGE_SIZE.width
 }
 
 function normalizePrintSettings(settings = {}, fallbackSettings = DEFAULT_PRINT_SETTINGS) {
+  logPrintDebug("normalizePrintSettings start", { settings, fallbackSettings });
   const base = { ...DEFAULT_PRINT_SETTINGS, ...(fallbackSettings || {}) };
   const fallbackWidth = base.customWidth || DEFAULT_CUSTOM_PAGE_SIZE.width;
   const fallbackHeight = base.customHeight || DEFAULT_CUSTOM_PAGE_SIZE.height;
@@ -141,6 +169,7 @@ function normalizePrintSettings(settings = {}, fallbackSettings = DEFAULT_PRINT_
     normalized.customHeight = fallbackHeight;
   }
 
+  logPrintDebug("normalizePrintSettings result", normalized);
   return normalized;
 }
 
@@ -149,9 +178,11 @@ function resolvePrintPageSize(printSettings = DEFAULT_PRINT_SETTINGS, fallbackSe
   const base = PRINT_PAPER_SIZE_MAP[normalized.paperSize];
   const width = base?.width || normalized.customWidth || DEFAULT_CUSTOM_PAGE_SIZE.width;
   const height = base?.height || normalized.customHeight || DEFAULT_CUSTOM_PAGE_SIZE.height;
-  return normalized.orientation === "landscape"
+  const resolved = normalized.orientation === "landscape"
     ? { width: height, height: width }
     : { width, height };
+  logPrintDebug("resolvePrintPageSize", { printSettings, fallbackSettings, resolved });
+  return resolved;
 }
 
 function buildParticipantPrintHtml({
@@ -166,6 +197,7 @@ function buildParticipantPrintHtml({
   generatedAt,
   printOptions
 }, { defaultSettings = DEFAULT_PRINT_SETTINGS } = {}) {
+  logPrintInfo("buildParticipantPrintHtml called", { eventId, scheduleId, printOptions, defaultSettings });
   const printSettings = normalizePrintSettings(printOptions, defaultSettings);
   const eventDisplayRaw = formatMetaDisplay(eventName, eventId);
   const scheduleDisplayRaw = formatMetaDisplay(scheduleLabel, scheduleId);
@@ -376,7 +408,7 @@ function buildParticipantPrintHtml({
     ? `<footer class="print-footer"><div class="print-footer__items">${footerItems.join("")}</div></footer>`
     : "";
 
-  return `<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="utf-8">
@@ -457,6 +489,14 @@ function buildParticipantPrintHtml({
   </div>
 </body>
 </html>`;
+  logPrintInfo("buildParticipantPrintHtml generated", {
+    eventId,
+    scheduleId,
+    groupsCount: Array.isArray(groups) ? groups.length : 0,
+    totalCount,
+    printSettings
+  });
+  return html;
 }
 
 function buildMinimalParticipantPrintPreview({
@@ -466,6 +506,7 @@ function buildMinimalParticipantPrintPreview({
   printOptions = {},
   generatedAt = new Date()
 } = {}) {
+  logPrintInfo("buildMinimalParticipantPrintPreview", { participantsCount: participants.length, groupLabel, groupValue, printOptions });
   return buildParticipantPrintHtml({
     eventId: "",
     scheduleId: "",
@@ -489,6 +530,7 @@ function buildMinimalParticipantPrintPreview({
 }
 
 export {
+  PRINT_LOG_PREFIX,
   PRINT_SETTING_STORAGE_KEY,
   DEFAULT_CUSTOM_PAGE_SIZE,
   DEFAULT_PRINT_SETTINGS,
@@ -504,5 +546,9 @@ export {
   normalizePrintSettings,
   resolvePrintPageSize,
   buildParticipantPrintHtml,
-  buildMinimalParticipantPrintPreview
+  buildMinimalParticipantPrintPreview,
+  logPrintInfo,
+  logPrintWarn,
+  logPrintError,
+  logPrintDebug
 };
