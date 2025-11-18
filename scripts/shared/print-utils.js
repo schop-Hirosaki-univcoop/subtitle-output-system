@@ -82,6 +82,30 @@ function formatPrintCell(value, { placeholder = "&nbsp;" } = {}) {
   return escapeHtml(text).replace(/\n/g, "<br>");
 }
 
+function parseDateTime(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const normalized = text.includes("/") ? text.replace(/\//g, "-") : text;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function formatPrintDate(value, formatter) {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    return "";
+  }
+  return formatter.format(value);
+}
+
+function formatPrintTime(value, formatter) {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    return "";
+  }
+  return formatter.format(value);
+}
+
 function formatMetaDisplay(primary, id) {
   const primaryText = String(primary ?? "").trim();
   const idText = String(id ?? "").trim();
@@ -545,6 +569,240 @@ function buildMinimalParticipantPrintPreview({
   });
 }
 
+function buildEventSelectionPrintHtml(
+  { events = [], generatedAt, printOptions } = {},
+  { defaultSettings = DEFAULT_PRINT_SETTINGS } = {}
+) {
+  logPrintInfo("buildEventSelectionPrintHtml called", {
+    eventCount: Array.isArray(events) ? events.length : 0,
+    printOptions,
+    defaultSettings
+  });
+
+  const printSettings = normalizePrintSettings(printOptions, defaultSettings);
+  const eventList = Array.isArray(events) ? events : [];
+  const generatedAtDate = generatedAt instanceof Date && !Number.isNaN(generatedAt.getTime())
+    ? generatedAt
+    : new Date();
+
+  const dateFormatter = new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  const timeFormatter = new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+  const generatedDateFormatter = new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  const generatedTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+
+  const generatedDateText = generatedDateFormatter.format(generatedAtDate);
+  const generatedTimeText = generatedTimeFormatter.format(generatedAtDate);
+
+  const formatParticipantTotal = (value) => {
+    if (value == null || value === "") {
+      return "—";
+    }
+    const num = Number(value);
+    return Number.isFinite(num) ? `${num}名` : `${value}`;
+  };
+
+  const extractTimePart = (value) => {
+    const text = String(value ?? "").trim();
+    if (!text) return "";
+    const match = text.match(/(\d{1,2}:\d{2})/);
+    return match ? match[1] : "";
+  };
+
+  const resolveScheduleDate = (schedule) => {
+    const startDate = parseDateTime(schedule?.startAt || schedule?.date);
+    const endDate = parseDateTime(schedule?.endAt);
+    const fallbackDate = parseDateTime(schedule?.date);
+    return (
+      formatPrintDate(startDate, dateFormatter) ||
+      formatPrintDate(fallbackDate, dateFormatter) ||
+      formatPrintDate(endDate, dateFormatter) ||
+      ""
+    );
+  };
+
+  const resolveScheduleTime = (schedule, key) => {
+    const rawValue = key === "start" ? schedule?.startAt || schedule?.date : schedule?.endAt;
+    const parsed = parseDateTime(rawValue);
+    return formatPrintTime(parsed, timeFormatter) || extractTimePart(rawValue);
+  };
+
+  const eventSections = eventList
+    .map((event) => {
+      const scheduleRows = Array.isArray(event?.schedules) ? event.schedules : [];
+      const safeName = escapeHtml(event?.name || event?.id || "イベント");
+      const scheduleCount = Number.isFinite(event?.scheduleCount)
+        ? event.scheduleCount
+        : scheduleRows.length;
+      const totalParticipants = formatParticipantTotal(event?.totalParticipants);
+      const scheduleMarkup = scheduleRows.length
+        ? scheduleRows
+            .map((schedule) => {
+              const label = formatPrintCell(schedule?.label || schedule?.id || "", { placeholder: "—" });
+              const dateText = resolveScheduleDate(schedule) || "—";
+              const startText = resolveScheduleTime(schedule, "start") || "—";
+              const endText = resolveScheduleTime(schedule, "end") || "—";
+              const locationText = formatPrintCell(schedule?.location || "", { placeholder: "—" });
+              const participantText = formatParticipantTotal(schedule?.participantCount);
+              return `<tr><td>${label}</td><td>${escapeHtml(dateText)}</td><td>${escapeHtml(startText)}</td><td>${escapeHtml(endText)}</td><td>${locationText}</td><td>${escapeHtml(participantText)}</td></tr>`;
+            })
+            .join("\n")
+        : '<tr class="print-table__empty"><td colspan="6">日程が登録されていません。</td></tr>';
+
+      return `<section class="print-event">
+        <header class="print-event__header">
+          <div class="print-event__title">
+            <p class="print-event__label">イベント</p>
+            <h2 class="print-event__name">${safeName}</h2>
+          </div>
+          <dl class="print-event__stats">
+            <div class="print-event__stat"><dt>日程数</dt><dd>${escapeHtml(`${scheduleCount}件`)}</dd></div>
+            <div class="print-event__stat"><dt>総参加者数</dt><dd>${escapeHtml(totalParticipants)}</dd></div>
+          </dl>
+        </header>
+        <table class="print-table print-event__table" aria-label="${escapeHtml(`${safeName} の日程一覧`)}">
+          <thead>
+            <tr><th scope="col">日程の表示名</th><th scope="col">日付</th><th scope="col">開始時刻</th><th scope="col">終了時刻</th><th scope="col">場所</th><th scope="col">参加者数</th></tr>
+          </thead>
+          <tbody>
+            ${scheduleMarkup}
+          </tbody>
+        </table>
+      </section>`;
+    })
+    .join("\n\n");
+
+  const metaItems = [];
+  metaItems.push(
+    `<li class="print-meta__item"><span class="print-meta__label">イベント数:</span> <span class="print-meta__value">${escapeHtml(
+      `${eventList.length}件`
+    )}</span></li>`
+  );
+  if (printSettings.showDate || printSettings.showTime) {
+    const generatedParts = [
+      printSettings.showDate ? generatedDateText : "",
+      printSettings.showTime ? generatedTimeText : ""
+    ].filter(Boolean);
+    const generatedLabel = printSettings.showDate && printSettings.showTime
+      ? "出力日時"
+      : printSettings.showDate
+        ? "出力日"
+        : "出力時刻";
+    metaItems.push(
+      `<li class="print-meta__item"><span class="print-meta__label">${escapeHtml(generatedLabel)}:</span> <span class="print-meta__value">${escapeHtml(
+        generatedParts.join(" ")
+      )}</span></li>`
+    );
+  }
+
+  const pageMargin = printSettings.margin || "5mm";
+  const pageSize = printSettings.paperSize || "A4";
+  const pageOrientation = printSettings.orientation || "portrait";
+  const { width: pageWidth, height: pageHeight } = resolvePrintPageSize(printSettings, defaultSettings);
+  const pageSizeValue = pageSize === "Custom"
+    ? `${pageWidth}mm ${pageHeight}mm`
+    : `${pageSize} ${pageOrientation}`;
+  const headerClass = printSettings.repeatHeader ? "print-header print-header--repeat" : "print-header";
+  const headingText = eventList.length ? `イベント一覧 (${eventList.length}件)` : "イベント一覧";
+  const docTitle = headingText;
+  const metaMarkup = metaItems.length ? `<ul class="print-meta">${metaItems.join("\n")}</ul>` : "";
+  const headerMarkup = printSettings.showHeader
+    ? `<header class="${headerClass}">
+      <h1 class="print-title">${escapeHtml(headingText)}</h1>
+      ${metaMarkup}
+    </header>`
+    : "";
+  const footerTimestamp = [
+    printSettings.showDate ? generatedDateText : "",
+    printSettings.showTime ? generatedTimeText : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const footerItems = [];
+  if (footerTimestamp) {
+    footerItems.push(`<span class="print-footer__item">${escapeHtml(footerTimestamp)}</span>`);
+  }
+  if (printSettings.showPageNumbers) {
+    footerItems.push('<span class="print-footer__item print-footer__page" aria-label="ページ番号"><span class="print-footer__page-number" aria-hidden="true"></span></span>');
+  }
+  const footerMarkup = footerItems.length
+    ? `<footer class="print-footer"><div class="print-footer__items">${footerItems.join("")}</div></footer>`
+    : "";
+
+  const html = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(docTitle)}</title>
+  <style>
+    :root { color-scheme: light; --page-margin: ${pageMargin}; --page-width: ${pageWidth}mm; --page-height: ${pageHeight}mm; --page-content-width: calc(var(--page-width) - (2 * var(--page-margin))); --page-content-height: calc(var(--page-height) - (2 * var(--page-margin))); --preview-scale: 1; }
+    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+    @page { size: ${pageSizeValue}; margin: ${pageMargin}; counter-increment: page; }
+    body { counter-reset: page 1; }
+    body { margin: 0; font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 9pt; line-height: 1.5; color: #000; background: #f6f7fb; }
+    .print-header { margin-bottom: 8mm; }
+    .print-title { font-size: 14.4pt; margin: 0 0 4mm; }
+    .print-meta { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2mm 12mm; font-size: 8pt; }
+    .print-meta__label { font-weight: 600; margin-right: 2mm; }
+    .print-event { border: 0.3mm solid #000; padding: 4mm; margin-bottom: 12mm; background: #fff; page-break-inside: avoid; break-inside: avoid; }
+    .print-event__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 6mm; margin-bottom: 5mm; }
+    .print-event__title { flex: 1 1 auto; }
+    .print-event__label { font-size: 7.2pt; color: #555; letter-spacing: 0.08em; margin: 0 0 1mm; text-transform: uppercase; }
+    .print-event__name { font-size: 14pt; margin: 0; }
+    .print-event__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(28mm, 1fr)); gap: 3mm; margin: 0; padding: 0; min-width: 60mm; }
+    .print-event__stat { margin: 0; padding: 0; display: grid; gap: 1mm; font-size: 8pt; align-content: center; }
+    .print-event__stat dt { font-weight: 600; color: #444; margin: 0; }
+    .print-event__stat dd { margin: 0; font-size: 11pt; font-weight: 600; }
+    .print-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+    .print-table th, .print-table td { border: 0.25mm solid #000; padding: 1.5mm 2mm; text-align: left; vertical-align: top; }
+    .print-table th { background: #f5f5f5; }
+    .print-table__empty td { text-align: center; color: #555; }
+    .print-empty { font-size: 8.8pt; margin: 0; }
+    .print-footer { margin-top: 6mm; font-size: 8pt; color: #000; }
+    .print-footer__items { display: flex; gap: 6mm; align-items: center; }
+    .print-footer__page { margin-left: auto; }
+    .print-footer__item { white-space: nowrap; }
+    .print-footer__page-number::after { content: counter(page); }
+    .print-surface { margin: auto; padding: calc(var(--page-margin) * var(--preview-scale)); width: calc(var(--page-content-width) * var(--preview-scale)); background: #fff; box-sizing: border-box; min-height: calc(var(--page-content-height) * var(--preview-scale)); }
+  </style>
+</head>
+<body>
+  <div class="print-surface">
+    ${headerMarkup}
+    ${eventSections || '<p class="print-empty">印刷できるイベントがありません。</p>'}
+    ${footerMarkup}
+  </div>
+</body>
+</html>`;
+
+  logPrintInfo("buildEventSelectionPrintHtml generated", {
+    eventCount: eventList.length,
+    showHeader: printSettings.showHeader,
+    showPageNumbers: printSettings.showPageNumbers
+  });
+
+  return { html, docTitle, metaText: headingText };
+}
+
 export {
   PRINT_LOG_PREFIX,
   PRINT_SETTING_STORAGE_KEY,
@@ -563,6 +821,7 @@ export {
   resolvePrintPageSize,
   buildParticipantPrintHtml,
   buildMinimalParticipantPrintPreview,
+  buildEventSelectionPrintHtml,
   logPrintInfo,
   logPrintWarn,
   logPrintError,
