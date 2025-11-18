@@ -74,7 +74,11 @@ import {
   DEFAULT_PRINT_SETTINGS,
   normalizePrintSettings,
   formatPrintDateTimeRange,
-  buildParticipantPrintHtml
+  buildParticipantPrintHtml,
+  logPrintInfo,
+  logPrintWarn,
+  logPrintError,
+  logPrintDebug
 } from "../shared/print-utils.js";
 import {
   DEFAULT_PREVIEW_NOTE,
@@ -3064,28 +3068,37 @@ function buildParticipantPrintGroups({ eventId, scheduleId }) {
 }
 
 function hydratePrintSettingsFromStorage() {
+  logPrintInfo("hydratePrintSettingsFromStorage start");
   if (typeof localStorage === "undefined") {
+    logPrintWarn("hydratePrintSettingsFromStorage skipped: localStorage unavailable");
     return;
   }
   try {
     const stored = localStorage.getItem(PRINT_SETTING_STORAGE_KEY);
-    if (!stored) return;
+    if (!stored) {
+      logPrintDebug("hydratePrintSettingsFromStorage empty");
+      return;
+    }
     const parsed = JSON.parse(stored);
     const normalized = normalizePrintSettings(parsed, state.printSettings || DEFAULT_PRINT_SETTINGS);
     state.printSettings = normalized;
+    logPrintInfo("hydratePrintSettingsFromStorage loaded", normalized);
   } catch (error) {
     console.warn("[Print] Failed to load print settings from storage", error);
   }
 }
 
 function persistPrintSettings(settings) {
+  logPrintInfo("persistPrintSettings start", settings);
   const normalized = normalizePrintSettings(settings, state.printSettings || DEFAULT_PRINT_SETTINGS);
   state.printSettings = normalized;
   if (typeof localStorage === "undefined") {
+    logPrintWarn("persistPrintSettings skipped: localStorage unavailable");
     return normalized;
   }
   try {
     localStorage.setItem(PRINT_SETTING_STORAGE_KEY, JSON.stringify(normalized));
+    logPrintInfo("persistPrintSettings saved", normalized);
   } catch (error) {
     console.warn("[Print] Failed to persist print settings", error);
   }
@@ -3093,6 +3106,7 @@ function persistPrintSettings(settings) {
 }
 
 function applyPrintSettingsToForm(settings = state.printSettings) {
+  logPrintDebug("applyPrintSettingsToForm", settings);
   const normalized = normalizePrintSettings(settings, state.printSettings || DEFAULT_PRINT_SETTINGS);
   if (dom.printPaperSizeInput) {
     dom.printPaperSizeInput.value = normalized.paperSize;
@@ -3134,6 +3148,7 @@ function applyPrintSettingsToForm(settings = state.printSettings) {
 }
 
 function readPrintSettingsFromForm() {
+  logPrintDebug("readPrintSettingsFromForm start");
   const settings = {
     paperSize: dom.printPaperSizeInput?.value,
     orientation: dom.printOrientationInput?.value,
@@ -3151,11 +3166,15 @@ function readPrintSettingsFromForm() {
   if (settings.showHeader === false) {
     settings.repeatHeader = false;
   }
-  return normalizePrintSettings(settings, state.printSettings || DEFAULT_PRINT_SETTINGS);
+  const normalized = normalizePrintSettings(settings, state.printSettings || DEFAULT_PRINT_SETTINGS);
+  logPrintInfo("readPrintSettingsFromForm normalized", normalized);
+  return normalized;
 }
 
 function setupPrintSettingsDialog() {
   if (!dom.printSettingsForm) return;
+
+  logPrintInfo("setupPrintSettingsDialog initialized");
 
   const syncHeaderControls = () => {
     if (!dom.printShowHeaderInput || !dom.printRepeatHeaderInput) return;
@@ -3164,17 +3183,20 @@ function setupPrintSettingsDialog() {
     if (!enabled) {
       dom.printRepeatHeaderInput.checked = false;
     }
+    logPrintDebug("syncHeaderControls", { enabled });
   };
 
   const syncCustomSizeVisibility = () => {
     if (!dom.printPaperSizeInput || !dom.printCustomSizeField) return;
     const isCustom = dom.printPaperSizeInput.value === "Custom";
     dom.printCustomSizeField.hidden = !isCustom;
+    logPrintDebug("syncCustomSizeVisibility", { isCustom });
   };
 
   dom.printShowHeaderInput?.addEventListener("change", syncHeaderControls);
   dom.printPaperSizeInput?.addEventListener("change", syncCustomSizeVisibility);
   dom.printSettingsForm.addEventListener("change", () => {
+    logPrintInfo("print settings form changed");
     const settings = readPrintSettingsFromForm();
     persistPrintSettings(settings);
     updateParticipantPrintPreview({ autoPrint: false, forceReveal: true, quiet: true });
@@ -3182,6 +3204,7 @@ function setupPrintSettingsDialog() {
 
   dom.printSettingsForm.addEventListener("submit", event => {
     event.preventDefault();
+    logPrintInfo("print settings form submitted");
     const settings = readPrintSettingsFromForm();
     persistPrintSettings(settings);
     updateParticipantPrintPreview({ autoPrint: false, forceReveal: true });
@@ -3211,33 +3234,41 @@ const participantPrintPreviewController = createPrintPreviewController({
   onCacheChange: (nextCache) => {
     participantPrintPreviewCache = nextCache;
   },
+  openDialog: (element) => openDialog(element),
+  closeDialog: (element) => closeDialog(element),
   openPopup: (html, title, settings) => openPopupPrintWindow(html, title, settings)
 });
 
 let participantPrintPreviewCache = participantPrintPreviewController.getCache();
 
 function cacheParticipantPrintPreview(data = {}, options = {}) {
+  logPrintDebug("cacheParticipantPrintPreview", { data, options });
   participantPrintPreviewCache = participantPrintPreviewController.cachePreview(data, options);
   return participantPrintPreviewCache;
 }
 
 function setPrintPreviewNote(text = PRINT_PREVIEW_DEFAULT_NOTE, options = {}) {
+  logPrintDebug("setPrintPreviewNote", { text, options });
   participantPrintPreviewController.setNote(text, options);
 }
 function setPrintPreviewVisibility(visible) {
+  logPrintInfo("setPrintPreviewVisibility", { visible });
   return participantPrintPreviewController.setVisibility(visible);
 }
 
 function setPrintPreviewBusy(isBusy = false) {
+  logPrintDebug("setPrintPreviewBusy", { isBusy });
   participantPrintPreviewController.setBusy(isBusy);
 }
 
 function clearParticipantPrintPreviewLoader() {
+  logPrintDebug("clearParticipantPrintPreviewLoader");
   participantPrintPreviewController.setBusy(false);
 }
 
 function resetPrintPreview(options = {}) {
   const { skipCloseDialog = false } = options || {};
+  logPrintInfo("resetPrintPreview", { skipCloseDialog });
   participantPrintPreviewCache = participantPrintPreviewController.reset();
   if (!skipCloseDialog) {
     participantPrintPreviewController.setVisibility(false);
@@ -3245,6 +3276,7 @@ function resetPrintPreview(options = {}) {
 }
 
 function renderPreviewFallbackNote(message, metaText = "") {
+  logPrintWarn("renderPreviewFallbackNote", { message, metaText });
   const hasCachedHtml = Boolean(participantPrintPreviewCache?.html || participantPrintPreviewCache?.forcePopupFallback);
   const noteText = `${message || "プレビューを表示できませんでした。"}${
     hasCachedHtml ? " 画面右の「このリストを印刷」からポップアップ印刷を再試行できます。" : ""
@@ -3316,6 +3348,7 @@ function renderParticipantPrintPreview({
   autoPrint = false,
   printSettings
 } = {}) {
+  logPrintInfo("renderParticipantPrintPreview", { hasHtml: Boolean(html), metaText, title, autoPrint, printSettings });
   return participantPrintPreviewController.renderPreview({
     html,
     metaText,
@@ -3325,32 +3358,40 @@ function renderParticipantPrintPreview({
   });
 }
 function triggerPrintFromPreview() {
+  logPrintInfo("triggerPrintFromPreview");
   if (!dom.printPreviewFrame) {
+    logPrintWarn("triggerPrintFromPreview aborted: missing frame");
     return false;
   }
   const printWindow = dom.printPreviewFrame.contentWindow;
   if (!printWindow) {
+    logPrintWarn("triggerPrintFromPreview aborted: missing window");
     return false;
   }
   try {
     printWindow.focus();
     printWindow.print();
+    logPrintInfo("triggerPrintFromPreview succeeded");
     return true;
   } catch (error) {
+    logPrintWarn("triggerPrintFromPreview failed", error);
     return false;
   }
 }
 
 function printParticipantPreview({ showAlertOnFailure = false } = {}) {
+  logPrintInfo("printParticipantPreview invoked", { showAlertOnFailure });
   return participantPrintPreviewController.printPreview({ showAlertOnFailure });
 }
 
 function closeParticipantPrintPreview() {
+  logPrintInfo("closeParticipantPrintPreview");
   resetPrintPreview();
 }
 
 
 async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = false, quiet = false } = {}) {
+  logPrintInfo("updateParticipantPrintPreview start", { autoPrint, forceReveal, quiet });
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) {
@@ -3378,6 +3419,7 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
     if (!quiet) {
       window.alert("印刷するにはイベントと日程を選択してください。");
     }
+    logPrintWarn("updateParticipantPrintPreview missing selection");
     return false;
   }
 
@@ -3406,15 +3448,19 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
     if (!quiet) {
       window.alert("印刷できる参加者がまだ登録されていません。");
     }
+    logPrintWarn("updateParticipantPrintPreview no participants");
     return false;
   }
 
   if (participantPrintInProgress) {
+    logPrintWarn("updateParticipantPrintPreview already in progress");
     return false;
   }
 
   const button = dom.openPrintViewButton;
   participantPrintInProgress = true;
+
+  logPrintDebug("updateParticipantPrintPreview lock engaged", { eventId, scheduleId });
 
   if (button) {
     button.dataset.printLocked = "true";
@@ -3437,6 +3483,7 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
         if (typeof console !== "undefined" && typeof console.error === "function") {
           console.error("[Print] GLデータの取得に失敗しました。最新の情報が反映されない場合があります。", error);
         }
+        logPrintError("updateParticipantPrintPreview failed to load GL data", error);
       }
 
       const groups = buildParticipantPrintGroups({ eventId, scheduleId });
@@ -3480,6 +3527,14 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
         printOptions: printSettings
       }, { defaultSettings: state.printSettings || DEFAULT_PRINT_SETTINGS });
 
+      logPrintDebug("updateParticipantPrintPreview generated html", {
+        eventId,
+        scheduleId,
+        totalCount,
+        groupsCount: groups.length,
+        printSettings
+      });
+
       const titleParts = [eventName || eventId || "", scheduleLabel || scheduleId || ""].filter(Boolean);
       const docTitle = titleParts.length ? `${titleParts.join(" / ")} - 参加者リスト` : "参加者リスト";
 
@@ -3501,10 +3556,12 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
       });
 
       if (participantPrintPreviewCache.forcePopupFallback) {
+        logPrintInfo("updateParticipantPrintPreview using popup fallback");
         return true;
       }
 
       if (!previewRendered) {
+        logPrintWarn("updateParticipantPrintPreview preview render failed");
         renderPreviewFallbackNote(
           "プレビュー枠を開けませんでした。ポップアップ許可後に再度お試しください。",
           metaText
@@ -3512,16 +3569,19 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
 
         const fallbackOpened = openPopupPrintWindow(html, docTitle, printSettings);
         if (!fallbackOpened) {
+          logPrintWarn("updateParticipantPrintPreview popup open failed");
           window.alert("印刷プレビューを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
           return false;
         }
       }
+      logPrintInfo("updateParticipantPrintPreview succeeded");
       return true;
     } finally {
       setPrintButtonBusy(false);
     }
   } finally {
     participantPrintInProgress = false;
+    logPrintDebug("updateParticipantPrintPreview lock released");
     if (button) {
       delete button.dataset.printLocked;
     }
@@ -3530,24 +3590,29 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
 }
 
 async function openParticipantPrintView() {
+  logPrintInfo("openParticipantPrintView start");
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   if (!eventId || !scheduleId) {
     window.alert("印刷するにはイベントと日程を選択してください。");
+    logPrintWarn("openParticipantPrintView missing selection");
     return;
   }
 
   if (!Array.isArray(state.participants) || state.participants.length === 0) {
     window.alert("印刷できる参加者がまだ登録されていません。");
+    logPrintWarn("openParticipantPrintView no participants");
     return;
   }
 
   if (participantPrintInProgress) {
+    logPrintWarn("openParticipantPrintView skipped: print in progress");
     return;
   }
 
   setPrintPreviewVisibility(true);
   applyPrintSettingsToForm(state.printSettings);
+  logPrintInfo("openParticipantPrintView updating preview");
   await updateParticipantPrintPreview({ autoPrint: false, forceReveal: true });
 }
 
@@ -3961,6 +4026,7 @@ function getPendingMailCount() {
 let printActionButtonMissingLogged = false;
 
 function syncPrintViewButtonState() {
+  logPrintDebug("syncPrintViewButtonState start");
   const button = dom.openPrintViewButton;
   if (!button) {
     if (!printActionButtonMissingLogged) {
@@ -3969,6 +4035,7 @@ function syncPrintViewButtonState() {
         console.warn("[Print] open-print-view-button が見つからないため、印刷アクションの状態を同期できませんでした。");
       }
     }
+    logPrintWarn("syncPrintViewButtonState aborted: missing button");
     return;
   }
 
@@ -3977,6 +4044,7 @@ function syncPrintViewButtonState() {
   }
 
   if (button.dataset.printing === "true") {
+    logPrintDebug("syncPrintViewButtonState printing state");
     setActionButtonState(button, true);
     const busyLabel = button.dataset.printingLabel || "印刷準備中…";
     if (!button.dataset.printingLabel) {
@@ -3989,6 +4057,7 @@ function syncPrintViewButtonState() {
   }
 
   if (button.dataset.printLocked === "true") {
+    logPrintDebug("syncPrintViewButtonState locked state");
     setActionButtonState(button, true);
     const defaultLabel = button.dataset.defaultLabel || "印刷用リスト";
     if (button.textContent !== defaultLabel) {
@@ -3997,9 +4066,12 @@ function syncPrintViewButtonState() {
     return;
   }
 
+  const participantList = Array.isArray(state.participants) ? state.participants : [];
   const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
-  const hasParticipants = hasSelection && state.participants.length > 0;
+  const hasParticipants = hasSelection && participantList.length > 0;
   const disabled = !hasSelection || !hasParticipants;
+
+  logPrintDebug("syncPrintViewButtonState resolved", { hasSelection, hasParticipants, disabled });
 
   setActionButtonState(button, disabled);
 
@@ -4017,6 +4089,7 @@ function syncPrintViewButtonState() {
 function setPrintButtonBusy(isBusy) {
   const button = dom.openPrintViewButton;
   if (!button) return;
+  logPrintDebug("setPrintButtonBusy", { isBusy });
   if (isBusy) {
     button.dataset.printing = "true";
   } else {
@@ -4557,6 +4630,7 @@ async function loadParticipants(options = {}) {
     }, 100); // 100ms delay to ensure UI is responsive
     updateParticipantContext({ preserveStatus: true });
     syncSaveButtonState();
+    syncPrintViewButtonState();
     emitParticipantSyncEvent({
       success: true,
       eventId,
@@ -4579,6 +4653,7 @@ async function loadParticipants(options = {}) {
     updateParticipantContext();
     syncSaveButtonState();
     syncMailActionState();
+    syncPrintViewButtonState();
     emitParticipantSyncEvent({
       success: false,
       eventId,
@@ -6854,7 +6929,21 @@ function attachEventHandlers() {
   if (dom.openPrintViewButton) {
     dom.openPrintViewButton.addEventListener("click", () => {
       const button = dom.openPrintViewButton;
-      if (!button || button.disabled || button.dataset.printing === "true") {
+      if (!button) {
+        logPrintWarn("openPrintViewButton click without button");
+        return;
+      }
+
+      // ボタンの状態が古い場合に即時同期してから判定する
+      syncPrintViewButtonState();
+
+      logPrintInfo("openPrintViewButton clicked", { disabled: button.disabled, printing: button.dataset.printing });
+
+      if (button.disabled || button.dataset.printing === "true") {
+        logPrintWarn("openPrintViewButton ignored due to state", {
+          disabled: button.disabled,
+          printing: button.dataset.printing
+        });
         return;
       }
 
@@ -6863,6 +6952,7 @@ function attachEventHandlers() {
           if (typeof console !== "undefined" && typeof console.error === "function") {
             console.error("[Print] 印刷用リストの生成に失敗しました。", error);
           }
+          logPrintError("openParticipantPrintView failed from click", error);
           window.alert("印刷用リストの生成中にエラーが発生しました。時間をおいて再度お試しください。");
         });
     });
@@ -6870,6 +6960,7 @@ function attachEventHandlers() {
 
   if (dom.printPreviewCloseButton) {
     dom.printPreviewCloseButton.addEventListener("click", () => {
+      logPrintInfo("printPreviewCloseButton clicked");
       closeParticipantPrintPreview();
     });
   }
@@ -6877,8 +6968,10 @@ function attachEventHandlers() {
   if (dom.printPreviewPrintButton) {
     dom.printPreviewPrintButton.addEventListener("click", () => {
       if (dom.printPreviewPrintButton.disabled) {
+        logPrintWarn("printPreviewPrintButton ignored: disabled");
         return;
       }
+      logPrintInfo("printPreviewPrintButton clicked");
       printParticipantPreview({ showAlertOnFailure: true });
     });
   }

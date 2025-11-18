@@ -1,6 +1,9 @@
 // print-utils.js: 印刷プレビュー用の共通ユーティリティを提供します。
 
+const PRINT_LOG_PREFIX = "[Print]";
 const PRINT_SETTING_STORAGE_KEY = "qa.printSettings.v1";
+
+const GEN_EI_FONT_BASE = new URL("../../assets/fonts/genei-gothic/", import.meta.url).href;
 const DEFAULT_CUSTOM_PAGE_SIZE = { width: 210, height: 297 };
 const DEFAULT_PRINT_SETTINGS = {
   paperSize: "A4",
@@ -35,6 +38,32 @@ const PRINT_PAPER_SIZE_MAP = {
 const PRINT_PAPER_SIZES = new Set(Object.keys(PRINT_PAPER_SIZE_MAP));
 const PRINT_ORIENTATIONS = new Set(["portrait", "landscape"]);
 const PRINT_MARGINS = new Set(["5mm", "10mm", "15mm"]);
+
+function logPrint(level, message, details) {
+  if (typeof console === "undefined") return;
+  const logger = (console[level] || console.log).bind(console);
+  if (details !== undefined) {
+    logger(`${PRINT_LOG_PREFIX} ${message}`, details);
+  } else {
+    logger(`${PRINT_LOG_PREFIX} ${message}`);
+  }
+}
+
+function logPrintInfo(message, details) {
+  logPrint("info", message, details);
+}
+
+function logPrintWarn(message, details) {
+  logPrint("warn", message, details);
+}
+
+function logPrintError(message, details) {
+  logPrint("error", message, details);
+}
+
+function logPrintDebug(message, details) {
+  logPrint("debug", message, details);
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -112,6 +141,7 @@ function normalizePageDimension(value, fallback = DEFAULT_CUSTOM_PAGE_SIZE.width
 }
 
 function normalizePrintSettings(settings = {}, fallbackSettings = DEFAULT_PRINT_SETTINGS) {
+  logPrintDebug("normalizePrintSettings start", { settings, fallbackSettings });
   const base = { ...DEFAULT_PRINT_SETTINGS, ...(fallbackSettings || {}) };
   const fallbackWidth = base.customWidth || DEFAULT_CUSTOM_PAGE_SIZE.width;
   const fallbackHeight = base.customHeight || DEFAULT_CUSTOM_PAGE_SIZE.height;
@@ -139,6 +169,7 @@ function normalizePrintSettings(settings = {}, fallbackSettings = DEFAULT_PRINT_
     normalized.customHeight = fallbackHeight;
   }
 
+  logPrintDebug("normalizePrintSettings result", normalized);
   return normalized;
 }
 
@@ -147,9 +178,11 @@ function resolvePrintPageSize(printSettings = DEFAULT_PRINT_SETTINGS, fallbackSe
   const base = PRINT_PAPER_SIZE_MAP[normalized.paperSize];
   const width = base?.width || normalized.customWidth || DEFAULT_CUSTOM_PAGE_SIZE.width;
   const height = base?.height || normalized.customHeight || DEFAULT_CUSTOM_PAGE_SIZE.height;
-  return normalized.orientation === "landscape"
+  const resolved = normalized.orientation === "landscape"
     ? { width: height, height: width }
     : { width, height };
+  logPrintDebug("resolvePrintPageSize", { printSettings, fallbackSettings, resolved });
+  return resolved;
 }
 
 function buildParticipantPrintHtml({
@@ -164,6 +197,7 @@ function buildParticipantPrintHtml({
   generatedAt,
   printOptions
 }, { defaultSettings = DEFAULT_PRINT_SETTINGS } = {}) {
+  logPrintInfo("buildParticipantPrintHtml called", { eventId, scheduleId, printOptions, defaultSettings });
   const printSettings = normalizePrintSettings(printOptions, defaultSettings);
   const eventDisplayRaw = formatMetaDisplay(eventName, eventId);
   const scheduleDisplayRaw = formatMetaDisplay(scheduleLabel, scheduleId);
@@ -374,7 +408,7 @@ function buildParticipantPrintHtml({
     ? `<footer class="print-footer"><div class="print-footer__items">${footerItems.join("")}</div></footer>`
     : "";
 
-  return `<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="utf-8">
@@ -382,9 +416,9 @@ function buildParticipantPrintHtml({
   <title>${escapeHtml(docTitle)}</title>
   <style>
     :root { color-scheme: light; --page-margin: ${pageMargin}; --page-width: ${pageWidth}mm; --page-height: ${pageHeight}mm; --page-content-width: calc(var(--page-width) - (2 * var(--page-margin))); --page-content-height: calc(var(--page-height) - (2 * var(--page-margin))); --preview-scale: 1; }
-    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
-    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
     @page { size: ${pageSizeValue}; margin: ${pageMargin}; counter-increment: page; }
     body { counter-reset: page 1; }
     body { margin: 0; font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #f6f7fb; }
@@ -455,6 +489,14 @@ function buildParticipantPrintHtml({
   </div>
 </body>
 </html>`;
+  logPrintInfo("buildParticipantPrintHtml generated", {
+    eventId,
+    scheduleId,
+    groupsCount: Array.isArray(groups) ? groups.length : 0,
+    totalCount,
+    printSettings
+  });
+  return html;
 }
 
 function buildMinimalParticipantPrintPreview({
@@ -464,6 +506,7 @@ function buildMinimalParticipantPrintPreview({
   printOptions = {},
   generatedAt = new Date()
 } = {}) {
+  logPrintInfo("buildMinimalParticipantPrintPreview", { participantsCount: participants.length, groupLabel, groupValue, printOptions });
   return buildParticipantPrintHtml({
     eventId: "",
     scheduleId: "",
@@ -487,6 +530,7 @@ function buildMinimalParticipantPrintPreview({
 }
 
 export {
+  PRINT_LOG_PREFIX,
   PRINT_SETTING_STORAGE_KEY,
   DEFAULT_CUSTOM_PAGE_SIZE,
   DEFAULT_PRINT_SETTINGS,
@@ -502,5 +546,9 @@ export {
   normalizePrintSettings,
   resolvePrintPageSize,
   buildParticipantPrintHtml,
-  buildMinimalParticipantPrintPreview
+  buildMinimalParticipantPrintPreview,
+  logPrintInfo,
+  logPrintWarn,
+  logPrintError,
+  logPrintDebug
 };
