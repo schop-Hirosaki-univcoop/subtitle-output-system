@@ -3997,8 +3997,9 @@ function syncPrintViewButtonState() {
     return;
   }
 
+  const participantList = Array.isArray(state.participants) ? state.participants : [];
   const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
-  const hasParticipants = hasSelection && state.participants.length > 0;
+  const hasParticipants = hasSelection && participantList.length > 0;
   const disabled = !hasSelection || !hasParticipants;
 
   setActionButtonState(button, disabled);
@@ -4557,6 +4558,7 @@ async function loadParticipants(options = {}) {
     }, 100); // 100ms delay to ensure UI is responsive
     updateParticipantContext({ preserveStatus: true });
     syncSaveButtonState();
+    syncPrintViewButtonState();
     emitParticipantSyncEvent({
       success: true,
       eventId,
@@ -4579,6 +4581,7 @@ async function loadParticipants(options = {}) {
     updateParticipantContext();
     syncSaveButtonState();
     syncMailActionState();
+    syncPrintViewButtonState();
     emitParticipantSyncEvent({
       success: false,
       eventId,
@@ -6854,7 +6857,14 @@ function attachEventHandlers() {
   if (dom.openPrintViewButton) {
     dom.openPrintViewButton.addEventListener("click", () => {
       const button = dom.openPrintViewButton;
-      if (!button || button.disabled || button.dataset.printing === "true") {
+      if (!button) {
+        return;
+      }
+
+      // ボタンの状態が古い場合に即時同期してから判定する
+      syncPrintViewButtonState();
+
+      if (button.disabled || button.dataset.printing === "true") {
         return;
       }
 
