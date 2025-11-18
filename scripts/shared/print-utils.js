@@ -1,6 +1,8 @@
 // print-utils.js: 印刷プレビュー用の共通ユーティリティを提供します。
 
 const PRINT_SETTING_STORAGE_KEY = "qa.printSettings.v1";
+
+const GEN_EI_FONT_BASE = new URL("../../assets/fonts/genei-gothic/", import.meta.url).href;
 const DEFAULT_CUSTOM_PAGE_SIZE = { width: 210, height: 297 };
 const DEFAULT_PRINT_SETTINGS = {
   paperSize: "A4",
@@ -382,9 +384,9 @@ function buildParticipantPrintHtml({
   <title>${escapeHtml(docTitle)}</title>
   <style>
     :root { color-scheme: light; --page-margin: ${pageMargin}; --page-width: ${pageWidth}mm; --page-height: ${pageHeight}mm; --page-content-width: calc(var(--page-width) - (2 * var(--page-margin))); --page-content-height: calc(var(--page-height) - (2 * var(--page-margin))); --preview-scale: 1; }
-    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
-    @font-face { font-family: "GenEi Gothic"; src: url("/assets/fonts/genei-gothic/GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
     @page { size: ${pageSizeValue}; margin: ${pageMargin}; counter-increment: page; }
     body { counter-reset: page 1; }
     body { margin: 0; font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #f6f7fb; }
