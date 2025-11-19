@@ -2785,6 +2785,20 @@ export class EventAdminApp {
     }
   }
 
+  ensureEventPrintDialogVisible() {
+    if (!this.dom.printPreviewDialog) {
+      logPrintWarn("Print preview dialog is missing; cannot reveal preview");
+      return;
+    }
+
+    if (this.eventPrintPreviewController) {
+      this.eventPrintPreviewController.setVisibility(true);
+    }
+
+    // フォールバックとして必ずダイアログを開く
+    this.openDialog(this.dom.printPreviewDialog);
+  }
+
   updateEventPrintPreview({ autoPrint = false, forceReveal = false, quiet = false } = {}) {
     if (!this.eventPrintPreviewController) {
       return false;
@@ -2821,7 +2835,7 @@ export class EventAdminApp {
     });
 
     if (forceReveal) {
-      this.eventPrintPreviewController.setVisibility(true);
+      this.ensureEventPrintDialogVisible();
     }
 
     return this.eventPrintPreviewController.renderPreview({
@@ -2849,6 +2863,7 @@ export class EventAdminApp {
   }
 
   handleEventPrint() {
+    this.ensureEventPrintDialogVisible();
     const updated = this.updateEventPrintPreview({ autoPrint: false, forceReveal: true });
     if (updated) {
       logPrintInfo("Triggered event selection print", { eventCount: this.events.length });
