@@ -209,6 +209,74 @@ function resolvePrintPageSize(printSettings = DEFAULT_PRINT_SETTINGS, fallbackSe
   return resolved;
 }
 
+function buildBasePrintStyles({
+  pageMargin,
+  pageSizeValue,
+  pageWidth,
+  pageHeight,
+  bodyFontSize = "8.8pt"
+} = {}) {
+  return `
+    :root { color-scheme: light; --page-margin: ${pageMargin}; --page-width: ${pageWidth}mm; --page-height: ${pageHeight}mm; --page-content-width: calc(var(--page-width) - (2 * var(--page-margin))); --page-content-height: calc(var(--page-height) - (2 * var(--page-margin))); --preview-scale: 1; }
+    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+    @page { size: ${pageSizeValue}; margin: ${pageMargin}; counter-increment: page; }
+    body { counter-reset: page 1; margin: 0; font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: ${bodyFontSize}; line-height: 1.5; color: #000; background: #f6f7fb; }
+    .print-controls { margin-bottom: 6mm; }
+    .print-controls__button { border: 0.25mm solid #000; background: #fff; color: #000; padding: 4px 12px; font-size: 8pt; cursor: pointer; }
+    .print-controls__button:focus { outline: 1px solid #000; outline-offset: 2px; }
+    .print-header { margin-bottom: 8mm; }
+    .print-title { font-size: 14.4pt; margin: 0 0 4mm; }
+    .print-meta { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2mm 12mm; font-size: 8pt; }
+    .print-meta__label { font-weight: 600; margin-right: 2mm; }
+    .print-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+    .print-table th, .print-table td { border: 0.25mm solid #000; padding: 1.5mm 2mm; text-align: left; vertical-align: top; }
+    .print-table th { background: #f5f5f5; }
+    .print-table__index { width: 12mm; text-align: right; }
+    .print-table__phonetic { font-size: 7.2pt; }
+    .print-table__contact { white-space: nowrap; }
+    .print-table__empty td { text-align: center; color: #555; }
+    .print-empty { font-size: 8.8pt; margin: 0; }
+    .print-footer { margin-top: 6mm; font-size: 8pt; color: #000; }
+    .print-footer__items { display: flex; gap: 6mm; align-items: center; }
+    .print-footer__page { margin-left: auto; }
+    .print-footer__item { white-space: nowrap; }
+    .print-surface {
+      -webkit-print-color-adjust: exact;
+      background: #fff;
+      margin: 24px auto;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      aspect-ratio: calc(var(--page-width) / var(--page-height));
+      height: auto;
+      padding: var(--page-margin);
+      width: var(--page-width);
+      min-height: var(--page-height);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+      transform: scale(var(--preview-scale));
+      transform-origin: top center;
+    }
+    @media print {
+      body { background: #fff; }
+      .print-surface {
+        aspect-ratio: auto;
+        box-shadow: none;
+        margin: 0 auto;
+        padding: 0;
+        width: var(--page-content-width);
+        min-height: var(--page-content-height);
+        box-sizing: content-box;
+        transform: none;
+      }
+    }
+    .print-surface .print-controls { display: none; }
+    .print-surface .print-footer { display: block; margin-top: auto; }
+    .print-surface .print-footer__page-number::after { content: counter(page); }
+  `;
+}
+
 function buildParticipantPrintHtml({
   eventId,
   scheduleId,
@@ -438,6 +506,14 @@ function buildParticipantPrintHtml({
     ? `<footer class="print-footer"><div class="print-footer__items">${footerItems.join("")}</div></footer>`
     : "";
 
+  const baseStyles = buildBasePrintStyles({
+    pageMargin,
+    pageSizeValue,
+    pageWidth,
+    pageHeight,
+    bodyFontSize: "8.8pt"
+  });
+
   const html = `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -445,20 +521,7 @@ function buildParticipantPrintHtml({
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(docTitle)}</title>
   <style>
-    :root { color-scheme: light; --page-margin: ${pageMargin}; --page-width: ${pageWidth}mm; --page-height: ${pageHeight}mm; --page-content-width: calc(var(--page-width) - (2 * var(--page-margin))); --page-content-height: calc(var(--page-height) - (2 * var(--page-margin))); --preview-scale: 1; }
-    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
-    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-    @page { size: ${pageSizeValue}; margin: ${pageMargin}; counter-increment: page; }
-    body { counter-reset: page 1; }
-    body { margin: 0; font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 8.8pt; line-height: 1.5; color: #000; background: #f6f7fb; }
-    .print-controls { margin-bottom: 6mm; }
-    .print-controls__button { border: 0.25mm solid #000; background: #fff; color: #000; padding: 4px 12px; font-size: 8pt; cursor: pointer; }
-    .print-controls__button:focus { outline: 1px solid #000; outline-offset: 2px; }
-    .print-header { margin-bottom: 8mm; }
-    .print-title { font-size: 14.4pt; margin: 0 0 4mm; }
-    .print-meta { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2mm 12mm; font-size: 8pt; }
-    .print-meta__label { font-weight: 600; margin-right: 2mm; }
+    ${baseStyles}
     .print-group { border: 0.3mm solid #000; padding: 3mm; margin-bottom: 12mm; background: #fff; page-break-inside: avoid; break-inside: avoid; }
     .print-group__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 5mm; margin-bottom: 4mm; }
     .print-group__meta { min-width: 40mm; }
@@ -469,51 +532,7 @@ function buildParticipantPrintHtml({
     .print-group__gl-table th, .print-group__gl-table td { border: 0.25mm solid #000; padding: 1.5mm 2mm; text-align: left; }
     .print-group__gl-table th { background: #f0f0f0; }
     .print-group__gl-empty { text-align: center; color: #555; }
-    .print-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
-    .print-table th, .print-table td { border: 0.25mm solid #000; padding: 1.5mm 2mm; text-align: left; vertical-align: top; }
-    .print-table th { background: #f5f5f5; }
-    .print-table__index { width: 12mm; text-align: right; }
-    .print-table__phonetic { font-size: 7.2pt; }
-    .print-table__contact { white-space: nowrap; }
-    .print-table__empty td { text-align: center; color: #555; }
-    .print-empty { font-size: 8.8pt; margin: 0; }
-    .print-footer { margin-top: 6mm; font-size: 8pt; color: #000; }
-    .print-footer__items { display: flex; gap: 6mm; align-items: center; }
-    .print-footer__page { margin-left: auto; }
-    .print-footer__item { white-space: nowrap; }
-    .print-surface {
-      -webkit-print-color-adjust: exact;
-      background: #fff;
-      margin: 24px auto;
-      display: flex;
-      flex-direction: column;
-      box-sizing: border-box;
-      aspect-ratio: calc(var(--page-width) / var(--page-height));
-      height: auto;
-      padding: var(--page-margin);
-      width: var(--page-width);
-      min-height: var(--page-height);
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
-      transform: scale(var(--preview-scale));
-      transform-origin: top center;
-    }
-    @media print {
-      body { background: #fff; }
-      .print-surface {
-        aspect-ratio: auto;
-        box-shadow: none;
-        margin: 0 auto;
-        padding: 0;
-        width: var(--page-content-width);
-        min-height: var(--page-content-height);
-        box-sizing: content-box;
-        transform: none;
-      }
-    }
-    .print-surface .print-controls { display: none; }
     .print-surface .print-group { break-inside: avoid-page; }
-    .print-surface .print-footer { display: block; margin-top: auto; }
-    .print-surface .print-footer__page-number::after { content: counter(page); }
   </style>
 </head>
 <body>
@@ -745,6 +764,14 @@ function buildEventSelectionPrintHtml(
     ? `<footer class="print-footer"><div class="print-footer__items">${footerItems.join("")}</div></footer>`
     : "";
 
+  const baseStyles = buildBasePrintStyles({
+    pageMargin,
+    pageSizeValue,
+    pageWidth,
+    pageHeight,
+    bodyFontSize: "8.8pt"
+  });
+
   const html = `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -752,17 +779,7 @@ function buildEventSelectionPrintHtml(
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(docTitle)}</title>
   <style>
-    :root { color-scheme: light; --page-margin: ${pageMargin}; --page-width: ${pageWidth}mm; --page-height: ${pageHeight}mm; --page-content-width: calc(var(--page-width) - (2 * var(--page-margin))); --page-content-height: calc(var(--page-height) - (2 * var(--page-margin))); --preview-scale: 1; }
-    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-SemiBold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
-    @font-face { font-family: "GenEi Gothic"; src: url("${GEN_EI_FONT_BASE}GenEiGothicP-Heavy.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-    @page { size: ${pageSizeValue}; margin: ${pageMargin}; counter-increment: page; }
-    body { counter-reset: page 1; }
-    body { margin: 0; font-family: "GenEi Gothic", "Noto Sans JP", "Yu Gothic", "Meiryo", system-ui, sans-serif; font-size: 9pt; line-height: 1.5; color: #000; background: #f6f7fb; }
-    .print-header { margin-bottom: 8mm; }
-    .print-title { font-size: 14.4pt; margin: 0 0 4mm; }
-    .print-meta { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2mm 12mm; font-size: 8pt; }
-    .print-meta__label { font-weight: 600; margin-right: 2mm; }
+    ${baseStyles}
     .print-event { border: 0.3mm solid #000; padding: 4mm; margin-bottom: 12mm; background: #fff; page-break-inside: avoid; break-inside: avoid; }
     .print-event__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 6mm; margin-bottom: 5mm; }
     .print-event__title { flex: 1 1 auto; }
@@ -772,17 +789,6 @@ function buildEventSelectionPrintHtml(
     .print-event__stat { margin: 0; padding: 0; display: grid; gap: 1mm; font-size: 8pt; align-content: center; }
     .print-event__stat dt { font-weight: 600; color: #444; margin: 0; }
     .print-event__stat dd { margin: 0; font-size: 11pt; font-weight: 600; }
-    .print-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
-    .print-table th, .print-table td { border: 0.25mm solid #000; padding: 1.5mm 2mm; text-align: left; vertical-align: top; }
-    .print-table th { background: #f5f5f5; }
-    .print-table__empty td { text-align: center; color: #555; }
-    .print-empty { font-size: 8.8pt; margin: 0; }
-    .print-footer { margin-top: 6mm; font-size: 8pt; color: #000; }
-    .print-footer__items { display: flex; gap: 6mm; align-items: center; }
-    .print-footer__page { margin-left: auto; }
-    .print-footer__item { white-space: nowrap; }
-    .print-footer__page-number::after { content: counter(page); }
-    .print-surface { margin: auto; padding: calc(var(--page-margin) * var(--preview-scale)); width: calc(var(--page-content-width) * var(--preview-scale)); background: #fff; box-sizing: border-box; min-height: calc(var(--page-content-height) * var(--preview-scale)); }
   </style>
 </head>
 <body>
