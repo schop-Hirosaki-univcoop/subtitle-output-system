@@ -60,6 +60,19 @@ import {
   preflightContextMatchesUser
 } from "../shared/auth-preflight.js";
 import { appendAuthDebugLog, replayAuthDebugLog } from "../shared/auth-debug-log.js";
+import {
+  DEFAULT_PRINT_SETTINGS,
+  PRINT_SETTING_STORAGE_KEY,
+  normalizePrintSettings,
+  buildEventSelectionPrintHtml,
+  logPrintInfo,
+  logPrintWarn
+} from "../shared/print-utils.js";
+import {
+  DEFAULT_PREVIEW_NOTE,
+  DEFAULT_LOAD_TIMEOUT_MS,
+  createPrintPreviewController
+} from "../shared/print-preview.js";
 
 const HOST_PRESENCE_HEARTBEAT_MS = 60_000;
 const SCHEDULE_CONSENSUS_TOAST_MS = 3_000;
@@ -176,6 +189,9 @@ export class EventAdminApp {
     this.backupInFlight = false;
     this.restoreInFlight = false;
     this.displayUrlCopyTimer = 0;
+    this.eventPrintSettings = DEFAULT_PRINT_SETTINGS;
+    this.eventPrintPreviewController = null;
+    this.eventPrintPreviewCache = null;
     this.operatorPresenceEntries = [];
     this.operatorPresenceEventId = "";
     this.operatorPresenceUnsubscribe = null;
@@ -488,6 +504,7 @@ export class EventAdminApp {
       this.updateUserLabel();
     }
     this.bindEvents();
+    this.setupEventPrintPreview();
     this.applyEventsLoadingState();
     this.applyScheduleLoadingState();
     this.updateStageUi();
@@ -555,6 +572,12 @@ export class EventAdminApp {
   bindEvents() {
     if (this.dom.addEventButton) {
       this.dom.addEventButton.addEventListener("click", () => this.openEventDialog({ mode: "create" }));
+    }
+
+    if (this.dom.eventPrintButton) {
+      this.dom.eventPrintButton.addEventListener("click", () => {
+        this.handleEventPrint();
+      });
     }
 
     if (this.dom.refreshButton) {
@@ -1271,6 +1294,7 @@ export class EventAdminApp {
     this.ensureSelectedEvent(previousEventId);
     this.renderEvents();
     this.updateScheduleStateFromSelection(previousScheduleId);
+    this.updateFlowButtons();
 
     if (this.stage === "tabs") {
       const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
@@ -2556,6 +2580,10 @@ export class EventAdminApp {
     if (this.dom.refreshButton) {
       this.dom.refreshButton.disabled = !signedIn;
     }
+    if (this.dom.eventPrintButton) {
+      const hasEvents = this.events.length > 0;
+      this.dom.eventPrintButton.disabled = !signedIn || !hasEvents;
+    }
     if (this.dom.nextButton) {
       this.dom.nextButton.disabled = !signedIn || !hasEvent;
     }
@@ -2569,6 +2597,277 @@ export class EventAdminApp {
       this.dom.scheduleNextButton.disabled = !signedIn || !hasSchedule;
     }
     this.updateNavigationButtons();
+  }
+
+  loadEventPrintSettings() {
+    if (typeof localStorage === "undefined") {
+      this.eventPrintSettings = DEFAULT_PRINT_SETTINGS;
+      return this.eventPrintSettings;
+    }
+
+    try {
+      const stored = localStorage.getItem(PRINT_SETTING_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        this.eventPrintSettings = normalizePrintSettings(parsed, DEFAULT_PRINT_SETTINGS);
+        logPrintInfo("Event print settings loaded", {
+          paperSize: this.eventPrintSettings.paperSize,
+          margin: this.eventPrintSettings.margin
+        });
+      } else {
+        this.eventPrintSettings = DEFAULT_PRINT_SETTINGS;
+      }
+    } catch (error) {
+      logPrintWarn("Failed to load event print settings", error);
+      this.eventPrintSettings = DEFAULT_PRINT_SETTINGS;
+    }
+
+    return this.eventPrintSettings;
+  }
+
+  persistEventPrintSettings(settings) {
+    const normalized = normalizePrintSettings(settings, DEFAULT_PRINT_SETTINGS);
+    this.eventPrintSettings = normalized;
+    if (typeof localStorage !== "undefined") {
+      try {
+        localStorage.setItem(PRINT_SETTING_STORAGE_KEY, JSON.stringify(normalized));
+        logPrintInfo("Event print settings saved", { paperSize: normalized.paperSize, margin: normalized.margin });
+      } catch (error) {
+        logPrintWarn("Failed to persist event print settings", error);
+      }
+    }
+    return normalized;
+  }
+
+  applyEventPrintSettingsToForm(settings) {
+    const normalized = normalizePrintSettings(settings, DEFAULT_PRINT_SETTINGS);
+    if (this.dom.printPaperSizeInput) {
+      this.dom.printPaperSizeInput.value = normalized.paperSize;
+    }
+    if (this.dom.printOrientationInput) {
+      this.dom.printOrientationInput.value = normalized.orientation;
+    }
+    if (this.dom.printMarginInput) {
+      this.dom.printMarginInput.value = normalized.margin;
+    }
+    if (this.dom.printCustomWidthInput) {
+      this.dom.printCustomWidthInput.value = normalized.customWidth;
+    }
+    if (this.dom.printCustomHeightInput) {
+      this.dom.printCustomHeightInput.value = normalized.customHeight;
+    }
+    if (this.dom.printShowHeaderInput) {
+      this.dom.printShowHeaderInput.checked = normalized.showHeader;
+    }
+    if (this.dom.printRepeatHeaderInput) {
+      this.dom.printRepeatHeaderInput.checked = normalized.repeatHeader && normalized.showHeader;
+      this.dom.printRepeatHeaderInput.disabled = !normalized.showHeader;
+    }
+    if (this.dom.printShowPageNumberInput) {
+      this.dom.printShowPageNumberInput.checked = normalized.showPageNumbers;
+    }
+    if (this.dom.printShowDateInput) {
+      this.dom.printShowDateInput.checked = normalized.showDate;
+    }
+    if (this.dom.printShowTimeInput) {
+      this.dom.printShowTimeInput.checked = normalized.showTime;
+    }
+    if (this.dom.printShowPhoneInput) {
+      this.dom.printShowPhoneInput.checked = normalized.showPhone;
+    }
+    if (this.dom.printShowEmailInput) {
+      this.dom.printShowEmailInput.checked = normalized.showEmail;
+    }
+  }
+
+  readEventPrintSettingsFromForm() {
+    const settings = {
+      paperSize: this.dom.printPaperSizeInput?.value,
+      orientation: this.dom.printOrientationInput?.value,
+      margin: this.dom.printMarginInput?.value,
+      customWidth: this.dom.printCustomWidthInput?.value,
+      customHeight: this.dom.printCustomHeightInput?.value,
+      showHeader: this.dom.printShowHeaderInput ? this.dom.printShowHeaderInput.checked : undefined,
+      repeatHeader: this.dom.printRepeatHeaderInput ? this.dom.printRepeatHeaderInput.checked : undefined,
+      showPageNumbers: this.dom.printShowPageNumberInput ? this.dom.printShowPageNumberInput.checked : undefined,
+      showDate: this.dom.printShowDateInput ? this.dom.printShowDateInput.checked : undefined,
+      showTime: this.dom.printShowTimeInput ? this.dom.printShowTimeInput.checked : undefined,
+      showPhone: this.dom.printShowPhoneInput ? this.dom.printShowPhoneInput.checked : undefined,
+      showEmail: this.dom.printShowEmailInput ? this.dom.printShowEmailInput.checked : undefined
+    };
+
+    if (settings.showHeader === false) {
+      settings.repeatHeader = false;
+    }
+
+    const normalized = normalizePrintSettings(settings, this.eventPrintSettings || DEFAULT_PRINT_SETTINGS);
+    logPrintInfo("Read event print settings from form", normalized);
+    return normalized;
+  }
+
+  setupEventPrintPreview() {
+    const loadedSettings = this.loadEventPrintSettings();
+    this.eventPrintSettings = normalizePrintSettings(loadedSettings, DEFAULT_PRINT_SETTINGS);
+    this.applyEventPrintSettingsToForm(this.eventPrintSettings);
+
+    const syncHeaderControls = () => {
+      if (!this.dom.printShowHeaderInput || !this.dom.printRepeatHeaderInput) return;
+      const enabled = Boolean(this.dom.printShowHeaderInput.checked);
+      this.dom.printRepeatHeaderInput.disabled = !enabled;
+      if (!enabled) {
+        this.dom.printRepeatHeaderInput.checked = false;
+      }
+    };
+
+    const syncCustomSizeVisibility = () => {
+      if (!this.dom.printPaperSizeInput || !this.dom.printCustomSizeField) return;
+      const isCustom = this.dom.printPaperSizeInput.value === "Custom";
+      this.dom.printCustomSizeField.hidden = !isCustom;
+    };
+
+    this.eventPrintPreviewController = createPrintPreviewController({
+      previewContainer: this.dom.printPreview,
+      previewFrame: this.dom.printPreviewFrame,
+      previewMeta: this.dom.printPreviewMeta,
+      previewNote: this.dom.printPreviewNote,
+      previewPrintButton: this.dom.printPreviewPrintButton,
+      previewDialog: this.dom.printPreviewDialog,
+      defaultNote: DEFAULT_PREVIEW_NOTE,
+      loadTimeoutMs: DEFAULT_LOAD_TIMEOUT_MS,
+      defaultSettings: () => this.eventPrintSettings || DEFAULT_PRINT_SETTINGS,
+      normalizeSettings: (settings, fallback) => normalizePrintSettings(settings, fallback),
+      onCacheChange: (nextCache) => {
+        this.eventPrintPreviewCache = nextCache;
+      },
+      openDialog: (element) => this.openDialog(element),
+      closeDialog: (element) => this.closeDialog(element)
+    });
+
+    this.eventPrintPreviewCache = this.eventPrintPreviewController.getCache();
+    syncHeaderControls();
+    syncCustomSizeVisibility();
+
+    if (this.dom.printShowHeaderInput) {
+      this.dom.printShowHeaderInput.addEventListener("change", syncHeaderControls);
+    }
+    if (this.dom.printPaperSizeInput) {
+      this.dom.printPaperSizeInput.addEventListener("change", syncCustomSizeVisibility);
+    }
+
+    if (this.dom.printSettingsForm) {
+      this.dom.printSettingsForm.addEventListener("change", () => {
+        const settings = this.readEventPrintSettingsFromForm();
+        this.persistEventPrintSettings(settings);
+        this.updateEventPrintPreview({ autoPrint: false, forceReveal: true, quiet: true });
+      });
+
+      this.dom.printSettingsForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const settings = this.readEventPrintSettingsFromForm();
+        this.persistEventPrintSettings(settings);
+        this.updateEventPrintPreview({ autoPrint: false, forceReveal: true });
+      });
+    }
+
+    if (this.dom.printPreviewCloseButton) {
+      this.dom.printPreviewCloseButton.addEventListener("click", () => {
+        this.closeEventPrintPreview();
+      });
+    }
+
+    if (this.dom.printPreviewPrintButton) {
+      this.dom.printPreviewPrintButton.addEventListener("click", () => {
+        if (this.dom.printPreviewPrintButton.disabled) {
+          return;
+        }
+        this.printEventPreview({ showAlertOnFailure: true });
+      });
+    }
+  }
+
+  ensureEventPrintDialogVisible() {
+    if (!this.dom.printPreviewDialog) {
+      logPrintWarn("Print preview dialog is missing; cannot reveal preview");
+      return;
+    }
+
+    if (this.eventPrintPreviewController) {
+      this.eventPrintPreviewController.setVisibility(true);
+    }
+
+    // フォールバックとして必ずダイアログを開く
+    this.openDialog(this.dom.printPreviewDialog);
+  }
+
+  updateEventPrintPreview({ autoPrint = false, forceReveal = false, quiet = false } = {}) {
+    if (!this.eventPrintPreviewController) {
+      return false;
+    }
+
+    const events = Array.isArray(this.events) ? this.events : [];
+    if (!events.length) {
+      this.eventPrintPreviewController.setVisibility(true);
+      this.eventPrintPreviewController.setNote("印刷できるイベントがありません。まずはイベントを登録してください。", {
+        forceAnnounce: true,
+        politeness: "assertive",
+        role: "alert"
+      });
+      if (this.dom.printPreviewMeta) {
+        this.dom.printPreviewMeta.textContent = "";
+      }
+      if (this.dom.printPreviewPrintButton) {
+        this.dom.printPreviewPrintButton.disabled = true;
+        delete this.dom.printPreviewPrintButton.dataset.popupFallback;
+      }
+      if (!quiet) {
+        this.showAlert("印刷できるイベントがありません。まずはイベントを登録してください。");
+      }
+      return false;
+    }
+
+    const printSettings = this.readEventPrintSettingsFromForm();
+    this.persistEventPrintSettings(printSettings);
+
+    const { html, docTitle, metaText } = buildEventSelectionPrintHtml({
+      events,
+      generatedAt: new Date(),
+      printOptions: printSettings
+    });
+
+    if (forceReveal) {
+      this.ensureEventPrintDialogVisible();
+    }
+
+    return this.eventPrintPreviewController.renderPreview({
+      html,
+      metaText,
+      title: docTitle,
+      autoPrint,
+      printSettings
+    });
+  }
+
+  printEventPreview(options = {}) {
+    if (!this.eventPrintPreviewController) {
+      return false;
+    }
+    return this.eventPrintPreviewController.printPreview(options);
+  }
+
+  closeEventPrintPreview() {
+    if (!this.eventPrintPreviewController) {
+      return;
+    }
+    this.eventPrintPreviewController.reset();
+    this.eventPrintPreviewController.setVisibility(false);
+  }
+
+  handleEventPrint() {
+    this.ensureEventPrintDialogVisible();
+    const updated = this.updateEventPrintPreview({ autoPrint: false, forceReveal: true });
+    if (updated) {
+      logPrintInfo("Triggered event selection print", { eventCount: this.events.length });
+    }
   }
 
   updateSelectionNotes() {
