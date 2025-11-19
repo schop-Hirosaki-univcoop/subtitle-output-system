@@ -428,165 +428,6 @@
                     </div>
                   </div>
 
-                  <div id="print-dialog" class="modal modal--fullscreen" role="dialog" aria-modal="true" aria-labelledby="print-dialog-title" hidden>
-                    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
-                    <div class="modal-panel modal-panel--print modal-panel--fullscreen">
-                      <div class="modal-header print-modal__header">
-                        <div class="print-modal__headline">
-                          <h2 id="print-dialog-title">印刷</h2>
-                          <p id="print-preview-meta" class="print-preview__meta"></p>
-                        </div>
-                        <div class="print-preview__actions">
-                          <button id="print-preview-print" class="btn btn-primary btn-sm" type="button" disabled>印刷</button>
-                          <button id="print-preview-close" class="btn btn-ghost btn-sm" type="button">閉じる</button>
-                        </div>
-                      </div>
-                      <div class="modal-body print-modal__body">
-                        <div id="print-preview" class="print-preview print-preview--immersive">
-                          <div class="print-preview__body">
-                            <div class="print-preview__panel">
-                              <div class="print-preview__frame">
-                                <iframe
-                                  id="print-preview-frame"
-                                  title="参加者リストの印刷プレビュー"
-                                  referrerpolicy="no-referrer"
-                                ></iframe>
-                              </div>
-                              <div
-                                id="print-preview-note"
-                                class="print-preview__note"
-                                role="status"
-                                aria-live="polite"
-                                aria-atomic="true"
-                              >
-                                印刷設定を選ぶとここに最新のプレビューが表示されます。
-                              </div>
-                            </div>
-                            <div class="print-preview__settings" aria-labelledby="print-settings-title">
-                              <form id="print-settings-form" class="print-settings-form">
-                                <div class="print-settings-form__header">
-                                  <h3 id="print-settings-title" class="print-settings-form__title">印刷設定</h3>
-                                  <p class="print-settings-form__helper">用紙やヘッダー/フッターを整えてから印刷してください。</p>
-                                </div>
-                                <div class="print-settings-form__fields">
-                                  <div class="modal-field">
-                                    <label for="print-paper-size">用紙サイズ</label>
-                                    <select id="print-paper-size" name="print-paper-size" class="input" data-autofocus>
-                                      <option value="Letter">Letter (21.6cm × 27.9cm)</option>
-                                      <option value="Tabloid">Tabloid (27.9cm × 43.2cm)</option>
-                                      <option value="Legal">Legal (21.6cm × 35.6cm)</option>
-                                      <option value="Statement">Statement (14.0cm × 21.6cm)</option>
-                                      <option value="Executive">Executive (18.4cm × 26.7cm)</option>
-                                      <option value="Folio">Folio (21.6cm × 33.0cm)</option>
-                                      <option value="A3">A3 (29.7cm × 42.0cm)</option>
-                                      <option value="A4">A4 (21.0cm × 29.7cm)</option>
-                                      <option value="A5">A5 (14.8cm × 21.0cm)</option>
-                                      <option value="B4">B4 (25.0cm × 35.3cm)</option>
-                                      <option value="B5">B5 (17.6cm × 25.0cm)</option>
-                                      <option value="Custom">カスタムサイズ</option>
-                                    </select>
-                                  </div>
-                                  <div id="print-custom-size" class="modal-field print-settings__custom" hidden>
-                                    <div class="print-settings__custom-inputs">
-                                      <label class="print-settings__custom-field" for="print-custom-width">
-                                        <span class="print-settings__custom-field-label">幅</span>
-                                        <div class="print-settings__custom-control">
-                                          <input
-                                            id="print-custom-width"
-                                            name="print-custom-width"
-                                            class="input input--dense"
-                                            type="number"
-                                            min="10"
-                                            max="2000"
-                                            step="1"
-                                            inputmode="decimal"
-                                          >
-                                          <span class="print-settings__custom-suffix" aria-hidden="true">mm</span>
-                                        </div>
-                                      </label>
-                                      <span class="print-settings__custom-separator" aria-hidden="true">×</span>
-                                      <label class="print-settings__custom-field" for="print-custom-height">
-                                        <span class="print-settings__custom-field-label">高さ</span>
-                                        <div class="print-settings__custom-control">
-                                          <input
-                                            id="print-custom-height"
-                                            name="print-custom-height"
-                                            class="input input--dense"
-                                            type="number"
-                                            min="10"
-                                            max="2000"
-                                            step="1"
-                                            inputmode="decimal"
-                                          >
-                                          <span class="print-settings__custom-suffix" aria-hidden="true">mm</span>
-                                        </div>
-                                      </label>
-                                    </div>
-                                    <p class="modal-helper">用紙の縦横は「ページの向き」に合わせて自動で入れ替わります。</p>
-                                  </div>
-                                  <div class="modal-field">
-                                  <label for="print-orientation">ページの向き</label>
-                                  <select id="print-orientation" name="print-orientation" class="input">
-                                      <option value="portrait">縦</option>
-                                      <option value="landscape">横</option>
-                                    </select>
-                                  </div>
-                                  <div class="modal-field">
-                                  <label for="print-margin">余白</label>
-                                  <select id="print-margin" name="print-margin" class="input">
-                                      <option value="5mm">せまめ (5mm)</option>
-                                      <option value="10mm">ふつう (10mm)</option>
-                                      <option value="15mm">ひろめ (15mm)</option>
-                                    </select>
-                                  </div>
-                                  <fieldset class="modal-field">
-                                    <legend class="modal-label">ヘッダー</legend>
-                                    <label class="chk">
-                                      <input id="print-show-header" name="print-show-header" type="checkbox" checked>
-                                      <span>ヘッダー (タイトルとメタ情報) を表示する</span>
-                                    </label>
-                                    <label class="chk">
-                                      <input id="print-repeat-header" name="print-repeat-header" type="checkbox">
-                                      <span>複数ページの先頭にヘッダーを繰り返す</span>
-                                    </label>
-                                  </fieldset>
-                                  <fieldset class="modal-field">
-                                    <legend class="modal-label">フッター</legend>
-                                    <label class="chk">
-                                      <input id="print-show-page-number" name="print-show-page-number" type="checkbox" checked>
-                                      <span>ページ番号を表示する</span>
-                                    </label>
-                                    <label class="chk">
-                                      <input id="print-show-date" name="print-show-date" type="checkbox" checked>
-                                      <span>現在の日付を表示する</span>
-                                    </label>
-                                    <label class="chk">
-                                      <input id="print-show-time" name="print-show-time" type="checkbox" checked>
-                                      <span>現在の時刻を表示する</span>
-                                    </label>
-                                  </fieldset>
-                                  <fieldset class="modal-field">
-                                    <legend class="modal-label">参加者の連絡先</legend>
-                                    <label class="chk">
-                                      <input id="print-show-phone" name="print-show-phone" type="checkbox" checked>
-                                      <span>電話番号を表示する</span>
-                                    </label>
-                                    <label class="chk">
-                                      <input id="print-show-email" name="print-show-email" type="checkbox" checked>
-                                      <span>メールアドレスを表示する</span>
-                                    </label>
-                                  </fieldset>
-                                </div>
-                                <div class="print-settings-form__footer">
-                                  <button type="submit" class="btn btn-primary btn-sm">プレビュー更新</button>
-                                </div>
-                              </form>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
 
                   <div id="qa-confirm-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="qa-confirm-dialog-title" hidden>
                     <div class="modal-backdrop" data-dialog-dismiss="true"></div>
@@ -1682,6 +1523,167 @@
     aria-live="assertive"
     hidden
   ></div>
+
+
+  <div id="print-dialog" class="modal modal--fullscreen" role="dialog" aria-modal="true" aria-labelledby="print-dialog-title" hidden>
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel modal-panel--print modal-panel--fullscreen">
+      <div class="modal-header print-modal__header">
+        <div class="print-modal__headline">
+          <h2 id="print-dialog-title">印刷</h2>
+          <p id="print-preview-meta" class="print-preview__meta"></p>
+        </div>
+        <div class="print-preview__actions">
+          <button id="print-preview-print" class="btn btn-primary btn-sm" type="button" disabled>印刷</button>
+          <button id="print-preview-close" class="btn btn-ghost btn-sm" type="button">閉じる</button>
+        </div>
+      </div>
+      <div class="modal-body print-modal__body">
+        <div id="print-preview" class="print-preview print-preview--immersive">
+          <div class="print-preview__body">
+            <div class="print-preview__panel">
+              <div class="print-preview__frame">
+                <iframe
+                  id="print-preview-frame"
+                  title="参加者リストの印刷プレビュー"
+                  referrerpolicy="no-referrer"
+                ></iframe>
+              </div>
+              <div
+                id="print-preview-note"
+                class="print-preview__note"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                印刷設定を選ぶとここに最新のプレビューが表示されます。
+              </div>
+            </div>
+            <div class="print-preview__settings" aria-labelledby="print-settings-title">
+              <form id="print-settings-form" class="print-settings-form">
+                <div class="print-settings-form__header">
+                  <h3 id="print-settings-title" class="print-settings-form__title">印刷設定</h3>
+                  <p class="print-settings-form__helper">用紙やヘッダー/フッターを整えてから印刷してください。</p>
+                </div>
+                <div class="print-settings-form__fields">
+                  <div class="modal-field">
+                    <label for="print-paper-size">用紙サイズ</label>
+                    <select id="print-paper-size" name="print-paper-size" class="input" data-autofocus>
+                      <option value="Letter">Letter (21.6cm × 27.9cm)</option>
+                      <option value="Tabloid">Tabloid (27.9cm × 43.2cm)</option>
+                      <option value="Legal">Legal (21.6cm × 35.6cm)</option>
+                      <option value="Statement">Statement (14.0cm × 21.6cm)</option>
+                      <option value="Executive">Executive (18.4cm × 26.7cm)</option>
+                      <option value="Folio">Folio (21.6cm × 33.0cm)</option>
+                      <option value="A3">A3 (29.7cm × 42.0cm)</option>
+                      <option value="A4">A4 (21.0cm × 29.7cm)</option>
+                      <option value="A5">A5 (14.8cm × 21.0cm)</option>
+                      <option value="B4">B4 (25.0cm × 35.3cm)</option>
+                      <option value="B5">B5 (17.6cm × 25.0cm)</option>
+                      <option value="Custom">カスタムサイズ</option>
+                    </select>
+                  </div>
+                  <div id="print-custom-size" class="modal-field print-settings__custom" hidden>
+                    <div class="print-settings__custom-inputs">
+                      <label class="print-settings__custom-field" for="print-custom-width">
+                        <span class="print-settings__custom-field-label">幅</span>
+                        <div class="print-settings__custom-control">
+                          <input
+                            id="print-custom-width"
+                            name="print-custom-width"
+                            class="input input--dense"
+                            type="number"
+                            min="10"
+                            max="2000"
+                            step="1"
+                            inputmode="decimal"
+                          >
+                          <span class="print-settings__custom-suffix" aria-hidden="true">mm</span>
+                        </div>
+                      </label>
+                      <span class="print-settings__custom-separator" aria-hidden="true">×</span>
+                      <label class="print-settings__custom-field" for="print-custom-height">
+                        <span class="print-settings__custom-field-label">高さ</span>
+                        <div class="print-settings__custom-control">
+                          <input
+                            id="print-custom-height"
+                            name="print-custom-height"
+                            class="input input--dense"
+                            type="number"
+                            min="10"
+                            max="2000"
+                            step="1"
+                            inputmode="decimal"
+                          >
+                          <span class="print-settings__custom-suffix" aria-hidden="true">mm</span>
+                        </div>
+                      </label>
+                    </div>
+                    <p class="modal-helper">用紙の縦横は「ページの向き」に合わせて自動で入れ替わります。</p>
+                  </div>
+                  <div class="modal-field">
+                    <label for="print-orientation">ページの向き</label>
+                    <select id="print-orientation" name="print-orientation" class="input">
+                      <option value="portrait">縦</option>
+                      <option value="landscape">横</option>
+                    </select>
+                  </div>
+                  <div class="modal-field">
+                    <label for="print-margin">余白</label>
+                    <select id="print-margin" name="print-margin" class="input">
+                      <option value="5mm">せまめ (5mm)</option>
+                      <option value="10mm">ふつう (10mm)</option>
+                      <option value="15mm">ひろめ (15mm)</option>
+                    </select>
+                  </div>
+                  <fieldset class="modal-field">
+                    <legend class="modal-label">ヘッダー</legend>
+                    <label class="chk">
+                      <input id="print-show-header" name="print-show-header" type="checkbox" checked>
+                      <span>ヘッダー (タイトルとメタ情報) を表示する</span>
+                    </label>
+                    <label class="chk">
+                      <input id="print-repeat-header" name="print-repeat-header" type="checkbox">
+                      <span>複数ページの先頭にヘッダーを繰り返す</span>
+                    </label>
+                  </fieldset>
+                  <fieldset class="modal-field">
+                    <legend class="modal-label">フッター</legend>
+                    <label class="chk">
+                      <input id="print-show-page-number" name="print-show-page-number" type="checkbox" checked>
+                      <span>ページ番号を表示する</span>
+                    </label>
+                    <label class="chk">
+                      <input id="print-show-date" name="print-show-date" type="checkbox" checked>
+                      <span>現在の日付を表示する</span>
+                    </label>
+                    <label class="chk">
+                      <input id="print-show-time" name="print-show-time" type="checkbox" checked>
+                      <span>現在の時刻を表示する</span>
+                    </label>
+                  </fieldset>
+                  <fieldset class="modal-field">
+                    <legend class="modal-label">参加者の連絡先</legend>
+                    <label class="chk">
+                      <input id="print-show-phone" name="print-show-phone" type="checkbox" checked>
+                      <span>電話番号を表示する</span>
+                    </label>
+                    <label class="chk">
+                      <input id="print-show-email" name="print-show-email" type="checkbox" checked>
+                      <span>メールアドレスを表示する</span>
+                    </label>
+                  </fieldset>
+                </div>
+                <div class="print-settings-form__footer">
+                  <button type="submit" class="btn btn-primary btn-sm">プレビュー更新</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div id="flow-confirm-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="flow-confirm-dialog-title" hidden>
     <div class="modal-backdrop" data-dialog-dismiss="true"></div>
