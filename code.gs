@@ -1,4 +1,11 @@
 // code.gs: Google Apps Script上でSpreadsheetやFirebase連携を行うサーバー側スクリプトのエントリーです。
+
+// === WebアプリのGETリクエスト入口 ==========================
+// 通常はこのWebアプリはGETアクセスを想定しておらず、
+// 405相当のレスポンスを返すだけ。
+// ただし、特定のviewパラメータが付いているときだけ、
+// 参加者メールプレビューやQAアップロード状況といった
+// 「確認用ページ」を返すための裏口として使っている。
 /**
  * WebAppとしてアクセスされた際に応答を生成するエントリポイント。
  * このAPIではGETをサポートしないため常に405相当のレスポンスを返します。
@@ -31,7 +38,11 @@ const ALLOWED_ORIGINS = [
   'https://schop-hirosaki-univcoop.github.io/'
 ];
 
-
+// === ログ用の安全な文字列化ユーティリティ =================
+// ログに出したい情報をJSON文字列に変換するが、
+// 循環参照や巨大オブジェクトが混ざっていても、
+// スクリプトが落ちないように安全側に倒しながら文字列化する。
+// ログに「何が起きたか」を残すための裏方。
 function stringifyLogPayload_(payload) {
   const seen = [];
   return JSON.stringify(payload, function(key, value) {
@@ -64,6 +75,8 @@ function stringifyLogPayload_(payload) {
   });
 }
 
+// stringifyLogPayload_が扱えない値が来たときのフォールバック。
+// 「とりあえず中身をそれっぽく文字列にしてログに残す」ための関数。
 function stringifyLogValueFallback_(value) {
   if (value === undefined) return 'undefined';
   if (value === null) return 'null';
@@ -88,6 +101,11 @@ function stringifyLogValueFallback_(value) {
   }
 }
 
+// === メール送信ログの書き込み ==============================
+// メール送信に関するイベントをスプレッドシートの
+// ログシートに1行追記する。
+// 後から「いつ誰に何を送ったか」「どんなエラーが出たか」を
+// 追跡できるようにするための記録用関数。
 function writeMailLog_(severity, message, error, details) {
   const prefix = `[Mail][${severity}] ${message}`;
   if (typeof console !== 'undefined') {
@@ -157,15 +175,23 @@ function writeMailLog_(severity, message, error, details) {
   }
 }
 
+// メール関連の通常ログを書き込むためのヘルパー。
+// 毎回severityなどを意識せず、logMail_だけ呼べばOKにするための薄いラッパー。
 function logMail_(message, details) {
   writeMailLog_('INFO', message, null, details);
 }
 
+
+// メール関連のエラーログ専用ヘルパー。
+// エラー内容と合わせて、ログシートとLoggerの両方に記録する。
 function logMailError_(message, error, details) {
   writeMailLog_('ERROR', message, error, details);
 }
 
-
+// === スプレッドシートの日付セルをDate型に変換する =========
+// シリアル値や文字列など、シート上に入っている日付っぽい値を
+// Google Apps ScriptのDateオブジェクトに変換するための共通処理。
+// 「どのセルにも同じルールで」日付変換したいときに使う。
 /**
  * Spreadsheetセル値をDateオブジェクトに変換します。
  * 数値シリアル値・UNIX秒・ISO文字列をサポートし、不正値はnullを返します。
@@ -193,6 +219,8 @@ function parseDateCell_(value) {
   return null;
 }
 
+// Date型や日付っぽい値を「ミリ秒の数値」に変換する。
+// DBに保存したり大小比較したりするときに扱いやすくするためのヘルパー。
 function parseDateToMillis_(value, fallback) {
   const date = parseDateCell_(value);
   if (date) {
@@ -201,6 +229,8 @@ function parseDateToMillis_(value, fallback) {
   return fallback == null ? 0 : fallback;
 }
 
+// 画面やメールに出すための「日付ラベル」を組み立てる。
+// 例: 2025/11/20(木) のような表記に揃える。
 /**
  * セル値を人が読みやすいyyyy/MM/dd HH:mm形式に整形します。
  * 日付変換できない場合はトリムした文字列を返します。
@@ -215,6 +245,9 @@ function formatDateLabel_(value) {
   return String(value || '').trim();
 }
 
+// 値がDateならISO形式の文字列(2025-11-20T...Z)に変換し、
+// それ以外なら元の値をそのまま返す。
+// ログやデバッグ用に「日付をそれなりに読みやすく」するための関数。
 /**
  * 値をISO 8601(JST)文字列に正規化するか、生値のトリム結果を返します。
  * @param {any} value
@@ -228,6 +261,9 @@ function toIsoStringOrValue_(value) {
   return String(value || '').trim();
 }
 
+// スケジュールの開始時刻・終了時刻から、
+// 画面表示用の「◯◯〜◯◯」といったラベル文字列を作る。
+// 片方しかない場合にもそれなりに見えるように整形する。
 /**
  * 開始・終了日時を結合したスケジュール表示ラベルを生成します。
  * @param {any} startValue
@@ -246,6 +282,9 @@ function formatScheduleLabel_(startValue, endValue) {
   return startLabel || endLabel || '';
 }
 
+// 複数の候補の中から、最初に見つかった「空でない文字列」を返す。
+// 例: coalesceStrings_('', null, 'fallback', 'zzz') → 'fallback'
+// 設定値やラベルの「優先順位付きデフォルト値」を決めたいときに使う。
 function coalesceStrings_(...values) {
   for (let i = 0; i < values.length; i += 1) {
     const value = values[i];
@@ -437,9 +476,19 @@ function shouldRefreshParticipantMailTemplateCache_(error) {
   return /Identifier '\w+' has already been declared/.test(message);
 }
 
-
+// ================================
+// Webアプリとしての入口（POST / JSON API）
+// ================================
+// GitHub Pages 側のフロントエンドから送られてくる
+// すべてのAPIリクエストを1本で受ける「玄関」です。
+// リクエストボディをparseBody_で解析し、
+// req.action の内容に応じて個別の処理関数へ振り分けます。
+// ここで認証チェックやCORS対応もまとめて行います。
 function doPost(e) {
   try {
+    // メール送信のログを書き込むシートがなければここで用意しておく。
+    // ログが多少壊れていても、本体処理は止めたくないので、
+    // 失敗しても握りつぶして後続処理を続ける。
     ensureMailLogSheet_();
   } catch (sheetInitError) {
     try {
@@ -447,15 +496,18 @@ function doPost(e) {
         console.error('[Mail][WARN] ensureMailLogSheet_ failed during doPost bootstrap', sheetInitError);
       }
     } catch (ignoreConsoleError) {
-      // ignore logging failures
+      // console自体がない環境もあり得るので、ここは完全に無視。
     }
   }
 
   let requestOrigin = getRequestOrigin_(e);
   try {
+    // リクエストボディをJSONやフォームとして解析する。
     const req = parseBody_(e);
+    // body側にorigin情報があればそちらを優先して、CORS用のOriginとして覚えておく。
     requestOrigin = getRequestOrigin_(e, req) || requestOrigin;
     const { action, idToken } = req;
+    // どんなactionのリクエストが来たか簡単にログに残す。
     logMail_('Apps Script doPost リクエストを受信しました', {
       action: action || '',
       origin: requestOrigin || '',
@@ -463,31 +515,49 @@ function doPost(e) {
     });
     if (!action) throw new Error('Missing action');
 
+    // 画面表示セッション系のアクション
     const displayActions = new Set(['beginDisplaySession', 'heartbeatDisplaySession', 'endDisplaySession']);
+
+    // 認証なしで呼び出せる例外アクション
+    // - submitQuestion: 視聴者からの質問投稿
+    // - processQuestionQueueForToken: トークン単位のキュー処理
+    // - resolveParticipantMail: メール閲覧用リンクなどの解決
     const noAuthActions = new Set(['submitQuestion', 'processQuestionQueueForToken', 'resolveParticipantMail']);
     let principal = null;
+
+    // 認証が必要なアクションについては、idTokenを検証してユーザー情報を取得する。
+    // display系のアクションだけは匿名許可オプション付き。
     if (!noAuthActions.has(action)) {
       principal = requireAuth_(idToken, displayActions.has(action) ? { allowAnonymous: true } : {});
     }
 
     const ok = (payload) => jsonOk(payload, requestOrigin);
 
+    // ここから下は action ごとの振り分け。
+    // それぞれの case で、専用の処理関数を呼び出し、その結果を ok(...) でラップして返す。
     switch (action) {
+      // 例: 質問投稿
+      case 'submitQuestion':
+        return ok(submitQuestion_(req));
+
+      // 例: 質問キューの処理
+      case 'processQuestionQueueForToken':
+        return ok(processQuestionQueueForToken_(req.token));
+
+      // 例: 表示用セッションの開始 / 心拍 / 終了
+      // （display.html 側からの定期的な通信）
       case 'beginDisplaySession':
         return ok(beginDisplaySession_(principal));
       case 'heartbeatDisplaySession':
         return ok(heartbeatDisplaySession_(principal, req.sessionId));
       case 'endDisplaySession':
         return ok(endDisplaySession_(principal, req.sessionId, req.reason));
+
       case 'ensureAdmin':
         return ok(ensureAdmin_(principal));
-      case 'submitQuestion':
-        return ok(submitQuestion_(req));
       case 'processQuestionQueue':
         assertOperator_(principal);
         return ok(processQuestionSubmissionQueue_());
-      case 'processQuestionQueueForToken':
-        return ok(processQuestionQueueForToken_(req.token));
       case 'resolveParticipantMail':
         return ok(resolveParticipantMailForToken_(req));
       case 'fetchSheet':
@@ -549,6 +619,7 @@ function doPost(e) {
         assertOperator_(principal);
         return ok(clearScheduleRotation_(principal, req.eventId));
       case 'sendParticipantMail':
+        // 参加者向けの一斉メール送信処理。
         return ok(sendParticipantMail_(principal, req));
       case 'logAction':
         assertOperator_(principal);
@@ -560,21 +631,41 @@ function doPost(e) {
         assertOperator_(principal);
         return ok(restoreRealtimeDatabase_());
       case 'whoami':
+        // デバッグ用途: 現在のprincipal情報（認証されたユーザー）を返す。
         return ok({ principal });
       default:
+        // 未知のactionが来たらエラー扱いにする。
         throw new Error('Unknown action: ' + action);
     }
   } catch (err) {
+    // ここで例外をJSONエラーとして整形し、CORSヘッダ付きで返す。
     return jsonErr_(err, requestOrigin);
   }
 }
 
+// ================================
+// CORSプレフライト(OPTIONS)リクエストへの応答
+// ================================
+// ブラウザがクロスオリジンのPOSTを送る前に投げてくる
+// OPTIONSリクエストに対して、空のレスポンス＋CORSヘッダを返す。
+// 実際の処理はwithCors_でAccess-Control-Allow-*ヘッダを付けるだけ。
 function doOptions(e) {
   const origin = getRequestOrigin_(e);
   const empty = ContentService.createTextOutput('');
   return withCors_(empty, origin);
 }
 
+// ================================
+// 視聴者からの質問投稿を受け付ける
+// ================================
+// 質問フォーム(question-form.htmlなど)から送られてくるデータを受け取り、
+// 1. ラジオネーム・質問本文などをバリデーションする
+// 2. token(一時リンク)をRTDB上で検証する
+// 3. イベント・日程・参加者情報と整合しているかチェックする
+// 4. 「質問受付キュー(questionIntake/submissions/...)」に1件分として積む
+//
+// ここではあくまで「キューに積むだけ」で、本番の質問一覧への反映は
+// processQuestionSubmissionQueue_ 側でまとめて行う。
 function submitQuestion_(payload) {
   const radioName = String(payload.radioName || payload.name || '').trim();
   const questionText = String(payload.question || payload.text || '').trim();
@@ -593,6 +684,7 @@ function submitQuestion_(payload) {
   const rawToken = String(payload.token || '').trim();
   const payloadQuestionLength = Number(payload.questionLength || 0);
 
+  // --- 基本的なバリデーション --------------------
   if (!radioName) throw new Error('ラジオネームを入力してください。');
   if (!questionText) throw new Error('質問・お悩みを入力してください。');
   if (!rawToken) {
@@ -602,8 +694,10 @@ function submitQuestion_(payload) {
     throw new Error('アクセスリンクが無効です。最新のURLからアクセスしてください。');
   }
 
+  // --- tokenを使ってRTDBからリンク情報を取得 --------------------
   let accessToken;
   try {
+    // Firebase RTDB にアクセスするためのアクセストークンを取得
     accessToken = getFirebaseAccessToken_();
   } catch (error) {
     throw new Error('アクセスリンクの検証に失敗しました。時間をおいて再試行してください。');
@@ -611,6 +705,7 @@ function submitQuestion_(payload) {
 
   let tokenRecord = null;
   try {
+    // questionIntake/tokens/{token} から、イベントや参加者に紐づく情報を取得
     tokenRecord = fetchRtdb_('questionIntake/tokens/' + rawToken, accessToken);
   } catch (error) {
     throw new Error('アクセスリンクの検証に失敗しました。時間をおいて再試行してください。');
@@ -627,6 +722,7 @@ function submitQuestion_(payload) {
     throw new Error('このリンクの有効期限が切れています。運営までお問い合わせください。');
   }
 
+  // --- token に紐づくイベント/日程/参加者情報との整合性チェック ----
   const tokenEventId = String(tokenRecord.eventId || '').trim();
   const tokenScheduleId = String(tokenRecord.scheduleId || '').trim();
   const tokenParticipantId = String(tokenRecord.participantId || '').trim();
@@ -634,6 +730,8 @@ function submitQuestion_(payload) {
     throw new Error('リンクに紐づくイベント情報が確認できません。運営までお問い合わせください。');
   }
 
+  // フォーム側から渡されてきた eventId / scheduleId / participantId が
+  // トークンに紐づいているものと矛盾していないか確認する。
   if (payloadEventId && payloadEventId !== tokenEventId) {
     throw new Error('送信されたイベント情報が一致しません。リンクを再度開き直してください。');
   }
@@ -644,6 +742,7 @@ function submitQuestion_(payload) {
     throw new Error('送信された参加者情報が一致しません。リンクを再度開き直してください。');
   }
 
+  // --- token とフォームからの値をマージして、質問キュー用の1レコードを作る ----
   const eventId = tokenEventId;
   const scheduleId = tokenScheduleId;
   const participantId = tokenParticipantId;
@@ -665,6 +764,8 @@ function submitQuestion_(payload) {
   const clientTimestamp = Number.isFinite(clientTimestampRaw) && clientTimestampRaw > 0
     ? clientTimestampRaw
     : now;
+
+  // ベースとなる送信データ（nullや空文字はあとで削る）
   const submissionBase = {
     token: rawToken,
     radioName,
@@ -693,6 +794,7 @@ function submitQuestion_(payload) {
     status: 'pending'
   };
 
+  // ベースとなる送信データ（nullや空文字はあとで削る）
   const submission = {};
   Object.keys(submissionBase).forEach(key => {
     const value = submissionBase[key];
@@ -711,6 +813,7 @@ function submitQuestion_(payload) {
 
   submission.submittedAt = now;
 
+  // --- RTDBのキュー(questionIntake/submissions/{token}/{entryId})に積む ----
   const entryId = Utilities.getUuid().replace(/-/g, '');
   const updates = {};
   updates[`questionIntake/submissions/${rawToken}/${entryId}`] = submission;
@@ -722,9 +825,18 @@ function submitQuestion_(payload) {
     throw new Error('質問の登録に失敗しました。時間をおいて再試行してください。');
   }
 
+  // フロント側用の簡単な結果（キューに入ったかどうか）
   return { queued: true, entryId, submittedAt: toIsoJst_(new Date(now)) };
 }
 
+// ================================
+// 特定トークンに紐づく質問キューを処理する
+// ================================
+// submitQuestion_ によって questionIntake/submissions/{token}/... に
+// 積まれている質問を、そのtoken分だけまとめて本番の質問一覧に反映する。
+// 1. tokenの形式チェックとRTDB上での有効性チェック
+// 2. processQuestionSubmissionQueue_ を tokenFilter 付きで呼び出す
+// 3. 処理件数などのサマリを呼び出し元に返す
 function processQuestionQueueForToken_(rawToken) {
   const token = String(rawToken || '').trim();
   if (!token) {
@@ -750,6 +862,8 @@ function processQuestionQueueForToken_(rawToken) {
     throw new Error('このリンクの有効期限が切れています。運営までお問い合わせください。');
   }
 
+  // 実際のキュー処理は processQuestionSubmissionQueue_ に任せ、
+  // ここでは「このtokenに紐づく分だけ」を対象にする。
   const result = processQuestionSubmissionQueue_(accessToken, { tokenFilter: [token] }) || {};
   return {
     processed: Number(result.processed || 0),
@@ -757,10 +871,21 @@ function processQuestionQueueForToken_(rawToken) {
   };
 }
 
+// ================================
+// 使われていない質問用トークンをRTDBから掃除する
+// ================================
+// participantsBranch(参加者情報)とtokensBranch(発行済みトークン)を突き合わせて、
+// どの参加者からも参照されていない「余っているtoken」を削除する。
+// - 参加者に紐づくtokenはactiveTokensとして記録
+// - tokensBranch側を走査し、activeTokensに含まれないtokenをnullで上書き
+// することで RTDB(questionIntake/tokens/...) から物理削除する。
 function cleanupUnusedQuestionTokens_(participantsBranch, tokensBranch, accessToken) {
   const participantKeys = new Set();
   const activeTokens = new Set();
 
+  // まず participantsBranch を走査して、
+  // 「イベントID::スケジュールID::参加者ID」の組をセットに集める。
+  // ここで token が埋まっている場合は activeTokens にも追加する。
   Object.keys(participantsBranch || {}).forEach(eventId => {
     const schedules = participantsBranch[eventId] || {};
     Object.keys(schedules).forEach(scheduleId => {
@@ -777,6 +902,9 @@ function cleanupUnusedQuestionTokens_(participantsBranch, tokensBranch, accessTo
     });
   });
 
+  // 次に tokensBranch 側を走査し、
+  // (eventId, scheduleId, participantId) が実在する参加者に紐づくtokenは
+  // activeTokensとしてマークし直す。
   Object.keys(tokensBranch || {}).forEach(token => {
     const trimmed = String(token || '').trim();
     if (!trimmed) {
@@ -789,6 +917,7 @@ function cleanupUnusedQuestionTokens_(participantsBranch, tokensBranch, accessTo
     }
   });
 
+  // activeTokens に含まれていない token を削除対象として updates に積む
   const updates = {};
   let removed = 0;
   Object.keys(tokensBranch || {}).forEach(token => {
@@ -803,6 +932,7 @@ function cleanupUnusedQuestionTokens_(participantsBranch, tokensBranch, accessTo
     removed += 1;
   });
 
+  // 実際に RTDB を更新する（必要な場合のみ）
   if (removed > 0 && accessToken) {
     try {
       patchRtdb_(updates, accessToken);
@@ -814,15 +944,35 @@ function cleanupUnusedQuestionTokens_(participantsBranch, tokensBranch, accessTo
 
   return { removed };
 }
+
+// === 名前の検索用にキーを正規化する =====================
+// ユーザー名・ラジオネームなどを検索や突き合わせに使うとき、
+// そのままだと全角/半角や見えない文字の違いで一致判定が難しい。
+// ここでは:
+//  - 前後の空白を除去
+//  - Unicode正規化(NFKC)で全角/半角などを揃える
+// を行い、「名前のキー」として扱いやすい形に整える。
 function normalizeNameKey_(value) {
   return String(value || '')
     .trim()
     .normalize('NFKC');
 }
 
+// normalizeNameKey_で正規化した上で、
+// ゼロ幅スペースなどの見えない制御文字を取り除く。
+// シートやフォーム由来の微妙な差異を吸収して検索しやすくする目的。
 function normalizeNameForLookup_(value) {
   return normalizeNameKey_(value).replace(/[\u200B-\u200D\uFEFF]/g, '');
 }
+
+// === 管理者ユーザーとしてRTDBに登録する =================
+// principal(認証済みユーザー情報)を元に、
+// 1. usersシートにメールアドレスが載っているか確認し、
+//    「この人は管理者候補かどうか」を判定する。
+// 2. 問題なければ Firebase RTDB の admins/{uid} に
+//    email や grantedAt(付与時刻)を書き込み、
+//    以後「管理画面にアクセスしてよいユーザー」として扱えるようにする。
+// usersシートの内容を元に管理者権限を配るための仕組み。
 function ensureAdmin_(principal){
   const uid   = principal && principal.uid;
   const email = String(principal && principal.email || '').trim().toLowerCase();
@@ -846,10 +996,21 @@ function ensureAdmin_(principal){
   return { status: res.getResponseCode() };
 }
 
+// === Firebase Realtime Database 用のフルURLを作る ========
+// スクリプトプロパティに設定してある FIREBASE_DB_URL を元に、
+// 与えられた path を結合して「◯◯.firebaseio.com/... .json」形式の
+// REST API 向けURLを生成する。
+// 前後の / をいい感じに調整してくれるヘルパー。
 function rtdbUrl_(path){
   const FIREBASE_DB_URL = PropertiesService.getScriptProperties().getProperty('FIREBASE_DB_URL');
   return FIREBASE_DB_URL.replace(/\/$/, '') + '/' + String(path || '').replace(/^\//,'') + '.json';
 }
+
+// === 管理者の操作履歴をRTDBに記録する ====================
+// principal(操作ユーザー), actionType(操作の種類), details(詳細文字列)
+// を受け取り、logs/history コレクションに1件として追加する。
+// これにより、後から「誰がいつどんな操作をしたか」を追跡できる。
+// 追加後は notifyUpdate('logs') を呼び、必要に応じて通知を飛ばす。
 function logAction_(principal, actionType, details) {
   const now = new Date();
   const timestampMs = now.getTime();
@@ -881,6 +1042,11 @@ function logAction_(principal, actionType, details) {
   return { ok: true, id: name };
 }
 
+// === RTDBバックアップ用シート(backups)を用意する =========
+// アクティブなスプレッドシート内に "backups" という名前のシートを確保し、
+// 存在しなければ新規作成する。
+// 1行目には [Timestamp, Data] というヘッダを自動で挿入する。
+// RTDB全体スナップショットをJSON文字列で保存するための置き場。
 function ensureBackupSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetName = 'backups';
@@ -894,6 +1060,10 @@ function ensureBackupSheet_() {
   return sheet;
 }
 
+// === メール送信ログ用シート(mail_logs)を用意する =========
+// アクティブなスプレッドシート内に "mail_logs" シートを確保し、
+// なければ作成する。1行目にログのヘッダを自動挿入する。
+// writeMailLog_ などがここに1件ずつ追記していく。
 function ensureMailLogSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetName = 'mail_logs';
@@ -907,6 +1077,12 @@ function ensureMailLogSheet_() {
   return sheet;
 }
 
+// === RTDB全体のスナップショットをbackupsシートに保存する ===
+// Firebase Realtime Database のルート("/")を丸ごと取得し、
+// スプレッドシート "backups" の末尾に
+//   [取得時刻, JSON文字列化したスナップショット]
+// の形式で1行追記する。
+// rowCountは、ヘッダ行を除いたバックアップ件数。
 function backupRealtimeDatabase_() {
   const token = getFirebaseAccessToken_();
   const snapshot = fetchRtdb_('', token) || {};
@@ -919,6 +1095,11 @@ function backupRealtimeDatabase_() {
   };
 }
 
+// === backupsシートの最新バックアップからRTDBを復元する ===
+// backupsシートの一番下の行(最新のバックアップ)を取得し、
+// JSONをパースしてRTDBのルート("/")にそのままputする。
+// 誤操作などでデータが壊れたときに、直近の状態に巻き戻す用途。
+// バックアップが無い・壊れている場合はエラーを投げる。
 function restoreRealtimeDatabase_() {
   const sheet = ensureBackupSheet_();
   const lastRow = sheet.getLastRow();
@@ -941,6 +1122,11 @@ function restoreRealtimeDatabase_() {
   return { timestamp };
 }
 
+// === backupsシートの最新バックアップからRTDBを復元する ===
+// backupsシートの一番下の行(最新のバックアップ)を取得し、
+// JSONをパースしてRTDBのルート("/")にそのままputする。
+// 誤操作などでデータが壊れたときに、直近の状態に巻き戻す用途。
+// バックアップが無い・壊れている場合はエラーを投げる。
 function normalizeParticipantMailViewBaseUrl_(value) {
   const trimmed = String(value || '').trim();
   if (!trimmed) {
@@ -1045,6 +1231,15 @@ function getWebAppBaseUrl_() {
   return '';
 }
 
+// === 質問フォームのベースURLを決定する ===============================
+// 「視聴者向け質問フォーム」をどのURLでホストするかを決める。
+// スクリプトプロパティなどから順番に候補を探し、
+//  1. QUESTION_FORM_BASE_URL
+//  2. PUBLIC_WEB_APP_URL
+//  3. PUBLIC_WEB_APP_FALLBACK_BASE_URL
+//  4. 参加者メールWeb表示URLから email-participant-shell.html を差し替えたURL
+// を試す。
+// 決まったURLは normalizeQuestionFormBaseUrl_ で整形してから返す。
 function getQuestionFormBaseUrl_() {
   const properties = PropertiesService.getScriptProperties();
   const propertyKeys = ['QUESTION_FORM_BASE_URL', 'PUBLIC_WEB_APP_URL'];
@@ -1066,27 +1261,13 @@ function getQuestionFormBaseUrl_() {
   return '';
 }
 
-function getQuestionFormBaseUrl_() {
-  const properties = PropertiesService.getScriptProperties();
-  const propertyKeys = ['QUESTION_FORM_BASE_URL', 'PUBLIC_WEB_APP_URL'];
-  for (let i = 0; i < propertyKeys.length; i += 1) {
-    const value = String(properties.getProperty(propertyKeys[i]) || '').trim();
-    if (value) {
-      return normalizeQuestionFormBaseUrl_(value);
-    }
-  }
-  if (PUBLIC_WEB_APP_FALLBACK_BASE_URL) {
-    return normalizeQuestionFormBaseUrl_(PUBLIC_WEB_APP_FALLBACK_BASE_URL);
-  }
-  if (PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL) {
-    const derived = PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL.replace(/email-participant-shell\.html?.*$/i, QUESTION_FORM_PAGE_FILENAME);
-    if (derived) {
-      return normalizeQuestionFormBaseUrl_(derived);
-    }
-  }
-  return '';
-}
-
+// === 質問フォームの完成URLを組み立てる ================================
+// getQuestionFormBaseUrl_ で決まったベースURLに対して、
+// token などのクエリパラメータを付与して完成URLを返す。
+// - 既に ? が含まれているかどうかで ? / & を切り替える
+// - #hash が付いている場合は、クエリを hash より前に挿入する
+// 例: baseUrl=https://example.com/form, token=abc
+//   → https://example.com/form?token=abc
 function buildQuestionFormUrl_(baseUrl, params) {
   const trimmed = String(baseUrl || '').trim();
   if (!trimmed) {
@@ -1114,6 +1295,16 @@ function buildQuestionFormUrl_(baseUrl, params) {
   return `${baseWithoutHash}${separator}${segments.join('&')}${hashPart}`;
 }
 
+// === 参加者メール全体の設定値を読み込む ===============================
+// スクリプトプロパティから、参加者メールに関する設定をまとめて取得する。
+// 具体的には：
+//  - 件名テンプレート(PARTICIPANT_MAIL_SUBJECT)
+//  - 追記事項のHTML/テキスト(PARTICIPANT_MAIL_NOTE_HTML / _TEXT)
+//  - 会場の場所や集合時刻に関する説明
+//  - フッターメッセージ、タグライン
+//  - 問い合わせ先リンク・質問フォームリンク用のラベルとURL
+// 等を一つのsettingsオブジェクトにして返す。
+// あとで buildParticipantMailContext_ などから参照する前提。
 function getParticipantMailSettings_() {
   const properties = PropertiesService.getScriptProperties();
   const settings = {
@@ -1217,6 +1408,19 @@ function buildParticipantMailSenderName_(eventName) {
   return '弘前大学生協学生委員会 運営チーム';
 }
 
+// === 参加者1人分の「メール差し込みデータ」を組み立てる =================
+// eventId, scheduleId と、イベント/日程/参加者の行データ、
+// そして getParticipantMailSettings_ で取得した共通設定を元に、
+// テンプレートエンジンに渡すためのコンテキストオブジェクトを構築する。
+// ここで最終的に決めるデータの例：
+//  - participantName / participantEmail
+//  - eventName / scheduleLabel / scheduleDateLabel / scheduleTimeLabel
+//  - 集合場所や集合時間帯(location, arrivalNote, arrivalWindow)
+//  - メールのWeb表示用URL(webViewUrl)と、そのためのtoken
+//  - 質問フォームURL(questionFormUrl)と誘導文
+//  - フッターメッセージや問い合わせ先リンクなど
+// 各値は「参加者行 → 日程行 → イベント行 → 設定値」の順に
+// coalesceStrings_ でフォールバックしながら決定する。
 function buildParticipantMailContext_(eventId, scheduleId, participantRecord, eventRecord, scheduleRecord, settings, baseUrl, questionFormBaseUrl) {
   const participantId = String((participantRecord && (participantRecord.participantId || participantRecord.uid)) || '').trim();
   const participantName = String(participantRecord && participantRecord.name || '').trim();
@@ -1379,6 +1583,14 @@ function buildParticipantMailContext_(eventId, scheduleId, participantRecord, ev
   };
 }
 
+// === 参加者メールの件名を組み立てる ===============================
+// buildParticipantMailContext_ で作った context と、
+// getParticipantMailSettings_ で取得した settings を元に、
+// 実際にメールで使う件名文字列を生成する。
+// - settings.subjectTemplate が設定されている場合は、
+//   {{eventName}}, {{scheduleLabel}}, {{participantName}} などの
+//   プレースホルダを置き換えて件名を作る。
+// - 設定が無い場合は「【◯◯】参加日時のご案内」というデフォルト形式にする。
 function buildParticipantMailSubject_(context, settings) {
   const template = String(settings.subjectTemplate || '').trim();
   const eventName = context.eventName || context.eventId || '';
@@ -1393,6 +1605,15 @@ function buildParticipantMailSubject_(context, settings) {
   return `【${eventName || 'イベント'}】参加日時のご案内`;
 }
 
+// === メールクライアント用のプレビュー文を生成する ===================
+// Gmailなどの受信一覧で表示される「冒頭の一行(プレビュー)」用の文字列を作る。
+// - 設定側に previewTextTemplate があれば、
+//   {{eventName}}, {{scheduleLabel}}, {{participantName}},
+//   {{arrivalNote}}, {{location}} などを埋め込んで作成。
+// - 設定が無ければ、eventName / scheduleLabel / arrivalNote / location などを
+//   「｜」区切りでつないで、160文字程度に丸めた簡易プレビューを返す。
+// 何も情報が無い場合の最後のfallbackは
+// 「ご参加に関する大切なお知らせです。」とする。
 function buildParticipantMailPreviewText_(context, settings) {
   const template = settings && settings.previewTextTemplate ? String(settings.previewTextTemplate).trim() : '';
   const eventName = coalesceStrings_(context && context.eventName, context && context.eventId);
@@ -1430,6 +1651,11 @@ function buildParticipantMailPreviewText_(context, settings) {
   return 'ご参加に関する大切なお知らせです。';
 }
 
+// === 件名から「【◯◯】」内のイベント名だけ抜き出す ================
+// 件名文字列のうち、「【イベント名】」という形式が含まれていれば
+// そのカッコの中身だけを返す。
+// buildParticipantMailSubject_ で組み立てた件名から、
+// context.eventName の補完などに使うためのユーティリティ。
 function extractSubjectEventName_(subject) {
   if (!subject) {
     return '';
@@ -1439,6 +1665,15 @@ function extractSubjectEventName_(subject) {
   return match ? match[1].trim() : '';
 }
 
+// === メール差し込みコンテキストを後から整える =======================
+// buildParticipantMailContext_ で作った context に対して、
+// 抜けている値を「候補からよしなに補完」したり、
+// settings側で決めたデフォルト値を上書きしたりする仕上げ処理。
+// 例：
+//  - eventName が空なら eventLabel / eventId / 件名の【◯◯】部分から補完
+//  - tagline や footerNote が空なら settings の値で補う
+//  - questionFormLabel が空なら「質問フォームを開く」などのデフォルトをセット
+// ログに補完元を出しつつ、最終的にテンプレに渡す context を整える役割。
 function enrichParticipantMailContext_(context, settings) {
   if (!context || typeof context !== 'object') {
     return context;
@@ -1535,6 +1770,14 @@ function enrichParticipantMailContext_(context, settings) {
   return context;
 }
 
+// === HTMLテンプレート全体で共有して使う値を算出する =================
+// context に入っている eventName / scheduleLabel などから、
+// 「テンプレートの中で何度も使う基本的なラベル」をまとめて計算する。
+// 例：
+//  - resolvedEventName: eventName / eventLabel / 件名から抽出した名前 など
+//  - resolvedScheduleLabel: scheduleLabel / scheduleRangeLabel など
+// また、テンプレート内で安全に使うために、
+// 一部の値はHTMLエスケープ済み (& → &amp; など) にして返す。
 function deriveParticipantMailTemplateSharedValues_(context) {
   const ctx = context && typeof context === 'object' ? context : {};
   const subjectText = ctx.subject ? String(ctx.subject) : '';
@@ -1654,6 +1897,15 @@ function renderHtmlTemplateMarkup_(markup, state) {
   }
 }
 
+// === メール用HTMLテンプレートにコンテキストを差し込む本体 ==========
+// getParticipantMailTemplateMarkup_ で取得した
+//  - shellHtml (外枠テンプレ)
+//  - bodyHtml  (本文テンプレ)
+// に対して、contextや共有値(sharedValues)を埋め込んで
+// 最終的な HtmlOutput を返す。
+// mode には 'email' や 'preview' などが入り、
+// テンプレート側で表示切り替えに使えるように safeContext.mode にセットする。
+// {{key}} 形式のプレースホルダを走査し、escapeHtmlForTemplate_ を通した値で置換する。
 function createParticipantMailTemplateOutput_(context, mode) {
   const safeContext = context && typeof context === 'object'
     ? Object.assign({}, context)
@@ -1725,6 +1977,13 @@ function stripHtmlToPlainText_(input) {
     .trim();
 }
 
+// === 参加者メールのプレーンテキスト版本文を組み立てる ==============
+// HTMLメールだけでなく、text/plain 部分にもそれなりに読める文章を入れるため、
+// context からテキスト専用の本文を行単位で構築する。
+// 「◯◯ 様」「「イベント名」にご参加いただきありがとうございます。」
+// といった挨拶から始まり、
+// 日程・場所・持ち物・注意事項・質問フォームURL などを
+// 人間が読んで分かりやすい順番でならべて1本のテキストにする。
 function renderParticipantMailPlainText_(context) {
   const lines = [];
   if (context.participantName) {
@@ -1881,6 +2140,16 @@ function buildParticipantMailRawMessage_(options) {
   return headers.join('\r\n');
 }
 
+// === 参加者メールを1通送信する(低レベル送信処理) ====================
+// optionsとして、宛先(to)、件名(subject)、HTML本文(htmlBody)、
+// テキスト本文(textBody)、差出人名(senderName)、Reply-Toアドレス(replyTo),
+// Fromアドレス(fromEmail)などを受け取り、
+// 1. 高度なGmailサービス(Gmail.Users.Messages.send)が使える場合:
+//    MIMEメッセージを手動で組み立てて raw として送信
+// 2. 使えない場合:
+//    MailApp.sendEmail(...) を使ってHTML+テキストメールを送信
+// という二段構えで送信する。
+// stripHtmlToPlainText_ でHTMLからテキストを生成するfallbackもここで行う。
 function sendParticipantMailMessage_(options) {
   const to = String(options.to || '').trim();
   if (!to) {
@@ -1926,6 +2195,23 @@ function sendParticipantMailMessage_(options) {
   });
 }
 
+// === 参加者一覧に対して一斉メール送信を行うメイン処理 ===============
+// doPost(action: 'sendParticipantMail') から呼ばれるエントリポイント。
+// 1. eventId / scheduleId を正規化し、principal がそのイベントの
+//    オペレーター権限を持っているか assertOperatorForEvent_ で確認する。
+// 2. RTDBから eventRecord / scheduleRecord / participant 一覧を取得し、
+//    送信対象の参加者(未送信 or force=true の場合は再送対象)を絞り込む。
+// 3. 各参加者ごとに：
+//    - buildParticipantMailContext_ で差し込み用contextを構築
+//    - enrichParticipantMailContext_ で不足情報を補完
+//    - buildParticipantMailSubject_ で件名を作成
+//    - buildParticipantMailPreviewText_ でプレビュー文を作成
+//    - createParticipantMailTemplateOutput_ でHTML本文を生成
+//    - renderParticipantMailPlainText_ でテキスト本文を生成
+//    - sendParticipantMailMessage_ で1通ずつ送信
+// 4. 送信結果をRTDBやスプレッドシートに記録し、ログも残す。
+// 5. MailApp.getRemainingDailyQuota() で日次送信枠をチェックし、
+//    足りない場合はエラーとして中断する。
 function sendParticipantMail_(principal, req) {
   const eventId = normalizeEventId_(req && req.eventId);
   const scheduleId = normalizeKey_(req && req.scheduleId);
@@ -2500,6 +2786,15 @@ function renderParticipantMailPage_(e) {
   }
 }
 
+// ================================
+// リクエストボディの共通パーサ
+// ================================
+// フロントエンドから送られてくるPOSTリクエストを、
+// - JSON (application/json)
+// - フォーム (x-www-form-urlencoded / multipart/form-data)
+// のどちらでも受け取れるようにして、
+// 最終的に「普通のオブジェクト」に統一して返す役割。
+// doPostから最初に呼び出される。
 function parseBody_(e) {
   if (!e) throw new Error('No body');
 
@@ -2511,6 +2806,8 @@ function parseBody_(e) {
     const type = String(postData.type || '').toLowerCase();
     const contents = postData.contents || '';
 
+    // application/x-www-form-urlencoded または multipart/form-data
+    // → e.parameter / e.parameters から組み立て直す
     if (type.indexOf('application/json') !== -1) {
       try {
         return contents ? JSON.parse(contents) : {};
@@ -2523,6 +2820,7 @@ function parseBody_(e) {
       return parseParameterObject_(parameter, parameters);
     }
 
+    // それ以外で中身があればJSONとして解釈を試みる
     if (contents) {
       try {
         return JSON.parse(contents);
@@ -2534,6 +2832,7 @@ function parseBody_(e) {
     }
   }
 
+  // POSTにbodyが無いか、JSONが壊れていた場合はパラメータから組み立てる
   if (parameter && Object.keys(parameter).length) {
     return parseParameterObject_(parameter, parameters);
   }
@@ -2662,6 +2961,14 @@ function jsonOk(payload, requestOrigin){
   );
 }
 
+// ================================
+// エラー応答(JSON)の共通フォーマット
+// ================================
+// 例外が発生したときに、サーバ側ログとクライアント側の両方に
+// 分かりやすい情報を残すための共通関数。
+// - ログには短いID付きでスタックトレースを出力
+// - クライアントには success:false, error, errorId をJSONで返却
+// CORSヘッダ付与は withCors_ に任せる。
 function jsonErr_(err, requestOrigin){
   const id = Utilities.getUuid().slice(0, 8);
   console.error('[' + id + ']', err && err.stack || err);
@@ -2675,6 +2982,13 @@ function jsonErr_(err, requestOrigin){
   );
 }
 
+// ================================
+// CORSヘッダ付与の共通ラッパー
+// ================================
+// ContentServiceのレスポンスに対して、
+// Access-Control-Allow-* 系のヘッダをまとめて付与する。
+// 実際に許可するOriginは normalizeAllowedOrigin_ で
+// 設定済みのホワイトリストに基づいて決定する。
 function withCors_(output, requestOrigin) {
   if (!output || typeof output.setHeader !== 'function') {
     return output;
@@ -2808,6 +3122,14 @@ function buildActiveScheduleRecord_(assignment, session, operatorUid) {
   };
 }
 
+// ================================
+// リクエスト元Originの推定
+// ================================
+// フロントエンドから送られてきたリクエストの中から、
+// 「どのOrigin(https://example.com)から呼ばれたか」を推定する。
+// - JSONボディ内の origin / requestOrigin
+// - URLパラメータの origin など
+// を見て、URLとして妥当なものだけを取り出し、origin部分だけに正規化する。
 function getRequestOrigin_(event, body) {
   const fallback = extractOriginFromBody_(body) || extractOriginFromParams_(event);
   if (fallback) {
@@ -2862,6 +3184,11 @@ function requireSessionId_(raw) {
   return sessionId;
 }
 
+// === Firebase RTDB REST APIラッパー =========================
+// fetchRtdb_: 指定パスのノードをGETしてJSONとして返す。
+// patchRtdb_: 複数パスに対する部分更新(PATCH)をまとめて行う。
+// postRtdb_: 指定パスにpush形式で新しい子ノードを追加する。
+// すべてBearerトークン認証付きでUrlFetchAppを通して叩く。
 function fetchRtdb_(path, token) {
   const res = UrlFetchApp.fetch(rtdbUrl_(path), {
     method: 'get',
@@ -2937,6 +3264,13 @@ function ensureDisplayPrincipal_(principal, message) {
   return principal;
 }
 
+// === display用セッションの開始(begin) ======================
+// display.html 側が立ち上がったときに最初に呼ばれるエンドポイント。
+// 1. principal(uid)とeventIdを元にセッションIDを決める
+// 2. screens/sessions/{uid} にセッション情報(status, startedAt など)を書き込む
+// 3. screens/approved/{uid} が存在している場合のみ「承認済みスクリーン」として扱う
+// 4. render/displayPresence/{uid} にプレゼンス情報をセットし、
+//    管理画面側から「どのスクリーンがオンラインか」を把握できるようにする。
 function beginDisplaySession_(principal) {
   ensureDisplayPrincipal_(principal, 'Only anonymous display accounts can begin sessions');
   const token = getFirebaseAccessToken_();
@@ -3031,6 +3365,11 @@ function beginDisplaySession_(principal) {
   return { session };
 }
 
+// === displayセッションのハートビート(heartbeat) ===========
+// 一定間隔で呼ばれ、現在のセッションがまだ生きていることを通知する。
+// screens/sessions/{uid} の lastSeenAt / expiresAt を更新し、
+// render/displayPresence/{uid} も更新することで、
+// 管理画面側から「いまも接続中かどうか」を判別できるようにする。
 function heartbeatDisplaySession_(principal, rawSessionId) {
   ensureDisplayPrincipal_(principal, 'Only anonymous display accounts can send heartbeats');
   const sessionId = requireSessionId_(rawSessionId);
@@ -3100,6 +3439,12 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
   return { active: true, session };
 }
 
+// === displayセッションの終了処理(end) ======================
+// display.html を閉じる／切断する際に呼ばれる想定のエンドポイント。
+// 1. screens/sessions/{uid} に status: 'ended' / endedAt などを書き込む
+// 2. screens/approved/{uid}, render/displayPresence/{uid} を削除
+// 3. そのセッションに紐づいていた「アクティブなスケジュール」情報もクリア
+// といった後片付けを一括で行う。
 function endDisplaySession_(principal, rawSessionId, reason) {
   ensureDisplayPrincipal_(principal, 'Only anonymous display accounts can end sessions');
   const sessionId = requireSessionId_(rawSessionId);
@@ -3136,6 +3481,11 @@ function endDisplaySession_(principal, rawSessionId, reason) {
   return { ended: true };
 }
 
+// === 表示スケジュールの操作権をロックする ===================
+// オペレーターが「このイベントの画面表示を自分が操作する」ことを宣言する。
+// screens/locks/{eventId} に ownerUid/ownerName を書き込むことで、
+// 同時に複数のオペレーターが同じイベントを操作してしまうことを防ぐ。
+// すでに他のユーザーがロックしている場合はエラーで弾く。
 function lockDisplaySchedule_(principal, rawEventId, rawScheduleId, rawScheduleLabel, rawOperatorName) {
   const eventId = normalizeEventId_(rawEventId);
   if (!eventId) {
@@ -3218,6 +3568,12 @@ function lockDisplaySchedule_(principal, rawEventId, rawScheduleId, rawScheduleL
   return { assignment };
 }
 
+// === ローテーション設定(entries)を正規化する ================
+// saveScheduleRotation_ に渡される entries 配列をチェックし、
+// 1. scheduleId を正規化して無効なエントリを除外
+// 2. 同じscheduleIdが重複している場合は最初の1件だけ残す
+// 3. 表示時間(dwellMs)やdurationMsなどが未指定の場合はデフォルト値を補う
+// といった正規化を行い、「サーバー側で扱いやすい形」に整えて返す。
 function normalizeRotationEntries_(eventId, rawEntries) {
   const list = Array.isArray(rawEntries) ? rawEntries : [];
   const seenKeys = new Set();
@@ -3292,6 +3648,11 @@ function buildRotationActiveScheduleRecord_(eventId, rotationRecord, timestamp) 
   };
 }
 
+// === スケジュールのローテーション設定を保存する ===================
+// オペレーターが設定した「◯◯→△△→□□ と自動で切り替える」ルールを、
+// screens/rotations/{eventId} に保存し、
+// さらに現在の時刻を元に「今どのスケジュールを表示すべきか」を
+// buildRotationActiveScheduleRecord_ で計算して render/activeSchedules に反映する。
 function saveScheduleRotation_(principal, rawEventId, rawRotationEntries, rawOptions) {
   const eventId = normalizeEventId_(rawEventId);
   if (!eventId) {
@@ -3342,6 +3703,10 @@ function saveScheduleRotation_(principal, rawEventId, rawRotationEntries, rawOpt
   return { rotation: rotationRecord, active: activeRecord };
 }
 
+// === スケジュールローテーション設定を解除する ======================
+// 指定イベントの screens/rotations/{eventId} を削除し、
+// activeSchedules 側にもローテーション由来のレコードがあればクリアする。
+// 手動操作に戻したいときに使う。
 function clearScheduleRotation_(principal, rawEventId) {
   const eventId = normalizeEventId_(rawEventId);
   if (!eventId) {
@@ -3492,6 +3857,13 @@ function isOperatorAllowedForEvent_(principal, eventId) {
   });
 }
 
+// === principalがイベントのオペレーターかどうかを検証する ==========
+// principal(uid/email) と eventId を元に、
+// イベントごとのオペレーターACLを参照し、
+// 「このユーザーが指定イベントの操作をしてよいか」をチェックする。
+// 許可されていない場合はErrorを投げて処理を止める。
+// sendParticipantMail_ や lockDisplaySchedule_ など、
+// イベント単位で権限が必要な処理の入り口で呼び出す。
 function assertOperatorForEvent_(principal, eventId) {
   assertOperator_(principal);
   const eventKey = normalizeEventId_(eventId);
@@ -3572,6 +3944,10 @@ function findDictionaryUidByTerm_(branch, termKey) {
   return '';
 }
 
+// === 辞書(よみがな)エントリを追加する ===============================
+// 指定イベントに対して、新しい「表記→よみがな」辞書エントリを追加する。
+// term, reading, enabled などを受け取り、normalizeDictionaryTermKey_ で
+// キーを正規化した上で RTDB(dictionary/...) に保存する。
 function addDictionaryTerm(term, ruby, providedUid) {
   const normalizedTerm = String(term || '').trim();
   const normalizedRuby = String(ruby || '').trim();
@@ -3611,6 +3987,10 @@ function addDictionaryTerm(term, ruby, providedUid) {
   return { success: true, message: `Term "${normalizedTerm}" added.`, uid };
 }
 
+// === 既存の辞書エントリを更新する ================================
+// 辞書エントリのよみや有効/無効フラグを更新する。
+// term自体を変えたい場合はキーの再計算が必要になるため、
+// その扱いも考慮した上で RTDB をpatchする。
 function updateDictionaryTerm(uid, term, ruby) {
   const normalizedUid = String(uid || '').trim();
   if (!normalizedUid) {
@@ -3642,6 +4022,9 @@ function updateDictionaryTerm(uid, term, ruby) {
   return { success: true, message: `UID: ${normalizedUid} updated.` };
 }
 
+// === 辞書エントリを削除する =====================================
+// 指定uidの辞書エントリを RTDB から削除する。
+// 一括削除(batchDeleteDictionaryTerms)では、複数uidをまとめてnullにする。
 function deleteDictionaryTerm(uid, term) {
   const normalizedUid = String(uid || '').trim();
   if (!normalizedUid) {
@@ -3742,6 +4125,11 @@ function batchToggleDictionaryTerms(uids, enabled) {
   }
   return { success: true, message: `${updated} entries updated.` };
 }
+
+// === 日次バッチでフォームや状態をリセットする =====================
+// Apps Scriptの時間主導トリガーから1日1回呼び出す想定の処理。
+// ユーザーフォームの状態や期限付きのフラグなどをチェックし、
+// 期限切れのものをOFFにする・リセットするなどのメンテナンスを行う。
 function dailyCheckAndResetUserForm() {
     const today = new Date();
     const month = today.getMonth() + 1;
@@ -3765,6 +4153,11 @@ function dailyCheckAndResetUserForm() {
     }
 }
 
+// === Firebase RTDB用のアクセストークンを取得する ==================
+// サービスアカウント情報(スクリプトプロパティなど)からJWTを組み立て、
+// Googleのトークンエンドポイントに対してOAuthトークンを発行してもらう。
+// fetchRtdb_ / patchRtdb_ / postRtdb_ でAuthorization: Bearer に
+// セットするための短命アクセストークンを返す。
 function getFirebaseAccessToken_() {
   const properties = PropertiesService.getScriptProperties();
   const CLIENT_EMAIL = properties.getProperty('CLIENT_EMAIL');
@@ -3871,6 +4264,10 @@ function notifyUpdate(kind, maybeKind) {
 }
 function toIsoJst_(d){ return Utilities.formatDate(d,'Asia/Tokyo',"yyyy-MM-dd'T'HH:mm:ssXXX"); }
 
+// === シートの内容を「ヘッダ行付きの配列」に変換して取得する =========
+// 指定したシート名の1行目をキーとして扱い、2行目以降のデータを
+// [{ヘッダ1: 値, ヘッダ2: 値, ...}, ...] という形の配列にして返す。
+// usersシートやconfigシートなど、ヘッダ付きテーブルを扱うときの共通入り口。
 function getSheetData_(sheetKey) {
   const normalized = String(sheetKey || '').trim().toLowerCase();
   if (normalized !== 'users') {
@@ -3907,6 +4304,15 @@ function getSheetData_(sheetKey) {
 
   return rows;
 }
+// === 質問受付キュー(questionIntake)を本番リストに反映する ==========
+// submitQuestion_ によって RTDB上の questionIntake/submissions/... に
+// 積まれている質問キューを走査し、
+// 1. 有効なトークン・期限内のエントリだけを対象にする
+// 2. 本番の質問リスト(questions/...)に書き込み
+// 3. 正常に移行できたキューは削除する
+// といった処理をまとめて行う。
+// options.tokenFilter に配列を渡すと、特定のtokenに紐づくキューだけを
+// 処理対象に絞り込める。
 function processQuestionSubmissionQueue_(providedAccessToken, options) {
   const accessToken = providedAccessToken || getFirebaseAccessToken_();
   const queueBranch = fetchRtdb_('questionIntake/submissions', accessToken) || {};
@@ -4089,6 +4495,11 @@ function updateAnswerStatus(uid, status) {
   return { success: true, message: `UID: ${normalizedUid} updated.` };
 }
 
+// === 複数の質問のステータスを一括更新する ========================
+// 質問一覧の中から、指定されたuidsに対応するレコードを探し、
+// それぞれの status フィールドを requestedStatus に更新する。
+// まとめてPATCHすることでRTDBへの書き込み回数を削減する。
+// 司会用に「この質問群を一括で採用済みにする」といった操作で使う。
 function batchUpdateStatus(uids, status) {
   if (!Array.isArray(uids)) {
     throw new Error('UIDs array is required.');
@@ -4224,6 +4635,10 @@ function editQuestionText(uid, newText) {
   return { success: true, message: `UID: ${normalizedUid} question updated.` };
 }
 
+// === 参加者メールテンプレートのキャッシュを一度だけクリアする =====
+// CacheService に保存されている email-participant-shell.html / body.html の
+// キャッシュエントリを削除し、次回のメール生成時に最新テンプレートを
+// DriveやGitHubから再読込させるためのメンテナンス用関数。
 function clearParticipantMailTemplateCacheOnce() {
   // 推奨されていた呼び出し
   getParticipantMailTemplateMarkup_({ forceRefresh: true });
