@@ -14,6 +14,7 @@ import {
 } from "../../operator/firebase.js";
 import { ensureString, formatDateTimeLocal, logError } from "../helpers.js";
 import { normalizeFacultyList } from "./gl-faculty-utils.js";
+import { buildGlShiftTablePrintHtml, logPrintWarn } from "../../shared/print-utils.js";
 
 const ASSIGNMENT_VALUE_ABSENT = "__absent";
 const ASSIGNMENT_VALUE_STAFF = "__staff";
@@ -225,6 +226,36 @@ function applyGradeBadge(element, grade) {
     element.classList.add(`gl-grade-badge--${variant}`);
   }
   element.textContent = text;
+}
+
+function getGradeSortWeight(grade) {
+  const variant = determineGradeBadgeVariant(grade);
+  const order = {
+    year1: 1,
+    year2: 2,
+    year3: 3,
+    year4: 4,
+    year5: 5,
+    year6: 6,
+    other: 9
+  };
+  if (!variant) {
+    return 99;
+  }
+  return order[variant] ?? 98;
+}
+
+function formatAssignmentLabelForPrint(value) {
+  if (value === ASSIGNMENT_VALUE_ABSENT) {
+    return "欠席";
+  }
+  if (value === ASSIGNMENT_VALUE_STAFF) {
+    return "運営待機";
+  }
+  if (value === ASSIGNMENT_VALUE_UNAVAILABLE) {
+    return "参加不可";
+  }
+  return ensureString(value);
 }
 
 function resolveScheduleResponseValue(application, scheduleId) {
@@ -2796,6 +2827,92 @@ export class GlToolManager {
     content.append(control);
     cell.append(content);
     return cell;
+  }
+
+  buildShiftTablePrintPreview({ printSettings } = {}) {
+    if (!this.currentEventId) {
+      return { message: "イベントを選択してください。" };
+    }
+
+    const schedules = buildRenderableSchedules(
+      this.currentSchedules,
+      this.config?.schedules || [],
+      this.applications
+    );
+    const printableSchedules = schedules.map((schedule) => ({
+      id: ensureString(schedule.id),
+      label: ensureString(schedule.label) || ensureString(schedule.date) || schedule.id || "日程",
+      date: ensureString(schedule.date)
+    }));
+
+    const applications = Array.isArray(this.applications) ? this.applications.filter(Boolean) : [];
+    if (!applications.length) {
+      return { message: "印刷できるシフト情報がありません。" };
+    }
+
+    const entries = applications.map((application) => {
+      const values = {};
+      printableSchedules.forEach((schedule) => {
+        const assignment = this.getAssignmentForSchedule(application.id, schedule.id);
+        const assignmentValue = resolveEffectiveAssignmentValue(application, assignment);
+        const assignmentLabel = formatAssignmentLabelForPrint(assignmentValue);
+        const responseDescriptor = resolveScheduleResponseValue(application, schedule.id);
+        const responseText = ensureString(responseDescriptor.text);
+        const displayValue = assignmentLabel || responseText || "未回答";
+        values[schedule.id] = displayValue;
+      });
+      return {
+        id: ensureString(application.id),
+        name: ensureString(application.name) || "(無記入)",
+        phonetic: ensureString(application.phonetic),
+        grade: ensureString(application.grade),
+        department: buildAcademicPathText(application),
+        email: ensureString(application.email),
+        sourceType: application.sourceType === "internal" ? "internal" : "external",
+        values
+      };
+    });
+
+    entries.sort((a, b) => {
+      const nameCompare = a.name.localeCompare(b.name, "ja", { numeric: true, sensitivity: "base" });
+      if (nameCompare !== 0) {
+        return nameCompare;
+      }
+      const gradeCompare = getGradeSortWeight(a.grade) - getGradeSortWeight(b.grade);
+      if (gradeCompare !== 0) {
+        return gradeCompare;
+      }
+      const departmentA = ensureString(a.department);
+      const departmentB = ensureString(b.department);
+      return departmentA.localeCompare(departmentB, "ja", { numeric: true, sensitivity: "base" });
+    });
+
+    const internalEntries = entries.filter((entry) => entry.sourceType === "internal");
+    const externalEntries = entries.filter((entry) => entry.sourceType !== "internal");
+    const sections = [];
+    if (internalEntries.length) {
+      sections.push({ label: "運営スタッフ", entries: internalEntries });
+    }
+    if (externalEntries.length) {
+      sections.push({ label: "協力スタッフ", entries: externalEntries });
+    }
+
+    if (!sections.length) {
+      return { message: "印刷できるシフト情報がありません。" };
+    }
+
+    try {
+      return buildGlShiftTablePrintHtml({
+        eventName: this.currentEventName,
+        schedules: printableSchedules,
+        sections,
+        generatedAt: new Date(),
+        printOptions: printSettings
+      });
+    } catch (error) {
+      logPrintWarn("GL shift print generation failed", error);
+      return { message: "シフト表の印刷データ生成に失敗しました。" };
+    }
   }
 
   createBucketMatcher() {

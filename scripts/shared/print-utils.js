@@ -1005,6 +1005,213 @@ function buildStaffPrintHtml({
   return { html, docTitle, metaText: headingText };
 }
 
+function buildGlShiftTablePrintHtml({
+  eventName = "",
+  schedules = [],
+  sections = [],
+  generatedAt = new Date(),
+  printOptions = {}
+}, { defaultSettings = DEFAULT_PRINT_SETTINGS } = {}) {
+  const printSettings = normalizePrintSettings(printOptions, defaultSettings);
+  const scheduleList = Array.isArray(schedules)
+    ? schedules.map((schedule) => ({
+        id: schedule?.id ?? "",
+        label: formatPrintCell(schedule?.label || schedule?.date || schedule?.id || "日程"),
+        date: formatPrintCell(schedule?.date || "", { placeholder: "" })
+      }))
+    : [];
+
+  const generatedAtDate = generatedAt instanceof Date && !Number.isNaN(generatedAt.getTime())
+    ? generatedAt
+    : new Date();
+
+  const generatedDateFormatter = new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  const generatedTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+
+  const generatedDateText = generatedDateFormatter.format(generatedAtDate);
+  const generatedTimeText = generatedTimeFormatter.format(generatedAtDate);
+
+  const normalizedSections = (Array.isArray(sections) ? sections : [])
+    .map((section) => ({
+      label: formatPrintCell(section?.label || section?.sourceType || ""),
+      entries: Array.isArray(section?.entries) ? section.entries : []
+    }))
+    .filter((section) => section.label && section.entries.length);
+
+  const totalCount = normalizedSections.reduce((sum, section) => sum + section.entries.length, 0);
+
+  const titleParts = [formatMetaDisplay(eventName, "")]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean);
+  const headingText = titleParts.length
+    ? `${titleParts.join(" / ")} のGLシフト表`
+    : "GLシフト表";
+  const docTitle = titleParts.length ? `${titleParts.join(" / ")} - GLシフト表` : "GLシフト表";
+  const metaText = `${headingText} (${totalCount}名)`;
+
+  const metaItems = [];
+  if (eventName) {
+    metaItems.push(`<li class="print-meta__item"><span class="print-meta__label">イベント:</span> <span class="print-meta__value">${escapeHtml(eventName)}</span></li>`);
+  }
+  metaItems.push(`<li class="print-meta__item"><span class="print-meta__label">スタッフ数:</span> <span class="print-meta__value">${escapeHtml(`${totalCount}名`)}</span></li>`);
+  if (printSettings.showDate || printSettings.showTime) {
+    const generatedParts = [
+      printSettings.showDate ? generatedDateText : "",
+      printSettings.showTime ? generatedTimeText : ""
+    ].filter(Boolean);
+    const generatedLabel = printSettings.showDate && printSettings.showTime
+      ? "出力日時"
+      : printSettings.showDate
+        ? "出力日"
+        : "出力時刻";
+    metaItems.push(
+      `<li class="print-meta__item"><span class="print-meta__label">${escapeHtml(generatedLabel)}:</span> <span class="print-meta__value">${escapeHtml(generatedParts.join(" "))}</span></li>`
+    );
+  }
+
+  const buildIdentityCell = (entry) => {
+    const nameText = entry?.phonetic
+      ? `<ruby>${escapeHtml(entry?.name || "(無記入)")}<rt>${escapeHtml(entry.phonetic)}</rt></ruby>`
+      : escapeHtml(entry?.name || "(無記入)");
+    const lines = [
+      `<span class="gl-shift-print__name">${nameText}</span>`,
+      entry?.department ? `<span class="gl-shift-print__meta">${escapeHtml(entry.department)}</span>` : "",
+      entry?.email ? `<span class="gl-shift-print__meta">${escapeHtml(entry.email)}</span>` : ""
+    ].filter(Boolean);
+    return `<td class="gl-shift-print__identity">${lines.join("")}</td>`;
+  };
+
+  const buildSectionMarkup = (section) => {
+    const headerCells = [
+      '<th scope="col" class="gl-shift-print__identity">スタッフ</th>',
+      ...scheduleList.map((schedule) => {
+        const date = schedule.date ? `<span class="gl-shift-print__schedule-date">${schedule.date}</span>` : "";
+        const label = `<span class="gl-shift-print__schedule-label">${schedule.label}</span>`;
+        return `<th scope="col" class="gl-shift-print__value" data-schedule-id="${escapeHtml(schedule.id)}">${label}${date}</th>`;
+      })
+    ].join("");
+
+    const rows = section.entries
+      .map((entry) => {
+        const identityCell = buildIdentityCell(entry);
+        const cells = scheduleList
+          .map((schedule) => {
+            const value = formatPrintCell(entry?.values?.[schedule.id] ?? "—", { placeholder: "—" });
+            return `<td class="gl-shift-print__value">${value}</td>`;
+          })
+          .join("");
+        return `<tr>${identityCell}${cells}</tr>`;
+      })
+      .join("");
+
+    const bodyMarkup = rows || '<tr><td class="gl-shift-print__value" colspan="100%">該当するスタッフがいません。</td></tr>';
+
+    return `<section class="gl-shift-print" aria-label="${escapeHtml(section.label)}">\n      <header class="gl-shift-print__header">\n        <h4 class="gl-shift-print__title">${escapeHtml(section.label)}</h4>\n      </header>\n      <div class="gl-shift-print__table-wrapper">\n        <table class="gl-shift-print__table">\n          <thead>\n            <tr>${headerCells}</tr>\n          </thead>\n          <tbody>\n            ${bodyMarkup}\n          </tbody>\n        </table>\n      </div>\n    </section>`;
+  };
+
+  const sectionMarkup = normalizedSections.length
+    ? normalizedSections.map((section) => buildSectionMarkup(section)).join("\n\n")
+    : '<p class="print-empty">出力できるスタッフがいません。</p>';
+
+  const metaMarkup = metaItems.length
+    ? `<ul class="print-meta">${metaItems.join("\n")}</ul>`
+    : "";
+
+  const pageMargin = printSettings.margin || "5mm";
+  const pageSize = printSettings.paperSize || "A4";
+  const pageOrientation = printSettings.orientation || "portrait";
+  const { width: pageWidth, height: pageHeight } = resolvePrintPageSize(printSettings, defaultSettings);
+  const pageSizeValue = pageSize === "Custom"
+    ? `${pageWidth}mm ${pageHeight}mm`
+    : `${pageSize} ${pageOrientation}`;
+  const headerClass = printSettings.repeatHeader ? "print-header print-header--repeat" : "print-header";
+  const headerMarkup = printSettings.showHeader
+    ? `<header class="${headerClass}">\n      <h1 class="print-title">${escapeHtml(headingText)}</h1>\n      ${metaMarkup}\n    </header>`
+    : "";
+
+  const footerTimestamp = [
+    printSettings.showDate ? generatedDateText : "",
+    printSettings.showTime ? generatedTimeText : ""
+  ].filter(Boolean).join(" ");
+  const footerItems = [];
+  if (footerTimestamp) {
+    footerItems.push(`<span class="print-footer__item">${escapeHtml(footerTimestamp)}</span>`);
+  }
+  if (printSettings.showPageNumbers) {
+    footerItems.push('<span class="print-footer__item print-footer__page" aria-label="ページ番号"><span class="print-footer__page-number" aria-hidden="true"></span></span>');
+  }
+  const footerMarkup = footerItems.length
+    ? `<footer class="print-footer"><div class="print-footer__items">${footerItems.join("")}</div></footer>`
+    : "";
+
+  const baseStyles = buildBasePrintStyles({
+    pageMargin,
+    pageSizeValue,
+    pageWidth,
+    pageHeight,
+    bodyFontSize: "9pt"
+  });
+
+  const html = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(docTitle)}</title>
+  <style>
+    ${baseStyles}
+    .gl-shift-print { border: 0.3mm solid #000; padding: 3mm; margin-bottom: 10mm; background: #fff; page-break-inside: avoid; break-inside: avoid-page; }
+    .gl-shift-print__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3mm; }
+    .gl-shift-print__title { margin: 0; font-size: 12.5pt; display: inline-flex; gap: 3mm; align-items: baseline; }
+    .gl-shift-print__tag { font-size: 8.5pt; color: #444; letter-spacing: 0.02em; }
+    .gl-shift-print__table-wrapper { width: 100%; overflow: hidden; }
+    .gl-shift-print__table { width: 100%; table-layout: fixed; border-collapse: collapse; page-break-inside: avoid; break-inside: avoid-page; }
+    .gl-shift-print__table th, .gl-shift-print__table td { border: 0.25mm solid #000; padding: 1.5mm 1.8mm; word-break: break-all; }
+    .gl-shift-print__table thead th { background: #f5f5f5; }
+    .gl-shift-print__table th { vertical-align: middle; }
+    .gl-shift-print__identity { width: 55mm; vertical-align: top; }
+    .gl-shift-print__name { font-weight: 700; display: block; }
+    .gl-shift-print__meta { font-size: 8pt; display: block; color: #444; }
+    .gl-shift-print__schedule-label { display: block; font-weight: 700; }
+    .gl-shift-print__schedule-date { display: block; font-size: 8pt; color: #444; }
+    .gl-shift-print__value { text-align: center; vertical-align: middle; }
+    .gl-shift-print__table tbody tr { break-inside: avoid-page; }
+  </style>
+</head>
+<body>
+  <div class="print-surface" aria-label="GLシフト表の印刷プレビュー">
+    <div class="print-controls" role="group" aria-label="印刷操作">
+      <button type="button" class="print-controls__button" onclick="window.print()">印刷する</button>
+    </div>
+    ${headerMarkup}
+    <main>
+      ${sectionMarkup}
+    </main>
+    ${footerMarkup}
+  </div>
+</body>
+</html>`;
+
+  logPrintInfo("buildGlShiftTablePrintHtml generated", {
+    eventName,
+    totalCount,
+    sectionCount: normalizedSections.length,
+    scheduleCount: scheduleList.length,
+    printSettings
+  });
+
+  return { html, docTitle, metaText };
+}
+
 export {
   PRINT_LOG_PREFIX,
   PRINT_SETTING_STORAGE_KEY,
@@ -1025,6 +1232,7 @@ export {
   buildMinimalParticipantPrintPreview,
   buildStaffPrintHtml,
   buildEventSelectionPrintHtml,
+  buildGlShiftTablePrintHtml,
   logPrintInfo,
   logPrintWarn,
   logPrintError,
