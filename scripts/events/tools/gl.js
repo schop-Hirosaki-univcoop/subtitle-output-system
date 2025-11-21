@@ -1658,10 +1658,12 @@ export class GlToolManager {
   }
 
   handleSelection(detail = {}) {
-    const eventId = ensureString(detail.eventId);
+    const hasEventId = Object.prototype.hasOwnProperty.call(detail, "eventId");
+    const eventId = hasEventId ? ensureString(detail.eventId) : this.currentEventId;
+    const eventName = ensureString(detail.eventName);
     const changed = eventId !== this.currentEventId;
     this.currentEventId = eventId;
-    this.currentEventName = ensureString(detail.eventName) || eventId;
+    this.currentEventName = eventName || this.currentEventName || eventId;
     this.refreshSchedules();
     this.updateConfigVisibility();
     this.updateSlugPreview();
