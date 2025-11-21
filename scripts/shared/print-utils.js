@@ -1013,12 +1013,42 @@ function buildGlShiftTablePrintHtml({
   printOptions = {}
 }, { defaultSettings = DEFAULT_PRINT_SETTINGS } = {}) {
   const printSettings = normalizePrintSettings(printOptions, defaultSettings);
+  const weekdayNames = ["日", "月", "火", "水", "木", "金", "土"];
   const scheduleList = Array.isArray(schedules)
-    ? schedules.map((schedule) => ({
-        id: schedule?.id ?? "",
-        label: formatPrintCell(schedule?.label || schedule?.date || schedule?.id || "日程"),
-        date: formatPrintCell(schedule?.date || "", { placeholder: "" })
-      }))
+    ? schedules.map((schedule, index) => {
+        const rawDate = schedule?.date ?? "";
+        const parsedDate = parseDateTime(rawDate);
+        const validDate = parsedDate instanceof Date && !Number.isNaN(parsedDate.getTime());
+        const fallbackText = formatPrintCell(
+          schedule?.label || schedule?.date || schedule?.id || `日程${index + 1}`,
+          { placeholder: "—" }
+        );
+
+        if (!validDate) {
+          return {
+            id: schedule?.id ?? "",
+            yearText: "",
+            monthText: "",
+            dayText: fallbackText,
+            weekdayText: "",
+            fallbackText
+          };
+        }
+
+        const yearText = `${parsedDate.getFullYear()}年`;
+        const monthText = `${parsedDate.getMonth() + 1}月`;
+        const dayText = `${parsedDate.getDate()}日`;
+        const weekdayText = `${weekdayNames[parsedDate.getDay()]}曜`;
+
+        return {
+          id: schedule?.id ?? "",
+          yearText,
+          monthText,
+          dayText,
+          weekdayText,
+          fallbackText
+        };
+      })
     : [];
 
   const generatedAtDate = generatedAt instanceof Date && !Number.isNaN(generatedAt.getTime())
@@ -1091,14 +1121,72 @@ function buildGlShiftTablePrintHtml({
   };
 
   const buildSectionMarkup = (section) => {
-    const headerCells = [
-      '<th scope="col" class="gl-shift-print__identity">スタッフ</th>',
-      ...scheduleList.map((schedule) => {
-        const date = schedule.date ? `<span class="gl-shift-print__schedule-date">${schedule.date}</span>` : "";
-        const label = `<span class="gl-shift-print__schedule-label">${schedule.label}</span>`;
-        return `<th scope="col" class="gl-shift-print__value" data-schedule-id="${escapeHtml(schedule.id)}">${label}${date}</th>`;
-      })
-    ].join("");
+    const buildGroupedCells = (
+      items,
+      valueSelector,
+      { scope = "colgroup", className = "", displaySelector } = {}
+    ) => {
+      return items
+        .reduce((cells, item, index) => {
+          const value = valueSelector(item);
+          const display = displaySelector ? displaySelector(item) : value;
+          const prev = cells[cells.length - 1];
+          if (prev && prev.value === value) {
+            prev.span += 1;
+            return cells;
+          }
+          cells.push({ value, display, span: 1, index });
+          return cells;
+        }, [])
+        .map((cell) => {
+          const content = cell.display || "&nbsp;";
+          const span = cell.span > 1 ? ` colspan="${cell.span}"` : "";
+          const dataAttr = scope === "col" ? ` data-schedule-id="${escapeHtml(items[cell.index].id)}"` : "";
+          const classAttr = className ? ` ${className}` : "";
+          return `<th scope="${scope}"${span}${dataAttr} class="gl-shift-print__header${classAttr}">${content}</th>`;
+        })
+        .join("");
+    };
+
+    const yearRow = buildGroupedCells(scheduleList, (schedule) => schedule.yearText, {
+      scope: "colgroup",
+      className: " gl-shift-print__schedule-year"
+    });
+    const monthRow = buildGroupedCells(
+      scheduleList,
+      (schedule) => `${schedule.yearText}|${schedule.monthText}`,
+      {
+        scope: "colgroup",
+        className: " gl-shift-print__schedule-month",
+        displaySelector: (schedule) => schedule.monthText
+      }
+    );
+    const dayRow = scheduleList
+      .map(
+        (schedule) =>
+          `<th scope="col" class="gl-shift-print__header gl-shift-print__schedule-day" data-schedule-id="${escapeHtml(
+            schedule.id
+          )}">${schedule.dayText || "&nbsp;"}</th>`
+      )
+      .join("");
+    const weekdayRow = scheduleList
+      .map(
+        (schedule) =>
+          `<th scope="col" class="gl-shift-print__header gl-shift-print__schedule-weekday" data-schedule-id="${escapeHtml(
+            schedule.id
+          )}">${schedule.weekdayText || "&nbsp;"}</th>`
+      )
+      .join("");
+
+    const headerRows = `
+      <tr>
+        <th scope="col" class="gl-shift-print__identity" rowspan="4">スタッフ</th>
+        ${yearRow}
+      </tr>
+      <tr>${monthRow}</tr>
+      <tr>${dayRow}</tr>
+      <tr>${weekdayRow}</tr>
+    `;
 
     const rows = section.entries
       .map((entry) => {
@@ -1115,7 +1203,7 @@ function buildGlShiftTablePrintHtml({
 
     const bodyMarkup = rows || '<tr><td class="gl-shift-print__value" colspan="100%">該当するスタッフがいません。</td></tr>';
 
-    return `<section class="gl-shift-print" aria-label="${escapeHtml(section.label)}">\n      <header class="gl-shift-print__header">\n        <h4 class="gl-shift-print__title">${escapeHtml(section.label)}</h4>\n      </header>\n      <div class="gl-shift-print__table-wrapper">\n        <table class="gl-shift-print__table">\n          <thead>\n            <tr>${headerCells}</tr>\n          </thead>\n          <tbody>\n            ${bodyMarkup}\n          </tbody>\n        </table>\n      </div>\n    </section>`;
+    return `<section class="gl-shift-print" aria-label="${escapeHtml(section.label)}">\n      <header class="gl-shift-print__header">\n        <h4 class="gl-shift-print__title">${escapeHtml(section.label)}</h4>\n      </header>\n      <div class="gl-shift-print__table-wrapper">\n        <table class="gl-shift-print__table">\n          <thead class="gl-shift-print__thead">\n            ${headerRows}\n          </thead>\n          <tbody>\n            ${bodyMarkup}\n          </tbody>\n        </table>\n      </div>\n    </section>`;
   };
 
   const sectionMarkup = normalizedSections.length
@@ -1181,8 +1269,12 @@ function buildGlShiftTablePrintHtml({
     .gl-shift-print__identity { width: 55mm; vertical-align: top; }
     .gl-shift-print__name { font-weight: 700; display: block; }
     .gl-shift-print__meta { font-size: 8pt; display: block; color: #444; }
-    .gl-shift-print__schedule-label { display: block; font-weight: 700; }
-    .gl-shift-print__schedule-date { display: block; font-size: 8pt; color: #444; }
+    .gl-shift-print__thead th { padding: 1mm 1.2mm; }
+    .gl-shift-print__header { text-align: center; }
+    .gl-shift-print__schedule-year, .gl-shift-print__schedule-month { font-weight: 700; }
+    .gl-shift-print__schedule-month { background: #f5f5f5; }
+    .gl-shift-print__schedule-day, .gl-shift-print__schedule-weekday { font-size: 8.8pt; }
+    .gl-shift-print__schedule-weekday { color: #444; }
     .gl-shift-print__value { text-align: center; vertical-align: middle; }
     .gl-shift-print__table tbody tr { break-inside: avoid-page; }
   </style>
