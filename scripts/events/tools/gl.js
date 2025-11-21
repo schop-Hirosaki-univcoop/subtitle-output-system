@@ -255,7 +255,19 @@ function formatAssignmentLabelForPrint(value) {
   if (value === ASSIGNMENT_VALUE_UNAVAILABLE) {
     return "参加不可";
   }
-  return ensureString(value);
+  const normalized = ensureString(value).trim();
+  if (!normalized) {
+    return normalized;
+  }
+  const withSuffix = normalized.match(/^([0-9０-９]+)班$/);
+  if (withSuffix) {
+    return withSuffix[1];
+  }
+  const withPrefix = normalized.match(/^班[:：]?\s*([0-9０-９]+)$/);
+  if (withPrefix) {
+    return withPrefix[1];
+  }
+  return normalized;
 }
 
 function resolveScheduleResponseValue(application, scheduleId) {
@@ -626,11 +638,31 @@ function normalizeApplications(snapshot = {}) {
     .sort((a, b) => b.createdAt - a.createdAt || a.name.localeCompare(b.name, "ja", { numeric: true }));
 }
 
+function formatTeamOptionLabel(team) {
+  const text = ensureString(team).trim();
+  if (!text) {
+    return text;
+  }
+  const prefixed = text.match(/^班[:：]?\s*([0-9０-９]+)$/);
+  if (prefixed) {
+    return prefixed[1];
+  }
+  const withSuffix = text.match(/^([0-9０-９]+)班$/);
+  if (withSuffix) {
+    return withSuffix[1];
+  }
+  const numericOnly = text.match(/^[0-9０-９]+$/);
+  if (numericOnly) {
+    return text;
+  }
+  return `班: ${text}`;
+}
+
 function buildAssignmentOptions(teams = []) {
   const normalizedTeams = Array.isArray(teams) ? teams.map((team) => ensureString(team)).filter(Boolean) : [];
   const options = [
     { value: "", label: "未割当" },
-    ...normalizedTeams.map((team) => ({ value: team, label: `班: ${team}` })),
+    ...normalizedTeams.map((team) => ({ value: team, label: formatTeamOptionLabel(team) })),
     { value: ASSIGNMENT_VALUE_UNAVAILABLE, label: "参加不可" },
     { value: ASSIGNMENT_VALUE_ABSENT, label: "欠席" },
     { value: ASSIGNMENT_VALUE_STAFF, label: "運営待機" }
@@ -648,7 +680,7 @@ function buildInternalAssignmentOptions(teams = [], role = "") {
   const uniqueRoles = Array.from(new Set(baseRoles));
   const options = [
     { value: "", label: "未割当" },
-    ...normalizedTeams.map((team) => ({ value: team, label: `班: ${team}` })),
+    ...normalizedTeams.map((team) => ({ value: team, label: formatTeamOptionLabel(team) })),
     ...uniqueRoles.map((entry) => ({ value: entry, label: entry })),
     { value: ASSIGNMENT_VALUE_UNAVAILABLE, label: "参加不可" },
     { value: ASSIGNMENT_VALUE_ABSENT, label: "欠席" }

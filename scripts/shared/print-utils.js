@@ -1035,10 +1035,10 @@ function buildGlShiftTablePrintHtml({
           };
         }
 
-        const yearText = `${parsedDate.getFullYear()}年`;
-        const monthText = `${parsedDate.getMonth() + 1}月`;
-        const dayText = `${parsedDate.getDate()}日`;
-        const weekdayText = `${weekdayNames[parsedDate.getDay()]}曜`;
+        const yearText = `${parsedDate.getFullYear()}`;
+        const monthText = `${parsedDate.getMonth() + 1}`;
+        const dayText = `${parsedDate.getDate()}`;
+        const weekdayText = `${weekdayNames[parsedDate.getDay()]}`;
 
         return {
           id: schedule?.id ?? "",
@@ -1180,11 +1180,12 @@ function buildGlShiftTablePrintHtml({
     const headerRows = `
       <tr>
         <th scope="col" class="gl-shift-print__identity" rowspan="4">スタッフ</th>
+        <th scope="row" class="gl-shift-print__row-label" aria-label="年の見出し">年</th>
         ${yearRow}
       </tr>
-      <tr>${monthRow}</tr>
-      <tr>${dayRow}</tr>
-      <tr>${weekdayRow}</tr>
+      <tr><th scope="row" class="gl-shift-print__row-label" aria-label="月の見出し">月</th>${monthRow}</tr>
+      <tr><th scope="row" class="gl-shift-print__row-label" aria-label="日の見出し">日</th>${dayRow}</tr>
+      <tr><th scope="row" class="gl-shift-print__row-label" aria-label="曜日の見出し">曜</th>${weekdayRow}</tr>
     `;
 
     const rows = section.entries
@@ -1266,6 +1267,7 @@ function buildGlShiftTablePrintHtml({
     .gl-shift-print__table thead th { background: #f5f5f5; }
     .gl-shift-print__table th { vertical-align: middle; }
     .gl-shift-print__identity { width: 55mm; vertical-align: top; }
+    .gl-shift-print__row-label { width: 7mm; text-align: center; font-weight: 700; }
     .gl-shift-print__name { font-weight: 700; display: block; }
     .gl-shift-print__meta { font-size: 8pt; display: block; color: #444; }
     .gl-shift-print__thead th { padding: 1mm 1.2mm; }
