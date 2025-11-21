@@ -1117,7 +1117,7 @@ function buildGlShiftTablePrintHtml({
       entry?.department ? `<span class="gl-shift-print__meta">${escapeHtml(entry.department)}</span>` : "",
       entry?.email ? `<span class="gl-shift-print__meta">${escapeHtml(entry.email)}</span>` : ""
     ].filter(Boolean);
-    return `<td class="gl-shift-print__identity">${lines.join("")}</td>`;
+    return `<td class="gl-shift-print__identity" colspan="2">${lines.join("")}</td>`;
   };
 
   const buildSectionMarkup = (section) => {
