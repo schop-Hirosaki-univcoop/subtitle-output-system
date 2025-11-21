@@ -1288,7 +1288,7 @@ export class EventAdminApp {
 
     this.events = normalized;
     this.scheduleLocationHistory = locationHistory;
-    this.tools.resetContext();
+    this.tools.resetContext({ reason: "events-refreshed" });
     this.updateMetaNote();
     this.updateDocumentTitle();
     this.ensureSelectedEvent(previousEventId);
@@ -1472,7 +1472,7 @@ export class EventAdminApp {
         eventId: normalized || "",
         previousEventId: previous || ""
       });
-      this.tools.resetContext();
+      this.tools.resetContext({ reason: "event-change" });
       this.setHostCommittedSchedule("", { reason: "event-change", sync: false, updateContext: false, force: true });
     } else {
       this.logFlowState("イベント選択は既に最新の状態です", {
@@ -2110,7 +2110,7 @@ export class EventAdminApp {
         scheduleId: normalized || "",
         previousScheduleId: previous || ""
       });
-      this.tools.resetContext();
+      this.tools.resetContext({ reason: "schedule-change" });
       this.scheduleSelectionCommitted = false;
     } else {
       this.logFlowState("日程選択は既に最新の状態です", {

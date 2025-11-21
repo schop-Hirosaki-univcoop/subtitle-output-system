@@ -1638,7 +1638,12 @@ export class GlToolManager {
     }
   }
 
-  resetContext() {
+  resetContext(options = {}) {
+    const reason = ensureString(options?.reason);
+    const shouldPreserve = reason === "schedule-change" && !options?.clearDataset;
+    if (shouldPreserve) {
+      return;
+    }
     this.applications = [];
     this.assignments = new Map();
     this.renderApplications();
