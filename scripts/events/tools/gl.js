@@ -607,26 +607,27 @@ function buildAssignmentOptions(teams = []) {
   return options;
 }
 
-function buildRoleAssignmentOptions(role) {
-  const normalizedRole = ensureString(role);
+function buildInternalAssignmentOptions(teams = [], role = "") {
+  const normalizedTeams = Array.isArray(teams) ? teams.map((team) => ensureString(team)).filter(Boolean) : [];
   const baseRoles = INTERNAL_ROLE_OPTIONS.map((entry) => ensureString(entry)).filter(Boolean);
-  const roleOptions = baseRoles.map((entry) => ({ value: entry, label: entry }));
-  const options = [{ value: "", label: "未割当" }, ...roleOptions];
+  const normalizedRole = ensureString(role);
   if (normalizedRole && !baseRoles.includes(normalizedRole)) {
-    options.push({ value: normalizedRole, label: normalizedRole });
+    baseRoles.push(normalizedRole);
   }
-  options.push({ value: ASSIGNMENT_VALUE_UNAVAILABLE, label: "参加不可" });
-  options.push({ value: ASSIGNMENT_VALUE_ABSENT, label: "欠席" });
-  options.push({ value: ASSIGNMENT_VALUE_STAFF, label: "運営待機" });
+  const uniqueRoles = Array.from(new Set(baseRoles));
+  const options = [
+    { value: "", label: "未割当" },
+    ...normalizedTeams.map((team) => ({ value: team, label: `班: ${team}` })),
+    ...uniqueRoles.map((entry) => ({ value: entry, label: entry })),
+    { value: ASSIGNMENT_VALUE_UNAVAILABLE, label: "参加不可" },
+    { value: ASSIGNMENT_VALUE_ABSENT, label: "欠席" }
+  ];
   return options;
 }
 
 function buildAssignmentOptionsForApplication(application, teams = []) {
   if (application?.sourceType === "internal") {
-    const role = ensureString(application.role);
-    if (role && role !== "GL") {
-      return buildRoleAssignmentOptions(role);
-    }
+    return buildInternalAssignmentOptions(teams, application?.role);
   }
   return buildAssignmentOptions(teams);
 }
@@ -1864,7 +1865,6 @@ export class GlToolManager {
       this.dom.glInternalClubInput,
       this.dom.glInternalStudentIdInput,
       this.dom.glInternalNoteInput,
-      this.dom.glInternalRoleSelect,
       this.dom.glInternalSubmitButton,
       this.dom.glInternalResetButton
     ];
@@ -2133,12 +2133,6 @@ export class GlToolManager {
       this.dom.glInternalEmailInput?.focus();
       return null;
     }
-    const role = ensureString(this.dom.glInternalRoleSelect?.value);
-    if (!role) {
-      this.setInternalStatus("役割を選択してください。", "error");
-      this.dom.glInternalRoleSelect?.focus();
-      return null;
-    }
     const faculty = ensureString(this.dom.glInternalFacultyInput?.value);
     if (!faculty || faculty === INTERNAL_CUSTOM_OPTION_VALUE) {
       this.setInternalStatus("学部を選択してください。", "error");
@@ -2196,7 +2190,6 @@ export class GlToolManager {
       club: ensureString(this.dom.glInternalClubInput?.value),
       studentId: ensureString(this.dom.glInternalStudentIdInput?.value),
       note: ensureString(this.dom.glInternalNoteInput?.value),
-      role,
       shifts
     };
   }
@@ -2235,9 +2228,6 @@ export class GlToolManager {
     }
     if (this.dom.glInternalNoteInput) {
       this.dom.glInternalNoteInput.value = ensureString(application.note);
-    }
-    if (this.dom.glInternalRoleSelect) {
-      this.dom.glInternalRoleSelect.value = ensureString(application.role);
     }
     this.internalEditingShifts = application.shifts && typeof application.shifts === "object"
       ? { __default__: true, ...application.shifts }
@@ -2338,7 +2328,6 @@ export class GlToolManager {
       note: data.note,
       shifts: data.shifts,
       sourceType: "internal",
-      role: data.role,
       eventId: this.currentEventId,
       eventName: this.currentEventName,
       slug,
@@ -2428,10 +2417,7 @@ export class GlToolManager {
       const name = document.createElement("span");
       name.className = "gl-internal-list__name";
       name.textContent = ensureString(entry.name) || "名前未設定";
-      const role = document.createElement("span");
-      role.className = "gl-internal-list__role";
-      role.textContent = ensureString(entry.role) || "役割未設定";
-      button.append(name, role);
+      button.append(name);
       item.append(button);
       list.append(item);
     });
