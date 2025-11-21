@@ -214,7 +214,6 @@ export function queryDom() {
     glInternalClubInput: document.getElementById("gl-internal-club"),
     glInternalStudentIdInput: document.getElementById("gl-internal-student-id"),
     glInternalNoteInput: document.getElementById("gl-internal-note"),
-    glInternalRoleSelect: document.getElementById("gl-internal-role"),
     glInternalShiftList: document.getElementById("gl-internal-shifts"),
     glInternalSubmitButton: document.getElementById("gl-internal-submit"),
     glInternalResetButton: document.getElementById("gl-internal-reset"),
