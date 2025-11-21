@@ -1124,9 +1124,9 @@ function buildGlShiftTablePrintHtml({
     const buildGroupedCells = (
       items,
       valueSelector,
-      { scope = "colgroup", className = "", displaySelector } = {}
-    ) => {
-      return items
+      { scope = "col", className = "", displaySelector } = {}
+    ) =>
+      items
         .reduce((cells, item, index) => {
           const value = valueSelector(item);
           const display = displaySelector ? displaySelector(item) : value;
@@ -1146,17 +1146,16 @@ function buildGlShiftTablePrintHtml({
           return `<th scope="${scope}"${span}${dataAttr} class="gl-shift-print__header${classAttr}">${content}</th>`;
         })
         .join("");
-    };
 
     const yearRow = buildGroupedCells(scheduleList, (schedule) => schedule.yearText, {
-      scope: "colgroup",
+      scope: "col",
       className: " gl-shift-print__schedule-year"
     });
     const monthRow = buildGroupedCells(
       scheduleList,
       (schedule) => `${schedule.yearText}|${schedule.monthText}`,
       {
-        scope: "colgroup",
+        scope: "col",
         className: " gl-shift-print__schedule-month",
         displaySelector: (schedule) => schedule.monthText
       }
