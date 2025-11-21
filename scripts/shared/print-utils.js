@@ -1092,7 +1092,7 @@ function buildGlShiftTablePrintHtml({
 
   const buildSectionMarkup = (section) => {
     const headerCells = [
-      '<th scope="col" class="gl-shift-print__identity">ShiftTable</th>',
+      '<th scope="col" class="gl-shift-print__identity">スタッフ</th>',
       ...scheduleList.map((schedule) => `<th scope="col" class="gl-shift-print__value" data-schedule-id="${escapeHtml(schedule.id)}">${schedule.label}</th>`)
     ].join("");
 
@@ -1111,7 +1111,7 @@ function buildGlShiftTablePrintHtml({
 
     const bodyMarkup = rows || '<tr><td class="gl-shift-print__value" colspan="100%">該当するスタッフがいません。</td></tr>';
 
-    return `<section class="gl-shift-print" aria-label="${escapeHtml(section.label)}">\n      <header class="gl-shift-print__header">\n        <h4 class="gl-shift-print__title">ShiftTable <span class="gl-shift-print__tag">[${escapeHtml(section.label)}]</span></h4>\n      </header>\n      <div class="gl-shift-print__table-wrapper">\n        <table class="gl-shift-print__table">\n          <thead>\n            <tr>${headerCells}</tr>\n          </thead>\n          <tbody>\n            ${bodyMarkup}\n          </tbody>\n        </table>\n      </div>\n    </section>`;
+    return `<section class="gl-shift-print" aria-label="${escapeHtml(section.label)}">\n      <header class="gl-shift-print__header">\n        <h4 class="gl-shift-print__title">${escapeHtml(section.label)}</h4>\n      </header>\n      <div class="gl-shift-print__table-wrapper">\n        <table class="gl-shift-print__table">\n          <thead>\n            <tr>${headerCells}</tr>\n          </thead>\n          <tbody>\n            ${bodyMarkup}\n          </tbody>\n        </table>\n      </div>\n    </section>`;
   };
 
   const sectionMarkup = normalizedSections.length

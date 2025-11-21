@@ -192,6 +192,7 @@ export class EventAdminApp {
     this.eventPrintSettings = DEFAULT_PRINT_SETTINGS;
     this.eventPrintPreviewController = null;
     this.eventPrintPreviewCache = null;
+    this.eventPrintPreviewMode = "events";
     this.operatorPresenceEntries = [];
     this.operatorPresenceEventId = "";
     this.operatorPresenceUnsubscribe = null;
@@ -2805,9 +2806,51 @@ export class EventAdminApp {
     this.openDialog(this.dom.printPreviewDialog);
   }
 
-  updateEventPrintPreview({ autoPrint = false, forceReveal = false, quiet = false } = {}) {
+  updateEventPrintPreview({ autoPrint = false, forceReveal = false, quiet = false, mode } = {}) {
     if (!this.eventPrintPreviewController) {
       return false;
+    }
+
+    const effectiveMode = mode || this.eventPrintPreviewMode || "events";
+    this.eventPrintPreviewMode = effectiveMode;
+
+    const printSettings = this.readEventPrintSettingsFromForm();
+    this.persistEventPrintSettings(printSettings);
+
+    if (effectiveMode === "glShift") {
+      if (!this.tools?.gl) {
+        logPrintWarn("GL print requested but GL tool is unavailable");
+        return false;
+      }
+
+      const preview = this.tools.gl.buildShiftTablePrintPreview({ printSettings });
+
+      if (forceReveal) {
+        this.ensureEventPrintDialogVisible();
+      }
+
+      if (!preview || !preview.html) {
+        const message = preview?.message || "印刷できるシフト情報がありません。";
+        this.eventPrintPreviewController.setVisibility(true);
+        this.eventPrintPreviewController.setNote(message, {
+          forceAnnounce: true,
+          politeness: "assertive",
+          role: "alert"
+        });
+        if (this.dom.printPreviewPrintButton) {
+          this.dom.printPreviewPrintButton.disabled = true;
+          delete this.dom.printPreviewPrintButton.dataset.popupFallback;
+        }
+        return false;
+      }
+
+      return this.eventPrintPreviewController.renderPreview({
+        html: preview.html,
+        metaText: preview.metaText,
+        title: preview.docTitle,
+        autoPrint,
+        printSettings
+      });
     }
 
     const events = Array.isArray(this.events) ? this.events : [];
@@ -2830,9 +2873,6 @@ export class EventAdminApp {
       }
       return false;
     }
-
-    const printSettings = this.readEventPrintSettingsFromForm();
-    this.persistEventPrintSettings(printSettings);
 
     const { html, docTitle, metaText } = buildEventSelectionPrintHtml({
       events,
@@ -2869,8 +2909,9 @@ export class EventAdminApp {
   }
 
   handleEventPrint() {
+    this.eventPrintPreviewMode = "events";
     this.ensureEventPrintDialogVisible();
-    const updated = this.updateEventPrintPreview({ autoPrint: false, forceReveal: true });
+    const updated = this.updateEventPrintPreview({ autoPrint: false, forceReveal: true, mode: "events" });
     if (updated) {
       logPrintInfo("Triggered event selection print", { eventCount: this.events.length });
     }
@@ -2882,33 +2923,8 @@ export class EventAdminApp {
       return false;
     }
 
-    const printSettings = this.readEventPrintSettingsFromForm();
-    this.persistEventPrintSettings(printSettings);
-    const preview = this.tools.gl.buildShiftTablePrintPreview({ printSettings });
-    this.ensureEventPrintDialogVisible();
-
-    if (!preview || !preview.html) {
-      const message = preview?.message || "印刷できるシフト情報がありません。";
-      this.eventPrintPreviewController.setVisibility(true);
-      this.eventPrintPreviewController.setNote(message, {
-        forceAnnounce: true,
-        politeness: "assertive",
-        role: "alert"
-      });
-      if (this.dom.printPreviewPrintButton) {
-        this.dom.printPreviewPrintButton.disabled = true;
-        delete this.dom.printPreviewPrintButton.dataset.popupFallback;
-      }
-      return false;
-    }
-
-    return this.eventPrintPreviewController.renderPreview({
-      html: preview.html,
-      metaText: preview.metaText,
-      title: preview.docTitle,
-      autoPrint: false,
-      printSettings
-    });
+    this.eventPrintPreviewMode = "glShift";
+    return this.updateEventPrintPreview({ autoPrint: false, forceReveal: true, mode: "glShift" });
   }
 
   updateSelectionNotes() {

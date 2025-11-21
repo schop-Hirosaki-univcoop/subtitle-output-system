@@ -2891,10 +2891,10 @@ export class GlToolManager {
     const externalEntries = entries.filter((entry) => entry.sourceType !== "internal");
     const sections = [];
     if (internalEntries.length) {
-      sections.push({ label: "運営", entries: internalEntries });
+      sections.push({ label: "運営スタッフ", entries: internalEntries });
     }
     if (externalEntries.length) {
-      sections.push({ label: "協力", entries: externalEntries });
+      sections.push({ label: "協力スタッフ", entries: externalEntries });
     }
 
     if (!sections.length) {
