@@ -1202,7 +1202,7 @@ function buildGlShiftTablePrintHtml({
 
     const bodyMarkup = rows || '<tr><td class="gl-shift-print__value" colspan="100%">該当するスタッフがいません。</td></tr>';
 
-    return `<section class="gl-shift-print" aria-label="${escapeHtml(section.label)}">\n      <header class="gl-shift-print__header">\n        <h4 class="gl-shift-print__title">${escapeHtml(section.label)}</h4>\n      </header>\n      <div class="gl-shift-print__table-wrapper">\n        <table class="gl-shift-print__table">\n          <thead class="gl-shift-print__thead">\n            ${headerRows}\n          </thead>\n          <tbody>\n            ${bodyMarkup}\n          </tbody>\n        </table>\n      </div>\n    </section>`;
+    return `<section class="gl-shift-print" aria-label="${escapeHtml(section.label)}">\n      <header class="gl-shift-print__section-header">\n        <h4 class="gl-shift-print__title">${escapeHtml(section.label)}</h4>\n      </header>\n      <div class="gl-shift-print__table-wrapper">\n        <table class="gl-shift-print__table">\n          <thead class="gl-shift-print__thead">\n            ${headerRows}\n          </thead>\n          <tbody>\n            ${bodyMarkup}\n          </tbody>\n        </table>\n      </div>\n    </section>`;
   };
 
   const sectionMarkup = normalizedSections.length
@@ -1257,7 +1257,7 @@ function buildGlShiftTablePrintHtml({
   <style>
     ${baseStyles}
     .gl-shift-print { border: 0.3mm solid #000; padding: 3mm; margin-bottom: 10mm; background: #fff; page-break-inside: avoid; break-inside: avoid-page; }
-    .gl-shift-print__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3mm; }
+    .gl-shift-print__section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3mm; }
     .gl-shift-print__title { margin: 0; font-size: 12.5pt; display: inline-flex; gap: 3mm; align-items: baseline; }
     .gl-shift-print__tag { font-size: 8.5pt; color: #444; letter-spacing: 0.02em; }
     .gl-shift-print__table-wrapper { width: 100%; overflow: hidden; }
