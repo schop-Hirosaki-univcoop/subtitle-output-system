@@ -8,7 +8,9 @@
 // 「確認用ページ」を返すための裏口として使っている。
 /**
  * WebAppとしてアクセスされた際に応答を生成するエントリポイント。
- * このAPIではGETをサポートしないため常に405相当のレスポンスを返します。
+ * 通常のGETリクエストには405相当のJSONレスポンスを返しますが、
+ * 特定のviewパラメータが付与された場合のみ、
+ * 参加者メールプレビューやQAアップロード状況などの確認用ページを返します。
  * @param {GoogleAppsScript.Events.DoGet} e - リクエストコンテキスト
  * @returns {GoogleAppsScript.Content.TextOutput}
  */
