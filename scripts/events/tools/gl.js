@@ -27,6 +27,19 @@ const SCHEDULE_RESPONSE_POSITIVE_KEYWORDS = ["yes", "true", "1", "available", "�
 const SCHEDULE_RESPONSE_NEGATIVE_KEYWORDS = ["no", "false", "0", "unavailable", "不可", "欠席", "参加不可", "不参加", "参加できない"];
 const SCHEDULE_RESPONSE_STAFF_KEYWORDS = ["staff", "運営", "待機", "サポート"];
 const INTERNAL_ROLE_OPTIONS = ["司会", "受付", "ラジオ", "機材", "GL", "撮影", "その他"];
+const INTERNAL_GRADE_OPTIONS = [
+  "1年",
+  "2年",
+  "3年",
+  "4年",
+  "修士1年",
+  "修士2年",
+  "博士1年",
+  "博士2年",
+  "博士3年",
+  "その他（備考欄に記入してください）"
+];
+const INTERNAL_CUSTOM_OPTION_VALUE = "__custom";
 
 function toDateTimeLocalString(value) {
   if (!value) {
@@ -738,6 +751,8 @@ export class GlToolManager {
     this.sharedMeta = { updatedAt: 0, updatedByUid: "", updatedByName: "" };
     this.internalEditingId = "";
     this.internalEditingShifts = {};
+    this.internalAcademicState = { currentCustomLabel: "", unitSelections: [] };
+    this.internalUnitLevelMap = new WeakMap();
     this.sharedCatalogUnsubscribe = onValue(glIntakeFacultyCatalogRef, (snapshot) => {
       this.applySharedCatalog(snapshot.val() || {});
     });
@@ -796,6 +811,269 @@ export class GlToolManager {
     this.syncScheduleSummaryCache();
     this.renderScheduleTeamControls();
     this.renderInternalShiftList();
+  }
+
+  renderInternalGradeOptions() {
+    const select = this.dom.glInternalGradeInput;
+    if (!(select instanceof HTMLSelectElement)) {
+      return;
+    }
+    const current = select.value;
+    select.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "学年を選択してください";
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    placeholder.dataset.placeholder = "true";
+    select.append(placeholder);
+    INTERNAL_GRADE_OPTIONS.forEach((value) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      select.append(option);
+    });
+    if (INTERNAL_GRADE_OPTIONS.includes(current)) {
+      select.value = current;
+    }
+  }
+
+  getInternalFaculties() {
+    const catalog = Array.isArray(this.sharedFaculties) ? this.sharedFaculties : [];
+    const configFaculties = this.getConfigFaculties();
+    return catalog.length ? catalog : configFaculties;
+  }
+
+  renderInternalFaculties() {
+    const select = this.dom.glInternalFacultyInput;
+    if (!(select instanceof HTMLSelectElement)) {
+      return;
+    }
+    const faculties = this.getInternalFaculties();
+    const current = select.value;
+    select.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "学部を選択してください";
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    placeholder.dataset.placeholder = "true";
+    select.append(placeholder);
+    faculties.forEach((entry) => {
+      const faculty = ensureString(entry.faculty);
+      if (!faculty) return;
+      const option = document.createElement("option");
+      option.value = faculty;
+      option.textContent = faculty;
+      select.append(option);
+    });
+    const customOption = document.createElement("option");
+    customOption.value = INTERNAL_CUSTOM_OPTION_VALUE;
+    customOption.textContent = "その他";
+    select.append(customOption);
+    if (faculties.some((entry) => ensureString(entry.faculty) === current)) {
+      select.value = current;
+    }
+  }
+
+  clearInternalAcademicFields() {
+    this.internalAcademicState.unitSelections = [];
+    const fields = this.dom.glInternalAcademicFields;
+    if (fields) {
+      fields.innerHTML = "";
+    }
+    this.updateInternalAcademicCustomField();
+  }
+
+  updateInternalAcademicCustomField(label) {
+    const field = this.dom.glInternalAcademicCustomField;
+    const labelEl = this.dom.glInternalAcademicCustomLabel;
+    const input = this.dom.glInternalAcademicCustomInput;
+    if (!field || !labelEl || !input) {
+      return;
+    }
+    if (label) {
+      this.internalAcademicState.currentCustomLabel = label;
+      field.hidden = false;
+      labelEl.textContent = `${label}（その他入力）`;
+      input.placeholder = `${label}名を入力してください`;
+      input.required = true;
+    } else {
+      this.internalAcademicState.currentCustomLabel = "";
+      field.hidden = true;
+      input.placeholder = "所属名を入力してください";
+      input.required = false;
+      input.value = "";
+    }
+  }
+
+  removeInternalAcademicFieldsAfter(depth) {
+    const fields = Array.from(this.dom.glInternalAcademicFields?.querySelectorAll(".gl-academic-field") ?? []);
+    fields.forEach((field) => {
+      const fieldDepth = Number(field.dataset.depth ?? "0");
+      if (fieldDepth > depth) {
+        field.remove();
+      }
+    });
+    this.internalAcademicState.unitSelections = this.internalAcademicState.unitSelections.filter((_, index) => index <= depth);
+  }
+
+  renderInternalAcademicLevel(level, depth) {
+    if (!this.dom.glInternalAcademicFields || !this.dom.glInternalAcademicSelectTemplate) return;
+    const fragment = this.dom.glInternalAcademicSelectTemplate.content.cloneNode(true);
+    const field = fragment.querySelector(".gl-academic-field");
+    const labelEl = field?.querySelector(".gl-academic-label");
+    const select = field?.querySelector(".gl-academic-select");
+    if (!(field instanceof HTMLElement) || !(select instanceof HTMLSelectElement)) return;
+    field.dataset.depth = String(depth);
+    const selectId = `gl-internal-academic-select-${depth}`;
+    select.id = selectId;
+    select.dataset.depth = String(depth);
+    select.dataset.levelLabel = level.label;
+    if (labelEl instanceof HTMLLabelElement) {
+      labelEl.setAttribute("for", selectId);
+      labelEl.textContent = level.label;
+    }
+    select.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    placeholder.dataset.placeholder = "true";
+    placeholder.textContent = level.placeholder || `${level.label}を選択してください`;
+    select.append(placeholder);
+    level.options.forEach((option, index) => {
+      const opt = document.createElement("option");
+      opt.value = option.value;
+      opt.textContent = option.label;
+      opt.dataset.optionIndex = String(index);
+      if (option.children) {
+        opt.dataset.hasChildren = "true";
+      }
+      select.append(opt);
+    });
+    if (level.allowCustom !== false) {
+      const customOption = document.createElement("option");
+      customOption.value = INTERNAL_CUSTOM_OPTION_VALUE;
+      customOption.textContent = "その他";
+      customOption.dataset.isCustom = "true";
+      select.append(customOption);
+    }
+    this.internalUnitLevelMap.set(select, level);
+    select.addEventListener("change", (event) => {
+      if (event.target instanceof HTMLSelectElement) {
+        this.handleInternalAcademicLevelChange(event.target);
+      }
+    });
+    this.dom.glInternalAcademicFields.append(field);
+  }
+
+  handleInternalAcademicLevelChange(select) {
+    const depth = Number(select.dataset.depth ?? "0");
+    this.removeInternalAcademicFieldsAfter(depth);
+    const level = this.internalUnitLevelMap.get(select);
+    const value = ensureString(select.value);
+    if (!level || !value) {
+      this.updateInternalAcademicCustomField();
+      return;
+    }
+    if (value === INTERNAL_CUSTOM_OPTION_VALUE) {
+      this.internalAcademicState.unitSelections[depth] = { label: level.label, value: "", isCustom: true };
+      this.updateInternalAcademicCustomField(level.label);
+      return;
+    }
+    const selectedOption = select.selectedOptions[0];
+    const optionIndex = selectedOption ? Number(selectedOption.dataset.optionIndex ?? "-1") : -1;
+    const option = optionIndex >= 0 ? level.options[optionIndex] : null;
+    const displayLabel = ensureString(option?.label ?? selectedOption?.textContent ?? value);
+    this.internalAcademicState.unitSelections[depth] = {
+      label: level.label,
+      value: option ? option.value : value,
+      displayLabel,
+      isCustom: false
+    };
+    this.updateInternalAcademicCustomField();
+    if (option?.children) {
+      this.renderInternalAcademicLevel(option.children, depth + 1);
+    }
+  }
+
+  renderInternalAcademicTreeForFaculty(facultyName) {
+    this.clearInternalAcademicFields();
+    const name = ensureString(facultyName);
+    if (!name || name === INTERNAL_CUSTOM_OPTION_VALUE) {
+      return;
+    }
+    const entry = this.getInternalFaculties().find((item) => ensureString(item.faculty) === name);
+    if (entry?.unitTree) {
+      this.renderInternalAcademicLevel(entry.unitTree, 0);
+    } else if (entry?.fallbackLabel) {
+      this.updateInternalAcademicCustomField(entry.fallbackLabel);
+    } else {
+      this.updateInternalAcademicCustomField("所属");
+    }
+  }
+
+  collectInternalAcademicState() {
+    const selects = Array.from(this.dom.glInternalAcademicFields?.querySelectorAll(".gl-academic-select") ?? []);
+    const path = [];
+    let requiresCustom = false;
+    let customLabel = "";
+    let firstSelect = null;
+    let pendingSelect = null;
+    selects.forEach((select) => {
+      if (!(select instanceof HTMLSelectElement)) return;
+      if (!firstSelect) {
+        firstSelect = select;
+      }
+      const level = this.internalUnitLevelMap.get(select);
+      const levelLabel = level?.label ?? "";
+      const value = ensureString(select.value);
+      if (!value && !pendingSelect) {
+        pendingSelect = select;
+      }
+      if (!value) return;
+      if (value === INTERNAL_CUSTOM_OPTION_VALUE) {
+        requiresCustom = true;
+        customLabel = levelLabel || customLabel;
+        path.push({
+          label: levelLabel,
+          value: ensureString(this.dom.glInternalAcademicCustomInput?.value),
+          isCustom: true,
+          element: this.dom.glInternalAcademicCustomInput ?? null
+        });
+        return;
+      }
+      const selectedOption = select.selectedOptions[0];
+      const optionIndex = selectedOption ? Number(selectedOption.dataset.optionIndex ?? "-1") : -1;
+      const option = optionIndex >= 0 && level ? level.options[optionIndex] : null;
+      const storedValue = option ? option.value : value;
+      path.push({
+        label: levelLabel,
+        value: storedValue,
+        displayLabel: option ? option.label : ensureString(selectedOption?.textContent ?? storedValue),
+        isCustom: false,
+        element: select
+      });
+    });
+    if (!selects.length && this.internalAcademicState.currentCustomLabel) {
+      requiresCustom = true;
+      customLabel = this.internalAcademicState.currentCustomLabel;
+      path.push({
+        label: this.internalAcademicState.currentCustomLabel,
+        value: ensureString(this.dom.glInternalAcademicCustomInput?.value),
+        isCustom: true,
+        element: this.dom.glInternalAcademicCustomInput ?? null
+      });
+    }
+    const customValue = ensureString(this.dom.glInternalAcademicCustomInput?.value);
+    return { path, requiresCustom, customLabel, customValue, firstSelect, pendingSelect };
+  }
+
+  syncInternalAcademicInputs() {
+    this.renderInternalGradeOptions();
+    this.renderInternalFaculties();
+    this.renderInternalAcademicTreeForFaculty(this.dom.glInternalFacultyInput?.value || "");
   }
 
   bindDom() {
@@ -882,9 +1160,12 @@ export class GlToolManager {
         this.renderApplications();
       });
     }
-    const viewOrder = ["schedule", "applicant"];
-    const getViewButton = (key) =>
-      key === "applicant" ? this.dom.glApplicationViewApplicantButton : this.dom.glApplicationViewScheduleButton;
+    const viewOrder = ["schedule", "applicant", "internal"];
+    const getViewButton = (key) => {
+      if (key === "applicant") return this.dom.glApplicationViewApplicantButton;
+      if (key === "internal") return this.dom.glApplicationViewInternalButton;
+      return this.dom.glApplicationViewScheduleButton;
+    };
     viewOrder.forEach((key) => {
       const button = getViewButton(key);
       if (!button) {
@@ -982,6 +1263,12 @@ export class GlToolManager {
         }
       });
     }
+    if (this.dom.glInternalFacultyInput) {
+      this.dom.glInternalFacultyInput.addEventListener("change", (event) => {
+        const value = event.target instanceof HTMLSelectElement ? event.target.value : "";
+        this.renderInternalAcademicTreeForFaculty(value);
+      });
+    }
   }
 
   setActiveTab(tab) {
@@ -1006,7 +1293,7 @@ export class GlToolManager {
   }
 
   setActiveApplicationView(view) {
-    const normalized = view === "applicant" ? "applicant" : "schedule";
+    const normalized = view === "applicant" ? "applicant" : view === "internal" ? "internal" : "schedule";
     this.applicationView = normalized;
     const entries = [
       {
@@ -1018,6 +1305,11 @@ export class GlToolManager {
         key: "applicant",
         button: this.dom.glApplicationViewApplicantButton,
         panel: this.dom.glApplicationViewApplicantPanel
+      },
+      {
+        key: "internal",
+        button: this.dom.glApplicationViewInternalButton,
+        panel: this.dom.glApplicationViewInternalPanel
       }
     ];
     entries.forEach(({ key, button, panel }) => {
@@ -1464,6 +1756,7 @@ export class GlToolManager {
     }
     this.updateSlugPreview();
     this.refreshSchedules();
+    this.syncInternalAcademicInputs();
     this.renderApplications();
   }
 
@@ -1477,6 +1770,7 @@ export class GlToolManager {
       updatedByUid: ensureString(meta.updatedByUid),
       updatedByName: ensureString(meta.updatedByName)
     };
+    this.syncInternalAcademicInputs();
     this.updateConfigVisibility();
   }
 
@@ -1555,14 +1849,16 @@ export class GlToolManager {
     if (this.dom.glApplicationViewApplicantButton) {
       this.dom.glApplicationViewApplicantButton.disabled = !hasEvent;
     }
+    if (this.dom.glApplicationViewInternalButton) {
+      this.dom.glApplicationViewInternalButton.disabled = !hasEvent;
+    }
     const internalControls = [
       this.dom.glInternalNameInput,
       this.dom.glInternalEmailInput,
       this.dom.glInternalPhoneticInput,
       this.dom.glInternalGradeInput,
       this.dom.glInternalFacultyInput,
-      this.dom.glInternalDepartmentInput,
-      this.dom.glInternalAcademicPathInput,
+      this.dom.glInternalAcademicCustomInput,
       this.dom.glInternalClubInput,
       this.dom.glInternalStudentIdInput,
       this.dom.glInternalNoteInput,
@@ -1574,6 +1870,15 @@ export class GlToolManager {
       if (!element) return;
       element.disabled = !hasEvent;
     });
+    if (this.dom.glInternalAcademicFields) {
+      this.dom.glInternalAcademicFields
+        .querySelectorAll("select")
+        .forEach((select) => {
+          if (select instanceof HTMLSelectElement) {
+            select.disabled = !hasEvent;
+          }
+        });
+    }
     if (this.dom.glInternalDeleteButton) {
       this.dom.glInternalDeleteButton.disabled = !hasEvent || !this.internalEditingId;
     }
@@ -1813,23 +2118,6 @@ export class GlToolManager {
     return shifts;
   }
 
-  buildAcademicPathFromInput(rawValue) {
-    const text = ensureString(rawValue);
-    if (!text) {
-      return [];
-    }
-    const segments = text
-      .split(/[/\n]+/)
-      .map((segment) => segment.trim())
-      .filter(Boolean);
-    return segments.map((segment) => ({
-      label: "所属",
-      value: segment,
-      display: segment,
-      isCustom: true
-    }));
-  }
-
   collectInternalFormData() {
     const name = ensureString(this.dom.glInternalNameInput?.value);
     if (!name) {
@@ -1849,15 +2137,60 @@ export class GlToolManager {
       this.dom.glInternalRoleSelect?.focus();
       return null;
     }
+    const faculty = ensureString(this.dom.glInternalFacultyInput?.value);
+    if (!faculty || faculty === INTERNAL_CUSTOM_OPTION_VALUE) {
+      this.setInternalStatus("学部を選択してください。", "error");
+      this.dom.glInternalFacultyInput?.focus();
+      return null;
+    }
+    const academic = this.collectInternalAcademicState();
+    if (academic.pendingSelect instanceof HTMLSelectElement) {
+      const label = ensureString(academic.pendingSelect.dataset.levelLabel) || "所属";
+      this.setInternalStatus(`${label}を選択してください。`, "error");
+      academic.pendingSelect.focus();
+      return null;
+    }
+    if (!academic.path.length) {
+      const label = this.internalAcademicState.currentCustomLabel || "所属情報";
+      this.setInternalStatus(`${label}を選択してください。`, "error");
+      if (academic.firstSelect instanceof HTMLSelectElement) {
+        academic.firstSelect.focus();
+      }
+      return null;
+    }
+    if (academic.requiresCustom && !academic.customValue) {
+      const label = academic.customLabel || this.internalAcademicState.currentCustomLabel || "所属";
+      this.setInternalStatus(`${label}を入力してください。`, "error");
+      this.dom.glInternalAcademicCustomInput?.focus();
+      return null;
+    }
+    const departmentSegment = academic.path[academic.path.length - 1];
+    const department = ensureString(departmentSegment?.value);
+    if (!department) {
+      const label = ensureString(departmentSegment?.label) || "所属";
+      this.setInternalStatus(`${label}を入力してください。`, "error");
+      if (departmentSegment?.element instanceof HTMLElement) {
+        departmentSegment.element.focus();
+      }
+      return null;
+    }
+    const academicPath = academic.path
+      .map((segment) => ({
+        label: ensureString(segment.label),
+        value: ensureString(segment.value),
+        display: ensureString(segment.displayLabel ?? segment.value),
+        isCustom: Boolean(segment.isCustom)
+      }))
+      .filter((segment) => segment.value);
     const shifts = this.collectInternalShifts();
     return {
       name,
       phonetic: ensureString(this.dom.glInternalPhoneticInput?.value),
       email,
       grade: ensureString(this.dom.glInternalGradeInput?.value),
-      faculty: ensureString(this.dom.glInternalFacultyInput?.value),
-      department: ensureString(this.dom.glInternalDepartmentInput?.value),
-      academicPath: this.buildAcademicPathFromInput(this.dom.glInternalAcademicPathInput?.value),
+      faculty,
+      department,
+      academicPath,
       club: ensureString(this.dom.glInternalClubInput?.value),
       studentId: ensureString(this.dom.glInternalStudentIdInput?.value),
       note: ensureString(this.dom.glInternalNoteInput?.value),
@@ -1886,21 +2219,12 @@ export class GlToolManager {
     if (this.dom.glInternalGradeInput) {
       this.dom.glInternalGradeInput.value = ensureString(application.grade);
     }
+    const facultyValue = ensureString(application.faculty);
     if (this.dom.glInternalFacultyInput) {
-      this.dom.glInternalFacultyInput.value = ensureString(application.faculty);
+      this.dom.glInternalFacultyInput.value = facultyValue;
     }
-    if (this.dom.glInternalDepartmentInput) {
-      this.dom.glInternalDepartmentInput.value = ensureString(application.department);
-    }
-    if (this.dom.glInternalAcademicPathInput) {
-      const pathText = Array.isArray(application.academicPath)
-        ? application.academicPath
-            .map((entry) => ensureString(entry?.display || entry?.value || entry))
-            .filter(Boolean)
-            .join(" / ")
-        : "";
-      this.dom.glInternalAcademicPathInput.value = pathText;
-    }
+    this.renderInternalAcademicTreeForFaculty(facultyValue);
+    this.applyInternalAcademicPath(application);
     if (this.dom.glInternalClubInput) {
       this.dom.glInternalClubInput.value = ensureString(application.club);
     }
@@ -1926,6 +2250,43 @@ export class GlToolManager {
     this.setInternalStatus("編集モードです。変更後に保存してください。", "info");
   }
 
+  applyInternalAcademicPath(application) {
+    const path = Array.isArray(application?.academicPath) ? application.academicPath : [];
+    const department = ensureString(application?.department);
+    let depth = 0;
+    path.forEach((segment) => {
+      const value = ensureString(segment?.value ?? segment);
+      const select = this.dom.glInternalAcademicFields?.querySelector(
+        `.gl-academic-select[data-depth="${depth}"]`
+      );
+      if (!(select instanceof HTMLSelectElement)) {
+        return;
+      }
+      if (segment?.isCustom) {
+        select.value = INTERNAL_CUSTOM_OPTION_VALUE;
+        if (this.dom.glInternalAcademicCustomInput) {
+          this.dom.glInternalAcademicCustomInput.value = value;
+        }
+      } else {
+        select.value = value;
+      }
+      this.handleInternalAcademicLevelChange(select);
+      depth += 1;
+    });
+    if (!path.length && department) {
+      const firstSelect = this.dom.glInternalAcademicFields?.querySelector(
+        ".gl-academic-select[data-depth=\"0\"]"
+      );
+      if (firstSelect instanceof HTMLSelectElement && this.internalUnitLevelMap.has(firstSelect)) {
+        firstSelect.value = INTERNAL_CUSTOM_OPTION_VALUE;
+        this.handleInternalAcademicLevelChange(firstSelect);
+      }
+      if (this.dom.glInternalAcademicCustomInput) {
+        this.dom.glInternalAcademicCustomInput.value = department;
+      }
+    }
+  }
+
   resetInternalForm() {
     this.internalEditingId = "";
     this.internalEditingShifts = this.buildInternalDefaultShifts();
@@ -1935,6 +2296,7 @@ export class GlToolManager {
     if (this.dom.glInternalIdInput) {
       this.dom.glInternalIdInput.value = "";
     }
+    this.syncInternalAcademicInputs();
     if (this.dom.glInternalSubmitButton) {
       this.dom.glInternalSubmitButton.textContent = "内部スタッフを追加";
     }
@@ -2149,10 +2511,12 @@ export class GlToolManager {
       viewsContainer.hidden = false;
     }
     if (this.dom.glApplicationEmpty) {
-      const activeView = this.applicationView === "applicant" ? "applicant" : "schedule";
+      const activeView = this.applicationView;
       const shouldShowEmpty = activeView === "applicant"
         ? applicantResult.visibleCount === 0
-        : scheduleResult.visibleCount === 0;
+        : activeView === "internal"
+          ? false
+          : scheduleResult.visibleCount === 0;
       this.dom.glApplicationEmpty.hidden = !shouldShowEmpty;
     }
   }
