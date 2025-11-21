@@ -6096,12 +6096,14 @@ body.sidebar-overlay-open{
   gap:.75rem;
   justify-content:space-between;
 }
+.gl-card-header--sub{align-items:center;gap:.65rem;flex-wrap:wrap;}
 
 .gl-card-title{
   margin:0;
   font-size:1.1rem;
   color:#d8eaff;
 }
+.gl-card-subtitle{margin:0;font-size:1rem;color:#d8eaff;}
 
 .gl-card-status{
   margin:0;
@@ -6112,6 +6114,42 @@ body.sidebar-overlay-open{
 .gl-card-status[data-variant="success"]{color:#7ae6ff;}
 .gl-card-status[data-variant="error"]{color:#ff9aa8;}
 .gl-card-status[data-variant="warning"]{color:#ffd27a;}
+
+.gl-internal-card{border:1px solid rgba(120, 160, 200, .22);border-radius:.9rem;padding:clamp(.9rem, 1.2vw, 1.1rem);background:rgba(8, 22, 38, .6);}
+.gl-internal-body{display:grid;gap:clamp(.9rem, 1.6vw, 1.2rem);grid-template-columns:minmax(0, 1.6fr) minmax(0, 1fr);align-items:start;}
+@media(max-width:960px){.gl-internal-body{grid-template-columns:1fr;}}
+.gl-internal-actions{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap;}
+.gl-internal-form{display:flex;flex-direction:column;gap:.9rem;}
+.gl-internal-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.75rem;}
+.gl-input{display:flex;flex-direction:column;gap:.35rem;}
+.gl-input__label{font-size:.9rem;font-weight:600;color:rgba(210, 232, 255, .85);}
+.gl-input--full{grid-column:1/-1;}
+.gl-internal-shifts{border:1px solid rgba(120, 160, 200, .28);border-radius:.75rem;padding:.75rem .9rem;display:flex;flex-direction:column;gap:.45rem;background:rgba(12, 30, 50, .55);}
+.gl-internal-shifts__title{margin:0;font-size:.95rem;font-weight:700;color:#dbe8ff;}
+.gl-internal-shifts__note{margin:0;color:rgba(200, 225, 255, .7);font-size:.85rem;}
+.gl-internal-shifts__list{display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.45rem;}
+.gl-internal-shifts__item{display:flex;align-items:flex-start;gap:.45rem;border:1px solid rgba(120, 160, 200, .2);border-radius:.65rem;padding:.5rem .65rem;background:rgba(10, 26, 42, .65);color:#e5f0ff;}
+.gl-internal-shifts__label{font-size:.9rem;color:rgba(220, 234, 255, .9);}
+.gl-internal-shifts__meta{font-size:.8rem;color:rgba(200, 220, 245, .7);}
+.gl-internal-shifts__empty{margin:0;color:rgba(200, 220, 245, .8);}
+.gl-internal-list__container{border:1px solid rgba(120, 160, 200, .24);border-radius:.9rem;background:rgba(8, 22, 38, .55);padding:.9rem;display:flex;flex-direction:column;gap:.45rem;}
+.gl-internal-list__header{display:flex;align-items:baseline;gap:.5rem;justify-content:space-between;flex-wrap:wrap;}
+.gl-internal-list__title{margin:0;font-size:.95rem;color:#dbe8ff;}
+.gl-internal-list__hint{margin:0;font-size:.85rem;color:rgba(195, 220, 245, .75);}
+.gl-internal-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.4rem;}
+.gl-internal-list__item{margin:0;}
+.gl-internal-list__button{width:100%;text-align:left;display:flex;justify-content:space-between;gap:.55rem;align-items:center;padding:.55rem .75rem;border:1px solid rgba(120, 160, 200, .25);border-radius:.65rem;background:rgba(12, 26, 44, .6);color:#e8f2ff;}
+.gl-internal-list__button:hover{border-color:rgba(150, 200, 255, .6);background:rgba(16, 34, 54, .75);}
+.gl-internal-list__name{font-weight:700;}
+.gl-internal-list__role{font-size:.9rem;color:rgba(195, 220, 245, .78);}
+.gl-internal-list__empty{margin:0;color:rgba(195, 220, 245, .8);}
+.gl-applicant-matrix__badges{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.35rem;}
+.gl-badge{display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .55rem;border-radius:999px;font-size:.78rem;font-weight:700;line-height:1;background:rgba(12, 28, 48, .6);border:1px solid rgba(120, 160, 200, .3);color:#dfefff;}
+.gl-badge--source[data-source-type="internal"]{background:rgba(40, 130, 90, .35);border-color:rgba(80, 200, 140, .6);color:#caffe0;}
+.gl-badge--source[data-source-type="external"]{background:rgba(70, 110, 160, .35);border-color:rgba(120, 170, 220, .5);color:#dbeaff;}
+.gl-badge--role{background:rgba(110, 90, 180, .3);border-color:rgba(170, 150, 230, .45);color:#f1e7ff;}
+.gl-shift-entry[data-source-type="internal"]{border-color:rgba(90, 180, 130, .35);}
+.gl-shift-entry[data-source-type="internal"] .gl-shift-entry__name{color:#d0ffe6;}
 
 .gl-config-row{
   display:grid;

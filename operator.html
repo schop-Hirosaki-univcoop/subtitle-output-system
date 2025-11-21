@@ -589,6 +589,23 @@
                         <div class="gl-card-header">
                           <h3 id="gl-application-title" class="gl-card-title">応募一覧</h3>
                           <div class="gl-card-tools">
+                            <label class="gl-filter-label" for="gl-source-filter">区分</label>
+                            <select id="gl-source-filter" class="input input--dense">
+                              <option value="all" selected>すべて</option>
+                              <option value="external">外部</option>
+                              <option value="internal">内部</option>
+                            </select>
+                            <label class="gl-filter-label" for="gl-role-filter">役割</label>
+                            <select id="gl-role-filter" class="input input--dense">
+                              <option value="all" selected>すべて</option>
+                              <option value="司会">司会</option>
+                              <option value="受付">受付</option>
+                              <option value="ラジオ">ラジオ</option>
+                              <option value="機材">機材</option>
+                              <option value="GL">GL</option>
+                              <option value="撮影">撮影</option>
+                              <option value="その他">その他</option>
+                            </select>
                             <label class="gl-filter-label" for="gl-filter">表示</label>
                             <select id="gl-filter" class="input input--dense">
                               <option value="all" selected>すべて</option>
@@ -600,6 +617,98 @@
                           </div>
                         </div>
                         <div class="gl-card-body">
+                          <section class="gl-internal-card" aria-labelledby="gl-internal-title">
+                            <div class="gl-card-header gl-card-header--sub">
+                              <div>
+                                <h4 id="gl-internal-title" class="gl-card-subtitle">内部スタッフの登録・編集</h4>
+                                <p id="gl-internal-status" class="gl-card-status" role="status" aria-live="polite"></p>
+                              </div>
+                              <div class="gl-internal-actions">
+                                <button id="gl-internal-reset" class="btn btn-ghost btn-sm" type="button">クリア</button>
+                                <button id="gl-internal-delete" class="btn btn-danger btn-sm" type="button" disabled>削除</button>
+                                <button id="gl-internal-submit" class="btn btn-primary btn-sm" type="submit" form="gl-internal-form">
+                                  内部スタッフを追加
+                                </button>
+                              </div>
+                            </div>
+                            <div class="gl-card-body gl-internal-body">
+                              <form id="gl-internal-form" class="gl-internal-form">
+                                <input id="gl-internal-id" type="hidden">
+                                <div class="gl-internal-grid">
+                                  <label class="gl-input">
+                                    <span class="gl-input__label">氏名</span>
+                                    <input id="gl-internal-name" class="input" type="text" required placeholder="例: 山田 太郎">
+                                  </label>
+                                  <label class="gl-input">
+                                    <span class="gl-input__label">氏名 (フリガナ)</span>
+                                    <input id="gl-internal-phonetic" class="input" type="text" placeholder="例: ヤマダ タロウ">
+                                  </label>
+                                  <label class="gl-input">
+                                    <span class="gl-input__label">メールアドレス</span>
+                                    <input id="gl-internal-email" class="input" type="email" required placeholder="example@example.com">
+                                  </label>
+                                  <label class="gl-input">
+                                    <span class="gl-input__label">学年</span>
+                                    <input id="gl-internal-grade" class="input" type="text" placeholder="例: 3年">
+                                  </label>
+                                  <label class="gl-input">
+                                    <span class="gl-input__label">学部</span>
+                                    <input id="gl-internal-faculty" class="input" type="text" placeholder="例: 理工学部">
+                                  </label>
+                                  <label class="gl-input">
+                                    <span class="gl-input__label">学科 / 課程など</span>
+                                    <input id="gl-internal-department" class="input" type="text" placeholder="例: 電気電子工学科">
+                                  </label>
+                                  <label class="gl-input gl-input--full">
+                                    <span class="gl-input__label">所属詳細 (GL応募フォームの所属ツリーに相当 / 任意)</span>
+                                    <textarea
+                                      id="gl-internal-academic-path"
+                                      class="input"
+                                      rows="2"
+                                      placeholder="階層を / で区切って入力してください。例: 学科 / コース"
+                                    ></textarea>
+                                  </label>
+                                  <label class="gl-input">
+                                    <span class="gl-input__label">サークル / 所属</span>
+                                    <input id="gl-internal-club" class="input" type="text">
+                                  </label>
+                                  <label class="gl-input">
+                                    <span class="gl-input__label">学籍番号</span>
+                                    <input id="gl-internal-student-id" class="input" type="text">
+                                  </label>
+                                  <label class="gl-input gl-input--full">
+                                    <span class="gl-input__label">備考</span>
+                                    <textarea id="gl-internal-note" class="input" rows="2"></textarea>
+                                  </label>
+                                  <label class="gl-input">
+                                    <span class="gl-input__label">役割</span>
+                                    <select id="gl-internal-role" class="input" required>
+                                      <option value="">選択してください</option>
+                                      <option value="司会">司会</option>
+                                      <option value="受付">受付</option>
+                                      <option value="ラジオ">ラジオ</option>
+                                      <option value="機材">機材</option>
+                                      <option value="GL">GL</option>
+                                      <option value="撮影">撮影</option>
+                                      <option value="その他">その他</option>
+                                    </select>
+                                  </label>
+                                </div>
+                                <fieldset class="gl-internal-shifts">
+                                  <legend class="gl-internal-shifts__title">参加可能日程</legend>
+                                  <p class="gl-internal-shifts__note">デフォルトで全日程にチェックが入ります。出られない日程は外してください。</p>
+                                  <div id="gl-internal-shifts" class="gl-internal-shifts__list"></div>
+                                </fieldset>
+                              </form>
+                              <div class="gl-internal-list__container">
+                                <div class="gl-internal-list__header">
+                                  <h5 class="gl-internal-list__title">内部スタッフ一覧</h5>
+                                  <p class="gl-internal-list__hint">クリックするとフォームに読み込み、編集できます。</p>
+                                </div>
+                                <ul id="gl-internal-list" class="gl-internal-list" aria-live="polite"></ul>
+                              </div>
+                            </div>
+                          </section>
                           <p id="gl-application-event-note" class="gl-card-note">イベントを選択してください。</p>
                           <p id="gl-application-empty" class="gl-card-note" hidden>該当する応募はありません。フォームの公開や条件を確認してください。</p>
                           <div id="gl-application-loading" class="hub-loading" role="status" hidden>

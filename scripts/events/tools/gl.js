@@ -3,6 +3,8 @@ import {
   ref,
   onValue,
   update,
+  set,
+  push,
   serverTimestamp,
   getGlEventConfigRef,
   getGlApplicationsRef,
@@ -24,6 +26,7 @@ const ASSIGNMENT_BUCKET_UNAVAILABLE = "__bucket_unavailable";
 const SCHEDULE_RESPONSE_POSITIVE_KEYWORDS = ["yes", "true", "1", "available", "参加", "参加可", "ok", "可能", "出席", "参加する"];
 const SCHEDULE_RESPONSE_NEGATIVE_KEYWORDS = ["no", "false", "0", "unavailable", "不可", "欠席", "参加不可", "不参加", "参加できない"];
 const SCHEDULE_RESPONSE_STAFF_KEYWORDS = ["staff", "運営", "待機", "サポート"];
+const INTERNAL_ROLE_OPTIONS = ["司会", "受付", "ラジオ", "機材", "GL", "撮影", "その他"];
 
 function toDateTimeLocalString(value) {
   if (!value) {
@@ -348,6 +351,12 @@ function isApplicantAvailableForSchedule(application, scheduleId) {
     }
   }
   const value = shifts[key];
+  if (
+    !Object.prototype.hasOwnProperty.call(shifts, key) &&
+    Object.prototype.hasOwnProperty.call(shifts, "__default__")
+  ) {
+    return Boolean(shifts.__default__);
+  }
   if (typeof value === "boolean") {
     return value;
   }
@@ -547,6 +556,8 @@ function normalizeApplications(snapshot = {}) {
       }
       const createdAt = Number(value.createdAt) || Number(value.updatedAt) || 0;
       const shifts = value.shifts && typeof value.shifts === "object" ? value.shifts : {};
+      const sourceType = value.sourceType === "internal" ? "internal" : "external";
+      const role = ensureString(value.role);
       return {
         id: key,
         name: ensureString(value.name),
@@ -560,6 +571,8 @@ function normalizeApplications(snapshot = {}) {
         studentId: ensureString(value.studentId),
         note: ensureString(value.note),
         shifts,
+        role,
+        sourceType,
         createdAt,
         updatedAt: Number(value.updatedAt) || createdAt,
         raw: value
@@ -579,6 +592,30 @@ function buildAssignmentOptions(teams = []) {
     { value: ASSIGNMENT_VALUE_STAFF, label: "運営待機" }
   ];
   return options;
+}
+
+function buildRoleAssignmentOptions(role) {
+  const normalizedRole = ensureString(role);
+  const baseRoles = INTERNAL_ROLE_OPTIONS.map((entry) => ensureString(entry)).filter(Boolean);
+  const roleOptions = baseRoles.map((entry) => ({ value: entry, label: entry }));
+  const options = [{ value: "", label: "未割当" }, ...roleOptions];
+  if (normalizedRole && !baseRoles.includes(normalizedRole)) {
+    options.push({ value: normalizedRole, label: normalizedRole });
+  }
+  options.push({ value: ASSIGNMENT_VALUE_UNAVAILABLE, label: "参加不可" });
+  options.push({ value: ASSIGNMENT_VALUE_ABSENT, label: "欠席" });
+  options.push({ value: ASSIGNMENT_VALUE_STAFF, label: "運営待機" });
+  return options;
+}
+
+function buildAssignmentOptionsForApplication(application, teams = []) {
+  if (application?.sourceType === "internal") {
+    const role = ensureString(application.role);
+    if (role && role !== "GL") {
+      return buildRoleAssignmentOptions(role);
+    }
+  }
+  return buildAssignmentOptions(teams);
 }
 
 function resolveAssignmentValue(assignment) {
@@ -601,6 +638,17 @@ function resolveAssignmentValue(assignment) {
     return assignment.teamId;
   }
   return "";
+}
+
+function resolveEffectiveAssignmentValue(application, assignment) {
+  const value = resolveAssignmentValue(assignment);
+  if (application?.sourceType === "internal" && !value) {
+    const role = ensureString(application.role);
+    if (role && role !== "GL") {
+      return role;
+    }
+  }
+  return value;
 }
 
 function resolveAssignmentStatus(value) {
@@ -677,6 +725,8 @@ export class GlToolManager {
     this.applications = [];
     this.assignments = new Map();
     this.filter = "all";
+    this.applicantSourceFilter = "all";
+    this.applicantRoleFilter = "all";
     this.applicationView = "schedule";
     this.loading = false;
     this.scheduleSyncPending = false;
@@ -686,6 +736,8 @@ export class GlToolManager {
     this.sharedFaculties = [];
     this.sharedSignature = "";
     this.sharedMeta = { updatedAt: 0, updatedByUid: "", updatedByName: "" };
+    this.internalEditingId = "";
+    this.internalEditingShifts = {};
     this.sharedCatalogUnsubscribe = onValue(glIntakeFacultyCatalogRef, (snapshot) => {
       this.applySharedCatalog(snapshot.val() || {});
     });
@@ -694,6 +746,7 @@ export class GlToolManager {
     this.eventsUnsubscribe = this.app.addEventListener((events) => this.handleEvents(events));
     this.bindDom();
     this.updateConfigVisibility();
+    this.resetInternalForm();
   }
 
   getAvailableSchedules({ includeConfigFallback = false } = {}) {
@@ -742,6 +795,7 @@ export class GlToolManager {
     this.currentSchedules = this.getAvailableSchedules({ includeConfigFallback: true });
     this.syncScheduleSummaryCache();
     this.renderScheduleTeamControls();
+    this.renderInternalShiftList();
   }
 
   bindDom() {
@@ -807,6 +861,20 @@ export class GlToolManager {
       });
     });
     this.setActiveTab(this.activeTab);
+    if (this.dom.glApplicantSourceFilter) {
+      this.dom.glApplicantSourceFilter.addEventListener("change", (event) => {
+        const value = event.target instanceof HTMLSelectElement ? event.target.value : "all";
+        this.applicantSourceFilter = value || "all";
+        this.renderApplications();
+      });
+    }
+    if (this.dom.glApplicantRoleFilter) {
+      this.dom.glApplicantRoleFilter.addEventListener("change", (event) => {
+        const value = event.target instanceof HTMLSelectElement ? event.target.value : "all";
+        this.applicantRoleFilter = value || "all";
+        this.renderApplications();
+      });
+    }
     if (this.dom.glFilterSelect) {
       this.dom.glFilterSelect.addEventListener("change", (event) => {
         const value = event.target instanceof HTMLSelectElement ? event.target.value : "all";
@@ -863,6 +931,55 @@ export class GlToolManager {
           logError("Failed to update GL assignment", error);
           this.setStatus("班割当の更新に失敗しました。", "error");
         });
+      });
+    }
+    if (this.dom.glInternalForm) {
+      this.dom.glInternalForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        this.handleInternalSubmit().catch((error) => {
+          logError("Failed to save internal staff", error);
+          this.setInternalStatus("内部スタッフの保存に失敗しました。", "error");
+        });
+      });
+    }
+    if (this.dom.glInternalShiftList) {
+      this.dom.glInternalShiftList.addEventListener("change", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement) || target.type !== "checkbox" || !target.dataset.scheduleId) {
+          return;
+        }
+        this.internalEditingShifts = this.collectInternalShifts();
+      });
+    }
+    if (this.dom.glInternalResetButton) {
+      this.dom.glInternalResetButton.addEventListener("click", () => {
+        this.resetInternalForm();
+      });
+    }
+    if (this.dom.glInternalDeleteButton) {
+      this.dom.glInternalDeleteButton.addEventListener("click", () => {
+        this.handleInternalDelete().catch((error) => {
+          logError("Failed to delete internal staff", error);
+          this.setInternalStatus("内部スタッフの削除に失敗しました。", "error");
+        });
+      });
+    }
+    if (this.dom.glInternalList) {
+      this.dom.glInternalList.addEventListener("click", (event) => {
+        const button = event.target instanceof HTMLElement
+          ? event.target.closest("[data-internal-id]")
+          : null;
+        if (!button) {
+          return;
+        }
+        const id = ensureString(button.dataset.internalId);
+        if (!id) {
+          return;
+        }
+        const target = this.applications.find((entry) => ensureString(entry.id) === id);
+        if (target) {
+          this.populateInternalForm(target);
+        }
       });
     }
   }
@@ -1262,6 +1379,15 @@ export class GlToolManager {
       if (this.dom.glFilterSelect) {
         this.dom.glFilterSelect.value = "all";
       }
+      this.applicantSourceFilter = "all";
+      this.applicantRoleFilter = "all";
+      if (this.dom.glApplicantSourceFilter) {
+        this.dom.glApplicantSourceFilter.value = "all";
+      }
+      if (this.dom.glApplicantRoleFilter) {
+        this.dom.glApplicantRoleFilter.value = "all";
+      }
+      this.resetInternalForm();
       this.setActiveTab("config");
       this.attachListeners();
     }
@@ -1288,6 +1414,7 @@ export class GlToolManager {
       this.config = null;
       this.applications = [];
       this.assignments = new Map();
+      this.resetInternalForm();
       this.renderApplications();
       return;
     }
@@ -1413,6 +1540,12 @@ export class GlToolManager {
     if (this.dom.glConfigSaveButton) {
       this.dom.glConfigSaveButton.disabled = !hasEvent;
     }
+    if (this.dom.glApplicantSourceFilter) {
+      this.dom.glApplicantSourceFilter.disabled = !hasEvent;
+    }
+    if (this.dom.glApplicantRoleFilter) {
+      this.dom.glApplicantRoleFilter.disabled = !hasEvent;
+    }
     if (this.dom.glFilterSelect) {
       this.dom.glFilterSelect.disabled = !hasEvent;
     }
@@ -1421,6 +1554,28 @@ export class GlToolManager {
     }
     if (this.dom.glApplicationViewApplicantButton) {
       this.dom.glApplicationViewApplicantButton.disabled = !hasEvent;
+    }
+    const internalControls = [
+      this.dom.glInternalNameInput,
+      this.dom.glInternalEmailInput,
+      this.dom.glInternalPhoneticInput,
+      this.dom.glInternalGradeInput,
+      this.dom.glInternalFacultyInput,
+      this.dom.glInternalDepartmentInput,
+      this.dom.glInternalAcademicPathInput,
+      this.dom.glInternalClubInput,
+      this.dom.glInternalStudentIdInput,
+      this.dom.glInternalNoteInput,
+      this.dom.glInternalRoleSelect,
+      this.dom.glInternalSubmitButton,
+      this.dom.glInternalResetButton
+    ];
+    internalControls.forEach((element) => {
+      if (!element) return;
+      element.disabled = !hasEvent;
+    });
+    if (this.dom.glInternalDeleteButton) {
+      this.dom.glInternalDeleteButton.disabled = !hasEvent || !this.internalEditingId;
     }
   }
 
@@ -1569,6 +1724,355 @@ export class GlToolManager {
     this.dom.glConfigStatus.hidden = !text;
   }
 
+  setInternalStatus(message, variant = "info") {
+    if (!this.dom.glInternalStatus) return;
+    const text = ensureString(message);
+    this.dom.glInternalStatus.textContent = text;
+    this.dom.glInternalStatus.dataset.variant = variant;
+    this.dom.glInternalStatus.hidden = !text;
+  }
+
+  buildInternalDefaultShifts() {
+    const shifts = { __default__: true };
+    this.currentSchedules.forEach((schedule) => {
+      const id = ensureString(schedule?.id);
+      if (id) {
+        shifts[id] = true;
+      }
+    });
+    return shifts;
+  }
+
+  renderInternalShiftList(shiftsOverride = null) {
+    const container = this.dom.glInternalShiftList;
+    if (!container) {
+      return;
+    }
+    container.innerHTML = "";
+    const schedules = Array.isArray(this.currentSchedules) ? this.currentSchedules : [];
+    const shiftMap = shiftsOverride && typeof shiftsOverride === "object"
+      ? { __default__: true, ...shiftsOverride }
+      : this.internalEditingShifts && typeof this.internalEditingShifts === "object"
+        ? { __default__: true, ...this.internalEditingShifts }
+        : this.buildInternalDefaultShifts();
+    if (!schedules.length) {
+      const note = document.createElement("p");
+      note.className = "gl-internal-shifts__empty";
+      note.textContent = "日程がまだありません。募集設定から日程を追加してください。";
+      container.append(note);
+      return;
+    }
+    schedules.forEach((schedule) => {
+      const wrapper = document.createElement("label");
+      wrapper.className = "gl-internal-shifts__item";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "gl-internal-shifts__checkbox";
+      checkbox.dataset.scheduleId = ensureString(schedule.id);
+      const key = ensureString(schedule.id);
+      const fallback = Object.prototype.hasOwnProperty.call(shiftMap, "__default__")
+        ? Boolean(shiftMap.__default__)
+        : true;
+      const value = Object.prototype.hasOwnProperty.call(shiftMap, key) ? Boolean(shiftMap[key]) : fallback;
+      checkbox.checked = value;
+      const label = document.createElement("span");
+      label.className = "gl-internal-shifts__label";
+      label.textContent = ensureString(schedule.label) || ensureString(schedule.date) || key || "日程";
+      const date = ensureString(schedule.date);
+      if (date) {
+        const meta = document.createElement("span");
+        meta.className = "gl-internal-shifts__meta";
+        meta.textContent = date;
+        label.append(document.createElement("br"), meta);
+      }
+      wrapper.append(checkbox, label);
+      container.append(wrapper);
+    });
+  }
+
+  collectInternalShifts() {
+    const container = this.dom.glInternalShiftList;
+    const shifts = { __default__: true };
+    if (!container) {
+      return this.buildInternalDefaultShifts();
+    }
+    const inputs = Array.from(container.querySelectorAll("input[type='checkbox'][data-schedule-id]"));
+    if (!inputs.length) {
+      return this.buildInternalDefaultShifts();
+    }
+    inputs.forEach((input) => {
+      if (!(input instanceof HTMLInputElement)) {
+        return;
+      }
+      const id = ensureString(input.dataset.scheduleId);
+      if (!id) {
+        return;
+      }
+      shifts[id] = Boolean(input.checked);
+    });
+    return shifts;
+  }
+
+  buildAcademicPathFromInput(rawValue) {
+    const text = ensureString(rawValue);
+    if (!text) {
+      return [];
+    }
+    const segments = text
+      .split(/[/\n]+/)
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+    return segments.map((segment) => ({
+      label: "所属",
+      value: segment,
+      display: segment,
+      isCustom: true
+    }));
+  }
+
+  collectInternalFormData() {
+    const name = ensureString(this.dom.glInternalNameInput?.value);
+    if (!name) {
+      this.setInternalStatus("氏名を入力してください。", "error");
+      this.dom.glInternalNameInput?.focus();
+      return null;
+    }
+    const email = ensureString(this.dom.glInternalEmailInput?.value);
+    if (!email) {
+      this.setInternalStatus("メールアドレスを入力してください。", "error");
+      this.dom.glInternalEmailInput?.focus();
+      return null;
+    }
+    const role = ensureString(this.dom.glInternalRoleSelect?.value);
+    if (!role) {
+      this.setInternalStatus("役割を選択してください。", "error");
+      this.dom.glInternalRoleSelect?.focus();
+      return null;
+    }
+    const shifts = this.collectInternalShifts();
+    return {
+      name,
+      phonetic: ensureString(this.dom.glInternalPhoneticInput?.value),
+      email,
+      grade: ensureString(this.dom.glInternalGradeInput?.value),
+      faculty: ensureString(this.dom.glInternalFacultyInput?.value),
+      department: ensureString(this.dom.glInternalDepartmentInput?.value),
+      academicPath: this.buildAcademicPathFromInput(this.dom.glInternalAcademicPathInput?.value),
+      club: ensureString(this.dom.glInternalClubInput?.value),
+      studentId: ensureString(this.dom.glInternalStudentIdInput?.value),
+      note: ensureString(this.dom.glInternalNoteInput?.value),
+      role,
+      shifts
+    };
+  }
+
+  populateInternalForm(application) {
+    if (!application) {
+      return;
+    }
+    this.internalEditingId = ensureString(application.id);
+    if (this.dom.glInternalIdInput) {
+      this.dom.glInternalIdInput.value = this.internalEditingId;
+    }
+    if (this.dom.glInternalNameInput) {
+      this.dom.glInternalNameInput.value = ensureString(application.name);
+    }
+    if (this.dom.glInternalPhoneticInput) {
+      this.dom.glInternalPhoneticInput.value = ensureString(application.phonetic);
+    }
+    if (this.dom.glInternalEmailInput) {
+      this.dom.glInternalEmailInput.value = ensureString(application.email);
+    }
+    if (this.dom.glInternalGradeInput) {
+      this.dom.glInternalGradeInput.value = ensureString(application.grade);
+    }
+    if (this.dom.glInternalFacultyInput) {
+      this.dom.glInternalFacultyInput.value = ensureString(application.faculty);
+    }
+    if (this.dom.glInternalDepartmentInput) {
+      this.dom.glInternalDepartmentInput.value = ensureString(application.department);
+    }
+    if (this.dom.glInternalAcademicPathInput) {
+      const pathText = Array.isArray(application.academicPath)
+        ? application.academicPath
+            .map((entry) => ensureString(entry?.display || entry?.value || entry))
+            .filter(Boolean)
+            .join(" / ")
+        : "";
+      this.dom.glInternalAcademicPathInput.value = pathText;
+    }
+    if (this.dom.glInternalClubInput) {
+      this.dom.glInternalClubInput.value = ensureString(application.club);
+    }
+    if (this.dom.glInternalStudentIdInput) {
+      this.dom.glInternalStudentIdInput.value = ensureString(application.studentId);
+    }
+    if (this.dom.glInternalNoteInput) {
+      this.dom.glInternalNoteInput.value = ensureString(application.note);
+    }
+    if (this.dom.glInternalRoleSelect) {
+      this.dom.glInternalRoleSelect.value = ensureString(application.role);
+    }
+    this.internalEditingShifts = application.shifts && typeof application.shifts === "object"
+      ? { __default__: true, ...application.shifts }
+      : this.buildInternalDefaultShifts();
+    this.renderInternalShiftList(this.internalEditingShifts);
+    if (this.dom.glInternalDeleteButton) {
+      this.dom.glInternalDeleteButton.disabled = !this.currentEventId;
+    }
+    if (this.dom.glInternalSubmitButton) {
+      this.dom.glInternalSubmitButton.textContent = "内部スタッフを更新";
+    }
+    this.setInternalStatus("編集モードです。変更後に保存してください。", "info");
+  }
+
+  resetInternalForm() {
+    this.internalEditingId = "";
+    this.internalEditingShifts = this.buildInternalDefaultShifts();
+    if (this.dom.glInternalForm) {
+      this.dom.glInternalForm.reset();
+    }
+    if (this.dom.glInternalIdInput) {
+      this.dom.glInternalIdInput.value = "";
+    }
+    if (this.dom.glInternalSubmitButton) {
+      this.dom.glInternalSubmitButton.textContent = "内部スタッフを追加";
+    }
+    if (this.dom.glInternalDeleteButton) {
+      this.dom.glInternalDeleteButton.disabled = true;
+    }
+    this.renderInternalShiftList(this.internalEditingShifts);
+    this.setInternalStatus("", "info");
+    this.updateConfigVisibility();
+  }
+
+  async handleInternalSubmit() {
+    if (!this.currentEventId) {
+      this.setInternalStatus("イベントを選択してください。", "warning");
+      return;
+    }
+    const data = this.collectInternalFormData();
+    if (!data) {
+      return;
+    }
+    const existing = this.applications.find((entry) => ensureString(entry.id) === ensureString(this.internalEditingId));
+    const slug = ensureString(this.config?.slug) || this.getDefaultSlug();
+    const basePath = `glIntake/applications/${this.currentEventId}`;
+    const targetRef = existing
+      ? ref(database, `${basePath}/${existing.id}`)
+      : push(ref(database, basePath));
+    const payload = {
+      name: data.name,
+      phonetic: data.phonetic,
+      email: data.email,
+      grade: data.grade,
+      faculty: data.faculty,
+      department: data.department,
+      academicPath: Array.isArray(data.academicPath) ? data.academicPath : [],
+      club: data.club,
+      studentId: data.studentId,
+      note: data.note,
+      shifts: data.shifts,
+      sourceType: "internal",
+      role: data.role,
+      eventId: this.currentEventId,
+      eventName: this.currentEventName,
+      slug,
+      createdAt: existing?.raw?.createdAt ?? serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+    if (!payload.note) {
+      delete payload.note;
+    }
+    if (!payload.club) {
+      delete payload.club;
+    }
+    if (!payload.studentId) {
+      delete payload.studentId;
+    }
+    if (!payload.phonetic) {
+      delete payload.phonetic;
+    }
+    if (!payload.grade) {
+      delete payload.grade;
+    }
+    if (!payload.department) {
+      delete payload.department;
+    }
+    if (!Array.isArray(payload.academicPath) || !payload.academicPath.length) {
+      delete payload.academicPath;
+    }
+    await set(targetRef, payload);
+    this.resetInternalForm();
+    this.setInternalStatus(existing ? "内部スタッフを更新しました。" : "内部スタッフを追加しました。", "success");
+    this.renderApplications();
+  }
+
+  async handleInternalDelete() {
+    if (!this.currentEventId || !this.internalEditingId) {
+      return;
+    }
+    const updates = {};
+    updates[`glIntake/applications/${this.currentEventId}/${this.internalEditingId}`] = null;
+    const assignmentEntry = this.assignments.get(this.internalEditingId);
+    if (assignmentEntry) {
+      if (assignmentEntry.schedules instanceof Map) {
+        assignmentEntry.schedules.forEach((_, scheduleId) => {
+          updates[`glAssignments/${this.currentEventId}/${scheduleId}/${this.internalEditingId}`] = null;
+        });
+      }
+      if (assignmentEntry.fallback) {
+        updates[`glAssignments/${this.currentEventId}/${this.internalEditingId}`] = null;
+      }
+    }
+    await update(ref(database), updates);
+    this.resetInternalForm();
+    this.setInternalStatus("内部スタッフを削除しました。", "success");
+    this.renderApplications();
+  }
+
+  renderInternalList() {
+    const list = this.dom.glInternalList;
+    if (!list) {
+      return;
+    }
+    list.innerHTML = "";
+    if (!this.currentEventId) {
+      const note = document.createElement("li");
+      note.className = "gl-internal-list__empty";
+      note.textContent = "イベントを選択してください。";
+      list.append(note);
+      return;
+    }
+    const entries = this.applications
+      .filter((application) => application && application.sourceType === "internal")
+      .sort((a, b) => b.createdAt - a.createdAt || a.name.localeCompare(b.name, "ja", { numeric: true }));
+    if (!entries.length) {
+      const empty = document.createElement("li");
+      empty.className = "gl-internal-list__empty";
+      empty.textContent = "内部スタッフはまだ登録されていません。";
+      list.append(empty);
+      return;
+    }
+    entries.forEach((entry) => {
+      const item = document.createElement("li");
+      item.className = "gl-internal-list__item";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "gl-internal-list__button";
+      button.dataset.internalId = ensureString(entry.id);
+      const name = document.createElement("span");
+      name.className = "gl-internal-list__name";
+      name.textContent = ensureString(entry.name) || "名前未設定";
+      const role = document.createElement("span");
+      role.className = "gl-internal-list__role";
+      role.textContent = ensureString(entry.role) || "役割未設定";
+      button.append(name, role);
+      item.append(button);
+      list.append(item);
+    });
+  }
+
   renderApplications() {
     const board = this.dom.glApplicationBoard;
     const list = this.dom.glApplicationList;
@@ -1579,6 +2083,7 @@ export class GlToolManager {
     if (list) {
       list.innerHTML = "";
     }
+    this.renderInternalList();
     const hasEvent = Boolean(this.currentEventId);
     if (this.dom.glApplicationEventNote) {
       this.dom.glApplicationEventNote.hidden = hasEvent;
@@ -1613,14 +2118,27 @@ export class GlToolManager {
       this.applications
     );
     const matchesFilter = this.createBucketMatcher();
+    const sourceFilter = ensureString(this.applicantSourceFilter) || "all";
+    const roleFilter = ensureString(this.applicantRoleFilter) || "all";
     const filteredApplications = this.applications.filter((application) => {
       if (!application) {
+        return false;
+      }
+      const sourceType = application.sourceType === "internal" ? "internal" : "external";
+      if (sourceFilter === "internal" && sourceType !== "internal") {
+        return false;
+      }
+      if (sourceFilter === "external" && sourceType !== "external") {
+        return false;
+      }
+      const role = ensureString(application.role);
+      if (roleFilter !== "all" && role !== roleFilter) {
         return false;
       }
       return schedules.some((schedule) => {
         const available = isApplicantAvailableForSchedule(application, schedule.id);
         const assignment = this.getAssignmentForSchedule(application.id, schedule.id);
-        const value = resolveAssignmentValue(assignment);
+        const value = resolveEffectiveAssignmentValue(application, assignment);
         const bucketKey = this.resolveAssignmentBucket(value, available);
         return matchesFilter(bucketKey);
       });
@@ -1743,6 +2261,21 @@ export class GlToolManager {
     applicantCell.className = "gl-applicant-matrix__applicant";
     applicantCell.dataset.glId = ensureString(application.id);
 
+    const badgeRow = document.createElement("div");
+    badgeRow.className = "gl-applicant-matrix__badges";
+    const sourceBadge = document.createElement("span");
+    sourceBadge.className = "gl-badge gl-badge--source";
+    const sourceType = application.sourceType === "internal" ? "internal" : "external";
+    sourceBadge.dataset.sourceType = sourceType;
+    sourceBadge.textContent = sourceType === "internal" ? "内部" : "外部";
+    badgeRow.append(sourceBadge);
+    if (application.role) {
+      const roleBadge = document.createElement("span");
+      roleBadge.className = "gl-badge gl-badge--role";
+      roleBadge.textContent = application.role;
+      badgeRow.append(roleBadge);
+    }
+
     const identity = document.createElement("div");
     identity.className = "gl-applicant-matrix__identity";
     const nameEl = document.createElement("span");
@@ -1766,6 +2299,7 @@ export class GlToolManager {
       identityHeader.append(gradeEl);
     }
 
+    applicantCell.append(badgeRow);
     applicantCell.append(identityHeader);
 
     const metaList = document.createElement("dl");
@@ -1785,6 +2319,7 @@ export class GlToolManager {
 
     const academicPathText = buildAcademicPathText(application);
     addMeta("所属", academicPathText);
+    addMeta("役割", ensureString(application.role));
     addMeta("メール", ensureString(application.email));
     addMeta("サークル", ensureString(application.club));
     addMeta("学籍番号", ensureString(application.studentId));
@@ -1804,7 +2339,7 @@ export class GlToolManager {
 
     schedules.forEach((schedule) => {
       const assignment = this.getAssignmentForSchedule(application.id, schedule.id);
-      const assignmentValue = resolveAssignmentValue(assignment);
+      const assignmentValue = resolveEffectiveAssignmentValue(application, assignment);
       const available = isApplicantAvailableForSchedule(application, schedule.id);
       const teams = getScheduleTeams(this.config, schedule.id);
       const cell = this.createApplicantMatrixCell({
@@ -1835,6 +2370,7 @@ export class GlToolManager {
     cell.className = "gl-applicant-matrix__cell";
     cell.dataset.glId = ensureString(application.id);
     cell.dataset.scheduleId = ensureString(schedule.id);
+    cell.dataset.sourceType = application.sourceType === "internal" ? "internal" : "external";
     const bucketKey = this.resolveAssignmentBucket(assignmentValue, available);
     const matches = matchesFilter(bucketKey);
     cell.dataset.bucket = bucketKey;
@@ -1880,7 +2416,7 @@ export class GlToolManager {
       "aria-label",
       `${ensureString(schedule.label) || ensureString(schedule.date) || schedule.id || "日程"}の班割当`
     );
-    const options = buildAssignmentOptions(teams);
+    const options = buildAssignmentOptionsForApplication(application, teams);
     options.forEach((option) => {
       const opt = document.createElement("option");
       opt.value = option.value;
@@ -2005,7 +2541,7 @@ export class GlToolManager {
     let visibleCount = 0;
     applications.forEach((application) => {
       const assignment = this.getAssignmentForSchedule(application.id, schedule.id);
-      const value = resolveAssignmentValue(assignment);
+      const value = resolveEffectiveAssignmentValue(application, assignment);
       const available = isApplicantAvailableForSchedule(application, schedule.id);
       const bucketKey = this.resolveAssignmentBucket(value, available);
       if (!matchesFilter(bucketKey)) {
@@ -2092,6 +2628,7 @@ export class GlToolManager {
     item.dataset.glId = ensureString(application.id);
     item.dataset.scheduleId = ensureString(schedule.id);
     item.dataset.bucket = bucketKey;
+    item.dataset.sourceType = application.sourceType === "internal" ? "internal" : "external";
     if (assignmentValue === ASSIGNMENT_VALUE_ABSENT) {
       item.dataset.assignmentStatus = "absent";
     } else if (assignmentValue === ASSIGNMENT_VALUE_STAFF) {
@@ -2151,6 +2688,7 @@ export class GlToolManager {
     if (academicPathText) {
       addInfo("所属", academicPathText);
     }
+    addInfo("役割", ensureString(application.role));
     addInfo("サークル", ensureString(application.club));
     if (infoList.children.length) {
       item.append(infoList);
@@ -2174,7 +2712,7 @@ export class GlToolManager {
     select.className = "input input--dense";
     select.dataset.glAssignment = "true";
     select.dataset.scheduleId = ensureString(schedule.id);
-    const options = buildAssignmentOptions(teams);
+    const options = buildAssignmentOptionsForApplication(application, teams);
     options.forEach((option) => {
       const opt = document.createElement("option");
       opt.value = option.value;
