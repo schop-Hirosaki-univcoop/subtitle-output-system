@@ -75,6 +75,7 @@ import {
   normalizePrintSettings,
   formatPrintDateTimeRange,
   buildParticipantPrintHtml,
+  buildStaffPrintHtml,
   logPrintInfo,
   logPrintWarn,
   logPrintError,
@@ -2253,7 +2254,8 @@ function normalizeGlRoster(raw) {
       faculty: normalizeKey(value.faculty || ""),
       department: normalizeKey(value.department || ""),
       email: normalizeKey(value.email || ""),
-      club: normalizeKey(value.club || "")
+      club: normalizeKey(value.club || ""),
+      sourceType: value.sourceType === "internal" ? "internal" : "external"
     });
   });
   return map;
@@ -2267,6 +2269,8 @@ function normalizeGlAssignmentEntry(raw) {
   let status = "";
   if (statusRaw === "absent" || statusRaw === "欠席") {
     status = "absent";
+  } else if (statusRaw === "unavailable" || statusRaw === "参加不可") {
+    status = "unavailable";
   } else if (statusRaw === "staff" || statusRaw === "運営" || statusRaw === "運営待機") {
     status = "staff";
   } else if (statusRaw === "team") {
@@ -3061,10 +3065,110 @@ function buildParticipantPrintGroups({ eventId, scheduleId }) {
       glLeaders: collectGroupGlLeaders(group.key, {
         eventId,
         scheduleId,
-        rosterMap,
-        assignmentsMap
-      })
-    }));
+      rosterMap,
+      assignmentsMap
+    })
+  }));
+}
+
+const staffSortCollator = new Intl.Collator("ja", { numeric: true, sensitivity: "base" });
+
+function compareNullableStringsForStaff(a, b) {
+  const aText = normalizeKey(a || "");
+  const bText = normalizeKey(b || "");
+  if (aText && bText) {
+    return staffSortCollator.compare(aText, bText);
+  }
+  if (aText && !bText) return -1;
+  if (!aText && bText) return 1;
+  return 0;
+}
+
+function resolveGradeSortKey(grade) {
+  const raw = normalizeKey(grade || "");
+  if (!raw) {
+    return { priority: 1, letter: "", number: Number.POSITIVE_INFINITY, text: "" };
+  }
+  const normalized = raw.replace(/[０-９]/g, digit => String.fromCharCode(digit.charCodeAt(0) - 0xfee0));
+  const letterMatch = normalized.match(/^[A-Za-z]+/);
+  const numberMatch = normalized.match(/(\d+)/);
+  return {
+    priority: 0,
+    letter: (letterMatch ? letterMatch[0] : "").toLowerCase(),
+    number: numberMatch ? parseInt(numberMatch[1], 10) : Number.POSITIVE_INFINITY,
+    text: normalized
+  };
+}
+
+function compareStaffEntries(a, b) {
+  const facultyDiff = compareNullableStringsForStaff(a.faculty, b.faculty);
+  if (facultyDiff) return facultyDiff;
+  const departmentDiff = compareNullableStringsForStaff(a.department, b.department);
+  if (departmentDiff) return departmentDiff;
+
+  const gradeA = resolveGradeSortKey(a.grade);
+  const gradeB = resolveGradeSortKey(b.grade);
+  if (gradeA.priority !== gradeB.priority) return gradeA.priority - gradeB.priority;
+  const letterDiff = staffSortCollator.compare(gradeA.letter, gradeB.letter);
+  if (letterDiff) return letterDiff;
+  if (gradeA.number !== gradeB.number) return gradeA.number - gradeB.number;
+  const gradeTextDiff = staffSortCollator.compare(gradeA.text, gradeB.text);
+  if (gradeTextDiff) return gradeTextDiff;
+
+  const nameDiff = compareNullableStringsForStaff(a.name, b.name);
+  if (nameDiff) return nameDiff;
+  return compareNullableStringsForStaff(a.phonetic, b.phonetic);
+}
+
+function buildStaffPrintGroups({ eventId, scheduleId }) {
+  const roster = getEventGlRoster(eventId);
+  const assignments = getEventGlAssignmentsMap(eventId);
+  if (!(roster instanceof Map) || !(assignments instanceof Map)) {
+    return [];
+  }
+
+  const staffEntries = [];
+  assignments.forEach((entry, glId) => {
+    const assignment = resolveScheduleAssignment(entry, scheduleId);
+    if (!assignment) return;
+    const status = assignment.status || "";
+    if (status === "absent" || status === "unavailable") {
+      return;
+    }
+    if (status !== "team" && status !== "staff") {
+      return;
+    }
+
+    const profile = roster.get(String(glId)) || {};
+    staffEntries.push({
+      id: String(glId),
+      assignment: status === "staff" ? GL_STAFF_LABEL : normalizeKey(assignment.teamId || ""),
+      name: profile.name || String(glId),
+      phonetic: profile.phonetic || "",
+      faculty: profile.faculty || "",
+      department: profile.department || "",
+      grade: profile.grade || "",
+      sourceType: profile.sourceType === "internal" ? "internal" : "external"
+    });
+  });
+
+  staffEntries.sort(compareStaffEntries);
+
+  const groups = [];
+  let currentFaculty = "__init__";
+  let currentGroup = null;
+
+  staffEntries.forEach(entry => {
+    const facultyLabel = entry.faculty || "学部未設定";
+    if (!currentGroup || currentFaculty !== facultyLabel) {
+      currentFaculty = facultyLabel;
+      currentGroup = { faculty: facultyLabel, members: [] };
+      groups.push(currentGroup);
+    }
+    currentGroup.members.push(entry);
+  });
+
+  return groups;
 }
 
 function hydratePrintSettingsFromStorage() {
@@ -3219,6 +3323,7 @@ const PRINT_PREVIEW_DEFAULT_NOTE = DEFAULT_PREVIEW_NOTE;
 const PRINT_PREVIEW_LOAD_TIMEOUT_MS = DEFAULT_LOAD_TIMEOUT_MS;
 
 let participantPrintInProgress = false;
+let staffPrintInProgress = false;
 
 const participantPrintPreviewController = createPrintPreviewController({
   previewContainer: dom.printPreview,
@@ -3464,7 +3569,7 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
 
   if (button) {
     button.dataset.printLocked = "true";
-    syncPrintViewButtonState();
+    syncAllPrintButtonStates();
   }
 
   if (forceReveal) {
@@ -3585,7 +3690,7 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
     if (button) {
       delete button.dataset.printLocked;
     }
-    syncPrintViewButtonState();
+    syncAllPrintButtonStates();
   }
 }
 
@@ -3614,6 +3719,187 @@ async function openParticipantPrintView() {
   applyPrintSettingsToForm(state.printSettings);
   logPrintInfo("openParticipantPrintView updating preview");
   await updateParticipantPrintPreview({ autoPrint: false, forceReveal: true });
+}
+
+async function updateStaffPrintPreview({ autoPrint = false, forceReveal = false, quiet = false } = {}) {
+  logPrintInfo("updateStaffPrintPreview start", { autoPrint, forceReveal, quiet });
+  const eventId = state.selectedEventId;
+  const scheduleId = state.selectedScheduleId;
+  if (!eventId || !scheduleId) {
+    clearParticipantPrintPreviewLoader();
+    if (dom.printPreview) {
+      dom.printPreview.classList.remove("print-preview--fallback");
+    }
+    if (dom.printPreviewFrame) {
+      dom.printPreviewFrame.srcdoc = "";
+    }
+    if (dom.printPreviewMeta) {
+      dom.printPreviewMeta.textContent = "";
+    }
+    cacheParticipantPrintPreview({ forcePopupFallback: false });
+    setPrintPreviewVisibility(true);
+    setPrintPreviewNote("印刷するにはイベントと日程を選択してください。", {
+      forceAnnounce: true,
+      politeness: "assertive"
+    });
+    if (!quiet) {
+      window.alert("印刷するにはイベントと日程を選択してください。");
+    }
+    return false;
+  }
+
+  if (staffPrintInProgress) {
+    logPrintWarn("updateStaffPrintPreview already in progress");
+    return false;
+  }
+
+  const button = dom.openStaffPrintViewButton;
+  staffPrintInProgress = true;
+
+  if (button) {
+    button.dataset.printLocked = "true";
+    syncAllPrintButtonStates();
+  }
+
+  if (forceReveal) {
+    setPrintPreviewVisibility(true);
+  }
+
+  const printSettings = readPrintSettingsFromForm();
+  persistPrintSettings(printSettings);
+
+  try {
+    setStaffPrintButtonBusy(true);
+    try {
+      await loadGlDataForEvent(eventId);
+    } catch (error) {
+      if (typeof console !== "undefined" && typeof console.error === "function") {
+        console.error("[Print] スタッフデータの取得に失敗しました。最新の情報が反映されない場合があります。", error);
+      }
+      logPrintError("updateStaffPrintPreview failed to load GL data", error);
+    }
+
+    const groups = buildStaffPrintGroups({ eventId, scheduleId });
+    const totalCount = groups.reduce((sum, group) => sum + (group.members?.length || 0), 0);
+    if (!totalCount) {
+      if (dom.printPreviewPrintButton) {
+        dom.printPreviewPrintButton.disabled = true;
+        delete dom.printPreviewPrintButton.dataset.popupFallback;
+      }
+      setPrintPreviewVisibility(true);
+      setPrintPreviewNote("印刷できるスタッフがまだ登録されていません。", {
+        forceAnnounce: true,
+        politeness: "assertive"
+      });
+      if (!quiet) {
+        window.alert("印刷できるスタッフがまだ登録されていません。");
+      }
+      logPrintWarn("updateStaffPrintPreview no staff");
+      return false;
+    }
+
+    const selectedEvent = state.events.find(evt => evt.id === eventId) || null;
+    const schedule = selectedEvent?.schedules?.find(s => s.id === scheduleId) || null;
+    const eventName = selectedEvent?.name || "";
+    const scheduleLabel = schedule?.label || "";
+    const scheduleLocation = schedule?.location || schedule?.place || "";
+    let startAt = schedule?.startAt || "";
+    let endAt = schedule?.endAt || "";
+    const scheduleDate = String(schedule?.date || "").trim();
+    if (scheduleDate) {
+      if (!startAt && schedule?.startTime) {
+        startAt = combineDateAndTime(scheduleDate, schedule.startTime);
+      }
+      if (!endAt && schedule?.endTime) {
+        endAt = combineDateAndTime(scheduleDate, schedule.endTime);
+      }
+    }
+    const scheduleRange = formatPrintDateTimeRange(startAt, endAt);
+    const generatedAt = new Date();
+
+    const { html, docTitle, metaText } = buildStaffPrintHtml({
+      eventName,
+      scheduleLabel,
+      scheduleLocation,
+      scheduleRange,
+      groups,
+      totalCount,
+      generatedAt,
+      printOptions: printSettings
+    }, { defaultSettings: state.printSettings || DEFAULT_PRINT_SETTINGS });
+
+    cacheParticipantPrintPreview(
+      { html, title: docTitle, metaText, printSettings },
+      { preserveFallbackFlag: true }
+    );
+
+    const previewRendered = renderParticipantPrintPreview({
+      html,
+      metaText,
+      title: docTitle,
+      autoPrint,
+      printSettings
+    });
+
+    if (participantPrintPreviewCache.forcePopupFallback) {
+      logPrintInfo("updateStaffPrintPreview using popup fallback");
+      return true;
+    }
+
+    if (!previewRendered) {
+      logPrintWarn("updateStaffPrintPreview preview render failed");
+      renderPreviewFallbackNote(
+        "プレビュー枠を開けませんでした。ポップアップ許可後に再度お試しください。",
+        metaText
+      );
+
+      const fallbackOpened = openPopupPrintWindow(html, docTitle, printSettings);
+      if (!fallbackOpened) {
+        logPrintWarn("updateStaffPrintPreview popup open failed");
+        window.alert("印刷プレビューを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
+        return false;
+      }
+    }
+
+    logPrintInfo("updateStaffPrintPreview succeeded");
+    return true;
+  } finally {
+    setStaffPrintButtonBusy(false);
+    staffPrintInProgress = false;
+    if (button) {
+      delete button.dataset.printLocked;
+    }
+    syncAllPrintButtonStates();
+  }
+}
+
+async function openStaffPrintView() {
+  logPrintInfo("openStaffPrintView start");
+  const eventId = state.selectedEventId;
+  const scheduleId = state.selectedScheduleId;
+  if (!eventId || !scheduleId) {
+    window.alert("印刷するにはイベントと日程を選択してください。");
+    logPrintWarn("openStaffPrintView missing selection");
+    return;
+  }
+
+  const staffGroups = buildStaffPrintGroups({ eventId, scheduleId });
+  const totalStaff = staffGroups.reduce((sum, group) => sum + (group.members?.length || 0), 0);
+  if (!totalStaff) {
+    window.alert("印刷できるスタッフがまだ登録されていません。");
+    logPrintWarn("openStaffPrintView no staff");
+    return;
+  }
+
+  if (staffPrintInProgress) {
+    logPrintWarn("openStaffPrintView skipped: print in progress");
+    return;
+  }
+
+  setPrintPreviewVisibility(true);
+  applyPrintSettingsToForm(state.printSettings);
+  logPrintInfo("openStaffPrintView updating preview");
+  await updateStaffPrintPreview({ autoPrint: false, forceReveal: true });
 }
 
 function participantChangeKey(entry, fallbackIndex = 0) {
@@ -3973,7 +4259,7 @@ function syncClearButtonState() {
   dom.clearParticipantsButton.disabled = !hasSelection || !hasParticipants || state.saving;
   updateParticipantActionPanelState();
   syncMailActionState();
-  syncPrintViewButtonState();
+  syncAllPrintButtonStates();
 }
 
 function syncTemplateButtons() {
@@ -4001,7 +4287,7 @@ function syncTemplateButtons() {
   }
 
   syncMailActionState();
-  syncPrintViewButtonState();
+  syncAllPrintButtonStates();
 }
 
 function setActionButtonState(button, disabled) {
@@ -4024,6 +4310,12 @@ function getPendingMailCount() {
 }
 
 let printActionButtonMissingLogged = false;
+let staffPrintActionButtonMissingLogged = false;
+
+function syncAllPrintButtonStates() {
+  syncPrintViewButtonState();
+  syncStaffPrintViewButtonState();
+}
 
 function syncPrintViewButtonState() {
   logPrintDebug("syncPrintViewButtonState start");
@@ -4086,6 +4378,60 @@ function syncPrintViewButtonState() {
 
 }
 
+function syncStaffPrintViewButtonState() {
+  logPrintDebug("syncStaffPrintViewButtonState start");
+  const button = dom.openStaffPrintViewButton;
+  if (!button) {
+    if (!staffPrintActionButtonMissingLogged) {
+      staffPrintActionButtonMissingLogged = true;
+      if (typeof console !== "undefined" && typeof console.warn === "function") {
+        console.warn("[Print] open-staff-print-view-button が見つからないため、印刷アクションの状態を同期できませんでした。");
+      }
+    }
+    logPrintWarn("syncStaffPrintViewButtonState aborted: missing button");
+    return;
+  }
+
+  if (!button.dataset.defaultLabel) {
+    button.dataset.defaultLabel = button.textContent ? button.textContent.trim() : "スタッフ印刷";
+  }
+
+  if (button.dataset.printing === "true") {
+    setActionButtonState(button, true);
+    const busyLabel = button.dataset.printingLabel || "印刷準備中…";
+    if (!button.dataset.printingLabel) {
+      button.dataset.printingLabel = busyLabel;
+    }
+    if (button.textContent !== busyLabel) {
+      button.textContent = busyLabel;
+    }
+    return;
+  }
+
+  if (button.dataset.printLocked === "true") {
+    setActionButtonState(button, true);
+    const defaultLabel = button.dataset.defaultLabel || "スタッフ印刷";
+    if (button.textContent !== defaultLabel) {
+      button.textContent = defaultLabel;
+    }
+    return;
+  }
+
+  const eventId = state.selectedEventId;
+  const scheduleId = state.selectedScheduleId;
+  const hasSelection = Boolean(eventId && scheduleId);
+  const staffGroups = hasSelection ? buildStaffPrintGroups({ eventId, scheduleId }) : [];
+  const totalStaff = staffGroups.reduce((sum, group) => sum + (group.members?.length || 0), 0);
+  const disabled = !hasSelection || totalStaff === 0;
+
+  setActionButtonState(button, disabled);
+
+  const baseLabel = button.dataset.defaultLabel || "スタッフ印刷";
+  if (button.textContent !== baseLabel) {
+    button.textContent = baseLabel;
+  }
+}
+
 function setPrintButtonBusy(isBusy) {
   const button = dom.openPrintViewButton;
   if (!button) return;
@@ -4095,7 +4441,19 @@ function setPrintButtonBusy(isBusy) {
   } else {
     delete button.dataset.printing;
   }
-  syncPrintViewButtonState();
+  syncAllPrintButtonStates();
+}
+
+function setStaffPrintButtonBusy(isBusy) {
+  const button = dom.openStaffPrintViewButton;
+  if (!button) return;
+  logPrintDebug("setStaffPrintButtonBusy", { isBusy });
+  if (isBusy) {
+    button.dataset.printing = "true";
+  } else {
+    delete button.dataset.printing;
+  }
+  syncAllPrintButtonStates();
 }
 
 const MAIL_LOG_PREFIX = "[Mail]";
@@ -4630,7 +4988,7 @@ async function loadParticipants(options = {}) {
     }, 100); // 100ms delay to ensure UI is responsive
     updateParticipantContext({ preserveStatus: true });
     syncSaveButtonState();
-    syncPrintViewButtonState();
+    syncAllPrintButtonStates();
     emitParticipantSyncEvent({
       success: true,
       eventId,
@@ -4653,7 +5011,7 @@ async function loadParticipants(options = {}) {
     updateParticipantContext();
     syncSaveButtonState();
     syncMailActionState();
-    syncPrintViewButtonState();
+    syncAllPrintButtonStates();
     emitParticipantSyncEvent({
       success: false,
       eventId,
@@ -6926,6 +7284,36 @@ function attachEventHandlers() {
     });
   }
 
+  if (dom.openStaffPrintViewButton) {
+    dom.openStaffPrintViewButton.addEventListener("click", () => {
+      const button = dom.openStaffPrintViewButton;
+      if (!button) {
+        logPrintWarn("openStaffPrintViewButton click without button");
+        return;
+      }
+
+      syncAllPrintButtonStates();
+
+      logPrintInfo("openStaffPrintViewButton clicked", { disabled: button.disabled, printing: button.dataset.printing });
+
+      if (button.disabled || button.dataset.printing === "true") {
+        logPrintWarn("openStaffPrintViewButton ignored due to state", {
+          disabled: button.disabled,
+          printing: button.dataset.printing
+        });
+        return;
+      }
+
+      openStaffPrintView().catch(error => {
+        if (typeof console !== "undefined" && typeof console.error === "function") {
+          console.error("[Print] スタッフ印刷用リストの生成に失敗しました。", error);
+        }
+        logPrintError("openStaffPrintView failed from click", error);
+        window.alert("印刷用リストの生成中にエラーが発生しました。時間をおいて再度お試しください。");
+      });
+    });
+  }
+
   if (dom.openPrintViewButton) {
     dom.openPrintViewButton.addEventListener("click", () => {
       const button = dom.openPrintViewButton;
@@ -6935,7 +7323,7 @@ function attachEventHandlers() {
       }
 
       // ボタンの状態が古い場合に即時同期してから判定する
-      syncPrintViewButtonState();
+      syncAllPrintButtonStates();
 
       logPrintInfo("openPrintViewButton clicked", { disabled: button.disabled, printing: button.dataset.printing });
 

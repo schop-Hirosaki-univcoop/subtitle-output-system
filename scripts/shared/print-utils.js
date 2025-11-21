@@ -809,6 +809,202 @@ function buildEventSelectionPrintHtml(
   return { html, docTitle, metaText: headingText };
 }
 
+function buildStaffPrintHtml({
+  eventName = "",
+  scheduleLabel = "",
+  scheduleLocation = "",
+  scheduleRange = "",
+  groups = [],
+  totalCount = 0,
+  generatedAt = new Date(),
+  printOptions = {}
+}, { defaultSettings = DEFAULT_PRINT_SETTINGS } = {}) {
+  const printSettings = normalizePrintSettings(printOptions, defaultSettings);
+  const generatedAtDate = generatedAt instanceof Date && !Number.isNaN(generatedAt.getTime())
+    ? generatedAt
+    : new Date();
+
+  const generatedDateFormatter = new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  const generatedTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+
+  const generatedDateText = generatedDateFormatter.format(generatedAtDate);
+  const generatedTimeText = generatedTimeFormatter.format(generatedAtDate);
+  const staffCount = Number.isFinite(totalCount) ? totalCount : 0;
+
+  const titleParts = [formatMetaDisplay(eventName, ""), formatMetaDisplay(scheduleLabel, "")]
+    .map(part => String(part || "").trim())
+    .filter(Boolean);
+  const headingText = titleParts.length
+    ? `${titleParts.join(" / ")} のスタッフリスト`
+    : "スタッフリスト";
+  const docTitle = titleParts.length
+    ? `${titleParts.join(" / ")} - スタッフリスト`
+    : "スタッフリスト";
+
+  const metaItems = [];
+  if (eventName) {
+    metaItems.push(`<li class="print-meta__item"><span class="print-meta__label">イベント:</span> <span class="print-meta__value">${escapeHtml(eventName)}</span></li>`);
+  }
+  if (scheduleLabel) {
+    metaItems.push(`<li class="print-meta__item"><span class="print-meta__label">日程:</span> <span class="print-meta__value">${escapeHtml(scheduleLabel)}</span></li>`);
+  }
+  if (scheduleLocation) {
+    metaItems.push(`<li class="print-meta__item"><span class="print-meta__label">会場:</span> <span class="print-meta__value">${escapeHtml(scheduleLocation)}</span></li>`);
+  }
+  if (scheduleRange) {
+    metaItems.push(`<li class="print-meta__item"><span class="print-meta__label">時間:</span> <span class="print-meta__value">${escapeHtml(scheduleRange)}</span></li>`);
+  }
+  metaItems.push(`<li class="print-meta__item"><span class="print-meta__label">スタッフ数:</span> <span class="print-meta__value">${escapeHtml(`${staffCount}名`)}</span></li>`);
+
+  if (printSettings.showDate || printSettings.showTime) {
+    const generatedParts = [
+      printSettings.showDate ? generatedDateText : "",
+      printSettings.showTime ? generatedTimeText : ""
+    ].filter(Boolean);
+    const generatedLabel = printSettings.showDate && printSettings.showTime
+      ? "出力日時"
+      : printSettings.showDate
+        ? "出力日"
+        : "出力時刻";
+    metaItems.push(
+      `<li class="print-meta__item"><span class="print-meta__label">${escapeHtml(generatedLabel)}:</span> <span class="print-meta__value">${escapeHtml(generatedParts.join(" "))}</span></li>`
+    );
+  }
+
+  const groupMarkup = (Array.isArray(groups) ? groups : [])
+    .map(group => {
+      const facultyLabel = formatPrintCell(group.faculty || "学部未設定", { placeholder: "学部未設定" });
+      const rows = Array.isArray(group.members) && group.members.length
+        ? group.members
+            .map(member => {
+              const assignment = formatPrintCell(member.assignment || "—");
+              const name = formatPrintCell(member.name || member.id || "—");
+              const phonetic = formatPrintCell(member.phonetic || "", { placeholder: "" });
+              const department = formatPrintCell(member.department || "—");
+              const sourceLabel = member.sourceType === "internal" ? "運営" : "協力";
+              const source = formatPrintCell(sourceLabel || "—");
+              return `<tr><td class="staff-table__assignment">${assignment}</td><td class="staff-table__name">${name}</td><td class="staff-table__phonetic">${phonetic}</td><td class="staff-table__department">${department}</td><td class="staff-table__source">${source}</td></tr>`;
+            })
+            .join("\n")
+        : '<tr class="print-table__empty"><td colspan="5">スタッフがいません</td></tr>';
+
+      return `<section class="staff-print-group" aria-label="${escapeHtml(String(group.faculty || "スタッフ"))}">
+        <header class="staff-print-group__header">
+          <h2 class="staff-print-group__title">${facultyLabel}</h2>
+        </header>
+        <table class="print-table staff-table" aria-label="${escapeHtml(String(group.faculty || "スタッフ"))} の一覧">
+          <thead>
+            <tr>
+              <th scope="col" class="staff-table__assignment">班割当</th>
+              <th scope="col" class="staff-table__name">名前</th>
+              <th scope="col" class="staff-table__phonetic">フリガナ</th>
+              <th scope="col" class="staff-table__department">学科以下</th>
+              <th scope="col" class="staff-table__source">内部か外部か</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </section>`;
+    })
+    .join("\n\n");
+
+  const metaMarkup = metaItems.length
+    ? `<ul class="print-meta">${metaItems.join("\n")}</ul>`
+    : "";
+  const sectionsMarkup = groupMarkup || '<p class="print-empty">出力できるスタッフがいません。</p>';
+
+  const pageMargin = printSettings.margin || "5mm";
+  const pageSize = printSettings.paperSize || "A4";
+  const pageOrientation = printSettings.orientation || "portrait";
+  const { width: pageWidth, height: pageHeight } = resolvePrintPageSize(printSettings, defaultSettings);
+  const pageSizeValue = pageSize === "Custom"
+    ? `${pageWidth}mm ${pageHeight}mm`
+    : `${pageSize} ${pageOrientation}`;
+  const headerClass = printSettings.repeatHeader ? "print-header print-header--repeat" : "print-header";
+  const headerMarkup = printSettings.showHeader
+    ? `<header class="${headerClass}">
+      <h1 class="print-title">${escapeHtml(headingText)}</h1>
+      ${metaMarkup}
+    </header>`
+    : "";
+
+  const footerTimestamp = [
+    printSettings.showDate ? generatedDateText : "",
+    printSettings.showTime ? generatedTimeText : ""
+  ].filter(Boolean).join(" ");
+  const footerItems = [];
+  if (footerTimestamp) {
+    footerItems.push(`<span class="print-footer__item">${escapeHtml(footerTimestamp)}</span>`);
+  }
+  if (printSettings.showPageNumbers) {
+    footerItems.push('<span class="print-footer__item print-footer__page" aria-label="ページ番号"><span class="print-footer__page-number" aria-hidden="true"></span></span>');
+  }
+  const footerMarkup = footerItems.length
+    ? `<footer class="print-footer"><div class="print-footer__items">${footerItems.join("")}</div></footer>`
+    : "";
+
+  const baseStyles = buildBasePrintStyles({
+    pageMargin,
+    pageSizeValue,
+    pageWidth,
+    pageHeight,
+    bodyFontSize: "9pt"
+  });
+
+  const html = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(docTitle)}</title>
+  <style>
+    ${baseStyles}
+    .staff-print-group { border: 0.3mm solid #000; padding: 3mm; margin-bottom: 12mm; background: #fff; page-break-inside: avoid; break-inside: avoid-page; }
+    .staff-print-group__title { margin: 0 0 3mm; font-size: 13pt; }
+    .staff-table { table-layout: fixed; width: 100%; }
+    .staff-table__assignment { width: 22mm; text-align: center; }
+    .staff-table__name { width: 34mm; }
+    .staff-table__phonetic { width: 34mm; font-size: 7.4pt; }
+    .staff-table__department { width: 48mm; }
+    .staff-table__source { width: 22mm; text-align: center; }
+    .staff-table td, .staff-table th { word-break: break-all; }
+    .print-surface .staff-print-group { break-inside: avoid-page; }
+  </style>
+</head>
+<body>
+  <div class="print-surface" aria-label="スタッフリストの印刷プレビュー">
+    <div class="print-controls" role="group" aria-label="印刷操作">
+      <button type="button" class="print-controls__button" onclick="window.print()">印刷する</button>
+    </div>
+    ${headerMarkup}
+    <main>
+      ${sectionsMarkup}
+    </main>
+    ${footerMarkup}
+  </div>
+</body>
+</html>`;
+
+  logPrintInfo("buildStaffPrintHtml generated", {
+    groupsCount: Array.isArray(groups) ? groups.length : 0,
+    totalCount,
+    printSettings
+  });
+
+  return { html, docTitle, metaText: headingText };
+}
+
 export {
   PRINT_LOG_PREFIX,
   PRINT_SETTING_STORAGE_KEY,
@@ -827,6 +1023,7 @@ export {
   resolvePrintPageSize,
   buildParticipantPrintHtml,
   buildMinimalParticipantPrintPreview,
+  buildStaffPrintHtml,
   buildEventSelectionPrintHtml,
   logPrintInfo,
   logPrintWarn,
