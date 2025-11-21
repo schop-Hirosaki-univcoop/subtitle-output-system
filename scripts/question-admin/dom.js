@@ -93,6 +93,7 @@ const dom = {
   participantManagePanel: resolve("participant-tabpanel-manage"),
   participantCsvPanel: resolve("participant-tabpanel-csv"),
   downloadParticipantTemplateButton: resolve("download-participant-template"),
+  openStaffPrintViewButton: resolve("open-staff-print-view-button"),
   openPrintViewButton: resolve("open-print-view-button"),
   printPreviewDialog: resolve("print-dialog"),
   printPreview: resolve("print-preview"),
