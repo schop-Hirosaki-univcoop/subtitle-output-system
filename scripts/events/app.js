@@ -580,6 +580,12 @@ export class EventAdminApp {
       });
     }
 
+    if (this.dom.glPrintButton) {
+      this.dom.glPrintButton.addEventListener("click", () => {
+        this.handleGlPrint();
+      });
+    }
+
     if (this.dom.refreshButton) {
       this.dom.refreshButton.addEventListener("click", async () => {
         if (this.dom.refreshButton.disabled) {
@@ -2868,6 +2874,41 @@ export class EventAdminApp {
     if (updated) {
       logPrintInfo("Triggered event selection print", { eventCount: this.events.length });
     }
+  }
+
+  handleGlPrint() {
+    if (!this.eventPrintPreviewController || !this.tools?.gl) {
+      logPrintWarn("GL print requested but preview controller is unavailable");
+      return false;
+    }
+
+    const printSettings = this.readEventPrintSettingsFromForm();
+    this.persistEventPrintSettings(printSettings);
+    const preview = this.tools.gl.buildShiftTablePrintPreview({ printSettings });
+    this.ensureEventPrintDialogVisible();
+
+    if (!preview || !preview.html) {
+      const message = preview?.message || "印刷できるシフト情報がありません。";
+      this.eventPrintPreviewController.setVisibility(true);
+      this.eventPrintPreviewController.setNote(message, {
+        forceAnnounce: true,
+        politeness: "assertive",
+        role: "alert"
+      });
+      if (this.dom.printPreviewPrintButton) {
+        this.dom.printPreviewPrintButton.disabled = true;
+        delete this.dom.printPreviewPrintButton.dataset.popupFallback;
+      }
+      return false;
+    }
+
+    return this.eventPrintPreviewController.renderPreview({
+      html: preview.html,
+      metaText: preview.metaText,
+      title: preview.docTitle,
+      autoPrint: false,
+      printSettings
+    });
   }
 
   updateSelectionNotes() {

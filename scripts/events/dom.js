@@ -196,6 +196,7 @@ export function queryDom() {
     glApplicationList: document.getElementById("gl-application-list"),
     glApplicantSourceFilter: document.getElementById("gl-source-filter"),
     glApplicantRoleFilter: document.getElementById("gl-role-filter"),
+    glPrintButton: document.getElementById("gl-print-button"),
     glApplicationEventNote: document.getElementById("gl-application-event-note"),
     glApplicationEmpty: document.getElementById("gl-application-empty"),
     glApplicationLoading: document.getElementById("gl-application-loading"),
