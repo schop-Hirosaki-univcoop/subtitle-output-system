@@ -1256,8 +1256,8 @@ function buildGlShiftTablePrintHtml({
   <title>${escapeHtml(docTitle)}</title>
   <style>
     ${baseStyles}
-      .gl-shift-print { border: 0.3mm solid #000; padding: 3mm; margin-bottom: 10mm; background: #fff; page-break-inside: avoid; break-inside: avoid-page; }
-      .gl-shift-print__section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3mm; }
+    .gl-shift-print { border: 0.3mm solid #000; padding: 3mm; margin-bottom: 10mm; background: #fff; page-break-inside: avoid; break-inside: avoid-page; }
+    .gl-shift-print__section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3mm; }
     .gl-shift-print__title { margin: 0; font-size: 12.5pt; display: inline-flex; gap: 3mm; align-items: baseline; }
     .gl-shift-print__tag { font-size: 8.5pt; color: #444; letter-spacing: 0.02em; }
     .gl-shift-print__table-wrapper { width: 100%; overflow: hidden; }
@@ -1269,7 +1269,7 @@ function buildGlShiftTablePrintHtml({
     .gl-shift-print__name { font-weight: 700; display: block; }
     .gl-shift-print__meta { font-size: 8pt; display: block; color: #444; }
     .gl-shift-print__thead th { padding: 1mm 1.2mm; }
-      .gl-shift-print__header { text-align: center; }
+    .gl-shift-print__header { text-align: center; }
     .gl-shift-print__schedule-year, .gl-shift-print__schedule-month { font-weight: 700; }
     .gl-shift-print__schedule-month { background: #f5f5f5; }
     .gl-shift-print__schedule-day, .gl-shift-print__schedule-weekday { font-size: 8.8pt; }
