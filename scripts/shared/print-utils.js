@@ -1017,7 +1017,7 @@ function buildGlShiftTablePrintHtml({
     ? schedules.map((schedule) => ({
         id: schedule?.id ?? "",
         label: formatPrintCell(schedule?.label || schedule?.date || schedule?.id || "日程"),
-        date: formatPrintCell(schedule?.date || "")
+        date: formatPrintCell(schedule?.date || "", { placeholder: "" })
       }))
     : [];
 
@@ -1087,13 +1087,17 @@ function buildGlShiftTablePrintHtml({
       entry?.department ? `<span class="gl-shift-print__meta">${escapeHtml(entry.department)}</span>` : "",
       entry?.email ? `<span class="gl-shift-print__meta">${escapeHtml(entry.email)}</span>` : ""
     ].filter(Boolean);
-    return `<td class="gl-shift-print__identity">${lines.join("<br>")}</td>`;
+    return `<td class="gl-shift-print__identity">${lines.join("")}</td>`;
   };
 
   const buildSectionMarkup = (section) => {
     const headerCells = [
       '<th scope="col" class="gl-shift-print__identity">スタッフ</th>',
-      ...scheduleList.map((schedule) => `<th scope="col" class="gl-shift-print__value" data-schedule-id="${escapeHtml(schedule.id)}">${schedule.label}</th>`)
+      ...scheduleList.map((schedule) => {
+        const date = schedule.date ? `<span class="gl-shift-print__schedule-date">${schedule.date}</span>` : "";
+        const label = `<span class="gl-shift-print__schedule-label">${schedule.label}</span>`;
+        return `<th scope="col" class="gl-shift-print__value" data-schedule-id="${escapeHtml(schedule.id)}">${label}${date}</th>`;
+      })
     ].join("");
 
     const rows = section.entries
@@ -1171,12 +1175,15 @@ function buildGlShiftTablePrintHtml({
     .gl-shift-print__tag { font-size: 8.5pt; color: #444; letter-spacing: 0.02em; }
     .gl-shift-print__table-wrapper { width: 100%; overflow: hidden; }
     .gl-shift-print__table { width: 100%; table-layout: fixed; border-collapse: collapse; page-break-inside: avoid; break-inside: avoid-page; }
-    .gl-shift-print__table th, .gl-shift-print__table td { border: 0.25mm solid #000; padding: 1.5mm 1.8mm; vertical-align: top; word-break: break-all; }
+    .gl-shift-print__table th, .gl-shift-print__table td { border: 0.25mm solid #000; padding: 1.5mm 1.8mm; word-break: break-all; }
     .gl-shift-print__table thead th { background: #f5f5f5; }
-    .gl-shift-print__identity { width: 55mm; }
+    .gl-shift-print__table th { vertical-align: middle; }
+    .gl-shift-print__identity { width: 55mm; vertical-align: top; }
     .gl-shift-print__name { font-weight: 700; display: block; }
     .gl-shift-print__meta { font-size: 8pt; display: block; color: #444; }
-    .gl-shift-print__value { text-align: center; }
+    .gl-shift-print__schedule-label { display: block; font-weight: 700; }
+    .gl-shift-print__schedule-date { display: block; font-size: 8pt; color: #444; }
+    .gl-shift-print__value { text-align: center; vertical-align: middle; }
     .gl-shift-print__table tbody tr { break-inside: avoid-page; }
   </style>
 </head>
