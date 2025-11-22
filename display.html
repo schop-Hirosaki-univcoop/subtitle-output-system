@@ -73,6 +73,11 @@
       --dur-flip: 320ms;
       --ease-flip: cubic-bezier(.25,.9,.2,1);
       --blur-outer: 1vw;
+      --side-telop-bg: linear-gradient(135deg, rgba(15, 25, 35, 0.9), rgba(10, 18, 28, 0.92));
+      --side-telop-border: rgba(255, 255, 255, 0.2);
+      --side-telop-shadow: 0 0.6vw 1.6vw rgba(0, 0, 0, 0.45);
+      --side-telop-radius: 1vw;
+      --side-telop-padding: 0.65vw 1vw;
     }
     /* 低負荷モード（?lowgpu=1 で body.low-gpu を付与） */
     .low-gpu {
@@ -96,6 +101,76 @@
       padding: var(--pad-y) var(--pad-x) var(--pad-y);
       color: #fff;
       font-family: "Noto Sans JP","Hiragino Sans","Meiryo",system-ui,sans-serif;
+    }
+
+    /* ─ サイドテロップ（画面上部に常時帯を出す） ─ */
+    .side-telops {
+      position: absolute;
+      inset: var(--pad-y) var(--pad-x) auto var(--pad-x);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1.5vw;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .side-telop {
+      min-width: 18vw;
+      max-width: 34vw;
+      padding: var(--side-telop-padding);
+      border-radius: var(--side-telop-radius);
+      background: var(--side-telop-bg);
+      border: 0.18vw solid var(--side-telop-border);
+      box-shadow: var(--side-telop-shadow);
+      backdrop-filter: blur(0.8vw) saturate(140%);
+      -webkit-backdrop-filter: blur(0.8vw) saturate(140%);
+      color: #f5f7ff;
+      font-family: "GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
+      font-size: calc(90vw / 42);
+      font-weight: 700;
+      letter-spacing: .02em;
+      line-height: 1.2;
+      text-align: center;
+      text-shadow:
+        0.2vw 0 0 rgba(0,0,0,.45), -0.2vw 0 0 rgba(0,0,0,.45),
+        0 0.2vw 0 rgba(0,0,0,.45),  0 -0.2vw 0 rgba(0,0,0,.45),
+        0 0 1vw rgba(0,234,255,.15);
+      border-image: linear-gradient(135deg, var(--neon-a), var(--neon-b)) 1;
+      transition: opacity .18s ease, transform .18s ease;
+      transform-origin: center;
+    }
+    .side-telop.is-empty {
+      opacity: 0;
+      transform: translateY(-0.6vw) scale(.985);
+    }
+    .side-telop__label {
+      display: block;
+      font-size: calc(90vw / 60);
+      font-weight: 500;
+      opacity: .78;
+      letter-spacing: .08em;
+      margin-bottom: 0.18vw;
+    }
+    .side-telop__body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.12vw;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .side-telop__line {
+      display: block;
+    }
+    .side-telop__line--secondary {
+      font-size: 0.8em;
+      opacity: .92;
+    }
+    .side-telop__line--secondary:empty {
+      display: none;
+    }
+    @media (max-width: 1024px){
+      .side-telops { inset: 2.2vw; gap: 1vw; }
+      .side-telop { min-width: 30vw; font-size: calc(90vw / 38); }
     }
 
     /* ─ ラジオネーム“タブ座布団” ─ */
@@ -372,6 +447,22 @@
 <body>
   <!-- 表示領域: 画面下部に固定する 16:9 のテロップキャンバス -->
   <div id="telop-canvas">
+    <div class="side-telops" aria-live="polite">
+      <div id="side-telop-left" class="side-telop" aria-label="サイドテロップ（左）">
+        <span class="side-telop__label">INFORMATION</span>
+        <span class="side-telop__body">
+          <span class="side-telop__line side-telop__line--primary"></span>
+          <span class="side-telop__line side-telop__line--secondary"></span>
+        </span>
+      </div>
+      <div id="side-telop-right" class="side-telop" aria-label="サイドテロップ（右）">
+        <span class="side-telop__label">INFORMATION</span>
+        <span class="side-telop__body">
+          <span class="side-telop__line side-telop__line--primary"></span>
+          <span class="side-telop__line side-telop__line--secondary"></span>
+        </span>
+      </div>
+    </div>
     <!-- テロップラッパ: 名前タグと本文を同時にアニメーションさせる -->
     <div class="telop-wrap">
       <!-- ラジオネーム座布団: 名前の差し替えと入退場を演出 -->
@@ -410,14 +501,15 @@
          };
 
         const app = initializeApp(firebaseConfig);
+        const urlSearchParams = new URL(location.href).searchParams;
         // 低負荷モード (?lowgpu=1) を有効化
-        if (new URL(location.href).searchParams.get('lowgpu') === '1') {
+        if (urlSearchParams.get('lowgpu') === '1') {
           document.body.classList.add('low-gpu');
         }
         const database = getDatabase(app);
         const auth = getAuth(app);
 
-        const initialChannel = parseChannelParams(new URLSearchParams(location.search || ""));
+        const initialChannel = parseChannelParams(urlSearchParams);
         const initialEventId = typeof initialChannel.eventId === 'string' ? initialChannel.eventId.trim() : '';
         const initialScheduleId = typeof initialChannel.scheduleId === 'string' ? initialChannel.scheduleId.trim() : '';
         const queryEventPinned = initialEventId.length > 0;
@@ -972,6 +1064,20 @@
         const genreValueEl = document.getElementById('genre-label');
         const telopCanvas = document.getElementById('telop-canvas');
 
+        const sideTelopLeftEl = document.getElementById('side-telop-left');
+        const sideTelopRightEl = document.getElementById('side-telop-right');
+        const sideTelopLeftBodyEl = sideTelopLeftEl?.querySelector('.side-telop__body');
+        const sideTelopRightBodyEl = sideTelopRightEl?.querySelector('.side-telop__body');
+
+        const sideTelopDefaults = {
+          left: (urlSearchParams.get('sideLeft') ?? urlSearchParams.get('sideL') ?? '').trim(),
+          right: (urlSearchParams.get('sideRight') ?? urlSearchParams.get('sideR') ?? '').trim()
+        };
+        const sideTelopState = {
+          fallback: sideTelopDefaults,
+          active: { ...sideTelopDefaults }
+        };
+
         const telopWrap = document.querySelector('#telop-canvas .telop-wrap');
         const telopBox  = document.querySelector('#telop-canvas .telop-box');
         const nameTagEl = document.getElementById('name-tag');
@@ -1296,6 +1402,47 @@
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }
 
+        function setSideTelop(el, bodyEl, text){
+          const content = String(text || '').trim();
+          const primaryEl = bodyEl?.querySelector('.side-telop__line--primary');
+          const secondaryEl = bodyEl?.querySelector('.side-telop__line--secondary');
+
+          const lines = content.length ? content.split(/\r?\n/).map(l => l.trim()).filter(Boolean) : [];
+          const primaryText = lines[0] || '';
+          const secondaryText = lines.slice(1).join(' ') || '';
+
+          if (primaryEl) primaryEl.textContent = primaryText;
+          if (secondaryEl) secondaryEl.textContent = secondaryText;
+          if (el) el.classList.toggle('is-empty', !(primaryText || secondaryText));
+        }
+
+        function resolveSideTelopValue(value, fallback){
+          return typeof value === 'undefined' ? fallback : String(value || '').trim();
+        }
+
+        function applySideTelops(payload = {}) {
+          const hasLeft = Object.prototype.hasOwnProperty.call(payload, 'sideTelopLeft')
+            || Object.prototype.hasOwnProperty.call(payload, 'sideLeft');
+          const hasRight = Object.prototype.hasOwnProperty.call(payload, 'sideTelopRight')
+            || Object.prototype.hasOwnProperty.call(payload, 'sideRight');
+
+          const leftRaw = Object.prototype.hasOwnProperty.call(payload, 'sideTelopLeft')
+            ? payload.sideTelopLeft
+            : payload.sideLeft;
+          const rightRaw = Object.prototype.hasOwnProperty.call(payload, 'sideTelopRight')
+            ? payload.sideTelopRight
+            : payload.sideRight;
+
+          const nextLeft = resolveSideTelopValue(hasLeft ? leftRaw : undefined, sideTelopState.fallback.left);
+          const nextRight = resolveSideTelopValue(hasRight ? rightRaw : undefined, sideTelopState.fallback.right);
+
+          sideTelopState.active = { left: nextLeft, right: nextRight };
+          setSideTelop(sideTelopLeftEl, sideTelopLeftBodyEl, nextLeft);
+          setSideTelop(sideTelopRightEl, sideTelopRightBodyEl, nextRight);
+        }
+
+        applySideTelops();
+
         function handleNowShowingSnapshot(snapshot) {
           const telopData  = snapshot.val() || null;
           const name       = telopData?.name ?? '';
@@ -1305,6 +1452,8 @@
           const participantId = telopData?.participantId ? String(telopData.participantId) : '';
           const pickup     = telopData?.pickup === true;
           const hasQuestion = !!(question && question.trim().length);
+
+          applySideTelops(telopData || {});
 
           if (!hasQuestion){
             logDisplayLinkInfo('Received nowShowing clear request', {
