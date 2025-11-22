@@ -151,13 +151,11 @@ export function renderQuestions(app) {
   const viewingAllGenres = !selectedGenre || selectedGenre.toLowerCase() === GENRE_ALL_VALUE;
   let selectedSchedule = "";
   if (viewingNormalTab) {
-    const context = app.pageContext || {};
     const candidates = [
       app.state.currentSchedule,
       app.state.committedScheduleKey,
       app.state.conflictSelection,
-      app.state.lastNormalSchedule,
-      context.selectionConfirmed ? context.scheduleKey : ""
+      app.state.lastNormalSchedule
     ];
     for (const candidate of candidates) {
       const trimmed = String(candidate || "").trim();
