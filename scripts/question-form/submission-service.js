@@ -88,7 +88,6 @@ export function buildSubmissionPayload({
     questionLength: formData.questionLength,
     genre: formData.genre,
     groupNumber: snapshot.groupNumber,
-    teamNumber: snapshot.teamNumber,
     scheduleLabel: snapshot.scheduleLabel,
     scheduleDate: snapshot.scheduleDate,
     scheduleLocation: snapshot.scheduleLocation,
