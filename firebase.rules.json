@@ -400,6 +400,7 @@
           "scheduleStart": { ".validate": "newData.isString() || !newData.exists()" },
           "scheduleEnd":   { ".validate": "newData.isString() || !newData.exists()" },
           "scheduleDate":  { ".validate": "newData.isString() || !newData.exists()" },
+          "scheduleLocation": { ".validate": "newData.isString() || !newData.exists()" },
           "participantId": { ".validate": "newData.isString() || !newData.exists()" },
           "participantName": { ".validate": "newData.isString() || !newData.exists()" },
           "guidance": { ".validate": "newData.isString() || !newData.exists()" },
