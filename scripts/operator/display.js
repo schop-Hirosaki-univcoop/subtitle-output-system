@@ -71,6 +71,16 @@ function normalizeNowShowing(now) {
   if (Object.prototype.hasOwnProperty.call(now, "pickup")) {
     normalized.pickup = Boolean(now.pickup);
   }
+  if (Object.prototype.hasOwnProperty.call(now, "sideTelopLeft")) {
+    normalized.sideTelopLeft = String(now.sideTelopLeft || "");
+  } else if (Object.prototype.hasOwnProperty.call(now, "sideLeft")) {
+    normalized.sideTelopLeft = String(now.sideLeft || "");
+  }
+  if (Object.prototype.hasOwnProperty.call(now, "sideTelopRight")) {
+    normalized.sideTelopRight = String(now.sideTelopRight || "");
+  } else if (Object.prototype.hasOwnProperty.call(now, "sideRight")) {
+    normalized.sideTelopRight = String(now.sideRight || "");
+  }
   return normalized;
 }
 
@@ -82,7 +92,9 @@ function areNowShowingEqual(a, b) {
     (a.participantId || "") === (b.participantId || "") &&
     (a.question || "") === (b.question || "") &&
     (a.name || "") === (b.name || "") &&
-    Boolean(a.pickup) === Boolean(b.pickup)
+    Boolean(a.pickup) === Boolean(b.pickup) &&
+    (a.sideTelopLeft || "") === (b.sideTelopLeft || "") &&
+    (a.sideTelopRight || "") === (b.sideTelopRight || "")
   );
 }
 
