@@ -171,6 +171,11 @@ export function renderQuestions(app) {
     }
   }
   if (viewingNormalTab) {
+    console.info("[schedule-debug] logging enabled for normal tab", {
+      currentTab,
+      selectedSchedule,
+      hasCardsContainer: Boolean(app?.dom?.cardsContainer)
+    });
     const displaySession = app?.state?.displaySession || {};
     const assignment = displaySession && typeof displaySession === "object" ? displaySession.assignment : null;
     const displayEventId = String(displaySession?.eventId || assignment?.eventId || "").trim();
@@ -200,6 +205,11 @@ export function renderQuestions(app) {
         scheduleKey: questionScheduleKey,
         scheduleLabel: questionLabel
       });
+    });
+  } else {
+    console.info("[schedule-debug] logging skipped (not on normal tab)", {
+      currentTab,
+      hasCardsContainer: Boolean(app?.dom?.cardsContainer)
     });
   }
   let list = app.state.allQuestions.filter((item) => {
