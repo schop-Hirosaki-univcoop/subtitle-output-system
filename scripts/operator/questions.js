@@ -150,25 +150,23 @@ export function renderQuestions(app) {
   const selectedGenre = typeof app.state.currentGenre === "string" ? app.state.currentGenre.trim() : "";
   const viewingAllGenres = !selectedGenre || selectedGenre.toLowerCase() === GENRE_ALL_VALUE;
   let selectedSchedule = "";
-  if (viewingNormalTab) {
-    const context = app.pageContext || {};
-    const candidates = [
-      app.state.currentSchedule,
-      app.state.committedScheduleKey,
-      app.state.conflictSelection,
-      app.state.lastNormalSchedule,
-      context.selectionConfirmed ? context.scheduleKey : ""
-    ];
-    for (const candidate of candidates) {
-      const trimmed = String(candidate || "").trim();
-      if (trimmed) {
-        selectedSchedule = trimmed;
-        break;
-      }
+  const context = app.pageContext || {};
+  const scheduleCandidates = [
+    app.state.currentSchedule,
+    app.state.committedScheduleKey,
+    app.state.conflictSelection,
+    app.state.lastNormalSchedule,
+    context.selectionConfirmed ? context.scheduleKey : ""
+  ];
+  for (const candidate of scheduleCandidates) {
+    const trimmed = String(candidate || "").trim();
+    if (trimmed) {
+      selectedSchedule = trimmed;
+      break;
     }
-    if (!selectedSchedule && typeof app.getCurrentScheduleKey === "function") {
-      selectedSchedule = String(app.getCurrentScheduleKey() || "").trim();
-    }
+  }
+  if (!selectedSchedule && typeof app.getCurrentScheduleKey === "function") {
+    selectedSchedule = String(app.getCurrentScheduleKey() || "").trim();
   }
   if (viewingNormalTab) {
     console.info("[schedule-debug] logging enabled for normal tab", {
@@ -212,6 +210,8 @@ export function renderQuestions(app) {
       hasCardsContainer: Boolean(app?.dom?.cardsContainer)
     });
   }
+  // Pick Upタブではピックアップ質問のみを表示し、normalタブでは通常質問のみを表示する。
+  // 「すべて」タブは両方を並べるが、normal質問には選択中の日程フィルターが適用される。
   let list = app.state.allQuestions.filter((item) => {
     const isPuq = isPickUpQuestion(item);
     if (viewingPuqTab && !isPuq) {
@@ -223,7 +223,7 @@ export function renderQuestions(app) {
     const itemGenre = String(item["ジャンル"] ?? "").trim() || "その他";
     if (!viewingAllGenres && itemGenre !== selectedGenre) return false;
     const itemSchedule = String(item.__scheduleKey ?? item["日程"] ?? "").trim();
-    if (viewingNormalTab && selectedSchedule && itemSchedule !== selectedSchedule) return false;
+    if (!isPuq && selectedSchedule && itemSchedule !== selectedSchedule) return false;
     return true;
   });
   const currentTabCompareKey = viewingPuqTab ? "__ts" : "__ts";
