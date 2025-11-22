@@ -2353,6 +2353,9 @@ export class GlToolManager {
     if (this.dom.glInternalForm) {
       this.dom.glInternalForm.reset();
     }
+    if (this.dom.glInternalFacultyInput) {
+      this.dom.glInternalFacultyInput.value = "";
+    }
     if (this.dom.glInternalIdInput) {
       this.dom.glInternalIdInput.value = "";
     }
