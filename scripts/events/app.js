@@ -166,6 +166,7 @@ export class EventAdminApp {
     this.lastFocused = null;
     this.confirmResolver = null;
     this.redirectingToIndex = false;
+    this.fullscreenPromptShown = false;
     this.hasSeenAuthenticatedUser = Boolean(auth?.currentUser);
     this.authResumeFallbackTimer = 0;
     this.authResumeGracePeriodMs = AUTH_RESUME_FALLBACK_DELAY_MS;
@@ -628,6 +629,20 @@ export class EventAdminApp {
       this.updateFullscreenButton();
     }
 
+    if (this.dom.fullscreenPromptEnterButton) {
+      this.dom.fullscreenPromptEnterButton.addEventListener("click", () => {
+        this.handleFullscreenPromptEnter().catch((error) => {
+          logError("Failed to handle fullscreen prompt", error);
+        });
+      });
+    }
+
+    if (this.dom.fullscreenPromptStayButton) {
+      this.dom.fullscreenPromptStayButton.addEventListener("click", () => {
+        this.handleFullscreenPromptDismiss();
+      });
+    }
+
     if (typeof document !== "undefined") {
       document.addEventListener("fullscreenchange", this.handleFullscreenChange);
       document.addEventListener("webkitfullscreenchange", this.handleFullscreenChange);
@@ -726,6 +741,7 @@ export class EventAdminApp {
     this.bindDialogDismiss(this.dom.scheduleConflictDialog);
     this.bindDialogDismiss(this.dom.scheduleFallbackDialog);
     this.bindDialogDismiss(this.dom.operatorModeDialog);
+    this.bindDialogDismiss(this.dom.fullscreenPromptDialog);
 
     if (this.dom.confirmAcceptButton) {
       this.dom.confirmAcceptButton.addEventListener("click", () => {
@@ -1123,6 +1139,7 @@ export class EventAdminApp {
     this.updateUserLabel();
     this.preflightContext = this.loadPreflightContextForUser(user);
     if (!user) {
+      this.fullscreenPromptShown = false;
       if (this.hasSeenAuthenticatedUser) {
         appendAuthDebugLog("events:handle-auth-state:signed-out");
         this.cancelAuthResumeFallback("signed-out");
@@ -1156,6 +1173,7 @@ export class EventAdminApp {
     });
     this.showLoggedInState();
     this.clearAlert();
+    this.promptFullscreenChoice();
 
     try {
       this.beginEventsLoading("権限を確認しています…");
@@ -2516,6 +2534,40 @@ export class EventAdminApp {
       button.dataset.state = "unsupported";
       button.title = "このブラウザではフルスクリーン表示に対応していません";
     }
+  }
+
+  promptFullscreenChoice() {
+    if (this.fullscreenPromptShown) {
+      return;
+    }
+    this.fullscreenPromptShown = true;
+    const dialog = this.dom.fullscreenPromptDialog;
+    if (!dialog) {
+      return;
+    }
+    const supported = this.isFullscreenSupported();
+    if (this.dom.fullscreenPromptEnterButton) {
+      this.dom.fullscreenPromptEnterButton.disabled = !supported;
+    }
+    if (this.dom.fullscreenPromptSupportNote) {
+      this.dom.fullscreenPromptSupportNote.hidden = supported;
+    }
+    this.openDialog(dialog);
+  }
+
+  async handleFullscreenPromptEnter() {
+    this.closeDialog(this.dom.fullscreenPromptDialog);
+    try {
+      await this.enterFullscreen();
+    } catch (error) {
+      logError("Failed to enter fullscreen from prompt", error);
+    }
+    this.updateFullscreenButton();
+  }
+
+  handleFullscreenPromptDismiss() {
+    this.closeDialog(this.dom.fullscreenPromptDialog);
+    this.updateFullscreenButton();
   }
 
   async toggleFullscreen() {

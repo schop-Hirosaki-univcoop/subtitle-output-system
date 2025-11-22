@@ -1654,6 +1654,31 @@
   ></div>
 
 
+  <div
+    id="flow-fullscreen-dialog"
+    class="modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="flow-fullscreen-dialog-title"
+    hidden
+  >
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="flow-fullscreen-dialog-title">表示モードを選択</h2>
+      </div>
+      <div class="modal-body">
+        <p class="modal-helper">ログインが完了しました。フルスクリーンで続けますか？</p>
+        <p id="flow-fullscreen-support-note" class="modal-helper" hidden>このブラウザではフルスクリーンが利用できません。</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="flow-fullscreen-enter-button" data-autofocus="true">フルスクリーンで続行</button>
+        <button type="button" class="btn btn-ghost" id="flow-fullscreen-stay-button" data-dialog-dismiss="true">通常表示のまま</button>
+      </div>
+    </div>
+  </div>
+
+
   <div id="print-dialog" class="modal modal--fullscreen" role="dialog" aria-modal="true" aria-labelledby="print-dialog-title" hidden>
     <div class="modal-backdrop" data-dialog-dismiss="true"></div>
     <div class="modal-panel modal-panel--print modal-panel--fullscreen">
