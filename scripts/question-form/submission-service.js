@@ -166,21 +166,27 @@ export async function submitQuestionRecord({
 
   ensureActive(controller);
 
-  const questionRef = ref(database, `questions/normal/${questionUid}`);
-  const statusRef = ref(database, `questionStatus/${questionUid}`);
+  const intakeRef = ref(database, `questionIntake/submissions/${token}/${questionUid}`);
+  const intakePayload = { ...submission, uid: questionUid, submittedAt: timestamp };
+  let intakeCreated = false;
   let questionCreated = false;
 
   try {
-    await set(questionRef, questionRecord);
+    await set(intakeRef, intakePayload);
+    intakeCreated = true;
+    await set(ref(database, `questions/normal/${questionUid}`), questionRecord);
     questionCreated = true;
-    await set(statusRef, statusRecord);
+    await set(ref(database, `questionStatus/${questionUid}`), statusRecord);
   } catch (error) {
-    if (questionCreated) {
-      try {
-        await remove(questionRef);
-      } catch (cleanupError) {
-        console.warn("Failed to roll back question record after status write error", cleanupError);
+    try {
+      if (questionCreated) {
+        await remove(ref(database, `questions/normal/${questionUid}`));
       }
+      if (intakeCreated) {
+        await remove(intakeRef);
+      }
+    } catch (cleanupError) {
+      console.warn("Failed to roll back question record after status write error", cleanupError);
     }
     const isPermissionError = error?.code === "PERMISSION_DENIED";
     const message = isPermissionError
