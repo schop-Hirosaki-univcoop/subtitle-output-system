@@ -1282,7 +1282,7 @@ function buildGlShiftTablePrintHtml({
     .gl-shift-print__schedule-month { background: #f5f5f5; }
     .gl-shift-print__schedule-day, .gl-shift-print__schedule-weekday { font-size: 8.8pt; }
     .gl-shift-print__schedule-weekday { color: #444; }
-    .gl-shift-print__schedule-weekday--weekend { background: #e0e0e0; color: #222; }
+    .gl-shift-print__schedule-weekday--weekend { background: #d0d0d0; color: #222; }
     .gl-shift-print__value { text-align: center; vertical-align: middle; }
     .gl-shift-print__value--weekend { background: #f0f0f0; }
     .gl-shift-print__table tbody tr { break-inside: avoid-page; }
