@@ -73,7 +73,6 @@ import {
   DEFAULT_LOAD_TIMEOUT_MS,
   createPrintPreviewController
 } from "../shared/print-preview.js";
-import { consumeLaunchFullscreenRequest } from "../shared/fullscreen-request.js";
 
 const HOST_PRESENCE_HEARTBEAT_MS = 60_000;
 const SCHEDULE_CONSENSUS_TOAST_MS = 3_000;
@@ -1157,7 +1156,6 @@ export class EventAdminApp {
     });
     this.showLoggedInState();
     this.clearAlert();
-    void this.maybeEnterFullscreenOnLaunch();
 
     try {
       this.beginEventsLoading("権限を確認しています…");
@@ -2517,26 +2515,6 @@ export class EventAdminApp {
       button.textContent = "フルスクリーン";
       button.dataset.state = "unsupported";
       button.title = "このブラウザではフルスクリーン表示に対応していません";
-    }
-  }
-
-  async maybeEnterFullscreenOnLaunch() {
-    if (!consumeLaunchFullscreenRequest()) {
-      return;
-    }
-    appendAuthDebugLog("events:fullscreen:launch-request");
-    try {
-      await this.enterFullscreen();
-      appendAuthDebugLog("events:fullscreen:entered");
-    } catch (error) {
-      logError("Failed to enter fullscreen on launch", error);
-      appendAuthDebugLog(
-        "events:fullscreen:error",
-        { code: error?.code || null, message: error?.message || null },
-        { level: "error" }
-      );
-    } finally {
-      this.updateFullscreenButton();
     }
   }
 
