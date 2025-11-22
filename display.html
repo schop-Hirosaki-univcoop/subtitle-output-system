@@ -116,12 +116,15 @@
       z-index: 10;
     }
     .side-telop {
+      position: relative;
+      z-index: 0;
       min-width: 18vw;
       max-width: 34vw;
       padding: var(--side-telop-padding);
       border-radius: var(--side-telop-radius);
       background: var(--side-telop-bg);
-      border: 0.18vw solid var(--side-telop-border);
+      /* 実枠は透明にしておいて、疑似要素側でグラデ枠を描く */
+      border: 0.18vw solid transparent;
       box-shadow: var(--side-telop-shadow);
       backdrop-filter: blur(0.8vw) saturate(140%);
       -webkit-backdrop-filter: blur(0.8vw) saturate(140%);
@@ -136,10 +139,42 @@
         0.2vw 0 0 rgba(0,0,0,.45), -0.2vw 0 0 rgba(0,0,0,.45),
         0 0.2vw 0 rgba(0,0,0,.45),  0 -0.2vw 0 rgba(0,0,0,.45),
         0 0 1vw rgba(0,234,255,.15);
-      border-image: linear-gradient(135deg, var(--neon-a), var(--neon-b)) 1;
       transition: opacity .18s ease, transform .18s ease;
       transform-origin: center;
+      overflow: visible;
     }
+
+    /* サイドテロップ用：グラデ枠＋外側グロー */
+    .side-telop::before,
+    .side-telop::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+    }
+
+    /* 細いグラデーション枠（ネオンチューブ） */
+    .side-telop::before {
+      padding: 0.14vw; /* 枠の太さ（調整ポイント） */
+      background: linear-gradient(135deg, var(--neon-a), var(--neon-b));
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+              mask-composite: exclude;
+      opacity: .95;
+    }
+
+    /* ぼんやり広がる外側グロー */
+    .side-telop::after {
+      z-index: -1;
+      background: linear-gradient(135deg, var(--neon-a), var(--neon-b));
+      filter: blur(0.6vw);
+      opacity: .45;
+      transform: scale(1.03);
+    }
+
     .side-telop.is-empty {
       opacity: 0;
       transform: translateY(-0.6vw) scale(.985);
@@ -451,7 +486,6 @@
   <div id="telop-canvas">
     <div class="side-telops" aria-live="polite">
       <div id="side-telop-left" class="side-telop" aria-label="サイドテロップ（左）">
-        <span class="side-telop__label">INFORMATION</span>
         <span class="side-telop__body">
           <span class="side-telop__line side-telop__line--primary"></span>
           <span class="side-telop__line side-telop__line--secondary"></span>
