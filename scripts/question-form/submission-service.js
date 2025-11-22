@@ -162,6 +162,7 @@ export async function submitQuestionRecord({
     timestamp
   });
   const statusRecord = { answered: false, selecting: false, updatedAt: timestamp };
+console.log("[DEBUG] questionRecord", JSON.stringify(questionRecord, null, 2));
 
   ensureActive(controller);
 
