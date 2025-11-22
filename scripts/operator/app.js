@@ -3969,14 +3969,15 @@ export class OperatorApp {
    */
   normalizeQuestionRecord(item) {
     const record = item && typeof item === "object" ? item : {};
+    const rawScheduleKey = String(record.scheduleKey ?? "").trim();
     const eventId = String(record.eventId ?? "").trim();
     const rawScheduleId = String(record.scheduleId ?? "").trim();
     const fallbackLabel = String(record.scheduleLabel ?? record.schedule ?? "").trim();
     const normalizedScheduleId = eventId ? normalizeScheduleId(rawScheduleId) : rawScheduleId;
-    let scheduleKey = "";
-    if (eventId && normalizedScheduleId) {
+    let scheduleKey = rawScheduleKey;
+    if (!scheduleKey && eventId && normalizedScheduleId) {
       scheduleKey = `${eventId}::${normalizedScheduleId}`;
-    } else if (rawScheduleId) {
+    } else if (!scheduleKey && rawScheduleId) {
       scheduleKey = rawScheduleId;
     } else if (fallbackLabel) {
       scheduleKey = fallbackLabel;

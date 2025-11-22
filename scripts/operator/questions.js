@@ -151,11 +151,13 @@ export function renderQuestions(app) {
   const viewingAllGenres = !selectedGenre || selectedGenre.toLowerCase() === GENRE_ALL_VALUE;
   let selectedSchedule = "";
   if (viewingNormalTab) {
+    const context = app.pageContext || {};
     const candidates = [
       app.state.currentSchedule,
       app.state.committedScheduleKey,
       app.state.conflictSelection,
-      app.state.lastNormalSchedule
+      app.state.lastNormalSchedule,
+      context.selectionConfirmed ? context.scheduleKey : ""
     ];
     for (const candidate of candidates) {
       const trimmed = String(candidate || "").trim();
@@ -167,6 +169,38 @@ export function renderQuestions(app) {
     if (!selectedSchedule && typeof app.getCurrentScheduleKey === "function") {
       selectedSchedule = String(app.getCurrentScheduleKey() || "").trim();
     }
+  }
+  if (viewingNormalTab) {
+    const displaySession = app?.state?.displaySession || {};
+    const assignment = displaySession && typeof displaySession === "object" ? displaySession.assignment : null;
+    const displayEventId = String(displaySession?.eventId || assignment?.eventId || "").trim();
+    const displayScheduleId = normalizeScheduleId(displaySession?.scheduleId || assignment?.scheduleId || "");
+    const derivedDisplayKey = displayEventId && displayScheduleId ? `${displayEventId}::${displayScheduleId}` : "";
+    const displayScheduleKey = String(assignment?.scheduleKey || derivedDisplayKey || "").trim();
+    const displayScheduleLabel = String(
+      assignment?.scheduleLabel || displaySession?.scheduleLabel || displaySession?.schedule || ""
+    ).trim();
+
+    const normalQuestions = app.state.allQuestions.filter((item) => !isPickUpQuestion(item));
+    console.info("[schedule-debug] display schedule", {
+      eventId: displayEventId,
+      scheduleId: displayScheduleId,
+      scheduleKey: displayScheduleKey,
+      scheduleLabel: displayScheduleLabel
+    });
+    normalQuestions.forEach((item) => {
+      const questionScheduleKey = String(item.__scheduleKey ?? item["日程"] ?? "").trim();
+      const questionEventId = String(item["イベントID"] ?? "").trim();
+      const questionScheduleId = String(item["日程ID"] ?? "").trim();
+      const questionLabel = String(item.__scheduleLabel ?? item["日程示"] ?? "").trim();
+      console.info("[schedule-debug] normal question", {
+        uid: item.UID,
+        eventId: questionEventId,
+        scheduleId: questionScheduleId,
+        scheduleKey: questionScheduleKey,
+        scheduleLabel: questionLabel
+      });
+    });
   }
   let list = app.state.allQuestions.filter((item) => {
     const isPuq = isPickUpQuestion(item);
