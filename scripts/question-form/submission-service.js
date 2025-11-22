@@ -167,11 +167,12 @@ export async function submitQuestionRecord({
   ensureActive(controller);
 
   const intakeRef = ref(database, `questionIntake/submissions/${token}/${questionUid}`);
+  const intakePayload = { ...submission, uid: questionUid, submittedAt: timestamp };
   let intakeCreated = false;
   let questionCreated = false;
 
   try {
-    await set(intakeRef, { ...questionRecord, submittedAt: timestamp });
+    await set(intakeRef, intakePayload);
     intakeCreated = true;
     await set(ref(database, `questions/normal/${questionUid}`), questionRecord);
     questionCreated = true;
