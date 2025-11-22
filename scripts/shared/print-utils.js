@@ -1031,6 +1031,7 @@ function buildGlShiftTablePrintHtml({
             monthText: "",
             dayText: fallbackText,
             weekdayText: "",
+            isWeekend: false,
             fallbackText
           };
         }
@@ -1039,6 +1040,8 @@ function buildGlShiftTablePrintHtml({
         const monthText = `${parsedDate.getMonth() + 1}`;
         const dayText = `${parsedDate.getDate()}`;
         const weekdayText = `${weekdayNames[parsedDate.getDay()]}`;
+        const weekdayIndex = parsedDate.getDay();
+        const isWeekend = weekdayIndex === 0 || weekdayIndex === 6;
 
         return {
           id: schedule?.id ?? "",
@@ -1046,6 +1049,8 @@ function buildGlShiftTablePrintHtml({
           monthText,
           dayText,
           weekdayText,
+          weekdayIndex,
+          isWeekend,
           fallbackText
         };
       })
@@ -1171,9 +1176,9 @@ function buildGlShiftTablePrintHtml({
     const weekdayRow = scheduleList
       .map(
         (schedule) =>
-          `<th scope="col" class="gl-shift-print__header gl-shift-print__schedule-weekday" data-schedule-id="${escapeHtml(
-            schedule.id
-          )}">${schedule.weekdayText || "&nbsp;"}</th>`
+          `<th scope="col" class="gl-shift-print__header gl-shift-print__schedule-weekday${
+            schedule.isWeekend ? " gl-shift-print__schedule-weekday--weekend" : ""
+          }" data-schedule-id="${escapeHtml(schedule.id)}">${schedule.weekdayText || "&nbsp;"}</th>`
       )
       .join("");
 
@@ -1194,7 +1199,8 @@ function buildGlShiftTablePrintHtml({
         const cells = scheduleList
           .map((schedule) => {
             const value = formatPrintCell(entry?.values?.[schedule.id] ?? "—", { placeholder: "—" });
-            return `<td class="gl-shift-print__value">${value}</td>`;
+            const weekendClass = schedule.isWeekend ? " gl-shift-print__value--weekend" : "";
+            return `<td class="gl-shift-print__value${weekendClass}">${value}</td>`;
           })
           .join("");
         return `<tr>${identityCell}${cells}</tr>`;
@@ -1276,7 +1282,9 @@ function buildGlShiftTablePrintHtml({
     .gl-shift-print__schedule-month { background: #f5f5f5; }
     .gl-shift-print__schedule-day, .gl-shift-print__schedule-weekday { font-size: 8.8pt; }
     .gl-shift-print__schedule-weekday { color: #444; }
+    .gl-shift-print__schedule-weekday--weekend { background: #e0e0e0; color: #222; }
     .gl-shift-print__value { text-align: center; vertical-align: middle; }
+    .gl-shift-print__value--weekend { background: #f0f0f0; }
     .gl-shift-print__table tbody tr { break-inside: avoid-page; }
   </style>
 </head>
