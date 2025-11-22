@@ -7,6 +7,7 @@ import {
   onAuthStateChanged,
   signOut
 } from "./operator/firebase.js";
+import { markLaunchFullscreenRequest } from "./shared/fullscreen-request.js";
 import { storeAuthTransfer, clearAuthTransfer } from "./shared/auth-transfer.js";
 import {
   runAuthPreflight,
@@ -130,6 +131,7 @@ class LoginPage {
     }
 
     appendAuthDebugLog("login:click");
+    markLaunchFullscreenRequest();
     this.performLogin();
   }
 
