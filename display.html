@@ -150,7 +150,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      border-radius: inherit;
+      border-radius: calc(var(--side-telop-radius) - 0.1vw);
       pointer-events: none;
     }
 
@@ -171,7 +171,7 @@
       z-index: -1;
       background: linear-gradient(135deg, var(--neon-a), var(--neon-b));
       filter: blur(0.6vw);
-      opacity: .45;
+      opacity: .1;
       transform: scale(1.03);
     }
 
