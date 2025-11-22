@@ -409,7 +409,7 @@ export function updateScheduleContext(app, options = {}) {
   let startText = ensure(startValue);
   let endText = ensure(endValue);
 
-  const applySelection = !assignmentDerivedSelection;
+  const applySelection = Boolean(scheduleKey) || !assignmentDerivedSelection;
 
   if (!applySelection) {
     scheduleKey = "";
@@ -455,7 +455,7 @@ export function updateScheduleContext(app, options = {}) {
     applySelection && eventId && scheduleId
       ? typeof selectionConfirmedOption === "boolean"
         ? selectionConfirmedOption
-        : contextSelectionConfirmed
+        : contextSelectionConfirmed && !assignmentDerivedSelection
       : false;
 
   app.pageContext = {
