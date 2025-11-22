@@ -153,6 +153,7 @@ export function renderQuestions(app) {
   if (viewingNormalTab) {
     const candidates = [
       app.state.currentSchedule,
+      app.state.committedScheduleKey,
       app.state.conflictSelection,
       app.state.lastNormalSchedule
     ];
