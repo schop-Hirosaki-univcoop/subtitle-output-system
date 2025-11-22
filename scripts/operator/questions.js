@@ -679,6 +679,7 @@ export function handleSelectAll(app, event) {
     });
   syncSelectAllState(app);
   updateBatchButtonVisibility(app);
+  updateActionAvailability(app);
 }
 
 export async function handleBatchUnanswer(app) {
