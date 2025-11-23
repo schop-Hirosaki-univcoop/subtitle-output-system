@@ -6,7 +6,7 @@ import { resolveNowShowingReference } from "./questions.js";
 import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn } from "../shared/display-link-logger.js";
 
 const DEFAULT_SIDE_TELOP_ITEMS = [
-  "まずは自己紹介です・・・",
+  "まずは自己紹介です…",
   "質問や不安・悩みをどんどん送ってみよう！",
   "沢山の質問ありがとうございました！"
 ];
