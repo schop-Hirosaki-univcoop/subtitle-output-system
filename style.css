@@ -7162,6 +7162,13 @@ body.sidebar-overlay-open{
     linear-gradient(135deg, rgba(62, 177, 255, 0.08), rgba(255, 255, 255, 0.02));
 }
 
+.side-telop-item.is-active {
+  border-color: rgba(239, 68, 68, 0.6);
+  box-shadow: 0 12px 32px rgba(127, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(86, 16, 24, 0.92), rgba(45, 10, 14, 0.96));
+  color: #ffe4e6;
+}
+
 .side-telop-item__header {
   display: flex;
   align-items: center;
@@ -7176,57 +7183,11 @@ body.sidebar-overlay-open{
 }
 
 .side-telop-item__text {
-  margin: 0.35rem 0 0;
+  margin: 0.4rem 0 0;
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 0.725rem;
   line-height: 1.62;
-}
-
-.side-telop-item__status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #c4d2ea;
-  font-size: 0.675rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  letter-spacing: 0.01em;
-}
-
-.side-telop-item__status::before {
-  content: "";
-  width: 0.55rem;
-  height: 0.55rem;
-  border-radius: 999px;
-  background: linear-gradient(140deg, rgba(103, 123, 173, 0.9), rgba(64, 78, 116, 0.9));
-  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.02);
-}
-
-.side-telop-item__status.is-active {
-  color: #e3f3ff;
-  background: rgba(41, 163, 255, 0.16);
-  border-color: rgba(41, 163, 255, 0.35);
-}
-
-.side-telop-item__status.is-active::before {
-  background: radial-gradient(circle at 40% 40%, #9fe5ff, #2eb1ff 65%);
-  box-shadow: 0 0 0 5px rgba(46, 177, 255, 0.1), 0 0 12px rgba(46, 177, 255, 0.6);
-}
-
-.side-telop-item__meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-top: 0.65rem;
-}
-
-.side-telop-item__hint {
-  color: #a9b6cc;
-  font-size: 0.675rem;
 }
 
 .side-telop-item__activate {
@@ -7244,6 +7205,14 @@ body.sidebar-overlay-open{
   letter-spacing: 0.01em;
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.side-telop-item.is-active .side-telop-item__activate,
+.side-telop-item.is-active .side-telop-item__activate:disabled {
+  opacity: 1;
+  border-color: rgba(248, 113, 113, 0.65);
+  background: linear-gradient(120deg, rgba(248, 113, 113, 0.32), rgba(239, 68, 68, 0.2));
+  color: #ffe4e6;
 }
 
 .side-telop-item__activate:hover:not(:disabled) {

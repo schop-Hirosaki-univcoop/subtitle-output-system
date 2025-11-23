@@ -225,6 +225,9 @@ export function renderSideTelopList(app) {
     const li = document.createElement("li");
     li.className = "side-telop-item";
     const isActive = index === activeIndex;
+    if (isActive) {
+      li.classList.add("is-active");
+    }
     if (selectedIndex === index) {
       li.classList.add("is-selected");
     }
@@ -236,26 +239,6 @@ export function renderSideTelopList(app) {
     const number = document.createElement("span");
     number.className = "side-telop-item__number";
     number.textContent = `#${index + 1}`;
-    const status = document.createElement("span");
-    status.className = "side-telop-item__status";
-    if (isActive) {
-      status.classList.add("is-active");
-      status.textContent = "表示中";
-    } else {
-      status.textContent = "待機中";
-    }
-    header.appendChild(number);
-    header.appendChild(status);
-
-    const body = document.createElement("p");
-    body.className = "side-telop-item__text";
-    body.textContent = ensureString(text) || "（未設定）";
-
-    const meta = document.createElement("div");
-    meta.className = "side-telop-item__meta";
-    const hint = document.createElement("span");
-    hint.className = "side-telop-item__hint";
-    hint.textContent = isActive ? "現在表示中の文言です" : "クリックで選択、ボタンで表示";
     const activate = document.createElement("button");
     activate.type = "button";
     activate.className = "side-telop-item__activate";
@@ -264,9 +247,13 @@ export function renderSideTelopList(app) {
     activate.innerHTML = `<span aria-hidden="true">⏵</span>${isActive ? "表示中" : "この文言を表示"}`;
     activate.disabled = isActive;
     activate.title = isActive ? "現在表示中" : "右サイドテロップを切り替え";
-    meta.append(hint, activate);
 
-    li.append(header, body, meta);
+    header.append(number, activate);
+
+    const body = document.createElement("p");
+    body.className = "side-telop-item__text";
+    body.textContent = ensureString(text) || "（未設定）";
+    li.append(header, body);
     listEl.appendChild(li);
   });
   if (emptyEl) emptyEl.hidden = hasEntries;
