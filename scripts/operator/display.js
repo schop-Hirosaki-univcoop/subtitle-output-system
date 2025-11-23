@@ -15,8 +15,9 @@ export function handleRenderUpdate(app, snapshot) {
   const value = rawValue || {};
   setLamp(app, value.phase);
   const phase = value.phase || "";
-  const isHidden = phase === "hidden";
-  const now = isHidden ? null : value.nowShowing || null;
+  // phase が hidden でも nowShowing 自体は最新値を参照し、送出クリア（nowShowing: null）を
+  // 受け取ったタイミングだけでカード強調やステータスをリセットする。
+  const now = value.nowShowing || null;
   renderNowShowingSummary(app, now, phase);
 
   const updatedAt = normalizeUpdatedAt(value.updatedAt) || 0;
@@ -156,8 +157,7 @@ export function refreshRenderSummary(app) {
 
 function renderNowShowingSummary(app, now, phase = "") {
   const dictionaryEntries = Array.isArray(app.dictionaryEntries) ? app.dictionaryEntries : [];
-  const isHidden = phase === "hidden";
-  const activeNow = !isHidden && now ? now : null;
+  const activeNow = now ? now : null;
 
   if (!activeNow) {
     if (app.dom.render.title) {
@@ -194,11 +194,12 @@ function renderNowShowingSummary(app, now, phase = "") {
   }
 
   if (app.dom.render.question) {
-    const questionHtml = renderRubyHtml(activeNow.question, dictionaryEntries);
+    const questionText = String(activeNow.question || "");
+    const questionHtml = renderRubyHtml(questionText, dictionaryEntries);
     if (questionHtml) {
       app.dom.render.question.innerHTML = questionHtml;
     } else {
-      app.dom.render.question.textContent = "";
+      app.dom.render.question.textContent = questionText;
     }
   }
 }
