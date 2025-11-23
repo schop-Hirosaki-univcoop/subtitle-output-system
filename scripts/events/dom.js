@@ -155,6 +155,7 @@ export function queryDom() {
     chatError: document.getElementById("flow-chat-error"),
     chatUnreadButton: document.getElementById("flow-chat-unread-button"),
     chatUnreadCount: document.getElementById("flow-chat-unread-count"),
+    chatScrollButton: document.getElementById("flow-chat-scroll-button"),
     chatContextMenu: document.getElementById("flow-chat-menu"),
     chatContextCancelButton: document.getElementById("flow-chat-menu-cancel"),
     glConfigStatus: document.getElementById("gl-config-status"),
