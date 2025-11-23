@@ -7,6 +7,9 @@
   <meta name="referrer" content="same-origin">
   <title>Telop Display</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800;900&display=swap" rel="stylesheet">
   <!-- 主要フォントを先読み（同一オリジン想定） -->
   <link rel="preload" as="font" href="assets/fonts/genei-gothic/GenEiGothicP-Bold.woff2" type="font/woff2" crossorigin>
   <link rel="preload" as="font" href="assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2" type="font/woff2" crossorigin>
@@ -221,10 +224,11 @@
       font-size: calc((90vw / 42) * var(--side-telop-scale));
       font-weight: 800;
       letter-spacing: .01em;
+      font-family: "M PLUS Rounded 1c", "GenEiGothicP", "Noto Sans JP", system-ui, sans-serif;
       text-shadow:
-        min(0.08vw, calc(0.08vh * 16 / 9)) min(0.08vw, calc(0.08vh * 16 / 9)) min(0.1vw, calc(0.1vh * 16 / 9)) rgba(30, 100, 225, 1), 
-        0 0 min(0.2vw, calc(0.2vh * 16 / 9)) rgba(30, 100, 225, 1), 
-        0 0 min(0.4vw, calc(0.4vh * 16 / 9)) rgba(38, 152, 255, 1), 
+        min(0.08vw, calc(0.08vh * 16 / 9)) min(0.08vw, calc(0.08vh * 16 / 9)) min(0.1vw, calc(0.1vh * 16 / 9)) rgba(30, 100, 225, 1),
+        0 0 min(0.2vw, calc(0.2vh * 16 / 9)) rgba(30, 100, 225, 1),
+        0 0 min(0.4vw, calc(0.4vh * 16 / 9)) rgba(38, 152, 255, 1),
         0 0 min(0.8vw, calc(0.8vh * 16 / 9)) rgba(38, 152, 255, 0.25), 
         0 0 min(1.2vw, calc(1.2vh * 16 / 9)) rgba(38, 152, 255, 0.1111), 
         0 0 min(1.6vw, calc(1.6vh * 16 / 9)) rgba(38, 152, 255, 0.0625);
