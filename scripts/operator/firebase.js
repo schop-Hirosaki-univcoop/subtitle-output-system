@@ -30,7 +30,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 import { firebaseConfig } from "./constants.js";
-import { getRenderStatePath, getNowShowingPath, getSideTelopPath } from "../shared/channel-paths.js";
+import { getRenderStatePath, getNowShowingPath } from "../shared/channel-paths.js";
 
 const apps = getApps();
 export const app = apps.length ? getApp() : initializeApp(firebaseConfig);
@@ -47,7 +47,6 @@ provider.setCustomParameters({ prompt: "select_account" });
 
 const LEGACY_RENDER_REF = ref(database, "render/state");
 const LEGACY_NOW_SHOWING_REF = ref(database, "render/state/nowShowing");
-const LEGACY_SIDE_TELOP_REF = ref(database, "render/state/sideTelops");
 export const displaySessionRef = ref(database, "render/session");
 export const displayPresenceRootRef = ref(database, "render/displayPresence");
 export const questionsRef = ref(database, "questions");
@@ -75,11 +74,6 @@ export function getRenderRef(eventId = "", scheduleId = "") {
 export function getNowShowingRef(eventId = "", scheduleId = "") {
   const path = getNowShowingPath(eventId, scheduleId);
   return path === "render/state/nowShowing" ? LEGACY_NOW_SHOWING_REF : ref(database, path);
-}
-
-export function getSideTelopsRef(eventId = "", scheduleId = "") {
-  const path = getSideTelopPath(eventId, scheduleId);
-  return path === "render/state/sideTelops" ? LEGACY_SIDE_TELOP_REF : ref(database, path);
 }
 
 export function getOperatorPresenceEventRef(eventId = "") {

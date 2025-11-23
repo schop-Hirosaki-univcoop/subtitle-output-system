@@ -1,13 +1,12 @@
 // questions.js: 質問キューの操作と選択ロジックを管理します。
 import { QUESTIONS_SUBTAB_KEY, GENRE_ALL_VALUE } from "./constants.js";
-import { database, ref, update, set, get, getNowShowingRef, serverTimestamp } from "./firebase.js";
+import { database, ref, update, set, remove, get, getNowShowingRef, serverTimestamp } from "./firebase.js";
 import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn, error as logDisplayLinkError } from "../shared/display-link-logger.js";
 import { normalizeScheduleId } from "../shared/channel-paths.js";
 import { escapeHtml, formatOperatorName, resolveGenreLabel, formatScheduleRange } from "./utils.js";
 
 const SUB_TAB_OPTIONS = new Set(["all", "normal", "puq"]);
 const PICK_UP_NAME_CANONICAL = "pick up question";
-const DEFAULT_SIDE_TELOP = "右サイドテロップ1";
 
 function isPickUpQuestion(record) {
   if (!record || typeof record !== "object") {
@@ -23,21 +22,12 @@ function isPickUpQuestion(record) {
   return radioName === PICK_UP_NAME_CANONICAL;
 }
 
-function getActiveSideTelopRight(app) {
-  const entries = Array.isArray(app?.state?.sideTelopEntries) ? app.state.sideTelopEntries : [];
-  const activeIndexRaw = Number.isInteger(app?.state?.sideTelopActiveIndex) ? app.state.sideTelopActiveIndex : 0;
-  const boundedIndex = Math.min(Math.max(activeIndexRaw, 0), entries.length ? entries.length - 1 : 0);
-  const active = entries[boundedIndex];
-  const text = typeof active === "string" ? active.trim() : "";
-  return text || DEFAULT_SIDE_TELOP;
-}
-
 function normalizeSubTab(value) {
   const candidate = String(value || "").trim();
   return SUB_TAB_OPTIONS.has(candidate) ? candidate : "all";
 }
 
-export function resolveNowShowingReference(app) {
+function resolveNowShowingReference(app) {
   const hasChannelAccessor = app && typeof app.getActiveChannel === "function";
   const { eventId = "", scheduleId = "" } = hasChannelAccessor ? app.getActiveChannel() || {} : {};
   const normalizedSchedule = scheduleId ? normalizeScheduleId(scheduleId) : "";
@@ -661,8 +651,7 @@ export async function handleDisplay(app) {
       name: app.state.selectedRowData.name,
       question: app.state.selectedRowData.question,
       genre,
-      pickup: app.state.selectedRowData.isPickup === true,
-      sideTelopRight: getActiveSideTelopRight(app)
+      pickup: app.state.selectedRowData.isPickup === true
     });
     logDisplayLinkInfo("Display nowShowing updated", {
       eventId,
@@ -830,9 +819,8 @@ export async function clearNowShowing(app) {
     if (Object.keys(updates).length > 0) {
       await update(ref(database), updates);
     }
-    const sideTelopRight = getActiveSideTelopRight(app);
-    await set(nowShowingRef, sideTelopRight ? { sideTelopRight } : {});
-    logDisplayLinkInfo("Display nowShowing cleared", { eventId, scheduleId, sideTelopRight });
+    await remove(nowShowingRef);
+    logDisplayLinkInfo("Display nowShowing cleared", { eventId, scheduleId });
     app.api.fireAndForgetApi({ action: "clearSelectingStatus" });
     app.api.logAction("CLEAR");
     app.toast("送出をクリアしました。", "success");

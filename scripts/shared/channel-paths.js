@@ -75,20 +75,6 @@ export function getNowShowingPath(eventId, scheduleId) {
 }
 
 /**
- * サイドテロップのプリセットを配置するパスを返します。
- * @param {unknown} eventId
- * @param {unknown} scheduleId
- * @returns {string}
- */
-export function getSideTelopPath(eventId, scheduleId) {
-  const base = buildEventScheduleBase(eventId, scheduleId);
-  if (base === LEGACY_RENDER_BASE) {
-    return `${LEGACY_RENDER_BASE}/sideTelops`;
-  }
-  return `${base}/sideTelops`;
-}
-
-/**
  * 指定されたイベント/スケジュールのチャンネル情報をまとめて返します。
  * @param {unknown} eventId
  * @param {unknown} scheduleId
