@@ -52,6 +52,7 @@ body{
 }
 html, body{ height:100%; }
 html{ overflow:auto; }
+.flow-page-root{ font-size:75%; }
 .op-theme{ background:var(--bg); color:var(--text); }
 body.op-theme{
   --page-gap:clamp(1rem, 2.2vw, 1.8rem);
