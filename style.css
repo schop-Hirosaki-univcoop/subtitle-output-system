@@ -7042,12 +7042,13 @@ body.sidebar-overlay-open{
 
 .side-telop-panel {
   margin-top: 1rem;
-  padding: 1rem;
-  border-radius: 1rem;
-  background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.06), transparent 55%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.2);
+  padding: 1.1rem;
+  border-radius: 1.1rem;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.08), transparent 50%),
+    linear-gradient(160deg, rgba(54, 82, 131, 0.45), rgba(17, 22, 35, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
   gap: clamp(0.75rem, 1.2vw, 1rem);
@@ -7092,9 +7093,9 @@ body.sidebar-overlay-open{
 
 .side-telop-panel__description {
   margin: 0.35rem 0 0;
-  color: #d7d9e3;
-  line-height: 1.5;
-  font-size: 0.7125rem;
+  color: #dfe6fb;
+  line-height: 1.55;
+  font-size: 0.725rem;
 }
 
 .side-telop-panel__meta {
@@ -7118,10 +7119,10 @@ body.sidebar-overlay-open{
 
 .side-telop-panel__body {
   margin: 0;
-  padding: 0.75rem;
-  border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 0.9rem;
+  border-radius: 0.9rem;
+  background: rgba(9, 12, 20, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .side-telop-list {
@@ -7130,30 +7131,38 @@ body.sidebar-overlay-open{
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.8rem;
 }
 
 .side-telop-item {
-  padding: 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.02);
+  padding: 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.9rem;
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
+  backdrop-filter: blur(4px);
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
   cursor: pointer;
 }
 
 .side-telop-item:focus-within,
 .side-telop-item.is-selected {
-  border-color: rgba(62, 177, 255, 0.7);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  background: linear-gradient(135deg, rgba(62, 177, 255, 0.08), rgba(255, 255, 255, 0.02));
+  border-color: rgba(62, 177, 255, 0.8);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28), inset 0 0 0 1px rgba(62, 177, 255, 0.28);
+  background: radial-gradient(circle at 12% 20%, rgba(62, 177, 255, 0.08), transparent 55%),
+    linear-gradient(135deg, rgba(62, 177, 255, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.side-telop-item.is-active {
+  border-color: rgba(239, 68, 68, 0.6);
+  box-shadow: 0 16px 36px rgba(127, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(86, 16, 24, 0.9), rgba(45, 10, 14, 0.94));
 }
 
 .side-telop-item__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.85rem;
 }
 
 .side-telop-item__number {
@@ -7163,11 +7172,51 @@ body.sidebar-overlay-open{
 }
 
 .side-telop-item__text {
-  margin: 0.35rem 0 0;
+  margin: 0.45rem 0 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 0.7125rem;
-  line-height: 1.6;
+  font-size: 0.725rem;
+  line-height: 1.62;
+}
+
+.side-telop-item__activate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.65rem;
+  border: 1px solid rgba(62, 177, 255, 0.35);
+  color: #e8f6ff;
+  background: linear-gradient(120deg, rgba(62, 177, 255, 0.35), rgba(29, 203, 255, 0.15));
+  font-weight: 700;
+  font-size: 0.675rem;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.side-telop-item__activate:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(62, 177, 255, 0.4);
+  background: linear-gradient(120deg, rgba(62, 177, 255, 0.55), rgba(29, 203, 255, 0.25));
+}
+
+.side-telop-item__activate:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.22);
+}
+
+.side-telop-item__activate:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #c7d3e8;
+}
+
+.side-telop-item__activate span {
+  display: inline-flex;
+  align-items: center;
 }
 
 .side-telop-empty {
