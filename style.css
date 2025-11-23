@@ -777,7 +777,7 @@ body.logs-open #logs-panel{ display:flex; }
 .pickup-body{ position:relative; display:flex; flex-direction:column; gap:clamp(.9rem, 1.7vw, 1.3rem); }
 .pickup-add-body textarea{ min-height:clamp(6.5rem, 18vh, 12rem); }
 .pickup-tabs{ display:flex; flex-wrap:wrap; gap:clamp(.5rem, 1.2vw, .75rem); margin:0; }
-.pickup-tab{ padding:clamp(.45rem, 1vw, .6rem) clamp(.9rem, 2vw, 1.15rem); border-radius:999px; border:1px solid rgba(70,94,128,.5); background:rgba(12,20,34,.6); color:var(--muted); font-weight:600; cursor:pointer; transition:background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.pickup-tab{ font-size: 75%; padding:clamp(.45rem, 1vw, .6rem) clamp(.9rem, 2vw, 1.15rem); border-radius:999px; border:1px solid rgba(70,94,128,.5); background:rgba(12,20,34,.6); color:var(--muted); font-weight:600; cursor:pointer; transition:background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease; }
 .pickup-tab.is-active,
 .pickup-tab[aria-selected="true"]{ color:var(--text); border-color:rgba(30,200,255,.6); background:linear-gradient(180deg, rgba(30,200,255,.22), rgba(14,110,190,.18)); box-shadow:0 10px 24px rgba(0,0,0,.28); }
 .pickup-tab:focus-visible{ outline:2px solid rgba(30,200,255,.8); outline-offset:2px; }
@@ -1002,6 +1002,7 @@ input[type="checkbox"]{
   color:rgba(150,222,255,.92);
 }
 .tab-group--genre .genre-tab-button{
+  font-size: 75%;
   background:rgba(10,30,52,.72);
   border-color:rgba(52,160,220,.38);
 }
@@ -1021,6 +1022,7 @@ input[type="checkbox"]{
   color:rgba(228,204,255,.9);
 }
 .tab-group--sub .sub-tab-button{
+  font-size: 75%;
   background:rgba(44,20,70,.74);
   border-color:rgba(198,120,255,.35);
 }
@@ -6469,6 +6471,7 @@ body.sidebar-overlay-open{
   gap:.6rem;
 }
 .gl-application-view-tab{
+  font-size:75%;
   padding:.45rem 1.1rem;
   border-radius:999px;
   border:1px solid rgba(80, 110, 150, .55);
