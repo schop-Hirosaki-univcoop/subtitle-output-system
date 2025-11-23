@@ -44,6 +44,7 @@ import * as Display from "./display.js";
 import * as Dialog from "./dialog.js";
 import * as Loader from "./loader.js";
 import * as Pickup from "./pickup.js";
+import * as SideTelop from "./side-telop.js";
 
 const DOM_EVENT_BINDINGS = [
   { element: "loginButton", type: "click", handler: "login", guard: (app) => !app.isEmbedded },
@@ -75,6 +76,9 @@ const DOM_EVENT_BINDINGS = [
   { element: "pickupEditForm", type: "submit", handler: "handlePickupEditSubmit" },
   { element: "pickupConfirmCancelButton", type: "click", handler: "closePickupConfirmDialog" },
   { element: "pickupConfirmAcceptButton", type: "click", handler: "handlePickupDelete" },
+  { element: "sideTelopForm", type: "submit", handler: "handleSideTelopFormSubmit" },
+  { element: "sideTelopFormCancel", type: "click", handler: "handleSideTelopCancel" },
+  { element: "sideTelopList", type: "click", handler: "handleSideTelopListClick" },
   { element: "selectAllCheckbox", type: "change", handler: "handleSelectAll" },
   { element: "batchUnanswerBtn", type: "click", handler: "handleBatchUnanswer" },
   { element: "editCancelButton", type: "click", handler: "closeEditDialog" },
@@ -176,6 +180,18 @@ const MODULE_METHOD_GROUPS = [
       "closePickupEditDialog",
       "closePickupConfirmDialog",
       "handlePickupDelete"
+    ]
+  },
+  {
+    module: SideTelop,
+    methods: [
+      "startSideTelopListener",
+      "stopSideTelopListener",
+      "renderSideTelopList",
+      "handleSideTelopFormSubmit",
+      "handleSideTelopListClick",
+      "handleSideTelopCancel",
+      "syncSideTelopToChannel"
     ]
   },
   {
@@ -382,6 +398,7 @@ export class OperatorApp {
     this.pickupLoaderSetup = false;
     this.pickupLoaderCurrentStep = 0;
     this.pickupLoaderCompleted = false;
+    this.sideTelopUnsubscribe = null;
     this.eventsBranch = {};
     this.schedulesBranch = {};
     this.authFlow = "idle";
@@ -1226,6 +1243,10 @@ export class OperatorApp {
         logDisplayLinkError("Render state monitor error", error);
       }
     );
+
+    if (typeof this.startSideTelopListener === "function") {
+      this.startSideTelopListener();
+    }
     this.refreshOperatorPresenceSubscription();
     this.renderChannelBanner();
     this.evaluateScheduleConflict();
@@ -2544,6 +2565,9 @@ export class OperatorApp {
     this.state.channelAssignment = enriched;
     this.state.autoLockAttemptKey = "";
     this.state.autoLockAttemptAt = 0;
+    if (typeof this.syncSideTelopToChannel === "function") {
+      this.syncSideTelopToChannel();
+    }
   }
 
   /**
@@ -3541,6 +3565,7 @@ export class OperatorApp {
       });
       this.startDictionaryListener();
       this.startPickupListener();
+      this.startSideTelopListener();
       this.startDisplaySessionMonitor();
       this.startDisplayPresenceMonitor();
       this.fetchLogs().catch((error) => {
@@ -3758,6 +3783,9 @@ export class OperatorApp {
     }
     if (typeof this.stopPickupListener === "function") {
       this.stopPickupListener();
+    }
+    if (typeof this.stopSideTelopListener === "function") {
+      this.stopSideTelopListener();
     }
     if (this.renderTicker) {
       clearInterval(this.renderTicker);
