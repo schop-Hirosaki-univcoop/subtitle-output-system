@@ -8,11 +8,11 @@
   <title>Telop Display</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <!-- 主要フォントを先読み（同一オリジン想定） -->
+  <link rel="preload" as="font" href="assets/fonts/rounded-mplus-2p/rounded-mplus-2p-medium.ttf" type="font/ttf" crossorigin>
+  <link rel="preload" as="font" href="assets/fonts/rounded-mplus-2p/rounded-mplus-2p-bold.ttf" type="font/ttf" crossorigin>
   <link rel="preload" as="font" href="assets/fonts/genei-gothic/GenEiGothicP-Bold.woff2" type="font/woff2" crossorigin>
   <link rel="preload" as="font" href="assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2" type="font/woff2" crossorigin>
   <link rel="preload" as="font" href="assets/fonts/genei-gothic/GenEiGothicP-H-KL.woff2" type="font/woff2" crossorigin>
-  <link rel="preload" as="font" href="assets/fonts/rounded-mplus-2p/rounded-mplus-2p-medium.ttf" type="font/ttf" crossorigin>
-  <link rel="preload" as="font" href="assets/fonts/rounded-mplus-2p/rounded-mplus-2p-bold.ttf" type="font/ttf" crossorigin>
   <style>
     /* === GenEi Gothic P / H-KL を登録（アップ済みの woff2 を使用） === */
     @font-face{
@@ -260,7 +260,7 @@
       font-size: calc(90vw / 35);
       font-weight: 700;
       letter-spacing: .01em;
-      font-family: "Rounded Mplus 2p", "GenEiGothicP", "Noto Sans JP", system-ui, sans-serif;
+      font-family: "Rounded Mplus 2p", system-ui, sans-serif;
       text-shadow:
         min(0.08vw, calc(0.08vh * 16 / 9)) min(0.08vw, calc(0.08vh * 16 / 9)) min(0.1vw, calc(0.1vh * 16 / 9)) rgba(30, 100, 225, 1),
         0 0 min(0.2vw, calc(0.2vh * 16 / 9)) rgba(30, 100, 225, 1),
