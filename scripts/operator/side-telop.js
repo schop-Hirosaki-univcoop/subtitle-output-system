@@ -253,7 +253,22 @@ export function renderSideTelopList(app) {
     body.className = "side-telop-item__text";
     body.textContent = ensureString(text) || "（未設定）";
 
-    li.append(header, body);
+    const meta = document.createElement("div");
+    meta.className = "side-telop-item__meta";
+    const hint = document.createElement("span");
+    hint.className = "side-telop-item__hint";
+    hint.textContent = isActive ? "現在表示中の文言です" : "クリックで選択、ボタンで表示";
+    const activate = document.createElement("button");
+    activate.type = "button";
+    activate.className = "side-telop-item__activate";
+    activate.dataset.action = "activate";
+    activate.setAttribute("aria-label", `#${index + 1} を右サイドに表示する`);
+    activate.innerHTML = `<span aria-hidden="true">⏵</span>${isActive ? "表示中" : "この文言を表示"}`;
+    activate.disabled = isActive;
+    activate.title = isActive ? "現在表示中" : "右サイドテロップを切り替え";
+    meta.append(hint, activate);
+
+    li.append(header, body, meta);
     listEl.appendChild(li);
   });
   if (emptyEl) emptyEl.hidden = hasEntries;
