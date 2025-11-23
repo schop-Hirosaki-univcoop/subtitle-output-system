@@ -23,6 +23,14 @@ function resolve(id) {
       return prefixed;
     }
   }
+
+  // 予期せずプレフィックスが外れている環境でも要素を取得できるよう、
+  // デフォルトの "op-" プレフィックスを試す。
+  const fallbackPrefixed = document.getElementById(`op-${id}`);
+  if (fallbackPrefixed) {
+    return fallbackPrefixed;
+  }
+
   return document.getElementById(id);
 }
 
