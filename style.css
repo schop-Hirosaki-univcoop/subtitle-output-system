@@ -7042,7 +7042,7 @@ body.sidebar-overlay-open{
 
 .side-telop-panel {
   margin-top: 1rem;
-  padding: clamp(1rem, 2vw, 1.5rem);
+  padding: 1rem;
   border-radius: 1rem;
   background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.06), transparent 55%),
     linear-gradient(145deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0));
