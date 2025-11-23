@@ -3426,31 +3426,6 @@ body.events-page .flow-stage-panel{
   outline-offset:2px;
 }
 
-.chat-scroll-bottom{
-  align-self:center;
-  margin-top:.5rem;
-  padding:.5rem 1.1rem;
-  border-radius:999px;
-  border:1px solid rgba(110,170,255,.6);
-  background:rgba(8,28,58,.92);
-  color:#f1f7ff;
-  font-size:0.68rem;
-  font-weight:700;
-  letter-spacing:.02em;
-  cursor:pointer;
-  transition:transform .18s ease, box-shadow .18s ease;
-}
-
-.chat-scroll-bottom:hover{
-  transform:translateY(-1px);
-  box-shadow:0 14px 28px rgba(6,18,40,.38);
-}
-
-.chat-scroll-bottom:focus-visible{
-  outline:2px solid rgba(126,186,248,.95);
-  outline-offset:2px;
-}
-
 .chat-form{
   display:flex;
   flex-direction:column;
