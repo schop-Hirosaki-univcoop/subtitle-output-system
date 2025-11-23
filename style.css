@@ -7024,6 +7024,85 @@ body.sidebar-overlay-open{
   box-shadow:none;
 }
 
+.side-telop-panel {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+}
+
+.side-telop-panel__heading h2 {
+  margin: 0;
+}
+
+.side-telop-panel__description {
+  margin: 0.25rem 0 0;
+  color: #d7d9e3;
+  line-height: 1.5;
+}
+
+.side-telop-panel__body {
+  margin: 0.75rem 0;
+}
+
+.side-telop-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.side-telop-item {
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.side-telop-item__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.side-telop-item__number {
+  font-weight: 700;
+  color: #e0e3ff;
+}
+
+.side-telop-item__text {
+  margin: 0.4rem 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.side-telop-item__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.side-telop-empty {
+  margin: 0;
+  color: #d7d9e3;
+}
+
+.side-telop-form label {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.side-telop-form__actions {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
 @media (max-width: 640px){
   .flow-progress{
     gap:.25rem;
