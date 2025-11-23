@@ -120,9 +120,7 @@
       backdrop-filter: blur(0.8vw) saturate(140%);
       -webkit-backdrop-filter: blur(0.8vw) saturate(140%);
       color: #f5f7ff;
-      font-family: "GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
       font-size: calc((90vw / 42) * var(--side-telop-scale));
-      font-weight: 700;
       letter-spacing: .02em;
       line-height: 1.2;
       text-align: center;
@@ -136,6 +134,11 @@
       font-feature-settings: "palt" 1;
     }
 
+    .side-telop-left {
+      font-family: "GenEiGothicP","Noto Sans JP",system-ui,sans-serif;
+      font-weight: 700;
+    }
+    
     /* サイドテロップ用：グラデ枠＋外側グロー */
     .side-telop::before,
     .side-telop::after {
