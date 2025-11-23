@@ -831,15 +831,19 @@ export async function clearNowShowing(app) {
       await update(ref(database), updates);
     }
     const sideTelopRight = getActiveSideTelopRight(app);
-    await update(nowShowingRef, {
-      uid: null,
-      participantId: null,
-      name: null,
-      question: null,
-      genre: null,
-      pickup: null,
+    const clearedNowShowing = {
+      // バリデーション要件を満たしたまま「送出なし」を表現するため、
+      // name/question を空文字で残しつつその他の値も初期化する。
+      name: "",
+      question: "",
+      uid: "",
+      participantId: "",
+      genre: "",
+      pickup: false,
       ...(sideTelopRight ? { sideTelopRight } : {})
-    });
+    };
+
+    await update(nowShowingRef, clearedNowShowing);
     logDisplayLinkInfo("Display nowShowing cleared", { eventId, scheduleId, sideTelopRight });
     app.api.fireAndForgetApi({ action: "clearSelectingStatus" });
     app.api.logAction("CLEAR");
