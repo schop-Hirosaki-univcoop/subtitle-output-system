@@ -7,7 +7,7 @@ import { escapeHtml, formatOperatorName, resolveGenreLabel, formatScheduleRange 
 
 const SUB_TAB_OPTIONS = new Set(["all", "normal", "puq"]);
 const PICK_UP_NAME_CANONICAL = "pick up question";
-const DEFAULT_SIDE_TELOP = "まずは自己紹介です・・・";
+const DEFAULT_SIDE_TELOP = "まずは自己紹介です…";
 
 function isPickUpQuestion(record) {
   if (!record || typeof record !== "object") {
