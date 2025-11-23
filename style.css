@@ -53,7 +53,7 @@ body{
 }
 html, body{ height:100%; }
 html{ overflow:auto; }
-.flow-page-root{ font-size:75%; }
+.flow-page-root{ font-size:85%; }
 .op-theme{ background:var(--bg); color:var(--text); }
 body.op-theme{
   --page-gap:clamp(1rem, 2.2vw, 1.8rem);
@@ -76,7 +76,7 @@ body.events-page{
 }
 
 body.flow-page{
-  font-size:75%;
+  font-size:85%;
 }
 
 /* 背景全体にノイズ感のあるグラデーションを載せ、イベントUIに奥行きを付与 */
@@ -542,14 +542,14 @@ body.logs-open #logs-panel{ display:flex; }
 }
 .print-preview__title{
   margin:0;
-  font-size:clamp(0.7125rem, 1.275vw, 0.825rem);
+  font-size:clamp(0.9rem, 1.5vw, 1rem);
   font-weight:700;
   color:#e7f1ff;
 }
 .print-preview__meta{
   margin:.1rem 0 0;
   color:var(--muted);
-  font-size:0.675rem;
+  font-size:0.75rem;
 }
 .print-preview__meta:empty{ display:none; }
 .print-preview__actions{
@@ -874,7 +874,7 @@ body.logs-open #logs-panel{ display:flex; }
   border:1px solid rgba(70,94,128,.6);
   background:rgba(12,18,32,.85);
   color:var(--text);
-  font-size:0.7125rem;
+  font-size:0.95rem;
   transition:border-color .18s ease, box-shadow .18s ease;
 }
 
@@ -2105,7 +2105,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 .btn-sm{
   padding:clamp(.35rem, .8vw, .45rem) clamp(.65rem, 1.4vw, .8rem);
-  font-size:0.6rem;
+  font-size:0.7rem;
   border-radius:clamp(.6rem, 1vw, .7rem);
   gap:clamp(.25rem, .6vw, .4rem);
 }
@@ -2244,12 +2244,12 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 
 .modal-field label{
-  font-size:0.675rem;
+  font-size:0.75rem;
   color:var(--muted);
 }
 
 .modal-label{
-  font-size:0.675rem;
+  font-size:0.75rem;
   color:var(--muted);
   font-weight:600;
 }
@@ -2265,7 +2265,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 }
 
 .modal-helper{
-  font-size:0.6375rem;
+  font-size:0.85rem;
   color:var(--muted);
   margin:0;
 }
@@ -2421,7 +2421,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 .dialog-calendar-date span{
   display:inline-block;
-  font-size:0.7125rem;
+  font-size:0.9rem;
   font-weight:600;
   letter-spacing:.05em;
 }
@@ -3717,7 +3717,7 @@ body.events-page .flow-stage-panel{
 
 .sidebar-card__name{
   margin:0;
-  font-size:0.825rem;
+  font-size:0.9rem;
   font-weight:700;
   letter-spacing:.015em;
   color:#f6f9ff;
@@ -4158,6 +4158,7 @@ body.sidebar-overlay-open{
 }
 
 .flow-selection-summary{
+  font-size: 75%;
   display:block;
   width:100%;
   box-sizing:border-box;
@@ -4944,6 +4945,7 @@ body.sidebar-overlay-open{
 }
 
 #flow-panel-participants .qa-embedded .admin-controls .file-input{
+  font-size: 75%;
   position:relative;
   overflow:hidden;
   display:inline-flex;
