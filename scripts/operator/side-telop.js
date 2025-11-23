@@ -5,7 +5,12 @@ import { normalizeScheduleId } from "../shared/channel-paths.js";
 import { resolveNowShowingReference } from "./questions.js";
 import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn } from "../shared/display-link-logger.js";
 
-const DEFAULT_SIDE_TELOP = "右サイドテロップ1";
+const DEFAULT_SIDE_TELOP_ITEMS = [
+  "まずは自己紹介です・・・",
+  "質問や不安・悩みをどんどん送ってみよう！",
+  "沢山の質問ありがとうございました！"
+];
+const DEFAULT_SIDE_TELOP = DEFAULT_SIDE_TELOP_ITEMS[0];
 
 function ensureString(value) {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
@@ -25,7 +30,7 @@ function resolveSideTelopChannel(app) {
 function normalizeItems(items) {
   const base = Array.isArray(items) ? items : [];
   const normalized = base.map((item) => ensureString(item)).filter((text) => text.length > 0);
-  return normalized.length ? normalized : [DEFAULT_SIDE_TELOP];
+  return normalized.length ? normalized : [...DEFAULT_SIDE_TELOP_ITEMS];
 }
 
 function clampActiveIndex(activeIndex, items) {
@@ -163,7 +168,7 @@ export async function startSideTelopListener(app) {
   try {
     const initialSnap = await get(sideTelopRef);
     if (!initialSnap?.exists?.()) {
-      await persistSideTelops(app, [DEFAULT_SIDE_TELOP], 0);
+      await persistSideTelops(app, DEFAULT_SIDE_TELOP_ITEMS, 0);
     }
   } catch (error) {
     logDisplayLinkWarn("Failed to seed side telops", error);
