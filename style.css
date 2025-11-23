@@ -330,13 +330,14 @@ html.embedded-view .site-footer{ display:none !important; }
   display:flex;
   align-items:flex-start;
   gap:0.55rem;
-  font-size:0.6525rem;
+  font-size:0.8rem;
   line-height:1.6;
   color:var(--muted);
   transition:color .2s ease;
 }
 
 .login-status__label{
+  align-self: center;
   flex:1 1 auto;
 }
 
