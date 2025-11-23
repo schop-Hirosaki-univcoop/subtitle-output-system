@@ -72,7 +72,7 @@ function renderSideTelopControls(app, enabled) {
     if (el) el.disabled = disabled;
   });
   if (app.dom.sideTelopList) {
-    app.dom.sideTelopList.querySelectorAll("button, input[type='radio']").forEach((el) => {
+    app.dom.sideTelopList.querySelectorAll("button").forEach((el) => {
       el.disabled = disabled;
     });
   }
@@ -224,6 +224,7 @@ export function renderSideTelopList(app) {
   entries.forEach((text, index) => {
     const li = document.createElement("li");
     li.className = "side-telop-item";
+    const isActive = index === activeIndex;
     if (selectedIndex === index) {
       li.classList.add("is-selected");
     }
@@ -235,24 +236,37 @@ export function renderSideTelopList(app) {
     const number = document.createElement("span");
     number.className = "side-telop-item__number";
     number.textContent = `#${index + 1}`;
-    const radioLabel = document.createElement("label");
-    radioLabel.className = "side-telop-item__radio chk";
-    const radio = document.createElement("input");
-    radio.type = "radio";
-    radio.name = "side-telop-active";
-    radio.value = String(index);
-    radio.checked = index === activeIndex;
-    radio.dataset.action = "activate";
-    radioLabel.appendChild(radio);
-    radioLabel.appendChild(document.createTextNode(" 表示中"));
+    const status = document.createElement("span");
+    status.className = "side-telop-item__status";
+    if (isActive) {
+      status.classList.add("is-active");
+      status.textContent = "表示中";
+    } else {
+      status.textContent = "待機中";
+    }
     header.appendChild(number);
-    header.appendChild(radioLabel);
+    header.appendChild(status);
 
     const body = document.createElement("p");
     body.className = "side-telop-item__text";
     body.textContent = ensureString(text) || "（未設定）";
 
-    li.append(header, body);
+    const meta = document.createElement("div");
+    meta.className = "side-telop-item__meta";
+    const hint = document.createElement("span");
+    hint.className = "side-telop-item__hint";
+    hint.textContent = isActive ? "現在表示中の文言です" : "クリックで選択、ボタンで表示";
+    const activate = document.createElement("button");
+    activate.type = "button";
+    activate.className = "side-telop-item__activate";
+    activate.dataset.action = "activate";
+    activate.setAttribute("aria-label", `#${index + 1} を右サイドに表示する`);
+    activate.innerHTML = `<span aria-hidden="true">⏵</span>${isActive ? "表示中" : "この文言を表示"}`;
+    activate.disabled = isActive;
+    activate.title = isActive ? "現在表示中" : "右サイドテロップを切り替え";
+    meta.append(hint, activate);
+
+    li.append(header, body, meta);
     listEl.appendChild(li);
   });
   if (emptyEl) emptyEl.hidden = hasEntries;
