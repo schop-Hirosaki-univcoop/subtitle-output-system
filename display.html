@@ -79,6 +79,10 @@
       --side-telop-radius: 1vw;
       --side-telop-padding: 0.65vw 1vw;
       --side-telop-scale: 0.8;
+      --side-telop-right-bg: linear-gradient(130deg, #1ad3ff 0%, #1972ff 100%);
+      --side-telop-right-shadow: 0 0.55vw 1.35vw rgba(0, 0, 0, 0.5);
+      --side-telop-right-accent: #114ba8;
+      --side-telop-right-highlight: linear-gradient(120deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0));
     }
     /* 低負荷モード（?lowgpu=1 で body.low-gpu を付与） */
     .low-gpu {
@@ -203,6 +207,50 @@
     }
     .side-telop__line--secondary:empty {
       display: none;
+    }
+
+    /* --- 右サイド専用デザイン（文字のみ＋ドロップシャドウ＆グロー） --- */
+    #side-telop-right {
+      background: none;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+      min-width: auto;
+      max-width: 42vw;
+      font-size: calc((90vw / 42) * var(--side-telop-scale));
+      font-weight: 800;
+      letter-spacing: .01em;
+      text-shadow:
+        0.12vw 0.16vw 0.4vw rgba(0, 0, 0, 0.65),
+        0 0 0.85vw rgba(38, 152, 255, 0.55),
+        0 0 1.45vw rgba(38, 152, 255, 0.35);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      color: #eaf5ff;
+    }
+    #side-telop-right::before,
+    #side-telop-right::after { content: none; }
+    #side-telop-right .side-telop__label { display: none; }
+    #side-telop-right .side-telop__body {
+      align-items: center;
+      gap: 0.08vw;
+      text-align: center;
+    }
+    #side-telop-right .side-telop__line--primary {
+      font-size: 1em;
+      line-height: 1.12;
+    }
+    #side-telop-right .side-telop__line--secondary {
+      font-size: 0.9em;
+      opacity: 0.9;
+      line-height: 1.05;
+    }
+
+    /* 左側は既存のネオン枠を維持 */
+    #side-telop-left::before,
+    #side-telop-left::after {
+      content: "";
     }
     @media (max-width: 1024px){
       .side-telops { inset: 2.2vw; gap: 1vw; }
