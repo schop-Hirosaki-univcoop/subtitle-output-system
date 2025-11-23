@@ -52,6 +52,7 @@ body{
 }
 html, body{ height:100%; }
 html{ overflow:auto; }
+.flow-page-root{ font-size:75%; }
 .op-theme{ background:var(--bg); color:var(--text); }
 body.op-theme{
   --page-gap:clamp(1rem, 2.2vw, 1.8rem);
@@ -71,6 +72,10 @@ body.op-theme{
 body.events-page{
   overflow:hidden;
   padding-block-end:var(--page-padding-top);
+}
+
+body.flow-page{
+  font-size:75%;
 }
 
 /* 背景全体にノイズ感のあるグラデーションを載せ、イベントUIに奥行きを付与 */
@@ -7035,6 +7040,29 @@ body.sidebar-overlay-open{
   display: flex;
   flex-direction: column;
   gap: clamp(0.75rem, 1.2vw, 1rem);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(108, 132, 168, 0.6) rgba(18, 24, 38, 0.7);
+}
+
+.side-telop-panel::-webkit-scrollbar { width: 10px; }
+.side-telop-panel::-webkit-scrollbar-track {
+  background: rgba(10, 16, 26, 0.7);
+  border-radius: 999px;
+}
+
+.side-telop-panel::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(46, 141, 255, 0.5), rgba(30, 200, 255, 0.35));
+  border-radius: 999px;
+  border: 2px solid rgba(9, 14, 24, 0.9);
+}
+
+.side-telop-panel::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(46, 141, 255, 0.7), rgba(30, 200, 255, 0.5));
 }
 
 .side-telop-panel__header {
