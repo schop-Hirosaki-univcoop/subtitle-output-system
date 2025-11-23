@@ -52,6 +52,7 @@ export function createInitialState(autoScroll = true) {
     sideTelopLastPushedText: "",
     sideTelopEntries: [],
     sideTelopActiveIndex: 0,
-    sideTelopEditingIndex: null
+    sideTelopEditingIndex: null,
+    sideTelopSelectedIndex: null
   };
 }
