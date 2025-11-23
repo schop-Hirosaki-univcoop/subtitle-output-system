@@ -11,6 +11,8 @@
   <link rel="preload" as="font" href="assets/fonts/genei-gothic/GenEiGothicP-Bold.woff2" type="font/woff2" crossorigin>
   <link rel="preload" as="font" href="assets/fonts/genei-gothic/GenEiGothicP-SemiBold.woff2" type="font/woff2" crossorigin>
   <link rel="preload" as="font" href="assets/fonts/genei-gothic/GenEiGothicP-H-KL.woff2" type="font/woff2" crossorigin>
+  <link rel="preload" as="font" href="assets/fonts/rounded-mplus-2p/rounded-mplus-2p-medium.ttf" type="font/ttf" crossorigin>
+  <link rel="preload" as="font" href="assets/fonts/rounded-mplus-2p/rounded-mplus-2p-bold.ttf" type="font/ttf" crossorigin>
   <style>
     /* === GenEi Gothic P / H-KL を登録（アップ済みの woff2 を使用） === */
     @font-face{
@@ -182,6 +184,7 @@
       transition: opacity .18s ease, transform .18s ease;
       transform-origin: center;
       overflow: visible;
+      font-feature-settings: "palt" 1;
     }
 
     /* サイドテロップ用：グラデ枠＋外側グロー */
