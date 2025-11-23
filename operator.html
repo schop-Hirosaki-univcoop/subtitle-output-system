@@ -1369,13 +1369,16 @@
           </form>
         </section>
 
-        <section id="side-telop-panel" class="side-telop-panel" aria-labelledby="side-telop-title">
+        <section id="side-telop-panel" class="module module--secondary side-telop-panel" aria-labelledby="side-telop-title">
           <div class="side-telop-panel__header">
             <div class="side-telop-panel__heading">
               <h2 id="side-telop-title">右サイドテロップ</h2>
               <p class="side-telop-panel__description">
                 表示する文言をあらかじめ登録し、どれか1つを常に表示します。日程を選択すると編集できます。
               </p>
+            </div>
+            <div class="side-telop-panel__meta" aria-hidden="true">
+              <span class="side-telop-panel__pill">常時表示</span>
             </div>
           </div>
           <div class="side-telop-panel__body">
@@ -1392,8 +1395,15 @@
               required
             ></textarea>
             <div class="side-telop-form__actions">
-              <button id="side-telop-submit" class="btn btn-primary btn-sm" type="submit">追加</button>
-              <button id="side-telop-cancel" class="btn btn-ghost btn-sm" type="button" hidden>キャンセル</button>
+              <div class="side-telop-form__toolbar">
+                <button id="side-telop-edit" class="btn btn-ghost btn-sm" type="button" disabled>編集</button>
+                <button id="side-telop-delete" class="btn btn-ghost btn-sm" type="button" disabled>削除</button>
+                <span id="side-telop-selection-label" class="side-telop-selection" role="status">テロップを選択してください</span>
+              </div>
+              <div class="side-telop-form__submit">
+                <button id="side-telop-submit" class="btn btn-primary btn-sm" type="submit">追加</button>
+                <button id="side-telop-cancel" class="btn btn-ghost btn-sm" type="button" hidden>キャンセル</button>
+              </div>
             </div>
           </form>
         </section>

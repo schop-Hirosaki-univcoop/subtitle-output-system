@@ -39,6 +39,18 @@ function clampActiveIndex(activeIndex, items) {
   return Math.min(Math.max(normalized, 0), items.length - 1);
 }
 
+function clampSelectedIndex(selectedIndex, items, fallbackIndex = null) {
+  if (!Array.isArray(items) || !items.length) return null;
+  if (Number.isInteger(selectedIndex)) {
+    const normalized = Math.min(Math.max(selectedIndex, 0), items.length - 1);
+    return normalized;
+  }
+  if (Number.isInteger(fallbackIndex)) {
+    return clampActiveIndex(fallbackIndex, items);
+  }
+  return null;
+}
+
 function renderSideTelopEmptyState(app, visible) {
   if (app.dom.sideTelopEmpty) {
     app.dom.sideTelopEmpty.hidden = !visible;
@@ -50,7 +62,13 @@ function renderSideTelopEmptyState(app, visible) {
 
 function renderSideTelopControls(app, enabled) {
   const disabled = !enabled;
-  [app.dom.sideTelopFormSubmit, app.dom.sideTelopFormCancel, app.dom.sideTelopText].forEach((el) => {
+  [
+    app.dom.sideTelopFormSubmit,
+    app.dom.sideTelopFormCancel,
+    app.dom.sideTelopText,
+    app.dom.sideTelopEditButton,
+    app.dom.sideTelopDeleteButton
+  ].forEach((el) => {
     if (el) el.disabled = disabled;
   });
   if (app.dom.sideTelopList) {
@@ -123,6 +141,7 @@ export async function startSideTelopListener(app) {
     app.state.sideTelopEntries = [];
     app.state.sideTelopActiveIndex = 0;
     app.state.sideTelopEditingIndex = null;
+    app.state.sideTelopSelectedIndex = null;
     app.state.sideTelopChannelKey = "";
     app.state.sideTelopLastPushedText = "";
     renderSideTelopList(app);
@@ -135,6 +154,7 @@ export async function startSideTelopListener(app) {
     app.state.sideTelopEntries = [];
     app.state.sideTelopActiveIndex = 0;
     app.state.sideTelopEditingIndex = null;
+    app.state.sideTelopSelectedIndex = null;
     app.state.sideTelopLastPushedText = "";
     renderSideTelopList(app);
   } else {
@@ -154,6 +174,9 @@ export async function startSideTelopListener(app) {
     app.state.sideTelopActiveIndex = activeIndex;
     if (!Number.isInteger(app.state.sideTelopEditingIndex) || app.state.sideTelopEditingIndex >= items.length) {
       app.state.sideTelopEditingIndex = null;
+    }
+    if (!Number.isInteger(app.state.sideTelopSelectedIndex) || app.state.sideTelopSelectedIndex >= items.length) {
+      app.state.sideTelopSelectedIndex = clampSelectedIndex(null, items, activeIndex);
     }
     app.state.sideTelopChannelKey = channelKey;
     renderSideTelopList(app);
@@ -187,16 +210,25 @@ export function renderSideTelopList(app) {
   const emptyEl = app.dom?.sideTelopEmpty;
   const entries = Array.isArray(app.state?.sideTelopEntries) ? app.state.sideTelopEntries : [];
   const activeIndex = clampActiveIndex(app.state?.sideTelopActiveIndex ?? 0, entries);
+  const selectedIndex = clampSelectedIndex(app.state?.sideTelopSelectedIndex, entries, activeIndex);
+  app.state.sideTelopSelectedIndex = selectedIndex;
   if (!listEl) return;
   listEl.innerHTML = "";
   const hasEntries = entries.length > 0;
   renderSideTelopEmptyState(app, !hasEntries);
-  if (!hasEntries) return;
+  if (!hasEntries) {
+    updateSideTelopSelectionUI(app, entries);
+    return;
+  }
 
   entries.forEach((text, index) => {
     const li = document.createElement("li");
     li.className = "side-telop-item";
+    if (selectedIndex === index) {
+      li.classList.add("is-selected");
+    }
     li.dataset.index = String(index);
+    li.tabIndex = 0;
 
     const header = document.createElement("div");
     header.className = "side-telop-item__header";
@@ -220,25 +252,7 @@ export function renderSideTelopList(app) {
     body.className = "side-telop-item__text";
     body.textContent = ensureString(text) || "（未設定）";
 
-    const actions = document.createElement("div");
-    actions.className = "side-telop-item__actions";
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "btn btn-ghost btn-sm";
-    editBtn.dataset.action = "edit";
-    editBtn.textContent = "編集";
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "btn btn-ghost btn-sm";
-    deleteBtn.dataset.action = "delete";
-    deleteBtn.textContent = "削除";
-    if (entries.length <= 1) {
-      deleteBtn.disabled = true;
-      deleteBtn.title = "少なくとも1件は残してください";
-    }
-    actions.append(editBtn, deleteBtn);
-
-    li.append(header, body, actions);
+    li.append(header, body);
     listEl.appendChild(li);
   });
   if (emptyEl) emptyEl.hidden = hasEntries;
@@ -246,6 +260,7 @@ export function renderSideTelopList(app) {
     app.dom.sideTelopText.value = "";
   }
   updateSideTelopFormLabels(app, entries, app.state.sideTelopEditingIndex);
+  updateSideTelopSelectionUI(app, entries);
 }
 
 function updateSideTelopFormLabels(app, entriesOverride = null, editingIndexOverride = undefined) {
@@ -275,6 +290,99 @@ function updateSideTelopFormLabels(app, entriesOverride = null, editingIndexOver
   }
 }
 
+function updateSideTelopSelectionUI(app, entriesOverride = null) {
+  const entries = Array.isArray(entriesOverride)
+    ? entriesOverride
+    : Array.isArray(app.state?.sideTelopEntries)
+    ? app.state.sideTelopEntries
+    : [];
+  const selectedIndex = clampSelectedIndex(app.state?.sideTelopSelectedIndex, entries, app.state?.sideTelopActiveIndex);
+  const hasSelection = Number.isInteger(selectedIndex);
+  const selectionLabel = app.dom?.sideTelopSelectionLabel;
+  const editBtn = app.dom?.sideTelopEditButton;
+  const deleteBtn = app.dom?.sideTelopDeleteButton;
+
+  if (app.dom?.sideTelopList) {
+    app.dom.sideTelopList.querySelectorAll(".side-telop-item").forEach((itemEl) => {
+      const index = Number(itemEl.dataset.index || "-1");
+      itemEl.classList.toggle("is-selected", index === selectedIndex);
+    });
+  }
+
+  if (selectionLabel) {
+    selectionLabel.textContent = hasSelection
+      ? `#${(selectedIndex || 0) + 1} を選択中`
+      : "テロップを選択してください";
+  }
+
+  if (editBtn) {
+    editBtn.disabled = !hasSelection;
+  }
+
+  if (deleteBtn) {
+    deleteBtn.disabled = !hasSelection || entries.length <= 1;
+    deleteBtn.title = deleteBtn.disabled && entries.length <= 1 ? "少なくとも1件は残してください" : "";
+  }
+}
+
+function setSideTelopSelection(app, nextIndex, entriesOverride = null) {
+  const entries = Array.isArray(entriesOverride)
+    ? entriesOverride
+    : Array.isArray(app.state?.sideTelopEntries)
+    ? app.state.sideTelopEntries
+    : [];
+  const selection = clampSelectedIndex(nextIndex, entries, app.state?.sideTelopActiveIndex);
+  app.state.sideTelopSelectedIndex = selection;
+  updateSideTelopSelectionUI(app, entries);
+  return selection;
+}
+
+export function handleSideTelopListKeydown(app, event) {
+  if (!(event?.target instanceof HTMLElement)) return;
+  const itemEl = event.target.closest(".side-telop-item");
+  if (!itemEl) return;
+  const index = Number(itemEl.dataset.index || "-1");
+  if (!Number.isInteger(index) || index < 0) return;
+  if (event.key === "Enter" || event.key === " ") {
+    setSideTelopSelection(app, index);
+  }
+}
+
+export function handleSideTelopEditRequest(app) {
+  const entries = Array.isArray(app.state?.sideTelopEntries) ? app.state.sideTelopEntries : [];
+  const selectedIndex = clampSelectedIndex(app.state?.sideTelopSelectedIndex, entries, app.state?.sideTelopActiveIndex);
+  if (!Number.isInteger(selectedIndex)) {
+    app.toast("テロップを選択してください。", "error");
+    return;
+  }
+  app.state.sideTelopEditingIndex = selectedIndex;
+  if (app.dom.sideTelopText) {
+    app.dom.sideTelopText.value = ensureString(entries[selectedIndex] || "");
+    app.dom.sideTelopText.focus();
+  }
+  updateSideTelopFormLabels(app, entries, selectedIndex);
+}
+
+export function handleSideTelopDeleteRequest(app) {
+  const entries = Array.isArray(app.state?.sideTelopEntries) ? [...app.state.sideTelopEntries] : [];
+  const selectedIndex = clampSelectedIndex(app.state?.sideTelopSelectedIndex, entries, app.state?.sideTelopActiveIndex);
+  if (!Number.isInteger(selectedIndex)) {
+    app.toast("テロップを選択してください。", "error");
+    return;
+  }
+  if (entries.length <= 1) {
+    app.toast("少なくとも1件は残してください。", "error");
+    return;
+  }
+  entries.splice(selectedIndex, 1);
+  const activeIndex = clampActiveIndex(app.state?.sideTelopActiveIndex ?? 0, entries);
+  app.state.sideTelopEditingIndex = null;
+  app.state.sideTelopSelectedIndex = clampSelectedIndex(selectedIndex, entries, activeIndex);
+  updateSideTelopFormLabels(app, entries, null);
+  updateSideTelopSelectionUI(app, entries);
+  persistSideTelops(app, entries, activeIndex);
+}
+
 export function handleSideTelopFormSubmit(app, event) {
   event.preventDefault();
   const textarea = app.dom?.sideTelopText;
@@ -292,9 +400,12 @@ export function handleSideTelopFormSubmit(app, event) {
     entries.push(text);
   }
   const activeIndex = clampActiveIndex(app.state?.sideTelopActiveIndex ?? 0, entries);
+  const nextSelection = clampSelectedIndex(editingIndex >= 0 ? editingIndex : entries.length - 1, entries, activeIndex);
   app.state.sideTelopEditingIndex = null;
+  app.state.sideTelopSelectedIndex = nextSelection;
   textarea.value = "";
   updateSideTelopFormLabels(app, entries, null);
+  updateSideTelopSelectionUI(app, entries);
   persistSideTelops(app, entries, activeIndex);
 }
 
@@ -304,6 +415,7 @@ export function handleSideTelopCancel(app) {
     app.dom.sideTelopText.value = "";
   }
   updateSideTelopFormLabels(app, app.state?.sideTelopEntries || [], null);
+  updateSideTelopSelectionUI(app);
 }
 
 export function handleSideTelopListClick(app, event) {
@@ -316,27 +428,7 @@ export function handleSideTelopListClick(app, event) {
   if (!Number.isInteger(index) || index < 0) return;
 
   const entries = Array.isArray(app.state?.sideTelopEntries) ? [...app.state.sideTelopEntries] : [];
-  if (action === "edit") {
-    app.state.sideTelopEditingIndex = index;
-    if (app.dom.sideTelopText) {
-      app.dom.sideTelopText.value = ensureString(entries[index] || "");
-      app.dom.sideTelopText.focus();
-    }
-    updateSideTelopFormLabels(app);
-    return;
-  }
-  if (action === "delete") {
-    if (entries.length <= 1) {
-      app.toast("少なくとも1件は残してください。", "error");
-      return;
-    }
-    entries.splice(index, 1);
-    const activeIndex = clampActiveIndex(app.state?.sideTelopActiveIndex ?? 0, entries);
-    app.state.sideTelopEditingIndex = null;
-    updateSideTelopFormLabels(app, entries, null);
-    persistSideTelops(app, entries, activeIndex);
-    return;
-  }
+  setSideTelopSelection(app, index, entries);
   if (action === "activate") {
     const activeIndex = clampActiveIndex(index, entries);
     persistSideTelops(app, entries, activeIndex);

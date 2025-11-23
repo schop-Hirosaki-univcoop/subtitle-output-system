@@ -79,6 +79,9 @@ const DOM_EVENT_BINDINGS = [
   { element: "sideTelopForm", type: "submit", handler: "handleSideTelopFormSubmit" },
   { element: "sideTelopFormCancel", type: "click", handler: "handleSideTelopCancel" },
   { element: "sideTelopList", type: "click", handler: "handleSideTelopListClick" },
+  { element: "sideTelopList", type: "keydown", handler: "handleSideTelopListKeydown" },
+  { element: "sideTelopEditButton", type: "click", handler: "handleSideTelopEditRequest" },
+  { element: "sideTelopDeleteButton", type: "click", handler: "handleSideTelopDeleteRequest" },
   { element: "selectAllCheckbox", type: "change", handler: "handleSelectAll" },
   { element: "batchUnanswerBtn", type: "click", handler: "handleBatchUnanswer" },
   { element: "editCancelButton", type: "click", handler: "closeEditDialog" },
@@ -191,6 +194,9 @@ const MODULE_METHOD_GROUPS = [
       "handleSideTelopFormSubmit",
       "handleSideTelopListClick",
       "handleSideTelopCancel",
+      "handleSideTelopListKeydown",
+      "handleSideTelopEditRequest",
+      "handleSideTelopDeleteRequest",
       "syncSideTelopToChannel"
     ]
   },
