@@ -7108,25 +7108,6 @@ body.sidebar-overlay-open{
   font-size: 0.725rem;
 }
 
-.side-telop-panel__meta {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.side-telop-panel__pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.6rem;
-  border-radius: 999px;
-  background: rgba(41, 163, 255, 0.12);
-  border: 1px solid rgba(41, 163, 255, 0.25);
-  color: #a9d6ff;
-  font-size: 0.6375rem;
-  letter-spacing: 0.02em;
-}
-
 .side-telop-panel__body {
   margin: 0;
   padding: 0.9rem;
