@@ -29,9 +29,7 @@
               ".read": true,
               ".write": "auth != null && ((auth.token.firebase.sign_in_provider === 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true) || root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
               ".validate": "newData.hasChildren(['phase'])",
-              "phase": {
-                ".validate": "newData.isString() && newData.val().matches(/^(visible|hidden|showing|hiding|error)$/)"
-              },
+              "phase": { ".validate": "newData.isString() && newData.val().matches(/^(visible|hidden|showing|hiding|error)$/)" },
               "updatedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
               "nowShowing": {
                 ".validate": "!newData.exists() || (newData.hasChildren(['name','question']) && newData.child('name').isString() && newData.child('question').isString() && (!newData.child('uid').exists() || newData.child('uid').isString()) && (!newData.child('participantId').exists() || newData.child('participantId').isString()) && (!newData.child('genre').exists() || newData.child('genre').isString()) && (!newData.child('pickup').exists() || newData.child('pickup').isBoolean()))",
@@ -40,6 +38,22 @@
                 "genre": { ".validate": "newData.isString()" },
                 "pickup": { ".validate": "newData.isBoolean()" }
               }
+            },
+            "sideTelops": {
+              ".read": true,
+              ".write": "auth != null && ((auth.token.firebase.sign_in_provider === 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true) || root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+              ".validate": "!newData.exists() || newData.hasChildren(['right'])",
+              "right": {
+                ".validate": "!newData.exists() || (newData.hasChildren(['items']) && (!newData.child('activeIndex').exists() || newData.child('activeIndex').isNumber()) && (!newData.child('updatedAt').exists() || newData.child('updatedAt').isNumber() || newData.child('updatedAt').val() == now))",
+                "items": {
+                  ".validate": "!newData.isString() && !newData.isNumber() && !newData.isBoolean()",
+                  "$index": { ".validate": "!newData.exists() || newData.isString()" }
+                },
+                "activeIndex": { ".validate": "newData.isNumber() || !newData.exists()" },
+                "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
+                "$other": { ".validate": false }
+              },
+              "$other": { ".validate": false }
             },
             "nowShowing": {
               ".read": true,
@@ -52,7 +66,7 @@
               "genre": { ".validate": "newData.isString() || !newData.exists()" },
               "pickup": { ".validate": "newData.isBoolean() || !newData.exists()" }
             }
-          }
+          },
         }
       },
       "session": {
