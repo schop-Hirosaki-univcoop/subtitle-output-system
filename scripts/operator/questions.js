@@ -1,6 +1,6 @@
 // questions.js: 質問キューの操作と選択ロジックを管理します。
 import { QUESTIONS_SUBTAB_KEY, GENRE_ALL_VALUE } from "./constants.js";
-import { database, ref, update, get, getNowShowingRef, serverTimestamp } from "./firebase.js";
+import { database, ref, set, update, get, getNowShowingRef, serverTimestamp } from "./firebase.js";
 import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn, error as logDisplayLinkError } from "../shared/display-link-logger.js";
 import { normalizeScheduleId } from "../shared/channel-paths.js";
 import { escapeHtml, formatOperatorName, resolveGenreLabel, formatScheduleRange } from "./utils.js";
@@ -831,13 +831,13 @@ export async function clearNowShowing(app) {
       await update(ref(database), updates);
     }
     const sideTelopRight = getActiveSideTelopRight(app);
-    await update(nowShowingRef, {
-      uid: null,
-      participantId: null,
-      name: null,
-      question: null,
-      genre: null,
-      pickup: null,
+    await set(nowShowingRef, {
+      uid: "",
+      participantId: "",
+      name: "",
+      question: "",
+      genre: "",
+      pickup: false,
       ...(sideTelopRight ? { sideTelopRight } : {})
     });
     logDisplayLinkInfo("Display nowShowing cleared", { eventId, scheduleId, sideTelopRight });
