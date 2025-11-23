@@ -3722,6 +3722,7 @@ body.events-page .flow-stage-panel{
 }
 
 .sidebar-card__name{
+  max-height: 3vh;
   margin:0;
   font-size:0.9rem;
   font-weight:700;
@@ -4186,13 +4187,22 @@ body.sidebar-overlay-open{
 .flow-selection-summary__item{
   margin:.35rem 0;
   display:flex;
-  gap:.75rem;
+  gap:.15rem;
 }
 
 .flow-selection-summary__label{
-  width:3.5rem;
+  width:3rem;
   flex-shrink:0;
   color:var(--muted);
+}
+
+/* 2つ目の span（値のほう）を3行で省略 */
+.flow-selection-summary__item > span:last-child {
+  flex: 1;                       /* 横幅いっぱい使う */
+  display: -webkit-box;          /* 複数行省略のキモ */
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;         /* ★ 3行まで表示 */
+  overflow: hidden;              /* はみ出しを隠す */
 }
 
 .flow-forward-actions{
