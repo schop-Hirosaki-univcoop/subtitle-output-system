@@ -47,9 +47,6 @@ export function createInitialState(autoScroll = true) {
     channelLocking: false,
     scheduleConflict: null,
     conflictSelection: "",
-    operatorMode: OPERATOR_MODE_TELOP,
-    sideTelopEntries: [],
-    sideTelopActiveIndex: 0,
-    sideTelopEditingIndex: null
+    operatorMode: OPERATOR_MODE_TELOP
   };
 }
