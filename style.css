@@ -293,6 +293,7 @@ html.embedded-view .site-footer{ display:none !important; }
   margin:0;
   color:var(--muted);
   line-height:1.65;
+  font-size: 75%;
 }
 
 .login-status{
@@ -349,7 +350,7 @@ html.embedded-view .site-footer{ display:none !important; }
   border:1px solid rgba(100,140,196,.5);
   background:rgba(20,30,48,.6);
   color:rgba(160,190,230,.85);
-  font-size:0.54rem;
+  font-size:0.9rem;
   line-height:1;
   flex-shrink:0;
   transition:all .2s ease;
@@ -390,7 +391,7 @@ html.embedded-view .site-footer{ display:none !important; }
 
 .login-status__detail{
   margin:0;
-  font-size:0.63rem;
+  font-size:0.8rem;
   line-height:1.6;
   color:var(--muted);
 }
@@ -477,7 +478,7 @@ body.logs-open #logs-panel{ display:flex; }
 }
 .module-description{
   margin:0;
-  font-size:clamp(0.525rem, 0.75vw, 0.6375rem);
+  font-size:clamp(0.7rem, 0.8vw, 0.9rem);
   color:var(--muted);
   line-height:1.4;
 }
@@ -849,6 +850,7 @@ body.logs-open #logs-panel{ display:flex; }
   box-shadow:none;
 }
 .btn-primary{
+  font-size:75%;
   background:linear-gradient(180deg, #2563eb, #1b46c1);
   border-color:#1f3b94;
   box-shadow:0 12px 26px rgba(37,99,235,.35);
