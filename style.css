@@ -1,8 +1,4 @@
 /* style.css: 管理画面全体に共通するテーマカラーやレイアウトユーティリティを定義するスタイル集です。 */
-/* フォントサイズのベースを75%にして、明示的にfont-sizeを指定していない要素を0.75倍に縮小 */
-html{
-  font-size:75%;
-}
 
 /* ===== Theme Tokens (Broadcast UI) ===== */
 :root{
@@ -57,7 +53,7 @@ body{
 }
 html, body{ height:100%; }
 html{ overflow:auto; }
-.flow-page-root{ font-size:100%; }
+.flow-page-root{ font-size:75%; }
 .op-theme{ background:var(--bg); color:var(--text); }
 body.op-theme{
   --page-gap:clamp(1rem, 2.2vw, 1.8rem);
@@ -80,7 +76,7 @@ body.events-page{
 }
 
 body.flow-page{
-  font-size:100%;
+  font-size:75%;
 }
 
 /* 背景全体にノイズ感のあるグラデーションを載せ、イベントUIに奥行きを付与 */
