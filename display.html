@@ -1194,25 +1194,35 @@
         let __updateToken = 0;
         let __currentToken = 0;
 
+        function buildNowShowingPayload(source = {}) {
+          const payload = {
+            name: source?.name || '',
+            question: source?.question || ''
+          };
+          if (source?.genre) payload.genre = source.genre;
+          if (source?.uid) payload.uid = String(source.uid);
+          if (source?.participantId) payload.participantId = String(source.participantId);
+          if (source?.pickup) payload.pickup = true;
+
+          const left = sideTelopState?.active?.left;
+          const right = sideTelopState?.active?.right;
+          if (left) payload.sideTelopLeft = left;
+          if (right) payload.sideTelopRight = right;
+
+          return payload;
+        }
+
         async function showTelop(next){
           const token = (++__updateToken || 1);
           __currentToken = token;
-          const showingPayload = { name: next?.name || '', question: next?.question || '' };
-          if (next?.genre) showingPayload.genre = next.genre;
-          if (next?.uid) showingPayload.uid = String(next.uid);
-          if (next?.participantId) showingPayload.participantId = String(next.participantId);
-          if (next?.pickup) showingPayload.pickup = true;
-          reportRender('showing');
+          const showingPayload = buildNowShowingPayload(next);
+          reportRender('showing', { nowShowing: showingPayload });
           try{
             if (__currentToken !== token) return;
             await flipResize(next);
             if (__currentToken !== token) return;
-            const visiblePayload = { name: next?.name || '', question: next?.question || '' };
-            if (next?.genre) visiblePayload.genre = next.genre;
-            if (next?.uid) visiblePayload.uid = String(next.uid);
-            if (next?.participantId) visiblePayload.participantId = String(next.participantId);
-            if (next?.pickup) visiblePayload.pickup = true;
-            await reportRender('visible');
+            const visiblePayload = buildNowShowingPayload(next);
+            await reportRender('visible', { nowShowing: visiblePayload });
           } catch(e){
             logDisplayLinkError('Failed to show telop', e);
             await reportRender('error', { error: String(e && e.message || e) });
@@ -1759,12 +1769,15 @@
                 const next = { name, question, genre, noLabel: willNoLabel, uid, participantId, pickup };
 
                 // ★ 変更開始＝showing（phase と updatedAt を更新）
-                const showingPayload = { name, question };
-                if (uid) showingPayload.uid = uid;
-                if (participantId) showingPayload.participantId = participantId;
-                if (pickup) showingPayload.pickup = true;
-                if (genre) showingPayload.genre = genre;
-                reportRender('showing');
+                const showingPayload = buildNowShowingPayload({
+                  name,
+                  question,
+                  uid,
+                  participantId,
+                  pickup,
+                  genre
+                });
+                reportRender('showing', { nowShowing: showingPayload });
 
                 await fontsReady();
                 await flipResize(next);              // サイズ補間（座布団も滑らか）
@@ -1777,12 +1790,15 @@
                 ensureTextVisible();
 
                 // ★ 反映完了＝visible（nowShowing と updatedAt を確定）
-                const visiblePayload = { name, question };
-                if (uid) visiblePayload.uid = uid;
-                if (participantId) visiblePayload.participantId = participantId;
-                if (pickup) visiblePayload.pickup = true;
-                if (genre) visiblePayload.genre = genre;
-                reportRender('visible');
+                const visiblePayload = buildNowShowingPayload({
+                  name,
+                  question,
+                  uid,
+                  participantId,
+                  pickup,
+                  genre
+                });
+                reportRender('visible', { nowShowing: visiblePayload });
               });
             } else {
               // 変更なしでも不可視が残っていたら強制復帰
