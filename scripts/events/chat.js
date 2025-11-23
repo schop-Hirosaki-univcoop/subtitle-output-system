@@ -153,6 +153,7 @@ export class EventChat {
       chatInput,
       chatScroll,
       chatUnreadButton,
+      chatScrollButton,
       chatMessages,
       chatContextMenu,
       chatReplyDismiss
@@ -190,6 +191,9 @@ export class EventChat {
     if (chatUnreadButton) {
       chatUnreadButton.addEventListener("click", () => this.scrollToLatest(true));
     }
+    if (chatScrollButton) {
+      chatScrollButton.addEventListener("click", () => this.scrollToLatest(true));
+    }
     if (chatMessages) {
       chatMessages.addEventListener("contextmenu", (event) => this.handleMessageContextMenu(event));
       chatMessages.addEventListener("click", () => this.hideContextMenu());
@@ -221,6 +225,7 @@ export class EventChat {
     }
     document.addEventListener("pointerdown", this.handleGlobalPointerDown);
     document.addEventListener("keydown", this.handleGlobalKeydown, true);
+    this.updateScrollButton();
     this.initialized = true;
   }
 
@@ -380,6 +385,7 @@ export class EventChat {
       this.state.unreadCount = 0;
       this.updateUnreadIndicator();
     }
+    this.updateScrollButton();
   }
 
   scrollToLatest(focusInput = false) {
@@ -392,6 +398,7 @@ export class EventChat {
       chatScroll.scrollTop = chatScroll.scrollHeight;
       this.state.unreadCount = 0;
       this.updateUnreadIndicator();
+      this.updateScrollButton();
       if (focusInput && chatInput && !chatInput.disabled) {
         chatInput.focus();
       }
@@ -457,7 +464,19 @@ export class EventChat {
     if (this.state.autoScroll) {
       this.scrollToLatest(false);
     }
+    this.updateScrollButton();
     this.lastMessageCount = messages.length;
+  }
+
+  updateScrollButton() {
+    const { chatScrollButton, chatScroll } = this.app.dom;
+    if (!chatScrollButton || !chatScroll) {
+      return;
+    }
+    const hasMessages = Boolean(this.state.messages && this.state.messages.length > 0);
+    const remaining = chatScroll.scrollHeight - chatScroll.scrollTop - chatScroll.clientHeight;
+    const atBottom = remaining <= SCROLL_THRESHOLD;
+    chatScrollButton.hidden = !hasMessages || atBottom;
   }
 
   isMessageFromCurrentUser(message) {
