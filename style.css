@@ -3831,6 +3831,7 @@ body.events-page .flow-stage-panel{
 }
 
 .sidebar-nav__button{
+  font-size: 75%;
   display:flex;
   align-items:center;
   justify-content:space-between;
