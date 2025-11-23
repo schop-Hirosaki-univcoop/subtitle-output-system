@@ -523,7 +523,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getDatabase, ref, onValue, update, serverTimestamp, get, set, remove, onDisconnect } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
         import { getAuth, onAuthStateChanged, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getRenderStatePath, getNowShowingPath, parseChannelParams } from "./scripts/shared/channel-paths.js";
+        import { getRenderStatePath, getNowShowingPath, getSideTelopPath, parseChannelParams } from "./scripts/shared/channel-paths.js";
         import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn, error as logDisplayLinkError } from "./scripts/shared/display-link-logger.js";
 
         const firebaseConfig = {
@@ -554,8 +554,10 @@
         let channelScheduleId = querySchedulePinned ? initialScheduleId : '';
         let renderRef = ref(database, getRenderStatePath(channelEventId, channelScheduleId));
         let nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
+        let sideTelopRef = ref(database, getSideTelopPath(channelEventId, channelScheduleId));
         const displaySessionRef = ref(database, "render/session");
         let nowShowingUnsubscribe = null;
+        let sideTelopUnsubscribe = null;
         let displayPresenceRef = null;
         let displayPresenceUid = '';
         let displayPresenceDisconnect = null;
@@ -583,7 +585,9 @@
           });
           renderRef = ref(database, getRenderStatePath(channelEventId, channelScheduleId));
           nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
+          sideTelopRef = ref(database, getSideTelopPath(channelEventId, channelScheduleId));
           subscribeNowShowing();
+          subscribeSideTelops();
           syncDisplayPresence('channel-change').catch(() => {});
           refreshSideTelopFallbackFromMeta(channelEventId, channelScheduleId).catch(() => {});
         }
@@ -1036,6 +1040,7 @@
         });
 
         subscribeNowShowing();
+        subscribeSideTelops();
         subscribeDisplaySession();
 
         function flushPendingRender(reason) {
@@ -1517,6 +1522,15 @@
           setSideTelop(sideTelopRightEl, sideTelopRightBodyEl, nextRight);
         }
 
+        function handleSideTelopPresetSnapshot(snapshot) {
+          const payload = typeof snapshot?.val === 'function' ? snapshot.val() || {} : {};
+          const items = Array.isArray(payload?.right?.items) ? payload.right.items : [];
+          const activeIndex = Number.isInteger(payload?.right?.activeIndex) ? payload.right.activeIndex : 0;
+          const clampedIndex = items.length ? Math.min(Math.max(activeIndex, 0), items.length - 1) : 0;
+          const activeText = items[clampedIndex] || '';
+          updateSideTelopFallback({ right: activeText });
+        }
+
         function formatScheduleDate(schedule) {
           const normalized = ensureString(schedule.date || schedule.scheduleDate);
           if (!normalized) return '';
@@ -1744,6 +1758,21 @@
             scheduleId: channelScheduleId || null
           });
           nowShowingUnsubscribe = onValue(nowShowingRef, handleNowShowingSnapshot);
+        }
+
+        function subscribeSideTelops() {
+          if (typeof sideTelopUnsubscribe === 'function') {
+            sideTelopUnsubscribe();
+          }
+          const path = getSideTelopPath(channelEventId, channelScheduleId);
+          logDisplayLinkInfo('Subscribing sideTelop stream', {
+            path,
+            eventId: channelEventId || null,
+            scheduleId: channelScheduleId || null
+          });
+          sideTelopUnsubscribe = onValue(sideTelopRef, handleSideTelopPresetSnapshot, (error) => {
+            logDisplayLinkWarn('Failed to subscribe sideTelop stream', error);
+          });
         }
   </script>
 </body>

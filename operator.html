@@ -1368,6 +1368,35 @@
             </div>
           </form>
         </section>
+
+        <section id="side-telop-panel" class="side-telop-panel" aria-labelledby="side-telop-title">
+          <div class="side-telop-panel__header">
+            <div class="side-telop-panel__heading">
+              <h2 id="side-telop-title">右サイドテロップ</h2>
+              <p class="side-telop-panel__description">
+                表示する文言をあらかじめ登録し、どれか1つを常に表示します。日程を選択すると編集できます。
+              </p>
+            </div>
+          </div>
+          <div class="side-telop-panel__body">
+            <p id="side-telop-empty" class="side-telop-empty">まだ文言がありません。下のフォームから追加してください。</p>
+            <ol id="side-telop-list" class="side-telop-list"></ol>
+          </div>
+          <form id="side-telop-form" class="side-telop-form" novalidate>
+            <label for="side-telop-text">文言</label>
+            <textarea
+              id="side-telop-text"
+              class="input"
+              rows="3"
+              placeholder="右サイドテロップに表示する文言を入力"
+              required
+            ></textarea>
+            <div class="side-telop-form__actions">
+              <button id="side-telop-submit" class="btn btn-primary btn-sm" type="submit">追加</button>
+              <button id="side-telop-cancel" class="btn btn-ghost btn-sm" type="button" hidden>キャンセル</button>
+            </div>
+          </form>
+        </section>
       </aside>
     </div>
   </main>
