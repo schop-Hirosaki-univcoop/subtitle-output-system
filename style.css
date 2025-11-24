@@ -1669,7 +1669,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 #op-action-panel[data-selection="multi"] [data-mode="single"]{ display:none; }
 #op-channel-banner{
   margin:0;
-  padding:clamp(.75rem, 1.5vw, 1.1rem) clamp(1rem, 2.2vw, 1.35rem);
+  padding:1vh 1vw;
   border:1px solid rgba(46,64,92,.7);
   border-radius:clamp(1rem, 1.9vw, 1.35rem);
   background:linear-gradient(180deg, rgba(24,32,54,.85), rgba(13,19,32,.92));
@@ -3695,7 +3695,7 @@ body.events-page .flow-stage-panel{
   display:flex;
   flex-direction:column;
   gap:.85rem;
-  padding:1.1rem 1.25rem 1.2rem;
+  padding:1vh 1vw;
   border-radius:1rem;
   border:1px solid rgba(86,132,194,.45);
   background:linear-gradient(180deg, rgba(18,34,58,.82), rgba(8,18,32,.78));
@@ -3849,7 +3849,7 @@ body.events-page .flow-stage-panel{
   display:flex;
   flex-direction:column;
   gap:.6rem;
-  padding:1rem 1.1rem;
+  padding:1vh 1vw;
   border-radius:1rem;
   border:1px solid rgba(70,108,156,.4);
   background:linear-gradient(180deg, rgba(14,26,44,.82), rgba(8,16,30,.78));
@@ -4195,8 +4195,8 @@ body.sidebar-overlay-open{
   display:block;
   width:100%;
   box-sizing:border-box;
-  margin:0 0 1rem;
-  padding:1rem 1.25rem;
+  margin:0;
+  padding:0.5vh 0.5vw;
   border-radius:.85rem;
   background:rgba(18,30,46,.8);
   border:1px solid rgba(60,96,143,.5);
@@ -5797,7 +5797,7 @@ body.sidebar-overlay-open{
 }
 
 #op-questions-panel{
-  padding: 1vw;
+  padding: 1.5vh 1.5vw;
   overflow:visible;
   flex:1 1 auto;
   min-height:0;
