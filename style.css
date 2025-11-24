@@ -1,5 +1,37 @@
 /* style.css: 管理画面全体に共通するテーマカラーやレイアウトユーティリティを定義するスタイル集です。 */
 
+/* === GenEi Gothic P / H-KL を登録（アップ済みの woff2 を使用） === */
+@font-face{
+  font-family: "源暎ゴシックP";
+  src: url("assets/fonts/genei-gothic/GenEiGothicP-Regular.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face{
+  font-family: "源暎ゴシックP";
+  src: url("assets/fonts/genei-gothic/GenEiGothicP-Bold.woff2") format("woff2");
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+/* === Rounded Mplus 2p（右サイドテロップ用） === */
+@font-face{
+  font-family: "Rounded Mgen+ 2pp";
+  src: url("assets/fonts/rounded-mgenplus-2pp/rounded-mgenplus-2pp-medium.woff2") format("woff2");
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+/* H-KL（質問本文用）
+   → 日本語だけを担当させ、英数字は通常の P にフォールバックさせる */
+@font-face{
+  font-family: "源暎ゴシックP";
+  src: url("assets/fonts/genei-gothic/GenEiGothicP-H-KL.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap;
+  unicode-range:
+    U+3000-303F,      /* CJK記号・句読点 */
+    U+3040-309F,      /* ひらがな */
+    U+30A0-30FF,      /* カタカナ */
+    U+4E00-9FFF,      /* CJK統合漢字 */
+    U+FF01-FF60, U+FFE0-FFE6; /* 全角英数・記号 */
+}
+
+
 /* ===== Theme Tokens (Broadcast UI) ===== */
 :root{
   --ui-bg: #0d1117;
@@ -38,7 +70,7 @@
 
 body{
   margin:0;
-  font-family:"Noto Sans JP", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:"源暎ゴシックP", "Noto Sans JP", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   line-height:1.6;
 }
 .noscript-banner{
