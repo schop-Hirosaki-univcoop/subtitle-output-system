@@ -56,7 +56,7 @@ html{ overflow:auto; }
 .flow-page-root{ font-size:85%; }
 .op-theme{ background:var(--bg); color:var(--text); }
 body.op-theme{
-  --page-gap:clamp(1rem, 2.2vw, 1.8rem);
+  --page-gap:1vh;
   --page-pad-inline:max(2.5vw, 1.4rem);
   --page-padding-top:clamp(.45rem, 1.2vh, .85rem);
   min-height:100dvh;
@@ -120,7 +120,7 @@ html.embedded-view .site-footer{ display:none !important; }
   position:sticky;
   top:0;
   z-index:90;
-  width:96.5vw;
+  width:calc(100vw - var(--page-pad-inline));
   margin-inline:calc(var(--page-pad-inline) * -1);
   padding:clamp(.55rem, 1.2vw, .85rem) var(--page-pad-inline);
   background:linear-gradient(180deg, rgba(14,20,34,.95), rgba(8,12,22,.84));
@@ -2725,6 +2725,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 
 /* --- Event control flow layout --- */
 .flow-main{
+  gap: 1vh;
   display:flex;
   flex-direction:column;
   flex:1 1 auto;
@@ -3025,7 +3026,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   --events-layout-padding: clamp(1.25rem, 2.4vw, 2rem);
   --events-sticky-top: calc(var(--page-padding-top, 0px) + var(--safe-area-top, 0px) + var(--header-height, 64px) + var(--page-gap, 0px) + 1.5rem);
   display:grid;
-  gap:clamp(1.25rem, 2vw, 1.75rem);
+  gap: 1vw;
   grid-template-columns:minmax(190px, 15vw) minmax(0, 1fr) clamp(260px, 22vw, 340px);
   align-items:stretch;
   width:min(100%, 96vw);
@@ -3068,7 +3069,7 @@ body.events-page .flow-stage-panel{
 .events-chat{
   display:flex;
   flex-direction:column;
-  gap:1.25rem;
+  gap:1vh;
   align-self:start;
   min-width:0;
   position:sticky;
@@ -3661,7 +3662,7 @@ body.events-page .flow-stage-panel{
   padding: 0 0.1vw 0 0;
   display:flex;
   flex-direction:column;
-  gap:1.25rem;
+  gap:1vh;
   position:sticky;
   top:var(--events-sticky-top);
   max-height:var(--events-main-panel-height, calc(100vh - var(--events-sticky-top) - clamp(1rem, 2vw, 1.75rem)));
@@ -7025,7 +7026,7 @@ body.sidebar-overlay-open{
 }
 
 .events-layout{
-  padding:clamp(.75rem, 1.6vw, 1.2rem);
+  padding:0;
   border:none;
   border-radius:0;
   background:none;
@@ -7076,7 +7077,7 @@ body.sidebar-overlay-open{
 }
 
 .side-telop-panel {
-  margin-top: 1rem;
+  margin: 0;
   padding: 1.1rem;
   border-radius: 1.1rem;
   background:
