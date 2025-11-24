@@ -239,6 +239,7 @@ export class EventAdminApp {
     this.updateChatLayoutMetrics = this.updateChatLayoutMetrics.bind(this);
     this.chatLayoutResizeObserver = null;
     this.chatLayoutRaf = 0;
+    this.chatLayoutHeight = 0;
     this.visualViewportResize = null;
     this.activeMobilePanel = "";
     this.chatUnreadCount = 0;
@@ -8338,45 +8339,53 @@ export class EventAdminApp {
     if (!chatPanel || !chatContainer) {
       return;
     }
+    let nextHeight = 0;
     if (window.matchMedia && window.matchMedia("(max-width: 960px)").matches) {
       chatContainer.style.removeProperty("--events-chat-top");
       chatContainer.style.removeProperty("--events-chat-height");
-      return;
-    }
-    const docEl = document.documentElement;
-    const header = document.querySelector(".op-header");
-    const flowStage = this.dom.flowStage || document.querySelector(".flow-stage");
-    const layout = chatContainer.closest(".events-layout");
-    const bodyStyles = window.getComputedStyle(document.body);
-    const docStyles = window.getComputedStyle(docEl);
-    const mainStyles = this.dom.main ? window.getComputedStyle(this.dom.main) : null;
-    const layoutStyles = layout ? window.getComputedStyle(layout) : null;
-
-    const safeAreaTop = parseCssPixels(docStyles.getPropertyValue("--safe-area-top"));
-    const safeAreaBottom = parseCssPixels(docStyles.getPropertyValue("--safe-area-bottom"));
-    const bodyPaddingTop = parseCssPixels(bodyStyles.paddingTop);
-    const bodyPaddingBottom = parseCssPixels(bodyStyles.paddingBottom);
-    const bodyGap = parseCssPixels(bodyStyles.gap);
-    const mainGap = mainStyles ? parseCssPixels(mainStyles.gap) : 0;
-    const layoutPaddingTop = layoutStyles ? parseCssPixels(layoutStyles.paddingTop) : 0;
-    const layoutPaddingBottom = layoutStyles ? parseCssPixels(layoutStyles.paddingBottom) : 0;
-
-    const headerHeight = header ? header.getBoundingClientRect().height : 0;
-    const flowStageHeight = flowStage ? flowStage.getBoundingClientRect().height : 0;
-
-    const chatStyles = window.getComputedStyle(chatContainer);
-    const cssStickyTop = parseCssPixels(chatStyles.top);
-    const fallbackStickyTop = bodyPaddingTop + safeAreaTop + headerHeight + bodyGap;
-    const stickyTop = cssStickyTop > 0 ? cssStickyTop : fallbackStickyTop;
-    const chatOffset = stickyTop + flowStageHeight + mainGap + layoutPaddingTop;
-    const viewportHeight = window.innerHeight || docEl.clientHeight;
-    const availableHeight = viewportHeight - chatOffset - layoutPaddingBottom - bodyPaddingBottom - safeAreaBottom;
-
-    const heightValue = Math.max(0, Math.round(availableHeight));
-    if (heightValue > 0) {
-      chatContainer.style.setProperty("--events-chat-height", `${heightValue}px`);
     } else {
-      chatContainer.style.removeProperty("--events-chat-height");
+      const docEl = document.documentElement;
+      const header = document.querySelector(".op-header");
+      const flowStage = this.dom.flowStage || document.querySelector(".flow-stage");
+      const layout = chatContainer.closest(".events-layout");
+      const bodyStyles = window.getComputedStyle(document.body);
+      const docStyles = window.getComputedStyle(docEl);
+      const mainStyles = this.dom.main ? window.getComputedStyle(this.dom.main) : null;
+      const layoutStyles = layout ? window.getComputedStyle(layout) : null;
+
+      const safeAreaTop = parseCssPixels(docStyles.getPropertyValue("--safe-area-top"));
+      const safeAreaBottom = parseCssPixels(docStyles.getPropertyValue("--safe-area-bottom"));
+      const bodyPaddingTop = parseCssPixels(bodyStyles.paddingTop);
+      const bodyPaddingBottom = parseCssPixels(bodyStyles.paddingBottom);
+      const bodyGap = parseCssPixels(bodyStyles.gap);
+      const mainGap = mainStyles ? parseCssPixels(mainStyles.gap) : 0;
+      const layoutPaddingTop = layoutStyles ? parseCssPixels(layoutStyles.paddingTop) : 0;
+      const layoutPaddingBottom = layoutStyles ? parseCssPixels(layoutStyles.paddingBottom) : 0;
+
+      const headerHeight = header ? header.getBoundingClientRect().height : 0;
+      const flowStageHeight = flowStage ? flowStage.getBoundingClientRect().height : 0;
+
+      const chatStyles = window.getComputedStyle(chatContainer);
+      const cssStickyTop = parseCssPixels(chatStyles.top);
+      const fallbackStickyTop = bodyPaddingTop + safeAreaTop + headerHeight + bodyGap;
+      const stickyTop = cssStickyTop > 0 ? cssStickyTop : fallbackStickyTop;
+      const chatOffset = stickyTop + flowStageHeight + mainGap + layoutPaddingTop;
+      const viewportHeight = window.innerHeight || docEl.clientHeight;
+      const availableHeight = viewportHeight - chatOffset - layoutPaddingBottom - bodyPaddingBottom - safeAreaBottom;
+
+      const heightValue = Math.max(0, Math.round(availableHeight));
+      nextHeight = heightValue;
+      if (heightValue > 0) {
+        chatContainer.style.setProperty("--events-chat-height", `${heightValue}px`);
+      } else {
+        chatContainer.style.removeProperty("--events-chat-height");
+      }
+    }
+
+    const heightChanged = this.chatLayoutHeight !== nextHeight;
+    this.chatLayoutHeight = nextHeight;
+    if (heightChanged && this.chat && this.chat.state && this.chat.state.autoScroll) {
+      this.chat.scrollToLatest(false);
     }
   }
 
