@@ -134,7 +134,6 @@ html.embedded-view .site-footer{ display:none !important; }
   justify-content:space-between;
   gap:clamp(1rem, 2.4vw, 1.8rem);
   width:100%;
-  max-width:min(96rem, 100%);
   margin-inline:auto;
   flex-wrap:wrap;
 }
