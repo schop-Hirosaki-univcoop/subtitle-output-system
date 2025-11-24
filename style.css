@@ -3799,7 +3799,7 @@ body.events-page .flow-stage-panel{
   display:flex;
   justify-content:flex-end;
   gap:.6rem;
-  margin-top:.35rem;
+  margin:0;
 }
 
 .sidebar-card-actions__button{
