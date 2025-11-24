@@ -6072,9 +6072,13 @@ export class EventAdminApp {
         this.visualViewportResize = null;
       }
     }
+    const layout = this.dom.chatContainer?.closest(".events-layout");
     if (this.dom.chatContainer) {
       this.dom.chatContainer.style.removeProperty("--events-chat-top");
       this.dom.chatContainer.style.removeProperty("--events-chat-height");
+    }
+    if (layout) {
+      layout.style.removeProperty("--events-main-panel-height");
     }
   }
 
@@ -8375,8 +8379,11 @@ export class EventAdminApp {
     } else {
       const docEl = document.documentElement;
       const header = document.querySelector(".op-header");
-      const flowStage = this.dom.flowStage || document.querySelector(".flow-stage");
       const layout = chatContainer.closest(".events-layout");
+      const flowStage = this.dom.flowStage || document.querySelector(".flow-stage");
+      const mainPanel =
+        layout?.querySelector(".flow-stage-panel.is-active") ||
+        layout?.querySelector(".flow-stage-panel");
       const bodyStyles = window.getComputedStyle(document.body);
       const docStyles = window.getComputedStyle(docEl);
       const mainStyles = this.dom.main ? window.getComputedStyle(this.dom.main) : null;
@@ -8393,6 +8400,15 @@ export class EventAdminApp {
 
       const headerHeight = header ? header.getBoundingClientRect().height : 0;
       const flowStageHeight = flowStage ? flowStage.getBoundingClientRect().height : 0;
+      const mainPanelHeight = mainPanel ? mainPanel.getBoundingClientRect().height : 0;
+
+      if (layout) {
+        if (mainPanelHeight > 0) {
+          layout.style.setProperty("--events-main-panel-height", `${mainPanelHeight}px`);
+        } else {
+          layout.style.removeProperty("--events-main-panel-height");
+        }
+      }
 
       const chatStyles = window.getComputedStyle(chatContainer);
       const cssStickyTop = parseCssPixels(chatStyles.top);
