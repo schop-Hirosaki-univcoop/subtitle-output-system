@@ -958,6 +958,15 @@
                             </div>
                           </div>
                           <div class="cards-toolbar">
+                            <div class="toolbar-left">
+                              <label for="op-export-scope">出力範囲</label>
+                              <select id="op-export-scope" class="input">
+                                <option value="schedule">テロップ操作の日程</option>
+                                <option value="event">イベント全日程</option>
+                              </select>
+                              <button id="op-export-csv-unanswered" class="btn btn-ghost btn-sm" type="button">未回答CSV</button>
+                              <button id="op-export-csv-answered" class="btn btn-ghost btn-sm" type="button">回答済CSV</button>
+                            </div>
                             <div class="toolbar-right">
                               <label class="chk">
                                 <input id="op-select-all-checkbox" type="checkbox">

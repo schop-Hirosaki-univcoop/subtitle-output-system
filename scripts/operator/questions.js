@@ -152,20 +152,15 @@ function persistSubTabPreference(tabName) {
   }
 }
 
-export function renderQuestions(app) {
-  if (!app.dom.cardsContainer) return;
-  const currentTab = app.state.currentSubTab;
-  const viewingPuqTab = currentTab === "puq";
-  const viewingNormalTab = currentTab === "normal";
-  const selectedGenre = typeof app.state.currentGenre === "string" ? app.state.currentGenre.trim() : "";
-  const viewingAllGenres = !selectedGenre || selectedGenre.toLowerCase() === GENRE_ALL_VALUE;
+export function resolveNormalScheduleKey(app) {
+  if (!app || typeof app !== "object") return "";
   let selectedSchedule = "";
   const context = app.pageContext || {};
   const scheduleCandidates = [
-    app.state.currentSchedule,
-    app.state.committedScheduleKey,
-    app.state.conflictSelection,
-    app.state.lastNormalSchedule,
+    app?.state?.currentSchedule,
+    app?.state?.committedScheduleKey,
+    app?.state?.conflictSelection,
+    app?.state?.lastNormalSchedule,
     context.selectionConfirmed ? context.scheduleKey : ""
   ];
   for (const candidate of scheduleCandidates) {
@@ -178,6 +173,17 @@ export function renderQuestions(app) {
   if (!selectedSchedule && typeof app.getCurrentScheduleKey === "function") {
     selectedSchedule = String(app.getCurrentScheduleKey() || "").trim();
   }
+  return selectedSchedule;
+}
+
+export function renderQuestions(app) {
+  if (!app.dom.cardsContainer) return;
+  const currentTab = app.state.currentSubTab;
+  const viewingPuqTab = currentTab === "puq";
+  const viewingNormalTab = currentTab === "normal";
+  const selectedGenre = typeof app.state.currentGenre === "string" ? app.state.currentGenre.trim() : "";
+  const viewingAllGenres = !selectedGenre || selectedGenre.toLowerCase() === GENRE_ALL_VALUE;
+  const selectedSchedule = resolveNormalScheduleKey(app);
   if (viewingNormalTab) {
     console.info("[schedule-debug] logging enabled for normal tab", {
       currentTab,
@@ -1102,4 +1108,164 @@ export function syncSelectAllState(app) {
   });
   app.dom.selectAllCheckbox.checked = checked === total;
   app.dom.selectAllCheckbox.indeterminate = checked > 0 && checked < total;
+}
+
+function encodeCsvValue(value) {
+  const text = value == null ? "" : String(value);
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function createCsvContent(rows) {
+  return rows.map((row) => row.map(encodeCsvValue).join(",")).join("\r\n");
+}
+
+function downloadCsv(filename, rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return;
+  const content = createCsvContent(rows);
+  const bomBytes = new Uint8Array([0xef, 0xbb, 0xbf]);
+  let blob;
+
+  if (typeof TextEncoder !== "undefined") {
+    const encoder = new TextEncoder();
+    const body = encoder.encode(content);
+    blob = new Blob([bomBytes, body], { type: "text/csv;charset=utf-8;" });
+  } else {
+    blob = new Blob(["\ufeff" + content], { type: "text/csv;charset=utf-8;" });
+  }
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+function buildNormalQuestionCsvRows(records) {
+  const header = [
+    "UID",
+    "参加者ID",
+    "ラジオネーム",
+    "質問・お悩み",
+    "ジャンル",
+    "班番号",
+    "イベントID",
+    "イベント名",
+    "日程ID",
+    "日程表示",
+    "開始日時",
+    "終了日時",
+    "回答状況"
+  ];
+  const rows = [header];
+  records.forEach((item) => {
+    rows.push([
+      item.UID,
+      item["参加者ID"],
+      item["ラジオネーム"],
+      item["質問・お悩み"],
+      item["ジャンル"],
+      item["班番号"],
+      item["イベントID"],
+      item["イベント名"],
+      item["日程ID"],
+      item["日程表示"],
+      item["開始日時"],
+      item["終了日時"],
+      item["回答済"] ? "回答済" : "未回答"
+    ]);
+  });
+  return rows;
+}
+
+function resolveScheduleContext(app, scheduleKey) {
+  const key = String(scheduleKey || "").trim();
+  const metaMap = app?.state?.scheduleMetadata;
+  const meta = key && metaMap instanceof Map ? metaMap.get(key) : null;
+  if (meta) {
+    const normalizedSchedule = normalizeScheduleId(meta.scheduleId || "");
+    return {
+      eventId: String(meta.eventId || "").trim(),
+      scheduleId: String(normalizedSchedule || meta.scheduleId || "").trim(),
+      label: String(meta.label || "").trim()
+    };
+  }
+  const [eventPart = "", schedulePart = ""] = key.includes("::") ? key.split("::") : ["", key];
+  const normalizedSchedule = normalizeScheduleId(schedulePart || "");
+  return {
+    eventId: String(eventPart || "").trim(),
+    scheduleId: String(normalizedSchedule || schedulePart || "").trim(),
+    label: key
+  };
+}
+
+function buildNormalQuestionFilename({ scope, answered, eventId, scheduleId }) {
+  const status = answered ? "answered" : "unanswered";
+  const safeEvent = String(eventId || "event").trim() || "event";
+  if (scope === "event") {
+    return `${safeEvent}_normal_questions_${status}_all_schedules.csv`;
+  }
+  const safeSchedule = String(scheduleId || "schedule").trim() || "schedule";
+  return `${safeEvent}_${safeSchedule}_normal_questions_${status}.csv`;
+}
+
+function exportNormalQuestionsCsv(app, { answered }) {
+  const scope = app?.dom?.exportScopeSelect?.value === "event" ? "event" : "schedule";
+  const allQuestions = Array.isArray(app?.state?.allQuestions) ? app.state.allQuestions : [];
+  const normalQuestions = allQuestions.filter((item) => !isPickUpQuestion(item));
+  const selectedSchedule = resolveNormalScheduleKey(app);
+  const scheduleContext = resolveScheduleContext(app, selectedSchedule);
+  const activeEventId = String(app?.state?.activeEventId || "").trim();
+  const fallbackEventId = scheduleContext.eventId;
+  const eventId = activeEventId || fallbackEventId;
+  let filtered = [];
+
+  if (scope === "event") {
+    if (!eventId) {
+      app.toast("イベントが選択されていないため出力できません。", "error");
+      return;
+    }
+    filtered = normalQuestions.filter((item) => String(item["イベントID"] || "").trim() === eventId);
+  } else {
+    if (!selectedSchedule) {
+      app.toast("日程が選択されていないため出力できません。", "error");
+      return;
+    }
+    filtered = normalQuestions.filter(
+      (item) => String(item.__scheduleKey ?? item["日程"] ?? "").trim() === selectedSchedule
+    );
+  }
+
+  filtered = filtered
+    .filter((item) => Boolean(item["回答済"]) === answered)
+    .sort((a, b) => Number(b.__ts || 0) - Number(a.__ts || 0));
+
+  if (filtered.length === 0) {
+    app.toast("出力対象の通常質問がありません。", "info");
+    return;
+  }
+
+  const filename = buildNormalQuestionFilename({
+    scope,
+    answered,
+    eventId: scope === "event" ? eventId : scheduleContext.eventId || eventId,
+    scheduleId: scope === "event" ? "all" : scheduleContext.scheduleId || selectedSchedule
+  });
+
+  const rows = buildNormalQuestionCsvRows(filtered);
+  downloadCsv(filename, rows);
+}
+
+export function exportUnansweredCsv(app) {
+  exportNormalQuestionsCsv(app, { answered: false });
+}
+
+export function exportAnsweredCsv(app) {
+  exportNormalQuestionsCsv(app, { answered: true });
 }
