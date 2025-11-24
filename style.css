@@ -443,7 +443,7 @@ body.logs-open #logs-panel{ display:flex; }
 .module{
   display:flex;
   flex-direction:column;
-  gap:clamp(.75rem, 1.3vw, 1.1rem);
+  gap:1vh;
   padding:clamp(.95rem, 1.8vw, 1.35rem) clamp(1rem, 2.2vw, 1.5rem);
   border-radius:clamp(.95rem, 1.8vw, 1.4rem);
   border:1px solid rgba(46,64,92,.6);
@@ -5798,6 +5798,7 @@ body.sidebar-overlay-open{
 }
 
 #op-questions-panel{
+  padding: 1vw;
   overflow:visible;
   flex:1 1 auto;
   min-height:0;
@@ -5812,6 +5813,7 @@ body.sidebar-overlay-open{
 }
 
 #op-questions-content .cards-scroll{
+  margin-top: 1vh;
   flex:1 1 auto;
   min-height:0;
   overflow:auto;
@@ -5839,7 +5841,6 @@ body.sidebar-overlay-open{
 
 .operator-embedded #op-action-panel{
   position:static;
-  margin-top:clamp(.75rem, 1.6vw, 1.1rem);
   display:flex;
   flex-wrap:wrap;
   align-items:center;
