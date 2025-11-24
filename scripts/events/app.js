@@ -240,6 +240,7 @@ export class EventAdminApp {
     this.chatLayoutResizeObserver = null;
     this.chatLayoutRaf = 0;
     this.chatLayoutHeight = 0;
+    this.chatLayoutScrollRaf = 0;
     this.visualViewportResize = null;
     this.activeMobilePanel = "";
     this.chatUnreadCount = 0;
@@ -6019,6 +6020,7 @@ export class EventAdminApp {
       const observer = new ResizeObserver(() => this.updateChatLayoutMetrics());
       const header = document.querySelector(".op-header");
       const layout = this.dom.chatContainer?.closest(".events-layout");
+      const telopPanel = typeof document !== "undefined" ? document.getElementById("side-telop-panel") : null;
       const targets = [
         document.body,
         header,
@@ -6026,7 +6028,8 @@ export class EventAdminApp {
         this.dom.flowStage,
         layout,
         this.dom.chatContainer,
-        this.dom.chatPanel
+        this.dom.chatPanel,
+        telopPanel
       ];
       const uniqueTargets = Array.from(new Set(targets.filter(Boolean)));
       uniqueTargets.forEach((target) => observer.observe(target));
@@ -6058,6 +6061,10 @@ export class EventAdminApp {
       if (this.chatLayoutRaf) {
         window.cancelAnimationFrame(this.chatLayoutRaf);
         this.chatLayoutRaf = 0;
+      }
+      if (this.chatLayoutScrollRaf) {
+        window.cancelAnimationFrame(this.chatLayoutScrollRaf);
+        this.chatLayoutScrollRaf = 0;
       }
       if (window.visualViewport && this.visualViewportResize) {
         window.visualViewport.removeEventListener("resize", this.visualViewportResize);
@@ -7828,6 +7835,7 @@ export class EventAdminApp {
       const observer = new ResizeObserver(() => this.updateChatLayoutMetrics());
       const header = document.querySelector(".op-header");
       const layout = this.dom.chatContainer?.closest(".events-layout");
+      const telopPanel = typeof document !== "undefined" ? document.getElementById("side-telop-panel") : null;
       const targets = [
         document.body,
         header,
@@ -7835,7 +7843,8 @@ export class EventAdminApp {
         this.dom.flowStage,
         layout,
         this.dom.chatContainer,
-        this.dom.chatPanel
+        this.dom.chatPanel,
+        telopPanel
       ];
       const uniqueTargets = Array.from(new Set(targets.filter(Boolean)));
       uniqueTargets.forEach((target) => observer.observe(target));
@@ -7867,6 +7876,10 @@ export class EventAdminApp {
       if (this.chatLayoutRaf) {
         window.cancelAnimationFrame(this.chatLayoutRaf);
         this.chatLayoutRaf = 0;
+      }
+      if (this.chatLayoutScrollRaf) {
+        window.cancelAnimationFrame(this.chatLayoutScrollRaf);
+        this.chatLayoutScrollRaf = 0;
       }
       if (window.visualViewport && this.visualViewportResize) {
         window.visualViewport.removeEventListener("resize", this.visualViewportResize);
@@ -8330,6 +8343,22 @@ export class EventAdminApp {
     }
   }
 
+  requestChatScrollAfterLayout() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!this.chat || !this.chat.state || !this.chat.state.autoScroll) {
+      return;
+    }
+    if (this.chatLayoutScrollRaf) {
+      window.cancelAnimationFrame(this.chatLayoutScrollRaf);
+    }
+    this.chatLayoutScrollRaf = window.requestAnimationFrame(() => {
+      this.chatLayoutScrollRaf = 0;
+      this.chat.scrollToLatest(false);
+    });
+  }
+
   updateChatLayoutMetrics() {
     if (typeof window === "undefined" || typeof document === "undefined") {
       return;
@@ -8384,8 +8413,8 @@ export class EventAdminApp {
 
     const heightChanged = this.chatLayoutHeight !== nextHeight;
     this.chatLayoutHeight = nextHeight;
-    if (heightChanged && this.chat && this.chat.state && this.chat.state.autoScroll) {
-      this.chat.scrollToLatest(false);
+    if (heightChanged) {
+      this.requestChatScrollAfterLayout();
     }
   }
 
