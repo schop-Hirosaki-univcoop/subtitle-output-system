@@ -6072,9 +6072,13 @@ export class EventAdminApp {
         this.visualViewportResize = null;
       }
     }
+    const layout = this.dom.chatContainer?.closest(".events-layout");
     if (this.dom.chatContainer) {
       this.dom.chatContainer.style.removeProperty("--events-chat-top");
       this.dom.chatContainer.style.removeProperty("--events-chat-height");
+    }
+    if (layout) {
+      layout.style.removeProperty("--events-main-panel-height");
     }
   }
 
@@ -8393,6 +8397,14 @@ export class EventAdminApp {
 
       const headerHeight = header ? header.getBoundingClientRect().height : 0;
       const flowStageHeight = flowStage ? flowStage.getBoundingClientRect().height : 0;
+
+      if (layout) {
+        if (flowStageHeight > 0) {
+          layout.style.setProperty("--events-main-panel-height", `${flowStageHeight}px`);
+        } else {
+          layout.style.removeProperty("--events-main-panel-height");
+        }
+      }
 
       const chatStyles = window.getComputedStyle(chatContainer);
       const cssStickyTop = parseCssPixels(chatStyles.top);
