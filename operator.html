@@ -149,6 +149,24 @@
           </span>
           <span id="flow-schedule-summary-empty" class="sidebar-card__placeholder">イベントと日程を選択してください。</span>
         </button>
+
+        <div id="op-channel-banner" role="region" aria-live="polite" hidden>
+          <div class="channel-banner__heading">
+            <span id="op-channel-status" class="channel-banner__status">ディスプレイの状態を確認しています…</span>
+            <button id="op-channel-lock-button" class="btn btn-primary btn-sm" type="button">この日程に固定</button>
+          </div>
+          <div class="channel-banner__body">
+            <div class="channel-banner__assignment" role="status">
+              <span class="channel-banner__assignment-label">ディスプレイ</span>
+              <span id="op-channel-assignment" class="channel-banner__assignment-value">—</span>
+            </div>
+            <div>
+              <div class="channel-banner__assignment-label">オペレーターの選択状況</div>
+              <ul id="op-channel-presence-list" class="channel-presence-list" aria-live="polite"></ul>
+              <p id="op-channel-presence-empty" hidden>このイベントで選択中のオペレーターはいません。</p>
+            </div>
+          </div>
+        </div>
         <nav class="sidebar-nav" aria-label="パネル選択">
           <button id="flow-tab-participants" class="sidebar-nav__button" type="button" data-panel-target="participants">参加者リスト</button>
           <button id="flow-tab-gl" class="sidebar-nav__button" type="button" data-panel-target="gl">GLリスト</button>
@@ -972,23 +990,6 @@
                                 <input id="op-select-all-checkbox" type="checkbox">
                                 全選択
                               </label>
-                            </div>
-                          </div>
-                        </div>
-                        <div id="op-channel-banner" role="region" aria-live="polite" hidden>
-                          <div class="channel-banner__heading">
-                            <span id="op-channel-status" class="channel-banner__status">ディスプレイの状態を確認しています…</span>
-                            <button id="op-channel-lock-button" class="btn btn-primary btn-sm" type="button">この日程に固定</button>
-                          </div>
-                          <div class="channel-banner__body">
-                            <div class="channel-banner__assignment" role="status">
-                              <span class="channel-banner__assignment-label">ディスプレイ</span>
-                              <span id="op-channel-assignment" class="channel-banner__assignment-value">—</span>
-                            </div>
-                            <div>
-                              <div class="channel-banner__assignment-label">オペレーターの選択状況</div>
-                              <ul id="op-channel-presence-list" class="channel-presence-list" aria-live="polite"></ul>
-                              <p id="op-channel-presence-empty" hidden>このイベントで選択中のオペレーターはいません。</p>
                             </div>
                           </div>
                         </div>
