@@ -2359,9 +2359,6 @@ export class EventAdminApp {
     if (!hasSchedule) {
       return;
     }
-    if (this.dom.scheduleSummaryEvent) {
-      this.dom.scheduleSummaryEvent.textContent = event.name || event.id;
-    }
     if (this.dom.scheduleSummaryLabel) {
       this.dom.scheduleSummaryLabel.textContent = schedule.label || schedule.id;
     }

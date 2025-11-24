@@ -71,7 +71,6 @@ export function queryDom() {
     scheduleNextButton: document.querySelector('[data-panel="schedules"] [data-flow-nav-target="participants"]'),
     scheduleSummary: document.getElementById("flow-schedule-summary"),
     scheduleSummaryEmpty: document.getElementById("flow-schedule-summary-empty"),
-    scheduleSummaryEvent: document.getElementById("flow-schedule-summary-event"),
     scheduleSummaryLabel: document.getElementById("flow-schedule-summary-label"),
     scheduleSummaryRange: document.getElementById("flow-schedule-summary-range"),
     scheduleSummaryRangeRow: document.getElementById("flow-schedule-summary-range-row"),
