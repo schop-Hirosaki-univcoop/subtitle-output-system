@@ -3663,31 +3663,9 @@ body.events-page .flow-stage-panel{
   gap:1.25rem;
   position:sticky;
   top:var(--events-sticky-top);
-  max-height:var(--events-main-panel-height, calc(100vh - var(--events-sticky-top) - clamp(1rem, 2vw, 1.75rem)));
+  max-height:calc(100vh - var(--events-sticky-top) - clamp(1rem, 2vw, 1.75rem));
   overflow:auto;
-  scrollbar-gutter:stable;
-  scrollbar-width:thin;
-  scrollbar-color:rgba(108,132,168,.6) rgba(12,20,34,.7);
   align-self:start;
-}
-
-.events-sidebar::-webkit-scrollbar{
-  width:10px;
-}
-
-.events-sidebar::-webkit-scrollbar-track{
-  background:rgba(10,16,26,.7);
-  border-radius:999px;
-}
-
-.events-sidebar::-webkit-scrollbar-thumb{
-  background:linear-gradient(180deg, rgba(46,141,255,.5), rgba(30,200,255,.35));
-  border-radius:999px;
-  border:2px solid rgba(9,14,24,.9);
-}
-
-.events-sidebar::-webkit-scrollbar-thumb:hover{
-  background:linear-gradient(180deg, rgba(46,141,255,.7), rgba(30,200,255,.5));
 }
 
 .sidebar-card{
