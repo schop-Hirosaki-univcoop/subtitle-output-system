@@ -4956,9 +4956,8 @@ body.sidebar-overlay-open{
 }
 
 #flow-panel-participants .qa-embedded .loading-overlay{
-  border-radius: clamp(.95rem, 1.8vw, 1.4rem);
   background:linear-gradient(180deg, rgba(8,16,32,.92), rgba(6,12,24,.88));
-  border-radius:inherit;
+  border-radius: clamp(.95rem, 1.8vw, 1.4rem);
   backdrop-filter:blur(10px);
 }
 
