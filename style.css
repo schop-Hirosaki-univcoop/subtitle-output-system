@@ -488,6 +488,7 @@ body.logs-open #logs-panel{ display:flex; }
   gap:clamp(.5rem, 1.1vw, .75rem);
 }
 .module-body{
+  gap:1vh;
   flex:1 1 auto;
   min-height:0;
   overflow:auto;
@@ -4029,7 +4030,6 @@ body.events-page .flow-stage-panel{
 }
 
 .flow-pane{
-  gap: 1vh;
   display:block;
   min-width:0;
 }
@@ -4241,17 +4241,17 @@ body.sidebar-overlay-open{
 
 .entity-list{
   list-style:none;
-  margin:0;
+  margin: 0.5vh 0 0;
   padding:0;
   display:grid;
-  gap:1rem;
+  gap:0.5vh;
 }
 
 .entity-item{
   display:flex;
   align-items:flex-start;
   justify-content:space-between;
-  gap:1rem;
+  gap:0.3vw;
   padding:1.1rem 1.3rem;
   border-radius:1rem;
   background:rgba(8,20,34,.75);
@@ -4331,6 +4331,7 @@ body.sidebar-overlay-open{
 }
 
 .entity-label{
+  margin-right: auto;
   display:flex;
   flex-direction:column;
   gap:.4rem;
@@ -4955,6 +4956,7 @@ body.sidebar-overlay-open{
 }
 
 #flow-panel-participants .qa-embedded .loading-overlay{
+  border-radius: clamp(.95rem, 1.8vw, 1.4rem);
   background:linear-gradient(180deg, rgba(8,16,32,.92), rgba(6,12,24,.88));
   border-radius:inherit;
   backdrop-filter:blur(10px);
