@@ -2836,7 +2836,7 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   align-items:center;
   justify-content:space-between;
   gap:.75rem;
-  margin-top:1rem;
+  margin:0;
   flex-wrap:wrap;
 }
 
@@ -4029,6 +4029,7 @@ body.events-page .flow-stage-panel{
 }
 
 .flow-pane{
+  gap: 1vh;
   display:block;
   min-width:0;
 }
@@ -4182,7 +4183,7 @@ body.sidebar-overlay-open{
 }
 
 .flow-selection-note{
-  margin:.75rem 0 1rem;
+  margin:0;
   padding:.65rem .85rem;
   border-radius:.6rem;
   background:rgba(0,142,255,.1);
@@ -4240,7 +4241,7 @@ body.sidebar-overlay-open{
 
 .entity-list{
   list-style:none;
-  margin:1.1rem 0 0;
+  margin:0;
   padding:0;
   display:grid;
   gap:1rem;
