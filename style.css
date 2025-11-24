@@ -851,7 +851,6 @@ body.logs-open #logs-panel{ display:flex; }
   box-shadow:none;
 }
 .btn-primary{
-  font-size:85%;
   background:linear-gradient(180deg, #2563eb, #1b46c1);
   border-color:#1f3b94;
   box-shadow:0 12px 26px rgba(37,99,235,.35);
@@ -1164,7 +1163,6 @@ input[type="checkbox"]{
   flex-direction:column;
   align-items:center;
   gap:clamp(.55rem, 1.2vw, .85rem);
-  padding:clamp(.35rem, 1.2vw, .75rem) 0 calc(var(--footer-clearance) + var(--footer-gap));
 }
 
 .q-card{
