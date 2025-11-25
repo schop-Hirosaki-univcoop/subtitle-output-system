@@ -40,13 +40,13 @@ const PRINT_ORIENTATIONS = new Set(["portrait", "landscape"]);
 const PRINT_MARGINS = new Set(["5mm", "10mm", "15mm"]);
 
 function logPrint(level, message, details) {
-  if (typeof console === "undefined") return;
+/*  if (typeof console === "undefined") return;
   const logger = (console[level] || console.log).bind(console);
   if (details !== undefined) {
     logger(`${PRINT_LOG_PREFIX} ${message}`, details);
   } else {
     logger(`${PRINT_LOG_PREFIX} ${message}`);
-  }
+  }*/
 }
 
 function logPrintInfo(message, details) {
