@@ -1045,7 +1045,7 @@ export class OperatorApp {
     if (details && typeof details === "object" && Object.keys(details).length > 0) {
       payload.details = details;
     }
-    console.log("[Operator] schedule-debug", payload);
+//    console.log("[Operator] schedule-debug", payload);
   }
 
   /**
