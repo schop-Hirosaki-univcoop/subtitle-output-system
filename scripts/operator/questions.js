@@ -185,7 +185,7 @@ export function renderQuestions(app) {
   const viewingAllGenres = !selectedGenre || selectedGenre.toLowerCase() === GENRE_ALL_VALUE;
   const selectedSchedule = resolveNormalScheduleKey(app);
   if (viewingNormalTab) {
-    console.info("[schedule-debug] logging enabled for normal tab", {
+//    console.info("[schedule-debug] logging enabled for normal tab", {
       currentTab,
       selectedSchedule,
       hasCardsContainer: Boolean(app?.dom?.cardsContainer)
@@ -201,7 +201,7 @@ export function renderQuestions(app) {
     ).trim();
 
     const normalQuestions = app.state.allQuestions.filter((item) => !isPickUpQuestion(item));
-    console.info("[schedule-debug] display schedule", {
+//    console.info("[schedule-debug] display schedule", {
       eventId: displayEventId,
       scheduleId: displayScheduleId,
       scheduleKey: displayScheduleKey,
@@ -212,7 +212,7 @@ export function renderQuestions(app) {
       const questionEventId = String(item["イベントID"] ?? "").trim();
       const questionScheduleId = String(item["日程ID"] ?? "").trim();
       const questionLabel = String(item.__scheduleLabel ?? item["日程示"] ?? "").trim();
-      console.info("[schedule-debug] normal question", {
+//      console.info("[schedule-debug] normal question", {
         uid: item.UID,
         eventId: questionEventId,
         scheduleId: questionScheduleId,
@@ -221,7 +221,7 @@ export function renderQuestions(app) {
       });
     });
   } else {
-    console.info("[schedule-debug] logging skipped (not on normal tab)", {
+//    console.info("[schedule-debug] logging skipped (not on normal tab)", {
       currentTab,
       hasCardsContainer: Boolean(app?.dom?.cardsContainer)
     });
@@ -726,7 +726,7 @@ export async function handleUnanswer(app) {
     app.api.fireAndForgetApi({ action: "updateStatus", uid: app.state.selectedRowData.uid, status: false });
     app.api.logAction("UNANSWER", `UID: ${uid}, RN: ${displayLabel}`);
   } catch (error) {
-    console.error("Failed to revert question to unanswered", error);
+//    console.error("Failed to revert question to unanswered", error);
     app.toast("未回答への戻し中にエラーが発生しました。", "error");
   }
 }
@@ -1009,7 +1009,7 @@ export function updateActionAvailability(app) {
     }
     if (typeof console !== "undefined" && typeof console.log === "function") {
       const { message, details } = summarizeActionPanelDebug(panelDebug);
-      console.log(`[Operator] action-availability ${message}`, details);
+//      console.log(`[Operator] action-availability ${message}`, details);
     }
   };
 
