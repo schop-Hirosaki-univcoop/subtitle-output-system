@@ -72,8 +72,8 @@ function writeLog(storage, entries) {
 }
 
 function consoleForLevel(level = "info") {
-//  const method = typeof level === "string" ? level.toLowerCase() : "log";
-//  return console[method] ? console[method].bind(console) : console.log.bind(console);
+  const method = typeof level === "string" ? level.toLowerCase() : "log";
+  return console[method] ? console[method].bind(console) : console.log.bind(console);
 }
 
 export function appendAuthDebugLog(event, detail = undefined, { level = "info" } = {}) {
@@ -93,9 +93,9 @@ export function appendAuthDebugLog(event, detail = undefined, { level = "info" }
 
   const logFn = consoleForLevel(entry.level);
   if (detail !== undefined) {
-    logFn(`[auth-debug] ${entry.event}`, detail);
+//    logFn(`[auth-debug] ${entry.event}`, detail);
   } else {
-    logFn(`[auth-debug] ${entry.event}`);
+//    logFn(`[auth-debug] ${entry.event}`);
   }
   return entry;
 }
