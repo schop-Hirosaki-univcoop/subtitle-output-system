@@ -9,11 +9,11 @@ const PREFIX = "[DisplayLink]";
  * @param {...unknown} details
  */
 function log(level, message, ...details) {
-  const method = typeof console?.[level] === "function" ? console[level] : console.log;
+/*  const method = typeof console?.[level] === "function" ? console[level] : console.log;
   const normalizedMessage = typeof message === "string" ? message : String(message ?? "");
   const extras = details.filter((detail) => detail !== undefined);
   method.call(console, PREFIX, normalizedMessage, ...extras);
-}
+*/}
 
 /**
  * 通常情報ログを出力します。
