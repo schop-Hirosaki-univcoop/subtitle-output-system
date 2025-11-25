@@ -180,14 +180,14 @@ function writeMailLog_(severity, message, error, details) {
 // メール関連の通常ログを書き込むためのヘルパー。
 // 毎回severityなどを意識せず、logMail_だけ呼べばOKにするための薄いラッパー。
 function logMail_(message, details) {
-  writeMailLog_('INFO', message, null, details);
+//  writeMailLog_('INFO', message, null, details);
 }
 
 
 // メール関連のエラーログ専用ヘルパー。
 // エラー内容と合わせて、ログシートとLoggerの両方に記録する。
 function logMailError_(message, error, details) {
-  writeMailLog_('ERROR', message, error, details);
+//  writeMailLog_('ERROR', message, error, details);
 }
 
 // === スプレッドシートの日付セルをDate型に変換する =========
