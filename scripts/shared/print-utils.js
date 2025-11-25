@@ -40,29 +40,29 @@ const PRINT_ORIENTATIONS = new Set(["portrait", "landscape"]);
 const PRINT_MARGINS = new Set(["5mm", "10mm", "15mm"]);
 
 function logPrint(level, message, details) {
-/*  if (typeof console === "undefined") return;
+  if (typeof console === "undefined") return;
   const logger = (console[level] || console.log).bind(console);
   if (details !== undefined) {
     logger(`${PRINT_LOG_PREFIX} ${message}`, details);
   } else {
     logger(`${PRINT_LOG_PREFIX} ${message}`);
-  }*/
+  }
 }
 
 function logPrintInfo(message, details) {
-  logPrint("info", message, details);
+//  logPrint("info", message, details);
 }
 
 function logPrintWarn(message, details) {
-  logPrint("warn", message, details);
+//  logPrint("warn", message, details);
 }
 
 function logPrintError(message, details) {
-  logPrint("error", message, details);
+//  logPrint("error", message, details);
 }
 
 function logPrintDebug(message, details) {
-  logPrint("debug", message, details);
+//  logPrint("debug", message, details);
 }
 
 function escapeHtml(value) {
