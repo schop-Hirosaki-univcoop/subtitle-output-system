@@ -72,8 +72,8 @@ function writeLog(storage, entries) {
 }
 
 function consoleForLevel(level = "info") {
-  const method = typeof level === "string" ? level.toLowerCase() : "log";
-  return console[method] ? console[method].bind(console) : console.log.bind(console);
+//  const method = typeof level === "string" ? level.toLowerCase() : "log";
+//  return console[method] ? console[method].bind(console) : console.log.bind(console);
 }
 
 export function appendAuthDebugLog(event, detail = undefined, { level = "info" } = {}) {
