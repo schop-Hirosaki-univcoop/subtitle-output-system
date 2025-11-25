@@ -166,7 +166,7 @@ html.embedded-view .site-footer{ display:none !important; }
   font-size:clamp(0.825rem, 1.425vw, 1.05rem);
   font-weight:700;
   letter-spacing:.12em;
-  text-transform:uppercase;
+/*  text-transform:uppercase;*/
 }
 .brand-tagline{
   font-size:clamp(0.48rem, 0.75vw, 0.6rem);
