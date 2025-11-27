@@ -9298,6 +9298,24 @@ export class EventAdminApp {
     const key = typeof event.key === "string" ? event.key : "";
     const normalized = key.length === 1 ? key.toLowerCase() : key;
 
+    if (
+      this.activePanel === "events" &&                     // イベント管理パネルがアクティブで
+      !this.getSelectedEvent?.() &&                        // まだ何も選ばれておらず
+      !event.altKey && !event.ctrlKey && !event.metaKey && // 修飾キーなしの
+      (event.key === "ArrowDown" ||
+        event.key === "Down" ||
+        event.key === "ArrowUp" ||
+        event.key === "Up")
+    ) {
+      const items = this.getEventListItems?.() || [];
+      if (items.length > 0) {
+        event.preventDefault();
+        // 一番上のイベントを「選択 + フォーカス」
+        this.focusEventListItem(items[0], { select: true });
+      }
+      return; // ここで処理完了（このキーはここで食う）
+    }
+    
     if (isFormField && !(event.ctrlKey || event.metaKey)) {
       return;
     }
