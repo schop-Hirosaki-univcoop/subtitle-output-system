@@ -1,6 +1,7 @@
 // auth-debug-log.js: 認証フローまわりのデバッグログを永続化しつつコンソールへ出力するユーティリティ。
 const LOG_STORAGE_KEY = "sos:authDebugLog";
 const MAX_LOG_ENTRIES = 200;
+const AUTH_DEBUG_OUTPUT_ENABLED = false;
 
 function safeGetStorage() {
   try {
@@ -91,16 +92,21 @@ export function appendAuthDebugLog(event, detail = undefined, { level = "info" }
   }
   writeLog(storage, entries);
 
-  const logFn = consoleForLevel(entry.level);
-  if (detail !== undefined) {
-//    logFn(`[auth-debug] ${entry.event}`, detail);
-  } else {
-//    logFn(`[auth-debug] ${entry.event}`);
+  if (AUTH_DEBUG_OUTPUT_ENABLED) {
+    const logFn = consoleForLevel(entry.level);
+    if (detail !== undefined) {
+      logFn(`[auth-debug] ${entry.event}`, detail);
+    } else {
+      logFn(`[auth-debug] ${entry.event}`);
+    }
   }
   return entry;
 }
 
 export function replayAuthDebugLog({ label = "[auth-debug] Persistent log", level = "groupCollapsed", clear = false } = {}) {
+  if (!AUTH_DEBUG_OUTPUT_ENABLED) {
+    return [];
+  }
   const storage = safeGetStorage();
   const entries = readLog(storage);
   if (!entries.length) {
