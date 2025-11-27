@@ -1565,7 +1565,7 @@ export class EventAdminApp {
       : items.findIndex((el) => el.dataset.eventId === this.selectedEventId);
     const activeIndex = currentIndex >= 0 ? currentIndex : -1;
 
-    let nextIndex = safeIndex;
+    let nextIndex = activeIndex >= 0 ? activeIndex : 0;
     switch (event.key) {
       case "ArrowDown":
       case "Down":
