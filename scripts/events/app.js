@@ -1560,18 +1560,20 @@ export class EventAdminApp {
     const items = this.getEventListItems();
     if (!items.length) return;
 
-    const currentIndex = item ? items.indexOf(item) : items.findIndex((el) => el.dataset.eventId === this.selectedEventId);
-    const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+    const currentIndex = item
+      ? items.indexOf(item)
+      : items.findIndex((el) => el.dataset.eventId === this.selectedEventId);
+    const activeIndex = currentIndex >= 0 ? currentIndex : -1;
 
     let nextIndex = safeIndex;
     switch (event.key) {
       case "ArrowDown":
       case "Down":
-        nextIndex = Math.min(items.length - 1, safeIndex + 1);
+        nextIndex = Math.min(items.length - 1, activeIndex + 1 || 0);
         break;
       case "ArrowUp":
       case "Up":
-        nextIndex = Math.max(0, safeIndex - 1);
+        nextIndex = Math.max(0, activeIndex >= 0 ? activeIndex - 1 : 0);
         break;
       case "Home":
         nextIndex = 0;
@@ -1580,7 +1582,7 @@ export class EventAdminApp {
         nextIndex = items.length - 1;
         break;
       case "Enter": {
-        const activeItem = item || items[safeIndex] || null;
+        const activeItem = item || items[Math.max(0, activeIndex)] || null;
         if (!activeItem) return;
         event.preventDefault();
         this.focusEventListItem(activeItem, { select: true });
