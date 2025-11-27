@@ -4456,9 +4456,13 @@ function setStaffPrintButtonBusy(isBusy) {
   syncAllPrintButtonStates();
 }
 
+const MAIL_LOG_ENABLED = false;
 const MAIL_LOG_PREFIX = "[Mail]";
 
 function logMailInfo(message, details) {
+  if (!MAIL_LOG_ENABLED) {
+    return;
+  }
   if (typeof console === "undefined") {
     return;
   }
@@ -4471,6 +4475,9 @@ function logMailInfo(message, details) {
 }
 
 function logMailWarn(message, details) {
+  if (!MAIL_LOG_ENABLED) {
+    return;
+  }
   if (typeof console === "undefined") {
     return;
   }
@@ -4483,6 +4490,9 @@ function logMailWarn(message, details) {
 }
 
 function logMailError(message, error, details) {
+  if (!MAIL_LOG_ENABLED) {
+    return;
+  }
   if (typeof console === "undefined") {
     return;
   }
