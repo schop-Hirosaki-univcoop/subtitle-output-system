@@ -261,6 +261,8 @@ export function renderQuestions(app) {
   list.forEach((item) => {
     const card = document.createElement("article");
     card.className = "q-card";
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
     const isAnswered = !!item["回答済"];
     const isSelecting = !!item["選択中"];
     const statusText = isSelecting ? "送出準備中" : isAnswered ? "送出済" : "未送出";
@@ -330,21 +332,35 @@ export function renderQuestions(app) {
       </header>
       <div class="q-text">${escapeHtml(item["質問・お悩み"])}</div>
     `;
+    card.setAttribute("aria-pressed", uid === selectedUid ? "true" : "false");
+    const selectionPayload = {
+      uid,
+      name: item["ラジオネーム"],
+      question: item["質問・お悩み"],
+      isAnswered,
+      participantId,
+      genre: normalizedGenre,
+      isPickup: isPuq
+    };
+    const applySelection = () => selectQuestionCard(app, card, selectionPayload);
     card.addEventListener("click", (event) => {
       const target = event.target;
       if (target instanceof Element && target.closest(".q-check")) return;
-      app.dom.cardsContainer?.querySelectorAll(".q-card").forEach((el) => el.classList.remove("is-selected"));
-      card.classList.add("is-selected");
-      app.state.selectedRowData = {
-        uid,
-        name: item["ラジオネーム"],
-        question: item["質問・お悩み"],
-        isAnswered,
-        participantId,
-        genre: normalizedGenre,
-        isPickup: isPuq
-      };
-      updateActionAvailability(app);
+      applySelection();
+    });
+    card.addEventListener("keydown", (event) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".q-check")) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        applySelection();
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusAdjacentCard(app, card, 1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusAdjacentCard(app, card, -1);
+      }
     });
     app.dom.cardsContainer.appendChild(card);
   });
@@ -358,6 +374,28 @@ export function renderQuestions(app) {
   }
   syncSelectAllState(app);
   updateBatchButtonVisibility(app);
+}
+
+function selectQuestionCard(app, card, selectionPayload) {
+  app.dom.cardsContainer?.querySelectorAll(".q-card").forEach((el) => {
+    el.classList.remove("is-selected");
+    el.setAttribute("aria-pressed", "false");
+  });
+  card.classList.add("is-selected");
+  card.setAttribute("aria-pressed", "true");
+  app.state.selectedRowData = selectionPayload;
+  updateActionAvailability(app);
+}
+
+function focusAdjacentCard(app, currentCard, delta) {
+  if (!app.dom.cardsContainer) return;
+  const cards = Array.from(app.dom.cardsContainer.querySelectorAll(".q-card"));
+  const currentIndex = cards.indexOf(currentCard);
+  if (currentIndex === -1) return;
+  const nextCard = cards[currentIndex + delta];
+  if (nextCard instanceof HTMLElement) {
+    nextCard.focus();
+  }
 }
 
 export function updateScheduleContext(app, options = {}) {
