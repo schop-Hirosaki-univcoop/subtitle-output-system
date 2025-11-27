@@ -179,6 +179,8 @@ export class EventAdminApp {
     });
 //    this.tools = new ToolCoordinator(this);
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
+    this.handleEventListKeydown = this.handleEventListKeydown.bind(this);
+    this.handleEventListFocus = this.handleEventListFocus.bind(this);
     this.cleanup = this.cleanup.bind(this);
     this.eventCountNote = "";
     this.stageNote = "";
@@ -813,6 +815,15 @@ export class EventAdminApp {
       this.dom.chatContainer.addEventListener("pointerdown", this.handleChatInteraction);
       this.dom.chatContainer.addEventListener("focusin", this.handleChatInteraction);
     }
+
+    if (this.dom.eventList) {
+      this.dom.eventList.addEventListener("keydown", this.handleEventListKeydown);
+      this.dom.eventList.addEventListener("focusin", this.handleEventListFocus);
+    }
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("keydown", this.handleGlobalKeydown, true);
+    }
   }
 
   async handleLogoutClick() {
@@ -1362,6 +1373,8 @@ export class EventAdminApp {
       list.removeAttribute("role");
       list.removeAttribute("aria-label");
       list.removeAttribute("aria-orientation");
+      list.removeAttribute("aria-activedescendant");
+      list.removeAttribute("tabindex");
       return;
     }
 
@@ -1371,12 +1384,14 @@ export class EventAdminApp {
     list.setAttribute("role", "listbox");
     list.setAttribute("aria-label", "イベント一覧");
     list.setAttribute("aria-orientation", "vertical");
+    list.tabIndex = 0;
     const fragment = document.createDocumentFragment();
     this.events.forEach((event) => {
       const item = document.createElement("li");
       item.className = "entity-item";
       item.dataset.eventId = event.id;
       item.setAttribute("role", "option");
+      item.id = `flow-event-option-${event.id}`;
 
       const isSelected = event.id === this.selectedEventId && this.selectedEventId;
       if (isSelected) {
@@ -1455,6 +1470,136 @@ export class EventAdminApp {
     });
 
     list.appendChild(fragment);
+    this.updateEventListKeyboardMetadata();
+  }
+
+  getEventListItems() {
+    const list = this.dom.eventList;
+    if (!list) return [];
+    return Array.from(list.querySelectorAll(".entity-item"));
+  }
+
+  getEventListItemByEventId(eventId) {
+    const items = this.getEventListItems();
+    if (!eventId) {
+      return items[0] || null;
+    }
+    return items.find((item) => item.dataset.eventId === eventId) || null;
+  }
+
+  updateEventListKeyboardMetadata(activeElement = null) {
+    const list = this.dom.eventList;
+    if (!list) return;
+    const items = this.getEventListItems();
+    if (!items.length) {
+      list.removeAttribute("aria-activedescendant");
+      return;
+    }
+    const target =
+      activeElement || this.getEventListItemByEventId(this.selectedEventId) || items[0] || null;
+    if (target instanceof HTMLElement && target.id) {
+      list.setAttribute("aria-activedescendant", target.id);
+    } else {
+      list.removeAttribute("aria-activedescendant");
+    }
+  }
+
+  focusEventListItem(element, { select = false } = {}) {
+    if (!(element instanceof HTMLElement)) return;
+    const eventId = ensureString(element.dataset.eventId);
+    if (select && eventId) {
+      this.selectEvent(eventId);
+      requestAnimationFrame(() => {
+        const refreshed = this.getEventListItemByEventId(eventId);
+        if (refreshed instanceof HTMLElement) {
+          refreshed.focus();
+          this.updateEventListKeyboardMetadata(refreshed);
+        }
+      });
+      return;
+    }
+    element.focus();
+    this.updateEventListKeyboardMetadata(element);
+  }
+
+  handleEventListFocus(event) {
+    const list = this.dom.eventList;
+    if (!list || !this.events.length) return;
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const item = target.closest(".entity-item");
+    if (item) {
+      this.updateEventListKeyboardMetadata(item);
+      return;
+    }
+    if (target === list) {
+      const activeItem =
+        this.getEventListItemByEventId(this.selectedEventId) || this.getEventListItems()[0] || null;
+      if (activeItem) {
+        this.focusEventListItem(activeItem);
+      }
+    }
+  }
+
+  handleEventListKeydown(event) {
+    const list = this.dom.eventList;
+    if (!list || !this.events.length) return;
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const item = target.closest(".entity-item");
+    const isListFocused = target === list;
+    const actionableControl = target.closest(
+      "button, [role='button'], input, select, textarea, a, [data-interactive]"
+    );
+    if (actionableControl && actionableControl !== item && actionableControl !== list) {
+      return;
+    }
+    if (!item && !isListFocused) return;
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+
+    const items = this.getEventListItems();
+    if (!items.length) return;
+
+    const currentIndex = item
+      ? items.indexOf(item)
+      : items.findIndex((el) => el.dataset.eventId === this.selectedEventId);
+    const activeIndex = currentIndex >= 0 ? currentIndex : -1;
+
+    let nextIndex = safeIndex;
+    switch (event.key) {
+      case "ArrowDown":
+      case "Down":
+        nextIndex = Math.min(items.length - 1, activeIndex + 1 || 0);
+        break;
+      case "ArrowUp":
+      case "Up":
+        nextIndex = Math.max(0, activeIndex >= 0 ? activeIndex - 1 : 0);
+        break;
+      case "Home":
+        nextIndex = 0;
+        break;
+      case "End":
+        nextIndex = items.length - 1;
+        break;
+      case "Enter": {
+        const activeItem = item || items[Math.max(0, activeIndex)] || null;
+        if (!activeItem) return;
+        event.preventDefault();
+        this.focusEventListItem(activeItem, { select: true });
+        const committed = this.confirmEventSelection({ reason: "event-confirm:keyboard" });
+        if (committed) {
+          void this.handleFlowNavigation("schedules");
+        }
+        return;
+      }
+      default:
+        return;
+    }
+
+    const nextItem = items[nextIndex];
+    if (!nextItem) return;
+    event.preventDefault();
+    this.focusEventListItem(nextItem, { select: true });
   }
 
   ensureSelectedEvent(preferredId = "") {
@@ -5989,6 +6134,7 @@ export class EventAdminApp {
       document.removeEventListener("webkitfullscreenchange", this.handleFullscreenChange);
       document.removeEventListener("fullscreenerror", this.handleFullscreenError);
       document.removeEventListener("webkitfullscreenerror", this.handleFullscreenError);
+      document.removeEventListener("keydown", this.handleGlobalKeydown, true);
     }
     if (typeof window !== "undefined") {
       window.removeEventListener("beforeunload", this.cleanup);
@@ -5996,6 +6142,10 @@ export class EventAdminApp {
     if (this.dom.chatContainer) {
       this.dom.chatContainer.removeEventListener("pointerdown", this.handleChatInteraction);
       this.dom.chatContainer.removeEventListener("focusin", this.handleChatInteraction);
+    }
+    if (this.dom.eventList) {
+      this.dom.eventList.removeEventListener("keydown", this.handleEventListKeydown);
+      this.dom.eventList.removeEventListener("focusin", this.handleEventListFocus);
     }
     this.closeMobilePanel({ restoreFocus: false });
     this.selectionListeners.clear();
@@ -7808,6 +7958,7 @@ export class EventAdminApp {
       document.removeEventListener("webkitfullscreenchange", this.handleFullscreenChange);
       document.removeEventListener("fullscreenerror", this.handleFullscreenError);
       document.removeEventListener("webkitfullscreenerror", this.handleFullscreenError);
+      document.removeEventListener("keydown", this.handleGlobalKeydown, true);
     }
     if (typeof window !== "undefined") {
       window.removeEventListener("beforeunload", this.cleanup);
@@ -7815,6 +7966,10 @@ export class EventAdminApp {
     if (this.dom.chatContainer) {
       this.dom.chatContainer.removeEventListener("pointerdown", this.handleChatInteraction);
       this.dom.chatContainer.removeEventListener("focusin", this.handleChatInteraction);
+    }
+    if (this.dom.eventList) {
+      this.dom.eventList.removeEventListener("keydown", this.handleEventListKeydown);
+      this.dom.eventList.removeEventListener("focusin", this.handleEventListFocus);
     }
     this.closeMobilePanel({ restoreFocus: false });
     this.selectionListeners.clear();
@@ -9053,7 +9208,6 @@ export class EventAdminApp {
     this.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     element.removeAttribute("hidden");
     document.body.classList.add("modal-open");
-    document.addEventListener("keydown", this.handleGlobalKeydown, true);
     const focusTarget = element.querySelector("[data-autofocus]") || element.querySelector("input, button, select, textarea");
     if (focusTarget instanceof HTMLElement) {
       requestAnimationFrame(() => focusTarget.focus());
@@ -9067,7 +9221,6 @@ export class EventAdminApp {
     }
     if (this.activeDialog === element) {
       document.body.classList.remove("modal-open");
-      document.removeEventListener("keydown", this.handleGlobalKeydown, true);
       const toFocus = this.lastFocused;
       this.activeDialog = null;
       this.lastFocused = null;
@@ -9122,6 +9275,90 @@ export class EventAdminApp {
       } else {
         this.closeDialog(this.activeDialog);
       }
+      return;
+    }
+
+    if (this.activeDialog) {
+      return;
+    }
+
+    if (this.activePanel !== "events") {
+      return;
+    }
+
+    if (event.defaultPrevented) {
+      return;
+    }
+
+    const target = event.target;
+    const isFormField =
+      target instanceof HTMLElement &&
+      target.closest("input, textarea, select, [role='textbox'], [contenteditable=''], [contenteditable='true']");
+
+    const key = typeof event.key === "string" ? event.key : "";
+    const normalized = key.length === 1 ? key.toLowerCase() : key;
+
+    if (isFormField && !(event.ctrlKey || event.metaKey)) {
+      return;
+    }
+
+    switch (normalized) {
+      case "i": {
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+        event.preventDefault();
+        if (this.dom.addEventButton?.disabled) return;
+        this.openEventDialog({ mode: "create" });
+        return;
+      }
+      case "p": {
+        if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+        event.preventDefault();
+        const printButton = this.dom.eventPrintButton;
+        if (printButton && printButton.disabled) return;
+        this.handleEventPrint();
+        return;
+      }
+      case "r": {
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+        const refreshButton = this.dom.refreshButton;
+        if (!refreshButton || refreshButton.disabled) return;
+        event.preventDefault();
+        refreshButton.disabled = true;
+        void (async () => {
+          try {
+            this.beginEventsLoading("イベント情報を再読み込みしています…");
+            await this.loadEvents();
+          } catch (error) {
+            logError("Failed to refresh events via shortcut", error);
+            this.showAlert(error?.message || "イベントの再読み込みに失敗しました。");
+          } finally {
+            this.endEventsLoading();
+            refreshButton.disabled = false;
+          }
+        })();
+        return;
+      }
+      case "e": {
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+        const selected = this.getSelectedEvent();
+        if (!selected) return;
+        event.preventDefault();
+        this.openEventDialog({ mode: "edit", event: selected });
+        return;
+      }
+      case "Delete": {
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+        const selected = this.getSelectedEvent();
+        if (!selected) return;
+        event.preventDefault();
+        void this.deleteEvent(selected).catch((error) => {
+          logError("Failed to delete event via shortcut", error);
+          this.showAlert(error?.message || "イベントの削除に失敗しました。");
+        });
+        return;
+      }
+      default:
+        break;
     }
   }
 
