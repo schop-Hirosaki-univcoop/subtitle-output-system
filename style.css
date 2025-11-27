@@ -1108,56 +1108,6 @@ input[type="checkbox"]{
   opacity:.6;
   pointer-events:none;
 }
-.keyboard-help{
-  border:1px solid rgba(72,96,132,.55);
-  background:rgba(13,18,30,.85);
-  border-radius:clamp(.75rem, 1.2vw, .9rem);
-  padding:clamp(.55rem, 1vw, .8rem);
-  box-shadow:0 8px 18px rgba(0,0,0,.25);
-}
-.keyboard-help__title{
-  margin:0 0 .35rem;
-  font-size:.9rem;
-  color:var(--muted);
-  font-weight:700;
-  letter-spacing:.02em;
-}
-.keyboard-help__list{
-  margin:0;
-  padding:0;
-  display:flex;
-  flex-direction:column;
-  gap:.35rem;
-}
-.keyboard-help__row{
-  display:grid;
-  grid-template-columns:auto 1fr;
-  gap:.5rem;
-  align-items:start;
-}
-.keyboard-help__row dt{ margin:0; }
-.keyboard-help__row dd{
-  margin:0;
-  color:var(--muted);
-  line-height:1.35;
-}
-.kbd{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-width:1.65rem;
-  padding:.15rem .4rem;
-  border-radius:.45rem;
-  background:rgba(31,41,64,.9);
-  border:1px solid rgba(86,113,156,.6);
-  box-shadow:0 1px 0 rgba(255,255,255,.05), inset 0 1px 0 rgba(255,255,255,.08);
-  font-size:.75rem;
-  font-weight:700;
-  color:#dce9ff;
-  letter-spacing:.02em;
-}
-.keyboard-help__row dt .kbd + .kbd{ margin-left:.25rem; }
-.keyboard-help__row strong{ color:#e5efff; }
 #logs-stream-view{ display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
 #logs-stream-view .log-stream{ flex:1 1 auto; height:100%; min-height:0; }
 
