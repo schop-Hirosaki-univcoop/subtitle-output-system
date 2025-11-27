@@ -342,6 +342,8 @@ export function renderQuestions(app) {
       genre: normalizedGenre,
       isPickup: isPuq
     };
+    card.setAttribute("role", "button");
+    card.tabIndex = 0;
     const applySelection = () => selectQuestionCard(app, card, selectionPayload);
     card.addEventListener("click", (event) => {
       const target = event.target;
