@@ -185,11 +185,11 @@ export function renderQuestions(app) {
   const viewingAllGenres = !selectedGenre || selectedGenre.toLowerCase() === GENRE_ALL_VALUE;
   const selectedSchedule = resolveNormalScheduleKey(app);
   if (viewingNormalTab) {
-//    console.info("[schedule-debug] logging enabled for normal tab", {
+    /* console.info("[schedule-debug] logging enabled for normal tab", {
       currentTab,
       selectedSchedule,
       hasCardsContainer: Boolean(app?.dom?.cardsContainer)
-    });
+    }); */
     const displaySession = app?.state?.displaySession || {};
     const assignment = displaySession && typeof displaySession === "object" ? displaySession.assignment : null;
     const displayEventId = String(displaySession?.eventId || assignment?.eventId || "").trim();
@@ -201,30 +201,30 @@ export function renderQuestions(app) {
     ).trim();
 
     const normalQuestions = app.state.allQuestions.filter((item) => !isPickUpQuestion(item));
-//    console.info("[schedule-debug] display schedule", {
+    /* console.info("[schedule-debug] display schedule", {
       eventId: displayEventId,
       scheduleId: displayScheduleId,
       scheduleKey: displayScheduleKey,
       scheduleLabel: displayScheduleLabel
-    });
+    }); */
     normalQuestions.forEach((item) => {
       const questionScheduleKey = String(item.__scheduleKey ?? item["日程"] ?? "").trim();
       const questionEventId = String(item["イベントID"] ?? "").trim();
       const questionScheduleId = String(item["日程ID"] ?? "").trim();
       const questionLabel = String(item.__scheduleLabel ?? item["日程示"] ?? "").trim();
-//      console.info("[schedule-debug] normal question", {
+      /* console.info("[schedule-debug] normal question", {
         uid: item.UID,
         eventId: questionEventId,
         scheduleId: questionScheduleId,
         scheduleKey: questionScheduleKey,
         scheduleLabel: questionLabel
-      });
+      }); */
     });
   } else {
-//    console.info("[schedule-debug] logging skipped (not on normal tab)", {
+    /* console.info("[schedule-debug] logging skipped (not on normal tab)", {
       currentTab,
       hasCardsContainer: Boolean(app?.dom?.cardsContainer)
-    });
+    }); */
   }
   // Pick Upタブではピックアップ質問のみを表示し、normalタブでは通常質問のみを表示する。
   // 「すべて」タブは両方を並べるが、normal質問には選択中の日程フィルターが適用される。

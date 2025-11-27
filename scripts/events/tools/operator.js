@@ -50,7 +50,7 @@ export class OperatorToolManager {
           document.documentElement.dataset.operatorEmbedPrefix = "op-";
         }
         const operatorModuleUrl = new URL("../../operator/index.js", import.meta.url);
-        await import(operatorModuleUrl);
+        await import(operatorModuleUrl.href);
         state.ready = true;
       })().catch((error) => {
         logError("Failed to load operator tool", error);
