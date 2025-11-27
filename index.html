@@ -22,19 +22,14 @@
       --heading-size: clamp(1.5rem, 4vw, 2.2rem);
       --body-size: clamp(1rem, 2.4vw, 1.12rem);
       --muted: rgba(230, 238, 247, 0.78);
-
-      display: flex;
-      flex-direction: column;
-      gap: clamp(1.4rem, 2vw, 2.2rem);
-      align-items: center;
-      padding-inline: clamp(1.4rem, 5vw, 3rem);
-      padding-block: clamp(2.4rem, 6vw, 4rem);
     }
 
     .access-guide-main {
       width: 100%;
       display: flex;
       justify-content: center;
+      padding-inline: clamp(1.4rem, 5vw, 3rem);
+      padding-block: clamp(2rem, 5vw, 3.4rem);
     }
 
     .guide-card {
@@ -86,7 +81,7 @@
     }
   </style>
 </head>
-<body class="op-theme access-guide-page">
+<body class="op-theme flow-page access-guide-page">
   <telop-header tagline="Subtitle Ops" context-label="Access Guide"></telop-header>
   <main class="access-guide-main">
     <section class="guide-card" aria-labelledby="access-guide-title">
