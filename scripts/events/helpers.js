@@ -63,7 +63,7 @@ export const logError = (context, error) => {
     error && typeof error === "object" && "message" in error && error.message
       ? error.message
       : String(error ?? "不明なエラー");
-  console.error(`${context}: ${detail}`);
+//  console.error(`${context}: ${detail}`);
 };
 
 /**
