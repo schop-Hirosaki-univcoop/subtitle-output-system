@@ -221,7 +221,7 @@ export class EventAdminApp {
     this.scheduleFallbackRadioName = generateShortId("flow-fallback-radio-");
     this.operatorModeRadioName = generateShortId("flow-operator-mode-radio-");
     this.flowDebugEnabled = false;
-    this.operatorPresenceDebugEnabled = true;
+    this.operatorPresenceDebugEnabled = false;
     this.scheduleConsensusEventId = "";
     this.scheduleConsensusUnsubscribe = null;
     this.scheduleConsensusState = null;
