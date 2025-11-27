@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ja" class="flow-page-root">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="same-origin" />
+  <title>Subtitle Output System | アクセス案内</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+
+    body.access-guide-page {
+      --card-max: min(780px, 90vw);
+      --card-padding: clamp(1.8rem, 4vw, 2.6rem);
+      --card-radius: 24px;
+      --card-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+      --border: rgba(71, 105, 160, 0.4);
+      --backdrop: rgba(10, 16, 28, 0.85);
+      --heading-size: clamp(1.5rem, 4vw, 2.2rem);
+      --body-size: clamp(1rem, 2.4vw, 1.12rem);
+      --muted: rgba(230, 238, 247, 0.78);
+
+      display: flex;
+      flex-direction: column;
+      gap: clamp(1.4rem, 2vw, 2.2rem);
+      align-items: center;
+      padding-inline: clamp(1.4rem, 5vw, 3rem);
+      padding-block: clamp(2.4rem, 6vw, 4rem);
+    }
+
+    .access-guide-main {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
+
+    .guide-card {
+      position: relative;
+      max-width: var(--card-max);
+      width: 100%;
+      padding: var(--card-padding);
+      border-radius: var(--card-radius);
+      border: 1px solid var(--border);
+      background: var(--backdrop);
+      box-shadow: var(--card-shadow);
+      backdrop-filter: blur(14px);
+      overflow: hidden;
+    }
+
+    .guide-card::before {
+      content: "";
+      position: absolute;
+      inset: -45% auto auto -50%;
+      width: 120%;
+      height: 120%;
+      background: radial-gradient(circle at 30% 40%, rgba(30, 200, 255, 0.22), transparent 55%),
+        radial-gradient(circle at 80% 30%, rgba(255, 79, 216, 0.18), transparent 60%),
+        radial-gradient(circle at 60% 75%, rgba(30, 200, 255, 0.14), transparent 65%);
+      filter: blur(28px);
+      opacity: 0.8;
+      z-index: -1;
+    }
+
+    .guide-card h1 {
+      margin: 0;
+      font-size: var(--heading-size);
+      letter-spacing: 0.04em;
+    }
+
+    .guide-card p {
+      margin: 0.6rem 0 0;
+      font-size: var(--body-size);
+      color: var(--muted);
+      line-height: 1.9;
+    }
+
+    .guide-card p + p {
+      margin-top: 0.9rem;
+    }
+
+    .guide-card strong {
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body class="op-theme flow-page access-guide-page">
+  <telop-header tagline="Broadcast Subtitle Console" context-label="Access Guide"></telop-header>
+  <main class="access-guide-main">
+    <section class="guide-card" aria-labelledby="access-guide-title">
+      <h1 id="access-guide-title">アクセスのご案内</h1>
+      <p>
+        このトップページにはコンテンツを用意していません。<br />
+        <strong>招待されたURLやメールに記載されたリンク</strong>から直接アクセスしてください。
+      </p>
+      <p>
+        リンクに心当たりがない場合やお困りの際は、イベント担当スタッフまでお知らせください。
+      </p>
+    </section>
+  </main>
+  <telop-footer year="2025"></telop-footer>
+  <script type="module" src="./scripts/shared/layout.js"></script>
+</body>
+</html>
