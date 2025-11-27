@@ -63,7 +63,9 @@ export const logError = (context, error) => {
     error && typeof error === "object" && "message" in error && error.message
       ? error.message
       : String(error ?? "不明なエラー");
-//  console.error(`${context}: ${detail}`);
+  if (typeof console !== "undefined" && typeof console.error === "function") {
+    console.error(`${context}: ${detail}`, error);
+  }
 };
 
 /**
