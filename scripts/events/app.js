@@ -1457,7 +1457,7 @@ export class EventAdminApp {
       item.append(indicator, label, actions);
 
       item.addEventListener("click", () => {
-        this.selectEvent(event.id);
+        this.focusEventListItem(item, { select: true });
       });
       item.addEventListener("keydown", (evt) => {
         if (evt.key === "Enter" || evt.key === " ") {
