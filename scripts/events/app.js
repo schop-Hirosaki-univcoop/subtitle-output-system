@@ -9289,16 +9289,63 @@ export class EventAdminApp {
   }
 
   handleGlobalKeydown(event) {
-    if (event.key === "Escape" && this.activeDialog) {
-      event.preventDefault();
-      if (this.activeDialog === this.dom.confirmDialog) {
-        this.resolveConfirm(false);
-      } else if (this.activeDialog === this.dom.operatorModeDialog) {
-        this.resolveOperatorModeChoice(null);
-      } else {
-        this.closeDialog(this.activeDialog);
+    // Escキーの処理（優先順位順）
+    if (event.key === "Escape") {
+      if (this.activeDialog) {
+        // ダイアログが開いている時は既存の処理
+        event.preventDefault();
+        if (this.activeDialog === this.dom.confirmDialog) {
+          this.resolveConfirm(false);
+        } else if (this.activeDialog === this.dom.operatorModeDialog) {
+          this.resolveOperatorModeChoice(null);
+        } else {
+          this.closeDialog(this.activeDialog);
+        }
+        return;
       }
-      return;
+
+      // ダイアログが開いていない時のEscキー処理
+      const activeElement = document.activeElement;
+      const sideTelopPanel = document.getElementById("side-telop-panel");
+      const isSideTelopFocused = sideTelopPanel && (
+        activeElement === sideTelopPanel ||
+        (activeElement instanceof HTMLElement && sideTelopPanel.contains(activeElement))
+      );
+      const isChatInputFocused = this.dom.chatInput && (
+        activeElement === this.dom.chatInput ||
+        (activeElement instanceof HTMLElement && this.dom.chatInput.contains(activeElement))
+      );
+      const isChatScrollFocused = this.dom.chatScroll && (
+        activeElement === this.dom.chatScroll ||
+        (activeElement === this.dom.chatScroll)
+      );
+
+      if (isChatInputFocused) {
+        // チャット入力にフォーカスがある時 → チャット本体にフォーカス
+        event.preventDefault();
+        if (this.dom.chatScroll) {
+          this.dom.chatScroll.focus();
+        }
+        return;
+      }
+
+      if (isChatScrollFocused) {
+        // チャット本体にフォーカスがある時 → flow-stage-panels に戻る
+        event.preventDefault();
+        if (this.dom.flowStagePanels) {
+          this.dom.flowStagePanels.focus();
+        }
+        return;
+      }
+
+      if (isSideTelopFocused) {
+        // 右サイドテロップ操作パネルにフォーカスがある時 → flow-stage-panels に戻る
+        event.preventDefault();
+        if (this.dom.flowStagePanels) {
+          this.dom.flowStagePanels.focus();
+        }
+        return;
+      }
     }
 
     if (this.activeDialog) {
@@ -9330,6 +9377,16 @@ export class EventAdminApp {
             return;
           }
         }
+      }
+    }
+
+    // Option/ALT + T で右サイドテロップ操作パネルにフォーカス
+    if ((event.altKey || event.metaKey) && !event.ctrlKey && !event.shiftKey && (event.key === "t" || event.key === "T")) {
+      const sideTelopPanel = document.getElementById("side-telop-panel");
+      if (sideTelopPanel && !sideTelopPanel.hidden) {
+        event.preventDefault();
+        sideTelopPanel.focus();
+        return;
       }
     }
 
@@ -9441,6 +9498,24 @@ export class EventAdminApp {
         }
         default:
           break;
+      }
+    }
+
+    // チャット本体にフォーカスがある時の上下キーでスクロール
+    const isChatScrollFocused = this.dom.chatScroll && (
+      activeElement === this.dom.chatScroll
+    );
+    if (isChatScrollFocused && !isFormField && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      const key = typeof event.key === "string" ? event.key : "";
+      if (key === "ArrowDown" || key === "Down" || key === "ArrowUp" || key === "Up") {
+        event.preventDefault();
+        const scrollAmount = 100; // スクロール量（ピクセル）
+        if (key === "ArrowDown" || key === "Down") {
+          this.dom.chatScroll.scrollBy({ top: scrollAmount, behavior: "smooth" });
+        } else if (key === "ArrowUp" || key === "Up") {
+          this.dom.chatScroll.scrollBy({ top: -scrollAmount, behavior: "smooth" });
+        }
+        return;
       }
     }
 
