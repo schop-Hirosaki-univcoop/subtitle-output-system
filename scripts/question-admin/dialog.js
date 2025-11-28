@@ -8,8 +8,8 @@ const dialogState = {
 };
 
 function handleDialogKeydown(event) {
-  // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
-  if (event.ctrlKey && event.key === "[" && dialogState.active) {
+  // N でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
+  if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && dialogState.active) {
     event.preventDefault();
     closeDialog(dialogState.active);
   }

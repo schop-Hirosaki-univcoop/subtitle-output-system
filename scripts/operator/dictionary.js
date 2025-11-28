@@ -184,8 +184,8 @@ function ensureDictionaryConfirm(app) {
     });
   }
   dialog.addEventListener("keydown", (event) => {
-    // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
-    if (event.ctrlKey && event.key === "[") {
+    // N でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
+    if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       event.preventDefault();
       finishDictionaryConfirm(app, false);
     }
@@ -283,8 +283,8 @@ function ensureDictionaryEditDialog(app) {
     }
   });
   dialog.addEventListener("keydown", (event) => {
-    // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
-    if (event.ctrlKey && event.key === "[") {
+    // N でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
+    if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       event.preventDefault();
       closeDictionaryEditDialog(app);
     }

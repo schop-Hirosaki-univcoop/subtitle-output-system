@@ -892,8 +892,8 @@ export class EventChat {
   }
 
   handleGlobalKeydown(event) {
-    // Ctrl+[ でコンテキストメニューを閉じる（ESCはフルスクリーン解除で使用されるため）
-    if (event.ctrlKey && event.key === "[") {
+    // N でコンテキストメニューを閉じる（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
+    if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       const menu = this.menuState.element || this.app.dom.chatContextMenu;
       if (menu && !menu.hidden) {
         event.preventDefault();

@@ -8520,8 +8520,8 @@ export class EventAdminApp {
   }
 
   handleMobileKeydown(event) {
-    // Ctrl+[ でモバイルパネルを閉じる（ESCはフルスクリーン解除で使用されるため）
-    if (event.ctrlKey && event.key === "[" && this.activeMobilePanel) {
+    // N でモバイルパネルを閉じる（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
+    if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && this.activeMobilePanel) {
       event.preventDefault();
       this.closeMobilePanel();
     }
@@ -9324,8 +9324,8 @@ export class EventAdminApp {
       }
     }
 
-    // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
-    if (event.ctrlKey && event.key === "[") {
+    // N でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
+    if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       if (this.activeDialog) {
         // ダイアログが開いている時は既存の処理
         event.preventDefault();
@@ -9340,8 +9340,8 @@ export class EventAdminApp {
       }
     }
 
-    // Ctrl+Shift+[ でフォーカスを戻す（ESCはフルスクリーン解除で使用されるため、OSのショートカットと競合しないようにCtrl+Shift+[を使用）
-    if (event.ctrlKey && event.shiftKey && event.key === "[") {
+    // M でフォーカスを戻す（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにMを使用）
+    if ((event.key === "m" || event.key === "M") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       const activeElement = document.activeElement;
       const sideTelopPanel = document.getElementById("side-telop-panel");
       const isSideTelopFocused = sideTelopPanel && (

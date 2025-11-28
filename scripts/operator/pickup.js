@@ -550,8 +550,8 @@ function setupPickupAddDialog(app) {
     closePickupAddDialog(app);
   });
   dialog.addEventListener("keydown", (event) => {
-    // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
-    if (event.ctrlKey && event.key === "[") {
+    // N でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
+    if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       event.preventDefault();
       if (app.pickupAddState?.submitting) {
         return;
@@ -618,8 +618,8 @@ function setupPickupEditDialog(app) {
     element.addEventListener("click", () => closePickupEditDialog(app));
   });
   dialog.addEventListener("keydown", (event) => {
-    // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
-    if (event.ctrlKey && event.key === "[") {
+    // N でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
+    if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       event.preventDefault();
       closePickupEditDialog(app);
     }
@@ -639,8 +639,8 @@ function setupPickupConfirmDialog(app) {
     element.addEventListener("click", () => closePickupConfirmDialog(app));
   });
   dialog.addEventListener("keydown", (event) => {
-    // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
-    if (event.ctrlKey && event.key === "[") {
+    // N でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
+    if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       event.preventDefault();
       closePickupConfirmDialog(app);
     }
