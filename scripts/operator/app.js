@@ -3355,7 +3355,8 @@ export class OperatorApp {
     document.body.classList.add("modal-open");
     this.confirmState.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.confirmState.keydownHandler = (event) => {
-      if (event.key === "Escape") {
+      // Ctrl+[ で確認ダイアログをキャンセル（ESCはフルスクリーン解除で使用されるため）
+      if (event.ctrlKey && event.key === "[") {
         event.preventDefault();
         event.stopImmediatePropagation();
         this.finishConfirm(false);

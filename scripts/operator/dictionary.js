@@ -184,7 +184,8 @@ function ensureDictionaryConfirm(app) {
     });
   }
   dialog.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
+    // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
+    if (event.ctrlKey && event.key === "[") {
       event.preventDefault();
       finishDictionaryConfirm(app, false);
     }
@@ -282,7 +283,8 @@ function ensureDictionaryEditDialog(app) {
     }
   });
   dialog.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
+    // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
+    if (event.ctrlKey && event.key === "[") {
       event.preventDefault();
       closeDictionaryEditDialog(app);
     }

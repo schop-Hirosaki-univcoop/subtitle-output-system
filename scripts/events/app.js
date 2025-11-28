@@ -2683,11 +2683,15 @@ export class EventAdminApp {
     button.disabled = !supported;
     button.setAttribute("aria-pressed", isActive ? "true" : "false");
     if (supported) {
-      button.textContent = isActive ? "フルスクリーン解除" : "フルスクリーン";
+      if (isActive) {
+        button.innerHTML = "フルスクリーン解除 <kbd>F</kbd> <kbd>Esc</kbd>";
+      } else {
+        button.innerHTML = "フルスクリーン <kbd>F</kbd>";
+      }
       button.dataset.state = isActive ? "active" : "inactive";
       button.title = isActive ? "フルスクリーンを終了します" : "画面をフルスクリーン表示します";
     } else {
-      button.textContent = "フルスクリーン";
+      button.innerHTML = "フルスクリーン <kbd>F</kbd>";
       button.dataset.state = "unsupported";
       button.title = "このブラウザではフルスクリーン表示に対応していません";
     }
@@ -8516,7 +8520,8 @@ export class EventAdminApp {
   }
 
   handleMobileKeydown(event) {
-    if (event.key === "Escape" && this.activeMobilePanel) {
+    // Ctrl+[ でモバイルパネルを閉じる（ESCはフルスクリーン解除で使用されるため）
+    if (event.ctrlKey && event.key === "[" && this.activeMobilePanel) {
       event.preventDefault();
       this.closeMobilePanel();
     }
@@ -9319,8 +9324,8 @@ export class EventAdminApp {
       }
     }
 
-    // Escキーの処理（優先順位順）
-    if (event.key === "Escape") {
+    // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
+    if (event.ctrlKey && event.key === "[") {
       if (this.activeDialog) {
         // ダイアログが開いている時は既存の処理
         event.preventDefault();
@@ -9333,8 +9338,10 @@ export class EventAdminApp {
         }
         return;
       }
+    }
 
-      // ダイアログが開いていない時のEscキー処理
+    // Ctrl+Shift+Tab でフォーカスを戻す（ESCはフルスクリーン解除で使用されるため）
+    if (event.ctrlKey && event.shiftKey && event.key === "Tab") {
       const activeElement = document.activeElement;
       const sideTelopPanel = document.getElementById("side-telop-panel");
       const isSideTelopFocused = sideTelopPanel && (
@@ -9427,6 +9434,20 @@ export class EventAdminApp {
           event.preventDefault();
           this.handleLogoutClick().catch((error) => {
             logError("Failed to handle logout", error);
+          });
+          return;
+        }
+      }
+    }
+
+    // フルスクリーン切り替えのキーボードショートカット「f」
+    if (!isFormField && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+      if (event.key === "f" || event.key === "F") {
+        if (this.dom.fullscreenButton && !this.dom.fullscreenButton.disabled && !this.dom.fullscreenButton.hidden) {
+          event.preventDefault();
+          this.toggleFullscreen().catch((error) => {
+            logError("Failed to toggle fullscreen", error);
+            this.updateFullscreenButton();
           });
           return;
         }

@@ -46,7 +46,8 @@ export function closeEditDialog(app) {
 }
 
 export function handleDialogKeydown(app, event) {
-  if (event.key === "Escape" && app.activeDialog) {
+  // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
+  if (event.ctrlKey && event.key === "[" && app.activeDialog) {
     event.preventDefault();
     if (app.activeDialog === app.dom.editDialog) {
       closeEditDialog(app);

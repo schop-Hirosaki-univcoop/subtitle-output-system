@@ -1980,7 +1980,8 @@ async function confirmAction({
   return await new Promise(resolve => {
     confirmState.resolver = resolve;
     confirmState.keydownHandler = event => {
-      if (event.key === "Escape") {
+      // Ctrl+[ で確認ダイアログをキャンセル（ESCはフルスクリーン解除で使用されるため）
+      if (event.ctrlKey && event.key === "[") {
         event.preventDefault();
         event.stopImmediatePropagation();
         finalizeConfirm(false);

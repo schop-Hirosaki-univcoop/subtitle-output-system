@@ -892,7 +892,8 @@ export class EventChat {
   }
 
   handleGlobalKeydown(event) {
-    if (event.key === "Escape") {
+    // Ctrl+[ でコンテキストメニューを閉じる（ESCはフルスクリーン解除で使用されるため）
+    if (event.ctrlKey && event.key === "[") {
       const menu = this.menuState.element || this.app.dom.chatContextMenu;
       if (menu && !menu.hidden) {
         event.preventDefault();

@@ -550,7 +550,8 @@ function setupPickupAddDialog(app) {
     closePickupAddDialog(app);
   });
   dialog.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
+    // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
+    if (event.ctrlKey && event.key === "[") {
       event.preventDefault();
       if (app.pickupAddState?.submitting) {
         return;
@@ -617,7 +618,8 @@ function setupPickupEditDialog(app) {
     element.addEventListener("click", () => closePickupEditDialog(app));
   });
   dialog.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
+    // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
+    if (event.ctrlKey && event.key === "[") {
       event.preventDefault();
       closePickupEditDialog(app);
     }
@@ -637,7 +639,8 @@ function setupPickupConfirmDialog(app) {
     element.addEventListener("click", () => closePickupConfirmDialog(app));
   });
   dialog.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
+    // Ctrl+[ でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため）
+    if (event.ctrlKey && event.key === "[") {
       event.preventDefault();
       closePickupConfirmDialog(app);
     }
