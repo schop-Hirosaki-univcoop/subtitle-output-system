@@ -2132,6 +2132,97 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
   gap:clamp(.25rem, .6vw, .4rem);
 }
 
+/* キーボードショートカット表示のスタイル */
+.btn kbd,
+.module-description kbd,
+.chat-form__shortcut kbd,
+.side-telop-panel__description kbd,
+.sidebar-card__title kbd,
+.sidebar-nav__button kbd,
+label kbd{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:1.4em;
+  height:1.4em;
+  padding:0 .3em;
+  margin:0 .15em;
+  font-family:ui-monospace, "SF Mono", "Monaco", "Cascadia Code", "Roboto Mono", "Consolas", monospace;
+  font-size:0.75em;
+  font-weight:600;
+  line-height:1;
+  color:rgba(230,238,247,.9);
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.15);
+  border-radius:.35em;
+  box-shadow:0 1px 2px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.1);
+  vertical-align:middle;
+  letter-spacing:0;
+}
+
+/* 長いキー名（Enter, Esc, Deleteなど）は自動的に幅が調整される */
+.btn kbd:first-child{
+  margin-left:0;
+}
+
+.btn-primary kbd{
+  background:rgba(255,255,255,.12);
+  border-color:rgba(255,255,255,.2);
+  color:rgba(255,255,255,.95);
+}
+
+.btn:hover kbd,
+.btn:focus-visible kbd{
+  background:rgba(255,255,255,.15);
+  border-color:rgba(255,255,255,.25);
+  box-shadow:0 2px 4px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.15);
+}
+
+.btn-primary:hover kbd,
+.btn-primary:focus-visible kbd{
+  background:rgba(255,255,255,.18);
+  border-color:rgba(255,255,255,.3);
+}
+
+/* キーボードショートカットの区切り文字 */
+.kbd-separator{
+  display:inline-block;
+  margin:0 .2em;
+  color:rgba(230,238,247,.5);
+  font-size:0.7em;
+  vertical-align:middle;
+}
+
+/* 説明文内のキーボードショートカット */
+.module-description kbd{
+  margin-left:0;
+  margin-right:0;
+}
+
+.chat-form__shortcut{
+  font-size:0.65rem;
+  color:rgba(230,238,247,.6);
+  margin:0.5rem 0 0;
+}
+
+.chat-form__shortcut kbd{
+  margin-left:0;
+}
+
+/* サイドバーとサイドテロップパネルの説明文内のキーボードショートカット */
+.side-telop-panel__description kbd,
+.sidebar-card__title kbd,
+.sidebar-nav__button kbd,
+label kbd{
+  margin-left:0;
+  margin-right:0;
+}
+
+.sidebar-card__title kbd,
+.sidebar-nav__button kbd{
+  margin-left:.25em;
+}
+
 .site-footer{
   position:fixed;
   left:50%;

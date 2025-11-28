@@ -118,7 +118,7 @@
           </svg>
         </button>
         <button id="flow-event-summary-pane" class="sidebar-card sidebar-card--action" type="button" data-panel-target="events">
-          <span class="sidebar-card__title">選択中のイベント(1)</span>
+          <span class="sidebar-card__title">選択中のイベント <kbd>1</kbd></span>
           <span id="flow-event-summary-name" class="sidebar-card__name">—</span>
           <span class="sidebar-card__stats" role="presentation">
             <span class="sidebar-card__stat"><span class="sidebar-card__stat-label">日程数</span><span id="flow-event-summary-schedules" class="sidebar-card__stat-value">—</span></span>
@@ -140,7 +140,7 @@
           <span id="flow-event-summary-copy-status" class="visually-hidden" aria-live="polite"></span>
         </div>
         <button id="flow-schedule-summary-pane" class="sidebar-card sidebar-card--action" type="button" data-panel-target="schedules">
-          <span class="sidebar-card__title">選択中の日程(2)</span>
+          <span class="sidebar-card__title">選択中の日程 <kbd>2</kbd></span>
           <span id="flow-schedule-summary" class="flow-selection-summary" hidden>
             <span class="flow-selection-summary__item"><span class="flow-selection-summary__label">日程</span><span id="flow-schedule-summary-label">—</span></span>
             <span class="flow-selection-summary__item" id="flow-schedule-summary-range-row" hidden><span class="flow-selection-summary__label">時間</span><span id="flow-schedule-summary-range">—</span></span>
@@ -167,13 +167,13 @@
           </div>
         </div>
         <nav class="sidebar-nav" aria-label="パネル選択">
-          <button id="flow-tab-participants" class="sidebar-nav__button" type="button" data-panel-target="participants">参加者リスト(3)</button>
-          <button id="flow-tab-gl" class="sidebar-nav__button" type="button" data-panel-target="gl">GLリスト(4)</button>
-          <button id="flow-tab-gl-faculties" class="sidebar-nav__button" type="button" data-panel-target="gl-faculties" >学部・学科設定(5)</button>
-          <button id="flow-tab-operator" class="sidebar-nav__button" type="button" data-panel-target="operator">テロップ操作(6)</button>
-          <button id="flow-tab-dictionary" class="sidebar-nav__button" type="button" data-panel-target="dictionary">ルビ辞書(7)</button>
-          <button id="flow-tab-pickup" class="sidebar-nav__button" type="button" data-panel-target="pickup">Pick Up Question(8)</button>
-          <button id="flow-tab-logs" class="sidebar-nav__button" type="button" data-panel-target="logs">操作ログ(9)</button>
+          <button id="flow-tab-participants" class="sidebar-nav__button" type="button" data-panel-target="participants">参加者リスト <kbd>3</kbd></button>
+          <button id="flow-tab-gl" class="sidebar-nav__button" type="button" data-panel-target="gl">GLリスト <kbd>4</kbd></button>
+          <button id="flow-tab-gl-faculties" class="sidebar-nav__button" type="button" data-panel-target="gl-faculties" >学部・学科設定 <kbd>5</kbd></button>
+          <button id="flow-tab-operator" class="sidebar-nav__button" type="button" data-panel-target="operator">テロップ操作 <kbd>6</kbd></button>
+          <button id="flow-tab-dictionary" class="sidebar-nav__button" type="button" data-panel-target="dictionary">ルビ辞書 <kbd>7</kbd></button>
+          <button id="flow-tab-pickup" class="sidebar-nav__button" type="button" data-panel-target="pickup">Pick Up Question <kbd>8</kbd></button>
+          <button id="flow-tab-logs" class="sidebar-nav__button" type="button" data-panel-target="logs">操作ログ <kbd>9</kbd></button>
         </nav>
       </aside>
       <!-- 右ペイン: 各種管理モジュールの本体 -->
@@ -183,12 +183,12 @@
         <div class="module-header">
           <div class="module-heading">
             <h2 id="events-title">イベントの管理</h2>
-            <p class="module-description">イベントを追加・編集・削除できます。イベントを選択し、次のステップへ引き継ぎます。<br>キーボードショートカット: 上下キーでイベントを選択, エンターキーで確定</p>
+            <p class="module-description">イベントを追加・編集・削除できます。イベントを選択し、次のステップへ引き継ぎます。<br>キーボードショートカット: <kbd>↑</kbd><kbd>↓</kbd> でイベントを選択, <kbd>Enter</kbd> で確定, <kbd>E</kbd> で編集, <kbd>Delete</kbd> で削除</p>
           </div>
           <div class="module-actions">
-            <button id="flow-add-event-button" class="btn btn-primary btn-sm" type="button" disabled>イベントを追加(E)</button>
-            <button id="flow-events-print-button" class="btn btn-ghost btn-sm" type="button" disabled>印刷(Ctrl / ⌘ + P)</button>
-            <button id="flow-events-refresh-button" class="btn btn-ghost btn-sm" type="button">再読み込み(R)</button>
+            <button id="flow-add-event-button" class="btn btn-primary btn-sm" type="button" disabled>イベントを追加 <kbd>E</kbd></button>
+            <button id="flow-events-print-button" class="btn btn-ghost btn-sm" type="button" disabled>印刷 <kbd>Ctrl</kbd><span class="kbd-separator">/</span><kbd>⌘</kbd><kbd>P</kbd></button>
+            <button id="flow-events-refresh-button" class="btn btn-ghost btn-sm" type="button">再読み込み <kbd>R</kbd></button>
           </div>
         </div>
         <div class="module-body">
@@ -1368,7 +1368,7 @@
             </div>
             <div class="chat-form__footer">
               <p id="flow-chat-error" class="chat-error" role="alert" hidden></p>
-              <p class="chat-form__shortcut" aria-hidden="true">Ctrl / ⌘ + Enter で送信</p>
+              <p class="chat-form__shortcut" aria-hidden="true"><kbd>/</kbd> で入力にフォーカス, <kbd>Ctrl</kbd><span class="kbd-separator">/</span><kbd>⌘</kbd><kbd>Enter</kbd> で送信</p>
             </div>
           </form>
         </section>
@@ -1378,7 +1378,7 @@
             <div class="side-telop-panel__heading">
               <h2 id="side-telop-title">右サイドテロップ</h2>
               <p class="side-telop-panel__description">
-                表示する文言をあらかじめ登録し、どれか1つを常に表示します。日程を選択すると編集できます。
+                表示する文言をあらかじめ登録し、どれか1つを常に表示します。日程を選択すると編集できます。<br>キーボードショートカット: <kbd>Alt</kbd><span class="kbd-separator">/</span><kbd>⌥</kbd><kbd>T</kbd> でこのパネルにフォーカス, <kbd>↑</kbd><kbd>↓</kbd> で選択, <kbd>A</kbd> で追加, <kbd>E</kbd> で編集, <kbd>D</kbd> で削除
               </p>
             </div>
           </div>
@@ -1387,7 +1387,7 @@
             <ol id="side-telop-list" class="side-telop-list"></ol>
           </div>
           <form id="side-telop-form" class="side-telop-form" novalidate>
-            <label for="side-telop-text">文言</label>
+            <label for="side-telop-text">文言 <kbd>A</kbd></label>
             <textarea
               id="side-telop-text"
               class="input"
@@ -1397,8 +1397,8 @@
             ></textarea>
             <div class="side-telop-form__actions">
               <div class="side-telop-form__toolbar">
-                <button id="side-telop-edit" class="btn btn-ghost btn-sm" type="button" disabled>編集</button>
-                <button id="side-telop-delete" class="btn btn-ghost btn-sm" type="button" disabled>削除</button>
+                <button id="side-telop-edit" class="btn btn-ghost btn-sm" type="button" disabled>編集 <kbd>E</kbd></button>
+                <button id="side-telop-delete" class="btn btn-ghost btn-sm" type="button" disabled>削除 <kbd>D</kbd></button>
                 <span id="side-telop-selection-label" class="side-telop-selection" role="status">テロップを選択してください</span>
               </div>
               <div class="side-telop-form__submit">
