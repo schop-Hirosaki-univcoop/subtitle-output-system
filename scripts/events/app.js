@@ -9340,8 +9340,8 @@ export class EventAdminApp {
       }
     }
 
-    // M でフォーカスを戻す（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにMを使用）
-    if ((event.key === "m" || event.key === "M") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+    // Alt+M (Option+M) でフォーカスを戻す（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにAlt+Mを使用）
+    if ((event.key === "m" || event.key === "M") && (event.altKey || event.metaKey) && !event.ctrlKey && !event.shiftKey) {
       const activeElement = document.activeElement;
       const sideTelopPanel = document.getElementById("side-telop-panel");
       const isSideTelopFocused = sideTelopPanel && (
