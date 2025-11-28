@@ -8,6 +8,7 @@ export function queryDom() {
   return {
     main: document.getElementById("events-main"),
     flowStage: document.querySelector(".flow-stage"),
+    flowStagePanels: document.getElementById("flow-stage-panels"),
     chatContainer: document.querySelector(".events-chat"),
     sidebarContainer: document.getElementById("events-sidebar"),
     eventsModule: document.querySelector('[data-panel="events"]'),

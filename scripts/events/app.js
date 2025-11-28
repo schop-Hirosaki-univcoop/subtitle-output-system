@@ -527,6 +527,19 @@ export class EventAdminApp {
     this.setupChatLayoutObservers();
     this.observeAuthState();
     this.syncMobilePanelAccessibility();
+    // flow-stage-panelsをフォーカス可能にする
+    if (this.dom.flowStagePanels) {
+      this.dom.flowStagePanels.setAttribute("tabindex", "0");
+      this.dom.flowStagePanels.setAttribute("role", "region");
+      this.dom.flowStagePanels.setAttribute("aria-label", "メインパネル");
+    }
+    // 右サイドテロップ操作パネルをフォーカス可能にする
+    const sideTelopPanel = document.getElementById("side-telop-panel");
+    if (sideTelopPanel) {
+      sideTelopPanel.setAttribute("tabindex", "0");
+      sideTelopPanel.setAttribute("role", "region");
+      sideTelopPanel.setAttribute("aria-label", "右サイドテロップ操作");
+    }
     if (typeof document !== "undefined") {
       document.addEventListener("qa:participants-synced", this.tools.handleParticipantSyncEvent);
       document.addEventListener("qa:selection-changed", this.tools.handleParticipantSelectionBroadcast);
@@ -3210,6 +3223,16 @@ export class EventAdminApp {
       }
     }
     this.handlePanelSetup(normalized, config).catch((error) => logError("Failed to prepare panel", error));
+    
+    // パネル表示後にflow-stage-panelsにフォーカスを当てる
+    if (this.dom.flowStagePanels) {
+      // 次のフレームでフォーカスを当てる（DOM更新を待つ）
+      requestAnimationFrame(() => {
+        if (this.dom.flowStagePanels && !this.activeDialog) {
+          this.dom.flowStagePanels.focus();
+        }
+      });
+    }
   }
 
   async handlePanelSetup(panel, config) {
@@ -9310,30 +9333,156 @@ export class EventAdminApp {
       }
     }
 
+    // スラッシュ（/）でチャット入力にフォーカス
+    // 入力フィールドにフォーカスがある場合は無視（ただし、チャット入力自体は除く）
+    if (!isFormField && !event.altKey && !event.ctrlKey && !event.metaKey && event.key === "/") {
+      const chatInput = this.dom.chatInput;
+      if (chatInput && !chatInput.disabled) {
+        event.preventDefault();
+        chatInput.focus();
+        return;
+      }
+    }
+
+    // フォーカス位置を確認
+    const activeElement = document.activeElement;
+    const sideTelopPanel = document.getElementById("side-telop-panel");
+    const isSideTelopFocused = sideTelopPanel && (
+      activeElement === sideTelopPanel ||
+      (activeElement instanceof HTMLElement && sideTelopPanel.contains(activeElement))
+    );
+    const isFlowStagePanelsFocused = this.dom.flowStagePanels && (
+      activeElement === this.dom.flowStagePanels ||
+      (activeElement instanceof HTMLElement && this.dom.flowStagePanels.contains(activeElement) && !isSideTelopFocused)
+    );
+
+    // 右サイドテロップ操作パネルのキーボードショートカット
+    // 右サイドテロップ操作パネルにフォーカスがある時だけ有効にする
+    if (isSideTelopFocused && sideTelopPanel && !sideTelopPanel.hidden && !isFormField && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      const key = typeof event.key === "string" ? event.key : "";
+      const normalized = key.length === 1 ? key.toLowerCase() : key.toLowerCase();
+      
+      // 右サイドテロップ操作
+      // 上下矢印キーの処理
+      if (key === "ArrowUp" || key === "Up") {
+        // 上矢印: テロップリストで上に移動
+        event.preventDefault();
+        const sideTelopList = document.getElementById("side-telop-list");
+        if (sideTelopList) {
+          const items = Array.from(sideTelopList.querySelectorAll(".side-telop-item"));
+          const currentIndex = items.findIndex((item) => item.classList.contains("is-selected"));
+          if (currentIndex > 0) {
+            const prevItem = items[currentIndex - 1];
+            if (prevItem) {
+              prevItem.click();
+              prevItem.focus();
+            }
+          } else if (items.length > 0) {
+            const lastItem = items[items.length - 1];
+            lastItem.click();
+            lastItem.focus();
+          }
+        }
+        return;
+      }
+      
+      if (key === "ArrowDown" || key === "Down") {
+        // 下矢印: テロップリストで下に移動
+        event.preventDefault();
+        const sideTelopList = document.getElementById("side-telop-list");
+        if (sideTelopList) {
+          const items = Array.from(sideTelopList.querySelectorAll(".side-telop-item"));
+          const currentIndex = items.findIndex((item) => item.classList.contains("is-selected"));
+          if (currentIndex >= 0 && currentIndex < items.length - 1) {
+            const nextItem = items[currentIndex + 1];
+            if (nextItem) {
+              nextItem.click();
+              nextItem.focus();
+            }
+          } else if (items.length > 0) {
+            const firstItem = items[0];
+            firstItem.click();
+            firstItem.focus();
+          }
+        }
+        return;
+      }
+      
+      switch (normalized) {
+        case "a": {
+          // Aキー: テロップ追加（テキストエリアにフォーカス）
+          const sideTelopText = document.getElementById("side-telop-text");
+          if (sideTelopText && !sideTelopText.disabled) {
+            event.preventDefault();
+            sideTelopText.focus();
+            return;
+          }
+          break;
+        }
+        case "e": {
+          // Eキー: 選択中のテロップを編集
+          const sideTelopEditButton = document.getElementById("side-telop-edit");
+          if (sideTelopEditButton && !sideTelopEditButton.disabled) {
+            event.preventDefault();
+            sideTelopEditButton.click();
+            return;
+          }
+          break;
+        }
+        case "d": {
+          // Dキー: 選択中のテロップを削除
+          const sideTelopDeleteButton = document.getElementById("side-telop-delete");
+          if (sideTelopDeleteButton && !sideTelopDeleteButton.disabled) {
+            event.preventDefault();
+            sideTelopDeleteButton.click();
+            return;
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    }
+
+    // flow-stage-panelsにフォーカスがある時の上下キー操作
+    // パネル内のカード（イベントリストなど）を操作できるようにする
+    if (isFlowStagePanelsFocused && !isFormField && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      const key = typeof event.key === "string" ? event.key : "";
+      if (key === "ArrowDown" || key === "Down" || key === "ArrowUp" || key === "Up") {
+        // イベントパネルがアクティブで、イベントリストがある場合
+        if (this.activePanel === "events" && this.dom.eventList) {
+          const items = this.getEventListItems?.() || [];
+          if (items.length > 0) {
+            event.preventDefault();
+            const currentIndex = items.findIndex((el) => el.dataset.eventId === this.selectedEventId);
+            const activeIndex = currentIndex >= 0 ? currentIndex : -1;
+            let nextIndex = activeIndex >= 0 ? activeIndex : 0;
+            
+            if (key === "ArrowDown" || key === "Down") {
+              nextIndex = Math.min(items.length - 1, activeIndex + 1 || 0);
+            } else if (key === "ArrowUp" || key === "Up") {
+              nextIndex = Math.max(0, activeIndex >= 0 ? activeIndex - 1 : 0);
+            }
+            
+            const nextItem = items[nextIndex];
+            if (nextItem) {
+              this.focusEventListItem(nextItem, { select: true });
+            }
+            return;
+          }
+        }
+        // 他のパネルでも同様の操作を追加できるようにする
+      }
+    }
+
+    // flow-stage-panelsにフォーカスがある時の上下キー操作は上で処理済み
+    // ここから下は、activePanel === "events"の時の他のキーボードショートカット処理
     if (this.activePanel !== "events") {
       return;
     }
 
     const key = typeof event.key === "string" ? event.key : "";
     const normalized = key.length === 1 ? key.toLowerCase() : key;
-
-    if (
-      this.activePanel === "events" &&                     // イベント管理パネルがアクティブで
-      !this.getSelectedEvent?.() &&                        // まだ何も選ばれておらず
-      !event.altKey && !event.ctrlKey && !event.metaKey && // 修飾キーなしの
-      (event.key === "ArrowDown" ||
-        event.key === "Down" ||
-        event.key === "ArrowUp" ||
-        event.key === "Up")
-    ) {
-      const items = this.getEventListItems?.() || [];
-      if (items.length > 0) {
-        event.preventDefault();
-        // 一番上のイベントを「選択 + フォーカス」
-        this.focusEventListItem(items[0], { select: true });
-      }
-      return; // ここで処理完了（このキーはここで食う）
-    }
     
     if (isFormField && !(event.ctrlKey || event.metaKey)) {
       return;
