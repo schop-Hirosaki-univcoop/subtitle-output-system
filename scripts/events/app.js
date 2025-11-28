@@ -9340,8 +9340,8 @@ export class EventAdminApp {
       }
     }
 
-    // Ctrl+Shift+Tab でフォーカスを戻す（ESCはフルスクリーン解除で使用されるため）
-    if (event.ctrlKey && event.shiftKey && event.key === "Tab") {
+    // Ctrl+Shift+[ でフォーカスを戻す（ESCはフルスクリーン解除で使用されるため、OSのショートカットと競合しないようにCtrl+Shift+[を使用）
+    if (event.ctrlKey && event.shiftKey && event.key === "[") {
       const activeElement = document.activeElement;
       const sideTelopPanel = document.getElementById("side-telop-panel");
       const isSideTelopFocused = sideTelopPanel && (
