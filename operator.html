@@ -118,7 +118,7 @@
           </svg>
         </button>
         <button id="flow-event-summary-pane" class="sidebar-card sidebar-card--action" type="button" data-panel-target="events">
-          <span class="sidebar-card__title">選択中のイベント</span>
+          <span class="sidebar-card__title">選択中のイベント(1)</span>
           <span id="flow-event-summary-name" class="sidebar-card__name">—</span>
           <span class="sidebar-card__stats" role="presentation">
             <span class="sidebar-card__stat"><span class="sidebar-card__stat-label">日程数</span><span id="flow-event-summary-schedules" class="sidebar-card__stat-value">—</span></span>
@@ -140,7 +140,7 @@
           <span id="flow-event-summary-copy-status" class="visually-hidden" aria-live="polite"></span>
         </div>
         <button id="flow-schedule-summary-pane" class="sidebar-card sidebar-card--action" type="button" data-panel-target="schedules">
-          <span class="sidebar-card__title">選択中の日程</span>
+          <span class="sidebar-card__title">選択中の日程(2)</span>
           <span id="flow-schedule-summary" class="flow-selection-summary" hidden>
             <span class="flow-selection-summary__item"><span class="flow-selection-summary__label">日程</span><span id="flow-schedule-summary-label">—</span></span>
             <span class="flow-selection-summary__item" id="flow-schedule-summary-range-row" hidden><span class="flow-selection-summary__label">時間</span><span id="flow-schedule-summary-range">—</span></span>
@@ -167,18 +167,13 @@
           </div>
         </div>
         <nav class="sidebar-nav" aria-label="パネル選択">
-          <button id="flow-tab-participants" class="sidebar-nav__button" type="button" data-panel-target="participants">参加者リスト</button>
-          <button id="flow-tab-gl" class="sidebar-nav__button" type="button" data-panel-target="gl">GLリスト</button>
-          <button
-            id="flow-tab-gl-faculties"
-            class="sidebar-nav__button"
-            type="button"
-            data-panel-target="gl-faculties"
-          >学部・学科設定</button>
-          <button id="flow-tab-operator" class="sidebar-nav__button" type="button" data-panel-target="operator">テロップ操作</button>
-          <button id="flow-tab-dictionary" class="sidebar-nav__button" type="button" data-panel-target="dictionary">ルビ辞書</button>
-          <button id="flow-tab-pickup" class="sidebar-nav__button" type="button" data-panel-target="pickup">Pick Up Question</button>
-          <button id="flow-tab-logs" class="sidebar-nav__button" type="button" data-panel-target="logs">操作ログ</button>
+          <button id="flow-tab-participants" class="sidebar-nav__button" type="button" data-panel-target="participants">参加者リスト(3)</button>
+          <button id="flow-tab-gl" class="sidebar-nav__button" type="button" data-panel-target="gl">GLリスト(4)</button>
+          <button id="flow-tab-gl-faculties" class="sidebar-nav__button" type="button" data-panel-target="gl-faculties" >学部・学科設定(5)</button>
+          <button id="flow-tab-operator" class="sidebar-nav__button" type="button" data-panel-target="operator">テロップ操作(6)</button>
+          <button id="flow-tab-dictionary" class="sidebar-nav__button" type="button" data-panel-target="dictionary">ルビ辞書(7)</button>
+          <button id="flow-tab-pickup" class="sidebar-nav__button" type="button" data-panel-target="pickup">Pick Up Question(8)</button>
+          <button id="flow-tab-logs" class="sidebar-nav__button" type="button" data-panel-target="logs">操作ログ(9)</button>
         </nav>
       </aside>
       <!-- 右ペイン: 各種管理モジュールの本体 -->
@@ -188,12 +183,12 @@
         <div class="module-header">
           <div class="module-heading">
             <h2 id="events-title">イベントの管理</h2>
-            <p class="module-description">イベントを追加・編集・削除できます。イベントを選択し、次のステップへ引き継ぎます。</p>
+            <p class="module-description">イベントを追加・編集・削除できます。イベントを選択し、次のステップへ引き継ぎます。<br>キーボードショートカット: 上下キーでイベントを選択, エンターキーで確定</p>
           </div>
           <div class="module-actions">
-            <button id="flow-add-event-button" class="btn btn-primary btn-sm" type="button" disabled>イベントを追加</button>
-            <button id="flow-events-print-button" class="btn btn-ghost btn-sm" type="button" disabled>印刷</button>
-            <button id="flow-events-refresh-button" class="btn btn-ghost btn-sm" type="button">再読み込み</button>
+            <button id="flow-add-event-button" class="btn btn-primary btn-sm" type="button" disabled>イベントを追加(E)</button>
+            <button id="flow-events-print-button" class="btn btn-ghost btn-sm" type="button" disabled>印刷(Ctrl / ⌘ + P)</button>
+            <button id="flow-events-refresh-button" class="btn btn-ghost btn-sm" type="button">再読み込み(R)</button>
           </div>
         </div>
         <div class="module-body">
