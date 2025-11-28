@@ -9289,6 +9289,36 @@ export class EventAdminApp {
   }
 
   handleGlobalKeydown(event) {
+    // モーダルパネル「表示モードを選択」が開いている時のキーボードショートカット
+    if (this.activeDialog === this.dom.fullscreenPromptDialog) {
+      const target = event.target;
+      const isFormField =
+        target instanceof HTMLElement &&
+        target.closest("input, textarea, select, [role='textbox'], [contenteditable=''], [contenteditable='true']");
+      
+      // 入力フィールドにフォーカスがある場合は無視
+      if (!isFormField && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+        if (event.key === "f" || event.key === "F") {
+          // 「f」でフルスクリーンで続行
+          event.preventDefault();
+          if (this.dom.fullscreenPromptEnterButton && !this.dom.fullscreenPromptEnterButton.disabled) {
+            this.handleFullscreenPromptEnter().catch((error) => {
+              logError("Failed to handle fullscreen prompt", error);
+            });
+          }
+          return;
+        }
+        if (event.key === "n" || event.key === "N") {
+          // 「n」で通常表示のまま
+          event.preventDefault();
+          if (this.dom.fullscreenPromptStayButton && !this.dom.fullscreenPromptStayButton.disabled) {
+            this.handleFullscreenPromptDismiss();
+          }
+          return;
+        }
+      }
+    }
+
     // Escキーの処理（優先順位順）
     if (event.key === "Escape") {
       if (this.activeDialog) {
@@ -9387,6 +9417,19 @@ export class EventAdminApp {
         event.preventDefault();
         sideTelopPanel.focus();
         return;
+      }
+    }
+
+    // ログアウトのキーボードショートカット「l」
+    if (!isFormField && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+      if (event.key === "l" || event.key === "L") {
+        if (this.dom.logoutButton && !this.dom.logoutButton.disabled && !this.dom.logoutButton.hidden) {
+          event.preventDefault();
+          this.handleLogoutClick().catch((error) => {
+            logError("Failed to handle logout", error);
+          });
+          return;
+        }
       }
     }
 

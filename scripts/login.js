@@ -103,6 +103,27 @@ class LoginPage {
     }
 
     this.loginButton.addEventListener("click", this.handleLoginClick);
+    
+    // キーボードショートカット「l」でログイン
+    if (typeof document !== "undefined") {
+      document.addEventListener("keydown", (event) => {
+        const target = event.target;
+        const isFormField =
+          target instanceof HTMLElement &&
+          target.closest("input, textarea, select, [role='textbox'], [contenteditable=''], [contenteditable='true']");
+        
+        // 入力フィールドにフォーカスがある場合は無視
+        if (!isFormField && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+          if (event.key === "l" || event.key === "L") {
+            if (this.loginButton && !this.loginButton.disabled) {
+              event.preventDefault();
+              this.handleLoginClick();
+            }
+          }
+        }
+      });
+    }
+    
     appendAuthDebugLog("login:button-bound");
   }
 

@@ -7272,6 +7272,27 @@ function attachEventHandlers() {
     dom.headerLogout.addEventListener("click", () => signOut(auth));
   }
 
+  // ログアウトのキーボードショートカット「l」
+  if (typeof document !== "undefined") {
+    document.addEventListener("keydown", (event) => {
+      const target = event.target;
+      const isFormField =
+        target instanceof HTMLElement &&
+        target.closest("input, textarea, select, [role='textbox'], [contenteditable=''], [contenteditable='true']");
+      
+      // 入力フィールドにフォーカスがある場合は無視
+      if (!isFormField && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+        if (event.key === "l" || event.key === "L") {
+          const logoutButton = dom.logoutButton || dom.headerLogout;
+          if (logoutButton && !logoutButton.disabled && !logoutButton.hidden) {
+            event.preventDefault();
+            signOut(auth);
+          }
+        }
+      }
+    });
+  }
+
   if (dom.refreshButton) {
     dom.refreshButton.addEventListener("click", async () => {
       try {
