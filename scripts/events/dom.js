@@ -232,6 +232,11 @@ export function queryDom() {
     glFacultyAdminSaveButton: document.getElementById("gl-faculty-admin-save"),
     glFacultyAdminResetButton: document.getElementById("gl-faculty-admin-reset"),
     panelButtons: Array.from(document.querySelectorAll("[data-panel-target]")),
+    sidebarPanelButtons: (() => {
+      const sidebar = document.getElementById("events-sidebar");
+      if (!sidebar) return [];
+      return Array.from(sidebar.querySelectorAll("[data-panel-target]"));
+    })(),
     navigationButtons: Array.from(document.querySelectorAll("[data-flow-nav-target]")),
     flowNavigations: Array.from(document.querySelectorAll(".flow-navigation")),
     mobileToggleButtons: Array.from(document.querySelectorAll("[data-mobile-target]")),

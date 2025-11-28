@@ -9282,10 +9282,6 @@ export class EventAdminApp {
       return;
     }
 
-    if (this.activePanel !== "events") {
-      return;
-    }
-
     if (event.defaultPrevented) {
       return;
     }
@@ -9294,6 +9290,29 @@ export class EventAdminApp {
     const isFormField =
       target instanceof HTMLElement &&
       target.closest("input, textarea, select, [role='textbox'], [contenteditable=''], [contenteditable='true']");
+
+    // サイドバーボタンのキーボードショートカット（1-9）
+    // 入力フィールドにフォーカスがある場合は無視
+    if (!isFormField && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      const key = typeof event.key === "string" ? event.key : "";
+      const numKey = parseInt(key, 10);
+      if (numKey >= 1 && numKey <= 9) {
+        const sidebarButtons = this.dom.sidebarPanelButtons || [];
+        const buttonIndex = numKey - 1;
+        if (buttonIndex < sidebarButtons.length) {
+          const button = sidebarButtons[buttonIndex];
+          if (button && !button.disabled && !button.hidden) {
+            event.preventDefault();
+            button.click();
+            return;
+          }
+        }
+      }
+    }
+
+    if (this.activePanel !== "events") {
+      return;
+    }
 
     const key = typeof event.key === "string" ? event.key : "";
     const normalized = key.length === 1 ? key.toLowerCase() : key;
