@@ -559,6 +559,28 @@ export function updateScheduleContext(app, options = {}) {
   if (typeof app.refreshChannelSubscriptions === "function") {
     app.refreshChannelSubscriptions();
   }
+
+  // イベント・日程が選択確定されたときに、自動的にディスプレイのassignmentを設定
+  if (nextSelectionConfirmed && eventId && scheduleId) {
+    const currentAssignment = app?.state?.channelAssignment || (typeof app.getDisplayAssignment === "function" ? app.getDisplayAssignment() : null);
+    const assignmentEventId = String(currentAssignment?.eventId || "").trim();
+    const assignmentScheduleId = String(currentAssignment?.scheduleId || "").trim();
+    const normalizedScheduleId = normalizeScheduleId(scheduleId);
+    
+    // 現在のassignmentと一致しない場合、またはassignmentが存在しない場合に自動設定
+    if (!currentAssignment || assignmentEventId !== eventId || assignmentScheduleId !== normalizedScheduleId) {
+      // ディスプレイが接続されている場合のみ自動設定
+      const displayActive = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : false;
+      if (displayActive && typeof app.lockDisplayToSchedule === "function") {
+        // エラーが発生してもログに残すだけで、UI更新を阻害しない
+        app.lockDisplayToSchedule(eventId, scheduleId, scheduleLabel, { silent: true }).catch((err) => {
+          if (typeof console !== "undefined" && typeof console.warn === "function") {
+            console.warn("Failed to auto-lock display schedule:", err);
+          }
+        });
+      }
+    }
+  }
 }
 
 export function switchSubTab(app, tabName) {
