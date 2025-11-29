@@ -403,8 +403,12 @@ export function updateScheduleContext(app, options = {}) {
   }
 
   if (!eventId || !scheduleId || !scheduleKey) {
-    const assignment =
-      app?.state?.channelAssignment || (typeof app.getDisplayAssignment === "function" ? app.getDisplayAssignment() : null);
+    // activeEventIdが空の場合は、getDisplayAssignment()を呼ばずにnullにする
+    // これにより、イベントを選んでいない状態で古いassignmentが評価されることを防ぐ
+    const activeEventId = String(app?.state?.activeEventId || "").trim();
+    const assignment = activeEventId
+      ? (app?.state?.channelAssignment || (typeof app.getDisplayAssignment === "function" ? app.getDisplayAssignment() : null))
+      : null;
     const assignmentEvent = ensure(assignment?.eventId);
     const assignmentSchedule = ensure(assignment?.scheduleId);
     if (!eventId && assignmentEvent) {

@@ -897,14 +897,19 @@ export class OperatorApp {
    * @returns {{ label: string, type: "normal"|"conflict"|"missing"|"unassigned" }}
    */
   describeChannelAssignment() {
+    // activeEventIdが空の場合は、getDisplayAssignment()を呼ばずに空文字列を返す
+    // これにより、イベントを選んでいない状態で古いassignmentが表示されることを防ぐ
+    const activeEventId = String(this.state?.activeEventId || "").trim();
+    if (!activeEventId) {
+      return "";
+    }
     const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
     if (!assignment || !assignment.eventId) {
       return "";
     }
     // 現在選択中のイベントと一致しない場合は空文字列を返す
-    const activeEventId = String(this.state?.activeEventId || "").trim();
     const assignmentEventId = String(assignment.eventId || "").trim();
-    if (activeEventId && assignmentEventId !== activeEventId) {
+    if (assignmentEventId !== activeEventId) {
       return "";
     }
     const eventId = assignmentEventId;
@@ -974,7 +979,12 @@ export class OperatorApp {
       typeof this.getActiveChannel === "function" ? this.getActiveChannel() : { eventId: "", scheduleId: "" };
     const currentScheduleKey =
       typeof this.getCurrentScheduleKey === "function" ? String(this.getCurrentScheduleKey() || "") : "";
-    const channelAssignment = state.channelAssignment || this.getDisplayAssignment();
+    // activeEventIdが空の場合は、getDisplayAssignment()を呼ばずにnullにする
+    // これにより、イベントを選んでいない状態で古いassignmentが評価されることを防ぐ
+    const activeEventId = String(state.activeEventId || "").trim();
+    const channelAssignment = activeEventId
+      ? (state.channelAssignment || this.getDisplayAssignment())
+      : null;
     const displaySession = state.displaySession || null;
     const sessionAssignment =
       displaySession && typeof displaySession.assignment === "object" ? displaySession.assignment : null;
@@ -1085,7 +1095,12 @@ export class OperatorApp {
    * @returns {boolean}
    */
   hasChannelMismatch() {
-    const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
+    // activeEventIdが空の場合は、getDisplayAssignment()を呼ばずにnullにする
+    // これにより、イベントを選んでいない状態で古いassignmentが評価されることを防ぐ
+    const activeEventId = String(this.state?.activeEventId || "").trim();
+    const assignment = activeEventId
+      ? (this.state?.channelAssignment || this.getDisplayAssignment())
+      : null;
     const debugAssignment = assignment
       ? {
           eventId: String(assignment.eventId || "").trim(),
@@ -2788,9 +2803,18 @@ export class OperatorApp {
         updatedAt
       });
     });
-    const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
-    const assignmentKey = assignment && assignment.eventId ? `${assignment.eventId}::${normalizeScheduleId(assignment.scheduleId || "")}` : "";
-    if (assignment && assignment.eventId && assignmentKey && !groups.has(assignmentKey)) {
+    // activeEventIdが空の場合は、getDisplayAssignment()を呼ばずにnullにする
+    // これにより、イベントを選んでいない状態で古いassignmentが表示されることを防ぐ
+    const activeEventId = String(this.state?.activeEventId || "").trim();
+    const assignment = activeEventId
+      ? (this.state?.channelAssignment || this.getDisplayAssignment())
+      : null;
+    // 現在選択中のイベントと一致する場合のみ表示
+    const assignmentEventId = assignment && assignment.eventId ? String(assignment.eventId || "").trim() : "";
+    const assignmentKey = assignment && assignmentEventId === activeEventId && assignment.eventId
+      ? `${assignment.eventId}::${normalizeScheduleId(assignment.scheduleId || "")}`
+      : "";
+    if (assignment && assignmentEventId === activeEventId && assignmentKey && !groups.has(assignmentKey)) {
       const label = this.resolveScheduleLabel(assignmentKey, assignment.scheduleLabel, assignment.scheduleId);
       groups.set(assignmentKey, {
         key: assignmentKey,
