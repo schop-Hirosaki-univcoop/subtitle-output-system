@@ -9564,6 +9564,16 @@ export class EventAdminApp {
         return;
       }
       
+      // Deleteキーの処理（normalizedの前にチェック）
+      if (key === "Delete") {
+        const sideTelopDeleteButton = document.getElementById("side-telop-delete");
+        if (sideTelopDeleteButton && !sideTelopDeleteButton.disabled) {
+          event.preventDefault();
+          sideTelopDeleteButton.click();
+          return;
+        }
+      }
+      
       switch (normalized) {
         case "a": {
           // Aキー: テロップ追加（テキストエリアにフォーカス）
@@ -9581,16 +9591,6 @@ export class EventAdminApp {
           if (sideTelopEditButton && !sideTelopEditButton.disabled) {
             event.preventDefault();
             sideTelopEditButton.click();
-            return;
-          }
-          break;
-        }
-        case "d": {
-          // Dキー: 選択中のテロップを削除
-          const sideTelopDeleteButton = document.getElementById("side-telop-delete");
-          if (sideTelopDeleteButton && !sideTelopDeleteButton.disabled) {
-            event.preventDefault();
-            sideTelopDeleteButton.click();
             return;
           }
           break;
@@ -9682,7 +9682,7 @@ export class EventAdminApp {
       }
 
       switch (normalized) {
-        case "i": {
+        case "a": {
           if (event.altKey || event.ctrlKey || event.metaKey) return;
           event.preventDefault();
           if (this.dom.addEventButton?.disabled) return;
@@ -9752,7 +9752,7 @@ export class EventAdminApp {
       }
 
       switch (normalized) {
-        case "i": {
+        case "a": {
           if (event.altKey || event.ctrlKey || event.metaKey) return;
           event.preventDefault();
           if (this.dom.addScheduleButton?.disabled) return;
