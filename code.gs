@@ -4210,7 +4210,7 @@ function lockDisplaySchedule_(
     lockedByEmail: String(principal.email || "").trim(),
     lockedByName: operatorName || String(principal.email || "").trim(),
   };
-  const nextSession = Object.assign({}, session, {
+  const nextSession = Object.assign({}, firstSession, {
     eventId,
     scheduleId: normalizedScheduleId,
     scheduleLabel: assignment.scheduleLabel,
