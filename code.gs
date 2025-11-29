@@ -771,9 +771,19 @@ function doPost(e) {
 // ブラウザがクロスオリジンのPOSTを送る前に投げてくる
 // OPTIONSリクエストに対して、空のレスポンス＋CORSヘッダを返す。
 // 実際の処理はwithCors_でAccess-Control-Allow-*ヘッダを付けるだけ。
+// 注意: OPTIONSリクエストではOriginヘッダーを直接取得できない場合があるため、
+// 許可されたOriginリストから適切なOriginを返すようにする。
 function doOptions(e) {
-  const origin = getRequestOrigin_(e);
-  const empty = ContentService.createTextOutput("");
+  // OPTIONSリクエストではOriginをパラメータから取得できない場合があるため、
+  // getRequestOrigin_で取得を試み、取得できない場合は許可されたOriginを返す
+  let origin = getRequestOrigin_(e);
+  // Originが取得できない、または許可されていない場合は、許可リストから最初のOriginを使用
+  if (!origin || ALLOWED_ORIGINS.indexOf(origin) === -1) {
+    origin = ALLOWED_ORIGINS[0] || "";
+  }
+  const empty = ContentService.createTextOutput("").setMimeType(
+    ContentService.MimeType.TEXT
+  );
   return withCors_(empty, origin);
 }
 
