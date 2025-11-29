@@ -1024,7 +1024,8 @@
                 lastSeenAt: now,
                 expiresAt,
                 grantedBy: 'client',
-                eventId: channelEventId
+                eventId: channelEventId,
+                scheduleId: channelScheduleId || null
               };
               
               // Firebaseに直接書き込み
@@ -1080,7 +1081,9 @@
             const sessionUpdate = {
               lastSeenAt: now,
               expiresAt,
-              status: 'active'
+              status: 'active',
+              eventId: channelEventId,
+              scheduleId: channelScheduleId || null
             };
             
             await update(sessionRef, sessionUpdate);
