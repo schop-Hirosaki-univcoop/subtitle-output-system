@@ -4372,6 +4372,7 @@ export class OperatorApp {
     const session = this.state.displaySession || null;
     const sessionUid = String(session?.uid || "").trim();
     const sessionId = String(session?.sessionId || "").trim();
+    const activeEventId = String(this.state?.activeEventId || "").trim();
     if (!sessionId) {
       this.displayPresencePrimedSessionId = "";
       this.displayPresencePrimedForSession = false;
@@ -4380,7 +4381,19 @@ export class OperatorApp {
       this.displayPresencePrimedForSession = false;
     }
     const presenceEntries = Array.isArray(this.displayPresenceEntries) ? this.displayPresenceEntries : [];
-    const presenceEntry = presenceEntries.find((entry) => entry.uid === sessionUid) || null;
+    // 複数イベント対応: 現在選択中のイベントに対応するpresenceエントリを探す
+    const presenceEntry = presenceEntries.find((entry) => {
+      if (entry.uid !== sessionUid || entry.sessionId !== sessionId) {
+        return false;
+      }
+      // イベントが選択されていない場合は、すべてのエントリを対象とする（後方互換性）
+      if (!activeEventId) {
+        return true;
+      }
+      // 現在選択中のイベントに対応するエントリを探す
+      const entryEventId = String(entry.eventId || entry.channelEventId || entry.assignmentEventId || "").trim();
+      return entryEventId === activeEventId;
+    }) || null;
     const presenceActive = !!presenceEntry && !presenceEntry.isStale && presenceEntry.sessionId === sessionId;
     if (presenceEntry && presenceEntry.sessionId === sessionId) {
       this.displayPresencePrimedForSession = true;
@@ -4389,7 +4402,10 @@ export class OperatorApp {
     const assetAvailable = this.state.displayAssetAvailable !== false;
     const allowActive = !assetChecked || assetAvailable;
     const snapshotFallbackAllowed = !this.displayPresencePrimedForSession;
-    const snapshotActive = snapshotFallbackAllowed && !!this.displaySessionStatusFromSnapshot;
+    // セッションのイベントIDと現在選択中のイベントIDが一致している場合のみsnapshotActiveを有効にする
+    const sessionEventId = String(session?.eventId || "").trim();
+    const sessionMatchesActiveEvent = !activeEventId || !sessionEventId || sessionEventId === activeEventId;
+    const snapshotActive = snapshotFallbackAllowed && !!this.displaySessionStatusFromSnapshot && sessionMatchesActiveEvent;
     const nextActive = allowActive && (presenceActive || snapshotActive);
     this.state.displaySessionActive = nextActive;
 
