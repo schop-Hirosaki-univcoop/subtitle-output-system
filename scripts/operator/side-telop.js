@@ -160,31 +160,51 @@ export async function startSideTelopListener(app) {
     renderSideTelopControls(app, true);
   }
   let initialized = false;
-  app.sideTelopUnsubscribe = onValue(sideTelopRef, async (snapshot) => {
-    const channelChanged = app.state.sideTelopChannelKey !== channelKey;
-    const data = snapshot?.exists?.() ? snapshot.val() || {} : {};
-    const items = normalizeItems(data?.right?.items || []);
-    const activeIndex = clampActiveIndex(data?.right?.activeIndex, items);
-    if (!initialized) {
-      initialized = true;
-      renderSideTelopControls(app, true);
+  app.sideTelopUnsubscribe = onValue(
+    sideTelopRef,
+    async (snapshot) => {
+      // チャンネルが変更されていないか再確認
+      const currentChannel = resolveSideTelopChannel(app);
+      const currentChannelKey = currentChannel.eventId && currentChannel.scheduleId
+        ? `${currentChannel.eventId}::${currentChannel.scheduleId}`
+        : "";
+      if (currentChannelKey !== channelKey) {
+        // チャンネルが変更された場合は処理を中断
+        return;
+      }
+      const channelChanged = app.state.sideTelopChannelKey !== channelKey;
+      const data = snapshot?.exists?.() ? snapshot.val() || {} : {};
+      const items = normalizeItems(data?.right?.items || []);
+      const activeIndex = clampActiveIndex(data?.right?.activeIndex, items);
+      if (!initialized) {
+        initialized = true;
+        renderSideTelopControls(app, true);
+      }
+      app.state.sideTelopEntries = items;
+      app.state.sideTelopActiveIndex = activeIndex;
+      if (!Number.isInteger(app.state.sideTelopEditingIndex) || app.state.sideTelopEditingIndex >= items.length) {
+        app.state.sideTelopEditingIndex = null;
+      }
+      if (!Number.isInteger(app.state.sideTelopSelectedIndex) || app.state.sideTelopSelectedIndex >= items.length) {
+        app.state.sideTelopSelectedIndex = clampSelectedIndex(null, items, activeIndex);
+      }
+      app.state.sideTelopChannelKey = channelKey;
+      renderSideTelopList(app);
+      const nextText = getActiveSideTelopText(app);
+      if (channelChanged || app.state.sideTelopLastPushedText !== nextText) {
+        try {
+          await pushActiveSideTelopToDisplay(app);
+          app.state.sideTelopLastPushedText = nextText;
+        } catch (error) {
+          logDisplayLinkWarn("Failed to push side telop to display in listener", error);
+        }
+      }
+    },
+    (error) => {
+      logDisplayLinkWarn("Side telop listener error", error);
+      renderSideTelopControls(app, false);
     }
-    app.state.sideTelopEntries = items;
-    app.state.sideTelopActiveIndex = activeIndex;
-    if (!Number.isInteger(app.state.sideTelopEditingIndex) || app.state.sideTelopEditingIndex >= items.length) {
-      app.state.sideTelopEditingIndex = null;
-    }
-    if (!Number.isInteger(app.state.sideTelopSelectedIndex) || app.state.sideTelopSelectedIndex >= items.length) {
-      app.state.sideTelopSelectedIndex = clampSelectedIndex(null, items, activeIndex);
-    }
-    app.state.sideTelopChannelKey = channelKey;
-    renderSideTelopList(app);
-    const nextText = getActiveSideTelopText(app);
-    if (channelChanged || app.state.sideTelopLastPushedText !== nextText) {
-      await pushActiveSideTelopToDisplay(app);
-      app.state.sideTelopLastPushedText = nextText;
-    }
-  });
+  );
 
   // 初期データが無ければ作成
   try {
