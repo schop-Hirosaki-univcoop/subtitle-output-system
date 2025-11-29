@@ -980,6 +980,17 @@
           if (beginInFlight) return beginInFlight;
           const user = auth.currentUser;
           if (!user) return;
+          // クエリパラメータにeventIdがない場合は、GASを使わずに旧パス（render/session）で動作
+          // セッション情報はsubscribeDisplaySession()で監視されるため、GAS呼び出しは不要
+          if (!channelEventId) {
+            logDisplayLinkInfo('Display session: using legacy path (no eventId in query)', {
+              uid: user.uid
+            });
+            // セッション情報が既に存在する場合はそれを使用、なければpresenceのみで動作
+            setSessionActive(true);
+            startHeartbeat();
+            return Promise.resolve(sessionInfo || {});
+          }
           beginInFlight = (async () => {
             clearSessionRetryTimer();
             try {
@@ -1014,8 +1025,7 @@
             return;
           }
           try {
-            // クエリパラメータのeventIdを渡す（複数イベントの同時操作に対応）
-            await callGas('heartbeatDisplaySession', { sessionId: sessionInfo.sessionId, eventId: channelEventId });
+            // presenceを更新するだけで、セッションのTTLはオペレーター側のrefreshDisplaySessionFromPresenceで更新される
             await syncDisplayPresence(reason);
           } catch (err) {
             logDisplayLinkWarn('Display presence heartbeat error', err);
@@ -1024,6 +1034,11 @@
 
         async function endDisplaySession(reason) {
           if (!sessionInfo || !sessionInfo.sessionId) return;
+          // クエリパラメータにeventIdがない場合は、GASを使わずにpresenceのみをクリア
+          if (!channelEventId) {
+            releaseDisplayPresence();
+            return;
+          }
           try {
             // クエリパラメータのeventIdを渡す（複数イベントの同時操作に対応）
             await callGas('endDisplaySession', { sessionId: sessionInfo.sessionId, reason, eventId: channelEventId });

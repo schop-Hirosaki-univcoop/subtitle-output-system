@@ -4471,7 +4471,12 @@ export class OperatorApp {
     if (!session?.scheduleId && entry.scheduleId) {
       payload.scheduleId = entry.scheduleId;
     }
-    update(displaySessionRef, payload).catch((error) => {
+    // 複数イベント対応: セッションのイベントIDに基づいて正しいパスを使用
+    const sessionEventId = String(session?.eventId || entry?.eventId || "").trim();
+    const sessionRef = sessionEventId
+      ? ref(database, `render/events/${sessionEventId}/session`)
+      : displaySessionRef; // 後方互換性のため、eventIdがない場合は旧パスを使用
+    update(sessionRef, payload).catch((error) => {
       console.debug("Failed to extend display session TTL:", error);
     });
     this.displayPresenceLastRefreshAt = now;

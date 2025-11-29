@@ -1882,9 +1882,9 @@ export class GlToolManager {
     }
     this.scheduleSyncPending = true;
     try {
-      await update(ref(database), {
-        [`glIntake/events/${this.currentEventId}/schedules`]: nextMap
-      });
+      const eventConfigRef = getGlEventConfigRef(this.currentEventId);
+      const schedulesRef = ref(database, `glIntake/events/${this.currentEventId}/schedules`);
+      await update(schedulesRef, nextMap);
     } catch (error) {
       logError("Failed to sync GL schedule summary", error);
     } finally {

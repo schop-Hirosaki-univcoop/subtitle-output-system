@@ -1,6 +1,6 @@
 // questions.js: 質問キューの操作と選択ロジックを管理します。
 import { QUESTIONS_SUBTAB_KEY, GENRE_ALL_VALUE } from "./constants.js";
-import { database, ref, update, get, getNowShowingRef, serverTimestamp } from "./firebase.js";
+import { database, ref, update, get, getNowShowingRef, serverTimestamp, questionStatusRef } from "./firebase.js";
 import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn, error as logDisplayLinkError } from "../shared/display-link-logger.js";
 import { normalizeScheduleId } from "../shared/channel-paths.js";
 import { escapeHtml, formatOperatorName, resolveGenreLabel, formatScheduleRange } from "./utils.js";
@@ -669,7 +669,7 @@ export async function handleDisplay(app) {
     updates[`questionStatus/${app.state.selectedRowData.uid}/selecting`] = true;
     updates[`questionStatus/${app.state.selectedRowData.uid}/answered`] = false;
     updates[`questionStatus/${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
-    await update(ref(database), updates);
+    await update(questionStatusRef, updates);
     // 更新前に再度チャンネルを確認
     const finalChannel = resolveNowShowingReference(app);
     const finalChannelKey = finalChannel.eventId && finalChannel.scheduleId
@@ -801,7 +801,7 @@ export async function handleBatchUnanswer(app) {
     updates[`questionStatus/${uid}/updatedAt`] = serverTimestamp();
   }
   try {
-    await update(ref(database), updates);
+    await update(questionStatusRef, updates);
     app.api.fireAndForgetApi({ action: "batchUpdateStatus", uids: uidsToUpdate, status: false });
     if (uidsToUpdate.length) {
       app.api.logAction("BATCH_UNANSWER", `Count: ${uidsToUpdate.length}`);
@@ -870,7 +870,7 @@ export async function clearNowShowing(app) {
       }
     }
     if (Object.keys(updates).length > 0) {
-      await update(ref(database), updates);
+      await update(questionStatusRef, updates);
     }
     // 更新前に再度チャンネルを確認
     const finalChannel = resolveNowShowingReference(app);
