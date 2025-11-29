@@ -24,7 +24,7 @@
         "$eventId": {
           ".read": true,
           "session": {
-            ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+            ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
             ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true || (auth.token.firebase.sign_in_provider === 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true))",
             ".validate": "!newData.exists() || (newData.hasChildren(['uid','sessionId','status']) && newData.child('uid').isString() && newData.child('sessionId').isString() && newData.child('status').isString() && (!newData.child('eventId').exists() || newData.child('eventId').isString()) && (!newData.child('scheduleId').exists() || newData.child('scheduleId').isString()) && (!newData.child('scheduleLabel').exists() || newData.child('scheduleLabel').isString()) && (!newData.child('assignment').exists() || newData.child('assignment').hasChildren(['eventId','scheduleId']) && newData.child('assignment').child('eventId').isString() && newData.child('assignment').child('scheduleId').isString()) && (!newData.child('startedAt').exists() || newData.child('startedAt').isNumber()) && (!newData.child('lastSeenAt').exists() || newData.child('lastSeenAt').isNumber()) && (!newData.child('expiresAt').exists() || newData.child('expiresAt').isNumber()))",
             "uid": { ".validate": "newData.isString()" },
@@ -100,7 +100,7 @@
         }
       },
       "session": {
-        ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+        ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
         ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)"
       },
       "displayPresence": {

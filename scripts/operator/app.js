@@ -3621,7 +3621,17 @@ export class OperatorApp {
         try {
           await this.api.apiPost({ action: "ensureAdmin" });
         } catch (error) {
-          // Allow the operator to continue even if ensureAdmin fails.
+          const rawMessage = error instanceof Error ? error.message : String(error || "");
+          let message = "管理者権限の同期に失敗しました。時間をおいて再度お試しください。";
+          if (/not in users sheet/i.test(rawMessage) || /Forbidden: not in users sheet/i.test(rawMessage)) {
+            message = "あなたのアカウントはこのシステムへのアクセスが許可されていません。";
+            this.toast(message, "error");
+            await this.logout();
+            this.hideLoader();
+            return;
+          }
+          // 技術的なエラー（ネットワークエラーなど）の場合も処理を中断
+          throw new Error(message);
         }
       } else {
         this.setLoaderStep(2, this.isEmbedded ? "管理者権限を適用しています…" : "管理者権限はプリフライト済みです。");
