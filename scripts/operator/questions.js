@@ -361,6 +361,10 @@ export function renderQuestions(app) {
 }
 
 export function updateScheduleContext(app, options = {}) {
+  // デバッグログ: 関数が呼ばれたことを確認
+  if (typeof console !== "undefined" && typeof console.log === "function") {
+    console.log("[updateScheduleContext] Called", options);
+  }
   const rangeEl = app.dom.scheduleTimeRange;
   const eventLabelEl = app.dom.scheduleEventName;
   const scheduleLabelEl = app.dom.scheduleLabel;
@@ -525,6 +529,19 @@ export function updateScheduleContext(app, options = {}) {
         ? selectionConfirmedOption
         : contextSelectionConfirmed && !assignmentDerivedSelection
       : false;
+  
+  // デバッグログ: 選択状態を確認
+  if (typeof console !== "undefined" && typeof console.log === "function") {
+    console.log("[updateScheduleContext] Selection state", {
+      nextSelectionConfirmed,
+      eventId: eventId || "(empty)",
+      scheduleId: scheduleId || "(empty)",
+      applySelection,
+      contextSelectionConfirmed,
+      assignmentDerivedSelection,
+      selectionConfirmedOption
+    });
+  }
 
   app.pageContext = {
     ...context,
