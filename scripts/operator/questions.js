@@ -636,7 +636,17 @@ export async function handleDisplay(app) {
     app.toast("イベントまたは日程が割り当てられていないため送出できません。", "error");
     return;
   }
+  const channelKey = `${eventId}::${scheduleId}`;
   const snapshot = await get(nowShowingRef);
+  // 非同期処理の後にチャンネルが変更されていないか確認
+  const currentChannel = resolveNowShowingReference(app);
+  const currentChannelKey = currentChannel.eventId && currentChannel.scheduleId
+    ? `${currentChannel.eventId}::${currentChannel.scheduleId}`
+    : "";
+  if (currentChannelKey !== channelKey) {
+    app.toast("チャンネルが変更されたため送出を中断しました。", "warning");
+    return;
+  }
   const previousNowShowing = snapshot.val();
   const previousUid =
     previousNowShowing && typeof previousNowShowing.uid !== "undefined" ? String(previousNowShowing.uid || "") : "";
@@ -660,6 +670,15 @@ export async function handleDisplay(app) {
     updates[`questionStatus/${app.state.selectedRowData.uid}/answered`] = false;
     updates[`questionStatus/${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
     await update(ref(database), updates);
+    // 更新前に再度チャンネルを確認
+    const finalChannel = resolveNowShowingReference(app);
+    const finalChannelKey = finalChannel.eventId && finalChannel.scheduleId
+      ? `${finalChannel.eventId}::${finalChannel.scheduleId}`
+      : "";
+    if (finalChannelKey !== channelKey) {
+      app.toast("チャンネルが変更されたため送出を中断しました。", "warning");
+      return;
+    }
     const genre = String(app.state.selectedRowData.genre ?? "").trim();
     logDisplayLinkInfo("Sending nowShowing payload", {
       eventId,
@@ -820,7 +839,17 @@ export async function clearNowShowing(app) {
     app.toast("イベントまたは日程が割り当てられていないため送出をクリアできません。", "error");
     return;
   }
+  const channelKey = `${eventId}::${scheduleId}`;
   const snapshot = await get(nowShowingRef);
+  // 非同期処理の後にチャンネルが変更されていないか確認
+  const currentChannel = resolveNowShowingReference(app);
+  const currentChannelKey = currentChannel.eventId && currentChannel.scheduleId
+    ? `${currentChannel.eventId}::${currentChannel.scheduleId}`
+    : "";
+  if (currentChannelKey !== channelKey) {
+    app.toast("チャンネルが変更されたため送出クリアを中断しました。", "warning");
+    return;
+  }
   const previousNowShowing = snapshot.val();
   try {
     logDisplayLinkInfo("Clearing nowShowing payload", { eventId, scheduleId });
@@ -842,6 +871,15 @@ export async function clearNowShowing(app) {
     }
     if (Object.keys(updates).length > 0) {
       await update(ref(database), updates);
+    }
+    // 更新前に再度チャンネルを確認
+    const finalChannel = resolveNowShowingReference(app);
+    const finalChannelKey = finalChannel.eventId && finalChannel.scheduleId
+      ? `${finalChannel.eventId}::${finalChannel.scheduleId}`
+      : "";
+    if (finalChannelKey !== channelKey) {
+      app.toast("チャンネルが変更されたため送出クリアを中断しました。", "warning");
+      return;
     }
     const sideTelopRight = getActiveSideTelopRight(app);
     const clearedNowShowing = {

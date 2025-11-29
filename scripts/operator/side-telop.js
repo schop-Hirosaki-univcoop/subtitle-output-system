@@ -83,11 +83,23 @@ function getActiveSideTelopText(app) {
   return ensureString(items[activeIndex] || DEFAULT_SIDE_TELOP) || DEFAULT_SIDE_TELOP;
 }
 
-async function pushActiveSideTelopToDisplay(app) {
+async function pushActiveSideTelopToDisplay(app, expectedChannelKey = null) {
   if (!app || typeof app.isDisplayOnline !== "function") return;
   const renderOnline = app.state?.renderChannelOnline !== false;
   const displayOnline = app.isDisplayOnline();
   if (!renderOnline || !displayOnline) return;
+
+  // チャンネルが変更されていないか確認
+  if (expectedChannelKey !== null) {
+    const currentChannel = resolveSideTelopChannel(app);
+    const currentChannelKey = currentChannel.eventId && currentChannel.scheduleId
+      ? `${currentChannel.eventId}::${currentChannel.scheduleId}`
+      : "";
+    if (currentChannelKey !== expectedChannelKey) {
+      // チャンネルが変更された場合は処理を中断
+      return;
+    }
+  }
 
   const activeText = getActiveSideTelopText(app);
   const { ref: nowShowingRef, eventId, scheduleId } = resolveNowShowingReference(app);
@@ -108,6 +120,7 @@ async function persistSideTelops(app, items, activeIndex = 0) {
     app.toast("日程が未選択のため右サイドテロップを保存できません。", "error");
     return;
   }
+  const channelKey = `${eventId}::${scheduleId}`;
   const normalizedItems = normalizeItems(items);
   const normalizedActiveIndex = clampActiveIndex(activeIndex, normalizedItems);
   try {
@@ -118,10 +131,26 @@ async function persistSideTelops(app, items, activeIndex = 0) {
         updatedAt: serverTimestamp()
       }
     });
+    // 保存後にチャンネルが変更されていないか確認
+    const currentChannel = resolveSideTelopChannel(app);
+    const currentChannelKey = currentChannel.eventId && currentChannel.scheduleId
+      ? `${currentChannel.eventId}::${currentChannel.scheduleId}`
+      : "";
+    if (currentChannelKey !== channelKey) {
+      // チャンネルが変更された場合は状態を更新しない
+      return;
+    }
     app.state.sideTelopEntries = normalizedItems;
     app.state.sideTelopActiveIndex = normalizedActiveIndex;
-    await pushActiveSideTelopToDisplay(app);
-    app.state.sideTelopLastPushedText = getActiveSideTelopText(app);
+    await pushActiveSideTelopToDisplay(app, channelKey);
+    // 再度チャンネルを確認
+    const finalChannel = resolveSideTelopChannel(app);
+    const finalChannelKey = finalChannel.eventId && finalChannel.scheduleId
+      ? `${finalChannel.eventId}::${finalChannel.scheduleId}`
+      : "";
+    if (finalChannelKey === channelKey) {
+      app.state.sideTelopLastPushedText = getActiveSideTelopText(app);
+    }
   } catch (error) {
     app.toast("サイドテロップの保存に失敗しました。", "error");
     logDisplayLinkWarn("Failed to persist side telops", error);
@@ -193,8 +222,15 @@ export async function startSideTelopListener(app) {
       const nextText = getActiveSideTelopText(app);
       if (channelChanged || app.state.sideTelopLastPushedText !== nextText) {
         try {
-          await pushActiveSideTelopToDisplay(app);
-          app.state.sideTelopLastPushedText = nextText;
+          await pushActiveSideTelopToDisplay(app, channelKey);
+          // チャンネルが変更されていないか再確認
+          const finalChannel = resolveSideTelopChannel(app);
+          const finalChannelKey = finalChannel.eventId && finalChannel.scheduleId
+            ? `${finalChannel.eventId}::${finalChannel.scheduleId}`
+            : "";
+          if (finalChannelKey === channelKey) {
+            app.state.sideTelopLastPushedText = nextText;
+          }
         } catch (error) {
           logDisplayLinkWarn("Failed to push side telop to display in listener", error);
         }
