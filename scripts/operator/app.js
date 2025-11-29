@@ -635,6 +635,13 @@ export class OperatorApp {
     };
     if (this.state) {
       this.state.selectionConfirmed = false;
+      // 前回の選択情報をクリア
+      this.state.activeEventId = "";
+      this.state.activeScheduleId = "";
+      this.state.activeEventName = "";
+      this.state.activeScheduleLabel = "";
+      this.state.currentSchedule = "";
+      this.state.lastNormalSchedule = "";
     }
   }
 
@@ -1986,7 +1993,10 @@ export class OperatorApp {
     const displaySessionActive = !!this.state.displaySessionActive;
     const renderOnline = this.state.renderChannelOnline !== false;
     const displayActive = this.isDisplayOnline();
-    const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
+    const rawAssignment = this.state?.channelAssignment || this.getDisplayAssignment();
+    // 現在選択中のイベントとディスプレイの割り当てのイベントが一致する場合のみ表示
+    // これにより、イベントを選んでいないのに別のイベントの情報が表示されることを防ぐ
+    const assignment = rawAssignment && String(rawAssignment.eventId || "").trim() === eventId ? rawAssignment : null;
     const channelAligned = !this.hasChannelMismatch();
     const telopEnabled = this.isTelopEnabled();
     const assetChecked = this.state.displayAssetChecked === true;
