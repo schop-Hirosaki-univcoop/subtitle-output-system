@@ -642,6 +642,8 @@ export class OperatorApp {
       this.state.activeScheduleLabel = "";
       this.state.currentSchedule = "";
       this.state.lastNormalSchedule = "";
+      // channelAssignmentもクリアして、古い割り当て情報が表示されないようにする
+      this.state.channelAssignment = null;
     }
   }
 
@@ -2005,7 +2007,9 @@ export class OperatorApp {
     const displaySessionActive = !!this.state.displaySessionActive;
     const renderOnline = this.state.renderChannelOnline !== false;
     const displayActive = this.isDisplayOnline();
-    const rawAssignment = this.state?.channelAssignment || this.getDisplayAssignment();
+    // activeEventIdが空の場合は、getDisplayAssignment()を呼ばずにnullにする
+    // これにより、イベントを選んでいない状態で古いassignmentが表示されることを防ぐ
+    const rawAssignment = eventId ? (this.state?.channelAssignment || this.getDisplayAssignment()) : null;
     // 現在選択中のイベントとディスプレイの割り当てのイベントが一致する場合のみ表示
     // これにより、イベントを選んでいないのに別のイベントの情報が表示されることを防ぐ
     const assignment = rawAssignment && String(rawAssignment.eventId || "").trim() === eventId ? rawAssignment : null;
@@ -3628,6 +3632,10 @@ export class OperatorApp {
       this.startDictionaryListener();
       this.startPickupListener();
       this.startSideTelopListener();
+      // 初期化時にchannelAssignmentをクリアして、古い割り当て情報が表示されないようにする
+      if (this.state) {
+        this.state.channelAssignment = null;
+      }
       this.startDisplaySessionMonitor();
       this.startDisplayPresenceMonitor();
       this.fetchLogs().catch((error) => {
