@@ -470,7 +470,10 @@ export function updateScheduleContext(app, options = {}) {
   let startText = ensure(startValue);
   let endText = ensure(endValue);
 
-  const applySelection = Boolean(scheduleKey) || !assignmentDerivedSelection;
+  // selectionConfirmedがfalseの場合、assignmentDerivedSelectionによる自動選択を適用しない
+  // これにより、初期状態で何も選択されていない状態を維持できる
+  const shouldApplyAssignmentSelection = assignmentDerivedSelection && contextSelectionConfirmed;
+  const applySelection = Boolean(scheduleKey) || !shouldApplyAssignmentSelection;
 
   if (!applySelection) {
     scheduleKey = "";

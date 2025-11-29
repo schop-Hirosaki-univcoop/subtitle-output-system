@@ -691,15 +691,20 @@ export class OperatorApp {
       }
     }
 
+    // selectionConfirmedがfalseの場合、channelAssignmentから自動取得しない
+    // これにより、初期状態で何も選択されていない状態を維持できる
+    const selectionConfirmed = this.state?.selectionConfirmed === true || contextConfirmed;
     if (!eventId || !scheduleId) {
-      const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
-      if (assignment) {
-        const assignmentKey = extractScheduleKeyParts(assignment.canonicalScheduleKey || assignment.scheduleKey);
-        if (!eventId) {
-          eventId = ensure(assignment.eventId || assignmentKey.eventId);
-        }
-        if (!scheduleId) {
-          scheduleId = ensure(assignment.scheduleId || assignmentKey.scheduleId);
+      if (selectionConfirmed) {
+        const assignment = this.state?.channelAssignment || this.getDisplayAssignment();
+        if (assignment) {
+          const assignmentKey = extractScheduleKeyParts(assignment.canonicalScheduleKey || assignment.scheduleKey);
+          if (!eventId) {
+            eventId = ensure(assignment.eventId || assignmentKey.eventId);
+          }
+          if (!scheduleId) {
+            scheduleId = ensure(assignment.scheduleId || assignmentKey.scheduleId);
+          }
         }
       }
     }
@@ -2689,6 +2694,14 @@ export class OperatorApp {
       this.closeConflictDialog();
       return;
     }
+    const selectionConfirmed = this.state?.selectionConfirmed === true;
+    // selectionConfirmedがfalseの場合、初期状態で何も選択されていないため、モーダルを表示しない
+    if (!selectionConfirmed) {
+      this.state.scheduleConflict = null;
+      this.state.conflictSelection = "";
+      this.closeConflictDialog();
+      return;
+    }
     const eventId = String(this.state?.activeEventId || "").trim();
     if (!eventId) {
       this.state.scheduleConflict = null;
@@ -2696,7 +2709,6 @@ export class OperatorApp {
       this.closeConflictDialog();
       return;
     }
-    const selectionConfirmed = this.state?.selectionConfirmed === true;
     const presenceMap = this.state?.operatorPresenceByUser instanceof Map ? this.state.operatorPresenceByUser : new Map();
     const groups = new Map();
     let latestPresenceAt = 0;
@@ -2809,7 +2821,9 @@ export class OperatorApp {
     let selfPresenceKey = selfEntry
       ? this.derivePresenceScheduleKey(selfEntryEventId, selfEntry, selfEntrySessionId || selfEntry?.sessionId || "")
       : "";
-    if (!selfPresenceKey) {
+    // selectionConfirmedがfalseの場合、getCurrentScheduleKey()から自動取得しない
+    // これにより、初期状態で何も選択されていない場合はモーダルを表示しない
+    if (!selfPresenceKey && selectionConfirmed) {
       selfPresenceKey = this.getCurrentScheduleKey();
     }
 
