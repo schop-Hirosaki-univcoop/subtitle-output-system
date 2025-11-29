@@ -3930,33 +3930,13 @@ function beginDisplaySession_(principal) {
 
   const sessionId = Utilities.getUuid();
   const expiresAt = now + DISPLAY_SESSION_TTL_MS;
+  // assignmentは保持しない
+  // 理由：
+  // 1. ディスプレイは複数のイベントで同時に使われる可能性がある
+  // 2. assignmentは「最後に固定したオペレーターのイベント」を表すが、これは他のオペレーターにとっては無関係な情報
+  // 3. オペレーターがイベントを選んでいない状態で、ディスプレイのassignmentが表示されるのは設計上の問題
+  // 4. オペレーターがイベントを選択した際に、必要に応じてlockDisplaySchedule_でassignmentを設定する
   let preservedAssignment = null;
-  // セッション開始時にassignmentを保持する際、一定時間（24時間）経過していた場合はクリアする
-  // これにより、前回のイベント/日程の情報が残り続けることを防ぐ
-  const ASSIGNMENT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24時間
-  if (current && current.assignment && typeof current.assignment === "object") {
-    const lockedAt = Number(current.assignment.lockedAt || 0);
-    const assignmentAge = lockedAt > 0 ? now - lockedAt : 0;
-    // 24時間以内のassignmentのみ保持する
-    if (assignmentAge > 0 && assignmentAge < ASSIGNMENT_MAX_AGE_MS) {
-      const preservedEvent = normalizeKey_(current.assignment.eventId);
-      const preservedSchedule = normalizeScheduleId_(
-        current.assignment.scheduleId
-      );
-      preservedAssignment = Object.assign({}, current.assignment, {
-        eventId: preservedEvent,
-        scheduleId: preservedSchedule,
-        scheduleLabel: String(current.assignment.scheduleLabel || "").trim(),
-        scheduleKey: buildScheduleKey_(preservedEvent, preservedSchedule),
-      });
-      if (!preservedAssignment.scheduleLabel) {
-        preservedAssignment.scheduleLabel =
-          preservedSchedule === DEFAULT_SCHEDULE_KEY
-            ? "未選択"
-            : preservedSchedule || preservedEvent;
-      }
-    }
-  }
   const session = {
     uid: principalUid,
     sessionId,
