@@ -573,13 +573,57 @@ export function updateScheduleContext(app, options = {}) {
       // ディスプレイが接続されている場合のみ自動設定
       const displayActive = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : false;
       if (displayActive && typeof app.lockDisplayToSchedule === "function") {
+        // デバッグ用ログ
+        if (typeof console !== "undefined" && typeof console.log === "function") {
+          console.log("[DisplaySchedule] Auto-locking display schedule", {
+            eventId,
+            scheduleId: normalizedScheduleId,
+            scheduleLabel: scheduleLabel || scheduleId,
+            displayActive,
+            currentAssignment: currentAssignment ? { eventId: assignmentEventId, scheduleId: assignmentScheduleId } : null
+          });
+        }
         // エラーが発生してもログに残すだけで、UI更新を阻害しない
-        app.lockDisplayToSchedule(eventId, scheduleId, scheduleLabel || scheduleId, { silent: true }).catch((err) => {
+        app.lockDisplayToSchedule(eventId, scheduleId, scheduleLabel || scheduleId, { silent: true }).then((result) => {
+          if (typeof console !== "undefined" && typeof console.log === "function") {
+            console.log("[DisplaySchedule] Auto-lock completed", result);
+          }
+        }).catch((err) => {
           if (typeof console !== "undefined" && typeof console.warn === "function") {
-            console.warn("Failed to auto-lock display schedule:", err);
+            console.warn("[DisplaySchedule] Failed to auto-lock display schedule:", err);
           }
         });
+      } else {
+        // デバッグ用ログ：なぜ実行されなかったか
+        if (typeof console !== "undefined" && typeof console.log === "function") {
+          console.log("[DisplaySchedule] Auto-lock skipped", {
+            eventId,
+            scheduleId: normalizedScheduleId,
+            displayActive,
+            hasLockDisplayToSchedule: typeof app.lockDisplayToSchedule === "function"
+          });
+        }
       }
+    } else {
+      // デバッグ用ログ：既に一致している場合
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log("[DisplaySchedule] Assignment already matches", {
+          eventId,
+          scheduleId: normalizedScheduleId,
+          assignmentEventId,
+          assignmentScheduleId
+        });
+      }
+    }
+  } else {
+    // デバッグ用ログ：条件を満たしていない場合
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[DisplaySchedule] Auto-lock conditions not met", {
+        nextSelectionConfirmed,
+        eventId: eventId || "(empty)",
+        scheduleId: scheduleId || "(empty)",
+        assignmentDerivedSelection
+      });
     }
   }
 }
