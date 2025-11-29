@@ -893,7 +893,13 @@ export class OperatorApp {
     if (!assignment || !assignment.eventId) {
       return "";
     }
-    const eventId = String(assignment.eventId || "").trim();
+    // 現在選択中のイベントと一致しない場合は空文字列を返す
+    const activeEventId = String(this.state?.activeEventId || "").trim();
+    const assignmentEventId = String(assignment.eventId || "").trim();
+    if (activeEventId && assignmentEventId !== activeEventId) {
+      return "";
+    }
+    const eventId = assignmentEventId;
     const scheduleId = String(assignment.scheduleId || "").trim();
     const canonicalScheduleKey = String(assignment.canonicalScheduleKey || "").trim();
     const scheduleKey = canonicalScheduleKey || `${eventId}::${normalizeScheduleId(scheduleId)}`;
@@ -2030,7 +2036,8 @@ export class OperatorApp {
       statusEl.textContent = statusText;
     }
     if (assignmentEl) {
-      const summary = this.describeChannelAssignment();
+      // assignmentがnullの場合は空文字列を表示
+      const summary = assignment ? this.describeChannelAssignment() : "";
       assignmentEl.textContent = summary || "—";
     }
     if (lockButton) {
@@ -2565,6 +2572,13 @@ export class OperatorApp {
     if (!scheduleId && parsedKey.scheduleId) {
       scheduleId = parsedKey.scheduleId;
     }
+    // 現在選択中のイベントと一致しない場合は適用しない
+    const activeEventId = String(this.state?.activeEventId || "").trim();
+    if (activeEventId && eventId && eventId !== activeEventId) {
+      // 別のイベントの割り当てのため、channelAssignmentをnullに設定
+      this.state.channelAssignment = null;
+      return;
+    }
     const normalizedScheduleId = scheduleId ? normalizeScheduleId(scheduleId) : "";
     const canonicalScheduleKey = eventId && normalizedScheduleId ? `${eventId}::${normalizedScheduleId}` : "";
     const resolvedScheduleKey = rawScheduleKey || canonicalScheduleKey || (normalizedScheduleId || "");
@@ -2593,7 +2607,8 @@ export class OperatorApp {
     //   scheduleLabel: scheduleLabel || null
     // });
     this.state.displaySession = nextSession;
-    this.state.channelAssignment = enriched;
+    // イベントが選択されていない場合はnullに設定
+    this.state.channelAssignment = activeEventId && eventId === activeEventId ? enriched : null;
     this.state.autoLockAttemptKey = "";
     this.state.autoLockAttemptAt = 0;
     if (typeof this.syncSideTelopToChannel === "function") {
@@ -4201,7 +4216,16 @@ export class OperatorApp {
         this.state.displaySession = data;
         this.displaySessionStatusFromSnapshot = activeFromSnapshot;
         this.evaluateDisplaySessionActivity("session-snapshot");
-        this.state.channelAssignment = this.getDisplayAssignment();
+        const rawAssignment = this.getDisplayAssignment();
+        // 現在選択中のイベントと一致する場合のみchannelAssignmentを設定
+        // イベントが選択されていない場合、または別のイベントの場合はnullに設定
+        const activeEventId = String(this.state?.activeEventId || "").trim();
+        if (rawAssignment && activeEventId) {
+          const assignmentEventId = String(rawAssignment.eventId || "").trim();
+          this.state.channelAssignment = assignmentEventId === activeEventId ? rawAssignment : null;
+        } else {
+          this.state.channelAssignment = null;
+        }
         this.updateScheduleContext({ presenceOptions: { allowFallback: false }, trackIntent: false });
         this.updateActionAvailability();
         this.updateBatchButtonVisibility();
