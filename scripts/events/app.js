@@ -2495,6 +2495,36 @@ export class EventAdminApp {
     this.syncOperatorModeUi();
   }
 
+  getScheduleListItems() {
+    const list = this.dom.scheduleList;
+    if (!list) return [];
+    return Array.from(list.querySelectorAll(".entity-item"));
+  }
+
+  getScheduleListItemByScheduleId(scheduleId) {
+    const items = this.getScheduleListItems();
+    if (!scheduleId) {
+      return items[0] || null;
+    }
+    return items.find((item) => item.dataset.scheduleId === scheduleId) || null;
+  }
+
+  focusScheduleListItem(element, { select = false } = {}) {
+    if (!(element instanceof HTMLElement)) return;
+    const scheduleId = ensureString(element.dataset.scheduleId);
+    if (select && scheduleId) {
+      this.selectSchedule(scheduleId);
+      requestAnimationFrame(() => {
+        const refreshed = this.getScheduleListItemByScheduleId(scheduleId);
+        if (refreshed instanceof HTMLElement) {
+          refreshed.focus();
+        }
+      });
+      return;
+    }
+    element.focus();
+  }
+
   updateScheduleSummary() {
     if (!this.dom.scheduleSummary) return;
 
@@ -9589,10 +9619,32 @@ export class EventAdminApp {
     }
 
     // flow-stage-panelsにフォーカスがある時の上下キー操作
-    // パネル内のカード（イベントリストなど）を操作できるようにする
+    // パネル内のカード（イベントリスト、日程リストなど）を操作できるようにする
     if (isFlowStagePanelsFocused && !isFormField && !event.altKey && !event.ctrlKey && !event.metaKey) {
       const key = typeof event.key === "string" ? event.key : "";
       if (key === "ArrowDown" || key === "Down" || key === "ArrowUp" || key === "Up") {
+        // 日程選択パネルがアクティブで、日程リストがある場合
+        if (this.activePanel === "schedules" && this.dom.scheduleList) {
+          const items = this.getScheduleListItems?.() || [];
+          if (items.length > 0) {
+            event.preventDefault();
+            const currentIndex = items.findIndex((el) => el.dataset.scheduleId === this.selectedScheduleId);
+            const activeIndex = currentIndex >= 0 ? currentIndex : -1;
+            let nextIndex = activeIndex >= 0 ? activeIndex : 0;
+            
+            if (key === "ArrowDown" || key === "Down") {
+              nextIndex = Math.min(items.length - 1, activeIndex + 1 || 0);
+            } else if (key === "ArrowUp" || key === "Up") {
+              nextIndex = Math.max(0, activeIndex >= 0 ? activeIndex - 1 : 0);
+            }
+            
+            const nextItem = items[nextIndex];
+            if (nextItem) {
+              this.focusScheduleListItem(nextItem, { select: true });
+            }
+            return;
+          }
+        }
         // イベントパネルがアクティブで、イベントリストがある場合
         if (this.activePanel === "events" && this.dom.eventList) {
           const items = this.getEventListItems?.() || [];
@@ -9621,74 +9673,134 @@ export class EventAdminApp {
 
     // flow-stage-panelsにフォーカスがある時の上下キー操作は上で処理済み
     // ここから下は、activePanel === "events"の時の他のキーボードショートカット処理
-    if (this.activePanel !== "events") {
+    if (this.activePanel === "events") {
+      const key = typeof event.key === "string" ? event.key : "";
+      const normalized = key.length === 1 ? key.toLowerCase() : key;
+      
+      if (isFormField && !(event.ctrlKey || event.metaKey)) {
+        return;
+      }
+
+      switch (normalized) {
+        case "i": {
+          if (event.altKey || event.ctrlKey || event.metaKey) return;
+          event.preventDefault();
+          if (this.dom.addEventButton?.disabled) return;
+          this.openEventDialog({ mode: "create" });
+          return;
+        }
+        case "p": {
+          if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+          event.preventDefault();
+          const printButton = this.dom.eventPrintButton;
+          if (printButton && printButton.disabled) return;
+          this.handleEventPrint();
+          return;
+        }
+        case "r": {
+          if (event.altKey || event.ctrlKey || event.metaKey) return;
+          const refreshButton = this.dom.refreshButton;
+          if (!refreshButton || refreshButton.disabled) return;
+          event.preventDefault();
+          refreshButton.disabled = true;
+          void (async () => {
+            try {
+              this.beginEventsLoading("イベント情報を再読み込みしています…");
+              await this.loadEvents();
+            } catch (error) {
+              logError("Failed to refresh events via shortcut", error);
+              this.showAlert(error?.message || "イベントの再読み込みに失敗しました。");
+            } finally {
+              this.endEventsLoading();
+              refreshButton.disabled = false;
+            }
+          })();
+          return;
+        }
+        case "e": {
+          if (event.altKey || event.ctrlKey || event.metaKey) return;
+          const selected = this.getSelectedEvent();
+          if (!selected) return;
+          event.preventDefault();
+          this.openEventDialog({ mode: "edit", event: selected });
+          return;
+        }
+        case "Delete": {
+          if (event.altKey || event.ctrlKey || event.metaKey) return;
+          const selected = this.getSelectedEvent();
+          if (!selected) return;
+          event.preventDefault();
+          void this.deleteEvent(selected).catch((error) => {
+            logError("Failed to delete event via shortcut", error);
+            this.showAlert(error?.message || "イベントの削除に失敗しました。");
+          });
+          return;
+        }
+        default:
+          break;
+      }
       return;
     }
 
-    const key = typeof event.key === "string" ? event.key : "";
-    const normalized = key.length === 1 ? key.toLowerCase() : key;
-    
-    if (isFormField && !(event.ctrlKey || event.metaKey)) {
-      return;
-    }
+    // 日程選択パネルがアクティブな時のキーボードショートカット処理
+    if (this.activePanel === "schedules") {
+      const key = typeof event.key === "string" ? event.key : "";
+      const normalized = key.length === 1 ? key.toLowerCase() : key;
+      
+      if (isFormField && !(event.ctrlKey || event.metaKey)) {
+        return;
+      }
 
-    switch (normalized) {
-      case "i": {
-        if (event.altKey || event.ctrlKey || event.metaKey) return;
-        event.preventDefault();
-        if (this.dom.addEventButton?.disabled) return;
-        this.openEventDialog({ mode: "create" });
-        return;
+      switch (normalized) {
+        case "i": {
+          if (event.altKey || event.ctrlKey || event.metaKey) return;
+          event.preventDefault();
+          if (this.dom.addScheduleButton?.disabled) return;
+          this.openScheduleDialog({ mode: "create" });
+          return;
+        }
+        case "r": {
+          if (event.altKey || event.ctrlKey || event.metaKey) return;
+          const refreshButton = this.dom.scheduleRefreshButton;
+          if (!refreshButton || refreshButton.disabled) return;
+          event.preventDefault();
+          refreshButton.disabled = true;
+          void (async () => {
+            try {
+              this.beginScheduleLoading("日程情報を再読み込みしています…");
+              await this.reloadSchedules();
+            } catch (error) {
+              logError("Failed to refresh schedules via shortcut", error);
+              this.showAlert(error?.message || "日程の再読み込みに失敗しました。");
+            } finally {
+              this.endScheduleLoading();
+              refreshButton.disabled = false;
+            }
+          })();
+          return;
+        }
+        case "e": {
+          if (event.altKey || event.ctrlKey || event.metaKey) return;
+          const selected = this.getSelectedSchedule();
+          if (!selected) return;
+          event.preventDefault();
+          this.openScheduleDialog({ mode: "edit", schedule: selected });
+          return;
+        }
+        case "Delete": {
+          if (event.altKey || event.ctrlKey || event.metaKey) return;
+          const selected = this.getSelectedSchedule();
+          if (!selected) return;
+          event.preventDefault();
+          void this.deleteSchedule(selected).catch((error) => {
+            logError("Failed to delete schedule via shortcut", error);
+            this.showAlert(error?.message || "日程の削除に失敗しました。");
+          });
+          return;
+        }
+        default:
+          break;
       }
-      case "p": {
-        if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
-        event.preventDefault();
-        const printButton = this.dom.eventPrintButton;
-        if (printButton && printButton.disabled) return;
-        this.handleEventPrint();
-        return;
-      }
-      case "r": {
-        if (event.altKey || event.ctrlKey || event.metaKey) return;
-        const refreshButton = this.dom.refreshButton;
-        if (!refreshButton || refreshButton.disabled) return;
-        event.preventDefault();
-        refreshButton.disabled = true;
-        void (async () => {
-          try {
-            this.beginEventsLoading("イベント情報を再読み込みしています…");
-            await this.loadEvents();
-          } catch (error) {
-            logError("Failed to refresh events via shortcut", error);
-            this.showAlert(error?.message || "イベントの再読み込みに失敗しました。");
-          } finally {
-            this.endEventsLoading();
-            refreshButton.disabled = false;
-          }
-        })();
-        return;
-      }
-      case "e": {
-        if (event.altKey || event.ctrlKey || event.metaKey) return;
-        const selected = this.getSelectedEvent();
-        if (!selected) return;
-        event.preventDefault();
-        this.openEventDialog({ mode: "edit", event: selected });
-        return;
-      }
-      case "Delete": {
-        if (event.altKey || event.ctrlKey || event.metaKey) return;
-        const selected = this.getSelectedEvent();
-        if (!selected) return;
-        event.preventDefault();
-        void this.deleteEvent(selected).catch((error) => {
-          logError("Failed to delete event via shortcut", error);
-          this.showAlert(error?.message || "イベントの削除に失敗しました。");
-        });
-        return;
-      }
-      default:
-        break;
     }
   }
 
