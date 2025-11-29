@@ -204,11 +204,13 @@
           </div>
         </div>
         <div id="flow-event-action-panel" class="action-panel is-idle">
-          <button id="flow-event-edit-button" class="btn" type="button" disabled>編集</button>
-          <button id="flow-event-delete-button" class="btn btn-danger" type="button" disabled>削除</button>
-          <span id="flow-event-selected-info">イベントを選択してください</span>
+          <div class="action-panel__toolbar">
+            <button id="flow-event-edit-button" class="btn btn-ghost btn-sm" type="button" disabled>編集</button>
+            <button id="flow-event-delete-button" class="btn btn-ghost btn-sm" type="button" disabled>削除</button>
+          </div>
+          <span id="flow-event-selected-info" class="action-panel__meta">イベントを選択してください</span>
           <div class="action-panel-right">
-            <button id="flow-event-batch-delete-button" class="btn btn-danger" type="button" hidden>選択項目を削除</button>
+            <button id="flow-event-batch-delete-button" class="btn btn-danger btn-sm" type="button" hidden>選択項目を削除</button>
           </div>
         </div>
         <div class="flow-navigation">
@@ -244,11 +246,13 @@
           </div>
         </div>
         <div id="flow-schedule-action-panel" class="action-panel is-idle">
-          <button id="flow-schedule-edit-button" class="btn" type="button" disabled>編集</button>
-          <button id="flow-schedule-delete-button" class="btn btn-danger" type="button" disabled>削除</button>
-          <span id="flow-schedule-selected-info">日程を選択してください</span>
+          <div class="action-panel__toolbar">
+            <button id="flow-schedule-edit-button" class="btn btn-ghost btn-sm" type="button" disabled>編集</button>
+            <button id="flow-schedule-delete-button" class="btn btn-ghost btn-sm" type="button" disabled>削除</button>
+          </div>
+          <span id="flow-schedule-selected-info" class="action-panel__meta">日程を選択してください</span>
           <div class="action-panel-right">
-            <button id="flow-schedule-batch-delete-button" class="btn btn-danger" type="button" hidden>選択項目を削除</button>
+            <button id="flow-schedule-batch-delete-button" class="btn btn-danger btn-sm" type="button" hidden>選択項目を削除</button>
           </div>
         </div>
         <div class="flow-navigation">

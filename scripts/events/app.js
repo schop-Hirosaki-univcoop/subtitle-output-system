@@ -1471,21 +1471,6 @@ export class EventAdminApp {
       }
       item.tabIndex = 0;
 
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "entity-checkbox";
-      checkbox.setAttribute("aria-label", `${event.name || event.id} を選択`);
-      checkbox.checked = this.eventBatchSet.has(event.id);
-      checkbox.addEventListener("change", (evt) => {
-        evt.stopPropagation();
-        if (checkbox.checked) {
-          this.eventBatchSet.add(event.id);
-        } else {
-          this.eventBatchSet.delete(event.id);
-        }
-        this.updateEventActionPanelState();
-      });
-
       const indicator = document.createElement("span");
       indicator.className = "entity-indicator";
       indicator.setAttribute("aria-hidden", "true");
@@ -1506,7 +1491,22 @@ export class EventAdminApp {
 
       label.append(nameEl, metaEl);
 
-      item.append(checkbox, indicator, label);
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "entity-checkbox";
+      checkbox.setAttribute("aria-label", `${event.name || event.id} を選択`);
+      checkbox.checked = this.eventBatchSet.has(event.id);
+      checkbox.addEventListener("change", (evt) => {
+        evt.stopPropagation();
+        if (checkbox.checked) {
+          this.eventBatchSet.add(event.id);
+        } else {
+          this.eventBatchSet.delete(event.id);
+        }
+        this.updateEventActionPanelState();
+      });
+
+      item.append(indicator, label, checkbox);
 
       item.addEventListener("click", () => {
         this.focusEventListItem(item, { select: true });
@@ -2433,21 +2433,6 @@ export class EventAdminApp {
       }
       item.tabIndex = 0;
 
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "entity-checkbox";
-      checkbox.setAttribute("aria-label", `${schedule.label || schedule.id} を選択`);
-      checkbox.checked = this.scheduleBatchSet.has(schedule.id);
-      checkbox.addEventListener("change", (evt) => {
-        evt.stopPropagation();
-        if (checkbox.checked) {
-          this.scheduleBatchSet.add(schedule.id);
-        } else {
-          this.scheduleBatchSet.delete(schedule.id);
-        }
-        this.updateScheduleActionPanelState();
-      });
-
       const indicator = document.createElement("span");
       indicator.className = "entity-indicator";
       indicator.setAttribute("aria-hidden", "true");
@@ -2480,7 +2465,22 @@ export class EventAdminApp {
 
       label.append(nameEl, metaEl);
 
-      item.append(checkbox, indicator, label);
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "entity-checkbox";
+      checkbox.setAttribute("aria-label", `${schedule.label || schedule.id} を選択`);
+      checkbox.checked = this.scheduleBatchSet.has(schedule.id);
+      checkbox.addEventListener("change", (evt) => {
+        evt.stopPropagation();
+        if (checkbox.checked) {
+          this.scheduleBatchSet.add(schedule.id);
+        } else {
+          this.scheduleBatchSet.delete(schedule.id);
+        }
+        this.updateScheduleActionPanelState();
+      });
+
+      item.append(indicator, label, checkbox);
 
       item.addEventListener("click", () => {
         this.selectSchedule(schedule.id);
