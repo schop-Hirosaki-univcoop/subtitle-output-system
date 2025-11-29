@@ -21,7 +21,9 @@ import {
   update,
   remove,
   serverTimestamp,
-  onDisconnect
+  onDisconnect,
+  ref,
+  database
 } from "./firebase.js";
 import { getRenderStatePath, parseChannelParams, normalizeScheduleId } from "../shared/channel-paths.js";
 import { derivePresenceScheduleKey as sharedDerivePresenceScheduleKey } from "../shared/presence-keys.js";
@@ -373,6 +375,7 @@ export class OperatorApp {
     this.renderTicker = null;
     this.questionsUnsubscribe = null;
     this.displaySessionUnsubscribe = null;
+    this.displaySessionSubscribedEventId = "";
     this.displayPresenceUnsubscribe = null;
     this.displayPresenceCleanupTimer = 0;
     this.displayPresenceEntries = [];
@@ -1274,6 +1277,12 @@ export class OperatorApp {
   refreshChannelSubscriptions() {
     const { eventId, scheduleId } = this.getActiveChannel();
     const path = getRenderStatePath(eventId, scheduleId);
+    // イベントが変わった場合、セッション監視も更新する（複数イベントの同時操作に対応）
+    const activeEventId = String(this.state?.activeEventId || "").trim();
+    if (this.displaySessionSubscribedEventId !== activeEventId) {
+      this.displaySessionSubscribedEventId = activeEventId;
+      this.startDisplaySessionMonitor();
+    }
     if (this.currentRenderPath !== path) {
       const normalizedEvent = String(eventId || "").trim();
       const normalizedSchedule = normalizeScheduleId(scheduleId || "");
@@ -4228,8 +4237,14 @@ export class OperatorApp {
    */
   startDisplaySessionMonitor() {
     if (this.displaySessionUnsubscribe) this.displaySessionUnsubscribe();
+    // 選択中のイベントに対応するセッションを監視（複数イベントの同時操作に対応）
+    const activeEventId = String(this.state?.activeEventId || "").trim();
+    const sessionPath = activeEventId
+      ? `render/events/${activeEventId}/session`
+      : "render/session"; // 後方互換性のため、eventIdがない場合は旧パスを使用
+    const sessionRef = ref(database, sessionPath);
     this.displaySessionUnsubscribe = onValue(
-      displaySessionRef,
+      sessionRef,
       (snapshot) => {
         const data = snapshot.val() || null;
         const now = Date.now();

@@ -649,11 +649,15 @@ function doPost(e) {
       // 例: 表示用セッションの開始 / 心拍 / 終了
       // （display.html 側からの定期的な通信）
       case "beginDisplaySession":
-        return ok(beginDisplaySession_(principal));
+        return ok(beginDisplaySession_(principal, req.eventId));
       case "heartbeatDisplaySession":
-        return ok(heartbeatDisplaySession_(principal, req.sessionId));
+        return ok(
+          heartbeatDisplaySession_(principal, req.sessionId, req.eventId)
+        );
       case "endDisplaySession":
-        return ok(endDisplaySession_(principal, req.sessionId, req.reason));
+        return ok(
+          endDisplaySession_(principal, req.sessionId, req.reason, req.eventId)
+        );
 
       case "ensureAdmin":
         return ok(ensureAdmin_(principal));
@@ -3665,6 +3669,11 @@ function getEventRotationPath_(eventId) {
   return eventKey ? `render/events/${eventKey}/rotationAssignments` : "";
 }
 
+function getEventSessionPath_(eventId) {
+  const eventKey = normalizeEventId_(eventId);
+  return eventKey ? `render/events/${eventKey}/session` : "";
+}
+
 function getActiveSchedulePathForSession_(session) {
   if (!session || typeof session !== "object") {
     return "";
@@ -3870,14 +3879,20 @@ function ensureDisplayPrincipal_(principal, message) {
 // 3. screens/approved/{uid} が存在している場合のみ「承認済みスクリーン」として扱う
 // 4. render/displayPresence/{uid} にプレゼンス情報をセットし、
 //    管理画面側から「どのスクリーンがオンラインか」を把握できるようにする。
-function beginDisplaySession_(principal) {
+// 5. 複数イベントの同時操作に対応するため、render/events/{eventId}/session にセッションを保存する
+function beginDisplaySession_(principal, rawEventId) {
   ensureDisplayPrincipal_(
     principal,
     "Only anonymous display accounts can begin sessions"
   );
   const token = getFirebaseAccessToken_();
   const now = Date.now();
-  const current = fetchRtdb_("render/session", token);
+  const eventId = normalizeEventId_(rawEventId);
+  if (!eventId) {
+    throw new Error("eventId is required for display session");
+  }
+  const eventSessionPath = getEventSessionPath_(eventId);
+  const current = fetchRtdb_(eventSessionPath, token);
   const updates = {};
   const principalUid = normalizeKey_(principal && principal.uid);
   if (!principalUid) {
@@ -3961,7 +3976,8 @@ function beginDisplaySession_(principal) {
 
   updates[`screens/approved/${principalUid}`] = true;
   updates[`screens/sessions/${principalUid}`] = session;
-  updates["render/session"] = session;
+  // イベントごとのセッションに保存（複数イベントの同時操作に対応）
+  updates[eventSessionPath] = session;
   updates[`render/displayPresence/${principalUid}`] = null;
   const activeSchedulePath = getActiveSchedulePathForSession_(session);
   const activeRecord = buildActiveScheduleRecord_(
@@ -3981,15 +3997,20 @@ function beginDisplaySession_(principal) {
 // screens/sessions/{uid} の lastSeenAt / expiresAt を更新し、
 // render/displayPresence/{uid} も更新することで、
 // 管理画面側から「いまも接続中かどうか」を判別できるようにする。
-function heartbeatDisplaySession_(principal, rawSessionId) {
+function heartbeatDisplaySession_(principal, rawSessionId, rawEventId) {
   ensureDisplayPrincipal_(
     principal,
     "Only anonymous display accounts can send heartbeats"
   );
   const sessionId = requireSessionId_(rawSessionId);
+  const eventId = normalizeEventId_(rawEventId);
+  if (!eventId) {
+    throw new Error("eventId is required for display session heartbeat");
+  }
   const token = getFirebaseAccessToken_();
   const now = Date.now();
-  const current = fetchRtdb_("render/session", token);
+  const eventSessionPath = getEventSessionPath_(eventId);
+  const current = fetchRtdb_(eventSessionPath, token);
   const principalUid = normalizeKey_(principal && principal.uid);
   if (!principalUid) {
     throw new Error("Missing display uid for heartbeat");
@@ -4002,7 +4023,7 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
   ) {
     const updates = {};
     if (current && Number(current.expiresAt || 0) <= now) {
-      updates["render/session"] = null;
+      updates[eventSessionPath] = null;
       if (currentUid) {
         updates[`screens/approved/${currentUid}`] = null;
         updates[`screens/sessions/${currentUid}`] = Object.assign({}, current, {
@@ -4025,7 +4046,7 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
 
   if (Number(current.expiresAt || 0) <= now) {
     const updates = {};
-    updates["render/session"] = null;
+    updates[eventSessionPath] = null;
     updates[`screens/approved/${currentUid}`] = null;
     updates[`screens/sessions/${currentUid}`] = Object.assign({}, current, {
       status: "expired",
@@ -4051,7 +4072,8 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
   const updates = {};
   updates[`screens/approved/${principalUid}`] = true;
   updates[`screens/sessions/${principalUid}`] = session;
-  updates["render/session"] = session;
+  // イベントごとのセッションに保存（複数イベントの同時操作に対応）
+  updates[eventSessionPath] = session;
   updates[`render/displayPresence/${principalUid}`] = null;
   patchRtdb_(updates, token);
   return { active: true, session };
@@ -4063,15 +4085,20 @@ function heartbeatDisplaySession_(principal, rawSessionId) {
 // 2. screens/approved/{uid}, render/displayPresence/{uid} を削除
 // 3. そのセッションに紐づいていた「アクティブなスケジュール」情報もクリア
 // といった後片付けを一括で行う。
-function endDisplaySession_(principal, rawSessionId, reason) {
+function endDisplaySession_(principal, rawSessionId, reason, rawEventId) {
   ensureDisplayPrincipal_(
     principal,
     "Only anonymous display accounts can end sessions"
   );
   const sessionId = requireSessionId_(rawSessionId);
+  const eventId = normalizeEventId_(rawEventId);
+  if (!eventId) {
+    throw new Error("eventId is required for display session end");
+  }
   const token = getFirebaseAccessToken_();
   const now = Date.now();
-  const current = fetchRtdb_("render/session", token);
+  const eventSessionPath = getEventSessionPath_(eventId);
+  const current = fetchRtdb_(eventSessionPath, token);
   const principalUid = normalizeKey_(principal && principal.uid);
   if (!principalUid) {
     throw new Error("Missing display uid for session end");
@@ -4096,7 +4123,8 @@ function endDisplaySession_(principal, rawSessionId, reason) {
   const updates = {};
   updates[`screens/approved/${principalUid}`] = null;
   updates[`screens/sessions/${principalUid}`] = session;
-  updates["render/session"] = null;
+  // イベントごとのセッションを終了（複数イベントの同時操作に対応）
+  updates[eventSessionPath] = null;
   updates[`render/displayPresence/${principalUid}`] = null;
   const activePath = getActiveSchedulePathForSession_(current);
   if (activePath) {
@@ -4132,7 +4160,9 @@ function lockDisplaySchedule_(
   assertOperatorForEvent_(principal, eventId);
   const token = getFirebaseAccessToken_();
   const now = Date.now();
-  const session = fetchRtdb_("render/session", token);
+  // イベントごとのセッションを取得（複数イベントの同時操作に対応）
+  const eventSessionPath = getEventSessionPath_(eventId);
+  const session = fetchRtdb_(eventSessionPath, token);
   if (!session || session.status !== "active") {
     throw new Error("ディスプレイのセッションが有効ではありません。");
   }
@@ -4198,7 +4228,8 @@ function lockDisplaySchedule_(
   }
   updates[`screens/approved/${sessionUid}`] = true;
   updates[`screens/sessions/${sessionUid}`] = nextSession;
-  updates["render/session"] = nextSession;
+  // イベントごとのセッションに保存（複数イベントの同時操作に対応）
+  updates[eventSessionPath] = nextSession;
   const activeSchedulePath = getEventActiveSchedulePath_(eventId);
   const activeRecord = buildActiveScheduleRecord_(
     assignment,
