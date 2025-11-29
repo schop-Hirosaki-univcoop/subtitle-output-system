@@ -561,7 +561,8 @@ export function updateScheduleContext(app, options = {}) {
   }
 
   // イベント・日程が選択確定されたときに、自動的にディスプレイのassignmentを設定
-  if (nextSelectionConfirmed && eventId && scheduleId) {
+  // ただし、assignmentDerivedSelectionがtrueの場合は既にassignmentから取得した情報なので、自動設定をスキップ
+  if (nextSelectionConfirmed && eventId && scheduleId && !assignmentDerivedSelection) {
     const currentAssignment = app?.state?.channelAssignment || (typeof app.getDisplayAssignment === "function" ? app.getDisplayAssignment() : null);
     const assignmentEventId = String(currentAssignment?.eventId || "").trim();
     const assignmentScheduleId = String(currentAssignment?.scheduleId || "").trim();
@@ -573,7 +574,7 @@ export function updateScheduleContext(app, options = {}) {
       const displayActive = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : false;
       if (displayActive && typeof app.lockDisplayToSchedule === "function") {
         // エラーが発生してもログに残すだけで、UI更新を阻害しない
-        app.lockDisplayToSchedule(eventId, scheduleId, scheduleLabel, { silent: true }).catch((err) => {
+        app.lockDisplayToSchedule(eventId, scheduleId, scheduleLabel || scheduleId, { silent: true }).catch((err) => {
           if (typeof console !== "undefined" && typeof console.warn === "function") {
             console.warn("Failed to auto-lock display schedule:", err);
           }

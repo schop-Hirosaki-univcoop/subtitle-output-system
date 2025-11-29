@@ -809,7 +809,10 @@ export class OperatorApp {
     const session = this.state?.displaySession || null;
     const rawAssignment = session && typeof session === "object" ? session.assignment || null : null;
     const candidate = rawAssignment && typeof rawAssignment === "object" ? rawAssignment : null;
-    let eventId = String((candidate && candidate.eventId) || (session && session.eventId) || "").trim();
+    // デバッグ: sessionから直接eventIdを取得することを優先
+    const sessionEventId = session && typeof session === "object" ? String(session.eventId || "").trim() : "";
+    const sessionScheduleId = session && typeof session === "object" ? String(session.scheduleId || "").trim() : "";
+    let eventId = String((candidate && candidate.eventId) || sessionEventId || "").trim();
     if (!eventId) {
       const fallbackFromKey = extractScheduleKeyParts((candidate && candidate.scheduleKey) || (session && session.scheduleKey));
       eventId = fallbackFromKey.eventId || "";
@@ -824,7 +827,8 @@ export class OperatorApp {
       return null;
     }
     const scheduleLabel = String((candidate && candidate.scheduleLabel) || (session && session.scheduleLabel) || "").trim();
-    let scheduleId = String((candidate && candidate.scheduleId) || (session && session.scheduleId) || "").trim();
+    // デバッグ: sessionから直接scheduleIdを取得することを優先
+    let scheduleId = String((candidate && candidate.scheduleId) || sessionScheduleId || "").trim();
     const rawScheduleKey = String(
       (candidate && candidate.scheduleKey) || (session && session.scheduleKey) || ""
     ).trim();
