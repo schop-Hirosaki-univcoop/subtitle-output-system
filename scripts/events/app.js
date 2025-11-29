@@ -761,6 +761,34 @@ export class EventAdminApp {
     this.bindDialogDismiss(this.dom.scheduleFallbackDialog);
     this.bindDialogDismiss(this.dom.operatorModeDialog);
     this.bindDialogDismiss(this.dom.fullscreenPromptDialog);
+    this.bindDialogDismiss(this.dom.scheduleCompletionDialog);
+    
+    if (this.dom.scheduleCompletionCloseButton) {
+      this.dom.scheduleCompletionCloseButton.addEventListener("click", () => {
+        if (this.dom.scheduleCompletionDialog) {
+          this.closeDialog(this.dom.scheduleCompletionDialog);
+        }
+      });
+    }
+    
+    if (this.dom.scheduleCompletionCopyButton) {
+      this.dom.scheduleCompletionCopyButton.addEventListener("click", () => {
+        void this.handleScheduleCompletionCopyUrl();
+      });
+    }
+    
+    if (this.dom.scheduleCompletionButtons) {
+      this.dom.scheduleCompletionButtons.forEach((button) => {
+        if (!button) return;
+        button.addEventListener("click", () => {
+          const target = button.dataset.panelTarget || "";
+          if (target && this.dom.scheduleCompletionDialog) {
+            this.closeDialog(this.dom.scheduleCompletionDialog);
+            this.showPanel(target);
+          }
+        });
+      });
+    }
 
     if (this.dom.confirmAcceptButton) {
       this.dom.confirmAcceptButton.addEventListener("click", () => {
@@ -1709,6 +1737,7 @@ export class EventAdminApp {
     this.updateEventSummary();
     this.updateStageHeader();
     this.updateFlowButtons();
+    this.updateSidebarButtons();
     this.updateSelectionNotes();
     this.showPanel(this.activePanel);
     this.tools.prepareContextForSelection();
@@ -2997,6 +3026,7 @@ export class EventAdminApp {
       this.dom.scheduleNextButton.disabled = !signedIn || !hasSchedule;
     }
     this.updateNavigationButtons();
+    this.updateSidebarButtons();
   }
 
   loadEventPrintSettings() {
@@ -3514,6 +3544,32 @@ export class EventAdminApp {
       const config = PANEL_CONFIG[target] || PANEL_CONFIG.events;
       const disabled = !target || target === this.activePanel || !this.canActivatePanel(target, config);
       button.disabled = disabled;
+    });
+  }
+
+  updateSidebarButtons() {
+    // サイドバーボタン（3-9: participants, gl, gl-faculties, operator, dictionary, pickup, logs）
+    // をイベント確定または日程確定後に有効化
+    const buttons = this.dom.sidebarPanelButtons || [];
+    const eventCommitted = this.eventSelectionCommitted;
+    const scheduleCommitted = this.scheduleSelectionCommitted;
+    const canUseSidebarButtons = eventCommitted || scheduleCommitted;
+
+    buttons.forEach((button) => {
+      if (!button) return;
+      const target = button.dataset.panelTarget || "";
+      
+      // イベントと日程のカード（1-2）は除外
+      if (target === "events" || target === "schedules") {
+        return;
+      }
+
+      const config = PANEL_CONFIG[target] || PANEL_CONFIG.events;
+      const canActivate = this.canActivatePanel(target, config);
+      
+      // サイドバーボタン（3-9）は、イベント確定または日程確定後に有効化
+      const shouldEnable = canUseSidebarButtons && canActivate && target !== this.activePanel;
+      button.disabled = !shouldEnable;
     });
   }
 
@@ -5889,24 +5945,16 @@ export class EventAdminApp {
           resolvedTarget = metaTarget;
           usedFallback = resolvedTarget !== navTarget;
         }
+        // 日程確定後は新しいモーダルを開く（参加者リストには移動しない）
         if (isFlowFromSchedules) {
-          const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
-          const fallbackTarget = preferredTarget || "participants";
-          if (resolvedTarget !== fallbackTarget) {
-            usedFallback = usedFallback || resolvedTarget !== navTarget;
-            resolvedTarget = fallbackTarget;
-          }
-        }
-        if (resolvedTarget) {
+          this.openScheduleCompletionDialog();
+        } else if (resolvedTarget) {
+          // 他のナビゲーションの場合は従来通り
           this.showPanel(resolvedTarget);
-          const message = usedFallback
-            ? "スケジュール合意の確定後に参加者リストへ移動しました"
-            : "スケジュール合意の確定後にナビゲーションを継続します";
-          this.logFlowState(message, {
+          this.logFlowState("スケジュール合意の確定後にナビゲーションを継続します", {
             target: resolvedTarget,
             scheduleId,
-            scheduleKey,
-            fallback: usedFallback
+            scheduleKey
           });
         }
       })
@@ -5917,6 +5965,99 @@ export class EventAdminApp {
       .finally(() => {
         this.setScheduleConflictSubmitting(false);
       });
+  }
+
+  openScheduleCompletionDialog() {
+    if (!this.dom.scheduleCompletionDialog) {
+      return;
+    }
+    this.updateScheduleCompletionButtons();
+    this.openDialog(this.dom.scheduleCompletionDialog);
+  }
+
+  updateScheduleCompletionButtons() {
+    const buttons = this.dom.scheduleCompletionButtons || [];
+    buttons.forEach((button) => {
+      if (!button) return;
+      const target = button.dataset.panelTarget || "";
+      const config = PANEL_CONFIG[target] || PANEL_CONFIG.events;
+      const canActivate = this.canActivatePanel(target, config);
+      button.disabled = !canActivate;
+    });
+  }
+
+  async handleScheduleCompletionCopyUrl() {
+    if (!this.dom.scheduleCompletionCopyButton) {
+      return;
+    }
+    const button = this.dom.scheduleCompletionCopyButton;
+    if (button.disabled) {
+      return;
+    }
+    const eventId = ensureString(this.selectedEventId);
+    if (!eventId) {
+      this.announceScheduleCompletionCopy(false);
+      return;
+    }
+    const url = this.getDisplayUrlForEvent(eventId);
+    if (!url) {
+      this.announceScheduleCompletionCopy(false);
+      return;
+    }
+    button.disabled = true;
+    let success = false;
+    try {
+      if (navigator?.clipboard && typeof navigator.clipboard.writeText === "function") {
+        await navigator.clipboard.writeText(url);
+        success = true;
+      }
+    } catch (error) {
+      console.warn("navigator.clipboard.writeText failed", error);
+    }
+    if (!success) {
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = url;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        success = document.execCommand("copy");
+        document.body.removeChild(textarea);
+      } catch (error) {
+        console.warn("Fallback clipboard copy failed", error);
+        success = false;
+      }
+    }
+    this.announceScheduleCompletionCopy(success, url);
+    button.disabled = false;
+  }
+
+  announceScheduleCompletionCopy(success, url = "") {
+    const status = this.dom.scheduleCompletionCopyStatus;
+    if (!status) {
+      return;
+    }
+    if (success) {
+      status.textContent = "表示URLをコピーしました。";
+      status.removeAttribute("hidden");
+      setTimeout(() => {
+        if (status) {
+          status.setAttribute("hidden", "");
+          status.textContent = "";
+        }
+      }, 2000);
+    } else {
+      status.textContent = "表示URLのコピーに失敗しました。";
+      status.removeAttribute("hidden");
+      setTimeout(() => {
+        if (status) {
+          status.setAttribute("hidden", "");
+          status.textContent = "";
+        }
+      }, 3000);
+    }
   }
 
   clearScheduleFallbackError() {
@@ -7699,24 +7840,16 @@ export class EventAdminApp {
           resolvedTarget = metaTarget;
           usedFallback = resolvedTarget !== navTarget;
         }
+        // 日程確定後は新しいモーダルを開く（参加者リストには移動しない）
         if (isFlowFromSchedules) {
-          const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
-          const fallbackTarget = preferredTarget || "participants";
-          if (resolvedTarget !== fallbackTarget) {
-            usedFallback = usedFallback || resolvedTarget !== navTarget;
-            resolvedTarget = fallbackTarget;
-          }
-        }
-        if (resolvedTarget) {
+          this.openScheduleCompletionDialog();
+        } else if (resolvedTarget) {
+          // 他のナビゲーションの場合は従来通り
           this.showPanel(resolvedTarget);
-          const message = usedFallback
-            ? "スケジュール合意の確定後に参加者リストへ移動しました"
-            : "スケジュール合意の確定後にナビゲーションを継続します";
-          this.logFlowState(message, {
+          this.logFlowState("スケジュール合意の確定後にナビゲーションを継続します", {
             target: resolvedTarget,
             scheduleId,
-            scheduleKey,
-            fallback: usedFallback
+            scheduleKey
           });
         }
       })
@@ -9946,6 +10079,15 @@ export class EventAdminApp {
             logError("Failed to delete schedule via shortcut", error);
             this.showAlert(error?.message || "日程の削除に失敗しました。");
           });
+          return;
+        }
+        case "Enter": {
+          if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+          const selected = this.getSelectedSchedule();
+          if (!selected) return;
+          if (!this.selectedScheduleId) return;
+          event.preventDefault();
+          void this.handleFlowNavigation("participants", { sourceButton: null });
           return;
         }
         default:

@@ -1743,6 +1743,41 @@
     hidden
   ></div>
 
+  <div
+    id="flow-schedule-completion-dialog"
+    class="modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="flow-schedule-completion-title"
+    hidden
+  >
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="flow-schedule-completion-title">日程が確定されました</h2>
+      </div>
+      <div class="modal-body">
+        <p class="modal-helper">以下のツールにアクセスできます。キーボードショートカット（<kbd>3</kbd>〜<kbd>9</kbd>）も使用できます。</p>
+        <nav class="modal-nav" aria-label="ツール選択">
+          <button id="flow-completion-participants" class="btn btn-primary btn-sm" type="button" data-panel-target="participants">参加者リスト <kbd>3</kbd></button>
+          <button id="flow-completion-gl" class="btn btn-primary btn-sm" type="button" data-panel-target="gl">GLリスト <kbd>4</kbd></button>
+          <button id="flow-completion-gl-faculties" class="btn btn-primary btn-sm" type="button" data-panel-target="gl-faculties">学部・学科設定 <kbd>5</kbd></button>
+          <button id="flow-completion-operator" class="btn btn-primary btn-sm" type="button" data-panel-target="operator">テロップ操作 <kbd>6</kbd></button>
+          <button id="flow-completion-dictionary" class="btn btn-primary btn-sm" type="button" data-panel-target="dictionary">ルビ辞書 <kbd>7</kbd></button>
+          <button id="flow-completion-pickup" class="btn btn-primary btn-sm" type="button" data-panel-target="pickup">Pick Up Question <kbd>8</kbd></button>
+          <button id="flow-completion-logs" class="btn btn-primary btn-sm" type="button" data-panel-target="logs">操作ログ <kbd>9</kbd></button>
+        </nav>
+        <div class="modal-field">
+          <button id="flow-completion-copy-url" class="btn btn-ghost btn-sm" type="button">表示URLをコピー</button>
+          <span id="flow-completion-copy-status" class="visually-hidden" aria-live="polite"></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" id="flow-schedule-completion-close-button" data-dialog-dismiss="true">閉じる</button>
+      </div>
+    </div>
+  </div>
+
 
   <div
     id="flow-fullscreen-dialog"
