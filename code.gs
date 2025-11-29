@@ -3669,9 +3669,19 @@ function getEventRotationPath_(eventId) {
   return eventKey ? `render/events/${eventKey}/rotationAssignments` : "";
 }
 
-function getEventSessionPath_(eventId) {
+function getEventSessionPath_(eventId, uid = null) {
   const eventKey = normalizeEventId_(eventId);
-  return eventKey ? `render/events/${eventKey}/session` : "";
+  if (!eventKey) return "";
+  const uidKey = uid ? normalizeKey_(uid) : "";
+  // 複数のdisplay.htmlが同じeventIdで同時に表示できるように、uidごとにセッションを分ける
+  return uidKey
+    ? `render/events/${eventKey}/sessions/${uidKey}`
+    : `render/events/${eventKey}/sessions`;
+}
+
+function getEventSessionsPath_(eventId) {
+  const eventKey = normalizeEventId_(eventId);
+  return eventKey ? `render/events/${eventKey}/sessions` : "";
 }
 
 function getActiveSchedulePathForSession_(session) {
@@ -3891,56 +3901,34 @@ function beginDisplaySession_(principal, rawEventId) {
   if (!eventId) {
     throw new Error("eventId is required for display session");
   }
-  const eventSessionPath = getEventSessionPath_(eventId);
-  const current = fetchRtdb_(eventSessionPath, token);
-  const updates = {};
   const principalUid = normalizeKey_(principal && principal.uid);
   if (!principalUid) {
     throw new Error("Missing display uid for session start");
   }
+  // 複数のdisplay.htmlが同じeventIdで同時に表示できるように、uidごとにセッションを分ける
+  const eventSessionPath = getEventSessionPath_(eventId, principalUid);
+  const current = fetchRtdb_(eventSessionPath, token);
+  const updates = {};
 
-  const previousUid = normalizeKey_(current && current.uid);
+  // 既存のセッションがある場合、期限切れチェックとクリーンアップ
   if (current && current.sessionId) {
     const normalizedCurrentUid = normalizeKey_(current.uid);
     const currentExpires = Number(current.expiresAt || 0);
     const currentExpired = currentExpires && currentExpires <= now;
-    if (normalizedCurrentUid && normalizedCurrentUid !== principalUid) {
-      updates[`screens/approved/${normalizedCurrentUid}`] = null;
-      updates[`screens/sessions/${normalizedCurrentUid}`] = Object.assign(
-        {},
-        current,
-        {
-          status: currentExpired ? "expired" : "superseded",
-          endedAt: now,
-          expiresAt: now,
-          lastSeenAt: Number(current.lastSeenAt || now),
-        }
-      );
-      updates[`render/displayPresence/${normalizedCurrentUid}`] = null;
-    } else if (
-      normalizedCurrentUid &&
-      normalizedCurrentUid === principalUid &&
-      currentExpired
-    ) {
-      updates[`screens/sessions/${normalizedCurrentUid}`] = Object.assign(
-        {},
-        current,
-        {
-          status: "expired",
-          endedAt: now,
-          expiresAt: now,
-          lastSeenAt: Number(current.lastSeenAt || now),
-        }
-      );
-      updates[`render/displayPresence/${normalizedCurrentUid}`] = null;
+    // 同じuidのセッションが期限切れの場合のみクリーンアップ
+    if (normalizedCurrentUid === principalUid && currentExpired) {
+      updates[`screens/sessions/${principalUid}`] = Object.assign({}, current, {
+        status: "expired",
+        endedAt: now,
+        expiresAt: now,
+        lastSeenAt: Number(current.lastSeenAt || now),
+      });
+      updates[`render/displayPresence/${principalUid}`] = null;
     }
     const previousActivePath = getActiveSchedulePathForSession_(current);
     if (previousActivePath) {
       updates[previousActivePath] = null;
     }
-  }
-  if (previousUid && previousUid !== principalUid) {
-    updates[`render/displayPresence/${previousUid}`] = null;
   }
 
   const sessionId = Utilities.getUuid();
@@ -3976,7 +3964,7 @@ function beginDisplaySession_(principal, rawEventId) {
 
   updates[`screens/approved/${principalUid}`] = true;
   updates[`screens/sessions/${principalUid}`] = session;
-  // イベントごとのセッションに保存（複数イベントの同時操作に対応）
+  // イベントごとのセッションに保存（複数display.htmlの同時表示に対応、uidごとに分ける）
   updates[eventSessionPath] = session;
   updates[`render/displayPresence/${principalUid}`] = null;
   const activeSchedulePath = getActiveSchedulePathForSession_(session);
@@ -4009,12 +3997,13 @@ function heartbeatDisplaySession_(principal, rawSessionId, rawEventId) {
   }
   const token = getFirebaseAccessToken_();
   const now = Date.now();
-  const eventSessionPath = getEventSessionPath_(eventId);
-  const current = fetchRtdb_(eventSessionPath, token);
   const principalUid = normalizeKey_(principal && principal.uid);
   if (!principalUid) {
     throw new Error("Missing display uid for heartbeat");
   }
+  // 複数のdisplay.htmlが同じeventIdで同時に表示できるように、uidごとにセッションを分ける
+  const eventSessionPath = getEventSessionPath_(eventId, principalUid);
+  const current = fetchRtdb_(eventSessionPath, token);
   const currentUid = normalizeKey_(current && current.uid);
   if (
     !current ||
@@ -4072,7 +4061,7 @@ function heartbeatDisplaySession_(principal, rawSessionId, rawEventId) {
   const updates = {};
   updates[`screens/approved/${principalUid}`] = true;
   updates[`screens/sessions/${principalUid}`] = session;
-  // イベントごとのセッションに保存（複数イベントの同時操作に対応）
+  // イベントごとのセッションに保存（複数display.htmlの同時表示に対応、uidごとに分ける）
   updates[eventSessionPath] = session;
   updates[`render/displayPresence/${principalUid}`] = null;
   patchRtdb_(updates, token);
@@ -4097,12 +4086,13 @@ function endDisplaySession_(principal, rawSessionId, reason, rawEventId) {
   }
   const token = getFirebaseAccessToken_();
   const now = Date.now();
-  const eventSessionPath = getEventSessionPath_(eventId);
-  const current = fetchRtdb_(eventSessionPath, token);
   const principalUid = normalizeKey_(principal && principal.uid);
   if (!principalUid) {
     throw new Error("Missing display uid for session end");
   }
+  // 複数のdisplay.htmlが同じeventIdで同時に表示できるように、uidごとにセッションを分ける
+  const eventSessionPath = getEventSessionPath_(eventId, principalUid);
+  const current = fetchRtdb_(eventSessionPath, token);
   const currentUid = normalizeKey_(current && current.uid);
   if (
     !current ||
@@ -4123,7 +4113,7 @@ function endDisplaySession_(principal, rawSessionId, reason, rawEventId) {
   const updates = {};
   updates[`screens/approved/${principalUid}`] = null;
   updates[`screens/sessions/${principalUid}`] = session;
-  // イベントごとのセッションを終了（複数イベントの同時操作に対応）
+  // イベントごとのセッションを終了（複数display.htmlの同時表示に対応、uidごとに分ける）
   updates[eventSessionPath] = null;
   updates[`render/displayPresence/${principalUid}`] = null;
   const activePath = getActiveSchedulePathForSession_(current);
@@ -4160,24 +4150,34 @@ function lockDisplaySchedule_(
   assertOperatorForEvent_(principal, eventId);
   const token = getFirebaseAccessToken_();
   const now = Date.now();
-  // イベントごとのセッションを取得（複数イベントの同時操作に対応）
-  const eventSessionPath = getEventSessionPath_(eventId);
-  const session = fetchRtdb_(eventSessionPath, token);
-  if (!session || session.status !== "active") {
+  // 複数のdisplay.htmlが同じeventIdで同時に表示できるように、全てのセッションを取得
+  const eventSessionsPath = getEventSessionsPath_(eventId);
+  const sessions = fetchRtdb_(eventSessionsPath, token) || {};
+  // 有効なセッションを抽出（status: "active" かつ期限切れでないもの）
+  const activeSessions = [];
+  Object.entries(sessions).forEach(([uid, session]) => {
+    if (!session || typeof session !== "object") return;
+    const sessionStatus = String(session.status || "").trim();
+    const expiresAt = Number(session.expiresAt || 0);
+    if (sessionStatus === "active" && expiresAt > now) {
+      activeSessions.push({ uid: normalizeKey_(uid), session });
+    }
+  });
+  if (activeSessions.length === 0) {
     throw new Error("ディスプレイのセッションが有効ではありません。");
   }
-  if (Number(session.expiresAt || 0) <= now) {
-    throw new Error("ディスプレイのセッションが期限切れです。");
-  }
-  const sessionUid = normalizeKey_(session.uid);
+  // 最初の有効なセッションを基準にassignmentを決定（全てのセッションに同じassignmentを設定する）
+  const firstSession = activeSessions[0].session;
+  const sessionUid = normalizeKey_(firstSession.uid);
   if (!sessionUid) {
     throw new Error("ディスプレイのセッション情報が不完全です。");
   }
   const normalizedScheduleId = normalizeScheduleId_(scheduleId);
   const scheduleKey = buildScheduleKey_(eventId, normalizedScheduleId);
+  // 既存のassignmentを最初のセッションから取得
   const existingAssignment =
-    session.assignment && typeof session.assignment === "object"
-      ? session.assignment
+    firstSession.assignment && typeof firstSession.assignment === "object"
+      ? firstSession.assignment
       : null;
   if (existingAssignment) {
     const existingKey = buildScheduleKey_(
@@ -4226,10 +4226,20 @@ function lockDisplaySchedule_(
       updates[previousActivePath] = null;
     }
   }
-  updates[`screens/approved/${sessionUid}`] = true;
-  updates[`screens/sessions/${sessionUid}`] = nextSession;
-  // イベントごとのセッションに保存（複数イベントの同時操作に対応）
-  updates[eventSessionPath] = nextSession;
+  // 全ての有効なセッションに対してassignmentを設定（複数display.htmlの同時表示に対応）
+  activeSessions.forEach(({ uid, session }) => {
+    const nextSessionForUid = Object.assign({}, session, {
+      eventId,
+      scheduleId: normalizedScheduleId,
+      scheduleLabel: assignment.scheduleLabel,
+      assignment,
+    });
+    updates[`screens/approved/${uid}`] = true;
+    updates[`screens/sessions/${uid}`] = nextSessionForUid;
+    // 各uidごとのセッションパスに保存
+    const sessionPath = getEventSessionPath_(eventId, uid);
+    updates[sessionPath] = nextSessionForUid;
+  });
   const activeSchedulePath = getEventActiveSchedulePath_(eventId);
   const activeRecord = buildActiveScheduleRecord_(
     assignment,

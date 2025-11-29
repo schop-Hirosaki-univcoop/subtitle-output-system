@@ -31,6 +31,7 @@ export function createInitialState(autoScroll = true) {
     autoScrollLogs: autoScroll,
     renderState: null,
     displaySession: null,
+    displaySessions: [], // 複数display.htmlの同時表示に対応
     displaySessionActive: false,
     displaySessionLastActive: null,
     displayPresenceEntries: [],

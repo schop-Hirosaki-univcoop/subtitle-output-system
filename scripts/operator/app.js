@@ -4247,51 +4247,76 @@ export class OperatorApp {
    */
   startDisplaySessionMonitor() {
     if (this.displaySessionUnsubscribe) this.displaySessionUnsubscribe();
-    // 選択中のイベントに対応するセッションを監視（複数イベントの同時操作に対応）
+    // 選択中のイベントに対応するセッションを監視（複数display.htmlの同時表示に対応）
     const activeEventId = String(this.state?.activeEventId || "").trim();
-    const sessionPath = activeEventId
-      ? `render/events/${activeEventId}/session`
+    const sessionsPath = activeEventId
+      ? `render/events/${activeEventId}/sessions`
       : "render/session"; // 後方互換性のため、eventIdがない場合は旧パスを使用
-    const sessionRef = ref(database, sessionPath);
+    const sessionsRef = ref(database, sessionsPath);
     this.displaySessionUnsubscribe = onValue(
-      sessionRef,
+      sessionsRef,
       (snapshot) => {
-        const data = snapshot.val() || null;
+        const raw = snapshot.val() || null;
         const now = Date.now();
-        const expiresAt = Number(data && data.expiresAt) || 0;
-        const status = String((data && data.status) || "");
-        const activeFromSnapshot = !!data && status === "active" && (!expiresAt || expiresAt > now);
-        const assignment = data && typeof data.assignment === "object" ? data.assignment : null;
-        const normalizedEvent = String(data?.eventId || "").trim();
-        const normalizedSchedule = normalizeScheduleId(data?.scheduleId || "");
-        const assignmentEvent = assignment && typeof assignment.eventId === "string" ? assignment.eventId.trim() : "";
-        const assignmentSchedule =
-          assignment && typeof assignment.scheduleId === "string" ? normalizeScheduleId(assignment.scheduleId) : "";
-        // logDisplayLinkInfo("Display session snapshot", {
-        //   active: activeFromSnapshot,
-        //   status,
-        //   sessionId: data?.sessionId || null,
-        //   eventId: normalizedEvent || null,
-        //   scheduleId: normalizedSchedule || null,
-        //   assignmentEvent: assignmentEvent || null,
-        //   assignmentSchedule: assignmentSchedule || null
-        // });
-        this.state.displaySession = data;
-        this.displaySessionStatusFromSnapshot = activeFromSnapshot;
+        const activeEventId = String(this.state?.activeEventId || "").trim();
+        
+        // 複数のdisplay.htmlが同じeventIdで同時に表示できるように、全てのセッションを処理
+        let activeSessions = [];
+        let hasActiveSession = false;
+        let representativeSession = null;
+        let representativeAssignment = null;
+
+        if (raw && typeof raw === "object") {
+          // オブジェクトの場合（sessions/{uid}形式）
+          Object.entries(raw).forEach(([uid, data]) => {
+            if (!data || typeof data !== "object") return;
+            const expiresAt = Number(data.expiresAt || 0);
+            const status = String((data.status || "")).trim();
+            const isActive = status === "active" && expiresAt > now;
+            if (isActive) {
+              hasActiveSession = true;
+              activeSessions.push({ uid, session: data });
+              // 最初の有効なセッションを代表として使用
+              if (!representativeSession) {
+                representativeSession = data;
+                representativeAssignment = data.assignment && typeof data.assignment === "object" ? data.assignment : null;
+              }
+            }
+          });
+        } else if (raw && typeof raw === "object" && raw.uid) {
+          // 単一セッションの場合（後方互換性、render/session形式）
+          const expiresAt = Number(raw.expiresAt || 0);
+          const status = String((raw.status || "")).trim();
+          const isActive = status === "active" && expiresAt > now;
+          if (isActive) {
+            hasActiveSession = true;
+            representativeSession = raw;
+            representativeAssignment = raw.assignment && typeof raw.assignment === "object" ? raw.assignment : null;
+          }
+        }
+
+        this.state.displaySession = representativeSession;
+        this.state.displaySessions = activeSessions.map(({ session }) => session); // 全有効セッションを保存
+        this.displaySessionStatusFromSnapshot = hasActiveSession;
         this.evaluateDisplaySessionActivity("session-snapshot");
+        
         // 現在選択中のイベントと一致する場合のみchannelAssignmentを設定
         // イベントが選択されていない場合、または別のイベントの場合はnullに設定
-        const activeEventId = String(this.state?.activeEventId || "").trim();
         if (!activeEventId) {
           // イベントが選択されていない場合は、channelAssignmentをnullに設定
           this.state.channelAssignment = null;
         } else {
-          const rawAssignment = this.getDisplayAssignment();
-          if (rawAssignment && activeEventId) {
-            const assignmentEventId = String(rawAssignment.eventId || "").trim();
-            this.state.channelAssignment = assignmentEventId === activeEventId ? rawAssignment : null;
+          if (representativeAssignment) {
+            const assignmentEventId = String(representativeAssignment.eventId || "").trim();
+            this.state.channelAssignment = assignmentEventId === activeEventId ? representativeAssignment : null;
           } else {
-            this.state.channelAssignment = null;
+            const rawAssignment = this.getDisplayAssignment();
+            if (rawAssignment && activeEventId) {
+              const assignmentEventId = String(rawAssignment.eventId || "").trim();
+              this.state.channelAssignment = assignmentEventId === activeEventId ? rawAssignment : null;
+            } else {
+              this.state.channelAssignment = null;
+            }
           }
         }
         this.updateScheduleContext({ presenceOptions: { allowFallback: false }, trackIntent: false });
@@ -4379,53 +4404,88 @@ export class OperatorApp {
    */
   evaluateDisplaySessionActivity(reason = "unknown") {
     const previousActive = this.state.displaySessionActive;
-    const session = this.state.displaySession || null;
-    const sessionUid = String(session?.uid || "").trim();
-    const sessionId = String(session?.sessionId || "").trim();
     const activeEventId = String(this.state?.activeEventId || "").trim();
-    if (!sessionId) {
-      this.displayPresencePrimedSessionId = "";
-      this.displayPresencePrimedForSession = false;
-    } else if (this.displayPresencePrimedSessionId !== sessionId) {
-      this.displayPresencePrimedSessionId = sessionId;
-      this.displayPresencePrimedForSession = false;
-    }
     const presenceEntries = Array.isArray(this.displayPresenceEntries) ? this.displayPresenceEntries : [];
-    // 複数イベント対応: 現在選択中のイベントに対応するpresenceエントリを探す
-    const presenceEntry = presenceEntries.find((entry) => {
-      if (entry.uid !== sessionUid || entry.sessionId !== sessionId) {
-        return false;
+    const displaySessions = Array.isArray(this.state.displaySessions) ? this.state.displaySessions : [];
+    const representativeSession = this.state.displaySession || null;
+    
+    // 複数display.html対応: いずれかのセッションが接続していればOK
+    // presenceエントリとセッションを照合して、有効な接続があるか確認
+    let hasActiveConnection = false;
+    let activePresenceEntry = null;
+    
+    // セッションスナップショットが有効な場合
+    if (this.displaySessionStatusFromSnapshot) {
+      // セッションスナップショットから有効なセッションを確認
+      if (representativeSession) {
+        const sessionEventId = String(representativeSession?.eventId || "").trim();
+        const assignmentEventId = representativeSession?.assignment && typeof representativeSession.assignment === "object"
+          ? String(representativeSession.assignment.eventId || "").trim()
+          : "";
+        const sessionMatchesActiveEvent = !activeEventId || !sessionEventId || sessionEventId === activeEventId || assignmentEventId === activeEventId;
+        if (sessionMatchesActiveEvent) {
+          hasActiveConnection = true;
+        }
       }
-      // イベントが選択されていない場合は、すべてのエントリを対象とする（後方互換性）
-      if (!activeEventId) {
-        return true;
+      // displaySessionsからも確認（複数セッションがある場合）
+      if (displaySessions.length > 0) {
+        const hasMatchingSession = displaySessions.some((session) => {
+          if (!session) return false;
+          const sessionEventId = String(session.eventId || "").trim();
+          const assignmentEventId = session.assignment && typeof session.assignment === "object"
+            ? String(session.assignment.eventId || "").trim()
+            : "";
+          return !activeEventId || !sessionEventId || sessionEventId === activeEventId || assignmentEventId === activeEventId;
+        });
+        if (hasMatchingSession) {
+          hasActiveConnection = true;
+        }
       }
-      // 現在選択中のイベントに対応するエントリを探す
-      const entryEventId = String(entry.eventId || entry.channelEventId || entry.assignmentEventId || "").trim();
-      return entryEventId === activeEventId;
-    }) || null;
-    const presenceActive = !!presenceEntry && !presenceEntry.isStale && presenceEntry.sessionId === sessionId;
-    if (presenceEntry && presenceEntry.sessionId === sessionId) {
-      this.displayPresencePrimedForSession = true;
     }
+    
+    // presenceエントリから有効な接続を確認
+    if (presenceEntries.length > 0) {
+      activePresenceEntry = presenceEntries.find((entry) => {
+        // イベントが選択されていない場合は、すべてのエントリを対象とする（後方互換性）
+        if (!activeEventId) {
+          return !entry.isStale;
+        }
+        // 現在選択中のイベントに対応するエントリを探す
+        const entryEventId = String(entry.eventId || entry.channelEventId || entry.assignmentEventId || "").trim();
+        if (entryEventId !== activeEventId) {
+          return false;
+        }
+        return !entry.isStale;
+      }) || null;
+      
+      if (activePresenceEntry) {
+        hasActiveConnection = true;
+        this.displayPresencePrimedForSession = true;
+        this.displayPresencePrimedSessionId = String(activePresenceEntry.sessionId || "").trim();
+        
+        // presenceエントリに対応するセッションがあれば、TTLを延長
+        const matchingSession = displaySessions.find((s) => 
+          s && String(s.uid || "").trim() === String(activePresenceEntry.uid || "").trim() &&
+          String(s.sessionId || "").trim() === String(activePresenceEntry.sessionId || "").trim()
+        ) || representativeSession;
+        if (matchingSession && String(matchingSession.uid || "").trim() === String(activePresenceEntry.uid || "").trim()) {
+          this.refreshDisplaySessionFromPresence(matchingSession, activePresenceEntry, reason);
+        }
+      }
+    }
+    
     const assetChecked = this.state.displayAssetChecked === true;
     const assetAvailable = this.state.displayAssetAvailable !== false;
     const allowActive = !assetChecked || assetAvailable;
-    const snapshotFallbackAllowed = !this.displayPresencePrimedForSession;
-    // セッションのイベントIDと現在選択中のイベントIDが一致している場合のみsnapshotActiveを有効にする
-    const sessionEventId = String(session?.eventId || "").trim();
-    const sessionMatchesActiveEvent = !activeEventId || !sessionEventId || sessionEventId === activeEventId;
-    const snapshotActive = snapshotFallbackAllowed && !!this.displaySessionStatusFromSnapshot && sessionMatchesActiveEvent;
-    const nextActive = allowActive && (presenceActive || snapshotActive);
+    const nextActive = allowActive && hasActiveConnection;
     this.state.displaySessionActive = nextActive;
 
     if (nextActive && this.state.renderChannelOnline === false) {
       this.updateRenderAvailability(null);
     }
 
-    if (presenceActive) {
-      this.refreshDisplaySessionFromPresence(session, presenceEntry, reason);
-    } else if (!nextActive && sessionUid && sessionId) {
+    if (!nextActive && displaySessions.length > 0) {
+      // 有効なセッションがない場合、非アクティブ状態としてマーク
       this.markDisplaySessionInactive(reason);
     }
 
@@ -4481,11 +4541,13 @@ export class OperatorApp {
     if (!session?.scheduleId && entry.scheduleId) {
       payload.scheduleId = entry.scheduleId;
     }
-    // 複数イベント対応: セッションのイベントIDに基づいて正しいパスを使用
+    // 複数display.html対応: セッションのイベントIDとuidに基づいて正しいパスを使用
     const sessionEventId = String(session?.eventId || entry?.eventId || "").trim();
-    const sessionRef = sessionEventId
-      ? ref(database, `render/events/${sessionEventId}/session`)
-      : displaySessionRef; // 後方互換性のため、eventIdがない場合は旧パスを使用
+    const sessionRef = sessionEventId && uid
+      ? ref(database, `render/events/${sessionEventId}/sessions/${uid}`)
+      : sessionEventId
+        ? ref(database, `render/events/${sessionEventId}/sessions`)
+        : displaySessionRef; // 後方互換性のため、eventIdがない場合は旧パスを使用
     update(sessionRef, payload).catch((error) => {
       console.debug("Failed to extend display session TTL:", error);
     });

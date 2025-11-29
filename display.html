@@ -598,12 +598,12 @@
         let renderRef = ref(database, getRenderStatePath(channelEventId, channelScheduleId));
         let nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
         let sideTelopRef = ref(database, getSideTelopPath(channelEventId, channelScheduleId));
-        // イベントごとのセッションを監視（複数イベントの同時操作に対応）
-        let displaySessionRef = channelEventId
-          ? ref(database, `render/events/${channelEventId}/session`)
-          : ref(database, "render/session"); // 後方互換性のため、eventIdがない場合は旧パスを使用
+        // イベントごとのセッションを監視（複数display.htmlの同時表示に対応、uidごとに分ける）
+        // 複数のdisplay.htmlが同じeventIdで同時に表示できるように、uidごとにセッションパスを分ける
+        let displaySessionRef = null;
         let nowShowingUnsubscribe = null;
         let sideTelopUnsubscribe = null;
+        let scheduleMetadataUnsubscribe = null;
         let displayPresenceRef = null;
         let displayPresenceUid = '';
         let displayPresenceDisconnect = null;
@@ -632,13 +632,19 @@
           renderRef = ref(database, getRenderStatePath(channelEventId, channelScheduleId));
           nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
           sideTelopRef = ref(database, getSideTelopPath(channelEventId, channelScheduleId));
-          // イベントごとのセッションを監視（複数イベントの同時操作に対応）
-          displaySessionRef = channelEventId
-            ? ref(database, `render/events/${channelEventId}/session`)
-            : ref(database, "render/session"); // 後方互換性のため、eventIdがない場合は旧パスを使用
-          subscribeDisplaySession();
+          // 複数のdisplay.htmlが同じeventIdで同時に表示できるように、uidごとにセッションパスを分ける
+          // セッションパスはbeginDisplaySession後に設定されるため、ここでは更新しない
+          if (auth.currentUser && auth.currentUser.uid && channelEventId) {
+            displaySessionRef = ref(database, `render/events/${channelEventId}/sessions/${auth.currentUser.uid}`);
+            subscribeDisplaySession();
+          } else if (!channelEventId) {
+            // 後方互換性のため、eventIdがない場合は旧パスを使用
+            displaySessionRef = ref(database, "render/session");
+            subscribeDisplaySession();
+          }
           subscribeNowShowing();
           subscribeSideTelops();
+          subscribeScheduleMetadata();
           syncDisplayPresence('channel-change').catch(() => {});
           refreshSideTelopFallbackFromMeta(channelEventId, channelScheduleId).catch(() => {});
         }
@@ -722,6 +728,9 @@
             scheduleId: mergedSchedule
           };
           applyChannelFromSession(sessionInfo);
+          // セッション情報が更新されたら、presenceも更新してoperator側が検知できるようにする
+          // presenceエントリのeventIdは常にchannelEventId（クエリパラメータから）を使用
+          // （display.htmlのeventIdは固定であり、変更されると放送事故の危険があるため）
           syncDisplayPresence('session-snapshot').catch(() => {});
         }
 
@@ -729,7 +738,13 @@
           if (typeof displaySessionUnsubscribe === 'function') {
             displaySessionUnsubscribe();
           }
-          logDisplayLinkInfo('Subscribing display session stream');
+          if (!displaySessionRef) {
+            logDisplayLinkWarn('Cannot subscribe display session: displaySessionRef is null');
+            return;
+          }
+          logDisplayLinkInfo('Subscribing display session stream', {
+            path: displaySessionRef.toString?.() || 'unknown'
+          });
           displaySessionUnsubscribe = onValue(displaySessionRef, handleDisplaySessionSnapshot);
         }
 
@@ -833,7 +848,10 @@
             payload[key] = trimmed;
           };
 
-          assignString(sessionInfo.eventId, 'eventId');
+          // operator側が正しくpresenceエントリを検出できるよう、eventIdを設定
+          // display.htmlのeventIdはクエリパラメータで固定されているため、channelEventIdを使用
+          // （複数オペレーターが異なるイベントを同時操作する場合、display.htmlのeventIdが変わると放送事故になる）
+          assignString(channelEventId, 'eventId');
           assignString(sessionInfo.scheduleId, 'scheduleId');
           assignString(assignment?.eventId, 'assignmentEventId');
           assignString(assignment?.scheduleId, 'assignmentScheduleId');
@@ -1000,6 +1018,11 @@
                 throw new Error('Invalid session payload');
               }
               sessionInfo = result.session;
+              // セッション確立後、uidごとのセッションパスを設定して監視を開始
+              if (channelEventId && user.uid) {
+                displaySessionRef = ref(database, `render/events/${channelEventId}/sessions/${user.uid}`);
+                subscribeDisplaySession();
+              }
               applyChannelFromSession(sessionInfo);
               logDisplayLinkInfo('Display session established', {
                 uid: user.uid,
@@ -1111,7 +1134,8 @@
 
         subscribeNowShowing();
         subscribeSideTelops();
-        subscribeDisplaySession();
+        subscribeScheduleMetadata();
+        // subscribeDisplaySession()はbeginDisplaySession()後に呼ばれる（uidが確定してから）
 
         function flushPendingRender(reason) {
           if (!pendingRenderUpdate) return;
@@ -1863,6 +1887,54 @@
           sideTelopUnsubscribe = onValue(sideTelopRef, handleSideTelopPresetSnapshot, (error) => {
             logDisplayLinkWarn('Failed to subscribe sideTelop stream', error);
           });
+        }
+
+        function subscribeScheduleMetadata() {
+          if (typeof scheduleMetadataUnsubscribe === 'function') {
+            scheduleMetadataUnsubscribe();
+          }
+          const normalizedEvent = ensureString(channelEventId);
+          const normalizedSchedule = ensureString(channelScheduleId);
+          if (!normalizedEvent || !normalizedSchedule) {
+            scheduleMetadataUnsubscribe = null;
+            return;
+          }
+          const scheduleRef = ref(database, `questionIntake/schedules/${normalizedEvent}/${normalizedSchedule}`);
+          const eventRef = ref(database, `questionIntake/events/${normalizedEvent}`);
+          logDisplayLinkInfo('Subscribing schedule metadata stream', {
+            eventId: normalizedEvent,
+            scheduleId: normalizedSchedule
+          });
+          
+          let eventUnsubscribe = null;
+          let scheduleUnsubscribe = null;
+          
+          const updateFromMetadata = () => {
+            refreshSideTelopFallbackFromMeta(normalizedEvent, normalizedSchedule).catch((err) => {
+              logDisplayLinkWarn('Failed to refresh side telop from metadata', err);
+            });
+          };
+          
+          eventUnsubscribe = onValue(eventRef, () => {
+            updateFromMetadata();
+          }, (error) => {
+            logDisplayLinkWarn('Failed to subscribe event metadata stream', error);
+          });
+          
+          scheduleUnsubscribe = onValue(scheduleRef, () => {
+            updateFromMetadata();
+          }, (error) => {
+            logDisplayLinkWarn('Failed to subscribe schedule metadata stream', error);
+          });
+          
+          scheduleMetadataUnsubscribe = () => {
+            if (typeof eventUnsubscribe === 'function') {
+              eventUnsubscribe();
+            }
+            if (typeof scheduleUnsubscribe === 'function') {
+              scheduleUnsubscribe();
+            }
+          };
         }
   </script>
 </body>
