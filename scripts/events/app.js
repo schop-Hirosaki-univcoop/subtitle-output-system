@@ -9340,21 +9340,12 @@ export class EventAdminApp {
       }
     }
 
-    // Ctrl+Alt+M (Command+Option+M) でフォーカスを戻す（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにCtrl+Alt+Mを使用）
-    if ((event.key === "m" || event.key === "M") && (event.ctrlKey || event.metaKey) && event.altKey && !event.shiftKey) {
+    // ESC で入力状態から回復（チャット入力 → チャットスクロール）
+    if (event.key === "Escape" && !this.isFullscreenActive()) {
       const activeElement = document.activeElement;
-      const sideTelopPanel = document.getElementById("side-telop-panel");
-      const isSideTelopFocused = sideTelopPanel && (
-        activeElement === sideTelopPanel ||
-        (activeElement instanceof HTMLElement && sideTelopPanel.contains(activeElement))
-      );
       const isChatInputFocused = this.dom.chatInput && (
         activeElement === this.dom.chatInput ||
         (activeElement instanceof HTMLElement && this.dom.chatInput.contains(activeElement))
-      );
-      const isChatScrollFocused = this.dom.chatScroll && (
-        activeElement === this.dom.chatScroll ||
-        (activeElement === this.dom.chatScroll)
       );
 
       if (isChatInputFocused) {
@@ -9365,6 +9356,20 @@ export class EventAdminApp {
         }
         return;
       }
+    }
+
+    // M でflow-stage-panelsにフォーカスを戻す（チャットスクロールや右サイドテロップ操作パネルから）
+    if ((event.key === "m" || event.key === "M") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+      const activeElement = document.activeElement;
+      const sideTelopPanel = document.getElementById("side-telop-panel");
+      const isSideTelopFocused = sideTelopPanel && (
+        activeElement === sideTelopPanel ||
+        (activeElement instanceof HTMLElement && sideTelopPanel.contains(activeElement))
+      );
+      const isChatScrollFocused = this.dom.chatScroll && (
+        activeElement === this.dom.chatScroll ||
+        (activeElement === this.dom.chatScroll)
+      );
 
       if (isChatScrollFocused) {
         // チャット本体にフォーカスがある時 → flow-stage-panels に戻る
