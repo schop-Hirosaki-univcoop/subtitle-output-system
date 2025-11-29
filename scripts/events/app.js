@@ -149,8 +149,10 @@ export class EventAdminApp {
     this.lastScheduleStartTime = "";
     this.lastScheduleEndTime = "";
     this.selectedEventId = "";
+    this.eventBatchSet = new Set();
     this.schedules = [];
     this.selectedScheduleId = "";
+    this.scheduleBatchSet = new Set();
     this.selectionListeners = new Set();
     this.eventListeners = new Set();
     this.participantHostInterface = null;
@@ -774,6 +776,60 @@ export class EventAdminApp {
 
     if (this.dom.addScheduleButton) {
       this.dom.addScheduleButton.addEventListener("click", () => this.openScheduleDialog({ mode: "create" }));
+    }
+
+    if (this.dom.eventEditButton) {
+      this.dom.eventEditButton.addEventListener("click", () => {
+        const selected = this.getSelectedEvent();
+        if (selected) {
+          this.openEventDialog({ mode: "edit", event: selected });
+        }
+      });
+    }
+
+    if (this.dom.eventDeleteButton) {
+      this.dom.eventDeleteButton.addEventListener("click", () => {
+        const selected = this.getSelectedEvent();
+        if (selected) {
+          void this.deleteEvent(selected).catch((error) => {
+            logError("Failed to delete event", error);
+            this.showAlert(error.message || "イベントの削除に失敗しました。");
+          });
+        }
+      });
+    }
+
+    if (this.dom.eventBatchDeleteButton) {
+      this.dom.eventBatchDeleteButton.addEventListener("click", () => {
+        this.handleEventBatchDelete();
+      });
+    }
+
+    if (this.dom.scheduleEditButton) {
+      this.dom.scheduleEditButton.addEventListener("click", () => {
+        const selected = this.getSelectedSchedule();
+        if (selected) {
+          this.openScheduleDialog({ mode: "edit", schedule: selected });
+        }
+      });
+    }
+
+    if (this.dom.scheduleDeleteButton) {
+      this.dom.scheduleDeleteButton.addEventListener("click", () => {
+        const selected = this.getSelectedSchedule();
+        if (selected) {
+          void this.deleteSchedule(selected).catch((error) => {
+            logError("Failed to delete schedule", error);
+            this.showAlert(error.message || "日程の削除に失敗しました。");
+          });
+        }
+      });
+    }
+
+    if (this.dom.scheduleBatchDeleteButton) {
+      this.dom.scheduleBatchDeleteButton.addEventListener("click", () => {
+        this.handleScheduleBatchDelete();
+      });
     }
 
     if (this.dom.scheduleRefreshButton) {
@@ -1415,6 +1471,21 @@ export class EventAdminApp {
       }
       item.tabIndex = 0;
 
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "entity-checkbox";
+      checkbox.setAttribute("aria-label", `${event.name || event.id} を選択`);
+      checkbox.checked = this.eventBatchSet.has(event.id);
+      checkbox.addEventListener("change", (evt) => {
+        evt.stopPropagation();
+        if (checkbox.checked) {
+          this.eventBatchSet.add(event.id);
+        } else {
+          this.eventBatchSet.delete(event.id);
+        }
+        this.updateEventActionPanelState();
+      });
+
       const indicator = document.createElement("span");
       indicator.className = "entity-indicator";
       indicator.setAttribute("aria-hidden", "true");
@@ -1435,39 +1506,7 @@ export class EventAdminApp {
 
       label.append(nameEl, metaEl);
 
-      const actions = document.createElement("div");
-      actions.className = "entity-actions";
-
-      const editBtn = document.createElement("button");
-      editBtn.type = "button";
-      editBtn.className = "entity-action entity-action--edit";
-      editBtn.setAttribute("aria-label", `${event.name || event.id} を編集`);
-      editBtn.title = "イベントを編集";
-      editBtn.innerHTML =
-        '<span class="entity-action__icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z" fill="currentColor"/></svg></span><span class="entity-action__label">編集</span>';
-      editBtn.addEventListener("click", (evt) => {
-        evt.stopPropagation();
-        this.openEventDialog({ mode: "edit", event });
-      });
-      actions.appendChild(editBtn);
-
-      const deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.className = "entity-action entity-action--delete";
-      deleteBtn.setAttribute("aria-label", `${event.name || event.id} を削除`);
-      deleteBtn.title = "イベントを削除";
-      deleteBtn.innerHTML =
-        '<span class="entity-action__icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z"/></svg></span><span class="entity-action__label">削除</span>';
-      deleteBtn.addEventListener("click", (evt) => {
-        evt.stopPropagation();
-        this.deleteEvent(event).catch((error) => {
-          logError("Failed to delete event", error);
-          this.showAlert(error.message || "イベントの削除に失敗しました。");
-        });
-      });
-      actions.appendChild(deleteBtn);
-
-      item.append(indicator, label, actions);
+      item.append(checkbox, indicator, label);
 
       item.addEventListener("click", () => {
         this.focusEventListItem(item, { select: true });
@@ -1484,6 +1523,7 @@ export class EventAdminApp {
 
     list.appendChild(fragment);
     this.updateEventListKeyboardMetadata();
+    this.updateEventActionPanelState();
   }
 
   getEventListItems() {
@@ -1675,6 +1715,7 @@ export class EventAdminApp {
     this.updateScheduleConflictState();
     this.syncOperatorPresenceSubscription();
     this.syncScheduleConsensusSubscription();
+    this.updateEventActionPanelState();
     if (changed) {
       this.notifySelectionListeners("host");
     }
@@ -2310,6 +2351,7 @@ export class EventAdminApp {
     this.showPanel(this.activePanel);
     this.tools.prepareContextForSelection();
     this.updateScheduleConflictState();
+    this.updateScheduleActionPanelState();
     if (changed) {
       this.syncOperatorPresenceSubscription();
       this.notifySelectionListeners("host");
@@ -2391,6 +2433,21 @@ export class EventAdminApp {
       }
       item.tabIndex = 0;
 
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "entity-checkbox";
+      checkbox.setAttribute("aria-label", `${schedule.label || schedule.id} を選択`);
+      checkbox.checked = this.scheduleBatchSet.has(schedule.id);
+      checkbox.addEventListener("change", (evt) => {
+        evt.stopPropagation();
+        if (checkbox.checked) {
+          this.scheduleBatchSet.add(schedule.id);
+        } else {
+          this.scheduleBatchSet.delete(schedule.id);
+        }
+        this.updateScheduleActionPanelState();
+      });
+
       const indicator = document.createElement("span");
       indicator.className = "entity-indicator";
       indicator.setAttribute("aria-hidden", "true");
@@ -2423,39 +2480,7 @@ export class EventAdminApp {
 
       label.append(nameEl, metaEl);
 
-      const actions = document.createElement("div");
-      actions.className = "entity-actions";
-
-      const editBtn = document.createElement("button");
-      editBtn.type = "button";
-      editBtn.className = "entity-action entity-action--edit";
-      editBtn.setAttribute("aria-label", `${schedule.label || schedule.id} を編集`);
-      editBtn.title = "日程を編集";
-      editBtn.innerHTML =
-        '<span class="entity-action__icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z" fill="currentColor"/></svg></span><span class="entity-action__label">編集</span>';
-      editBtn.addEventListener("click", (evt) => {
-        evt.stopPropagation();
-        this.openScheduleDialog({ mode: "edit", schedule });
-      });
-      actions.appendChild(editBtn);
-
-      const deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.className = "entity-action entity-action--delete";
-      deleteBtn.setAttribute("aria-label", `${schedule.label || schedule.id} を削除`);
-      deleteBtn.title = "日程を削除";
-      deleteBtn.innerHTML =
-        '<span class="entity-action__icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z"/></svg></span><span class="entity-action__label">削除</span>';
-      deleteBtn.addEventListener("click", (evt) => {
-        evt.stopPropagation();
-        this.deleteSchedule(schedule).catch((error) => {
-          logError("Failed to delete schedule", error);
-          this.showAlert(error.message || "日程の削除に失敗しました。");
-        });
-      });
-      actions.appendChild(deleteBtn);
-
-      item.append(indicator, label, actions);
+      item.append(checkbox, indicator, label);
 
       item.addEventListener("click", () => {
         this.selectSchedule(schedule.id);
@@ -2471,6 +2496,131 @@ export class EventAdminApp {
     });
 
     list.appendChild(fragment);
+    this.updateScheduleActionPanelState();
+  }
+
+  updateEventActionPanelState() {
+    const selected = this.getSelectedEvent();
+    const batchIds = Array.from(this.eventBatchSet);
+    const hasBatch = batchIds.length > 0;
+    const panel = this.dom.eventActionPanel;
+    if (panel) {
+      panel.hidden = false;
+      panel.classList.toggle("is-idle", !selected && !hasBatch);
+    }
+    if (this.dom.eventEditButton) {
+      this.dom.eventEditButton.disabled = !selected || hasBatch;
+    }
+    if (this.dom.eventDeleteButton) {
+      this.dom.eventDeleteButton.disabled = !selected || hasBatch;
+    }
+    if (this.dom.eventBatchDeleteButton) {
+      this.dom.eventBatchDeleteButton.hidden = !hasBatch;
+      this.dom.eventBatchDeleteButton.disabled = !hasBatch;
+    }
+    if (this.dom.eventSelectedInfo) {
+      if (hasBatch) {
+        this.dom.eventSelectedInfo.textContent = `${batchIds.length}件を選択中`;
+      } else if (selected) {
+        this.dom.eventSelectedInfo.textContent = selected.name || selected.id;
+      } else {
+        this.dom.eventSelectedInfo.textContent = "イベントを選択してください";
+      }
+    }
+  }
+
+  updateScheduleActionPanelState() {
+    const selected = this.getSelectedSchedule();
+    const batchIds = Array.from(this.scheduleBatchSet);
+    const hasBatch = batchIds.length > 0;
+    const panel = this.dom.scheduleActionPanel;
+    if (panel) {
+      panel.hidden = false;
+      panel.classList.toggle("is-idle", !selected && !hasBatch);
+    }
+    if (this.dom.scheduleEditButton) {
+      this.dom.scheduleEditButton.disabled = !selected || hasBatch;
+    }
+    if (this.dom.scheduleDeleteButton) {
+      this.dom.scheduleDeleteButton.disabled = !selected || hasBatch;
+    }
+    if (this.dom.scheduleBatchDeleteButton) {
+      this.dom.scheduleBatchDeleteButton.hidden = !hasBatch;
+      this.dom.scheduleBatchDeleteButton.disabled = !hasBatch;
+    }
+    if (this.dom.scheduleSelectedInfo) {
+      if (hasBatch) {
+        this.dom.scheduleSelectedInfo.textContent = `${batchIds.length}件を選択中`;
+      } else if (selected) {
+        this.dom.scheduleSelectedInfo.textContent = selected.label || selected.id;
+      } else {
+        this.dom.scheduleSelectedInfo.textContent = "日程を選択してください";
+      }
+    }
+  }
+
+  async handleEventBatchDelete() {
+    const batchIds = Array.from(this.eventBatchSet);
+    if (!batchIds.length) {
+      return;
+    }
+    const events = batchIds.map((id) => this.events.find((e) => e.id === id)).filter(Boolean);
+    if (!events.length) {
+      return;
+    }
+    const confirmed = await this.confirm({
+      title: "選択したイベントを削除",
+      description: `${events.length}件のイベントを削除します。よろしいですか？`,
+      confirmLabel: "削除する",
+      cancelLabel: "キャンセル"
+    });
+    if (!confirmed) {
+      return;
+    }
+    const selectedId = this.selectedEventId;
+    this.eventBatchSet.clear();
+    if (selectedId && batchIds.includes(selectedId)) {
+      this.selectedEventId = "";
+    }
+    this.updateEventActionPanelState();
+    try {
+      await Promise.all(events.map((event) => this.deleteEvent(event)));
+    } catch (error) {
+      logError("Failed to delete events in batch", error);
+      this.showAlert(error.message || "イベントの削除に失敗しました。");
+    }
+  }
+
+  async handleScheduleBatchDelete() {
+    const batchIds = Array.from(this.scheduleBatchSet);
+    if (!batchIds.length) {
+      return;
+    }
+    const schedules = batchIds.map((id) => this.schedules.find((s) => s.id === id)).filter(Boolean);
+    if (!schedules.length) {
+      return;
+    }
+    const confirmed = await this.confirm({
+      title: "選択した日程を削除",
+      description: `${schedules.length}件の日程を削除します。よろしいですか？`,
+      confirmLabel: "削除する",
+      cancelLabel: "キャンセル"
+    });
+    if (!confirmed) {
+      return;
+    }
+    const selectedId = this.selectedScheduleId;
+    this.scheduleBatchSet.clear();
+    if (selectedId && batchIds.includes(selectedId)) {
+      this.selectedScheduleId = "";
+    }
+    this.updateScheduleActionPanelState();
+    try {
+      await Promise.all(schedules.map((schedule) => this.deleteSchedule(schedule)));
+    } catch (error) {
+      logError("Failed to delete schedules in batch", error);
+      this.showAlert(error.message || "日程の削除に失敗しました。");
+    }
   }
 
   updateEventSummary() {
