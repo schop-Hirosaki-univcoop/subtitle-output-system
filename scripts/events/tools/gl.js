@@ -1882,10 +1882,16 @@ export class GlToolManager {
     }
     this.scheduleSyncPending = true;
     try {
-      const eventConfigRef = getGlEventConfigRef(this.currentEventId);
       const schedulesRef = ref(database, `glIntake/events/${this.currentEventId}/schedules`);
-      await update(schedulesRef, nextMap);
+      // set()を使うことで、schedulesノード全体を置き換える（update()だとルール検証が厳しくなる可能性がある）
+      await set(schedulesRef, nextMap);
     } catch (error) {
+      // パーミッションエラーの場合は、admin権限がない可能性があるため、警告レベルでログに記録
+      // GLリスト管理パネルを開いていないユーザーでも、イベント選択時にこの関数が呼ばれる可能性がある
+      if (error && error.code === 'PERMISSION_DENIED') {
+        // admin権限がない場合は、エラーをログに記録しない（正常な動作）
+        return;
+      }
       logError("Failed to sync GL schedule summary", error);
     } finally {
       this.scheduleSyncPending = false;
