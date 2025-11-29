@@ -812,6 +812,12 @@ export class OperatorApp {
     if (!eventId) {
       return null;
     }
+    // 現在選択中のイベントと一致しない場合はnullを返す
+    // これにより、イベントを選んでいない場合や別のイベントの情報が表示されることを防ぐ
+    const activeEventId = String(this.state?.activeEventId || "").trim();
+    if (activeEventId && eventId !== activeEventId) {
+      return null;
+    }
     const scheduleLabel = String((candidate && candidate.scheduleLabel) || (session && session.scheduleLabel) || "").trim();
     let scheduleId = String((candidate && candidate.scheduleId) || (session && session.scheduleId) || "").trim();
     const rawScheduleKey = String(
@@ -4216,15 +4222,20 @@ export class OperatorApp {
         this.state.displaySession = data;
         this.displaySessionStatusFromSnapshot = activeFromSnapshot;
         this.evaluateDisplaySessionActivity("session-snapshot");
-        const rawAssignment = this.getDisplayAssignment();
         // 現在選択中のイベントと一致する場合のみchannelAssignmentを設定
         // イベントが選択されていない場合、または別のイベントの場合はnullに設定
         const activeEventId = String(this.state?.activeEventId || "").trim();
-        if (rawAssignment && activeEventId) {
-          const assignmentEventId = String(rawAssignment.eventId || "").trim();
-          this.state.channelAssignment = assignmentEventId === activeEventId ? rawAssignment : null;
-        } else {
+        if (!activeEventId) {
+          // イベントが選択されていない場合は、channelAssignmentをnullに設定
           this.state.channelAssignment = null;
+        } else {
+          const rawAssignment = this.getDisplayAssignment();
+          if (rawAssignment && activeEventId) {
+            const assignmentEventId = String(rawAssignment.eventId || "").trim();
+            this.state.channelAssignment = assignmentEventId === activeEventId ? rawAssignment : null;
+          } else {
+            this.state.channelAssignment = null;
+          }
         }
         this.updateScheduleContext({ presenceOptions: { allowFallback: false }, trackIntent: false });
         this.updateActionAvailability();
