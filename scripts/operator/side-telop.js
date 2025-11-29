@@ -4,6 +4,7 @@ import { getSideTelopsRef } from "./firebase.js";
 import { normalizeScheduleId } from "../shared/channel-paths.js";
 import { resolveNowShowingReference } from "./questions.js";
 import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn } from "../shared/display-link-logger.js";
+import { openDialog, closeDialog } from "./dialog.js";
 
 const DEFAULT_SIDE_TELOP_ITEMS = [
   "まずは自己紹介です…",
@@ -63,9 +64,7 @@ function renderSideTelopEmptyState(app, visible) {
 function renderSideTelopControls(app, enabled) {
   const disabled = !enabled;
   [
-    app.dom.sideTelopFormSubmit,
-    app.dom.sideTelopFormCancel,
-    app.dom.sideTelopText,
+    app.dom.sideTelopAddButton,
     app.dom.sideTelopEditButton,
     app.dom.sideTelopDeleteButton
   ].forEach((el) => {
@@ -257,38 +256,67 @@ export function renderSideTelopList(app) {
     listEl.appendChild(li);
   });
   if (emptyEl) emptyEl.hidden = hasEntries;
-  if (app.dom.sideTelopText && app.state.sideTelopEditingIndex == null) {
-    app.dom.sideTelopText.value = "";
-  }
-  updateSideTelopFormLabels(app, entries, app.state.sideTelopEditingIndex);
   updateSideTelopSelectionUI(app, entries);
 }
 
-function updateSideTelopFormLabels(app, entriesOverride = null, editingIndexOverride = undefined) {
-  const entries = Array.isArray(entriesOverride)
-    ? entriesOverride
-    : Array.isArray(app.state?.sideTelopEntries)
-    ? app.state.sideTelopEntries
-    : [];
-  const isEditing = Number.isInteger(editingIndexOverride)
-    ? editingIndexOverride >= 0
-    : Number.isInteger(app.state?.sideTelopEditingIndex) && app.state.sideTelopEditingIndex >= 0;
-  const entryCount = entries.length;
-  const textarea = app.dom?.sideTelopText;
-  if (textarea) {
-    if (isEditing) {
-      textarea.placeholder = "編集するテロップの内容を入力";
-    } else {
-      const nextNumber = Math.max(1, entryCount + 1);
-      textarea.placeholder = `右サイドテロップ${nextNumber}`;
+function setSideTelopDialogError(app, message) {
+  const errorEl = app.dom?.sideTelopDialogError;
+  if (!errorEl) return;
+  if (message) {
+    errorEl.textContent = message;
+    errorEl.hidden = false;
+  } else {
+    errorEl.textContent = "";
+    errorEl.hidden = true;
+  }
+}
+
+function setupSideTelopDialog(app) {
+  if (app.sideTelopDialogSetup) {
+    return;
+  }
+  const dialog = app.dom?.sideTelopDialog;
+  if (!dialog) {
+    return;
+  }
+  dialog.querySelectorAll("[data-dialog-dismiss]").forEach((element) => {
+    if (element instanceof HTMLElement) {
+      element.addEventListener("click", (event) => {
+        event.preventDefault();
+        closeSideTelopDialog(app);
+      });
     }
+  });
+  app.sideTelopDialogSetup = true;
+}
+
+function openSideTelopDialog(app, mode = "create", editingIndex = null) {
+  setupSideTelopDialog(app);
+  const dialog = app.dom?.sideTelopDialog;
+  const form = app.dom?.sideTelopDialogForm;
+  const title = app.dom?.sideTelopDialogTitle;
+  const textarea = app.dom?.sideTelopDialogText;
+  const submitButton = app.dom?.sideTelopDialogSubmit;
+  if (!dialog || !form || !textarea) return;
+
+  form.reset();
+  setSideTelopDialogError(app, "");
+  app.state.sideTelopEditingIndex = editingIndex;
+
+  const entries = Array.isArray(app.state?.sideTelopEntries) ? app.state.sideTelopEntries : [];
+  const isEditing = mode === "edit" && Number.isInteger(editingIndex) && editingIndex >= 0 && editingIndex < entries.length;
+
+  if (title) {
+    title.textContent = isEditing ? "右サイドテロップを編集" : "右サイドテロップを追加";
   }
-  if (app.dom.sideTelopFormSubmit) {
-    app.dom.sideTelopFormSubmit.textContent = isEditing ? "更新" : "追加";
+  if (textarea) {
+    textarea.value = isEditing ? ensureString(entries[editingIndex] || "") : "";
   }
-  if (app.dom.sideTelopFormCancel) {
-    app.dom.sideTelopFormCancel.hidden = !isEditing;
+  if (submitButton) {
+    submitButton.textContent = isEditing ? "更新" : "追加";
   }
+
+  openDialog(app, dialog, textarea);
 }
 
 function updateSideTelopSelectionUI(app, entriesOverride = null) {
@@ -349,6 +377,10 @@ export function handleSideTelopListKeydown(app, event) {
   }
 }
 
+export function handleSideTelopAddRequest(app) {
+  openSideTelopDialog(app, "create", null);
+}
+
 export function handleSideTelopEditRequest(app) {
   const entries = Array.isArray(app.state?.sideTelopEntries) ? app.state.sideTelopEntries : [];
   const selectedIndex = clampSelectedIndex(app.state?.sideTelopSelectedIndex, entries, app.state?.sideTelopActiveIndex);
@@ -356,12 +388,7 @@ export function handleSideTelopEditRequest(app) {
     app.toast("テロップを選択してください。", "error");
     return;
   }
-  app.state.sideTelopEditingIndex = selectedIndex;
-  if (app.dom.sideTelopText) {
-    app.dom.sideTelopText.value = ensureString(entries[selectedIndex] || "");
-    app.dom.sideTelopText.focus();
-  }
-  updateSideTelopFormLabels(app, entries, selectedIndex);
+  openSideTelopDialog(app, "edit", selectedIndex);
 }
 
 export function handleSideTelopDeleteRequest(app) {
@@ -379,18 +406,18 @@ export function handleSideTelopDeleteRequest(app) {
   const activeIndex = clampActiveIndex(app.state?.sideTelopActiveIndex ?? 0, entries);
   app.state.sideTelopEditingIndex = null;
   app.state.sideTelopSelectedIndex = clampSelectedIndex(selectedIndex, entries, activeIndex);
-  updateSideTelopFormLabels(app, entries, null);
   updateSideTelopSelectionUI(app, entries);
   persistSideTelops(app, entries, activeIndex);
 }
 
-export function handleSideTelopFormSubmit(app, event) {
+export function handleSideTelopDialogSubmit(app, event) {
   event.preventDefault();
-  const textarea = app.dom?.sideTelopText;
+  const textarea = app.dom?.sideTelopDialogText;
   if (!textarea) return;
   const text = ensureString(textarea.value);
   if (!text) {
-    app.toast("テロップの文言を入力してください。", "error");
+    setSideTelopDialogError(app, "テロップの文言を入力してください。");
+    textarea.focus();
     return;
   }
   const entries = Array.isArray(app.state?.sideTelopEntries) ? [...app.state.sideTelopEntries] : [];
@@ -404,19 +431,26 @@ export function handleSideTelopFormSubmit(app, event) {
   const nextSelection = clampSelectedIndex(editingIndex >= 0 ? editingIndex : entries.length - 1, entries, activeIndex);
   app.state.sideTelopEditingIndex = null;
   app.state.sideTelopSelectedIndex = nextSelection;
-  textarea.value = "";
-  updateSideTelopFormLabels(app, entries, null);
   updateSideTelopSelectionUI(app, entries);
   persistSideTelops(app, entries, activeIndex);
+  closeSideTelopDialog(app);
+}
+
+export function closeSideTelopDialog(app) {
+  const dialog = app.dom?.sideTelopDialog;
+  if (!dialog) return;
+  app.state.sideTelopEditingIndex = null;
+  setSideTelopDialogError(app, "");
+  closeDialog(app, dialog);
+}
+
+// 後方互換性のため残す（非表示フォーム用）
+export function handleSideTelopFormSubmit(app, event) {
+  handleSideTelopDialogSubmit(app, event);
 }
 
 export function handleSideTelopCancel(app) {
-  app.state.sideTelopEditingIndex = null;
-  if (app.dom.sideTelopText) {
-    app.dom.sideTelopText.value = "";
-  }
-  updateSideTelopFormLabels(app, app.state?.sideTelopEntries || [], null);
-  updateSideTelopSelectionUI(app);
+  closeSideTelopDialog(app);
 }
 
 export function handleSideTelopListClick(app, event) {

@@ -1383,10 +1383,18 @@
             </div>
           </div>
           <div class="side-telop-panel__body">
-            <p id="side-telop-empty" class="side-telop-empty">まだ文言がありません。下のフォームから追加してください。</p>
+            <p id="side-telop-empty" class="side-telop-empty">まだ文言がありません。追加ボタンから追加してください。</p>
             <ol id="side-telop-list" class="side-telop-list"></ol>
           </div>
-          <form id="side-telop-form" class="side-telop-form" novalidate>
+          <div class="side-telop-panel__actions">
+            <div class="side-telop-panel__toolbar">
+              <button id="side-telop-add" class="btn btn-primary btn-sm" type="button">追加 <kbd>A</kbd></button>
+              <button id="side-telop-edit" class="btn btn-ghost btn-sm" type="button" disabled>編集 <kbd>E</kbd></button>
+              <button id="side-telop-delete" class="btn btn-ghost btn-sm" type="button" disabled>削除 <kbd>D</kbd></button>
+            </div>
+            <span id="side-telop-selection-label" class="side-telop-selection" role="status">テロップを選択してください</span>
+          </div>
+          <form id="side-telop-form" class="side-telop-form" novalidate hidden>
             <label for="side-telop-text">文言 <kbd>A</kbd></label>
             <textarea
               id="side-telop-text"
@@ -1464,6 +1472,28 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost" id="op-pickup-add-cancel-button" data-dialog-dismiss="true">キャンセル</button>
           <button type="submit" class="btn btn-primary">追加</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="side-telop-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="side-telop-dialog-title" hidden>
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel">
+      <form id="side-telop-dialog-form" class="modal-form">
+        <div class="modal-header">
+          <h2 id="side-telop-dialog-title">右サイドテロップを追加</h2>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label for="side-telop-dialog-text">文言</label>
+            <textarea id="side-telop-dialog-text" class="input" rows="4" placeholder="右サイドテロップに表示する文言を入力" required data-autofocus></textarea>
+          </div>
+          <p id="side-telop-dialog-error" class="form-error" role="alert" hidden></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="side-telop-dialog-cancel" data-dialog-dismiss="true">キャンセル</button>
+          <button type="submit" class="btn btn-primary" id="side-telop-dialog-submit">追加</button>
         </div>
       </form>
     </div>
