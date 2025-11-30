@@ -4953,6 +4953,15 @@ export class EventAdminApp {
 
   commitSelectedScheduleForTelop({ reason = "schedule-commit" } = {}) {
     const scheduleId = ensureString(this.selectedScheduleId);
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[commitSelectedScheduleForTelop] Called (first definition)", {
+        reason,
+        scheduleId: scheduleId || "(empty)",
+        selectedEventId: ensureString(this.selectedEventId) || "(empty)",
+        hostCommittedScheduleId: ensureString(this.hostCommittedScheduleId) || "(empty)",
+        scheduleSelectionCommitted: this.scheduleSelectionCommitted
+      });
+    }
     this.lastScheduleCommitChanged = false;
     if (!scheduleId) {
       this.logFlowState("日程未選択のためテロップ操作の日程を確定できません", { reason });
@@ -4974,6 +4983,16 @@ export class EventAdminApp {
       reason,
       changed
     });
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[commitSelectedScheduleForTelop] About to sync operator context (first definition)", {
+        scheduleId,
+        eventId: ensureString(this.selectedEventId) || "(empty)",
+        hostCommittedScheduleId: ensureString(this.hostCommittedScheduleId) || "(empty)",
+        scheduleSelectionCommitted: this.scheduleSelectionCommitted,
+        hasTools: Boolean(this.tools),
+        hasSyncOperatorContext: Boolean(this.tools?.syncOperatorContext)
+      });
+    }
     if (this.tools?.syncOperatorContext) {
       this.tools
         .syncOperatorContext({ force: true, reason: "schedule-commit" })

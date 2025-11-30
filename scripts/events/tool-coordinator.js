@@ -165,12 +165,15 @@ export class ToolCoordinator {
     if (typeof console !== "undefined" && typeof console.log === "function") {
       console.log("[syncOperatorContext] getCurrentSelectionContext returned", {
         reason,
-        selectionContext: {
-          eventId: selectionContext.eventId || "(empty)",
-          scheduleId: selectionContext.scheduleId || "(empty)",
-          committedScheduleId: selectionContext.committedScheduleId || "(empty)",
-          scheduleSelectionCommitted: this.app?.scheduleSelectionCommitted
-        }
+        eventId: selectionContext.eventId || "(empty)",
+        scheduleId: selectionContext.scheduleId || "(empty)",
+        committedScheduleId: selectionContext.committedScheduleId || "(empty)",
+        committedScheduleLabel: selectionContext.committedScheduleLabel || "(empty)",
+        scheduleSelectionCommitted: this.app?.scheduleSelectionCommitted,
+        selectedEventId: this.app?.selectedEventId || "(empty)",
+        selectedScheduleId: this.app?.selectedScheduleId || "(empty)",
+        hostCommittedScheduleId: this.app?.hostCommittedScheduleId || "(empty)",
+        fullSelectionContext: selectionContext
       });
     }
     const baseContext = overrideContext && typeof overrideContext === "object"
