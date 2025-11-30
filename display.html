@@ -617,6 +617,31 @@
 
         refreshSideTelopFallbackFromMeta(channelEventId, channelScheduleId).catch(() => {});
 
+        function formatScheduleDateForLog(assignment, scheduleId) {
+          if (!assignment) {
+            return "(未設定)";
+          }
+          let startAt = "";
+          if (assignment.startAt) {
+            startAt = String(assignment.startAt).trim();
+          }
+          if (startAt) {
+            try {
+              const date = new Date(startAt);
+              if (!isNaN(date.getTime())) {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, "0");
+                const day = String(date.getDate()).padStart(2, "0");
+                return `${year}.${month}/${day}`;
+              }
+            } catch (e) {
+              // 日付パースに失敗した場合はscheduleLabelを使用
+            }
+          }
+          const scheduleLabel = String(assignment.scheduleLabel || "").trim();
+          return scheduleLabel || "(未設定)";
+        }
+
         function setChannel(eventId, scheduleId) {
           const normalizedEvent = typeof eventId === 'string' ? eventId.trim() : '';
           const normalizedSchedule = typeof scheduleId === 'string' ? scheduleId.trim() : '';
@@ -671,6 +696,26 @@
             queryEventPinned,
             querySchedulePinned
           });
+          
+          // ログ出力: ディスプレイの日程情報
+          if (assignment && assignment.eventId) {
+            const formattedDate = formatScheduleDateForLog(assignment, assignedSchedule);
+            if (typeof console !== "undefined" && typeof console.log === "function") {
+              console.log(`[Display] ディスプレイの日程は${formattedDate}です (applyChannelFromSession)`, {
+                eventId: assignment.eventId,
+                scheduleId: assignedSchedule,
+                scheduleLabel: assignment.scheduleLabel,
+                formattedDate
+              });
+            }
+          } else {
+            if (typeof console !== "undefined" && typeof console.log === "function") {
+              console.log("[Display] ディスプレイの日程は(未設定)です (applyChannelFromSession)", {
+                hasAssignment: !!assignment,
+                eventId: assignment?.eventId || null
+              });
+            }
+          }
 
           if (!queryEventPinned) {
             if (assignedEvent) {
@@ -727,6 +772,27 @@
             eventId: mergedEvent,
             scheduleId: mergedSchedule
           };
+          
+          // ログ出力: ディスプレイの日程情報
+          if (assignment && assignment.eventId) {
+            const formattedDate = formatScheduleDateForLog(assignment, assignmentSchedule);
+            if (typeof console !== "undefined" && typeof console.log === "function") {
+              console.log(`[Display] ディスプレイの日程は${formattedDate}です (session snapshot)`, {
+                eventId: assignment.eventId,
+                scheduleId: assignmentSchedule,
+                scheduleLabel: assignment.scheduleLabel,
+                formattedDate
+              });
+            }
+          } else {
+            if (typeof console !== "undefined" && typeof console.log === "function") {
+              console.log("[Display] ディスプレイの日程は(未設定)です (session snapshot)", {
+                hasAssignment: !!assignment,
+                eventId: assignment?.eventId || null
+              });
+            }
+          }
+          
           applyChannelFromSession(sessionInfo);
           // セッション情報が更新されたら、presenceも更新してoperator側が検知できるようにする
           // presenceエントリのeventIdは常にchannelEventId（クエリパラメータから）を使用

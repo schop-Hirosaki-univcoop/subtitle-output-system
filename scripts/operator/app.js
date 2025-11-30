@@ -2018,6 +2018,42 @@ export class OperatorApp {
    * 現在のチャンネル割当状況をヘッダーバナーに描画します。
    * 表示端末との整合性やconflictの有無によって表示を切り替えます。
    */
+  /**
+   * 日程情報をYYYY.MM/DD形式の文字列にフォーマットします
+   * @param {object} assignment - 割り当て情報
+   * @param {string} scheduleKey - スケジュールキー
+   * @returns {string} フォーマットされた日付文字列
+   */
+  formatScheduleDateForLog(assignment, scheduleKey) {
+    if (!assignment) {
+      return "(未設定)";
+    }
+    const metadataMap = this.state?.scheduleMetadata instanceof Map ? this.state.scheduleMetadata : null;
+    let startAt = "";
+    if (metadataMap && scheduleKey && metadataMap.has(scheduleKey)) {
+      const meta = metadataMap.get(scheduleKey);
+      startAt = String(meta?.startAt || "").trim();
+    }
+    if (!startAt && assignment.startAt) {
+      startAt = String(assignment.startAt).trim();
+    }
+    if (startAt) {
+      try {
+        const date = new Date(startAt);
+        if (!isNaN(date.getTime())) {
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, "0");
+          const day = String(date.getDate()).padStart(2, "0");
+          return `${year}.${month}/${day}`;
+        }
+      } catch (e) {
+        // 日付パースに失敗した場合はscheduleLabelを使用
+      }
+    }
+    const scheduleLabel = String(assignment.scheduleLabel || "").trim();
+    return scheduleLabel || "(未設定)";
+  }
+
   renderChannelBanner() {
     const banner = this.dom.channelBanner;
     if (!banner) {
@@ -2078,6 +2114,29 @@ export class OperatorApp {
       const summary = assignment ? this.describeChannelAssignment() : "";
       assignmentEl.textContent = summary || "—";
     }
+    
+    // ログ出力: ディスプレイの日程情報
+    if (assignment && assignment.eventId) {
+      const scheduleKey = assignment.canonicalScheduleKey || `${assignment.eventId}::${normalizeScheduleId(assignment.scheduleId || "")}`;
+      const formattedDate = this.formatScheduleDateForLog(assignment, scheduleKey);
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log(`[Operator] ディスプレイの日程は${formattedDate}です`, {
+          eventId: assignment.eventId,
+          scheduleId: assignment.scheduleId,
+          scheduleLabel: assignment.scheduleLabel,
+          scheduleKey,
+          formattedDate
+        });
+      }
+    } else {
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log("[Operator] ディスプレイの日程は(未設定)です", {
+          hasAssignment: !!assignment,
+          eventId: assignment?.eventId || null
+        });
+      }
+    }
+    
     if (lockButton) {
       if (assetChecked && !assetAvailable) {
         lockButton.textContent = "ページ未配置";
@@ -2492,6 +2551,20 @@ export class OperatorApp {
         selectionConfirmed: true
       });
       const summary = this.describeChannelAssignment();
+      
+      // ログ出力: ディスプレイの日程情報
+      const scheduleKey = committedKey || `${committedEventId}::${normalizeScheduleId(committedScheduleId)}`;
+      const formattedDate = this.formatScheduleDateForLog(appliedAssignment, scheduleKey);
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log(`[Operator] ディスプレイの日程は${formattedDate}です (lockDisplayToSchedule完了)`, {
+          eventId: committedEventId,
+          scheduleId: committedScheduleId,
+          scheduleLabel: committedLabel,
+          scheduleKey,
+          formattedDate
+        });
+      }
+      
       if (!silent) {
         this.toast(summary ? `${summary}に固定しました。` : "ディスプレイのチャンネルを固定しました。", "success");
       }
@@ -2771,6 +2844,18 @@ export class OperatorApp {
       const assignmentEventId = String(currentAssignment?.eventId || "").trim();
       const assignmentScheduleId = String(currentAssignment?.scheduleId || "").trim();
       const normalizedScheduleId = normalizeScheduleId(scheduleId);
+      
+      // ログ出力: 適用前の日程情報
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        const formattedDate = this.formatScheduleDateForLog({ eventId, scheduleId: normalizedScheduleId, scheduleLabel: resolvedLabel }, scheduleKey);
+        console.log(`[Operator] ディスプレイの日程は${formattedDate}です (applyConsensusAdoption)`, {
+          eventId,
+          scheduleId: normalizedScheduleId,
+          scheduleLabel: resolvedLabel,
+          scheduleKey,
+          formattedDate
+        });
+      }
       
       // 現在のassignmentと一致しない場合、またはassignmentが存在しない場合に自動ロック
       if (!currentAssignment || assignmentEventId !== eventId || assignmentScheduleId !== normalizedScheduleId) {
