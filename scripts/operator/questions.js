@@ -361,6 +361,7 @@ export function renderQuestions(app) {
 }
 
 export function updateScheduleContext(app, options = {}) {
+  const context = app.pageContext || {};
   // デバッグログ: 関数が呼ばれたことを確認
   if (typeof console !== "undefined" && typeof console.log === "function") {
     console.log("[updateScheduleContext] Called", {
@@ -377,7 +378,6 @@ export function updateScheduleContext(app, options = {}) {
   const scheduleLabelEl = app.dom.scheduleLabel;
   const metadataMap = app.state.scheduleMetadata instanceof Map ? app.state.scheduleMetadata : null;
   const eventsMap = app.state.eventsById instanceof Map ? app.state.eventsById : null;
-  const context = app.pageContext || {};
   const {
     syncPresence = true,
     presenceReason = "context-sync",
