@@ -817,13 +817,37 @@ export class OperatorApp {
       const fallbackFromKey = extractScheduleKeyParts((candidate && candidate.scheduleKey) || (session && session.scheduleKey));
       eventId = fallbackFromKey.eventId || "";
     }
+    
+    // デバッグログ: getDisplayAssignmentの処理状況
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[Operator] getDisplayAssignment processing", {
+        hasSession: !!session,
+        hasRawAssignment: !!rawAssignment,
+        hasCandidate: !!candidate,
+        sessionEventId: sessionEventId || "(empty)",
+        sessionScheduleId: sessionScheduleId || "(empty)",
+        candidateEventId: candidate ? String(candidate.eventId || "").trim() : null,
+        resolvedEventId: eventId || "(empty)",
+        activeEventId: String(this.state?.activeEventId || "").trim() || "(empty)"
+      });
+    }
+    
     if (!eventId) {
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log("[Operator] getDisplayAssignment returning null: no eventId");
+      }
       return null;
     }
     // 現在選択中のイベントと一致しない場合はnullを返す
     // これにより、イベントを選んでいない場合や別のイベントの情報が表示されることを防ぐ
     const activeEventId = String(this.state?.activeEventId || "").trim();
     if (activeEventId && eventId !== activeEventId) {
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log("[Operator] getDisplayAssignment returning null: eventId mismatch", {
+          resolvedEventId: eventId,
+          activeEventId: activeEventId
+        });
+      }
       return null;
     }
     const scheduleLabel = String((candidate && candidate.scheduleLabel) || (session && session.scheduleLabel) || "").trim();
@@ -2077,6 +2101,25 @@ export class OperatorApp {
     // 現在選択中のイベントとディスプレイの割り当てのイベントが一致する場合のみ表示
     // これにより、イベントを選んでいないのに別のイベントの情報が表示されることを防ぐ
     const assignment = rawAssignment && String(rawAssignment.eventId || "").trim() === eventId ? rawAssignment : null;
+    
+    // デバッグログ: assignmentの取得状況を確認
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[Operator] renderChannelBanner assignment check", {
+        eventId,
+        hasChannelAssignment: !!this.state?.channelAssignment,
+        channelAssignmentEventId: this.state?.channelAssignment ? String(this.state.channelAssignment.eventId || "").trim() : null,
+        channelAssignmentScheduleId: this.state?.channelAssignment ? String(this.state.channelAssignment.scheduleId || "").trim() : null,
+        hasDisplaySession: !!this.state?.displaySession,
+        displaySessionEventId: this.state?.displaySession ? String(this.state.displaySession.eventId || "").trim() : null,
+        displaySessionScheduleId: this.state?.displaySession ? String(this.state.displaySession.scheduleId || "").trim() : null,
+        hasDisplaySessionAssignment: this.state?.displaySession ? !!(this.state.displaySession.assignment && typeof this.state.displaySession.assignment === "object") : false,
+        rawAssignmentEventId: rawAssignment ? String(rawAssignment.eventId || "").trim() : null,
+        rawAssignmentScheduleId: rawAssignment ? String(rawAssignment.scheduleId || "").trim() : null,
+        assignmentEventId: assignment ? String(assignment.eventId || "").trim() : null,
+        assignmentScheduleId: assignment ? String(assignment.scheduleId || "").trim() : null,
+        assignmentMatches: rawAssignment ? String(rawAssignment.eventId || "").trim() === eventId : false
+      });
+    }
     const channelAligned = !this.hasChannelMismatch();
     const telopEnabled = this.isTelopEnabled();
     const assetChecked = this.state.displayAssetChecked === true;
