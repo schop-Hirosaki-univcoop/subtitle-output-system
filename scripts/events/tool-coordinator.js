@@ -162,6 +162,17 @@ export class ToolCoordinator {
 
   async syncOperatorContext({ context: overrideContext = null, force = false, reason = "unspecified" } = {}) {
     const selectionContext = this.app?.getCurrentSelectionContext?.() || {};
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[syncOperatorContext] getCurrentSelectionContext returned", {
+        reason,
+        selectionContext: {
+          eventId: selectionContext.eventId || "(empty)",
+          scheduleId: selectionContext.scheduleId || "(empty)",
+          committedScheduleId: selectionContext.committedScheduleId || "(empty)",
+          scheduleSelectionCommitted: this.app?.scheduleSelectionCommitted
+        }
+      });
+    }
     const baseContext = overrideContext && typeof overrideContext === "object"
       ? { ...overrideContext }
       : { ...selectionContext };

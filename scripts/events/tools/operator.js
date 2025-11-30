@@ -135,6 +135,15 @@ export class OperatorToolManager {
         summary,
         ready: Boolean(app)
       });
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log("[OperatorToolManager.applyContext] Calling setContext with payload", {
+          eventId: payload.eventId || "(empty)",
+          scheduleId: payload.scheduleId || "(empty)",
+          committedScheduleId: payload.committedScheduleId || "(empty)",
+          selectionConfirmed: payload.selectionConfirmed,
+          summary
+        });
+      }
       app?.setContext?.(payload);
       this.app?.logFlowEvent?.("テロップ操作パネルへのコンテキスト適用が完了しました", {
         summary
