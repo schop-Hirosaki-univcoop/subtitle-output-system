@@ -4424,10 +4424,32 @@ export class OperatorApp {
             if (isActive) {
               hasActiveSession = true;
               activeSessions.push({ uid, session: data });
-              // 最初の有効なセッションを代表として使用
-              if (!representativeSession) {
+              
+              // assignmentが存在するセッションを優先的に代表として使用
+              const sessionAssignment = data.assignment && typeof data.assignment === "object" ? data.assignment : null;
+              const sessionEventId = String(data.eventId || "").trim();
+              const sessionScheduleId = String(data.scheduleId || "").trim();
+              const hasAssignment = !!sessionAssignment;
+              const hasEventAndSchedule = !!sessionEventId && !!sessionScheduleId;
+              
+              // まだ代表セッションが選ばれていない場合、または現在の代表セッションにassignmentがなく、このセッションにassignmentがある場合
+              if (!representativeSession || (!representativeAssignment && hasAssignment)) {
                 representativeSession = data;
-                representativeAssignment = data.assignment && typeof data.assignment === "object" ? data.assignment : null;
+                representativeAssignment = sessionAssignment;
+                
+                // assignmentが存在しないが、eventIdとscheduleIdがある場合は、それらからassignmentを構築
+                if (!representativeAssignment && hasEventAndSchedule) {
+                  const scheduleLabel = String(data.scheduleLabel || "").trim() || sessionScheduleId;
+                  const normalizedScheduleId = normalizeScheduleId(sessionScheduleId);
+                  representativeAssignment = {
+                    eventId: sessionEventId,
+                    scheduleId: normalizedScheduleId,
+                    scheduleLabel: scheduleLabel,
+                    scheduleKey: `${sessionEventId}::${normalizedScheduleId}`,
+                    canonicalScheduleId: normalizedScheduleId,
+                    canonicalScheduleKey: `${sessionEventId}::${normalizedScheduleId}`
+                  };
+                }
               }
             }
           });
@@ -4440,13 +4462,52 @@ export class OperatorApp {
             hasActiveSession = true;
             representativeSession = raw;
             representativeAssignment = raw.assignment && typeof raw.assignment === "object" ? raw.assignment : null;
+            
+            // assignmentが存在しないが、eventIdとscheduleIdがある場合は、それらからassignmentを構築
+            if (!representativeAssignment) {
+              const sessionEventId = String(raw.eventId || "").trim();
+              const sessionScheduleId = String(raw.scheduleId || "").trim();
+              if (sessionEventId && sessionScheduleId) {
+                const scheduleLabel = String(raw.scheduleLabel || "").trim() || sessionScheduleId;
+                const normalizedScheduleId = normalizeScheduleId(sessionScheduleId);
+                representativeAssignment = {
+                  eventId: sessionEventId,
+                  scheduleId: normalizedScheduleId,
+                  scheduleLabel: scheduleLabel,
+                  scheduleKey: `${sessionEventId}::${normalizedScheduleId}`,
+                  canonicalScheduleId: normalizedScheduleId,
+                  canonicalScheduleKey: `${sessionEventId}::${normalizedScheduleId}`
+                };
+              }
+            }
           }
         }
 
+        // representativeSessionにassignmentを設定（getDisplayAssignment()で参照されるため）
+        if (representativeSession && representativeAssignment) {
+          representativeSession.assignment = representativeAssignment;
+        }
+        
         this.state.displaySession = representativeSession;
         this.state.displaySessions = activeSessions.map(({ session }) => session); // 全有効セッションを保存
         this.displaySessionStatusFromSnapshot = hasActiveSession;
         this.evaluateDisplaySessionActivity("session-snapshot");
+        
+        // デバッグログ: セッション情報を確認
+        if (typeof console !== "undefined" && typeof console.log === "function") {
+          console.log("[Operator] Display session monitor snapshot", {
+            activeEventId,
+            hasActiveSession,
+            activeSessionsCount: activeSessions.length,
+            hasRepresentativeSession: !!representativeSession,
+            hasRepresentativeAssignment: !!representativeAssignment,
+            representativeSessionEventId: representativeSession ? String(representativeSession.eventId || "").trim() : null,
+            representativeSessionScheduleId: representativeSession ? String(representativeSession.scheduleId || "").trim() : null,
+            representativeAssignmentEventId: representativeAssignment ? String(representativeAssignment.eventId || "").trim() : null,
+            representativeAssignmentScheduleId: representativeAssignment ? String(representativeAssignment.scheduleId || "").trim() : null,
+            representativeAssignmentScheduleLabel: representativeAssignment ? String(representativeAssignment.scheduleLabel || "").trim() : null
+          });
+        }
         
         // 現在選択中のイベントと一致する場合のみchannelAssignmentを設定
         // イベントが選択されていない場合、または別のイベントの場合はnullに設定
@@ -4457,13 +4518,54 @@ export class OperatorApp {
           if (representativeAssignment) {
             const assignmentEventId = String(representativeAssignment.eventId || "").trim();
             this.state.channelAssignment = assignmentEventId === activeEventId ? representativeAssignment : null;
+            
+            // デバッグログ: channelAssignment設定
+            if (typeof console !== "undefined" && typeof console.log === "function") {
+              console.log("[Operator] Setting channelAssignment from representativeAssignment", {
+                assignmentEventId,
+                activeEventId,
+                matches: assignmentEventId === activeEventId,
+                channelAssignment: this.state.channelAssignment ? {
+                  eventId: this.state.channelAssignment.eventId,
+                  scheduleId: this.state.channelAssignment.scheduleId,
+                  scheduleLabel: this.state.channelAssignment.scheduleLabel
+                } : null
+              });
+            }
           } else {
             const rawAssignment = this.getDisplayAssignment();
             if (rawAssignment && activeEventId) {
               const assignmentEventId = String(rawAssignment.eventId || "").trim();
               this.state.channelAssignment = assignmentEventId === activeEventId ? rawAssignment : null;
+              
+              // デバッグログ: channelAssignment設定（フォールバック）
+              if (typeof console !== "undefined" && typeof console.log === "function") {
+                console.log("[Operator] Setting channelAssignment from getDisplayAssignment (fallback)", {
+                  assignmentEventId,
+                  activeEventId,
+                  matches: assignmentEventId === activeEventId,
+                  channelAssignment: this.state.channelAssignment ? {
+                    eventId: this.state.channelAssignment.eventId,
+                    scheduleId: this.state.channelAssignment.scheduleId,
+                    scheduleLabel: this.state.channelAssignment.scheduleLabel
+                  } : null
+                });
+              }
             } else {
               this.state.channelAssignment = null;
+              
+              // デバッグログ: channelAssignmentがnullに設定された
+              if (typeof console !== "undefined" && typeof console.log === "function") {
+                console.log("[Operator] channelAssignment set to null", {
+                  hasRawAssignment: !!rawAssignment,
+                  activeEventId,
+                  representativeSession: representativeSession ? {
+                    eventId: representativeSession.eventId,
+                    scheduleId: representativeSession.scheduleId,
+                    hasAssignment: !!representativeSession.assignment
+                  } : null
+                });
+              }
             }
           }
         }
