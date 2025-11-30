@@ -10,7 +10,25 @@ if (typeof window !== "undefined") {
   window.operatorEmbed = {
     app,
     setContext(context) {
-      return app.setExternalContext(context);
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log("[operatorEmbed.setContext] Called", {
+          eventId: context?.eventId || "(empty)",
+          scheduleId: context?.scheduleId || "(empty)",
+          selectionConfirmed: context?.selectionConfirmed,
+          hasApp: !!app,
+          hasSetExternalContext: app ? typeof app.setExternalContext === "function" : false
+        });
+      }
+      if (app && typeof app.setExternalContext === "function") {
+        return app.setExternalContext(context);
+      } else {
+        if (typeof console !== "undefined" && typeof console.warn === "function") {
+          console.warn("[operatorEmbed.setContext] Cannot call setExternalContext", {
+            hasApp: !!app,
+            hasSetExternalContext: app ? typeof app.setExternalContext === "function" : false
+          });
+        }
+      }
     },
     waitUntilReady() {
       return app.waitUntilReady();

@@ -144,7 +144,27 @@ export class OperatorToolManager {
           summary
         });
       }
-      app?.setContext?.(payload);
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log("[OperatorToolManager.applyContext] About to call setContext", {
+          hasApp: !!app,
+          hasSetContext: !!(app && typeof app.setContext === "function"),
+          payload
+        });
+      }
+      if (app && typeof app.setContext === "function") {
+        app.setContext(payload);
+        if (typeof console !== "undefined" && typeof console.log === "function") {
+          console.log("[OperatorToolManager.applyContext] setContext called successfully");
+        }
+      } else {
+        if (typeof console !== "undefined" && typeof console.warn === "function") {
+          console.warn("[OperatorToolManager.applyContext] Cannot call setContext", {
+            hasApp: !!app,
+            hasSetContext: app ? typeof app.setContext === "function" : false,
+            appType: app ? typeof app : "null/undefined"
+          });
+        }
+      }
       this.app?.logFlowEvent?.("テロップ操作パネルへのコンテキスト適用が完了しました", {
         summary
       });
