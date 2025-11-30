@@ -363,7 +363,14 @@ export function renderQuestions(app) {
 export function updateScheduleContext(app, options = {}) {
   // デバッグログ: 関数が呼ばれたことを確認
   if (typeof console !== "undefined" && typeof console.log === "function") {
-    console.log("[updateScheduleContext] Called", options);
+    console.log("[updateScheduleContext] Called", {
+      options,
+      pageContext: {
+        eventId: context.eventId || "(empty)",
+        scheduleId: context.scheduleId || "(empty)",
+        selectionConfirmed: context.selectionConfirmed
+      }
+    });
   }
   const rangeEl = app.dom.scheduleTimeRange;
   const eventLabelEl = app.dom.scheduleEventName;
@@ -389,10 +396,26 @@ export function updateScheduleContext(app, options = {}) {
   const contextEventId = ensure(context.eventId);
   const contextScheduleId = ensure(context.scheduleId);
   const contextScheduleKey = ensure(context.scheduleKey);
+  
+  // デバッグログ: contextの値を確認
+  if (typeof console !== "undefined" && typeof console.log === "function") {
+    console.log("[updateScheduleContext] Context values", {
+      contextEventId: contextEventId || "(empty)",
+      contextScheduleId: contextScheduleId || "(empty)",
+      contextScheduleKey: contextScheduleKey || "(empty)",
+      contextSelectionConfirmed,
+      selectionConfirmedOption
+    });
+  }
+  
   let eventId = contextEventId;
   let scheduleId = contextScheduleId;
   let scheduleKey = contextSelectionConfirmed ? ensure(app.state.currentSchedule) : "";
   if (!scheduleKey && contextSelectionConfirmed) {
+    scheduleKey = contextScheduleKey;
+  }
+  // contextSelectionConfirmedがfalseでも、contextScheduleKeyがある場合は使用
+  if (!scheduleKey && contextScheduleKey) {
     scheduleKey = contextScheduleKey;
   }
   let assignmentLabel = "";
