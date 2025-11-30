@@ -2081,10 +2081,19 @@ export class OperatorApp {
   renderChannelBanner() {
     const banner = this.dom.channelBanner;
     if (!banner) {
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log("[Operator] renderChannelBanner: banner element not found");
+      }
       return;
     }
     const eventId = String(this.state?.activeEventId || "").trim();
     if (!eventId || !this.isAuthorized) {
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log("[Operator] renderChannelBanner: early return", {
+          eventId: eventId || "(empty)",
+          isAuthorized: this.isAuthorized
+        });
+      }
       banner.hidden = true;
       return;
     }

@@ -520,6 +520,16 @@ export function updateScheduleContext(app, options = {}) {
   app.state.activeScheduleId = scheduleId;
   app.state.activeEventName = eventName;
   app.state.activeScheduleLabel = scheduleLabel;
+  
+  // デバッグログ: activeEventIdの設定を確認
+  if (typeof console !== "undefined" && typeof console.log === "function") {
+    console.log("[Operator] updateScheduleContext: Setting activeEventId", {
+      eventId: eventId || "(empty)",
+      scheduleId: scheduleId || "(empty)",
+      activeEventId: app.state.activeEventId || "(empty)",
+      activeScheduleId: app.state.activeScheduleId || "(empty)"
+    });
+  }
 
   if (eventLabelEl) {
     eventLabelEl.textContent = eventName || "イベント未選択";
