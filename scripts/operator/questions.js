@@ -384,9 +384,11 @@ export function updateScheduleContext(app, options = {}) {
     typeof selectionConfirmedOption === "boolean"
       ? selectionConfirmedOption
       : context.selectionConfirmed === true;
-  const contextEventId = contextSelectionConfirmed ? ensure(context.eventId) : "";
-  const contextScheduleId = contextSelectionConfirmed ? ensure(context.scheduleId) : "";
-  const contextScheduleKey = contextSelectionConfirmed ? ensure(context.scheduleKey) : "";
+  // contextSelectionConfirmedがfalseでも、pageContextにeventIdやscheduleIdがある場合は使用する
+  // （lockDisplayToScheduleでpageContextを更新した後に、別の処理でupdateScheduleContextが呼ばれる場合に対応）
+  const contextEventId = ensure(context.eventId);
+  const contextScheduleId = ensure(context.scheduleId);
+  const contextScheduleKey = ensure(context.scheduleKey);
   let eventId = contextEventId;
   let scheduleId = contextScheduleId;
   let scheduleKey = contextSelectionConfirmed ? ensure(app.state.currentSchedule) : "";
@@ -523,11 +525,14 @@ export function updateScheduleContext(app, options = {}) {
     }
   }
 
+  // 選択確定状態: applySelectionがtrueでeventIdとscheduleIdが存在し、
+  // selectionConfirmedOptionが明示的に指定されている場合はそれを使用、
+  // そうでない場合はcontextSelectionConfirmedまたはeventId/scheduleIdが存在することで判定
   const nextSelectionConfirmed =
     applySelection && eventId && scheduleId
       ? typeof selectionConfirmedOption === "boolean"
         ? selectionConfirmedOption
-        : contextSelectionConfirmed && !assignmentDerivedSelection
+        : contextSelectionConfirmed || (!assignmentDerivedSelection && Boolean(contextEventId || contextScheduleId))
       : false;
   
   // デバッグログ: 選択状態を確認
