@@ -144,15 +144,19 @@ export class OperatorToolManager {
           summary
         });
       }
+      
+      // window.operatorEmbed.setContextを直接呼ぶ（appオブジェクトにはsetContextメソッドがない）
+      const operatorEmbed = window.operatorEmbed;
       if (typeof console !== "undefined" && typeof console.log === "function") {
         console.log("[OperatorToolManager.applyContext] About to call setContext", {
           hasApp: !!app,
-          hasSetContext: !!(app && typeof app.setContext === "function"),
+          hasOperatorEmbed: !!operatorEmbed,
+          hasSetContext: !!(operatorEmbed && typeof operatorEmbed.setContext === "function"),
           payload
         });
       }
-      if (app && typeof app.setContext === "function") {
-        app.setContext(payload);
+      if (operatorEmbed && typeof operatorEmbed.setContext === "function") {
+        operatorEmbed.setContext(payload);
         if (typeof console !== "undefined" && typeof console.log === "function") {
           console.log("[OperatorToolManager.applyContext] setContext called successfully");
         }
@@ -160,8 +164,8 @@ export class OperatorToolManager {
         if (typeof console !== "undefined" && typeof console.warn === "function") {
           console.warn("[OperatorToolManager.applyContext] Cannot call setContext", {
             hasApp: !!app,
-            hasSetContext: app ? typeof app.setContext === "function" : false,
-            appType: app ? typeof app : "null/undefined"
+            hasOperatorEmbed: !!operatorEmbed,
+            hasSetContext: operatorEmbed ? typeof operatorEmbed.setContext === "function" : false
           });
         }
       }
