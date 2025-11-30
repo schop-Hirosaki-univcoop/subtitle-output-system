@@ -2763,6 +2763,25 @@ export class OperatorApp {
         useActiveSchedule: true
       });
     }
+
+    // ディスプレイが接続されている場合、自動的にロックを試みる
+    const displayActive = this.isDisplayOnline();
+    if (displayActive && this.isTelopEnabled()) {
+      const currentAssignment = this.state?.channelAssignment || this.getDisplayAssignment();
+      const assignmentEventId = String(currentAssignment?.eventId || "").trim();
+      const assignmentScheduleId = String(currentAssignment?.scheduleId || "").trim();
+      const normalizedScheduleId = normalizeScheduleId(scheduleId);
+      
+      // 現在のassignmentと一致しない場合、またはassignmentが存在しない場合に自動ロック
+      if (!currentAssignment || assignmentEventId !== eventId || assignmentScheduleId !== normalizedScheduleId) {
+        this.lockDisplayToSchedule(eventId, scheduleId, resolvedLabel, { silent: true }).catch((err) => {
+          // エラーが発生してもログに残すだけで、UI更新を阻害しない
+          if (typeof console !== "undefined" && typeof console.warn === "function") {
+            console.warn("[applyConsensusAdoption] Failed to auto-lock display schedule:", err);
+          }
+        });
+      }
+    }
   }
 
   /**
