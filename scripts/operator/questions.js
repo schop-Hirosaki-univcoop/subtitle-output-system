@@ -364,13 +364,16 @@ export function updateScheduleContext(app, options = {}) {
   const context = app.pageContext || {};
   // デバッグログ: 関数が呼ばれたことを確認
   if (typeof console !== "undefined" && typeof console.log === "function") {
+    const stackLines = new Error().stack?.split('\n') || [];
+    const callerInfo = stackLines[2] || stackLines[1] || "unknown";
     console.log("[updateScheduleContext] Called", {
       options,
       pageContext: {
         eventId: context.eventId || "(empty)",
         scheduleId: context.scheduleId || "(empty)",
         selectionConfirmed: context.selectionConfirmed
-      }
+      },
+      caller: callerInfo.trim()
     });
   }
   const rangeEl = app.dom.scheduleTimeRange;

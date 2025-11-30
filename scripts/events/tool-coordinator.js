@@ -271,6 +271,22 @@ export class ToolCoordinator {
     baseContext.operatorMode = normalizeOperatorMode(
       baseContext.operatorMode ?? this.app.operatorMode
     );
+    // selectionConfirmedを設定: 日程が確定されている場合にtrue
+    const finalCommittedScheduleId = ensure(baseContext.committedScheduleId);
+    const hasCommittedSchedule = Boolean(finalCommittedScheduleId);
+    const hasEventAndSchedule = Boolean(ensure(baseContext.eventId) && ensure(baseContext.scheduleId));
+    baseContext.selectionConfirmed = hasCommittedSchedule || (hasEventAndSchedule && this.app?.scheduleSelectionCommitted === true);
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[syncOperatorContext] Setting selectionConfirmed", {
+        selectionConfirmed: baseContext.selectionConfirmed,
+        hasCommittedSchedule,
+        hasEventAndSchedule,
+        scheduleSelectionCommitted: this.app?.scheduleSelectionCommitted,
+        eventId: baseContext.eventId || "(empty)",
+        scheduleId: baseContext.scheduleId || "(empty)",
+        committedScheduleId: finalCommittedScheduleId || "(empty)"
+      });
+    }
     const signature = this.buildOperatorContextSignature(baseContext);
     const alreadyApplied = signature === this.lastOperatorContextSignature;
     this.logFlow("テロップ操作パネルへのコンテキスト同期を要求しました", {

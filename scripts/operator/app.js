@@ -3084,7 +3084,8 @@ export class OperatorApp {
         eventId: context.eventId || "(empty)",
         scheduleId: context.scheduleId || "(empty)",
         selectionConfirmed: context.selectionConfirmed,
-        committedScheduleId: context.committedScheduleId || "(empty)"
+        committedScheduleId: context.committedScheduleId || "(empty)",
+        stack: new Error().stack
       });
     }
     const ensure = (value) => String(value ?? "").trim();
