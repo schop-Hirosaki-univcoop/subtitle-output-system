@@ -362,20 +362,6 @@ export function renderQuestions(app) {
 
 export function updateScheduleContext(app, options = {}) {
   const context = app.pageContext || {};
-  // デバッグログ: 関数が呼ばれたことを確認
-  if (typeof console !== "undefined" && typeof console.log === "function") {
-    const stackLines = new Error().stack?.split('\n') || [];
-    const callerInfo = stackLines[2] || stackLines[1] || "unknown";
-    console.log("[updateScheduleContext] Called", {
-      options,
-      pageContext: {
-        eventId: context.eventId || "(empty)",
-        scheduleId: context.scheduleId || "(empty)",
-        selectionConfirmed: context.selectionConfirmed
-      },
-      caller: callerInfo.trim()
-    });
-  }
   const rangeEl = app.dom.scheduleTimeRange;
   const eventLabelEl = app.dom.scheduleEventName;
   const scheduleLabelEl = app.dom.scheduleLabel;
@@ -386,7 +372,8 @@ export function updateScheduleContext(app, options = {}) {
     presenceReason = "context-sync",
     presenceOptions = undefined,
     trackIntent = syncPresence,
-    selectionConfirmed: selectionConfirmedOption
+    selectionConfirmed: selectionConfirmedOption,
+    force = false
   } = typeof options === "object" && options !== null ? options : {};
 
   const ensure = (value) => String(value ?? "").trim();
@@ -572,6 +559,43 @@ export function updateScheduleContext(app, options = {}) {
       assignmentDerivedSelection,
       selectionConfirmedOption
     });
+  }
+
+  // コンテキストが実際に変更されるかどうかをチェック（forceオプションが指定されている場合はスキップ）
+  let shouldSkipUpdate = false;
+  if (!force) {
+    const currentEventId = ensure(context.eventId);
+    const currentScheduleId = ensure(context.scheduleId);
+    const currentScheduleKey = ensure(context.scheduleKey);
+    const currentEventName = ensure(context.eventName);
+    const currentScheduleLabel = ensure(context.scheduleLabel);
+    const currentStartAt = ensure(context.startAt);
+    const currentEndAt = ensure(context.endAt);
+    const currentSelectionConfirmed = context.selectionConfirmed === true;
+
+    const eventIdChanged = currentEventId !== eventId;
+    const scheduleIdChanged = currentScheduleId !== scheduleId;
+    const scheduleKeyChanged = currentScheduleKey !== scheduleKey;
+    const eventNameChanged = currentEventName !== eventName;
+    const scheduleLabelChanged = currentScheduleLabel !== scheduleLabel;
+    const startAtChanged = currentStartAt !== startText;
+    const endAtChanged = currentEndAt !== endText;
+    const selectionConfirmedChanged = currentSelectionConfirmed !== nextSelectionConfirmed;
+
+    const hasChanges = eventIdChanged || scheduleIdChanged || scheduleKeyChanged ||
+      eventNameChanged || scheduleLabelChanged || startAtChanged || endAtChanged || selectionConfirmedChanged;
+
+    // コンテキストに変更がなく、かつ明示的なオプション（syncPresence、trackIntent、selectionConfirmedOption）が指定されていない場合、更新をスキップ
+    // ただし、syncPresenceやtrackIntentが明示的にtrueの場合は、それらの処理は実行する必要があるため、スキップしない
+    shouldSkipUpdate = !hasChanges && 
+      syncPresence === false && 
+      trackIntent === false && 
+      typeof selectionConfirmedOption === "undefined";
+  }
+
+  // 更新をスキップする場合、早期リターン
+  if (shouldSkipUpdate) {
+    return;
   }
 
   app.pageContext = {
