@@ -3249,10 +3249,23 @@ export class OperatorApp {
     if (ownerUid) {
       const currentUid = ensure(this.operatorIdentity?.uid || auth.currentUser?.uid || "");
       if (!currentUid) {
+        if (typeof console !== "undefined" && typeof console.log === "function") {
+          console.log("[setExternalContext] Early return: no currentUid, storing as pending", {
+            ownerUid,
+            hasOperatorIdentity: !!this.operatorIdentity,
+            hasAuthCurrentUser: !!auth.currentUser
+          });
+        }
         this.pendingExternalContext = { ...context };
         return;
       }
       if (ownerUid !== currentUid) {
+        if (typeof console !== "undefined" && typeof console.log === "function") {
+          console.log("[setExternalContext] Early return: ownerUid mismatch", {
+            ownerUid,
+            currentUid
+          });
+        }
         return;
       }
     }
@@ -3371,10 +3384,12 @@ export class OperatorApp {
       ? { allowFallback: false }
       : { allowFallback: false, publishSchedule: false, publishEvent: false, useActiveSchedule: false };
     // selectionConfirmedがtrueの場合、明示的に渡してupdateScheduleContext内で正しく処理されるようにする
+    // force: trueを指定して、外部コンテキストからの更新を確実に実行する
     this.updateScheduleContext({ 
       syncPresence: false, 
       presenceOptions,
-      selectionConfirmed: selectionConfirmed ? true : undefined
+      selectionConfirmed: selectionConfirmed ? true : undefined,
+      force: true
     });
     this.refreshChannelSubscriptions();
     if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== effectiveEventId) {
@@ -4539,7 +4554,7 @@ export class OperatorApp {
         if (representativeSession && representativeAssignment) {
           representativeSession.assignment = representativeAssignment;
         }
-        
+
         this.state.displaySession = representativeSession;
         this.state.displaySessions = activeSessions.map(({ session }) => session); // 全有効セッションを保存
         this.displaySessionStatusFromSnapshot = hasActiveSession;
