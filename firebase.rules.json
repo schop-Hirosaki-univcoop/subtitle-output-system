@@ -28,7 +28,7 @@
             "$uid": {
               ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true || (auth.token.firebase.sign_in_provider === 'anonymous' && auth.uid == $uid))",
               ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true || (auth.token.firebase.sign_in_provider === 'anonymous' && auth.uid == $uid))",
-              ".validate": "!newData.exists() || (newData.hasChildren(['uid','sessionId','status']) && newData.child('uid').isString() && newData.child('uid').val() == $uid && newData.child('sessionId').isString() && newData.child('status').isString() && (!newData.child('eventId').exists() || newData.child('eventId').isString()) && (!newData.child('scheduleId').exists() || newData.child('scheduleId').isString()) && (!newData.child('scheduleLabel').exists() || newData.child('scheduleLabel').isString()) && (!newData.child('assignment').exists() || newData.child('assignment').hasChildren(['eventId','scheduleId']) && newData.child('assignment').child('eventId').isString() && newData.child('assignment').child('scheduleId').isString()) && (!newData.child('startedAt').exists() || newData.child('startedAt').isNumber()) && (!newData.child('lastSeenAt').exists() || newData.child('lastSeenAt').isNumber()) && (!newData.child('expiresAt').exists() || newData.child('expiresAt').isNumber()))",
+              ".validate": "!newData.exists() || (newData.hasChildren(['uid','sessionId','status']) && newData.child('uid').isString() && newData.child('uid').val() == $uid && newData.child('sessionId').isString() && newData.child('status').isString() && (!newData.child('eventId').exists() || newData.child('eventId').isString()) && (!newData.child('scheduleId').exists() || newData.child('scheduleId').isString()) && (!newData.child('scheduleLabel').exists() || newData.child('scheduleLabel').isString()) && (!newData.child('assignment').exists() || newData.child('assignment').hasChildren(['eventId','scheduleId']) && newData.child('assignment').child('eventId').isString() && newData.child('assignment').child('scheduleId').isString()) && (!newData.child('startedAt').exists() || newData.child('startedAt').isNumber()) && (!newData.child('lastSeenAt').exists() || newData.child('lastSeenAt').isNumber()) && (!newData.child('expiresAt').exists() || newData.child('expiresAt').isNumber()) && (!newData.child('lastPresenceReason').exists() || newData.child('lastPresenceReason').isString()) && (!newData.child('lastPresenceUid').exists() || newData.child('lastPresenceUid').isString()) && (!newData.child('lastPresenceClientTimestamp').exists() || newData.child('lastPresenceClientTimestamp').isNumber()) && (!newData.child('presenceUpdatedAt').exists() || newData.child('presenceUpdatedAt').isNumber()))",
               "uid": { ".validate": "newData.isString() && newData.val() == $uid" },
               "sessionId": { ".validate": "newData.isString()" },
               "status": { ".validate": "newData.isString() && newData.val().matches(/^(active|expired|ended|superseded)$/)" },
@@ -53,6 +53,10 @@
               "endedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
               "endedReason": { ".validate": "newData.isString() || !newData.exists()" },
               "grantedBy": { ".validate": "newData.isString() || !newData.exists()" },
+              "lastPresenceReason": { ".validate": "newData.isString() || !newData.exists()" },
+              "lastPresenceUid": { ".validate": "newData.isString() || !newData.exists()" },
+              "lastPresenceClientTimestamp": { ".validate": "newData.isNumber() || !newData.exists()" },
+              "presenceUpdatedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
               "$other": { ".validate": false }
             }
           },
