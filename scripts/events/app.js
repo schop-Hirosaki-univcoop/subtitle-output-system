@@ -3657,7 +3657,20 @@ export class EventAdminApp {
           reason: "flow-navigation"
         };
         this.awaitingScheduleConflictPrompt = true;
+        if (typeof console !== "undefined" && typeof console.log === "function") {
+          console.log("[handleFlowNavigation] About to call commitSelectedScheduleForTelop", {
+            selectedScheduleId: ensureString(this.selectedScheduleId) || "(empty)",
+            selectedEventId: ensureString(this.selectedEventId) || "(empty)",
+            hostCommittedScheduleId: ensureString(this.hostCommittedScheduleId) || "(empty)"
+          });
+        }
         const committed = this.commitSelectedScheduleForTelop({ reason: "navigation" });
+        if (typeof console !== "undefined" && typeof console.log === "function") {
+          console.log("[handleFlowNavigation] commitSelectedScheduleForTelop returned", {
+            committed,
+            selectedScheduleId: ensureString(this.selectedScheduleId) || "(empty)"
+          });
+        }
         if (!committed) {
           this.pendingNavigationTarget = "";
           this.pendingNavigationMeta = null;
@@ -4949,56 +4962,6 @@ export class EventAdminApp {
       });
     }
     return changed;
-  }
-
-  commitSelectedScheduleForTelop({ reason = "schedule-commit" } = {}) {
-    const scheduleId = ensureString(this.selectedScheduleId);
-    if (typeof console !== "undefined" && typeof console.log === "function") {
-      console.log("[commitSelectedScheduleForTelop] Called (first definition)", {
-        reason,
-        scheduleId: scheduleId || "(empty)",
-        selectedEventId: ensureString(this.selectedEventId) || "(empty)",
-        hostCommittedScheduleId: ensureString(this.hostCommittedScheduleId) || "(empty)",
-        scheduleSelectionCommitted: this.scheduleSelectionCommitted
-      });
-    }
-    this.lastScheduleCommitChanged = false;
-    if (!scheduleId) {
-      this.logFlowState("日程未選択のためテロップ操作の日程を確定できません", { reason });
-      return false;
-    }
-    const schedule = this.getSelectedSchedule();
-    const changed = this.setHostCommittedSchedule(scheduleId, {
-      schedule,
-      reason,
-      sync: true,
-      updateContext: false,
-      force: true
-    });
-    this.lastScheduleCommitChanged = changed;
-    this.scheduleSelectionCommitted = true;
-    this.logFlowState("テロップ操作の日程の確定リクエストを処理しました", {
-      scheduleId,
-      scheduleLabel: schedule?.label || scheduleId,
-      reason,
-      changed
-    });
-    if (typeof console !== "undefined" && typeof console.log === "function") {
-      console.log("[commitSelectedScheduleForTelop] About to sync operator context (first definition)", {
-        scheduleId,
-        eventId: ensureString(this.selectedEventId) || "(empty)",
-        hostCommittedScheduleId: ensureString(this.hostCommittedScheduleId) || "(empty)",
-        scheduleSelectionCommitted: this.scheduleSelectionCommitted,
-        hasTools: Boolean(this.tools),
-        hasSyncOperatorContext: Boolean(this.tools?.syncOperatorContext)
-      });
-    }
-    if (this.tools?.syncOperatorContext) {
-      this.tools
-        .syncOperatorContext({ force: true, reason: "schedule-commit" })
-        .catch((error) => logError("Failed to sync operator context after schedule commit", error));
-    }
-    return true;
   }
 
   shouldAutoLockDisplaySchedule(reason = "") {
@@ -6469,6 +6432,14 @@ export class EventAdminApp {
         force: true,
         suppressConflictPrompt: true
       });
+      this.scheduleSelectionCommitted = true;
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log("[confirmScheduleConsensus] Set scheduleSelectionCommitted to true", {
+          scheduleId,
+          eventId,
+          hostCommittedScheduleId: ensureString(this.hostCommittedScheduleId) || "(empty)"
+        });
+      }
       this.tools.prepareContextForSelection();
       if (
         this.tools.isPendingSync() ||
@@ -6479,8 +6450,17 @@ export class EventAdminApp {
           .syncEmbeddedTools({ reason: "consensus-submit" })
           .catch((error) => logError("Failed to sync tools after schedule consensus", error));
       } else {
+        if (typeof console !== "undefined" && typeof console.log === "function") {
+          console.log("[confirmScheduleConsensus] About to sync operator context", {
+            eventId,
+            scheduleId,
+            scheduleSelectionCommitted: this.scheduleSelectionCommitted,
+            hostCommittedScheduleId: ensureString(this.hostCommittedScheduleId) || "(empty)",
+            activePanel: this.activePanel
+          });
+        }
         this.tools
-          .syncOperatorContext({ force: true })
+          .syncOperatorContext({ force: true, reason: "consensus-submit" })
           .catch((error) => logError("Failed to sync operator context after schedule consensus", error));
       }
       return true;
@@ -7609,6 +7589,15 @@ export class EventAdminApp {
 
   commitSelectedScheduleForTelop({ reason = "schedule-commit" } = {}) {
     const scheduleId = ensureString(this.selectedScheduleId);
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[commitSelectedScheduleForTelop] Called (second definition)", {
+        reason,
+        scheduleId: scheduleId || "(empty)",
+        selectedEventId: ensureString(this.selectedEventId) || "(empty)",
+        hostCommittedScheduleId: ensureString(this.hostCommittedScheduleId) || "(empty)",
+        scheduleSelectionCommitted: this.scheduleSelectionCommitted
+      });
+    }
     this.lastScheduleCommitChanged = false;
     if (!scheduleId) {
       this.logFlowState("日程未選択のためテロップ操作の日程を確定できません", { reason });
@@ -7630,6 +7619,16 @@ export class EventAdminApp {
       reason,
       changed
     });
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[commitSelectedScheduleForTelop] About to sync operator context (second definition)", {
+        scheduleId,
+        eventId: ensureString(this.selectedEventId) || "(empty)",
+        hostCommittedScheduleId: ensureString(this.hostCommittedScheduleId) || "(empty)",
+        scheduleSelectionCommitted: this.scheduleSelectionCommitted,
+        hasTools: Boolean(this.tools),
+        hasSyncOperatorContext: Boolean(this.tools?.syncOperatorContext)
+      });
+    }
     if (this.tools?.syncOperatorContext) {
       this.tools
         .syncOperatorContext({ force: true, reason: "schedule-commit" })
@@ -8285,6 +8284,14 @@ export class EventAdminApp {
         force: true,
         suppressConflictPrompt: true
       });
+      this.scheduleSelectionCommitted = true;
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log("[confirmScheduleConsensus] Set scheduleSelectionCommitted to true", {
+          scheduleId,
+          eventId,
+          hostCommittedScheduleId: ensureString(this.hostCommittedScheduleId) || "(empty)"
+        });
+      }
       this.tools.prepareContextForSelection();
       if (
         this.tools.isPendingSync() ||
@@ -8295,8 +8302,17 @@ export class EventAdminApp {
           .syncEmbeddedTools({ reason: "consensus-submit" })
           .catch((error) => logError("Failed to sync tools after schedule consensus", error));
       } else {
+        if (typeof console !== "undefined" && typeof console.log === "function") {
+          console.log("[confirmScheduleConsensus] About to sync operator context", {
+            eventId,
+            scheduleId,
+            scheduleSelectionCommitted: this.scheduleSelectionCommitted,
+            hostCommittedScheduleId: ensureString(this.hostCommittedScheduleId) || "(empty)",
+            activePanel: this.activePanel
+          });
+        }
         this.tools
-          .syncOperatorContext({ force: true })
+          .syncOperatorContext({ force: true, reason: "consensus-submit" })
           .catch((error) => logError("Failed to sync operator context after schedule consensus", error));
       }
       return true;
