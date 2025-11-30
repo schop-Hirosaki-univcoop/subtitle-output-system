@@ -2319,6 +2319,9 @@ export class OperatorApp {
    * 選択肢が無効な場合は操作をブロックします。
    */
   submitConflictSelection() {
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[submitConflictSelection] Called");
+    }
     const conflict = this.state?.scheduleConflict;
     if (!conflict || !Array.isArray(conflict.options) || conflict.options.length === 0) {
       this.closeConflictDialog();
@@ -2332,6 +2335,13 @@ export class OperatorApp {
         this.dom.conflictError.hidden = false;
       }
       return;
+    }
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[submitConflictSelection] Calling lockDisplayToSchedule", {
+        eventId: option.eventId || conflict.eventId,
+        scheduleId: option.scheduleId,
+        label: option.label
+      });
     }
     this.lockDisplayToSchedule(option.eventId || conflict.eventId, option.scheduleId, option.label, { fromModal: true });
   }
@@ -2358,6 +2368,14 @@ export class OperatorApp {
   }
 
   async lockDisplayToSchedule(eventId, scheduleId, scheduleLabel, options = {}) {
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[lockDisplayToSchedule] Called", {
+        eventId,
+        scheduleId,
+        scheduleLabel,
+        options
+      });
+    }
     const normalizedEvent = String(eventId || "").trim();
     const normalizedSchedule = String(scheduleId || "").trim();
     const label = String(scheduleLabel || "").trim();
@@ -3061,6 +3079,14 @@ export class OperatorApp {
    * @param {Record<string, any>} context
    */
   setExternalContext(context = {}) {
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[setExternalContext] Called", {
+        eventId: context.eventId || "(empty)",
+        scheduleId: context.scheduleId || "(empty)",
+        selectionConfirmed: context.selectionConfirmed,
+        committedScheduleId: context.committedScheduleId || "(empty)"
+      });
+    }
     const ensure = (value) => String(value ?? "").trim();
     const ownerUid = ensure(context.ownerUid || context.operatorUid || context.uid);
     if (ownerUid) {
@@ -3103,6 +3129,14 @@ export class OperatorApp {
     this.clearOperatorPresenceIntent();
 
     const selectionConfirmed = context.selectionConfirmed === true;
+    if (typeof console !== "undefined" && typeof console.log === "function") {
+      console.log("[setExternalContext] Selection state", {
+        selectionConfirmed,
+        eventId: eventId || "(empty)",
+        scheduleId: scheduleId || "(empty)",
+        committedScheduleId: committedScheduleId || "(empty)"
+      });
+    }
     const effectiveEventId = selectionConfirmed ? eventId : "";
     const baseContext = { ...(this.pageContext || {}) };
     if (!selectionConfirmed) {
@@ -3179,7 +3213,12 @@ export class OperatorApp {
     const presenceOptions = selectionConfirmed
       ? { allowFallback: false }
       : { allowFallback: false, publishSchedule: false, publishEvent: false, useActiveSchedule: false };
-    this.updateScheduleContext({ syncPresence: false, presenceOptions });
+    // selectionConfirmedがtrueの場合、明示的に渡してupdateScheduleContext内で正しく処理されるようにする
+    this.updateScheduleContext({ 
+      syncPresence: false, 
+      presenceOptions,
+      selectionConfirmed: selectionConfirmed ? true : undefined
+    });
     this.refreshChannelSubscriptions();
     if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== effectiveEventId) {
       this.operatorPresencePrimedEventId = "";
