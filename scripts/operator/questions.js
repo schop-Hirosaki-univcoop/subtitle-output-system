@@ -818,6 +818,7 @@ export async function handleDisplay(app) {
     updates[`questionStatus/${app.state.selectedRowData.uid}/selecting`] = true;
     updates[`questionStatus/${app.state.selectedRowData.uid}/answered`] = false;
     updates[`questionStatus/${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
+    console.log("[送出] questionStatus更新用JSON:", JSON.stringify(updates, null, 2));
     await update(questionStatusRef, updates);
     // 更新前に再度チャンネルを確認
     const finalChannel = resolveNowShowingReference(app);
@@ -836,7 +837,7 @@ export async function handleDisplay(app) {
       participantId: app.state.selectedRowData.participantId || "",
       name: app.state.selectedRowData.name
     });
-    await update(nowShowingRef, {
+    const nowShowingPayload = {
       uid: app.state.selectedRowData.uid,
       participantId: app.state.selectedRowData.participantId || "",
       name: app.state.selectedRowData.name,
@@ -844,7 +845,9 @@ export async function handleDisplay(app) {
       genre,
       pickup: app.state.selectedRowData.isPickup === true,
       sideTelopRight: getActiveSideTelopRight(app)
-    });
+    };
+    console.log("[送出] nowShowing更新用JSON:", JSON.stringify(nowShowingPayload, null, 2));
+    await update(nowShowingRef, nowShowingPayload);
     logDisplayLinkInfo("Display nowShowing updated", {
       eventId,
       scheduleId,
@@ -897,7 +900,9 @@ export async function handleUnanswer(app) {
   if (!confirmed) return;
   const uid = app.state.selectedRowData.uid;
   try {
-    await update(ref(database, `questionStatus/${uid}`), { answered: false, updatedAt: serverTimestamp() });
+    const unanswerPayload = { answered: false, updatedAt: serverTimestamp() };
+    console.log("[未回答にする] questionStatus更新用JSON:", JSON.stringify({ [`questionStatus/${uid}`]: unanswerPayload }, null, 2));
+    await update(ref(database, `questionStatus/${uid}`), unanswerPayload);
     app.api.fireAndForgetApi({ action: "updateStatus", uid: app.state.selectedRowData.uid, status: false });
     app.api.logAction("UNANSWER", `UID: ${uid}, RN: ${displayLabel}`);
   } catch (error) {
@@ -950,6 +955,7 @@ export async function handleBatchUnanswer(app) {
     updates[`questionStatus/${uid}/updatedAt`] = serverTimestamp();
   }
   try {
+    console.log("[チェックしたものをまとめて未回答にする] questionStatus更新用JSON:", JSON.stringify(updates, null, 2));
     await update(questionStatusRef, updates);
     app.api.fireAndForgetApi({ action: "batchUpdateStatus", uids: uidsToUpdate, status: false });
     if (uidsToUpdate.length) {
@@ -1019,6 +1025,7 @@ export async function clearNowShowing(app) {
       }
     }
     if (Object.keys(updates).length > 0) {
+      console.log("[送出クリア] questionStatus更新用JSON:", JSON.stringify(updates, null, 2));
       await update(questionStatusRef, updates);
     }
     // 更新前に再度チャンネルを確認
@@ -1042,7 +1049,7 @@ export async function clearNowShowing(app) {
       pickup: false,
       ...(sideTelopRight ? { sideTelopRight } : {})
     };
-
+    console.log("[送出クリア] nowShowing更新用JSON:", JSON.stringify(clearedNowShowing, null, 2));
     await update(nowShowingRef, clearedNowShowing);
     logDisplayLinkInfo("Display nowShowing cleared", { eventId, scheduleId, sideTelopRight });
     app.api.fireAndForgetApi({ action: "clearSelectingStatus" });

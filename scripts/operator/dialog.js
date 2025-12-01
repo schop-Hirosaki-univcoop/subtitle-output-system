@@ -92,7 +92,9 @@ export async function handleEditSubmit(app) {
   }
   try {
     const branch = app.pendingEditType === "pickup" ? "questions/pickup" : "questions/normal";
-    await update(ref(database, `${branch}/${app.pendingEditUid}`), { question: newText, updatedAt: Date.now() });
+    const editPayload = { question: newText, updatedAt: Date.now() };
+    console.log("[原稿修正] 更新用JSON:", JSON.stringify({ [`${branch}/${app.pendingEditUid}`]: editPayload }, null, 2));
+    await update(ref(database, `${branch}/${app.pendingEditUid}`), editPayload);
     app.api.fireAndForgetApi({ action: "editQuestion", uid: app.pendingEditUid, text: newText });
     app.api.logAction("EDIT", `UID: ${app.pendingEditUid}`);
     app.toast("質問を更新しました。", "success");
