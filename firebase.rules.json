@@ -510,15 +510,15 @@
       "$uid": {
         ".write": "(auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)) || (!data.exists() && newData.hasChildren(['answered','selecting']) && newData.child('answered').isBoolean() && newData.child('answered').val() == false && newData.child('selecting').isBoolean() && newData.child('selecting').val() == false && (!newData.child('updatedAt').exists() || newData.child('updatedAt').isNumber()) && root.child('questions/normal').child($uid).exists())",
         "answered": {
-          ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+          ".write": "(auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)) || (!root.child('questionStatus').child($uid).exists() && newData.isBoolean() && newData.val() == false && root.child('questions/normal').child($uid).exists())",
           ".validate": "newData.isBoolean() || !newData.exists()"
         },
         "selecting": {
-          ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+          ".write": "(auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)) || (!root.child('questionStatus').child($uid).exists() && newData.isBoolean() && newData.val() == false && root.child('questions/normal').child($uid).exists())",
           ".validate": "newData.isBoolean() || !newData.exists()"
         },
         "updatedAt": {
-          ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+          ".write": "(auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)) || (!root.child('questionStatus').child($uid).exists() && newData.isNumber() && root.child('questions/normal').child($uid).exists())",
           ".validate": "newData.isNumber() || !newData.exists()"
         },
         "$other": { ".validate": false }
