@@ -509,9 +509,18 @@
       ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
       "$uid": {
         ".write": "(auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)) || (!data.exists() && newData.hasChildren(['answered','selecting']) && newData.child('answered').isBoolean() && newData.child('answered').val() == false && newData.child('selecting').isBoolean() && newData.child('selecting').val() == false && (!newData.child('updatedAt').exists() || newData.child('updatedAt').isNumber()) && root.child('questions/normal').child($uid).exists())",
-        "answered": { ".validate": "newData.isBoolean() || !newData.exists()" },
-        "selecting": { ".validate": "newData.isBoolean() || !newData.exists()" },
-        "updatedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
+        "answered": {
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+          ".validate": "newData.isBoolean() || !newData.exists()"
+        },
+        "selecting": {
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+          ".validate": "newData.isBoolean() || !newData.exists()"
+        },
+        "updatedAt": {
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
+          ".validate": "newData.isNumber() || !newData.exists()"
+        },
         "$other": { ".validate": false }
       }
     },
