@@ -16,7 +16,7 @@ import {
   child,
   onDisconnect,
   runTransaction,
-  setLogLevel
+  enableLogging
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   initializeAuth,
@@ -185,7 +185,7 @@ export {
   signOut,
   onAuthStateChanged,
   getIdToken,
-  setLogLevel
+  enableLogging
 };
 
 // Console helper for operators: expose auth/database handles so `firebase.auth()` style
@@ -194,8 +194,7 @@ if (typeof window !== "undefined") {
   const compatFirebase = (window.firebase ||= {});
   compatFirebase.auth = () => auth;
   compatFirebase.database ||= {};
-  compatFirebase.database.enableLogging = (enable = true) =>
-    setLogLevel(enable ? "debug" : "silent");
+  compatFirebase.database.enableLogging = enableLogging;
 
   // Direct handles for debugging (e.g. window.__opFirebase.auth.currentUser)
   window.__opFirebase = {
@@ -203,6 +202,6 @@ if (typeof window !== "undefined") {
     auth,
     database,
     getIdToken,
-    setLogLevel
+    enableLogging
   };
 }
