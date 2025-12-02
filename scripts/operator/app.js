@@ -9,6 +9,7 @@ import {
   get,
   questionsRef,
   questionStatusRef,
+  getQuestionStatusRef,
   questionIntakeEventsRef,
   questionIntakeSchedulesRef,
   displaySessionRef,
@@ -4245,11 +4246,15 @@ export class OperatorApp {
 
   /**
    * 質問状態ノードの購読を開始し、ステータスの変化を反映します。
+   * 現在のイベントIDのquestionStatusを監視します（通常質問もPick Up Questionも同じパス）。
    */
   startQuestionStatusStream() {
     if (this.questionStatusUnsubscribe) this.questionStatusUnsubscribe();
-    this.questionStatusUnsubscribe = onValue(questionStatusRef, (snapshot) => {
-      this.applyQuestionStatusSnapshot(snapshot.val());
+    const eventId = String(this.state?.activeEventId || "").trim();
+    const statusRef = getQuestionStatusRef(eventId, false);
+    
+    this.questionStatusUnsubscribe = onValue(statusRef, (snapshot) => {
+      this.applyQuestionStatusSnapshot(snapshot.val() || {});
     });
   }
 

@@ -5244,7 +5244,12 @@ function processQuestionSubmissionQueue_(providedAccessToken, options) {
         }
 
         updates[`questions/normal/${uid}`] = record;
-        updates[`questionStatus/${uid}`] = {
+        // イベントごとのquestionStatusパスを使用
+        if (!eventId || !eventId.trim()) {
+          throw new Error(`Question UID ${uid} has no eventId.`);
+        }
+        const questionStatusPath = `questionStatus/${eventId.trim()}/${uid}`;
+        updates[questionStatusPath] = {
           answered: false,
           selecting: false,
           pickup: false,
@@ -5294,8 +5299,19 @@ function updateAnswerStatus(uid, status) {
   }
 
   const token = getFirebaseAccessToken_();
-  const statusPath = `questionStatus/${normalizedUid}`;
+  const { branch, record } = resolveQuestionRecordForUid_(normalizedUid, token);
+  if (!record || !branch) {
+    throw new Error(`UID: ${normalizedUid} not found.`);
+  }
+
+  // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
+  const eventId = record.eventId ? String(record.eventId).trim() : "";
+  if (!eventId) {
+    throw new Error(`UID: ${normalizedUid} has no eventId.`);
+  }
+  const statusPath = `questionStatus/${eventId}/${normalizedUid}`;
   const currentStatus = fetchRtdb_(statusPath, token);
+
   if (!currentStatus || typeof currentStatus !== "object") {
     throw new Error(`UID: ${normalizedUid} not found.`);
   }
@@ -5307,7 +5323,6 @@ function updateAnswerStatus(uid, status) {
   updates[`${statusPath}/answered`] = isAnswered;
   updates[`${statusPath}/updatedAt`] = now;
 
-  const { branch } = resolveQuestionRecordForUid_(normalizedUid, token);
   if (branch) {
     updates[`questions/${branch}/${normalizedUid}/answered`] = isAnswered;
     updates[`questions/${branch}/${normalizedUid}/updatedAt`] = now;
@@ -5334,7 +5349,6 @@ function batchUpdateStatus(uids, status) {
   }
 
   const token = getFirebaseAccessToken_();
-  const statusBranch = fetchRtdb_("questionStatus", token) || {};
   const isAnswered =
     status === true || status === "true" || status === 1 || status === "1";
   const now = Date.now();
@@ -5342,17 +5356,26 @@ function batchUpdateStatus(uids, status) {
   let updatedCount = 0;
 
   normalized.forEach((uid) => {
-    if (
-      !statusBranch ||
-      typeof statusBranch !== "object" ||
-      !statusBranch[uid]
-    ) {
+    const { branch, record } = resolveQuestionRecordForUid_(uid, token);
+    if (!record || !branch) {
       return;
     }
+
+    // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
+    const eventId = record.eventId ? String(record.eventId).trim() : "";
+    if (!eventId) {
+      return; // eventIdがない場合はスキップ
+    }
+    const statusPath = `questionStatus/${eventId}/${uid}`;
+    const currentStatus = fetchRtdb_(statusPath, token);
+
+    if (!currentStatus || typeof currentStatus !== "object") {
+      return;
+    }
+
     updatedCount += 1;
-    updates[`questionStatus/${uid}/answered`] = isAnswered;
-    updates[`questionStatus/${uid}/updatedAt`] = now;
-    const { branch } = resolveQuestionRecordForUid_(uid, token);
+    updates[`${statusPath}/answered`] = isAnswered;
+    updates[`${statusPath}/updatedAt`] = now;
     if (branch) {
       updates[`questions/${branch}/${uid}/answered`] = isAnswered;
       updates[`questions/${branch}/${uid}/updatedAt`] = now;
@@ -5373,7 +5396,21 @@ function updateSelectingStatus(uid) {
     throw new Error("UID is required.");
   }
   const token = getFirebaseAccessToken_();
-  const statusBranch = fetchRtdb_("questionStatus", token) || {};
+
+  // 指定されたUIDの質問レコードを取得して、イベントIDを確認
+  const { branch, record } = resolveQuestionRecordForUid_(normalizedUid, token);
+  if (!record || !branch) {
+    throw new Error(`UID: ${normalizedUid} not found.`);
+  }
+
+  // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
+  const eventId = record.eventId ? String(record.eventId).trim() : "";
+  if (!eventId) {
+    throw new Error(`UID: ${normalizedUid} has no eventId.`);
+  }
+  const questionStatusBasePath = `questionStatus/${eventId}`;
+  const statusBranch = fetchRtdb_(questionStatusBasePath, token) || {};
+
   if (
     !statusBranch ||
     typeof statusBranch !== "object" ||
@@ -5390,12 +5427,15 @@ function updateSelectingStatus(uid) {
       return;
     }
     const selecting = normalizedKey === normalizedUid;
-    updates[`questionStatus/${normalizedKey}/selecting`] = selecting;
-    updates[`questionStatus/${normalizedKey}/updatedAt`] = now;
-    const { branch } = resolveQuestionRecordForUid_(normalizedKey, token);
-    if (branch) {
-      updates[`questions/${branch}/${normalizedKey}/selecting`] = selecting;
-      updates[`questions/${branch}/${normalizedKey}/updatedAt`] = now;
+    updates[`${questionStatusBasePath}/${normalizedKey}/selecting`] = selecting;
+    updates[`${questionStatusBasePath}/${normalizedKey}/updatedAt`] = now;
+    const { branch: itemBranch } = resolveQuestionRecordForUid_(
+      normalizedKey,
+      token
+    );
+    if (itemBranch) {
+      updates[`questions/${itemBranch}/${normalizedKey}/selecting`] = selecting;
+      updates[`questions/${itemBranch}/${normalizedKey}/updatedAt`] = now;
     }
   });
 
@@ -5405,26 +5445,46 @@ function updateSelectingStatus(uid) {
 
 function clearSelectingStatus() {
   const token = getFirebaseAccessToken_();
-  const statusBranch = fetchRtdb_("questionStatus", token) || {};
-  if (!statusBranch || typeof statusBranch !== "object") {
-    return { success: true, changed: false };
-  }
+
+  // すべての質問レコードを取得して、イベントごとに選択中ステータスをクリア
+  // 注意: すべてのイベントを列挙するのは非効率なので、質問レコードからイベントIDを取得
+  const normalQuestions = fetchRtdb_("questions/normal", token) || {};
+  const pickupQuestions = fetchRtdb_("questions/pickup", token) || {};
+  const allQuestions = { ...normalQuestions, ...pickupQuestions };
 
   const updates = {};
   let changed = false;
   const now = Date.now();
-  Object.entries(statusBranch).forEach(([uid, record]) => {
-    if (!uid) {
+  const processedEventIds = new Set();
+
+  Object.entries(allQuestions).forEach(([uid, questionRecord]) => {
+    if (!uid || !questionRecord || typeof questionRecord !== "object") {
       return;
     }
-    if (record && record.selecting === true) {
-      changed = true;
-      updates[`questionStatus/${uid}/selecting`] = false;
-      updates[`questionStatus/${uid}/updatedAt`] = now;
-      const { branch } = resolveQuestionRecordForUid_(uid, token);
-      if (branch) {
-        updates[`questions/${branch}/${uid}/selecting`] = false;
-        updates[`questions/${branch}/${uid}/updatedAt`] = now;
+    const eventId = questionRecord.eventId
+      ? String(questionRecord.eventId).trim()
+      : "";
+    if (!eventId) {
+      return; // eventIdがない場合はスキップ
+    }
+
+    // 各イベントごとに一度だけquestionStatusを取得
+    if (!processedEventIds.has(eventId)) {
+      processedEventIds.add(eventId);
+      const statusBranch = fetchRtdb_(`questionStatus/${eventId}`, token) || {};
+      if (statusBranch && typeof statusBranch === "object") {
+        Object.entries(statusBranch).forEach(([statusUid, statusRecord]) => {
+          if (statusRecord && statusRecord.selecting === true) {
+            changed = true;
+            updates[`questionStatus/${eventId}/${statusUid}/selecting`] = false;
+            updates[`questionStatus/${eventId}/${statusUid}/updatedAt`] = now;
+            const { branch } = resolveQuestionRecordForUid_(statusUid, token);
+            if (branch) {
+              updates[`questions/${branch}/${statusUid}/selecting`] = false;
+              updates[`questions/${branch}/${statusUid}/updatedAt`] = now;
+            }
+          }
+        });
       }
     }
   });
@@ -5455,11 +5515,18 @@ function editQuestionText(uid, newText) {
     throw new Error(`UID: ${normalizedUid} not found.`);
   }
 
+  // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
+  const eventId = record.eventId ? String(record.eventId).trim() : "";
+  if (!eventId) {
+    throw new Error(`UID: ${normalizedUid} has no eventId.`);
+  }
+  const statusPath = `questionStatus/${eventId}/${normalizedUid}`;
+
   const now = Date.now();
   const updates = {};
   updates[`questions/${branch}/${normalizedUid}/question`] = trimmed;
   updates[`questions/${branch}/${normalizedUid}/updatedAt`] = now;
-  updates[`questionStatus/${normalizedUid}/updatedAt`] = now;
+  updates[`${statusPath}/updatedAt`] = now;
   patchRtdb_(updates, token);
   return { success: true, message: `UID: ${normalizedUid} question updated.` };
 }

@@ -1,6 +1,6 @@
 // questions.js: 質問キューの操作と選択ロジックを管理します。
 import { QUESTIONS_SUBTAB_KEY, GENRE_ALL_VALUE } from "./constants.js";
-import { database, ref, update, get, getNowShowingRef, serverTimestamp, questionStatusRef } from "./firebase.js";
+import { database, ref, update, get, getNowShowingRef, serverTimestamp, getQuestionStatusRef } from "./firebase.js";
 import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn, error as logDisplayLinkError } from "../shared/display-link-logger.js";
 import { normalizeScheduleId } from "../shared/channel-paths.js";
 import { escapeHtml, formatOperatorName, resolveGenreLabel, formatScheduleRange } from "./utils.js";
@@ -846,7 +846,12 @@ export async function handleDisplay(app) {
   const previousNowShowing = snapshot.val();
   const previousUid =
     previousNowShowing && typeof previousNowShowing.uid !== "undefined" ? String(previousNowShowing.uid || "") : "";
+  const isPickup = app.state.selectedRowData.isPickup === true;
   try {
+    // 選択中の質問のquestionStatus参照を取得（Pick Up Questionも通常質問も同じパス構造）
+    const statusRef = getQuestionStatusRef(eventId, isPickup);
+    
+    // 前回表示中の質問と現在の質問のステータスを更新
     const updates = {};
     if (previousUid) {
       updates[`${previousUid}/selecting`] = false;
@@ -866,7 +871,7 @@ export async function handleDisplay(app) {
     updates[`${app.state.selectedRowData.uid}/answered`] = false;
     updates[`${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
     console.log("[送出] questionStatus更新用JSON:", JSON.stringify(updates, null, 2));
-    await update(questionStatusRef, updates);
+    await update(statusRef, updates);
     // 更新前に再度チャンネルを確認
     const finalChannel = resolveNowShowingReference(app);
     const finalChannelKey = finalChannel.eventId && finalChannel.scheduleId
@@ -950,6 +955,8 @@ export async function handleUnanswer(app) {
   // ローディング状態を開始（更新前の状態を記録）
   const currentItem = app.state.allQuestions.find((q) => String(q.UID) === uid);
   const currentAnswered = currentItem ? !!currentItem["回答済"] : false;
+  const isPickup = app.state.selectedRowData.isPickup === true;
+  const eventId = String(app.state.activeEventId || "").trim();
   loadingUids.add(uid);
   loadingUidStates.set(uid, {
     expectedAnswered: false, // 未回答に戻すので、最終的にfalseになることを期待
@@ -972,9 +979,10 @@ export async function handleUnanswer(app) {
   renderQuestions(app);
   
   try {
+    const statusRef = getQuestionStatusRef(eventId, isPickup);
     const unanswerPayload = { answered: false, updatedAt: serverTimestamp() };
-    console.log("[未回答にする] questionStatus更新用JSON:", JSON.stringify({ [`questionStatus/${uid}`]: unanswerPayload }, null, 2));
-    await update(ref(database, `questionStatus/${uid}`), unanswerPayload);
+    console.log("[未回答にする] questionStatus更新用JSON:", JSON.stringify({ [`${statusRef.key}/${uid}`]: unanswerPayload }, null, 2));
+    await update(statusRef, { [`${uid}`]: unanswerPayload });
     app.api.fireAndForgetApi({ action: "updateStatus", uid: app.state.selectedRowData.uid, status: false });
     app.api.logAction("UNANSWER", `UID: ${uid}, RN: ${displayLabel}`);
     
@@ -1053,6 +1061,7 @@ export async function handleBatchUnanswer(app) {
   });
   if (!confirmed) return;
   const uidsToUpdate = checkedBoxes.map((checkbox) => checkbox.dataset.uid);
+  const eventId = String(app.state.activeEventId || "").trim();
   
   // ローディング状態を開始（更新前の状態を記録）
   uidsToUpdate.forEach((uid) => {
@@ -1079,14 +1088,27 @@ export async function handleBatchUnanswer(app) {
   // 即座に再描画してローディング状態を表示
   renderQuestions(app);
   
-  const updates = {};
+  // イベント/Pick Up Questionごとにグループ化
+  const updatesByPath = new Map();
   for (const uid of uidsToUpdate) {
-    updates[`${uid}/answered`] = false;
-    updates[`${uid}/updatedAt`] = serverTimestamp();
+    const item = app.state.allQuestions.find((q) => String(q.UID) === uid);
+    const isPickup = item ? item.ピックアップ === true : false;
+    const statusRef = getQuestionStatusRef(eventId, isPickup);
+    const pathKey = statusRef.key;
+    if (!updatesByPath.has(pathKey)) {
+      updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
+    }
+    const group = updatesByPath.get(pathKey);
+    group.updates[`${uid}/answered`] = false;
+    group.updates[`${uid}/updatedAt`] = serverTimestamp();
   }
+  
   try {
-    console.log("[チェックしたものをまとめて未回答にする] questionStatus更新用JSON:", JSON.stringify(updates, null, 2));
-    await update(questionStatusRef, updates);
+    // 各パスごとに更新を実行
+    for (const [pathKey, { ref: statusRef, updates }] of updatesByPath) {
+      console.log("[チェックしたものをまとめて未回答にする] questionStatus更新用JSON:", JSON.stringify({ [pathKey]: updates }, null, 2));
+      await update(statusRef, updates);
+    }
     app.api.fireAndForgetApi({ action: "batchUpdateStatus", uids: uidsToUpdate, status: false });
     if (uidsToUpdate.length) {
       app.api.logAction("BATCH_UNANSWER", `Count: ${uidsToUpdate.length}`);
@@ -1177,25 +1199,43 @@ export async function clearNowShowing(app) {
   const previousNowShowing = snapshot.val();
   try {
     logDisplayLinkInfo("Clearing nowShowing payload", { eventId, scheduleId });
-    const updates = {};
+    // イベント/Pick Up Questionごとにグループ化
+    const updatesByPath = new Map();
     const selectingItems = app.state.allQuestions.filter((item) => item["選択中"] === true);
     selectingItems.forEach((item) => {
-      updates[`${item.UID}/selecting`] = false;
-      updates[`${item.UID}/updatedAt`] = serverTimestamp();
+      const isPickup = item.ピックアップ === true;
+      const statusRef = getQuestionStatusRef(eventId, isPickup);
+      const pathKey = statusRef.key;
+      if (!updatesByPath.has(pathKey)) {
+        updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
+      }
+      const group = updatesByPath.get(pathKey);
+      group.updates[`${item.UID}/selecting`] = false;
+      group.updates[`${item.UID}/updatedAt`] = serverTimestamp();
     });
     if (previousNowShowing) {
       const prevItem = app.state.allQuestions.find(
         (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
       );
       if (prevItem) {
-        updates[`${prevItem.UID}/answered`] = true;
-        updates[`${prevItem.UID}/updatedAt`] = serverTimestamp();
+        const isPickup = prevItem.ピックアップ === true;
+        const statusRef = getQuestionStatusRef(eventId, isPickup);
+        const pathKey = statusRef.key;
+        if (!updatesByPath.has(pathKey)) {
+          updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
+        }
+        const group = updatesByPath.get(pathKey);
+        group.updates[`${prevItem.UID}/answered`] = true;
+        group.updates[`${prevItem.UID}/updatedAt`] = serverTimestamp();
         app.api.fireAndForgetApi({ action: "updateStatus", uid: prevItem.UID, status: true });
       }
     }
-    if (Object.keys(updates).length > 0) {
-      console.log("[送出クリア] questionStatus更新用JSON:", JSON.stringify(updates, null, 2));
-      await update(questionStatusRef, updates);
+    // 各パスごとに更新を実行
+    for (const [pathKey, { ref: statusRef, updates }] of updatesByPath) {
+      if (Object.keys(updates).length > 0) {
+        console.log("[送出クリア] questionStatus更新用JSON:", JSON.stringify({ [pathKey]: updates }, null, 2));
+        await update(statusRef, updates);
+      }
     }
     // 更新前に再度チャンネルを確認
     const finalChannel = resolveNowShowingReference(app);

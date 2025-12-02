@@ -507,21 +507,27 @@
     "questionStatus": {
       ".read": "auth != null",
       ".write": "true",
-      "$uid": {
-        ".write": "(auth != null && ((auth.token.firebase.sign_in_provider != 'anonymous' || root.child('admins').child(auth.uid).val() == true || auth.token.admin == true) || (auth.token.firebase.sign_in_provider == 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true))) || (!data.exists() && newData.hasChildren(['answered','selecting']) && newData.child('answered').isBoolean() && newData.child('answered').val() == false && newData.child('selecting').isBoolean() && newData.child('selecting').val() == false && (!newData.child('updatedAt').exists() || newData.child('updatedAt').isNumber()) && root.child('questions/normal').child($uid).exists())",
-        "answered": {
-          ".write": "(auth != null && ((auth.token.firebase.sign_in_provider != 'anonymous' || root.child('admins').child(auth.uid).val() == true || auth.token.admin == true) || (auth.token.firebase.sign_in_provider == 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true))) || (newData.isBoolean() && newData.val() == false && root.child('questions/normal').child($uid).exists())",
-          ".validate": "newData.isBoolean() || !newData.exists()"
-        },
-        "selecting": {
-          ".write": "(auth != null && ((auth.token.firebase.sign_in_provider != 'anonymous' || root.child('admins').child(auth.uid).val() == true || auth.token.admin == true) || (auth.token.firebase.sign_in_provider == 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true))) || (newData.isBoolean() && newData.val() == false && root.child('questions/normal').child($uid).exists())",
-          ".validate": "newData.isBoolean() || !newData.exists()"
-        },
-        "updatedAt": {
-          ".write": "(auth != null && ((auth.token.firebase.sign_in_provider != 'anonymous' || root.child('admins').child(auth.uid).val() == true || auth.token.admin == true) || (auth.token.firebase.sign_in_provider == 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true))) || (newData.isNumber() && root.child('questions/normal').child($uid).exists())",
-          ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()"
-        },
-        "$other": { ".validate": false }
+      // イベントごとのquestionStatus（questionStatus/{eventId}/{uid}）
+      // 通常質問もPick Up Questionも同じ構造でイベントごとに分離されます
+      "$eventId": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((auth.token.firebase.sign_in_provider != 'anonymous' || root.child('admins').child(auth.uid).val() == true || auth.token.admin == true) || (auth.token.firebase.sign_in_provider == 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true))",
+        "$uid": {
+          ".write": "(auth != null && ((auth.token.firebase.sign_in_provider != 'anonymous' || root.child('admins').child(auth.uid).val() == true || auth.token.admin == true) || (auth.token.firebase.sign_in_provider == 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true))) || (!data.exists() && newData.hasChildren(['answered','selecting']) && newData.child('answered').isBoolean() && newData.child('answered').val() == false && newData.child('selecting').isBoolean() && newData.child('selecting').val() == false && (!newData.child('updatedAt').exists() || newData.child('updatedAt').isNumber()) && (root.child('questions/normal').child($uid).exists() || root.child('questions/pickup').child($uid).exists()))",
+          "answered": {
+            ".write": "(auth != null && ((auth.token.firebase.sign_in_provider != 'anonymous' || root.child('admins').child(auth.uid).val() == true || auth.token.admin == true) || (auth.token.firebase.sign_in_provider == 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true))) || (newData.isBoolean() && newData.val() == false && (root.child('questions/normal').child($uid).exists() || root.child('questions/pickup').child($uid).exists()))",
+            ".validate": "newData.isBoolean() || !newData.exists()"
+          },
+          "selecting": {
+            ".write": "(auth != null && ((auth.token.firebase.sign_in_provider != 'anonymous' || root.child('admins').child(auth.uid).val() == true || auth.token.admin == true) || (auth.token.firebase.sign_in_provider == 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true))) || (newData.isBoolean() && newData.val() == false && (root.child('questions/normal').child($uid).exists() || root.child('questions/pickup').child($uid).exists()))",
+            ".validate": "newData.isBoolean() || !newData.exists()"
+          },
+          "updatedAt": {
+            ".write": "(auth != null && ((auth.token.firebase.sign_in_provider != 'anonymous' || root.child('admins').child(auth.uid).val() == true || auth.token.admin == true) || (auth.token.firebase.sign_in_provider == 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true))) || (newData.isNumber() && (root.child('questions/normal').child($uid).exists() || root.child('questions/pickup').child($uid).exists()))",
+            ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()"
+          },
+          "$other": { ".validate": false }
+        }
       }
     },
 

@@ -32,7 +32,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 import { firebaseConfig } from "./constants.js";
-import { getRenderStatePath, getNowShowingPath, getSideTelopPath } from "../shared/channel-paths.js";
+import { getRenderStatePath, getNowShowingPath, getSideTelopPath, getQuestionStatusPath } from "../shared/channel-paths.js";
 
 const apps = getApps();
 export const app = apps.length ? getApp() : initializeApp(firebaseConfig);
@@ -54,6 +54,7 @@ export const displaySessionRef = ref(database, "render/session");
 export const displayPresenceRootRef = ref(database, "render/displayPresence");
 export const questionsRef = ref(database, "questions");
 export const pickupQuestionsRef = ref(database, "questions/pickup");
+// 後方互換性のため、グローバルなquestionStatusRefも残す（非推奨）
 export const questionStatusRef = ref(database, "questionStatus");
 export const questionIntakeEventsRef = ref(database, "questionIntake/events");
 export const questionIntakeSchedulesRef = ref(database, "questionIntake/schedules");
@@ -82,6 +83,18 @@ export function getNowShowingRef(eventId = "", scheduleId = "") {
 export function getSideTelopsRef(eventId = "", scheduleId = "") {
   const path = getSideTelopPath(eventId, scheduleId);
   return path === "render/state/sideTelops" ? LEGACY_SIDE_TELOP_REF : ref(database, path);
+}
+
+/**
+ * 質問ステータスの参照を返します。
+ * 通常質問もPick Up Questionもイベントごとに分離されます。
+ * @param {string} eventId イベントID
+ * @param {boolean} isPickup Pick Up Questionかどうか（現在は使用されていませんが、将来の拡張のために残しています）
+ * @returns {import("firebase/database").DatabaseReference}
+ */
+export function getQuestionStatusRef(eventId = "", isPickup = false) {
+  const path = getQuestionStatusPath(eventId, isPickup);
+  return ref(database, path);
 }
 
 export function getOperatorPresenceEventRef(eventId = "") {

@@ -174,12 +174,19 @@ console.log("[DEBUG] questionUid", questionUid);
   let intakeCreated = false;
   let questionCreated = false;
 
+  // イベントごとのquestionStatusパスを使用
+  const eventId = questionRecord.eventId ? String(questionRecord.eventId).trim() : "";
+  if (!eventId) {
+    throw new Error("eventId is required for questionStatus path");
+  }
+  const questionStatusPath = `questionStatus/${eventId}/${questionUid}`;
+
   try {
     await set(intakeRef, intakePayload);
     intakeCreated = true;
     await set(ref(database, `questions/normal/${questionUid}`), questionRecord);
     questionCreated = true;
-    await set(ref(database, `questionStatus/${questionUid}`), statusRecord);
+    await set(ref(database, questionStatusPath), statusRecord);
   } catch (error) {
     try {
       if (questionCreated) {

@@ -158,3 +158,19 @@ export function parseChannelParams(searchParams) {
 export function isLegacyChannel(eventId, scheduleId) {
   return buildEventScheduleBase(eventId, scheduleId) === LEGACY_RENDER_BASE;
 }
+
+/**
+ * 質問ステータスを配置するパスを返します。
+ * 通常質問もPick Up Questionもイベントごとに分離されます。
+ * @param {unknown} eventId イベントID（必須）
+ * @param {boolean} isPickup Pick Up Questionかどうか（現在は使用されていませんが、将来の拡張のために残しています）
+ * @returns {string}
+ */
+export function getQuestionStatusPath(eventId, isPickup = false) {
+  const eventKey = normalizeEventId(eventId);
+  if (!eventKey) {
+    throw new Error("eventId is required for questionStatus path");
+  }
+  // Pick Up Questionも通常質問も同じ構造でイベントごとに分離
+  return `questionStatus/${eventKey}`;
+}
