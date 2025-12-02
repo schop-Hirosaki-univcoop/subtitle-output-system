@@ -15,7 +15,8 @@ import {
   orderByChild,
   child,
   onDisconnect,
-  runTransaction
+  runTransaction,
+  setLogLevel
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import {
   initializeAuth,
@@ -26,7 +27,8 @@ import {
   signInWithPopup,
   signInWithCredential,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  getIdToken
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 import { firebaseConfig } from "./constants.js";
@@ -181,5 +183,26 @@ export {
   signInWithPopup,
   signInWithCredential,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  getIdToken,
+  setLogLevel
 };
+
+// Console helper for operators: expose auth/database handles so `firebase.auth()` style
+// snippets from the docs keep working in DevTools.
+if (typeof window !== "undefined") {
+  const compatFirebase = (window.firebase ||= {});
+  compatFirebase.auth = () => auth;
+  compatFirebase.database ||= {};
+  compatFirebase.database.enableLogging = (enable = true) =>
+    setLogLevel(enable ? "debug" : "silent");
+
+  // Direct handles for debugging (e.g. window.__opFirebase.auth.currentUser)
+  window.__opFirebase = {
+    app,
+    auth,
+    database,
+    getIdToken,
+    setLogLevel
+  };
+}
