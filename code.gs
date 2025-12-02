@@ -5159,11 +5159,20 @@ function processQuestionSubmissionQueue_(providedAccessToken, options) {
         return;
       }
 
+      // entryからeventId、scheduleId、participantIdを取得（フォールバックとしてtokenRecordを使用）
+      const entryEventId = ensureString(entry.eventId || tokenRecord.eventId);
+      const entryScheduleId = ensureString(
+        entry.scheduleId || tokenRecord.scheduleId
+      );
+      const entryParticipantId = ensureString(
+        entry.participantId || tokenRecord.participantId
+      );
+
       if (
         !tokenRecord ||
-        !eventId ||
-        !scheduleId ||
-        !participantId ||
+        !entryEventId ||
+        !entryScheduleId ||
+        !entryParticipantId ||
         revoked ||
         (expiresAt && Date.now() > expiresAt)
       ) {
@@ -5227,10 +5236,10 @@ function processQuestionSubmissionQueue_(providedAccessToken, options) {
           scheduleDate,
           scheduleStart,
           scheduleEnd,
-          eventId,
+          eventId: entryEventId,
           eventName,
-          scheduleId,
-          participantId,
+          scheduleId: entryScheduleId,
+          participantId: entryParticipantId,
           participantName,
           guidance,
           token,
@@ -5245,10 +5254,10 @@ function processQuestionSubmissionQueue_(providedAccessToken, options) {
 
         updates[`questions/normal/${uid}`] = record;
         // イベントごとのquestionStatusパスを使用
-        if (!eventId || !eventId.trim()) {
+        if (!entryEventId || !entryEventId.trim()) {
           throw new Error(`Question UID ${uid} has no eventId.`);
         }
-        const questionStatusPath = `questionStatus/${eventId.trim()}/${uid}`;
+        const questionStatusPath = `questionStatus/${entryEventId.trim()}/${uid}`;
         updates[questionStatusPath] = {
           answered: false,
           selecting: false,
