@@ -164,6 +164,8 @@ export async function submitQuestionRecord({
   });
   const statusRecord = { answered: false, selecting: false, updatedAt: timestamp };
 console.log("[DEBUG] questionRecord", JSON.stringify(questionRecord, null, 2));
+console.log("[DEBUG] statusRecord", JSON.stringify(statusRecord, null, 2));
+console.log("[DEBUG] questionUid", questionUid);
 
   ensureActive(controller);
 
