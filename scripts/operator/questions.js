@@ -9,6 +9,9 @@ const SUB_TAB_OPTIONS = new Set(["all", "normal", "puq"]);
 const PICK_UP_NAME_CANONICAL = "pick up question";
 const DEFAULT_SIDE_TELOP = "まずは自己紹介です…";
 
+// ローディング中のUIDを追跡するSet
+const loadingUids = new Set();
+
 function isPickUpQuestion(record) {
   if (!record || typeof record !== "object") {
     return false;
@@ -257,6 +260,19 @@ export function renderQuestions(app) {
   const selectedUid = app.state.selectedRowData ? String(app.state.selectedRowData.uid || "") : "";
   let nextSelection = null;
 
+  // ローディング状態を解除（更新が反映された場合）
+  loadingUids.forEach((uid) => {
+    const item = list.find((q) => String(q.UID) === uid);
+    if (item) {
+      // 更新が反映されたか確認（answeredがfalseになっている、または元々falseだった）
+      // ローディング中は通常、answeredがtrueからfalseに変わることを期待している
+      // ただし、既にfalseの場合は更新が反映されたとみなす
+      if (!item["回答済"]) {
+        loadingUids.delete(uid);
+      }
+    }
+  });
+
   app.dom.cardsContainer.innerHTML = "";
   list.forEach((item) => {
     const card = document.createElement("article");
@@ -272,6 +288,14 @@ export function renderQuestions(app) {
     }
     const uid = String(item.UID);
     card.dataset.uid = uid;
+    // ローディング状態を適用
+    if (loadingUids.has(uid)) {
+      card.classList.add("is-loading");
+      const spinner = document.createElement("div");
+      spinner.className = "q-loading-spinner";
+      spinner.setAttribute("aria-label", "更新中");
+      card.appendChild(spinner);
+    }
     const participantId = String(item["参加者ID"] ?? "").trim();
     const rawGenre = String(item["ジャンル"] ?? "").trim();
     const normalizedGenre = rawGenre || "その他";
@@ -899,13 +923,72 @@ export async function handleUnanswer(app) {
   });
   if (!confirmed) return;
   const uid = app.state.selectedRowData.uid;
+  
+  // ローディング状態を開始
+  loadingUids.add(uid);
+  const card = app.dom.cardsContainer?.querySelector(`.q-card[data-uid="${uid}"]`);
+  if (card) {
+    card.classList.add("is-loading");
+    const existingSpinner = card.querySelector(".q-loading-spinner");
+    if (!existingSpinner) {
+      const spinner = document.createElement("div");
+      spinner.className = "q-loading-spinner";
+      spinner.setAttribute("aria-label", "更新中");
+      card.appendChild(spinner);
+    }
+  }
+  
   try {
     const unanswerPayload = { answered: false, updatedAt: serverTimestamp() };
     console.log("[未回答にする] questionStatus更新用JSON:", JSON.stringify({ [`questionStatus/${uid}`]: unanswerPayload }, null, 2));
     await update(ref(database, `questionStatus/${uid}`), unanswerPayload);
     app.api.fireAndForgetApi({ action: "updateStatus", uid: app.state.selectedRowData.uid, status: false });
     app.api.logAction("UNANSWER", `UID: ${uid}, RN: ${displayLabel}`);
+    
+    // Firebaseの更新が反映されるまで少し待つ（最大3秒）
+    const maxWaitTime = 3000;
+    const checkInterval = 100;
+    const startTime = Date.now();
+    const checkLoading = () => {
+      const item = app.state.allQuestions.find((q) => String(q.UID) === uid);
+      // 更新が反映されたか確認（answeredがfalseになっている）
+      if (item && !item["回答済"]) {
+        loadingUids.delete(uid);
+        if (card) {
+          card.classList.remove("is-loading");
+          const spinner = card.querySelector(".q-loading-spinner");
+          if (spinner) {
+            spinner.remove();
+          }
+        }
+        return;
+      }
+      // タイムアウトチェック
+      if (Date.now() - startTime < maxWaitTime) {
+        setTimeout(checkLoading, checkInterval);
+      } else {
+        // タイムアウト時もローディング状態を解除
+        loadingUids.delete(uid);
+        if (card) {
+          card.classList.remove("is-loading");
+          const spinner = card.querySelector(".q-loading-spinner");
+          if (spinner) {
+            spinner.remove();
+          }
+        }
+      }
+    };
+    setTimeout(checkLoading, checkInterval);
   } catch (error) {
+    // エラー時はローディング状態を解除
+    loadingUids.delete(uid);
+    if (card) {
+      card.classList.remove("is-loading");
+      const spinner = card.querySelector(".q-loading-spinner");
+      if (spinner) {
+        spinner.remove();
+      }
+    }
 //    console.error("Failed to revert question to unanswered", error);
     app.toast("未回答への戻し中にエラーが発生しました。", "error");
   }
@@ -949,6 +1032,23 @@ export async function handleBatchUnanswer(app) {
   });
   if (!confirmed) return;
   const uidsToUpdate = checkedBoxes.map((checkbox) => checkbox.dataset.uid);
+  
+  // ローディング状態を開始
+  uidsToUpdate.forEach((uid) => {
+    loadingUids.add(uid);
+    const card = app.dom.cardsContainer?.querySelector(`.q-card[data-uid="${uid}"]`);
+    if (card) {
+      card.classList.add("is-loading");
+      const existingSpinner = card.querySelector(".q-loading-spinner");
+      if (!existingSpinner) {
+        const spinner = document.createElement("div");
+        spinner.className = "q-loading-spinner";
+        spinner.setAttribute("aria-label", "更新中");
+        card.appendChild(spinner);
+      }
+    }
+  });
+  
   const updates = {};
   for (const uid of uidsToUpdate) {
     updates[`${uid}/answered`] = false;
@@ -970,7 +1070,62 @@ export async function handleBatchUnanswer(app) {
     }
     syncSelectAllState(app);
     updateBatchButtonVisibility(app);
+    
+    // Firebaseの更新が反映されるまで少し待つ（最大3秒）
+    const maxWaitTime = 3000;
+    const checkInterval = 100;
+    const startTime = Date.now();
+    const checkLoading = () => {
+      const remainingUids = uidsToUpdate.filter((uid) => {
+        const item = app.state.allQuestions.find((q) => String(q.UID) === uid);
+        // 更新が反映されたか確認
+        if (item && !item["回答済"]) {
+          loadingUids.delete(uid);
+          const card = app.dom.cardsContainer?.querySelector(`.q-card[data-uid="${uid}"]`);
+          if (card) {
+            card.classList.remove("is-loading");
+            const spinner = card.querySelector(".q-loading-spinner");
+            if (spinner) {
+              spinner.remove();
+            }
+          }
+          return false;
+        }
+        return true;
+      });
+      
+      // タイムアウトチェック
+      if (remainingUids.length > 0 && Date.now() - startTime < maxWaitTime) {
+        setTimeout(checkLoading, checkInterval);
+      } else {
+        // 残っているローディング状態をすべて解除
+        remainingUids.forEach((uid) => {
+          loadingUids.delete(uid);
+          const card = app.dom.cardsContainer?.querySelector(`.q-card[data-uid="${uid}"]`);
+          if (card) {
+            card.classList.remove("is-loading");
+            const spinner = card.querySelector(".q-loading-spinner");
+            if (spinner) {
+              spinner.remove();
+            }
+          }
+        });
+      }
+    };
+    setTimeout(checkLoading, checkInterval);
   } catch (error) {
+    // エラー時はローディング状態を解除
+    uidsToUpdate.forEach((uid) => {
+      loadingUids.delete(uid);
+      const card = app.dom.cardsContainer?.querySelector(`.q-card[data-uid="${uid}"]`);
+      if (card) {
+        card.classList.remove("is-loading");
+        const spinner = card.querySelector(".q-loading-spinner");
+        if (spinner) {
+          spinner.remove();
+        }
+      }
+    });
     app.toast("未回答への戻し中にエラーが発生しました。", "error");
   }
 }

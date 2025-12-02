@@ -1266,6 +1266,41 @@ input[type="checkbox"]{
   color:#78350f;
 }
 
+/* ローディング状態 */
+.q-card.is-loading{
+  position:relative;
+  pointer-events:none;
+  opacity:0.7;
+}
+.q-card.is-loading::after{
+  content:"";
+  position:absolute;
+  top:0;
+  left:0;
+  right:0;
+  bottom:0;
+  background:rgba(0,0,0,.3);
+  border-radius:inherit;
+  z-index:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.q-card.is-loading .q-loading-spinner{
+  position:absolute;
+  top:50%;
+  left:50%;
+  transform:translate(-50%, -50%);
+  width:clamp(2rem, 3.4vw, 2.6rem);
+  height:clamp(2rem, 3.4vw, 2.6rem);
+  border:.22rem solid rgba(231,236,251,.18);
+  border-top-color:var(--accent, #1ec8ff);
+  border-radius:50%;
+  animation:spin 1s linear infinite;
+  z-index:2;
+  box-shadow:0 0 0 1px rgba(12,18,34,.4);
+}
+
 /* 上段：RN & 班・状態 */
 .q-head{
   display:flex;

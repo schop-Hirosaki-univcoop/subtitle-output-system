@@ -3594,9 +3594,9 @@ export class EventAdminApp {
     }, PENDING_NAVIGATION_CLEAR_DELAY_MS);
   }
 
-  async handleFlowNavigation(target, { sourceButton = null } = {}) {
+  async handleFlowNavigation(target, { sourceButton = null, originPanel: providedOriginPanel = null } = {}) {
     let normalized = PANEL_CONFIG[target] ? target : "events";
-    const originPanel = sourceButton?.closest("[data-panel]")?.dataset?.panel || "";
+    const originPanel = providedOriginPanel || sourceButton?.closest("[data-panel]")?.dataset?.panel || "";
     let config = PANEL_CONFIG[normalized] || PANEL_CONFIG.events;
     this.clearPendingNavigationTimer();
     this.pendingNavigationTarget = "";
@@ -10122,7 +10122,11 @@ export class EventAdminApp {
           if (!selected) return;
           if (!this.selectedScheduleId) return;
           event.preventDefault();
-          void this.handleFlowNavigation("participants", { sourceButton: null });
+          // 確定ボタンと同じ挙動にするため、originPanelを明示的に設定
+          void this.handleFlowNavigation("participants", { 
+            sourceButton: null,
+            originPanel: "schedules"
+          });
           return;
         }
         default:
