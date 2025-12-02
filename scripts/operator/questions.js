@@ -1214,20 +1214,34 @@ export async function clearNowShowing(app) {
       group.updates[`${item.UID}/updatedAt`] = serverTimestamp();
     });
     if (previousNowShowing) {
-      const prevItem = app.state.allQuestions.find(
-        (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
-      );
-      if (prevItem) {
-        const isPickup = prevItem.ピックアップ === true;
+      let prevUid = typeof previousNowShowing.uid !== "undefined" ? String(previousNowShowing.uid || "") : "";
+      let prevItem = null;
+      let isPickup = previousNowShowing.pickup === true;
+      if (!prevUid) {
+        prevItem = app.state.allQuestions.find(
+          (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
+        );
+        if (prevItem) {
+          prevUid = prevItem.UID;
+          isPickup = prevItem.ピックアップ === true;
+        }
+      } else {
+        prevItem = app.state.allQuestions.find((q) => String(q.UID || "") === prevUid) || null;
+        if (!isPickup && prevItem) {
+          isPickup = prevItem.ピックアップ === true;
+        }
+      }
+
+      if (prevUid) {
         const statusRef = getQuestionStatusRef(eventId, isPickup);
         const pathKey = statusRef.key;
         if (!updatesByPath.has(pathKey)) {
           updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
         }
         const group = updatesByPath.get(pathKey);
-        group.updates[`${prevItem.UID}/answered`] = true;
-        group.updates[`${prevItem.UID}/updatedAt`] = serverTimestamp();
-        app.api.fireAndForgetApi({ action: "updateStatus", uid: prevItem.UID, status: true });
+        group.updates[`${prevUid}/answered`] = true;
+        group.updates[`${prevUid}/updatedAt`] = serverTimestamp();
+        app.api.fireAndForgetApi({ action: "updateStatus", uid: prevUid, status: true });
       }
     }
     // 各パスごとに更新を実行
