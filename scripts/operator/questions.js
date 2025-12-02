@@ -802,22 +802,22 @@ export async function handleDisplay(app) {
   try {
     const updates = {};
     if (previousUid) {
-      updates[`questionStatus/${previousUid}/selecting`] = false;
-      updates[`questionStatus/${previousUid}/answered`] = true;
-      updates[`questionStatus/${previousUid}/updatedAt`] = serverTimestamp();
+      updates[`${previousUid}/selecting`] = false;
+      updates[`${previousUid}/answered`] = true;
+      updates[`${previousUid}/updatedAt`] = serverTimestamp();
     } else if (previousNowShowing) {
       const prev = app.state.allQuestions.find(
         (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
       );
       if (prev) {
-        updates[`questionStatus/${prev.UID}/selecting`] = false;
-        updates[`questionStatus/${prev.UID}/answered`] = true;
-        updates[`questionStatus/${prev.UID}/updatedAt`] = serverTimestamp();
+        updates[`${prev.UID}/selecting`] = false;
+        updates[`${prev.UID}/answered`] = true;
+        updates[`${prev.UID}/updatedAt`] = serverTimestamp();
       }
     }
-    updates[`questionStatus/${app.state.selectedRowData.uid}/selecting`] = true;
-    updates[`questionStatus/${app.state.selectedRowData.uid}/answered`] = false;
-    updates[`questionStatus/${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
+    updates[`${app.state.selectedRowData.uid}/selecting`] = true;
+    updates[`${app.state.selectedRowData.uid}/answered`] = false;
+    updates[`${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
     console.log("[送出] questionStatus更新用JSON:", JSON.stringify(updates, null, 2));
     await update(questionStatusRef, updates);
     // 更新前に再度チャンネルを確認
@@ -951,8 +951,8 @@ export async function handleBatchUnanswer(app) {
   const uidsToUpdate = checkedBoxes.map((checkbox) => checkbox.dataset.uid);
   const updates = {};
   for (const uid of uidsToUpdate) {
-    updates[`questionStatus/${uid}/answered`] = false;
-    updates[`questionStatus/${uid}/updatedAt`] = serverTimestamp();
+    updates[`${uid}/answered`] = false;
+    updates[`${uid}/updatedAt`] = serverTimestamp();
   }
   try {
     console.log("[チェックしたものをまとめて未回答にする] questionStatus更新用JSON:", JSON.stringify(updates, null, 2));
@@ -1011,16 +1011,16 @@ export async function clearNowShowing(app) {
     const updates = {};
     const selectingItems = app.state.allQuestions.filter((item) => item["選択中"] === true);
     selectingItems.forEach((item) => {
-      updates[`questionStatus/${item.UID}/selecting`] = false;
-      updates[`questionStatus/${item.UID}/updatedAt`] = serverTimestamp();
+      updates[`${item.UID}/selecting`] = false;
+      updates[`${item.UID}/updatedAt`] = serverTimestamp();
     });
     if (previousNowShowing) {
       const prevItem = app.state.allQuestions.find(
         (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
       );
       if (prevItem) {
-        updates[`questionStatus/${prevItem.UID}/answered`] = true;
-        updates[`questionStatus/${prevItem.UID}/updatedAt`] = serverTimestamp();
+        updates[`${prevItem.UID}/answered`] = true;
+        updates[`${prevItem.UID}/updatedAt`] = serverTimestamp();
         app.api.fireAndForgetApi({ action: "updateStatus", uid: prevItem.UID, status: true });
       }
     }
