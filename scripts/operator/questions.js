@@ -1041,6 +1041,16 @@ export function handleSelectAll(app, event) {
   updateActionAvailability(app);
 }
 
+export function handleRowCheckboxChange(app, event) {
+  const target = event?.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (!target.classList.contains("row-checkbox")) return;
+
+  syncSelectAllState(app);
+  updateBatchButtonVisibility(app);
+  updateActionAvailability(app);
+}
+
 export async function handleBatchUnanswer(app) {
   const renderOnline = app.state.renderChannelOnline !== false;
   const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.displaySessionActive;
