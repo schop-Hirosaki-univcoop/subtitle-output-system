@@ -696,7 +696,7 @@ function doPost(e) {
         return ok(batchToggleDictionaryTerms(req.uids, req.enabled));
       case "updateStatus":
         assertOperator_(principal);
-        return ok(updateAnswerStatus(req.uid, req.status));
+        return ok(updateAnswerStatus(req.uid, req.status, req.eventId));
       case "editQuestion":
         assertOperator_(principal);
         return ok(editQuestionText(req.uid, req.text));
@@ -5301,7 +5301,7 @@ function resolveQuestionRecordForUid_(uid, token) {
   return { branch: "", record: null, token: accessToken };
 }
 
-function updateAnswerStatus(uid, status) {
+function updateAnswerStatus(uid, status, eventId) {
   const normalizedUid = String(uid || "").trim();
   if (!normalizedUid) {
     throw new Error("UID is required.");
@@ -5314,11 +5314,12 @@ function updateAnswerStatus(uid, status) {
   }
 
   // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
-  const eventId = record.eventId ? String(record.eventId).trim() : "";
-  if (!eventId) {
+  const fallbackEventId = String(eventId || "").trim();
+  const resolvedEventId = record.eventId ? String(record.eventId).trim() : fallbackEventId;
+  if (!resolvedEventId) {
     throw new Error(`UID: ${normalizedUid} has no eventId.`);
   }
-  const statusPath = `questionStatus/${eventId}/${normalizedUid}`;
+  const statusPath = `questionStatus/${resolvedEventId}/${normalizedUid}`;
   const currentStatus = fetchRtdb_(statusPath, token);
 
   if (!currentStatus || typeof currentStatus !== "object") {

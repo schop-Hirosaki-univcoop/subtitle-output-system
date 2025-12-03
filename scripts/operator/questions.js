@@ -907,13 +907,13 @@ export async function handleDisplay(app) {
     });
     app.api.fireAndForgetApi({ action: "updateSelectingStatus", uid: app.state.selectedRowData.uid });
     if (previousUid) {
-      app.api.fireAndForgetApi({ action: "updateStatus", uid: previousUid, status: true });
+      app.api.fireAndForgetApi({ action: "updateStatus", uid: previousUid, status: true, eventId });
     } else if (previousNowShowing) {
       const prev = app.state.allQuestions.find(
         (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
       );
       if (prev) {
-        app.api.fireAndForgetApi({ action: "updateStatus", uid: prev.UID, status: true });
+        app.api.fireAndForgetApi({ action: "updateStatus", uid: prev.UID, status: true, eventId });
       }
     }
     app.state.lastDisplayedUid = app.state.selectedRowData.uid;
@@ -983,7 +983,12 @@ export async function handleUnanswer(app) {
     const unanswerPayload = { answered: false, updatedAt: serverTimestamp() };
     console.log("[未回答にする] questionStatus更新用JSON:", JSON.stringify({ [`${statusRef.key}/${uid}`]: unanswerPayload }, null, 2));
     await update(statusRef, { [`${uid}`]: unanswerPayload });
-    app.api.fireAndForgetApi({ action: "updateStatus", uid: app.state.selectedRowData.uid, status: false });
+    app.api.fireAndForgetApi({
+      action: "updateStatus",
+      uid: app.state.selectedRowData.uid,
+      status: false,
+      eventId
+    });
     app.api.logAction("UNANSWER", `UID: ${uid}, RN: ${displayLabel}`);
     
     // Firebaseの更新が反映されるまで少し待つ（最大5秒）
@@ -1241,7 +1246,7 @@ export async function clearNowShowing(app) {
         const group = updatesByPath.get(pathKey);
         group.updates[`${prevUid}/answered`] = true;
         group.updates[`${prevUid}/updatedAt`] = serverTimestamp();
-        app.api.fireAndForgetApi({ action: "updateStatus", uid: prevUid, status: true });
+        app.api.fireAndForgetApi({ action: "updateStatus", uid: prevUid, status: true, eventId });
       }
     }
     // 各パスごとに更新を実行
