@@ -382,6 +382,8 @@ export class QuestionFormApp {
         formData,
         snapshot
       });
+      console.log("[DEBUG] submission payload", JSON.stringify(submission, null, 2));
+      console.log("[DEBUG] token", token);
       const result = await submitQuestionRecord({
         database: this.database,
         controller,

@@ -171,6 +171,8 @@ console.log("[DEBUG] questionUid", questionUid);
 
   const intakeRef = ref(database, `questionIntake/submissions/${token}/${questionUid}`);
   const intakePayload = { ...submission, uid: questionUid, submittedAt: timestamp };
+console.log("[DEBUG] intakePayload", JSON.stringify(intakePayload, null, 2));
+console.log("[DEBUG] intakeRef path", `questionIntake/submissions/${token}/${questionUid}`);
   let intakeCreated = false;
   let questionCreated = false;
 
