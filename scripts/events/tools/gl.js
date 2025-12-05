@@ -1883,8 +1883,21 @@ export class GlToolManager {
     this.scheduleSyncPending = true;
     try {
       const schedulesRef = ref(database, `glIntake/events/${this.currentEventId}/schedules`);
-      // set()を使うことで、schedulesノード全体を置き換える（update()だとルール検証が厳しくなる可能性がある）
-      await set(schedulesRef, nextMap);
+      // update()を使って部分的な更新を行う（set()だと検証ルールが厳しすぎる可能性がある）
+      const updates = {};
+      // 新しいスケジュールエントリを追加
+      Object.keys(nextMap).forEach(scheduleId => {
+        updates[`glIntake/events/${this.currentEventId}/schedules/${scheduleId}`] = nextMap[scheduleId];
+      });
+      // 削除されたスケジュールエントリを削除
+      Object.keys(currentMap).forEach(scheduleId => {
+        if (!nextMap[scheduleId]) {
+          updates[`glIntake/events/${this.currentEventId}/schedules/${scheduleId}`] = null;
+        }
+      });
+      if (Object.keys(updates).length > 0) {
+        await update(ref(database), updates);
+      }
     } catch (error) {
       // パーミッションエラーの場合は、admin権限がない可能性があるため、警告レベルでログに記録
       // GLリスト管理パネルを開いていないユーザーでも、イベント選択時にこの関数が呼ばれる可能性がある
