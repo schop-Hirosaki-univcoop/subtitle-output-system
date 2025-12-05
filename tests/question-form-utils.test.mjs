@@ -238,7 +238,6 @@ test('buildSubmissionPayload merges snapshot values and trims metadata', () => {
     },
     snapshot: {
       groupNumber: ' G1 ',
-      teamNumber: ' T1 ',
       scheduleLabel: ' 午前 ',
       scheduleDate: '2025-01-01',
       scheduleLocation: ' メイン会場 ',
@@ -265,10 +264,7 @@ test('buildSubmissionPayload merges snapshot values and trims metadata', () => {
   assert.equal(submission.radioName, 'Listener');
   assert.equal(submission.question, 'How are you?');
   assert.equal(submission.genre, '活動');
-  assert.equal(submission.groupNumber, 'G1');
-  assert.equal(submission.scheduleLabel, '午前');
-  assert.equal(submission.scheduleLocation, 'メイン会場');
-  assert.equal(submission.eventName, '朝会');
+  // tokenから取得できる情報（groupNumber, scheduleLabel, scheduleLocation, eventName等）は重複のため含まれない
   assert.equal(submission.formVersion, 'test@1');
   assert.equal(submission.language, 'ja-JP');
   assert.equal(submission.userAgent, 'CustomAgent/1.0');

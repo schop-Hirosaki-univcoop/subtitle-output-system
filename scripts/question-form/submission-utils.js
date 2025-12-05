@@ -209,14 +209,7 @@ export function generateQuestionUid({ crypto: cryptoOverride, random = Math.rand
  * @returns {Record<string, unknown>}
  */
 export function buildQuestionRecord({ uid, token, submission, context, timestamp }) {
-  const coalescedGroup = coalesceTrimmed(submission.groupNumber, context?.groupNumber);
-  const scheduleLabel = coalesceTrimmed(submission.scheduleLabel, context?.scheduleLabel);
-  const scheduleLocation = coalesceTrimmed(submission.scheduleLocation, context?.scheduleLocation);
-  const scheduleStart = coalesceTrimmed(submission.scheduleStart, context?.scheduleStart);
-  const scheduleEnd = coalesceTrimmed(submission.scheduleEnd, context?.scheduleEnd);
-  const participantId = coalesceTrimmed(submission.participantId, context?.participantId);
-  const eventId = coalesceTrimmed(submission.eventId, context?.eventId);
-  const scheduleId = coalesceTrimmed(submission.scheduleId, context?.scheduleId);
+  // tokenから取得できる情報はcontextから取得（重複を避けるためsubmissionには含めない）
   const questionLength = Number(submission.questionLength);
 
   const record = {
@@ -224,19 +217,7 @@ export function buildQuestionRecord({ uid, token, submission, context, timestamp
     token: ensureTrimmedString(token),
     name: ensureTrimmedString(submission.radioName),
     question: ensureTrimmedString(submission.question),
-    group: coalescedGroup,
     genre: coalesceTrimmed(submission.genre) || "その他",
-    schedule: scheduleLabel,
-    scheduleLocation,
-    scheduleStart,
-    scheduleEnd,
-    scheduleDate: coalesceTrimmed(submission.scheduleDate, context?.scheduleDate),
-    participantId,
-    participantName: coalesceTrimmed(submission.participantName, context?.participantName),
-    guidance: coalesceTrimmed(submission.guidance, context?.guidance),
-    eventId,
-    eventName: coalesceTrimmed(submission.eventName, context?.eventName),
-    scheduleId,
     ts: timestamp,
     updatedAt: timestamp,
     type: "normal"

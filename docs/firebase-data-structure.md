@@ -477,26 +477,16 @@ GL の割り当て情報を管理。
 **データ構造:**
 
 - `uid` (string, 必須): ユーザー ID
-- `token` (string, 任意): トークン
-- `name` (string, 必須): 名前
+- `token` (string, 必須): トークン
+- `name` (string, 必須): 名前（ラジオネーム）
 - `question` (string, 必須): 質問内容
-- `group` (string, 任意): グループ
 - `genre` (string, 任意): ジャンル
-- `schedule` (string, 任意): スケジュール
-- `scheduleStart` (string, 任意): スケジュール開始時刻
-- `scheduleEnd` (string, 任意): スケジュール終了時刻
-- `scheduleDate` (string, 任意): スケジュール日付
-- `scheduleLocation` (string, 任意): スケジュール場所
-- `participantId` (string, 任意): 参加者 ID
-- `participantName` (string, 任意): 参加者名
-- `guidance` (string, 任意): ガイダンス
-- `eventId` (string, 任意): イベント ID
-- `eventName` (string, 任意): イベント名
-- `scheduleId` (string, 任意): スケジュール ID
 - `ts` (number, 任意): タイムスタンプ
 - `updatedAt` (number, 任意): 更新時刻
-- `type` (string, 任意): タイプ（'normal'である必要がある）
+- `type` (string, 必須): タイプ（'normal'である必要がある）
 - `questionLength` (number, 任意): 質問の長さ
+
+**注意:** token から取得可能な情報（eventId, scheduleId, participantId, eventName, scheduleLabel, scheduleLocation, scheduleDate, scheduleStart, scheduleEnd, participantName, guidance, group）は重複のため含まれていません。
 
 ### questions/pickup/{uid}
 
@@ -645,7 +635,6 @@ GL の割り当て情報を管理。
 - `phone` (string, 任意): 電話番号
 - `email` (string, 任意): メールアドレス
 - `groupNumber` (string, 必須): グループ番号
-- `teamNumber` (string, 任意): チーム番号
 - `token` (string, 必須): トークン
 - `guidance` (string, 任意): ガイダンス
 - `status` (string, 任意): ステータス
@@ -688,7 +677,6 @@ GL の割り当て情報を管理。
 - `participantUid` (string, 任意): 参加者のユーザー ID
 - `displayName` (string, 必須): 表示名
 - `groupNumber` (string, 必須): グループ番号
-- `teamNumber` (string, 任意): チーム番号
 - `guidance` (string, 任意): ガイダンス
 - `expiresAt` (number, 任意): 有効期限（タイムスタンプ）
 - `updatedAt` (number, 任意): 更新時刻（タイムスタンプ、または`now`）
@@ -708,33 +696,22 @@ GL の割り当て情報を管理。
 
 **データ構造:**
 
+- `token` (string, 必須): トークン（パスパラメータの$token と一致する必要がある）
 - `radioName` (string, 必須): ラジオネーム（新規作成時のみ、空文字列不可）
 - `question` (string, 必須): 質問内容（新規作成時のみ、空文字列不可）
 - `questionLength` (number, 必須): 質問の長さ（新規作成時のみ、0 より大きい）
 - `genre` (string, 必須): ジャンル（新規作成時のみ、空文字列不可）
-- `eventId` (string, 必須): イベント ID（新規作成時のみ、トークンの eventId と一致する必要がある）
-- `scheduleId` (string, 必須): スケジュール ID（新規作成時のみ、トークンの scheduleId と一致する必要がある）
-- `participantId` (string, 必須): 参加者 ID（新規作成時のみ、トークンの participantId と一致する必要がある）
 - `formVersion` (string, 必須): フォームバージョン（新規作成時のみ）
 - `submittedAt` (number, 必須): 提出時刻（新規作成時のみ、タイムスタンプ、または`now`）
-- `groupNumber` (string, 任意): グループ番号
-- `teamNumber` (string, 任意): チーム番号
-- `scheduleLabel` (string, 任意): スケジュールラベル
-- `scheduleLocation` (string, 任意): スケジュール場所
-- `scheduleDate` (string, 任意): スケジュール日付
-- `scheduleStart` (string, 任意): スケジュール開始時刻
-- `scheduleEnd` (string, 任意): スケジュール終了時刻
-- `eventName` (string, 任意): イベント名
-- `participantName` (string, 任意): 参加者名
-- `guidance` (string, 任意): ガイダンス
+- `status` (string, 必須): ステータス（新規作成時は'pending'のみ許可）
+- `uid` (string, 任意): ユーザー ID（新規作成時のみ）
+- `clientTimestamp` (number, 任意): クライアント側タイムスタンプ
 - `language` (string, 任意): 言語
 - `userAgent` (string, 任意): ユーザーエージェント
 - `referrer` (string, 任意): リファラー
 - `origin` (string, 任意): オリジン
-- `clientTimestamp` (number, 任意): クライアント側タイムスタンプ
-- `status` (string, 任意): ステータス（新規作成時は'pending'のみ許可）
-- `token` (string, 任意): トークン（新規作成時はパスパラメータの$token と一致する必要がある）
-- `uid` (string, 任意): ユーザー ID（新規作成時のみ）
+
+**注意:** token から取得可能な情報（eventId, scheduleId, participantId, eventName, scheduleLabel, scheduleLocation, scheduleDate, scheduleStart, scheduleEnd, participantName, guidance, groupNumber）は重複のため含まれていません。
 
 ### questionIntake/submissionErrors
 

@@ -67,7 +67,7 @@ export async function fetchContextFromToken(database, token) {
     scheduleEnd: String(data.scheduleEnd || ""),
     participantId: String(data.participantId || ""),
     participantName: String(data.displayName || ""),
-    groupNumber: String(data.teamNumber || data.groupNumber || ""),
+    groupNumber: String(data.groupNumber || ""),
     guidance: String(data.guidance || "")
   };
 }

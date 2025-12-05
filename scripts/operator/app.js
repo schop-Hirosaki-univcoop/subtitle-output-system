@@ -4359,37 +4359,41 @@ export class OperatorApp {
    */
   normalizeQuestionRecord(item) {
     const record = item && typeof item === "object" ? item : {};
+    // tokenから取得できる情報は削除されているため、scheduleMetadataやeventsByIdから取得
     const rawScheduleKey = String(record.scheduleKey ?? "").trim();
-    const eventId = String(record.eventId ?? "").trim();
-    const rawScheduleId = String(record.scheduleId ?? "").trim();
-    const fallbackLabel = String(record.scheduleLabel ?? record.schedule ?? "").trim();
-    const normalizedScheduleId = eventId ? normalizeScheduleId(rawScheduleId) : rawScheduleId;
-    let scheduleKey = rawScheduleKey;
-    if (!scheduleKey && eventId && normalizedScheduleId) {
-      scheduleKey = `${eventId}::${normalizedScheduleId}`;
-    } else if (!scheduleKey && rawScheduleId) {
-      scheduleKey = rawScheduleId;
-    } else if (fallbackLabel) {
-      scheduleKey = fallbackLabel;
-    }
     const scheduleMap = this.state.scheduleMetadata instanceof Map ? this.state.scheduleMetadata : null;
-    const scheduleMeta = scheduleKey && scheduleMap ? scheduleMap.get(scheduleKey) : null;
     const eventsMap = this.state.eventsById instanceof Map ? this.state.eventsById : null;
-    const eventNameFromMap = eventId && eventsMap ? String(eventsMap.get(eventId)?.name || "").trim() : "";
+    
+    // tokenから情報を取得する必要があるが、同期的に取得できないため、scheduleMetadataから推測
+    let eventId = "";
+    let rawScheduleId = "";
+    let scheduleKey = rawScheduleKey;
+    let scheduleMeta = null;
+    
+    // scheduleKeyから情報を取得
+    if (scheduleKey && scheduleMap) {
+      scheduleMeta = scheduleMap.get(scheduleKey);
+      if (scheduleMeta) {
+        eventId = String(scheduleMeta.eventId || "").trim();
+        rawScheduleId = String(scheduleMeta.scheduleId || "").trim();
+      }
+    }
+    
+    // scheduleKeyがなければ空文字列として扱う
+    const normalizedScheduleId = eventId ? normalizeScheduleId(rawScheduleId) : rawScheduleId;
     const metaLabel = scheduleMeta ? String(scheduleMeta.label || "").trim() : "";
     const metaEventName = scheduleMeta ? String(scheduleMeta.eventName || "").trim() : "";
     const metaStart = scheduleMeta ? String(scheduleMeta.startAt || "").trim() : "";
     const metaEnd = scheduleMeta ? String(scheduleMeta.endAt || "").trim() : "";
-    const rawStart = String(record.scheduleStart ?? "").trim();
-    const rawEnd = String(record.scheduleEnd ?? "").trim();
-    const label = metaLabel || fallbackLabel || rawScheduleId || "";
-    const eventName = metaEventName || eventNameFromMap || String(record.eventName ?? "").trim();
-    const startAt = metaStart || rawStart;
-    const endAt = metaEnd || rawEnd;
+    const eventNameFromMap = eventId && eventsMap ? String(eventsMap.get(eventId)?.name || "").trim() : "";
+    const label = metaLabel || "";
+    const eventName = metaEventName || eventNameFromMap || "";
+    const startAt = metaStart;
+    const endAt = metaEnd;
 
     return {
       UID: record.uid,
-      班番号: record.group ?? "",
+      班番号: "", // groupは削除されているため空文字列
       ラジオネーム: record.name,
       "質問・お悩み": record.question,
       ジャンル: resolveGenreLabel(record.genre),
@@ -4400,7 +4404,7 @@ export class OperatorApp {
       日程表示: label,
       開始日時: startAt,
       終了日時: endAt,
-      参加者ID: record.participantId ?? "",
+      参加者ID: "", // participantIdは削除されているため空文字列
       回答済: !!record.answered,
       選択中: !!record.selecting,
       ピックアップ: !!record.pickup,

@@ -432,7 +432,6 @@ export class QuestionFormApp {
 
     return {
       groupNumber,
-      teamNumber: groupNumber,
       scheduleLabel,
       scheduleDate,
       scheduleLocation,

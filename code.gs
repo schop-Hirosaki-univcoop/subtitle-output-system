@@ -807,9 +807,6 @@ function submitQuestion_(payload) {
   const payloadGroupNumber = String(
     payload.groupNumber || payload.group || ""
   ).trim();
-  const payloadTeamNumber = String(
-    payload.teamNumber || payload.team || ""
-  ).trim();
   const rawGenre = String(payload.genre || "").trim();
   const payloadScheduleLabel = String(
     payload.schedule || payload.date || ""
@@ -932,11 +929,7 @@ function submitQuestion_(payload) {
     tokenRecord.guidance || payload.guidance || ""
   ).trim();
   const groupNumber = String(
-    tokenRecord.teamNumber ||
-      tokenRecord.groupNumber ||
-      payloadTeamNumber ||
-      payloadGroupNumber ||
-      ""
+    tokenRecord.groupNumber || payloadGroupNumber || ""
   ).trim();
 
   const now = Date.now();
@@ -951,25 +944,13 @@ function submitQuestion_(payload) {
       : now;
 
   // ベースとなる送信データ（nullや空文字はあとで削る）
+  // tokenから取得できる情報（eventId, scheduleId, participantId, eventName, scheduleLabel等）は重複のため含めない
   const submissionBase = {
     token: rawToken,
     radioName,
     question: questionText,
     questionLength,
     genre: rawGenre || "その他",
-    groupNumber,
-    teamNumber: groupNumber,
-    scheduleLabel,
-    scheduleLocation,
-    scheduleDate,
-    scheduleStart: scheduleStartRaw,
-    scheduleEnd: scheduleEndRaw,
-    eventId,
-    eventName,
-    scheduleId,
-    participantId,
-    participantName,
-    guidance,
     clientTimestamp,
     language: String(payload.language || "").trim(),
     userAgent: String(payload.userAgent || "").trim(),
@@ -3080,10 +3061,7 @@ function resolveParticipantMailForToken_(req) {
         guidance: String(tokenRecord.guidance || "").trim(),
         eventName: String(tokenRecord.eventName || "").trim(),
         eventLabel: String(tokenRecord.eventName || "").trim(),
-        groupNumber: String(
-          tokenRecord.groupNumber || tokenRecord.teamNumber || ""
-        ).trim(),
-        teamNumber: String(tokenRecord.teamNumber || "").trim(),
+        groupNumber: String(tokenRecord.groupNumber || "").trim(),
       };
     }
 
@@ -3119,10 +3097,7 @@ function resolveParticipantMailForToken_(req) {
         scheduleTime: String(tokenRecord.scheduleTime || "").trim(),
         scheduleRange: String(tokenRecord.scheduleRange || "").trim(),
         guidance: String(tokenRecord.guidance || "").trim(),
-        groupNumber: String(
-          tokenRecord.groupNumber || tokenRecord.teamNumber || ""
-        ).trim(),
-        teamNumber: String(tokenRecord.teamNumber || "").trim(),
+        groupNumber: String(tokenRecord.groupNumber || "").trim(),
       },
       participantRecord || {}
     );
@@ -5155,14 +5130,10 @@ function processQuestionSubmissionQueue_(providedAccessToken, options) {
         return;
       }
 
-      // entryからeventId、scheduleId、participantIdを取得（フォールバックとしてtokenRecordを使用）
-      const entryEventId = ensureString(entry.eventId || tokenRecord.eventId);
-      const entryScheduleId = ensureString(
-        entry.scheduleId || tokenRecord.scheduleId
-      );
-      const entryParticipantId = ensureString(
-        entry.participantId || tokenRecord.participantId
-      );
+      // entryからは削除されているため、tokenRecordからeventId、scheduleId、participantIdを取得
+      const entryEventId = ensureString(tokenRecord.eventId);
+      const entryScheduleId = ensureString(tokenRecord.scheduleId);
+      const entryParticipantId = ensureString(tokenRecord.participantId);
 
       if (
         !tokenRecord ||
@@ -5195,49 +5166,16 @@ function processQuestionSubmissionQueue_(providedAccessToken, options) {
           Number.isFinite(timestampCandidate) && timestampCandidate > 0
             ? timestampCandidate
             : now;
-        const scheduleLabel = ensureString(
-          entry.scheduleLabel || tokenRecord.scheduleLabel
-        );
-        const scheduleDate = ensureString(
-          entry.scheduleDate || tokenRecord.scheduleDate
-        );
-        const scheduleStart = ensureString(
-          entry.scheduleStart || tokenRecord.scheduleStart
-        );
-        const scheduleEnd = ensureString(
-          entry.scheduleEnd || tokenRecord.scheduleEnd
-        );
-        const eventName = ensureString(
-          entry.eventName || tokenRecord.eventName
-        );
-        const participantName = ensureString(
-          entry.participantName || tokenRecord.displayName
-        );
-        const guidance = ensureString(entry.guidance || tokenRecord.guidance);
         const genreValue = ensureString(entry.genre) || "その他";
-        const groupNumber = ensureString(
-          entry.groupNumber || tokenRecord.teamNumber || tokenRecord.groupNumber
-        );
         const providedUid = ensureString(entry.uid) || ensureString(entryId);
         const uid = providedUid || Utilities.getUuid();
 
+        // tokenから取得できる情報（eventId, scheduleId, participantId, eventName, scheduleLabel等）は重複のため含めない
         const record = {
           uid,
           name: radioName,
           question: questionText,
           genre: genreValue,
-          group: groupNumber,
-          teamNumber: groupNumber,
-          schedule: scheduleLabel,
-          scheduleDate,
-          scheduleStart,
-          scheduleEnd,
-          eventId: entryEventId,
-          eventName,
-          scheduleId: entryScheduleId,
-          participantId: entryParticipantId,
-          participantName,
-          guidance,
           token,
           ts,
           updatedAt: ts,
@@ -5310,10 +5248,8 @@ function updateAnswerStatus(uid, status, eventId) {
   }
 
   // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
-  const fallbackEventId = String(eventId || "").trim();
-  const resolvedEventId = record.eventId
-    ? String(record.eventId).trim()
-    : fallbackEventId;
+  // record.eventIdは削除されているため、引数のeventIdを使用
+  const resolvedEventId = String(eventId || "").trim();
   if (!resolvedEventId) {
     throw new Error(`UID: ${normalizedUid} has no eventId.`);
   }
@@ -5370,7 +5306,14 @@ function batchUpdateStatus(uids, status) {
     }
 
     // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
-    const eventId = record.eventId ? String(record.eventId).trim() : "";
+    // record.eventIdは削除されているため、tokenから取得
+    const questionToken = String(record.token || "").trim();
+    if (!questionToken) {
+      return; // tokenがない場合はスキップ
+    }
+    const tokenRecord =
+      fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
+    const eventId = String(tokenRecord.eventId || "").trim();
     if (!eventId) {
       return; // eventIdがない場合はスキップ
     }
@@ -5412,7 +5355,14 @@ function updateSelectingStatus(uid) {
   }
 
   // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
-  const eventId = record.eventId ? String(record.eventId).trim() : "";
+  // record.eventIdは削除されているため、tokenから取得
+  const questionToken = String(record.token || "").trim();
+  if (!questionToken) {
+    throw new Error(`UID: ${normalizedUid} has no token.`);
+  }
+  const tokenRecord =
+    fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
+  const eventId = String(tokenRecord.eventId || "").trim();
   if (!eventId) {
     throw new Error(`UID: ${normalizedUid} has no eventId.`);
   }
@@ -5455,7 +5405,7 @@ function clearSelectingStatus() {
   const token = getFirebaseAccessToken_();
 
   // すべての質問レコードを取得して、イベントごとに選択中ステータスをクリア
-  // 注意: すべてのイベントを列挙するのは非効率なので、質問レコードからイベントIDを取得
+  // 注意: questionRecord.eventIdは削除されているため、tokenからeventIdを取得
   const normalQuestions = fetchRtdb_("questions/normal", token) || {};
   const pickupQuestions = fetchRtdb_("questions/pickup", token) || {};
   const allQuestions = { ...normalQuestions, ...pickupQuestions };
@@ -5469,9 +5419,14 @@ function clearSelectingStatus() {
     if (!uid || !questionRecord || typeof questionRecord !== "object") {
       return;
     }
-    const eventId = questionRecord.eventId
-      ? String(questionRecord.eventId).trim()
-      : "";
+    // questionRecord.eventIdは削除されているため、tokenから取得
+    const questionToken = String(questionRecord.token || "").trim();
+    if (!questionToken) {
+      return; // tokenがない場合はスキップ
+    }
+    const tokenRecord =
+      fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
+    const eventId = String(tokenRecord.eventId || "").trim();
     if (!eventId) {
       return; // eventIdがない場合はスキップ
     }
@@ -5524,7 +5479,14 @@ function editQuestionText(uid, newText) {
   }
 
   // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
-  const eventId = record.eventId ? String(record.eventId).trim() : "";
+  // record.eventIdは削除されているため、tokenから取得
+  const questionToken = String(record.token || "").trim();
+  if (!questionToken) {
+    throw new Error(`UID: ${normalizedUid} has no token.`);
+  }
+  const tokenRecord =
+    fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
+  const eventId = String(tokenRecord.eventId || "").trim();
   if (!eventId) {
     throw new Error(`UID: ${normalizedUid} has no eventId.`);
   }

@@ -81,30 +81,18 @@ export function buildSubmissionPayload({
   const clientTimestamp = Number.isFinite(timestamp) ? timestamp : Date.now();
   const normalizedToken = String(token).trim();
 
+  // tokenから取得できる情報（eventId, scheduleId, participantId, eventName, scheduleLabel等）は重複のため含めない
   const submissionBase = {
     token: normalizedToken,
     radioName: formData.radioName,
     question: formData.question,
     questionLength: formData.questionLength,
     genre: formData.genre,
-    groupNumber: snapshot.groupNumber,
-    teamNumber: snapshot.teamNumber,
-    scheduleLabel: snapshot.scheduleLabel,
-    scheduleDate: snapshot.scheduleDate,
-    scheduleLocation: snapshot.scheduleLocation,
-    scheduleStart: snapshot.scheduleStart,
-    scheduleEnd: snapshot.scheduleEnd,
-    eventId: snapshot.eventId != null ? String(snapshot.eventId) : undefined,
-    eventName: snapshot.eventName,
-    scheduleId: snapshot.scheduleId != null ? String(snapshot.scheduleId) : undefined,
-    participantId: snapshot.participantId != null ? String(snapshot.participantId) : undefined,
-    participantName: snapshot.participantName,
     clientTimestamp,
     language: metadata.language,
     userAgent: metadata.userAgent,
     referrer: metadata.referrer,
     formVersion,
-    guidance: snapshot.guidance,
     origin: metadata.origin,
     status: "pending"
   };
@@ -177,7 +165,8 @@ console.log("[DEBUG] intakeRef path", `questionIntake/submissions/${token}/${que
   let questionCreated = false;
 
   // イベントごとのquestionStatusパスを使用
-  const eventId = questionRecord.eventId ? String(questionRecord.eventId).trim() : "";
+  // eventIdはcontextから取得（tokenから取得可能な情報のためsubmissionには含めない）
+  const eventId = context?.eventId ? String(context.eventId).trim() : "";
   if (!eventId) {
     throw new Error("eventId is required for questionStatus path");
   }

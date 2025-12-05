@@ -881,15 +881,14 @@ function storeRelocationDraftOriginal(entry) {
   if (map.has(key)) {
     return key;
   }
-  const teamValue = String(entry.teamNumber ?? entry.groupNumber ?? "");
+  const groupValue = String(entry.groupNumber ?? "");
   map.set(key, {
     key,
     uid,
     rowKey,
     participantId,
-    teamNumber: entry.teamNumber ?? "",
     groupNumber: entry.groupNumber ?? "",
-    status: entry.status || resolveParticipantStatus(entry, teamValue),
+    status: entry.status || resolveParticipantStatus(entry, groupValue),
     isCancelled: Boolean(entry.isCancelled),
     isRelocated: Boolean(entry.isRelocated),
     relocationDestinationScheduleId: entry.relocationDestinationScheduleId || "",
@@ -956,10 +955,9 @@ function restoreRelocationDrafts(keys = []) {
     if (!entry) {
       return;
     }
-    entry.teamNumber = snapshot.teamNumber || "";
     entry.groupNumber = snapshot.groupNumber || "";
-    const teamValue = String(entry.teamNumber || entry.groupNumber || "");
-    entry.status = snapshot.status || resolveParticipantStatus(entry, teamValue);
+    const groupValue = String(entry.groupNumber || "");
+    entry.status = snapshot.status || resolveParticipantStatus(entry, groupValue);
     entry.isCancelled = Boolean(snapshot.isCancelled);
     entry.isRelocated = Boolean(snapshot.isRelocated);
     entry.relocationDestinationScheduleId = snapshot.relocationDestinationScheduleId || "";
@@ -967,7 +965,7 @@ function restoreRelocationDrafts(keys = []) {
     entry.relocationDestinationTeamNumber = snapshot.relocationDestinationTeamNumber || "";
     if (assignmentMap) {
       const assignmentKey = String(snapshot.uid || snapshot.participantId || snapshot.rowKey || normalizedKey).trim();
-      const assignmentValue = String(snapshot.teamNumber || snapshot.groupNumber || "");
+      const assignmentValue = String(snapshot.groupNumber || "");
       if (assignmentKey) {
         if (assignmentValue) {
           assignmentMap.set(assignmentKey, assignmentValue);
@@ -1085,13 +1083,13 @@ function commitParticipantQuickEdit(index, updated, { successMessage, successVar
   state.participants = sortParticipants(state.participants);
 
   const eventId = state.selectedEventId;
-  const teamNumber = String(nextEntry.teamNumber || nextEntry.groupNumber || "");
+  const groupNumber = String(nextEntry.groupNumber || "");
   if (eventId && uid) {
     const assignmentMap = ensureTeamAssignmentMap(eventId);
     if (assignmentMap) {
-      assignmentMap.set(uid, teamNumber);
+      assignmentMap.set(uid, groupNumber);
     }
-    const singleMap = new Map([[uid, teamNumber]]);
+    const singleMap = new Map([[uid, groupNumber]]);
     applyAssignmentsToEventCache(eventId, singleMap);
   }
 
@@ -1134,7 +1132,6 @@ function handleQuickCancelAction(participantId, rowIndex, rowKey) {
   const cancellationLabel = CANCEL_LABEL;
   const updated = {
     ...entry,
-    teamNumber: cancellationLabel,
     groupNumber: cancellationLabel
   };
   const nextStatus = resolveParticipantStatus(updated, cancellationLabel);
@@ -1193,7 +1190,6 @@ function handleQuickRelocateAction(participantId, rowIndex, rowKey) {
   const relocationLabel = RELOCATE_LABEL;
   const updated = {
     ...entry,
-    teamNumber: relocationLabel,
     groupNumber: relocationLabel
   };
   const nextStatus = resolveParticipantStatus(updated, relocationLabel);
@@ -1273,8 +1269,8 @@ function renderRelocationPrompt() {
       return;
     }
 
-    const teamValue = String(entry.teamNumber || entry.groupNumber || "");
-    const status = resolveParticipantStatus(entry, teamValue);
+    const groupValue = String(entry.groupNumber || "");
+    const status = resolveParticipantStatus(entry, groupValue);
     if (status !== "relocated") {
       return;
     }
@@ -1303,7 +1299,7 @@ function renderRelocationPrompt() {
     deptSpan.className = "relocation-item__meta";
     const department = entry.department || entry.groupNumber || "";
     const currentScheduleLabel = getScheduleLabel(eventId, currentScheduleId) || currentScheduleId || "";
-    const currentTeam = entry.teamNumber || entry.groupNumber || "";
+    const currentTeam = entry.groupNumber || "";
     const metaParts = [];
     if (department) metaParts.push(department);
     if (currentScheduleLabel) metaParts.push(`現在: ${currentScheduleLabel}`);
@@ -1492,8 +1488,8 @@ function queueRelocationPrompt(targets = [], { replace = false, focusKey = "" } 
     if (!entry) {
       return;
     }
-    const teamValue = String(entry.teamNumber || entry.groupNumber || "");
-    const status = resolveParticipantStatus(entry, teamValue);
+    const groupValue = String(entry.groupNumber || "");
+    const status = resolveParticipantStatus(entry, groupValue);
     if (status !== "relocated") {
       return;
     }
@@ -1556,7 +1552,7 @@ function handleRelocationFormSubmit(event) {
     const rowKey = row.dataset.rowKey || "";
     const uid = row.dataset.uid || participantId || "";
     const scheduleId = String(select?.value || "").trim();
-    const teamNumber = normalizeGroupNumberValue(teamInput?.value || "");
+    const groupNumber = normalizeGroupNumberValue(teamInput?.value || "");
     const selectable = Boolean(select && !select.disabled);
     if (selectable) {
       hasSelectableSchedule = true;
@@ -1564,7 +1560,7 @@ function handleRelocationFormSubmit(event) {
     if (!scheduleId) {
       return;
     }
-    updates.push({ uid, participantId, rowKey, scheduleId, teamNumber });
+    updates.push({ uid, participantId, rowKey, scheduleId, groupNumber });
   });
 
   if (!updates.length) {
@@ -1605,12 +1601,11 @@ function handleRelocationFormSubmit(event) {
     if (!uid && !rowKey && !participantId) {
       return;
     }
-    entry.teamNumber = RELOCATE_LABEL;
     entry.groupNumber = RELOCATE_LABEL;
     entry.status = "relocated";
     entry.isRelocated = true;
     entry.isCancelled = false;
-    applyRelocationDraft(entry, update.scheduleId, update.teamNumber);
+    applyRelocationDraft(entry, update.scheduleId, update.groupNumber);
     state.participants[index] = entry;
     processed.push({ uid, rowKey, participantId });
   });
@@ -1797,7 +1792,6 @@ function upsertRelocationPreview(relocation) {
     gender: base.gender || "",
     department: base.department || base.groupNumber || "",
     groupNumber: destinationTeam,
-    teamNumber: destinationTeam,
     scheduleId: relocation.toScheduleId,
     status: "relocated",
     isCancelled: false,
@@ -2138,7 +2132,7 @@ async function copyShareLink(token) {
 }
 
 function getParticipantGroupKey(entry) {
-  const raw = entry && (entry.teamNumber ?? entry.groupNumber);
+  const raw = entry && entry.groupNumber;
   const value = raw != null ? String(raw).trim() : "";
   if (!value) {
     return NO_TEAM_GROUP_KEY;
@@ -3959,7 +3953,7 @@ function buildChangeMeta(entry) {
   const metaParts = [];
   const displayId = getDisplayParticipantId(entry.participantId);
   metaParts.push(displayId ? `UID: ${displayId}` : "UID: 未設定");
-  const team = String(entry.teamNumber || "").trim();
+  const team = String(entry.groupNumber || "").trim();
   if (team) {
     metaParts.push(`班番号: ${team}`);
   }
@@ -5582,9 +5576,9 @@ async function handleCsvChange(event) {
         const entryKey = uid;
         const existing = entryKey ? existingMap.get(entryKey) || {} : {};
         const department = entry.department || existing.department || "";
-        const teamNumber = entry.teamNumber || existing.teamNumber || existing.groupNumber || "";
-        const phonetic = entry.phonetic || entry.furigana || existing.phonetic || existing.furigana || "";
-        const status = resolveParticipantStatus({ ...existing, ...entry, teamNumber }, teamNumber) || existing.status || "active";
+    const groupNumber = entry.groupNumber || existing.groupNumber || "";
+    const phonetic = entry.phonetic || entry.furigana || existing.phonetic || existing.furigana || "";
+    const status = resolveParticipantStatus({ ...existing, ...entry, groupNumber }, groupNumber) || existing.status || "active";
         const legacyParticipantId = existing.legacyParticipantId || (existing.participantId && existing.participantId !== uid ? existing.participantId : "");
         return {
           participantId: uid,
@@ -5595,8 +5589,7 @@ async function handleCsvChange(event) {
           furigana: phonetic,
           gender: entry.gender || existing.gender || "",
           department,
-          groupNumber: teamNumber,
-          teamNumber,
+          groupNumber,
           phone: entry.phone || existing.phone || "",
           email: entry.email || existing.email || "",
           token: existing.token || "",
@@ -5613,7 +5606,7 @@ async function handleCsvChange(event) {
     renderParticipants();
     const relocationCandidates = state.participants
       .filter(entry => {
-        const teamValue = String(entry.teamNumber || entry.groupNumber || "");
+        const teamValue = String(entry.groupNumber || "");
         return resolveParticipantStatus(entry, teamValue) === "relocated";
       })
       .map(entry => ({ participantId: entry.participantId || "", rowKey: entry.rowKey || "" }));
@@ -5662,9 +5655,9 @@ async function handleTeamCsvChange(event) {
     const eventAssignmentMap = ensureTeamAssignmentMap(eventId);
     const currentMapMatches = applyAssignmentsToEntries(state.participants, assignments);
 
-    assignments.forEach((teamNumber, participantId) => {
+    assignments.forEach((groupNumber, participantId) => {
       if (eventAssignmentMap) {
-        eventAssignmentMap.set(participantId, teamNumber);
+        eventAssignmentMap.set(participantId, groupNumber);
       }
     });
 
@@ -5727,7 +5720,7 @@ function downloadTeamTemplate() {
       String(entry.department || ""),
       String(entry.gender || ""),
       String(entry.name || ""),
-      String(entry.teamNumber || entry.groupNumber || ""),
+      String(entry.groupNumber || ""),
       resolveParticipantUid(entry)
     ]);
 
@@ -5809,8 +5802,8 @@ async function handleSave(options = {}) {
       const guidance = String(entry.guidance || "");
       const departmentValue = String(entry.department || "");
       const storedDepartment = departmentValue;
-      const teamNumber = String(entry.teamNumber || entry.groupNumber || "");
-      const status = entry.status || resolveParticipantStatus(entry, teamNumber) || "active";
+      const groupNumber = String(entry.groupNumber || "");
+      const status = entry.status || resolveParticipantStatus(entry, groupNumber) || "active";
       const isCancelled = entry.isCancelled === true || status === "cancelled";
       const isRelocated = entry.isRelocated === true || status === "relocated";
       const legacyIdRaw = String(entry.legacyParticipantId || "").trim();
@@ -5838,8 +5831,7 @@ async function handleSave(options = {}) {
         furigana: String(entry.phonetic || entry.furigana || ""),
         gender: String(entry.gender || ""),
         department: storedDepartment,
-        groupNumber: teamNumber,
-        teamNumber,
+        groupNumber,
         phone: String(entry.phone || ""),
         email: String(entry.email || ""),
         token,
@@ -5876,8 +5868,7 @@ async function handleSave(options = {}) {
         participantId,
         participantUid: participantId,
         displayName: String(entry.name || ""),
-        groupNumber: teamNumber,
-        teamNumber,
+        groupNumber,
         guidance: guidance || existingTokenRecord.guidance || "",
         revoked: false,
         createdAt: existingTokenRecord.createdAt || now,
@@ -5904,9 +5895,14 @@ async function handleSave(options = {}) {
       try {
         const fetchedQuestions = await fetchDbValue("questions/normal");
         if (fetchedQuestions && typeof fetchedQuestions === "object") {
+          // tokenからparticipantIdを取得して質問をフィルタリング
+          const tokenRecords = state.tokenRecords || {};
           Object.entries(fetchedQuestions).forEach(([questionUid, record]) => {
             if (!record || typeof record !== "object") return;
-            const participantKey = String(record.participantId || "");
+            const questionToken = String(record.token || "").trim();
+            if (!questionToken) return;
+            const tokenRecord = tokenRecords[questionToken] || {};
+            const participantKey = String(tokenRecord.participantId || "");
             if (!participantKey) return;
             if (!questionsByParticipant.has(participantKey)) {
               questionsByParticipant.set(participantKey, []);
@@ -5959,7 +5955,6 @@ async function handleSave(options = {}) {
         phone: String(originEntry.phone || ""),
         email: String(originEntry.email || ""),
         groupNumber: destinationTeam,
-        teamNumber: destinationTeam,
         token,
         guidance: guidanceText,
         status: "relocated",
@@ -6004,7 +5999,6 @@ async function handleSave(options = {}) {
           participantUid: uid,
           displayName: String(originEntry.name || existingTokenRecord.displayName || ""),
           groupNumber: destinationTeam,
-          teamNumber: destinationTeam,
           guidance: guidanceText || existingTokenRecord.guidance || "",
           revoked: false,
           createdAt: existingTokenRecord.createdAt || now,
@@ -6015,29 +6009,25 @@ async function handleSave(options = {}) {
       const questionEntries = questionsByParticipant.get(uid) || [];
       questionEntries.forEach(({ questionUid, record }) => {
         if (!questionUid || !record) return;
+        // questions/normalのレコードから削除されたフィールド（eventId, scheduleId, schedule等）は設定しない
+        // tokenを更新することで、tokenから情報を取得できるようになる
         const updatedQuestion = { ...record };
-        updatedQuestion.eventId = eventId;
-        updatedQuestion.scheduleId = destinationScheduleId;
-        updatedQuestion.schedule = destinationLabel || updatedQuestion.schedule || "";
-        updatedQuestion.scheduleStart = destinationStart || updatedQuestion.scheduleStart || "";
-        updatedQuestion.scheduleEnd = destinationEnd || updatedQuestion.scheduleEnd || "";
-        updatedQuestion.scheduleDate = destinationDate || updatedQuestion.scheduleDate || "";
-        updatedQuestion.scheduleLocation = destinationLocation || updatedQuestion.scheduleLocation || "";
-        if (destinationTeam) {
-          updatedQuestion.group = destinationTeam;
-        }
         updatedQuestion.updatedAt = now;
         additionalUpdates.push([
           `questions/normal/${questionUid}`,
           updatedQuestion
         ]);
 
-        // questionStatusはイベントごとに分離されているため、質問データからeventIdを取得
-        const questionEventId = String(updatedQuestion.eventId || "").trim();
-        if (questionEventId) {
-          // イベントごとのquestionStatusから取得を試みる（必要に応じて）
-          // ここでは質問データの更新のみ行い、questionStatusは個別に管理される
-          // 必要に応じて、questionStatus/${questionEventId}/${questionUid}から取得する処理を追加
+        // questionStatusはイベントごとに分離されているため、tokenからeventIdを取得
+        const questionToken = String(record.token || "").trim();
+        if (questionToken) {
+          const tokenRecord = state.tokenRecords[questionToken] || {};
+          const questionEventId = String(tokenRecord.eventId || eventId || "").trim();
+          if (questionEventId) {
+            // イベントごとのquestionStatusから取得を試みる（必要に応じて）
+            // ここでは質問データの更新のみ行い、questionStatusは個別に管理される
+            // 必要に応じて、questionStatus/${questionEventId}/${questionUid}から取得する処理を追加
+          }
         }
       });
 
@@ -6846,7 +6836,7 @@ function openParticipantEditor(participantId, rowKey) {
   if (dom.participantPhoneticInput) dom.participantPhoneticInput.value = entry.phonetic || entry.furigana || "";
   if (dom.participantGenderInput) dom.participantGenderInput.value = entry.gender || "";
   if (dom.participantDepartmentInput) dom.participantDepartmentInput.value = entry.department || "";
-  if (dom.participantTeamInput) dom.participantTeamInput.value = entry.teamNumber || entry.groupNumber || "";
+  if (dom.participantTeamInput) dom.participantTeamInput.value = entry.groupNumber || "";
   if (dom.participantPhoneInput) dom.participantPhoneInput.value = entry.phone || "";
   if (dom.participantEmailInput) dom.participantEmailInput.value = entry.email || "";
   if (dom.participantMailSentInput) {
@@ -6856,7 +6846,7 @@ function openParticipantEditor(participantId, rowKey) {
     dom.participantMailSentInput.disabled = false;
   }
 
-  const currentStatus = entry.status || resolveParticipantStatus(entry, entry.teamNumber || entry.groupNumber || "");
+  const currentStatus = entry.status || resolveParticipantStatus(entry, entry.groupNumber || "");
   const isCancelled = currentStatus === "cancelled";
   const isRelocated = currentStatus === "relocated";
   const relocationMap = ensurePendingRelocationMap();
@@ -6911,7 +6901,7 @@ function saveParticipantEdits() {
   const phonetic = String(dom.participantPhoneticInput?.value || "").trim();
   const gender = String(dom.participantGenderInput?.value || "").trim();
   const department = String(dom.participantDepartmentInput?.value || "").trim();
-  const teamNumber = normalizeGroupNumberValue(dom.participantTeamInput?.value || "");
+  const groupNumber = normalizeGroupNumberValue(dom.participantTeamInput?.value || "");
   const phone = String(dom.participantPhoneInput?.value || "").trim();
   const email = String(dom.participantEmailInput?.value || "").trim();
 
@@ -6925,8 +6915,7 @@ function saveParticipantEdits() {
     furigana: phonetic,
     gender,
     department,
-    teamNumber,
-    groupNumber: teamNumber,
+    groupNumber,
     phone,
     email
   };
@@ -6950,7 +6939,7 @@ function saveParticipantEdits() {
     updated.mailSentAt = 0;
     updated.mailError = "";
   }
-  const nextStatus = resolveParticipantStatus(updated, teamNumber);
+  const nextStatus = resolveParticipantStatus(updated, groupNumber);
   updated.status = nextStatus;
   updated.isCancelled = nextStatus === "cancelled";
   updated.isRelocated = nextStatus === "relocated";
@@ -6976,9 +6965,9 @@ function saveParticipantEdits() {
   if (eventId && uid) {
     const assignmentMap = ensureTeamAssignmentMap(eventId);
     if (assignmentMap) {
-      assignmentMap.set(uid, teamNumber);
+      assignmentMap.set(uid, groupNumber);
     }
-    const singleMap = new Map([[uid, teamNumber]]);
+    const singleMap = new Map([[uid, groupNumber]]);
     applyAssignmentsToEventCache(eventId, singleMap);
   }
 
