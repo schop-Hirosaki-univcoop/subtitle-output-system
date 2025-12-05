@@ -1917,6 +1917,9 @@
                   if (!question && pickupData.question) {
                     question = String(pickupData.question || '').trim();
                   }
+                  if (!genre && pickupData.genre) {
+                    genre = String(pickupData.genre || '').trim();
+                  }
                   pickup = true;
                 }
               }
