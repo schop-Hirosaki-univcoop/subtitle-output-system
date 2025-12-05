@@ -290,7 +290,7 @@ export const questionStatusRef = ref(database, "questionStatus");
 
 1. **移行スクリプトの実行**:
    - `code.gs`に`migrateLegacyPaths_`関数が追加されました
-   - APIエンドポイント: `action: "migrateLegacyPaths"`（`dryRun`パラメータでドライラン/実実行を切り替え）
+   - API エンドポイント: `action: "migrateLegacyPaths"`（`dryRun`パラメータでドライラン/実実行を切り替え）
    - まず`dryRun: true`で実行し、移行計画を確認
    - 問題がなければ`dryRun: false`で実際の移行を実行
 2. 移行完了を確認
@@ -393,7 +393,8 @@ export const questionStatusRef = ref(database, "questionStatus");
 - [ ] 本番環境での移行実行（`dryRun: false`で実行）
 
 **移行スクリプトの使用方法**:
-- APIエンドポイント: `action: "migrateLegacyPaths"`
+
+- API エンドポイント: `action: "migrateLegacyPaths"`
 - パラメータ: `{ dryRun: true }`（ドライラン）または `{ dryRun: false }`（実実行）
 - 戻り値: 移行結果のサマリー（移行件数、スキップ件数、エラー一覧）
 
