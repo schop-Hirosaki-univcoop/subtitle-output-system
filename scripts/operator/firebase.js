@@ -52,6 +52,7 @@ export const questionsRef = ref(database, "questions");
 export const pickupQuestionsRef = ref(database, "questions/pickup");
 export const questionIntakeEventsRef = ref(database, "questionIntake/events");
 export const questionIntakeSchedulesRef = ref(database, "questionIntake/schedules");
+export const questionIntakeTokensRef = ref(database, "questionIntake/tokens");
 export const updateTriggerRef = ref(database, "signals/logs");
 export const dictionaryRef = ref(database, "dictionary");
 export const operatorChatMessagesRef = ref(database, "operatorChat/messages");

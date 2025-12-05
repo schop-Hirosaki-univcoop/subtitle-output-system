@@ -11,6 +11,7 @@ import {
   getQuestionStatusRef,
   questionIntakeEventsRef,
   questionIntakeSchedulesRef,
+  questionIntakeTokensRef,
   displayPresenceRootRef,
   getDisplayPresenceEntryRef,
   getRenderRef,
@@ -4155,6 +4156,10 @@ export class OperatorApp {
       this.schedulesUnsubscribe();
       this.schedulesUnsubscribe = null;
     }
+    if (this.tokensUnsubscribe) {
+      this.tokensUnsubscribe();
+      this.tokensUnsubscribe = null;
+    }
     if (typeof this.stopDictionaryListener === "function") {
       this.stopDictionaryListener();
     }
@@ -4387,12 +4392,26 @@ export class OperatorApp {
     const rawScheduleKey = String(record.scheduleKey ?? "").trim();
     const scheduleMap = this.state.scheduleMetadata instanceof Map ? this.state.scheduleMetadata : null;
     const eventsMap = this.state.eventsById instanceof Map ? this.state.eventsById : null;
+    const tokensMap = this.state.tokensByToken instanceof Map ? this.state.tokensByToken : null;
     
-    // tokenから情報を取得する必要があるが、同期的に取得できないため、scheduleMetadataから推測
+    // tokenからscheduleKeyを解決
     let eventId = "";
     let rawScheduleId = "";
     let scheduleKey = rawScheduleKey;
     let scheduleMeta = null;
+    
+    // tokenからscheduleKeyを取得
+    if (!scheduleKey) {
+      const token = String(record.token ?? "").trim();
+      if (token && tokensMap) {
+        const tokenInfo = tokensMap.get(token);
+        if (tokenInfo) {
+          scheduleKey = tokenInfo.scheduleKey || "";
+          eventId = tokenInfo.eventId || "";
+          rawScheduleId = tokenInfo.scheduleId || "";
+        }
+      }
+    }
     
     // scheduleKeyから情報を取得
     if (scheduleKey && scheduleMap) {
@@ -4516,6 +4535,28 @@ export class OperatorApp {
     this.schedulesUnsubscribe = onValue(questionIntakeSchedulesRef, (snapshot) => {
       this.schedulesBranch = snapshot.val() || {};
       this.rebuildScheduleMetadata();
+    });
+    if (this.tokensUnsubscribe) this.tokensUnsubscribe();
+    this.tokensUnsubscribe = onValue(questionIntakeTokensRef, (snapshot) => {
+      const tokensValue = snapshot.val() || {};
+      const tokensMap = new Map();
+      Object.entries(tokensValue).forEach(([token, tokenRecord]) => {
+        if (tokenRecord && typeof tokenRecord === "object") {
+          const eventId = String(tokenRecord.eventId || "").trim();
+          const scheduleId = String(tokenRecord.scheduleId || "").trim();
+          if (eventId && scheduleId) {
+            const normalizedScheduleId = normalizeScheduleId(scheduleId);
+            const scheduleKey = `${eventId}::${normalizedScheduleId}`;
+            tokensMap.set(token, {
+              eventId,
+              scheduleId: normalizedScheduleId,
+              scheduleKey
+            });
+          }
+        }
+      });
+      this.state.tokensByToken = tokensMap;
+      this.rebuildQuestions();
     });
   }
 
