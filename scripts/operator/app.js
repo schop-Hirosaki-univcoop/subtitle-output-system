@@ -851,12 +851,6 @@ export class OperatorApp {
       }
       return null;
     }
-    // 完全正規化: scheduleLabelは参照先から取得（既存データとの互換性のため、candidate/sessionから直接取得をフォールバックとして使用）
-    const fallbackScheduleLabel = String((candidate && candidate.scheduleLabel) || (session && session.scheduleLabel) || "").trim();
-    const scheduleKeyForLabel = eventId && normalizedScheduleId ? `${eventId}::${normalizedScheduleId}` : "";
-    const scheduleLabel = scheduleKeyForLabel && typeof this.resolveScheduleLabel === "function"
-      ? this.resolveScheduleLabel(scheduleKeyForLabel, fallbackScheduleLabel, normalizedScheduleId) || fallbackScheduleLabel || normalizedScheduleId
-      : fallbackScheduleLabel || normalizedScheduleId;
     // デバッグ: sessionから直接scheduleIdを取得することを優先
     let scheduleId = String((candidate && candidate.scheduleId) || sessionScheduleId || "").trim();
     const rawScheduleKey = String(
@@ -872,6 +866,12 @@ export class OperatorApp {
       }
     }
     const normalizedScheduleId = scheduleId ? normalizeScheduleId(scheduleId) : "";
+    // 完全正規化: scheduleLabelは参照先から取得（既存データとの互換性のため、candidate/sessionから直接取得をフォールバックとして使用）
+    const fallbackScheduleLabel = String((candidate && candidate.scheduleLabel) || (session && session.scheduleLabel) || "").trim();
+    const scheduleKeyForLabel = eventId && normalizedScheduleId ? `${eventId}::${normalizedScheduleId}` : "";
+    const scheduleLabel = scheduleKeyForLabel && typeof this.resolveScheduleLabel === "function"
+      ? this.resolveScheduleLabel(scheduleKeyForLabel, fallbackScheduleLabel, normalizedScheduleId) || fallbackScheduleLabel || normalizedScheduleId
+      : fallbackScheduleLabel || normalizedScheduleId;
     const canonicalScheduleId = String(
       (candidate && candidate.canonicalScheduleId) ||
         (session && session.canonicalScheduleId) ||
