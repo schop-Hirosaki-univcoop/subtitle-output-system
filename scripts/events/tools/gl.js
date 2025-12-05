@@ -1883,20 +1883,20 @@ export class GlToolManager {
     this.scheduleSyncPending = true;
     try {
       const schedulesRef = ref(database, `glIntake/events/${this.currentEventId}/schedules`);
-      // update()を使って部分的な更新を行う（set()だと検証ルールが厳しすぎる可能性がある）
+      // schedulesRefを基準にした相対パスで更新を行う（ルートパスから更新すると権限エラーになる）
       const updates = {};
       // 新しいスケジュールエントリを追加
       Object.keys(nextMap).forEach(scheduleId => {
-        updates[`glIntake/events/${this.currentEventId}/schedules/${scheduleId}`] = nextMap[scheduleId];
+        updates[scheduleId] = nextMap[scheduleId];
       });
       // 削除されたスケジュールエントリを削除
       Object.keys(currentMap).forEach(scheduleId => {
         if (!nextMap[scheduleId]) {
-          updates[`glIntake/events/${this.currentEventId}/schedules/${scheduleId}`] = null;
+          updates[scheduleId] = null;
         }
       });
       if (Object.keys(updates).length > 0) {
-        await update(ref(database), updates);
+        await update(schedulesRef, updates);
       }
     } catch (error) {
       // パーミッションエラーの場合は、admin権限がない可能性があるため、警告レベルでログに記録
