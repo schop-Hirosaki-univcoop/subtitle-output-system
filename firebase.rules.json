@@ -447,16 +447,6 @@
           "type":      { ".validate": "newData.isString() || !newData.exists()" },
           "ts":        { ".validate": "newData.isNumber() || !newData.exists()" },
           "updatedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-          "schedule":  { ".validate": "newData.isString() || !newData.exists()" },
-          "scheduleStart": { ".validate": "newData.isString() || !newData.exists()" },
-          "scheduleEnd": { ".validate": "newData.isString() || !newData.exists()" },
-          "scheduleDate": { ".validate": "newData.isString() || !newData.exists()" },
-          "participantId": { ".validate": "newData.isString() || !newData.exists()" },
-          "participantName": { ".validate": "newData.isString() || !newData.exists()" },
-          "guidance":  { ".validate": "newData.isString() || !newData.exists()" },
-          "eventId":   { ".validate": "newData.isString() || !newData.exists()" },
-          "eventName": { ".validate": "newData.isString() || !newData.exists()" },
-          "scheduleId": { ".validate": "newData.isString() || !newData.exists()" },
           "$other":    { ".validate": false }
         }
       }

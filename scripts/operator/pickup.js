@@ -105,17 +105,7 @@ export function resetPickupLoader(app) {
 const PICKUP_DEFAULT_FIELDS = {
   name: "Pick Up Question",
   pickup: true,
-  type: "pickup",
-  schedule: "",
-  scheduleStart: "",
-  scheduleEnd: "",
-  scheduleDate: "",
-  participantId: "",
-  participantName: "",
-  guidance: "",
-  eventId: "",
-  eventName: "",
-  scheduleId: ""
+  type: "pickup"
 };
 
 function normalizeGenreValue(value) {
@@ -210,9 +200,18 @@ function getFilteredPickupEntries(app) {
 }
 
 function createPickupRecord(uid, question, genre, existingRecord = null, timestamp = Date.now()) {
+  // 許可されているフィールドのみを保持（正規化により不要なフィールドを除外）
+  const ALLOWED_FIELDS = new Set(['uid', 'name', 'question', 'genre', 'pickup', 'type', 'ts', 'updatedAt']);
   const base = existingRecord && typeof existingRecord === "object" ? { ...existingRecord } : {};
+  // 既存レコードから許可されているフィールドのみを抽出
+  const filteredBase = {};
+  Object.keys(base).forEach((key) => {
+    if (ALLOWED_FIELDS.has(key)) {
+      filteredBase[key] = base[key];
+    }
+  });
   const defaults = { ...PICKUP_DEFAULT_FIELDS };
-  const record = { ...defaults, ...base };
+  const record = { ...defaults, ...filteredBase };
   record.uid = uid;
   record.question = question;
   record.genre = genre;
@@ -842,11 +841,14 @@ export async function handlePickupFormSubmit(app, event) {
         : `${now}-${Math.random().toString(16).slice(2, 10)}`;
     const record = createPickupRecord(uid, question, genre, null, now);
     const eventId = String(app.state?.activeEventId || "").trim();
-    const statusRef = getQuestionStatusRef(eventId, false);
     const updates = {
-      [`questions/pickup/${uid}`]: record,
-      [`${statusRef.key}/${uid}`]: { answered: false, selecting: false, pickup: true, updatedAt: now }
+      [`questions/pickup/${uid}`]: record
     };
+    // questionStatusへの書き込みはeventIdが存在する場合のみ
+    if (eventId) {
+      const statusRef = getQuestionStatusRef(eventId, false);
+      updates[`${statusRef.key}/${uid}`] = { answered: false, selecting: false, pickup: true, updatedAt: now };
+    }
     await update(ref(database), updates);
     app.api?.logAction?.("PICKUP_ADD", buildPickupLogDetails(uid, question, genre));
     if (questionInput) {
@@ -959,22 +961,25 @@ export async function handlePickupEditSubmit(app, event) {
       : null;
     const record = createPickupRecord(state.uid, question, genre, existing?.raw || null, now);
     const eventId = String(app.state?.activeEventId || "").trim();
-    const statusRef = getQuestionStatusRef(eventId, false);
     const updates = {
       [`questions/pickup/${state.uid}`]: record
     };
-    const statusMap = app.state?.questionStatusByUid;
-    const statusEntry = statusMap instanceof Map ? statusMap.get(state.uid) : null;
-    if (statusEntry) {
-      updates[`${statusRef.key}/${state.uid}/updatedAt`] = now;
-      updates[`${statusRef.key}/${state.uid}/pickup`] = true;
-    } else {
-      updates[`${statusRef.key}/${state.uid}`] = {
-        answered: false,
-        selecting: false,
-        pickup: true,
-        updatedAt: now
-      };
+    // questionStatusへの書き込みはeventIdが存在する場合のみ
+    if (eventId) {
+      const statusRef = getQuestionStatusRef(eventId, false);
+      const statusMap = app.state?.questionStatusByUid;
+      const statusEntry = statusMap instanceof Map ? statusMap.get(state.uid) : null;
+      if (statusEntry) {
+        updates[`${statusRef.key}/${state.uid}/updatedAt`] = now;
+        updates[`${statusRef.key}/${state.uid}/pickup`] = true;
+      } else {
+        updates[`${statusRef.key}/${state.uid}`] = {
+          answered: false,
+          selecting: false,
+          pickup: true,
+          updatedAt: now
+        };
+      }
     }
     await update(ref(database), updates);
     app.api?.logAction?.("PICKUP_UPDATE", buildPickupLogDetails(state.uid, question, genre));
@@ -1085,11 +1090,14 @@ export async function handlePickupDelete(app) {
   }
   try {
     const eventId = String(app.state?.activeEventId || "").trim();
-    const statusRef = getQuestionStatusRef(eventId, false);
     const updates = {
-      [`questions/pickup/${state.uid}`]: null,
-      [`${statusRef.key}/${state.uid}`]: null
+      [`questions/pickup/${state.uid}`]: null
     };
+    // questionStatusへの削除はeventIdが存在する場合のみ
+    if (eventId) {
+      const statusRef = getQuestionStatusRef(eventId, false);
+      updates[`${statusRef.key}/${state.uid}`] = null;
+    }
     await update(ref(database), updates);
     app.api?.logAction?.("PICKUP_DELETE", buildPickupLogDetails(state.uid, state.question, state.genre));
     app.toast("Pick Up Question を削除しました。", "success");
