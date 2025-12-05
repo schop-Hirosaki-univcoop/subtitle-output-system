@@ -840,12 +840,14 @@ export async function handlePickupFormSubmit(app, event) {
         ? crypto.randomUUID()
         : `${now}-${Math.random().toString(16).slice(2, 10)}`;
     const record = createPickupRecord(uid, question, genre, null, now);
-    const eventId = String(app.state?.activeEventId || "").trim();
+    const eventIdRaw = app.state?.activeEventId;
+    const eventId = eventIdRaw ? String(eventIdRaw).trim() : "";
     const updates = {
       [`questions/pickup/${uid}`]: record
     };
     // questionStatusへの書き込みはeventIdが存在する場合のみ
-    if (eventId) {
+    // eventIdが空文字列やnull/undefinedの場合はスキップ
+    if (eventId && eventId.length > 0) {
       const statusRef = getQuestionStatusRef(eventId, false);
       updates[`${statusRef.key}/${uid}`] = { answered: false, selecting: false, pickup: true, updatedAt: now };
     }
@@ -960,12 +962,14 @@ export async function handlePickupEditSubmit(app, event) {
       ? app.pickupEntries.find((entry) => entry.uid === state.uid)
       : null;
     const record = createPickupRecord(state.uid, question, genre, existing?.raw || null, now);
-    const eventId = String(app.state?.activeEventId || "").trim();
+    const eventIdRaw = app.state?.activeEventId;
+    const eventId = eventIdRaw ? String(eventIdRaw).trim() : "";
     const updates = {
       [`questions/pickup/${state.uid}`]: record
     };
     // questionStatusへの書き込みはeventIdが存在する場合のみ
-    if (eventId) {
+    // eventIdが空文字列やnull/undefinedの場合はスキップ
+    if (eventId && eventId.length > 0) {
       const statusRef = getQuestionStatusRef(eventId, false);
       const statusMap = app.state?.questionStatusByUid;
       const statusEntry = statusMap instanceof Map ? statusMap.get(state.uid) : null;
@@ -1089,12 +1093,14 @@ export async function handlePickupDelete(app) {
     cancelButton.setAttribute("disabled", "true");
   }
   try {
-    const eventId = String(app.state?.activeEventId || "").trim();
+    const eventIdRaw = app.state?.activeEventId;
+    const eventId = eventIdRaw ? String(eventIdRaw).trim() : "";
     const updates = {
       [`questions/pickup/${state.uid}`]: null
     };
     // questionStatusへの削除はeventIdが存在する場合のみ
-    if (eventId) {
+    // eventIdが空文字列やnull/undefinedの場合はスキップ
+    if (eventId && eventId.length > 0) {
       const statusRef = getQuestionStatusRef(eventId, false);
       updates[`${statusRef.key}/${state.uid}`] = null;
     }
