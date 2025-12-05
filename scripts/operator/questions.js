@@ -195,22 +195,25 @@ export function renderQuestions(app) {
   const selectedGenre = typeof app.state.currentGenre === "string" ? app.state.currentGenre.trim() : "";
   const viewingAllGenres = !selectedGenre || selectedGenre.toLowerCase() === GENRE_ALL_VALUE;
   let selectedSchedule = resolveNormalScheduleKey(app);
+  
+  // テロップ操作パネルの日程情報を取得（通常タブと「すべて」タブの両方で使用）
+  const displaySession = app?.state?.displaySession || {};
+  const assignment = displaySession && typeof displaySession === "object" ? displaySession.assignment : null;
+  const displayEventId = String(displaySession?.eventId || assignment?.eventId || "").trim();
+  const displayScheduleId = normalizeScheduleId(displaySession?.scheduleId || assignment?.scheduleId || "");
+  const derivedDisplayKey = displayEventId && displayScheduleId ? `${displayEventId}::${displayScheduleId}` : "";
+  const displayScheduleKey = String(assignment?.scheduleKey || derivedDisplayKey || "").trim();
+  // テロップ操作パネルの日程情報を優先的に使用
+  if (displayScheduleKey) {
+    selectedSchedule = displayScheduleKey;
+  }
+  
   if (viewingNormalTab) {
     /* console.info("[schedule-debug] logging enabled for normal tab", {
       currentTab,
       selectedSchedule,
       hasCardsContainer: Boolean(app?.dom?.cardsContainer)
     }); */
-    const displaySession = app?.state?.displaySession || {};
-    const assignment = displaySession && typeof displaySession === "object" ? displaySession.assignment : null;
-    const displayEventId = String(displaySession?.eventId || assignment?.eventId || "").trim();
-    const displayScheduleId = normalizeScheduleId(displaySession?.scheduleId || assignment?.scheduleId || "");
-    const derivedDisplayKey = displayEventId && displayScheduleId ? `${displayEventId}::${displayScheduleId}` : "";
-    const displayScheduleKey = String(assignment?.scheduleKey || derivedDisplayKey || "").trim();
-    // テロップ操作パネルの日程情報を優先的に使用
-    if (displayScheduleKey) {
-      selectedSchedule = displayScheduleKey;
-    }
     // 完全正規化: scheduleLabelは参照先から取得（既存データとの互換性のため、assignment/sessionから直接取得をフォールバックとして使用）
     const fallbackScheduleLabel = String(
       assignment?.scheduleLabel || displaySession?.scheduleLabel || displaySession?.schedule || ""
