@@ -194,7 +194,7 @@ export function renderQuestions(app) {
   const viewingNormalTab = currentTab === "normal";
   const selectedGenre = typeof app.state.currentGenre === "string" ? app.state.currentGenre.trim() : "";
   const viewingAllGenres = !selectedGenre || selectedGenre.toLowerCase() === GENRE_ALL_VALUE;
-  const selectedSchedule = resolveNormalScheduleKey(app);
+  let selectedSchedule = resolveNormalScheduleKey(app);
   if (viewingNormalTab) {
     /* console.info("[schedule-debug] logging enabled for normal tab", {
       currentTab,
@@ -207,6 +207,10 @@ export function renderQuestions(app) {
     const displayScheduleId = normalizeScheduleId(displaySession?.scheduleId || assignment?.scheduleId || "");
     const derivedDisplayKey = displayEventId && displayScheduleId ? `${displayEventId}::${displayScheduleId}` : "";
     const displayScheduleKey = String(assignment?.scheduleKey || derivedDisplayKey || "").trim();
+    // テロップ操作パネルの日程情報を優先的に使用
+    if (displayScheduleKey) {
+      selectedSchedule = displayScheduleKey;
+    }
     // 完全正規化: scheduleLabelは参照先から取得（既存データとの互換性のため、assignment/sessionから直接取得をフォールバックとして使用）
     const fallbackScheduleLabel = String(
       assignment?.scheduleLabel || displaySession?.scheduleLabel || displaySession?.schedule || ""
