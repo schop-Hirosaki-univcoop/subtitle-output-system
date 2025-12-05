@@ -341,48 +341,51 @@ export const questionStatusRef = ref(database, "questionStatus");
 
 ## 修正作業のチェックリスト
 
-### フェーズ 1: コード修正
+### フェーズ 1: コード修正（完了）
 
-- [ ] `scripts/shared/channel-paths.js`の修正
+- [x] `scripts/shared/channel-paths.js`の修正
 
-  - [ ] `LEGACY_RENDER_BASE`定数の削除
-  - [ ] `buildEventScheduleBase()`のフォールバック削除
-  - [ ] `getRenderStatePath()`のフォールバック削除
-  - [ ] `getNowShowingPath()`のフォールバック削除
-  - [ ] `getSideTelopPath()`のフォールバック削除
-  - [ ] `isLegacyChannel()`関数の削除
+  - [x] `LEGACY_RENDER_BASE`定数の削除
+  - [x] `buildEventScheduleBase()`のフォールバック削除
+  - [x] `getRenderStatePath()`のフォールバック削除
+  - [x] `getNowShowingPath()`のフォールバック削除
+  - [x] `getSideTelopPath()`のフォールバック削除
+  - [x] `isLegacyChannel()`関数の削除
 
-- [ ] `scripts/operator/firebase.js`の修正
+- [x] `scripts/operator/firebase.js`の修正
 
-  - [ ] `LEGACY_*_REF`定数の削除
-  - [ ] `displaySessionRef`の削除
-  - [ ] `questionStatusRef`の削除
-  - [ ] `getRenderRef()`のフォールバック削除
-  - [ ] `getNowShowingRef()`のフォールバック削除
-  - [ ] `getSideTelopsRef()`のフォールバック削除
+  - [x] `LEGACY_*_REF`定数の削除
+  - [x] `displaySessionRef`の削除
+  - [x] `questionStatusRef`の削除
+  - [x] `getRenderRef()`のフォールバック削除
+  - [x] `getNowShowingRef()`のフォールバック削除
+  - [x] `getSideTelopsRef()`のフォールバック削除
 
-- [ ] `scripts/operator/app.js`の修正
+- [x] `scripts/operator/app.js`の修正
 
-  - [ ] `startDisplaySessionMonitor()`のレガシーパス処理削除
-  - [ ] `refreshDisplaySessionTTL()`のレガシーパス処理削除
-  - [ ] `loadInitialData()`のレガシー questionStatus 取得削除
+  - [x] `startDisplaySessionMonitor()`のレガシーパス処理削除
+  - [x] `refreshDisplaySessionTTL()`のレガシーパス処理削除
+  - [x] `loadInitialData()`のレガシー questionStatus 取得削除
 
-- [ ] `display.html`の修正
+- [x] `display.html`の修正
 
-  - [ ] `setChannel()`のレガシーパス処理削除
+  - [x] `setChannel()`のレガシーパス処理削除
+  - [x] `beginDisplaySession()`の`screens/sessions`書き込み削除
+  - [x] `heartbeatDisplaySession()`の`screens/sessions`書き込み削除
+  - [x] `endDisplaySession()`の`screens/sessions`書き込み削除
 
-- [ ] `code.gs`の修正
+- [x] `code.gs`の修正
 
-  - [ ] `getRenderStatePath_()`のフォールバック削除
-  - [ ] `getNowShowingPath_()`のフォールバック削除
-  - [ ] `getEventSessionPath_()`のフォールバック削除
-  - [ ] `beginDisplaySession_()`の`screens/sessions`書き込み削除
-  - [ ] `heartbeatDisplaySession_()`の`screens/sessions`書き込み削除
-  - [ ] `endDisplaySession_()`の`screens/sessions`書き込み削除
-  - [ ] `rotateDisplaySession_()`の`screens/sessions`書き込み削除
+  - [x] `getRenderStatePath_()`のフォールバック削除
+  - [x] `getNowShowingPath_()`のフォールバック削除
+  - [x] `getEventSessionPath_()`のフォールバック削除
+  - [x] `beginDisplaySession_()`の`screens/sessions`書き込み削除
+  - [x] `heartbeatDisplaySession_()`の`screens/sessions`書き込み削除
+  - [x] `endDisplaySession_()`の`screens/sessions`書き込み削除
+  - [x] `lockDisplaySchedule_()`の`screens/sessions`書き込み削除
 
-- [ ] `scripts/question-admin/app.js`の修正
-  - [ ] `loadInitialData()`のレガシー questionStatus 取得削除
+- [x] `scripts/question-admin/app.js`の修正
+  - [x] `loadInitialData()`のレガシー questionStatus 取得削除
 
 ### フェーズ 2: データ移行
 
@@ -398,11 +401,16 @@ export const questionStatusRef = ref(database, "questionStatus");
 - パラメータ: `{ dryRun: true }`（ドライラン）または `{ dryRun: false }`（実実行）
 - 戻り値: 移行結果のサマリー（移行件数、スキップ件数、エラー一覧）
 
-### フェーズ 3: ルールファイルの簡素化
+### フェーズ 3: ルールファイルの簡素化（完了）
 
-- [ ] `firebase.rules.json`からレガシーパスのルール削除
-- [ ] 重複したバリデーションルールの共通化
-- [ ] ルールファイルのテスト
+- [x] `firebase.rules.json`からレガシーパスのルール削除
+  - [x] `render/state` のルール削除
+  - [x] `render/events/$eventId/session`（単一セッション）のルール削除
+  - [x] `render/session` のルール削除
+  - [x] `screens/sessions/$uid` のルール削除
+  - [x] グローバルな `questionStatus` のルール削除
+- [x] 重複したバリデーションルールの削除（レガシーパス削除により自動的に簡素化）
+- [x] ルールファイルの JSON 構文検証
 
 ### フェーズ 4: レガシーパスの削除
 
@@ -413,25 +421,19 @@ export const questionStatusRef = ref(database, "questionStatus");
 
 - `scripts/shared/channel-paths.js`: パス生成ロジックの実装
 
-### 注意: 古いドキュメントについて
+## 現在のステータス
 
-**`docs/operator-shared-storage-and-fallback.md` は古い情報が含まれています。**
+### 完了した作業
 
-このドキュメントには以下の古い情報が記載されています：
+1. **コード修正**: すべてのレガシーパスへのフォールバック処理を削除し、新規パスのみを使用するように修正しました。
+2. **ルールファイルの簡素化**: `firebase.rules.json`からレガシーパスのルールを削除しました。
+3. **データ移行スクリプト**: `migrateLegacyPaths_`関数を作成し、レガシーパスのデータを新規パスに移行できるようにしました。
 
-1. **`render/session` の説明** (line 27):
+### 残りの作業
 
-   - 現在は主に `render/events/$eventId/sessions/$uid` が使用されています
-   - `render/session` はレガシーパスとして残っていますが、削除予定です
+1. **データ移行**: 移行スクリプトを実行して、既存のレガシーパスのデータを新規パスに移行します。
+2. **レガシーパスの削除**: 移行完了後、レガシーパスのデータを削除します。
 
-2. **`questionStatus` の説明** (line 31):
+### 関連ドキュメント
 
-   - 現在は `questionStatus/$eventId/$uid` が使用されています（イベントごとに分離）
-   - グローバルな `questionStatus/$uid` はレガシーパスとして残っていますが、削除予定です
-
-3. **フォールバック処理の説明** (line 41, 44):
-   - レガシーパスへのフォールバック処理は削除予定です
-   - このドキュメントの説明は、リファクタリング前の状態を反映しています
-
-**このドキュメントを参照する際は、現在のコードベースと照らし合わせて確認してください。**
-リファクタリング完了後は、このドキュメントも更新が必要です。
+- `docs/operator-shared-storage-and-fallback.md`: 共有ストレージの一覧とフォールバック処理の説明（更新済み）
