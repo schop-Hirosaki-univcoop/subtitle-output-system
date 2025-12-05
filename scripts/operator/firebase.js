@@ -47,15 +47,9 @@ export const auth = apps.length
 export const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
-const LEGACY_RENDER_REF = ref(database, "render/state");
-const LEGACY_NOW_SHOWING_REF = ref(database, "render/state/nowShowing");
-const LEGACY_SIDE_TELOP_REF = ref(database, "render/state/sideTelops");
-export const displaySessionRef = ref(database, "render/session");
 export const displayPresenceRootRef = ref(database, "render/displayPresence");
 export const questionsRef = ref(database, "questions");
 export const pickupQuestionsRef = ref(database, "questions/pickup");
-// 後方互換性のため、グローバルなquestionStatusRefも残す（非推奨）
-export const questionStatusRef = ref(database, "questionStatus");
 export const questionIntakeEventsRef = ref(database, "questionIntake/events");
 export const questionIntakeSchedulesRef = ref(database, "questionIntake/schedules");
 export const updateTriggerRef = ref(database, "signals/logs");
@@ -70,19 +64,43 @@ export const glIntakeFacultyCatalogRef = ref(database, "glIntake/facultyCatalog"
 const operatorPresenceRootRef = ref(database, "operatorPresence");
 const operatorScheduleConsensusRootRef = ref(database, "operatorPresenceConsensus");
 
+/**
+ * レンダリング状態の参照を返します。
+ * eventIdとscheduleIdが必須です。
+ * @param {string} eventId イベントID（必須）
+ * @param {string} scheduleId スケジュールID
+ * @returns {import("firebase/database").DatabaseReference}
+ * @throws {Error} eventIdが空の場合
+ */
 export function getRenderRef(eventId = "", scheduleId = "") {
   const path = getRenderStatePath(eventId, scheduleId);
-  return path === "render/state" ? LEGACY_RENDER_REF : ref(database, path);
+  return ref(database, path);
 }
 
+/**
+ * 現在表示中の字幕データの参照を返します。
+ * eventIdとscheduleIdが必須です。
+ * @param {string} eventId イベントID（必須）
+ * @param {string} scheduleId スケジュールID
+ * @returns {import("firebase/database").DatabaseReference}
+ * @throws {Error} eventIdが空の場合
+ */
 export function getNowShowingRef(eventId = "", scheduleId = "") {
   const path = getNowShowingPath(eventId, scheduleId);
-  return path === "render/state/nowShowing" ? LEGACY_NOW_SHOWING_REF : ref(database, path);
+  return ref(database, path);
 }
 
+/**
+ * サイドテロップのプリセットの参照を返します。
+ * eventIdとscheduleIdが必須です。
+ * @param {string} eventId イベントID（必須）
+ * @param {string} scheduleId スケジュールID
+ * @returns {import("firebase/database").DatabaseReference}
+ * @throws {Error} eventIdが空の場合
+ */
 export function getSideTelopsRef(eventId = "", scheduleId = "") {
   const path = getSideTelopPath(eventId, scheduleId);
-  return path === "render/state/sideTelops" ? LEGACY_SIDE_TELOP_REF : ref(database, path);
+  return ref(database, path);
 }
 
 /**

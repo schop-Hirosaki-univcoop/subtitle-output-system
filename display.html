@@ -595,9 +595,19 @@
         const querySchedulePinned = queryEventPinned && initialScheduleId.length > 0;
         let channelEventId = queryEventPinned ? initialEventId : '';
         let channelScheduleId = querySchedulePinned ? initialScheduleId : '';
-        let renderRef = ref(database, getRenderStatePath(channelEventId, channelScheduleId));
-        let nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
-        let sideTelopRef = ref(database, getSideTelopPath(channelEventId, channelScheduleId));
+        // eventIdが必須のため、初期化時は空の参照を設定（setChannelで正しいパスに更新される）
+        let renderRef = null;
+        let nowShowingRef = null;
+        let sideTelopRef = null;
+        if (channelEventId) {
+          try {
+            renderRef = ref(database, getRenderStatePath(channelEventId, channelScheduleId));
+            nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
+            sideTelopRef = ref(database, getSideTelopPath(channelEventId, channelScheduleId));
+          } catch (error) {
+            logDisplayLinkError('Failed to initialize render refs', error);
+          }
+        }
         // イベントごとのセッションを監視（複数display.htmlの同時表示に対応、uidごとに分ける）
         // 複数のdisplay.htmlが同じeventIdで同時に表示できるように、uidごとにセッションパスを分ける
         let displaySessionRef = null;
@@ -654,17 +664,18 @@
             eventId: channelEventId || null,
             scheduleId: channelScheduleId || null
           });
+          // eventIdとscheduleIdが必須のため、どちらかが空の場合はエラーを投げる
+          if (!channelEventId) {
+            logDisplayLinkError('Display channel update failed: eventId is required');
+            return;
+          }
           renderRef = ref(database, getRenderStatePath(channelEventId, channelScheduleId));
           nowShowingRef = ref(database, getNowShowingPath(channelEventId, channelScheduleId));
           sideTelopRef = ref(database, getSideTelopPath(channelEventId, channelScheduleId));
           // 複数のdisplay.htmlが同じeventIdで同時に表示できるように、uidごとにセッションパスを分ける
           // セッションパスはbeginDisplaySession後に設定されるため、ここでは更新しない
-          if (auth.currentUser && auth.currentUser.uid && channelEventId) {
+          if (auth.currentUser && auth.currentUser.uid) {
             displaySessionRef = ref(database, `render/events/${channelEventId}/sessions/${auth.currentUser.uid}`);
-            subscribeDisplaySession();
-          } else if (!channelEventId) {
-            // 後方互換性のため、eventIdがない場合は旧パスを使用
-            displaySessionRef = ref(database, "render/session");
             subscribeDisplaySession();
           }
           subscribeNowShowing();
@@ -1999,6 +2010,9 @@
           if (typeof nowShowingUnsubscribe === 'function') {
             nowShowingUnsubscribe();
           }
+          if (!channelEventId || !nowShowingRef) {
+            return;
+          }
           const path = getNowShowingPath(channelEventId, channelScheduleId);
           logDisplayLinkInfo('Subscribing nowShowing stream', {
             path,
@@ -2011,6 +2025,9 @@
         function subscribeSideTelops() {
           if (typeof sideTelopUnsubscribe === 'function') {
             sideTelopUnsubscribe();
+          }
+          if (!channelEventId || !sideTelopRef) {
+            return;
           }
           const path = getSideTelopPath(channelEventId, channelScheduleId);
           logDisplayLinkInfo('Subscribing sideTelop stream', {

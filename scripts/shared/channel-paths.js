@@ -1,6 +1,4 @@
 // channel-paths.js: Realtime Database上のパス組成・正規化ユーティリティを提供します。
-const LEGACY_RENDER_BASE = "render/state";
-const LEGACY_NOW_SHOWING_PATH = `${LEGACY_RENDER_BASE}/nowShowing`;
 const DEFAULT_SCHEDULE_KEY = "__default_schedule__";
 
 /**
@@ -33,14 +31,16 @@ export function normalizeScheduleId(scheduleId) {
 
 /**
  * イベントとスケジュールIDからレンダリング用のパスを組み立てます。
- * @param {unknown} eventId
- * @param {unknown} scheduleId
+ * eventIdが空の場合はエラーを投げます（レガシーパスへのフォールバックを削除）。
+ * @param {unknown} eventId イベントID（必須）
+ * @param {unknown} scheduleId スケジュールID
  * @returns {string}
+ * @throws {Error} eventIdが空の場合
  */
 function buildEventScheduleBase(eventId, scheduleId) {
   const eventKey = normalizeEventId(eventId);
   if (!eventKey) {
-    return LEGACY_RENDER_BASE;
+    throw new Error("eventId is required for render path");
   }
   const scheduleKey = normalizeScheduleId(scheduleId);
   return `render/events/${eventKey}/${scheduleKey}`;
@@ -48,50 +48,48 @@ function buildEventScheduleBase(eventId, scheduleId) {
 
 /**
  * レンダリング状態を書き込むRealtime Databaseのパスを返します。
- * @param {unknown} eventId
- * @param {unknown} scheduleId
+ * eventIdとscheduleIdが必須です。
+ * @param {unknown} eventId イベントID（必須）
+ * @param {unknown} scheduleId スケジュールID
  * @returns {string}
+ * @throws {Error} eventIdが空の場合
  */
 export function getRenderStatePath(eventId, scheduleId) {
   const base = buildEventScheduleBase(eventId, scheduleId);
-  if (base === LEGACY_RENDER_BASE) {
-    return LEGACY_RENDER_BASE;
-  }
   return `${base}/state`;
 }
 
 /**
  * 現在表示中の字幕データを配置するパスを返します。
- * @param {unknown} eventId
- * @param {unknown} scheduleId
+ * eventIdとscheduleIdが必須です。
+ * @param {unknown} eventId イベントID（必須）
+ * @param {unknown} scheduleId スケジュールID
  * @returns {string}
+ * @throws {Error} eventIdが空の場合
  */
 export function getNowShowingPath(eventId, scheduleId) {
   const base = buildEventScheduleBase(eventId, scheduleId);
-  if (base === LEGACY_RENDER_BASE) {
-    return LEGACY_NOW_SHOWING_PATH;
-  }
   return `${base}/nowShowing`;
 }
 
 /**
  * サイドテロップのプリセットを配置するパスを返します。
- * @param {unknown} eventId
- * @param {unknown} scheduleId
+ * eventIdとscheduleIdが必須です。
+ * @param {unknown} eventId イベントID（必須）
+ * @param {unknown} scheduleId スケジュールID
  * @returns {string}
+ * @throws {Error} eventIdが空の場合
  */
 export function getSideTelopPath(eventId, scheduleId) {
   const base = buildEventScheduleBase(eventId, scheduleId);
-  if (base === LEGACY_RENDER_BASE) {
-    return `${LEGACY_RENDER_BASE}/sideTelops`;
-  }
   return `${base}/sideTelops`;
 }
 
 /**
  * 指定されたイベント/スケジュールのチャンネル情報をまとめて返します。
- * @param {unknown} eventId
- * @param {unknown} scheduleId
+ * eventIdが必須です。
+ * @param {unknown} eventId イベントID（必須）
+ * @param {unknown} scheduleId スケジュールID
  * @returns {{
  *   isLegacy: boolean,
  *   eventId: string,
@@ -100,20 +98,14 @@ export function getSideTelopPath(eventId, scheduleId) {
  *   renderStatePath: string,
  *   nowShowingPath: string
  * }}
+ * @throws {Error} eventIdが空の場合
  */
 export function describeChannel(eventId, scheduleId) {
   const eventKey = normalizeEventId(eventId);
-  const scheduleKey = normalizeScheduleId(scheduleId);
   if (!eventKey) {
-    return {
-      isLegacy: true,
-      eventId: "",
-      scheduleId: "",
-      basePath: LEGACY_RENDER_BASE,
-      renderStatePath: LEGACY_RENDER_BASE,
-      nowShowingPath: LEGACY_NOW_SHOWING_PATH
-    };
+    throw new Error("eventId is required for channel description");
   }
+  const scheduleKey = normalizeScheduleId(scheduleId);
   const basePath = `render/events/${eventKey}/${scheduleKey}`;
   return {
     isLegacy: false,
@@ -151,12 +143,14 @@ export function parseChannelParams(searchParams) {
 
 /**
  * 対象チャンネルが旧仕様の構造かどうかを判定します。
+ * レガシーパスは削除されたため、常にfalseを返します。
  * @param {unknown} eventId
  * @param {unknown} scheduleId
  * @returns {boolean}
+ * @deprecated レガシーパスは削除されたため、常にfalseを返します。この関数は後方互換性のため残していますが、使用しないでください。
  */
 export function isLegacyChannel(eventId, scheduleId) {
-  return buildEventScheduleBase(eventId, scheduleId) === LEGACY_RENDER_BASE;
+  return false;
 }
 
 /**

@@ -8,11 +8,9 @@ import {
   onValue,
   get,
   questionsRef,
-  questionStatusRef,
   getQuestionStatusRef,
   questionIntakeEventsRef,
   questionIntakeSchedulesRef,
-  displaySessionRef,
   displayPresenceRootRef,
   getDisplayPresenceEntryRef,
   getRenderRef,
@@ -1307,7 +1305,29 @@ export class OperatorApp {
    */
   refreshChannelSubscriptions() {
     const { eventId, scheduleId } = this.getActiveChannel();
-    const path = getRenderStatePath(eventId, scheduleId);
+    // eventIdが必須のため、空の場合は購読を解除
+    if (!eventId || !String(eventId).trim()) {
+      if (this.renderUnsubscribe) {
+        this.renderUnsubscribe();
+        this.renderUnsubscribe = null;
+      }
+      this.currentRenderPath = null;
+      this.updateRenderAvailability(null);
+      return;
+    }
+    let path;
+    try {
+      path = getRenderStatePath(eventId, scheduleId);
+    } catch (error) {
+      console.error("Failed to get render state path:", error);
+      if (this.renderUnsubscribe) {
+        this.renderUnsubscribe();
+        this.renderUnsubscribe = null;
+      }
+      this.currentRenderPath = null;
+      this.updateRenderAvailability(null);
+      return;
+    }
     // イベントが変わった場合、セッション監視も更新する（複数イベントの同時操作に対応）
     const activeEventId = String(this.state?.activeEventId || "").trim();
     if (this.displaySessionSubscribedEventId !== activeEventId) {
@@ -3872,8 +3892,9 @@ export class OperatorApp {
 
       this.setLoaderStep(4, this.isEmbedded ? "リアルタイム購読を開始しています…" : "購読開始…");
       this.updateLoader("データ同期中…");
-      const [questionStatusSnapshot, eventsSnapshot, schedulesSnapshot] = await Promise.all([
-        get(questionStatusRef),
+      // questionStatusはイベントごとに分離されているため、初期ロード時は取得しない
+      // リアルタイム購読で取得する（startQuestionStatusStream）
+      const [eventsSnapshot, schedulesSnapshot] = await Promise.all([
         get(questionIntakeEventsRef),
         get(questionIntakeSchedulesRef)
       ]);
@@ -3881,7 +3902,8 @@ export class OperatorApp {
       this.eventsBranch = eventsSnapshot.val() || {};
       this.schedulesBranch = schedulesSnapshot.val() || {};
       this.applyQuestionsBranch(questionsValue);
-      this.applyQuestionStatusSnapshot(questionStatusSnapshot.val() || {});
+      // questionStatusはstartQuestionStatusStreamで取得するため、ここでは空のMapを設定
+      this.applyQuestionStatusSnapshot({});
       this.rebuildScheduleMetadata();
       this.applyContextToState();
       this.startQuestionsStream();
@@ -4476,9 +4498,15 @@ export class OperatorApp {
     if (this.displaySessionUnsubscribe) this.displaySessionUnsubscribe();
     // 選択中のイベントに対応するセッションを監視（複数display.htmlの同時表示に対応）
     const activeEventId = String(this.state?.activeEventId || "").trim();
-    const sessionsPath = activeEventId
-      ? `render/events/${activeEventId}/sessions`
-      : "render/session"; // 後方互換性のため、eventIdがない場合は旧パスを使用
+    if (!activeEventId) {
+      // eventIdが必須のため、空の場合は監視しない
+      this.displaySessionUnsubscribe = null;
+      this.state.displaySession = null;
+      this.state.displaySessions = [];
+      this.displaySessionStatusFromSnapshot = false;
+      return;
+    }
+    const sessionsPath = `render/events/${activeEventId}/sessions`;
     const sessionsRef = ref(database, sessionsPath);
     this.displaySessionUnsubscribe = onValue(
       sessionsRef,
@@ -4532,34 +4560,6 @@ export class OperatorApp {
               }
             }
           });
-        } else if (raw && typeof raw === "object" && raw.uid) {
-          // 単一セッションの場合（後方互換性、render/session形式）
-          const expiresAt = Number(raw.expiresAt || 0);
-          const status = String((raw.status || "")).trim();
-          const isActive = status === "active" && expiresAt > now;
-          if (isActive) {
-            hasActiveSession = true;
-            representativeSession = raw;
-            representativeAssignment = raw.assignment && typeof raw.assignment === "object" ? raw.assignment : null;
-            
-            // assignmentが存在しないが、eventIdとscheduleIdがある場合は、それらからassignmentを構築
-            if (!representativeAssignment) {
-              const sessionEventId = String(raw.eventId || "").trim();
-              const sessionScheduleId = String(raw.scheduleId || "").trim();
-              if (sessionEventId && sessionScheduleId) {
-                const scheduleLabel = String(raw.scheduleLabel || "").trim() || sessionScheduleId;
-                const normalizedScheduleId = normalizeScheduleId(sessionScheduleId);
-                representativeAssignment = {
-                  eventId: sessionEventId,
-                  scheduleId: normalizedScheduleId,
-                  scheduleLabel: scheduleLabel,
-                  scheduleKey: `${sessionEventId}::${normalizedScheduleId}`,
-                  canonicalScheduleId: normalizedScheduleId,
-                  canonicalScheduleKey: `${sessionEventId}::${normalizedScheduleId}`
-                };
-              }
-            }
-          }
         }
 
         // representativeSessionにassignmentを設定（getDisplayAssignment()で参照されるため）
@@ -4872,11 +4872,14 @@ export class OperatorApp {
     }
     // 複数display.html対応: セッションのイベントIDとuidに基づいて正しいパスを使用
     const sessionEventId = String(session?.eventId || entry?.eventId || "").trim();
-    const sessionRef = sessionEventId && uid
+    if (!sessionEventId) {
+      // eventIdが必須のため、ない場合は処理をスキップ
+      console.debug("refreshDisplaySessionTTL: eventId is missing, skipping TTL refresh");
+      return;
+    }
+    const sessionRef = uid
       ? ref(database, `render/events/${sessionEventId}/sessions/${uid}`)
-      : sessionEventId
-        ? ref(database, `render/events/${sessionEventId}/sessions`)
-        : displaySessionRef; // 後方互換性のため、eventIdがない場合は旧パスを使用
+      : ref(database, `render/events/${sessionEventId}/sessions`);
     update(sessionRef, payload).catch((error) => {
       console.debug("Failed to extend display session TTL:", error);
     });

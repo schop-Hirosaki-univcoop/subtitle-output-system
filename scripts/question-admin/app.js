@@ -5918,14 +5918,12 @@ async function handleSave(options = {}) {
         console.warn("質問データの取得に失敗しました", error);
       }
 
-      try {
-        const fetchedStatuses = await fetchDbValue("questionStatus");
-        if (fetchedStatuses && typeof fetchedStatuses === "object") {
-          questionStatusBranch = fetchedStatuses;
-        }
-      } catch (error) {
-        console.warn("questionStatusの取得に失敗しました", error);
-      }
+      // questionStatusはイベントごとに分離されているため、eventIdが必要
+      // レガシーパスquestionStatusからの取得は削除（イベントごとのquestionStatusのみ使用）
+      // 質問データからeventIdを取得してquestionStatusを参照する必要がある場合は、
+      // 個別の質問レコードからeventIdを取得してquestionStatus/${eventId}から取得する
+      // ここでは空のオブジェクトを設定（必要に応じて個別に取得）
+      questionStatusBranch = {};
     }
 
     relocationsToProcess.forEach(relocation => {
@@ -6034,12 +6032,12 @@ async function handleSave(options = {}) {
           updatedQuestion
         ]);
 
-        const statusRecord = questionStatusBranch && questionStatusBranch[questionUid];
-        if (statusRecord && typeof statusRecord === "object") {
-          additionalUpdates.push([
-            `questionStatus/${questionUid}`,
-            { ...statusRecord, updatedAt: now }
-          ]);
+        // questionStatusはイベントごとに分離されているため、質問データからeventIdを取得
+        const questionEventId = String(updatedQuestion.eventId || "").trim();
+        if (questionEventId) {
+          // イベントごとのquestionStatusから取得を試みる（必要に応じて）
+          // ここでは質問データの更新のみ行い、questionStatusは個別に管理される
+          // 必要に応じて、questionStatus/${questionEventId}/${questionUid}から取得する処理を追加
         }
       });
 

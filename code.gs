@@ -3661,12 +3661,18 @@ function buildRenderEventBasePath_(eventId, scheduleId) {
 
 function getRenderStatePath_(eventId, scheduleId) {
   const basePath = buildRenderEventBasePath_(eventId, scheduleId);
-  return basePath ? `${basePath}/state` : "render/state";
+  if (!basePath) {
+    throw new Error("eventId is required for render state path");
+  }
+  return `${basePath}/state`;
 }
 
 function getNowShowingPath_(eventId, scheduleId) {
   const basePath = buildRenderEventBasePath_(eventId, scheduleId);
-  return basePath ? `${basePath}/nowShowing` : "render/state/nowShowing";
+  if (!basePath) {
+    throw new Error("eventId is required for nowShowing path");
+  }
+  return `${basePath}/nowShowing`;
 }
 
 function getEventActiveSchedulePath_(eventId) {
@@ -3681,7 +3687,9 @@ function getEventRotationPath_(eventId) {
 
 function getEventSessionPath_(eventId, uid = null) {
   const eventKey = normalizeEventId_(eventId);
-  if (!eventKey) return "";
+  if (!eventKey) {
+    throw new Error("eventId is required for session path");
+  }
   const uidKey = uid ? normalizeKey_(uid) : "";
   // 複数のdisplay.htmlが同じeventIdで同時に表示できるように、uidごとにセッションを分ける
   return uidKey
@@ -3895,11 +3903,11 @@ function ensureDisplayPrincipal_(principal, message) {
 // === display用セッションの開始(begin) ======================
 // display.html 側が立ち上がったときに最初に呼ばれるエンドポイント。
 // 1. principal(uid)とeventIdを元にセッションIDを決める
-// 2. screens/sessions/{uid} にセッション情報(status, startedAt など)を書き込む
+// 2. render/events/{eventId}/sessions/{uid} にセッション情報(status, startedAt など)を書き込む
 // 3. screens/approved/{uid} が存在している場合のみ「承認済みスクリーン」として扱う
 // 4. render/displayPresence/{uid} にプレゼンス情報をセットし、
 //    管理画面側から「どのスクリーンがオンラインか」を把握できるようにする。
-// 5. 複数イベントの同時操作に対応するため、render/events/{eventId}/session にセッションを保存する
+// 5. 複数イベントの同時操作に対応するため、render/events/{eventId}/sessions/{uid} にセッションを保存する
 function beginDisplaySession_(principal, rawEventId) {
   ensureDisplayPrincipal_(
     principal,
@@ -3927,12 +3935,7 @@ function beginDisplaySession_(principal, rawEventId) {
     const currentExpired = currentExpires && currentExpires <= now;
     // 同じuidのセッションが期限切れの場合のみクリーンアップ
     if (normalizedCurrentUid === principalUid && currentExpired) {
-      updates[`screens/sessions/${principalUid}`] = Object.assign({}, current, {
-        status: "expired",
-        endedAt: now,
-        expiresAt: now,
-        lastSeenAt: Number(current.lastSeenAt || now),
-      });
+      // レガシーパスscreens/sessionsへの書き込みは削除（新規パスのみ使用）
       updates[`render/displayPresence/${principalUid}`] = null;
     }
     const previousActivePath = getActiveSchedulePathForSession_(current);
@@ -3973,7 +3976,7 @@ function beginDisplaySession_(principal, rawEventId) {
   }
 
   updates[`screens/approved/${principalUid}`] = true;
-  updates[`screens/sessions/${principalUid}`] = session;
+  // レガシーパスscreens/sessionsへの書き込みは削除（新規パスのみ使用）
   // イベントごとのセッションに保存（複数display.htmlの同時表示に対応、uidごとに分ける）
   updates[eventSessionPath] = session;
   updates[`render/displayPresence/${principalUid}`] = null;
@@ -4025,12 +4028,7 @@ function heartbeatDisplaySession_(principal, rawSessionId, rawEventId) {
       updates[eventSessionPath] = null;
       if (currentUid) {
         updates[`screens/approved/${currentUid}`] = null;
-        updates[`screens/sessions/${currentUid}`] = Object.assign({}, current, {
-          status: "expired",
-          endedAt: now,
-          expiresAt: now,
-          lastSeenAt: Number(current.lastSeenAt || now),
-        });
+        // レガシーパスscreens/sessionsへの書き込みは削除（新規パスのみ使用）
         updates[`render/displayPresence/${currentUid}`] = null;
       }
       const activePath = getActiveSchedulePathForSession_(current);
@@ -4047,12 +4045,7 @@ function heartbeatDisplaySession_(principal, rawSessionId, rawEventId) {
     const updates = {};
     updates[eventSessionPath] = null;
     updates[`screens/approved/${currentUid}`] = null;
-    updates[`screens/sessions/${currentUid}`] = Object.assign({}, current, {
-      status: "expired",
-      endedAt: now,
-      expiresAt: now,
-      lastSeenAt: Number(current.lastSeenAt || now),
-    });
+    // レガシーパスscreens/sessionsへの書き込みは削除（新規パスのみ使用）
     const activePath = getActiveSchedulePathForSession_(current);
     if (activePath) {
       updates[activePath] = null;
@@ -4070,7 +4063,7 @@ function heartbeatDisplaySession_(principal, rawSessionId, rawEventId) {
   });
   const updates = {};
   updates[`screens/approved/${principalUid}`] = true;
-  updates[`screens/sessions/${principalUid}`] = session;
+  // レガシーパスscreens/sessionsへの書き込みは削除（新規パスのみ使用）
   // イベントごとのセッションに保存（複数display.htmlの同時表示に対応、uidごとに分ける）
   updates[eventSessionPath] = session;
   updates[`render/displayPresence/${principalUid}`] = null;
@@ -4080,7 +4073,7 @@ function heartbeatDisplaySession_(principal, rawSessionId, rawEventId) {
 
 // === displayセッションの終了処理(end) ======================
 // display.html を閉じる／切断する際に呼ばれる想定のエンドポイント。
-// 1. screens/sessions/{uid} に status: 'ended' / endedAt などを書き込む
+// 1. render/events/{eventId}/sessions/{uid} を削除
 // 2. screens/approved/{uid}, render/displayPresence/{uid} を削除
 // 3. そのセッションに紐づいていた「アクティブなスケジュール」情報もクリア
 // といった後片付けを一括で行う。
@@ -4122,7 +4115,7 @@ function endDisplaySession_(principal, rawSessionId, reason, rawEventId) {
   });
   const updates = {};
   updates[`screens/approved/${principalUid}`] = null;
-  updates[`screens/sessions/${principalUid}`] = session;
+  // レガシーパスscreens/sessionsへの書き込みは削除（新規パスのみ使用）
   // イベントごとのセッションを終了（複数display.htmlの同時表示に対応、uidごとに分ける）
   updates[eventSessionPath] = null;
   updates[`render/displayPresence/${principalUid}`] = null;
@@ -4245,7 +4238,7 @@ function lockDisplaySchedule_(
       assignment,
     });
     updates[`screens/approved/${uid}`] = true;
-    updates[`screens/sessions/${uid}`] = nextSessionForUid;
+    // レガシーパスscreens/sessionsへの書き込みは削除（新規パスのみ使用）
     // 各uidごとのセッションパスに保存
     const sessionPath = getEventSessionPath_(eventId, uid);
     updates[sessionPath] = nextSessionForUid;
