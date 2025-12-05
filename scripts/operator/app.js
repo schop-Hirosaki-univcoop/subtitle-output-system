@@ -4833,7 +4833,7 @@ export class OperatorApp {
   }
 
   /**
-   * presenceの最新情報をもとに render/session のTTLを延長します。
+   * presenceの最新情報をもとに render/events/$eventId/sessions/$uid のTTLを延長します。
    * @param {any} session
    * @param {any} entry
    * @param {string} reason

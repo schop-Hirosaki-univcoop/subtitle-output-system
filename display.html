@@ -1054,16 +1054,14 @@
           if (beginInFlight) return beginInFlight;
           const user = auth.currentUser;
           if (!user) return;
-          // クエリパラメータにeventIdがない場合は、GASを使わずに旧パス（render/session）で動作
-          // セッション情報はsubscribeDisplaySession()で監視されるため、GAS呼び出しは不要
+          // eventIdが必須のため、空の場合はセッションを作成できない
           if (!channelEventId) {
-            logDisplayLinkInfo('Display session: using legacy path (no eventId in query)', {
+            logDisplayLinkError('Display session: eventId is required', {
               uid: user.uid
             });
-            // セッション情報が既に存在する場合はそれを使用、なければpresenceのみで動作
-            setSessionActive(true);
-            startHeartbeat();
-            return Promise.resolve(sessionInfo || {});
+            // eventIdがない場合はpresenceのみで動作
+            setSessionActive(false);
+            return Promise.resolve(null);
           }
           beginInFlight = (async () => {
             clearSessionRetryTimer();
@@ -1105,12 +1103,8 @@
                 scheduleId: channelScheduleId || null
               };
               
-              // Firebaseに直接書き込み
+              // Firebaseに直接書き込み（イベントごとのセッションパスのみ使用）
               await set(displaySessionRef, session);
-              
-              // screens/sessions/{uid}にも書き込む（後方互換性のため）
-              const screensSessionRef = ref(database, `screens/sessions/${user.uid}`);
-              await set(screensSessionRef, session);
               
               sessionInfo = session;
               
@@ -1165,10 +1159,6 @@
             
             await update(sessionRef, sessionUpdate);
             
-            // screens/sessions/{uid}も更新（後方互換性）
-            const screensSessionRef = ref(database, `screens/sessions/${user.uid}`);
-            await update(screensSessionRef, sessionUpdate);
-            
             // sessionInfoも更新
             sessionInfo = { ...sessionInfo, ...sessionUpdate };
             
@@ -1209,10 +1199,6 @@
                   lastSeenAt: now,
                   endedReason: reason || null
                 };
-                
-                // screens/sessions/{uid}も更新（後方互換性）
-                const screensSessionRef = ref(database, `screens/sessions/${user.uid}`);
-                await update(screensSessionRef, sessionEnd);
                 
                 // イベントごとのセッションを削除
                 await remove(sessionRef);
