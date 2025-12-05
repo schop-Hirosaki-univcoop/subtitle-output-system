@@ -50,7 +50,7 @@
 - `status` (string, 必須): セッション状態。`active`, `expired`, `ended`, `superseded`のいずれか
 - `eventId` (string, 任意): イベント ID
 - `scheduleId` (string, 任意): スケジュール ID
-- `scheduleLabel` (string, 任意): スケジュールラベル
+- `scheduleLabel` (string, 任意): スケジュールラベル（現在の実装では使用されていない）
 - `assignment` (object, 任意): 割り当て情報
   - `eventId` (string, 必須): イベント ID
   - `scheduleId` (string, 必須): スケジュール ID
@@ -63,9 +63,9 @@
 - `startedAt` (number, 任意): セッション開始時刻（タイムスタンプ）
 - `lastSeenAt` (number, 任意): 最終確認時刻（タイムスタンプ）
 - `expiresAt` (number, 任意): セッション有効期限（タイムスタンプ）
-- `endedAt` (number, 任意): セッション終了時刻（タイムスタンプ）
-- `endedReason` (string, 任意): セッション終了理由
-- `grantedBy` (string, 任意): セッションを付与したユーザー
+- `endedAt` (number, 任意): セッション終了時刻（タイムスタンプ、現在の実装では使用されていない）
+- `endedReason` (string, 任意): セッション終了理由（現在の実装では使用されていない）
+- `grantedBy` (string, 任意): セッションを付与したユーザー（実際のコードでは`'client'`が使用される）
 - `lastPresenceReason` (string, 任意): 最終プレゼンス更新理由
 - `lastPresenceUid` (string, 任意): 最終プレゼンス更新を行ったユーザー ID
 - `lastPresenceClientTimestamp` (number, 任意): 最終プレゼンス更新のクライアント側タイムスタンプ
@@ -170,17 +170,17 @@
 - `sessionId` (string, 必須): セッション ID（空文字列不可）
 - `uid` (string, 任意): ユーザー ID（パスパラメータの$uid と一致する必要がある）
 - `clientTimestamp` (number, 必須): クライアント側タイムスタンプ（または`now`）
-- `lastSeenAt` (number, 任意): 最終確認時刻（タイムスタンプ、または`now`）
+- `lastSeenAt` (number, 任意): 最終確認時刻（タイムスタンプ、または`now`、実際のコードでは`serverTimestamp()`が使用される）
 - `eventId` (string, 任意): イベント ID
 - `scheduleId` (string, 任意): スケジュール ID
 - `channelEventId` (string, 任意): チャンネルイベント ID
 - `channelScheduleId` (string, 任意): チャンネルスケジュール ID
 - `assignmentEventId` (string, 任意): 割り当てイベント ID
 - `assignmentScheduleId` (string, 任意): 割り当てスケジュール ID
-- `status` (string, 任意): 状態
-- `reason` (string, 任意): 理由
-- `updatedBy` (string, 任意): 更新者
-- `version` (string, 任意): バージョン
+- `status` (string, 任意): 状態（実際のコードでは`'active'`または`'pending'`が使用される）
+- `reason` (string, 任意): 理由（実際のコードでは`'heartbeat'`、`'session-snapshot'`などが使用される）
+- `updatedBy` (string, 任意): 更新者（実際のコードでは`'display'`が使用される）
+- `version` (string, 任意): バージョン（実際のコードでは`'v2'`が使用される）
 
 ---
 
@@ -410,20 +410,20 @@ GL の割り当て情報を管理。
 
 - `uid` (string, 必須): ユーザー ID（auth.uid と一致する必要がある）
 - `eventId` (string, 必須): イベント ID（パスパラメータの$eventId と一致する必要がある）
+- `sessionId` (string, 任意): セッション ID（存在する場合、パスパラメータの$sessionId と一致する必要がある）
 - `eventName` (string, 任意): イベント名
 - `scheduleId` (string, 任意): スケジュール ID
 - `scheduleKey` (string, 任意): スケジュールキー
 - `scheduleLabel` (string, 任意): スケジュールラベル
-- `selectedScheduleId` (string, 任意): 選択されたスケジュール ID
-- `selectedScheduleLabel` (string, 任意): 選択されたスケジュールラベル
+- `selectedScheduleId` (string, 任意): 選択されたスケジュール ID（読み取り専用、書き込みは行われない）
+- `selectedScheduleLabel` (string, 任意): 選択されたスケジュールラベル（読み取り専用、書き込みは行われない）
 - `displayName` (string, 任意): 表示名
 - `email` (string, 任意): メールアドレス
 - `clientTimestamp` (number, 任意): クライアント側タイムスタンプ
 - `updatedAt` (number, 任意): 更新時刻（タイムスタンプ、または`now`）
 - `reason` (string, 任意): 理由
-- `sessionId` (string, 任意): セッション ID（存在する場合、パスパラメータの$sessionId と一致する必要がある）
 - `skipTelop` (boolean, 任意): テロップをスキップするか
-- `source` (string, 任意): ソース
+- `source` (string, 任意): ソース（実際のコードでは`"operator"`が使用される）
 
 ---
 
@@ -477,14 +477,14 @@ GL の割り当て情報を管理。
 **データ構造:**
 
 - `uid` (string, 必須): ユーザー ID
-- `token` (string, 必須): トークン
+- `token` (string, 必須): トークン（実際のコードでは必須）
 - `name` (string, 必須): 名前（ラジオネーム）
 - `question` (string, 必須): 質問内容
-- `genre` (string, 任意): ジャンル
+- `genre` (string, 任意): ジャンル（実際のコードでは`"その他"`がデフォルト）
 - `ts` (number, 任意): タイムスタンプ
 - `updatedAt` (number, 任意): 更新時刻
 - `type` (string, 必須): タイプ（'normal'である必要がある）
-- `questionLength` (number, 任意): 質問の長さ
+- `questionLength` (number, 任意): 質問の長さ（実際のコードでは 0 より大きい場合のみ設定される）
 
 **注意:** token から取得可能な情報（eventId, scheduleId, participantId, eventName, scheduleLabel, scheduleLocation, scheduleDate, scheduleStart, scheduleEnd, participantName, guidance, group）は重複のため含まれていません。
 
@@ -697,6 +697,7 @@ GL の割り当て情報を管理。
 **データ構造:**
 
 - `token` (string, 必須): トークン（パスパラメータの$token と一致する必要がある）
+- `uid` (string, 必須): ユーザー ID（新規作成時のみ、実際のコードでは必須）
 - `radioName` (string, 必須): ラジオネーム（新規作成時のみ、空文字列不可）
 - `question` (string, 必須): 質問内容（新規作成時のみ、空文字列不可）
 - `questionLength` (number, 必須): 質問の長さ（新規作成時のみ、0 より大きい）
@@ -704,7 +705,6 @@ GL の割り当て情報を管理。
 - `formVersion` (string, 必須): フォームバージョン（新規作成時のみ）
 - `submittedAt` (number, 必須): 提出時刻（新規作成時のみ、タイムスタンプ、または`now`）
 - `status` (string, 必須): ステータス（新規作成時は'pending'のみ許可）
-- `uid` (string, 任意): ユーザー ID（新規作成時のみ）
 - `clientTimestamp` (number, 任意): クライアント側タイムスタンプ
 - `language` (string, 任意): 言語
 - `userAgent` (string, 任意): ユーザーエージェント
