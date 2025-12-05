@@ -903,28 +903,50 @@ function submitQuestion_(payload) {
   }
 
   // --- token とフォームからの値をマージして、質問キュー用の1レコードを作る ----
+  // 完全正規化: 正規化された場所から情報を取得
   const eventId = tokenEventId;
   const scheduleId = tokenScheduleId;
   const participantId = tokenParticipantId;
+  
+  // 正規化された場所から情報を取得
+  let eventRecord = {};
+  let scheduleRecord = {};
+  let participantRecord = {};
+  try {
+    eventRecord = fetchRtdb_(`questionIntake/events/${eventId}`, accessToken) || {};
+  } catch (ignoreEventError) {
+    eventRecord = {};
+  }
+  try {
+    scheduleRecord = fetchRtdb_(`questionIntake/schedules/${eventId}/${scheduleId}`, accessToken) || {};
+  } catch (ignoreScheduleError) {
+    scheduleRecord = {};
+  }
+  try {
+    participantRecord = fetchRtdb_(`questionIntake/participants/${eventId}/${scheduleId}/${participantId}`, accessToken) || {};
+  } catch (ignoreParticipantError) {
+    participantRecord = {};
+  }
+  
   const eventName = String(
-    tokenRecord.eventName || payloadEventName || ""
+    eventRecord.name || payloadEventName || ""
   ).trim();
   const scheduleLabel = String(
-    tokenRecord.scheduleLabel || payloadScheduleLabel || ""
+    scheduleRecord.label || payloadScheduleLabel || ""
   ).trim();
   const scheduleLocation = String(
-    tokenRecord.scheduleLocation || payloadScheduleLocation || ""
+    scheduleRecord.location || payloadScheduleLocation || ""
   ).trim();
   const scheduleDate = String(
-    tokenRecord.scheduleDate || payloadScheduleDate || ""
+    scheduleRecord.date || payloadScheduleDate || ""
   ).trim();
   const scheduleStartRaw = String(
-    tokenRecord.scheduleStart || payloadScheduleStart || ""
+    scheduleRecord.startAt || payloadScheduleStart || ""
   ).trim();
   const scheduleEndRaw = String(
-    tokenRecord.scheduleEnd || payloadScheduleEnd || ""
+    scheduleRecord.endAt || payloadScheduleEnd || ""
   ).trim();
-  const participantName = String(tokenRecord.displayName || "").trim();
+  const participantName = String(participantRecord.name || "").trim();
   const guidance = String(
     tokenRecord.guidance || payload.guidance || ""
   ).trim();
@@ -1689,12 +1711,12 @@ function buildParticipantMailContext_(
   const participantName = String(
     (participantRecord && participantRecord.name) || ""
   ).trim();
+  // 完全正規化: 正規化された場所から取得（participantContextRecordには既に含まれている）
   const eventName = coalesceStrings_(
     participantRecord &&
       (participantRecord.eventName ||
         participantRecord.eventLabel ||
         participantRecord.eventTitle),
-    scheduleRecord && (scheduleRecord.eventName || scheduleRecord.eventLabel),
     eventRecord && (eventRecord.name || eventRecord.title),
     eventId
   );
@@ -1787,20 +1809,16 @@ function buildParticipantMailContext_(
   const guidance = String(
     (participantRecord && participantRecord.guidance) || ""
   ).trim();
+  // 完全正規化: 正規化された場所から取得（scheduleRecord.locationを使用）
   const scheduleLocation = coalesceStrings_(
     participantRecord &&
       (participantRecord.scheduleLocation ||
         participantRecord.location ||
         participantRecord.venue),
     scheduleRecord &&
-      (scheduleRecord.scheduleLocation ||
-        scheduleRecord.location ||
+      (scheduleRecord.location ||
         scheduleRecord.venue ||
-        scheduleRecord.place),
-    eventRecord &&
-      (eventRecord.scheduleLocation ||
-        eventRecord.location ||
-        eventRecord.venue)
+        scheduleRecord.place)
   );
   const location = coalesceStrings_(
     participantRecord &&
@@ -2621,16 +2639,16 @@ function sendParticipantMail_(principal, req) {
   if (!scheduleRecord || typeof scheduleRecord !== "object") {
     throw new Error("指定された日程が見つかりません。");
   }
+  // 完全正規化: 正規化された場所から取得
   const eventRecordName = coalesceStrings_(
     eventRecord &&
       (eventRecord.name ||
         eventRecord.title ||
-        eventRecord.eventName ||
         eventRecord.eventLabel),
     ""
   );
   const scheduleRecordLabel = coalesceStrings_(
-    scheduleRecord && (scheduleRecord.label || scheduleRecord.scheduleLabel),
+    scheduleRecord && scheduleRecord.label,
     formatScheduleLabel_(
       scheduleRecord && scheduleRecord.startAt,
       scheduleRecord && scheduleRecord.endAt
@@ -3043,28 +3061,7 @@ function resolveParticipantMailForToken_(req) {
       participantRecord = null;
     }
 
-    if (!participantRecord || typeof participantRecord !== "object") {
-      logMail_(
-        "参加者レコードが見つからなかったためトークン情報を利用して補完します",
-        logContext
-      );
-      participantRecord = {
-        participantId,
-        token: rawToken,
-        name: String(tokenRecord.displayName || "").trim(),
-        displayName: String(tokenRecord.displayName || "").trim(),
-        scheduleLabel: String(tokenRecord.scheduleLabel || "").trim(),
-        scheduleLocation: String(tokenRecord.scheduleLocation || "").trim(),
-        scheduleDate: String(tokenRecord.scheduleDate || "").trim(),
-        scheduleStart: String(tokenRecord.scheduleStart || "").trim(),
-        scheduleEnd: String(tokenRecord.scheduleEnd || "").trim(),
-        guidance: String(tokenRecord.guidance || "").trim(),
-        eventName: String(tokenRecord.eventName || "").trim(),
-        eventLabel: String(tokenRecord.eventName || "").trim(),
-        groupNumber: String(tokenRecord.groupNumber || "").trim(),
-      };
-    }
-
+    // 完全正規化: 正規化された場所から情報を取得
     let eventRecord = {};
     let scheduleRecord = {};
     try {
@@ -3083,21 +3080,40 @@ function resolveParticipantMailForToken_(req) {
       scheduleRecord = {};
     }
 
+    if (!participantRecord || typeof participantRecord !== "object") {
+      logMail_(
+        "参加者レコードが見つからなかったため正規化された情報を利用して補完します",
+        logContext
+      );
+      participantRecord = {
+        participantId,
+        token: rawToken,
+        name: "",
+        displayName: "",
+        groupNumber: String(tokenRecord.groupNumber || "").trim(),
+      };
+    }
+
+    // 正規化された場所から情報を取得して補完
     const participantContextRecord = Object.assign(
       {
         participantId,
         token: rawToken,
-        name: String(tokenRecord.displayName || "").trim(),
-        displayName: String(tokenRecord.displayName || "").trim(),
-        eventName: String(tokenRecord.eventName || "").trim(),
-        eventLabel: String(tokenRecord.eventName || "").trim(),
-        scheduleLabel: String(tokenRecord.scheduleLabel || "").trim(),
-        scheduleLocation: String(tokenRecord.scheduleLocation || "").trim(),
-        scheduleDate: String(tokenRecord.scheduleDate || "").trim(),
-        scheduleTime: String(tokenRecord.scheduleTime || "").trim(),
-        scheduleRange: String(tokenRecord.scheduleRange || "").trim(),
+        name: String(participantRecord.name || "").trim(),
+        displayName: String(participantRecord.name || "").trim(),
+        eventName: String(eventRecord.name || "").trim(),
+        eventLabel: String(eventRecord.name || "").trim(),
+        scheduleLabel: String(scheduleRecord.label || "").trim(),
+        scheduleLocation: String(scheduleRecord.location || "").trim(),
+        scheduleDate: String(scheduleRecord.date || "").trim(),
+        scheduleTime: String(scheduleRecord.startAt || "").trim(),
+        scheduleRange: String(
+          scheduleRecord.startAt && scheduleRecord.endAt
+            ? `${scheduleRecord.startAt} - ${scheduleRecord.endAt}`
+            : scheduleRecord.startAt || scheduleRecord.endAt || ""
+        ).trim(),
         guidance: String(tokenRecord.guidance || "").trim(),
-        groupNumber: String(tokenRecord.groupNumber || "").trim(),
+        groupNumber: String(participantRecord.groupNumber || tokenRecord.groupNumber || "").trim(),
       },
       participantRecord || {}
     );
@@ -3106,76 +3122,15 @@ function resolveParticipantMailForToken_(req) {
       participantContextRecord.token,
       rawToken
     );
-    if (
-      !participantContextRecord.name &&
-      tokenRecord &&
-      tokenRecord.displayName
-    ) {
-      participantContextRecord.name = String(
-        tokenRecord.displayName || ""
-      ).trim();
-    }
-    if (
-      !participantContextRecord.eventName &&
-      tokenRecord &&
-      tokenRecord.eventName
-    ) {
-      participantContextRecord.eventName = String(
-        tokenRecord.eventName || ""
-      ).trim();
-    }
-    if (
-      !participantContextRecord.scheduleLabel &&
-      tokenRecord &&
-      tokenRecord.scheduleLabel
-    ) {
-      participantContextRecord.scheduleLabel = String(
-        tokenRecord.scheduleLabel || ""
-      ).trim();
-    }
-    if (
-      !participantContextRecord.scheduleLocation &&
-      tokenRecord &&
-      tokenRecord.scheduleLocation
-    ) {
-      participantContextRecord.scheduleLocation = String(
-        tokenRecord.scheduleLocation || ""
-      ).trim();
-    }
-    if (
-      !participantContextRecord.scheduleDate &&
-      tokenRecord &&
-      tokenRecord.scheduleDate
-    ) {
-      participantContextRecord.scheduleDate = String(
-        tokenRecord.scheduleDate || ""
-      ).trim();
-    }
+    // 完全正規化: 正規化された場所から取得した情報を使用（tokenRecordからのフォールバックは不要）
+    // scheduleTimeはscheduleStartとscheduleEndから生成
     if (!participantContextRecord.scheduleTime) {
-      const start = String(tokenRecord.scheduleStart || "").trim();
-      const end = String(tokenRecord.scheduleEnd || "").trim();
+      const start = String(scheduleRecord.startAt || "").trim();
+      const end = String(scheduleRecord.endAt || "").trim();
       if (start || end) {
         participantContextRecord.scheduleTime =
           start && end ? `${start}〜${end}` : start || end;
       }
-    }
-    if (
-      !participantContextRecord.scheduleRange &&
-      tokenRecord &&
-      tokenRecord.scheduleRange
-    ) {
-      participantContextRecord.scheduleRange = String(
-        tokenRecord.scheduleRange || ""
-      ).trim();
-    }
-    if (
-      !participantContextRecord.guidance &&
-      tokenRecord &&
-      tokenRecord.guidance
-    ) {
-      participantContextRecord.guidance = String(
-        tokenRecord.guidance || ""
-      ).trim();
     }
 
     const settings = getParticipantMailSettings_();

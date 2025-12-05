@@ -24,7 +24,77 @@ export function extractToken(search = window.location.search, tokenKeys = TOKEN_
 }
 
 /**
+ * 正規化されたイベント情報を取得します。
+ * @param {import("firebase/database").Database} database
+ * @param {string} eventId
+ * @returns {Promise<{ name: string } | null>}
+ */
+async function fetchEventInfo(database, eventId) {
+  if (!eventId) return null;
+  try {
+    const eventRef = ref(database, `questionIntake/events/${eventId}`);
+    const snapshot = await get(eventRef);
+    if (!snapshot.exists()) return null;
+    const data = snapshot.val() || {};
+    return { name: String(data.name || "") };
+  } catch (error) {
+    console.warn("Failed to fetch event info", error);
+    return null;
+  }
+}
+
+/**
+ * 正規化されたスケジュール情報を取得します。
+ * @param {import("firebase/database").Database} database
+ * @param {string} eventId
+ * @param {string} scheduleId
+ * @returns {Promise<{ label: string, location: string, date: string, startAt: string, endAt: string } | null>}
+ */
+async function fetchScheduleInfo(database, eventId, scheduleId) {
+  if (!eventId || !scheduleId) return null;
+  try {
+    const scheduleRef = ref(database, `questionIntake/schedules/${eventId}/${scheduleId}`);
+    const snapshot = await get(scheduleRef);
+    if (!snapshot.exists()) return null;
+    const data = snapshot.val() || {};
+    return {
+      label: String(data.label || ""),
+      location: String(data.location || ""),
+      date: String(data.date || ""),
+      startAt: String(data.startAt || ""),
+      endAt: String(data.endAt || "")
+    };
+  } catch (error) {
+    console.warn("Failed to fetch schedule info", error);
+    return null;
+  }
+}
+
+/**
+ * 正規化された参加者情報を取得します。
+ * @param {import("firebase/database").Database} database
+ * @param {string} eventId
+ * @param {string} scheduleId
+ * @param {string} participantId
+ * @returns {Promise<{ name: string } | null>}
+ */
+async function fetchParticipantInfo(database, eventId, scheduleId, participantId) {
+  if (!eventId || !scheduleId || !participantId) return null;
+  try {
+    const participantRef = ref(database, `questionIntake/participants/${eventId}/${scheduleId}/${participantId}`);
+    const snapshot = await get(participantRef);
+    if (!snapshot.exists()) return null;
+    const data = snapshot.val() || {};
+    return { name: String(data.name || "") };
+  } catch (error) {
+    console.warn("Failed to fetch participant info", error);
+    return null;
+  }
+}
+
+/**
  * Firebase上のトークン情報を取得し、フォーム文脈データに整形します。
+ * 正規化されたデータ構造から情報を取得します。
  * @param {import("firebase/database").Database} database
  * @param {string} token
  * @returns {Promise<Record<string, string>>}
@@ -49,25 +119,38 @@ export async function fetchContextFromToken(database, token) {
   if (!snapshot.exists()) {
     throw new Error("リンクが無効です。配布された最新のURLからアクセスしてください。");
   }
-  const data = snapshot.val() || {};
-  if (data.revoked) {
+  const tokenData = snapshot.val() || {};
+  if (tokenData.revoked) {
     throw new Error("このリンクは無効化されています。運営までお問い合わせください。");
   }
-  if (data.expiresAt && Number(data.expiresAt) && Date.now() > Number(data.expiresAt)) {
+  if (tokenData.expiresAt && Number(tokenData.expiresAt) && Date.now() > Number(tokenData.expiresAt)) {
     throw new Error("このリンクの有効期限が切れています。運営までお問い合わせください。");
   }
+
+  // 正規化されたIDを取得
+  const eventId = String(tokenData.eventId || "");
+  const scheduleId = String(tokenData.scheduleId || "");
+  const participantId = String(tokenData.participantId || "");
+
+  // 正規化された場所から情報を取得
+  const [eventInfo, scheduleInfo, participantInfo] = await Promise.all([
+    fetchEventInfo(database, eventId),
+    fetchScheduleInfo(database, eventId, scheduleId),
+    fetchParticipantInfo(database, eventId, scheduleId, participantId)
+  ]);
+
   return {
-    eventId: String(data.eventId || ""),
-    eventName: String(data.eventName || ""),
-    scheduleId: String(data.scheduleId || ""),
-    scheduleLabel: String(data.scheduleLabel || ""),
-    scheduleDate: String(data.scheduleDate || ""),
-    scheduleLocation: String(data.scheduleLocation || ""),
-    scheduleStart: String(data.scheduleStart || ""),
-    scheduleEnd: String(data.scheduleEnd || ""),
-    participantId: String(data.participantId || ""),
-    participantName: String(data.displayName || ""),
-    groupNumber: String(data.groupNumber || ""),
-    guidance: String(data.guidance || "")
+    eventId,
+    eventName: eventInfo?.name || "",
+    scheduleId,
+    scheduleLabel: scheduleInfo?.label || "",
+    scheduleDate: scheduleInfo?.date || "",
+    scheduleLocation: scheduleInfo?.location || "",
+    scheduleStart: scheduleInfo?.startAt || "",
+    scheduleEnd: scheduleInfo?.endAt || "",
+    participantId,
+    participantName: participantInfo?.name || "",
+    groupNumber: String(tokenData.groupNumber || ""),
+    guidance: String(tokenData.guidance || "")
   };
 }

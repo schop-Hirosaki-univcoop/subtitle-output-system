@@ -157,7 +157,7 @@
         "$eventId": {
           ".read": "(auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)) || (data.child('slug').isString() && data.child('slug').val().length > 0)",
           ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
-          ".validate": "!newData.exists() || ((!data.exists() && newData.hasChildren(['eventId','eventName'])) || (data.exists() && (!newData.child('eventId').exists() || newData.child('eventId').isString()) && (!newData.child('eventName').exists() || newData.child('eventName').isString()) && (!data.child('eventId').exists() || newData.child('eventId').isString()) && (!data.child('eventName').exists() || newData.child('eventName').isString())))",
+          ".validate": "!newData.exists() || ((!data.exists() && newData.hasChildren(['eventId'])) || (data.exists() && (!newData.child('eventId').exists() || newData.child('eventId').isString()) && (!data.child('eventId').exists() || newData.child('eventId').isString())))",
           "slug": { ".validate": "newData.isString() || !newData.exists()" },
           "startAt": { ".validate": "newData.isString() || !newData.exists()" },
           "endAt": { ".validate": "newData.isString() || !newData.exists()" },          "faculties": {
@@ -250,7 +250,6 @@
           "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
           "createdAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
           "eventId": { ".validate": "newData.isString() || !newData.exists()" },
-          "eventName": { ".validate": "newData.isString() || !newData.exists()" },
           "$other": { ".validate": false }
         }
       },
@@ -259,7 +258,7 @@
             ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
             "$applicationId": {
               ".write": "(auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)) || (auth == null && !data.exists() && (!newData.child('sourceType').exists() || newData.child('sourceType').val() == 'external'))",
-              ".validate": "newData.hasChildren(['name','email','faculty','department','shifts','eventId','eventName','slug','createdAt','updatedAt']) && newData.child('name').isString() && newData.child('email').isString() && newData.child('faculty').isString() && newData.child('department').isString() && newData.child('eventId').isString() && newData.child('eventName').isString() && newData.child('slug').isString() && (!newData.child('grade').exists() || newData.child('grade').isString()) && (!newData.child('phonetic').exists() || newData.child('phonetic').isString()) && (!newData.child('club').exists() || newData.child('club').isString()) && (!newData.child('studentId').exists() || newData.child('studentId').isString()) && (!newData.child('note').exists() || newData.child('note').isString()) && (!newData.child('academicPath').exists() || (!newData.child('academicPath').isString() && !newData.child('academicPath').isNumber() && !newData.child('academicPath').isBoolean())) && (!newData.child('sourceType').exists() || newData.child('sourceType').isString()) && (!newData.child('role').exists() || newData.child('role').isString()) && !newData.child('shifts').isString() && !newData.child('shifts').isNumber() && !newData.child('shifts').isBoolean() && (newData.child('createdAt').isNumber() || newData.child('createdAt').val() == now) && (newData.child('updatedAt').isNumber() || newData.child('updatedAt').val() == now)",
+              ".validate": "newData.hasChildren(['name','email','faculty','department','shifts','eventId','slug','createdAt','updatedAt']) && newData.child('name').isString() && newData.child('email').isString() && newData.child('faculty').isString() && newData.child('department').isString() && newData.child('eventId').isString() && newData.child('slug').isString() && (!newData.child('grade').exists() || newData.child('grade').isString()) && (!newData.child('phonetic').exists() || newData.child('phonetic').isString()) && (!newData.child('club').exists() || newData.child('club').isString()) && (!newData.child('studentId').exists() || newData.child('studentId').isString()) && (!newData.child('note').exists() || newData.child('note').isString()) && (!newData.child('academicPath').exists() || (!newData.child('academicPath').isString() && !newData.child('academicPath').isNumber() && !newData.child('academicPath').isBoolean())) && (!newData.child('sourceType').exists() || newData.child('sourceType').isString()) && (!newData.child('role').exists() || newData.child('role').isString()) && !newData.child('shifts').isString() && !newData.child('shifts').isNumber() && !newData.child('shifts').isBoolean() && (newData.child('createdAt').isNumber() || newData.child('createdAt').val() == now) && (newData.child('updatedAt').isNumber() || newData.child('updatedAt').val() == now)",
           "createdAt": { ".validate": "newData.isNumber() || newData.val() == now" },
           "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now" },
           "shifts": {
@@ -580,18 +579,11 @@
         "$token": {
           ".read": true,
           ".write": "auth != null && root.child('admins').child(auth.uid).val() == true",
-          ".validate": "!newData.exists() || (newData.hasChildren(['eventId','scheduleId','participantId','displayName','groupNumber']) && newData.child('eventId').isString() && newData.child('scheduleId').isString() && newData.child('participantId').isString() && newData.child('displayName').isString() && newData.child('groupNumber').isString())",
+          ".validate": "!newData.exists() || (newData.hasChildren(['eventId','scheduleId','participantId','groupNumber']) && newData.child('eventId').isString() && newData.child('scheduleId').isString() && newData.child('participantId').isString() && newData.child('groupNumber').isString())",
           "eventId": { ".validate": "newData.isString()" },
-          "eventName": { ".validate": "newData.isString() || !newData.exists()" },
           "scheduleId": { ".validate": "newData.isString()" },
-          "scheduleLabel": { ".validate": "newData.isString() || !newData.exists()" },
-          "scheduleLocation": { ".validate": "newData.isString() || !newData.exists()" },
-          "scheduleDate": { ".validate": "newData.isString() || !newData.exists()" },
-          "scheduleStart": { ".validate": "newData.isString() || !newData.exists()" },
-          "scheduleEnd": { ".validate": "newData.isString() || !newData.exists()" },
           "participantId": { ".validate": "newData.isString()" },
           "participantUid": { ".validate": "newData.isString() || !newData.exists()" },
-          "displayName": { ".validate": "newData.isString()" },
           "groupNumber": { ".validate": "newData.isString()" },
           "guidance": { ".validate": "newData.isString() || !newData.exists()" },
           "expiresAt": { ".validate": "newData.isNumber() || !newData.exists()" },

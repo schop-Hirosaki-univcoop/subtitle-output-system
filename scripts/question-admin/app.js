@@ -5856,21 +5856,16 @@ async function handleSave(options = {}) {
       };
 
       const existingTokenRecord = tokenRecords[token] || {};
+      // 完全正規化: IDのみを保存し、名前やラベルなどの情報は正規化された場所から取得
       tokenRecords[token] = {
         eventId,
-        eventName: event.name || existingTokenRecord.eventName || "",
         scheduleId,
-        scheduleLabel: schedule.label || existingTokenRecord.scheduleLabel || "",
-        scheduleLocation: scheduleLocationText || existingTokenRecord.scheduleLocation || "",
-        scheduleDate: scheduleDateText || existingTokenRecord.scheduleDate || "",
-        scheduleStart: scheduleStartAt || existingTokenRecord.scheduleStart || "",
-        scheduleEnd: scheduleEndAt || existingTokenRecord.scheduleEnd || "",
         participantId,
         participantUid: participantId,
-        displayName: String(entry.name || ""),
         groupNumber,
         guidance: guidance || existingTokenRecord.guidance || "",
         revoked: false,
+        expiresAt: existingTokenRecord.expiresAt,
         createdAt: existingTokenRecord.createdAt || now,
         updatedAt: now
       };
@@ -5986,21 +5981,16 @@ async function handleSave(options = {}) {
 
       if (token) {
         const existingTokenRecord = state.tokenRecords[token] || {};
+        // 完全正規化: IDのみを保存し、名前やラベルなどの情報は正規化された場所から取得
         state.tokenRecords[token] = {
           eventId,
-          eventName: event.name || existingTokenRecord.eventName || "",
           scheduleId: destinationScheduleId,
-          scheduleLabel: destinationLabel || existingTokenRecord.scheduleLabel || "",
-          scheduleLocation: destinationLocation || existingTokenRecord.scheduleLocation || "",
-          scheduleDate: destinationDate || existingTokenRecord.scheduleDate || "",
-          scheduleStart: destinationStart || existingTokenRecord.scheduleStart || "",
-          scheduleEnd: destinationEnd || existingTokenRecord.scheduleEnd || "",
           participantId: uid,
           participantUid: uid,
-          displayName: String(originEntry.name || existingTokenRecord.displayName || ""),
           groupNumber: destinationTeam,
           guidance: guidanceText || existingTokenRecord.guidance || "",
           revoked: false,
+          expiresAt: existingTokenRecord.expiresAt,
           createdAt: existingTokenRecord.createdAt || now,
           updatedAt: now
         };

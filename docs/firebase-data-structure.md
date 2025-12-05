@@ -2,6 +2,28 @@
 
 このドキュメントは、`firebase.rules.json`から抽出した全てのデータ構造と各ノードの説明を記載しています。
 
+## データ正規化について
+
+このシステムでは**完全正規化**を採用しており、IDがある場合、そのIDに紐づく情報（イベント名、スケジュールラベルなど）は重複保存されません。必要な情報は参照時に正規化された場所から取得します。
+
+### 正規化の原則
+
+- **IDのみを保存**: `eventId`, `scheduleId`, `participantId`などのIDのみを保存
+- **参照時に取得**: イベント名、スケジュールラベルなどの情報は、正規化された場所から参照時に取得
+- **単一の情報源**: 各情報は1箇所にのみ保存され、更新時も1箇所のみを更新すれば良い
+
+### 正規化された場所
+
+- **イベント名**: `questionIntake/events/{eventId}/name`
+- **スケジュール情報**: `questionIntake/schedules/{eventId}/{scheduleId}/` (label, location, date, startAt, endAt)
+- **参加者名**: `questionIntake/participants/{eventId}/{scheduleId}/{participantId}/name`
+
+### メリット
+
+- **データ整合性**: 単一の情報源から情報を取得するため、データの不整合が発生しない
+- **保守性**: 更新処理が1箇所で済むため、保守が容易
+- **データ容量**: 重複データを削除することで、データベースの容量を削減
+
 ## 目次
 
 1. [render](#render)
@@ -249,13 +271,15 @@ GL（グループリーダー）の受付情報を管理。
 
 **書き込み権限:** 管理者のみ
 
-**データ構造:**
+**データ構造（完全正規化）:**
 
-- `eventId` (string, 任意): イベント ID
-- `eventName` (string, 任意): イベント名
+- `eventId` (string, 必須): イベント ID
 - `slug` (string, 任意): URL スラッグ
 - `startAt` (string, 任意): 開始時刻
 - `endAt` (string, 任意): 終了時刻
+
+**注意:** 完全正規化により、以下のフィールドは削除されました:
+- `eventName` → イベント名は別の場所（`questionIntake/events/{eventId}/name` など）から取得する必要があります
 - `faculties` (array, 任意): 学部情報の配列
   - `$index` (object): 各学部の情報
     - `faculty` (string, 必須): 学部名
@@ -333,10 +357,12 @@ GL 応募情報を管理。
 - `shifts` (object, 必須): シフト情報（オブジェクト形式）
   - `$scheduleId` (boolean): 各スケジュール ID に対する参加可否
 - `eventId` (string, 必須): イベント ID
-- `eventName` (string, 必須): イベント名
 - `slug` (string, 必須): URL スラッグ
 - `createdAt` (number, 必須): 作成時刻（タイムスタンプ、または`now`）
 - `updatedAt` (number, 必須): 更新時刻（タイムスタンプ、または`now`）
+
+**注意:** 完全正規化により、以下のフィールドは削除されました:
+- `eventName` → イベント名は別の場所（`questionIntake/events/{eventId}/name` など）から取得する必要があります
 
 ### glIntake/slugIndex/{slug}
 
@@ -663,25 +689,27 @@ GL の割り当て情報を管理。
 
 **書き込み権限:** 管理者のみ
 
-**データ構造:**
+**データ構造（完全正規化）:**
 
-- `eventId` (string, 必須): イベント ID
-- `eventName` (string, 任意): イベント名
-- `scheduleId` (string, 必須): スケジュール ID
-- `scheduleLabel` (string, 任意): スケジュールラベル
-- `scheduleLocation` (string, 任意): スケジュール場所
-- `scheduleDate` (string, 任意): スケジュール日付
-- `scheduleStart` (string, 任意): スケジュール開始時刻
-- `scheduleEnd` (string, 任意): スケジュール終了時刻
-- `participantId` (string, 必須): 参加者 ID
-- `participantUid` (string, 任意): 参加者のユーザー ID
-- `displayName` (string, 必須): 表示名
+- `eventId` (string, 必須): イベント ID（正規化された場所: `questionIntake/events/{eventId}/name` からイベント名を取得可能）
+- `scheduleId` (string, 必須): スケジュール ID（正規化された場所: `questionIntake/schedules/{eventId}/{scheduleId}/label` からスケジュールラベルを取得可能）
+- `participantId` (string, 必須): 参加者 ID（正規化された場所: `questionIntake/participants/{eventId}/{scheduleId}/{participantId}/name` から参加者名を取得可能）
+- `participantUid` (string, 任意): 参加者のユーザー ID（participantId と同じ値）
 - `groupNumber` (string, 必須): グループ番号
 - `guidance` (string, 任意): ガイダンス
 - `expiresAt` (number, 任意): 有効期限（タイムスタンプ）
 - `updatedAt` (number, 任意): 更新時刻（タイムスタンプ、または`now`）
 - `createdAt` (number, 任意): 作成時刻（タイムスタンプ、または`now`）
 - `revoked` (boolean, 任意): 取り消し済みかどうか
+
+**注意:** 完全正規化により、以下のフィールドは削除されました（正規化された場所から取得）:
+- `eventName` → `questionIntake/events/{eventId}/name` から取得
+- `scheduleLabel` → `questionIntake/schedules/{eventId}/{scheduleId}/label` から取得
+- `scheduleLocation` → `questionIntake/schedules/{eventId}/{scheduleId}/location` から取得
+- `scheduleDate` → `questionIntake/schedules/{eventId}/{scheduleId}/date` から取得
+- `scheduleStart` → `questionIntake/schedules/{eventId}/{scheduleId}/startAt` から取得
+- `scheduleEnd` → `questionIntake/schedules/{eventId}/{scheduleId}/endAt` から取得
+- `displayName` → `questionIntake/participants/{eventId}/{scheduleId}/{participantId}/name` から取得
 
 ### questionIntake/submissions/{token}/{submissionId}
 

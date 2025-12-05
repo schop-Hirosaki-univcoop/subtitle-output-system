@@ -668,7 +668,18 @@ import { FIREBASE_CONFIG } from "../shared/firebase-config.js";
       }
     }
     state.schedules = parsedSchedules;
-    const eventName = ensureString(config.eventName || eventId);
+    // 完全正規化: eventNameはquestionIntake/events/{eventId}/nameから取得
+    let eventName = eventId;
+    try {
+      const eventRef = ref(database, `questionIntake/events/${eventId}`);
+      const eventSnap = await get(eventRef);
+      if (eventSnap.exists()) {
+        const eventData = eventSnap.val() || {};
+        eventName = ensureString(eventData.name || eventId);
+      }
+    } catch (error) {
+      console.warn("Failed to fetch event name, using eventId as fallback", error);
+    }
     state.eventName = eventName;
     const periodText = formatPeriod(startAt, endAt);
     populateContext(eventName, periodText);
@@ -768,6 +779,7 @@ import { FIREBASE_CONFIG } from "../shared/firebase-config.js";
         isCustom: Boolean(segment.isCustom)
       }))
       .filter((segment) => segment.value);
+    // 完全正規化: eventNameは削除（eventIdから取得可能）
     const payload = {
       name: ensureString(elements.nameInput?.value),
       phonetic: ensureString(elements.phoneticInput?.value),
@@ -781,7 +793,6 @@ import { FIREBASE_CONFIG } from "../shared/firebase-config.js";
       note: ensureString(elements.noteInput?.value),
       shifts,
       eventId: state.eventId,
-      eventName: state.eventName,
       slug: state.slug,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()

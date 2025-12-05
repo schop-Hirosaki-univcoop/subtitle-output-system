@@ -2013,6 +2013,7 @@ export class GlToolManager {
       return;
     }
     this.config.scheduleTeams = scheduleTeams;
+    // 完全正規化: eventNameは削除（eventIdから取得可能）
     const configPayload = {
       slug,
       startAt,
@@ -2024,8 +2025,7 @@ export class GlToolManager {
       schedules: scheduleSummary,
       guidance: ensureString(this.config?.guidance),
       updatedAt: serverTimestamp(),
-      eventId: this.currentEventId,
-      eventName: this.currentEventName
+      eventId: this.currentEventId
     };
     if (this.config?.createdAt) {
       configPayload.createdAt = this.config.createdAt;
@@ -2392,6 +2392,7 @@ export class GlToolManager {
     const targetRef = existing
       ? ref(database, `${basePath}/${existing.id}`)
       : push(ref(database, basePath));
+    // 完全正規化: eventNameは削除（eventIdから取得可能）
     const payload = {
       name: data.name,
       phonetic: data.phonetic,
@@ -2406,7 +2407,6 @@ export class GlToolManager {
       shifts: data.shifts,
       sourceType: "internal",
       eventId: this.currentEventId,
-      eventName: this.currentEventName,
       slug,
       createdAt: existing?.raw?.createdAt ?? serverTimestamp(),
       updatedAt: serverTimestamp()
