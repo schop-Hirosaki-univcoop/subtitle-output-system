@@ -2109,13 +2109,14 @@ export class OperatorApp {
       }
     }
     // 完全正規化: scheduleLabelは参照先から取得（既存データとの互換性のため、assignmentから直接取得をフォールバックとして使用）
-    const fallbackScheduleLabel = String(assignment.scheduleLabel || "").trim();
-    const scheduleId = String(assignment.scheduleId || "").trim();
-    const eventId = String(assignment.eventId || "").trim();
-    const scheduleKey = String(assignment.scheduleKey || (eventId && scheduleId ? `${eventId}::${scheduleId}` : "") || "").trim();
-    const scheduleLabel = scheduleKey && typeof this.resolveScheduleLabel === "function"
-      ? this.resolveScheduleLabel(scheduleKey, fallbackScheduleLabel, scheduleId) || fallbackScheduleLabel || scheduleId || "(未設定)"
-      : fallbackScheduleLabel || scheduleId || "(未設定)";
+      const fallbackScheduleLabel = String(assignment.scheduleLabel || "").trim();
+      const scheduleId = String(assignment.scheduleId || "").trim();
+      const eventId = String(assignment.eventId || "").trim();
+      const derivedScheduleKey = scheduleKey || assignment.scheduleKey || (eventId && scheduleId ? `${eventId}::${scheduleId}` : "");
+      const normalizedScheduleKey = String(derivedScheduleKey || "").trim();
+      const scheduleLabel = normalizedScheduleKey && typeof this.resolveScheduleLabel === "function"
+        ? this.resolveScheduleLabel(normalizedScheduleKey, fallbackScheduleLabel, scheduleId) || fallbackScheduleLabel || scheduleId || "(未設定)"
+        : fallbackScheduleLabel || scheduleId || "(未設定)";
     return scheduleLabel;
   }
 
