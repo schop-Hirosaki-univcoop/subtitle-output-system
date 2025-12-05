@@ -387,13 +387,13 @@ export const questionStatusRef = ref(database, "questionStatus");
 - [x] `scripts/question-admin/app.js`の修正
   - [x] `loadInitialData()`のレガシー questionStatus 取得削除
 
-### フェーズ 2: データ移行
+### フェーズ 2: データ移行（完了）
 
 - [x] レンダリング状態の移行スクリプト作成（`migrateLegacyPaths_`関数に実装済み）
 - [x] セッション情報の移行スクリプト作成（`migrateLegacyPaths_`関数に実装済み）
 - [x] questionStatus の移行スクリプト作成（`migrateLegacyPaths_`関数に実装済み）
-- [ ] 移行スクリプトのテスト（ドライラン実行）
-- [ ] 本番環境での移行実行（`dryRun: false`で実行）
+- [x] 移行スクリプトのテスト（ドライラン実行）
+- [x] 本番環境での移行実行（`dryRun: false`で実行）
 
 **移行スクリプトの使用方法**:
 
@@ -412,10 +412,10 @@ export const questionStatusRef = ref(database, "questionStatus");
 - [x] 重複したバリデーションルールの削除（レガシーパス削除により自動的に簡素化）
 - [x] ルールファイルの JSON 構文検証
 
-### フェーズ 4: レガシーパスの削除
+### フェーズ 4: レガシーパスの削除（完了）
 
-- [ ] レガシーパスのデータ削除
-- [ ] 最終確認
+- [x] レガシーパスのデータ削除
+- [x] 最終確認
 
 ## 関連ドキュメント
 
@@ -428,11 +428,12 @@ export const questionStatusRef = ref(database, "questionStatus");
 1. **コード修正**: すべてのレガシーパスへのフォールバック処理を削除し、新規パスのみを使用するように修正しました。
 2. **ルールファイルの簡素化**: `firebase.rules.json`からレガシーパスのルールを削除しました。
 3. **データ移行スクリプト**: `migrateLegacyPaths_`関数を作成し、レガシーパスのデータを新規パスに移行できるようにしました。
+4. **データ移行**: 移行スクリプトを実行して、既存のレガシーパスのデータを新規パスに移行しました。
+5. **レガシーパスの削除**: 移行完了後、レガシーパスのデータを削除しました。
 
-### 残りの作業
+### リファクタリング完了
 
-1. **データ移行**: 移行スクリプトを実行して、既存のレガシーパスのデータを新規パスに移行します。
-2. **レガシーパスの削除**: 移行完了後、レガシーパスのデータを削除します。
+すべてのフェーズが完了し、Firebase Realtime Database のパス構造のリファクタリングが完了しました。システムは現在、イベントスコープパス（`render/events/<event>/<schedule>/...`, `render/events/<event>/sessions/<uid>`, `questionStatus/<event>/<uid>`）のみを使用しています。
 
 ### 関連ドキュメント
 
