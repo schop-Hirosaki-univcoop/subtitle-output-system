@@ -907,30 +907,37 @@ function submitQuestion_(payload) {
   const eventId = tokenEventId;
   const scheduleId = tokenScheduleId;
   const participantId = tokenParticipantId;
-  
+
   // 正規化された場所から情報を取得
   let eventRecord = {};
   let scheduleRecord = {};
   let participantRecord = {};
   try {
-    eventRecord = fetchRtdb_(`questionIntake/events/${eventId}`, accessToken) || {};
+    eventRecord =
+      fetchRtdb_(`questionIntake/events/${eventId}`, accessToken) || {};
   } catch (ignoreEventError) {
     eventRecord = {};
   }
   try {
-    scheduleRecord = fetchRtdb_(`questionIntake/schedules/${eventId}/${scheduleId}`, accessToken) || {};
+    scheduleRecord =
+      fetchRtdb_(
+        `questionIntake/schedules/${eventId}/${scheduleId}`,
+        accessToken
+      ) || {};
   } catch (ignoreScheduleError) {
     scheduleRecord = {};
   }
   try {
-    participantRecord = fetchRtdb_(`questionIntake/participants/${eventId}/${scheduleId}/${participantId}`, accessToken) || {};
+    participantRecord =
+      fetchRtdb_(
+        `questionIntake/participants/${eventId}/${scheduleId}/${participantId}`,
+        accessToken
+      ) || {};
   } catch (ignoreParticipantError) {
     participantRecord = {};
   }
-  
-  const eventName = String(
-    eventRecord.name || payloadEventName || ""
-  ).trim();
+
+  const eventName = String(eventRecord.name || payloadEventName || "").trim();
   const scheduleLabel = String(
     scheduleRecord.label || payloadScheduleLabel || ""
   ).trim();
@@ -1816,9 +1823,7 @@ function buildParticipantMailContext_(
         participantRecord.location ||
         participantRecord.venue),
     scheduleRecord &&
-      (scheduleRecord.location ||
-        scheduleRecord.venue ||
-        scheduleRecord.place)
+      (scheduleRecord.location || scheduleRecord.venue || scheduleRecord.place)
   );
   const location = coalesceStrings_(
     participantRecord &&
@@ -2642,9 +2647,7 @@ function sendParticipantMail_(principal, req) {
   // 完全正規化: 正規化された場所から取得
   const eventRecordName = coalesceStrings_(
     eventRecord &&
-      (eventRecord.name ||
-        eventRecord.title ||
-        eventRecord.eventLabel),
+      (eventRecord.name || eventRecord.title || eventRecord.eventLabel),
     ""
   );
   const scheduleRecordLabel = coalesceStrings_(
@@ -3113,7 +3116,9 @@ function resolveParticipantMailForToken_(req) {
             : scheduleRecord.startAt || scheduleRecord.endAt || ""
         ).trim(),
         guidance: String(tokenRecord.guidance || "").trim(),
-        groupNumber: String(participantRecord.groupNumber || tokenRecord.groupNumber || "").trim(),
+        groupNumber: String(
+          participantRecord.groupNumber || tokenRecord.groupNumber || ""
+        ).trim(),
       },
       participantRecord || {}
     );
