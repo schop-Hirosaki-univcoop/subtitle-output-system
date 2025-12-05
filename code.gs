@@ -752,6 +752,9 @@ function doPost(e) {
       case "restoreRealtimeDatabase":
         assertOperator_(principal);
         return ok(restoreRealtimeDatabase_());
+      case "migrateLegacyPaths":
+        assertOperator_(principal);
+        return ok(migrateLegacyPaths_(req.dryRun !== false));
       case "whoami":
         // デバッグ用途: 現在のprincipal情報（認証されたユーザー）を返す。
         return ok({ principal });
@@ -5308,7 +5311,9 @@ function updateAnswerStatus(uid, status, eventId) {
 
   // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
   const fallbackEventId = String(eventId || "").trim();
-  const resolvedEventId = record.eventId ? String(record.eventId).trim() : fallbackEventId;
+  const resolvedEventId = record.eventId
+    ? String(record.eventId).trim()
+    : fallbackEventId;
   if (!resolvedEventId) {
     throw new Error(`UID: ${normalizedUid} has no eventId.`);
   }
@@ -5541,4 +5546,188 @@ function editQuestionText(uid, newText) {
 function clearParticipantMailTemplateCacheOnce() {
   // 推奨されていた呼び出し
   getParticipantMailTemplateMarkup_({ forceRefresh: true });
+}
+
+// === レガシーパスから新規パスへのデータ移行スクリプト =========
+// レガシーパス（render/state, render/session, screens/sessions, questionStatus/$uid）
+// から新規パス（render/events/$eventId/$scheduleId/..., render/events/$eventId/sessions/$uid, questionStatus/$eventId/$uid）
+// へのデータ移行を実行します。
+// @param {boolean} dryRun - trueの場合、実際には書き込まずに移行計画のみを返す
+// @returns {Object} 移行結果のサマリー
+function migrateLegacyPaths_(dryRun = true) {
+  const token = getFirebaseAccessToken_();
+  const summary = {
+    dryRun: dryRun,
+    timestamp: toIsoJst_(new Date()),
+    migrated: {
+      renderState: 0,
+      sessions: 0,
+      questionStatus: 0,
+    },
+    skipped: {
+      renderState: 0,
+      sessions: 0,
+      questionStatus: 0,
+    },
+    errors: [],
+  };
+
+  try {
+    // 1. レンダリング状態の移行（render/state → render/events/$eventId/$scheduleId/state）
+    const renderStateData = fetchRtdb_("render/state", token);
+    if (renderStateData && typeof renderStateData === "object") {
+      // レガシーパスにはeventId/scheduleId情報がないため、既存のイベント/スケジュールから推測
+      // または、デフォルトのeventId/scheduleIdを使用
+      const events = fetchRtdb_("questionIntake/events", token) || {};
+      const eventIds = Object.keys(events);
+
+      if (eventIds.length > 0) {
+        // 最初のイベントを使用（実際の運用では、より適切な推測ロジックが必要）
+        const defaultEventId = eventIds[0];
+        const schedules =
+          fetchRtdb_(`questionIntake/schedules/${defaultEventId}`, token) || {};
+        const scheduleIds = Object.keys(schedules);
+        const defaultScheduleId =
+          scheduleIds.length > 0 ? scheduleIds[0] : DEFAULT_SCHEDULE_KEY;
+
+        const newStatePath = getRenderStatePath_(
+          defaultEventId,
+          defaultScheduleId
+        );
+        const newNowShowingPath = getNowShowingPath_(
+          defaultEventId,
+          defaultScheduleId
+        );
+        const newSideTelopsPath = `${buildRenderEventBasePath_(
+          defaultEventId,
+          defaultScheduleId
+        )}/sideTelops`;
+
+        if (!dryRun) {
+          const updates = {};
+          // render/stateの内容をrender/events/$eventId/$scheduleId/stateに移行
+          // phase, updatedAtなどはそのまま移行
+          if (renderStateData.phase !== undefined) {
+            updates[`${newStatePath}/phase`] = renderStateData.phase;
+          }
+          if (renderStateData.updatedAt !== undefined) {
+            updates[`${newStatePath}/updatedAt`] = renderStateData.updatedAt;
+          }
+          if (renderStateData.nowShowing !== undefined) {
+            updates[`${newStatePath}/nowShowing`] = renderStateData.nowShowing;
+          }
+          // nowShowingは独立したパスにも存在する可能性がある
+          if (renderStateData.nowShowing !== undefined) {
+            updates[newNowShowingPath] = renderStateData.nowShowing;
+          }
+          // sideTelopsの移行
+          if (renderStateData.sideTelops !== undefined) {
+            updates[newSideTelopsPath] = renderStateData.sideTelops;
+          }
+          if (Object.keys(updates).length > 0) {
+            patchRtdb_(updates, token);
+            summary.migrated.renderState = 1;
+          }
+        } else {
+          summary.migrated.renderState = 1;
+        }
+      } else {
+        summary.skipped.renderState = 1;
+        summary.errors.push("レンダリング状態の移行: イベントが見つかりません");
+      }
+    }
+
+    // 2. セッション情報の移行
+    // 2-1. render/session → render/events/$eventId/sessions/$uid
+    const legacySession = fetchRtdb_("render/session", token);
+    if (legacySession && typeof legacySession === "object") {
+      const sessionEventId = String(legacySession.eventId || "").trim();
+      const sessionUid = String(legacySession.uid || "").trim();
+
+      if (sessionEventId && sessionUid) {
+        const newSessionPath = getEventSessionPath_(sessionEventId, sessionUid);
+        if (!dryRun) {
+          putRtdb_(newSessionPath, legacySession, token);
+          summary.migrated.sessions += 1;
+        } else {
+          summary.migrated.sessions += 1;
+        }
+      } else {
+        summary.skipped.sessions += 1;
+        summary.errors.push(
+          "セッション情報の移行: eventIdまたはuidが欠落しています"
+        );
+      }
+    }
+
+    // 2-2. screens/sessions/$uid → render/events/$eventId/sessions/$uid
+    const screensSessions = fetchRtdb_("screens/sessions", token);
+    if (screensSessions && typeof screensSessions === "object") {
+      Object.entries(screensSessions).forEach(([uid, sessionData]) => {
+        if (sessionData && typeof sessionData === "object") {
+          const sessionEventId = String(sessionData.eventId || "").trim();
+          if (sessionEventId) {
+            const newSessionPath = getEventSessionPath_(sessionEventId, uid);
+            if (!dryRun) {
+              putRtdb_(newSessionPath, sessionData, token);
+              summary.migrated.sessions += 1;
+            } else {
+              summary.migrated.sessions += 1;
+            }
+          } else {
+            summary.skipped.sessions += 1;
+            summary.errors.push(
+              `セッション情報の移行 (screens/sessions/${uid}): eventIdが欠落しています`
+            );
+          }
+        }
+      });
+    }
+
+    // 3. questionStatusの移行（questionStatus/$uid → questionStatus/$eventId/$uid）
+    const legacyQuestionStatus = fetchRtdb_("questionStatus", token);
+    if (legacyQuestionStatus && typeof legacyQuestionStatus === "object") {
+      // イベントIDで始まるキーはスキップ（既に新規パス）
+      const questionStatusEntries = Object.entries(legacyQuestionStatus).filter(
+        ([key]) => !key.includes("/")
+      );
+
+      if (questionStatusEntries.length > 0) {
+        // 質問データからeventIdを取得
+        const questions = fetchRtdb_("questions/normal", token) || {};
+        const questionEventMap = {};
+        Object.entries(questions).forEach(([uid, question]) => {
+          if (question && typeof question === "object" && question.eventId) {
+            questionEventMap[uid] = String(question.eventId).trim();
+          }
+        });
+
+        questionStatusEntries.forEach(([uid, statusData]) => {
+          if (statusData && typeof statusData === "object") {
+            const eventId = questionEventMap[uid];
+            if (eventId) {
+              const newStatusPath = `questionStatus/${eventId}/${uid}`;
+              if (!dryRun) {
+                putRtdb_(newStatusPath, statusData, token);
+                summary.migrated.questionStatus += 1;
+              } else {
+                summary.migrated.questionStatus += 1;
+              }
+            } else {
+              summary.skipped.questionStatus += 1;
+              summary.errors.push(
+                `questionStatusの移行 (${uid}): 対応する質問データからeventIdを取得できませんでした`
+              );
+            }
+          }
+        });
+      }
+    }
+  } catch (error) {
+    summary.errors.push(
+      `移行中にエラーが発生しました: ${error.message || String(error)}`
+    );
+  }
+
+  return summary;
 }

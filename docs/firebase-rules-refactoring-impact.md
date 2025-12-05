@@ -288,7 +288,11 @@ export const questionStatusRef = ref(database, "questionStatus");
 
 ### フェーズ 2: データ移行
 
-1. 既存データを新規パスに移行
+1. **移行スクリプトの実行**:
+   - `code.gs`に`migrateLegacyPaths_`関数が追加されました
+   - APIエンドポイント: `action: "migrateLegacyPaths"`（`dryRun`パラメータでドライラン/実実行を切り替え）
+   - まず`dryRun: true`で実行し、移行計画を確認
+   - 問題がなければ`dryRun: false`で実際の移行を実行
 2. 移行完了を確認
 
 ### フェーズ 3: ルールファイルの簡素化
@@ -382,11 +386,16 @@ export const questionStatusRef = ref(database, "questionStatus");
 
 ### フェーズ 2: データ移行
 
-- [ ] レンダリング状態の移行スクリプト作成
-- [ ] セッション情報の移行スクリプト作成
-- [ ] questionStatus の移行スクリプト作成
-- [ ] 移行スクリプトのテスト
-- [ ] 本番環境での移行実行
+- [x] レンダリング状態の移行スクリプト作成（`migrateLegacyPaths_`関数に実装済み）
+- [x] セッション情報の移行スクリプト作成（`migrateLegacyPaths_`関数に実装済み）
+- [x] questionStatus の移行スクリプト作成（`migrateLegacyPaths_`関数に実装済み）
+- [ ] 移行スクリプトのテスト（ドライラン実行）
+- [ ] 本番環境での移行実行（`dryRun: false`で実行）
+
+**移行スクリプトの使用方法**:
+- APIエンドポイント: `action: "migrateLegacyPaths"`
+- パラメータ: `{ dryRun: true }`（ドライラン）または `{ dryRun: false }`（実実行）
+- 戻り値: 移行結果のサマリー（移行件数、スキップ件数、エラー一覧）
 
 ### フェーズ 3: ルールファイルの簡素化
 
