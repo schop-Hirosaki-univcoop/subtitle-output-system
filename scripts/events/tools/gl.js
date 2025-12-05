@@ -872,7 +872,7 @@ export class GlToolManager {
 
   refreshSchedules() {
     this.currentSchedules = this.getAvailableSchedules({ includeConfigFallback: true });
-    this.syncScheduleSummaryCache();
+    // syncScheduleSummaryCache()は削除 - 設定保存時(saveConfig())にのみ処理されるため不要
     this.renderScheduleTeamControls();
     this.renderInternalShiftList();
   }
@@ -1866,49 +1866,8 @@ export class GlToolManager {
     this.setStatus("共通設定を反映しました。必要に応じて保存してください。", "success");
   }
 
-  async syncScheduleSummaryCache() {
-    if (!this.currentEventId || !this.config || this.scheduleSyncPending) {
-      return;
-    }
-    const primarySchedules = this.getAvailableSchedules({ includeConfigFallback: false });
-    const summaryList = sanitizeScheduleEntries(primarySchedules);
-    if (!summaryList.length) {
-      return;
-    }
-    const nextMap = buildScheduleConfigMap(summaryList);
-    const currentMap = buildScheduleConfigMap(this.config.schedules || []);
-    if (scheduleSummaryMapsEqual(currentMap, nextMap)) {
-      return;
-    }
-    this.scheduleSyncPending = true;
-    try {
-      // ルートパスからの完全パスでupdate()を使用（他のコードと同じパターン）
-      const updates = {};
-      // 新しいスケジュールエントリを追加
-      Object.keys(nextMap).forEach(scheduleId => {
-        updates[`glIntake/events/${this.currentEventId}/schedules/${scheduleId}`] = nextMap[scheduleId];
-      });
-      // 削除されたスケジュールエントリを削除
-      Object.keys(currentMap).forEach(scheduleId => {
-        if (!nextMap[scheduleId]) {
-          updates[`glIntake/events/${this.currentEventId}/schedules/${scheduleId}`] = null;
-        }
-      });
-      if (Object.keys(updates).length > 0) {
-        await update(ref(database), updates);
-      }
-    } catch (error) {
-      // パーミッションエラーの場合は、admin権限がない可能性があるため、警告レベルでログに記録
-      // GLリスト管理パネルを開いていないユーザーでも、イベント選択時にこの関数が呼ばれる可能性がある
-      if (error && error.code === 'PERMISSION_DENIED') {
-        // admin権限がない場合は、エラーをログに記録しない（正常な動作）
-        return;
-      }
-      logError("Failed to sync GL schedule summary", error);
-    } finally {
-      this.scheduleSyncPending = false;
-    }
-  }
+  // syncScheduleSummaryCache()を削除 - この処理は設定保存時(saveConfig())にのみ必要
+  // イベント選択時の自動実行は権限エラーを引き起こすため削除
 
   updateConfigVisibility() {
     if (!this.dom.glConfigEventNote || !this.dom.glConfigContent) {
