@@ -6675,32 +6675,6 @@ export class EventAdminApp {
     if (external > 0) {
       this.chatAcknowledged = false;
     }
-    const selfUid = ensureString(this.currentUser?.uid);
-    Object.entries(raw).forEach(([entryId, payload]) => {
-      if (!payload || typeof payload !== "object") {
-        return;
-      }
-      const normalizedId = ensureString(entryId) || generateShortId("presence-");
-      const scheduleKey = this.buildPresenceScheduleKey(eventId, payload, normalizedId);
-      const scheduleId = ensureString(payload.scheduleId);
-      const displayName = ensureString(payload.displayName) || ensureString(payload.email) || ensureString(payload.uid) || normalizedId;
-      const uid = ensureString(payload.uid);
-      const mode = normalizeOperatorMode(payload.mode);
-      const updatedAt = Number(payload.clientTimestamp || payload.updatedAt || 0) || 0;
-      entries.push({
-        entryId: normalizedId,
-        uid,
-        displayName,
-        scheduleId,
-        scheduleLabel: ensureString(payload.scheduleLabel),
-        scheduleKey,
-        mode,
-        updatedAt,
-        isSelf: Boolean(selfUid && uid && uid === selfUid)
-      });
-    });
-    entries.sort((a, b) => a.displayName.localeCompare(b.displayName, "ja"));
-    return entries;
   }
 
   buildScheduleConflictContext() {
