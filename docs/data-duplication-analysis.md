@@ -1,8 +1,12 @@
 # データ重複分析と修正完了報告
 
+**状態**: ✅ 実装完了（2025 年）
+
 ## 概要
 
 Firebase Realtime Database のデータ構造において、ID があるのにその ID に紐付けられた情報まで一緒に書き込まれている箇所を特定し、修正を完了しました。
+
+**注意**: このドキュメントは正規化前の分析です。実装完了後の状態については、`docs/rtdb-normalization-check.md`を参照してください。
 
 ## 1. groupNumber と teamNumber の重複
 

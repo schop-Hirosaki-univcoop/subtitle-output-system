@@ -4,13 +4,13 @@
 
 ## データ正規化について
 
-このシステムでは**完全正規化**を採用しており、IDがある場合、そのIDに紐づく情報（イベント名、スケジュールラベルなど）は重複保存されません。必要な情報は参照時に正規化された場所から取得します。
+このシステムでは**完全正規化**を採用しており、ID がある場合、その ID に紐づく情報（イベント名、スケジュールラベルなど）は重複保存されません。必要な情報は参照時に正規化された場所から取得します。
 
 ### 正規化の原則
 
-- **IDのみを保存**: `eventId`, `scheduleId`, `participantId`などのIDのみを保存
+- **ID のみを保存**: `eventId`, `scheduleId`, `participantId`などの ID のみを保存
 - **参照時に取得**: イベント名、スケジュールラベルなどの情報は、正規化された場所から参照時に取得
-- **単一の情報源**: 各情報は1箇所にのみ保存され、更新時も1箇所のみを更新すれば良い
+- **単一の情報源**: 各情報は 1 箇所にのみ保存され、更新時も 1 箇所のみを更新すれば良い
 
 ### 正規化された場所
 
@@ -21,7 +21,7 @@
 ### メリット
 
 - **データ整合性**: 単一の情報源から情報を取得するため、データの不整合が発生しない
-- **保守性**: 更新処理が1箇所で済むため、保守が容易
+- **保守性**: 更新処理が 1 箇所で済むため、保守が容易
 - **データ容量**: 重複データを削除することで、データベースの容量を削減
 
 ## 目次
@@ -72,11 +72,9 @@
 - `status` (string, 必須): セッション状態。`active`, `expired`, `ended`, `superseded`のいずれか
 - `eventId` (string, 任意): イベント ID
 - `scheduleId` (string, 任意): スケジュール ID
-- `scheduleLabel` (string, 任意): スケジュールラベル（現在の実装では使用されていない）
 - `assignment` (object, 任意): 割り当て情報
   - `eventId` (string, 必須): イベント ID
   - `scheduleId` (string, 必須): スケジュール ID
-  - `scheduleLabel` (string, 任意): スケジュールラベル
   - `scheduleKey` (string, 任意): スケジュールキー
   - `lockedAt` (number, 任意): ロックされた時刻（タイムスタンプ）
   - `lockedByUid` (string, 任意): ロックしたユーザーの UID
@@ -92,6 +90,11 @@
 - `lastPresenceUid` (string, 任意): 最終プレゼンス更新を行ったユーザー ID
 - `lastPresenceClientTimestamp` (number, 任意): 最終プレゼンス更新のクライアント側タイムスタンプ
 - `presenceUpdatedAt` (number, 任意): プレゼンス更新時刻（タイムスタンプ）
+
+**注意:** 完全正規化により、以下のフィールドは削除されました:
+
+- `scheduleLabel` → スケジュールラベルは`questionIntake/schedules/{eventId}/{scheduleId}/label`から取得（`resolveScheduleLabel`関数を使用）
+- `assignment.scheduleLabel` → `assignment.scheduleId`から取得（`resolveScheduleLabel`関数を使用）
 
 #### render/events/{eventId}/{scheduleId}
 
@@ -117,12 +120,17 @@
 - `phase` (string, 必須): 表示フェーズ。`visible`, `hidden`, `showing`, `hiding`, `error`のいずれか
 - `updatedAt` (number, 任意): 更新時刻（タイムスタンプ）
 - `nowShowing` (object, 任意): 現在表示中の情報
-  - `name` (string, 必須): 表示名
-  - `question` (string, 必須): 質問内容
-  - `uid` (string, 任意): ユーザー ID
-  - `participantId` (string, 任意): 参加者 ID
-  - `genre` (string, 任意): ジャンル
-  - `pickup` (boolean, 任意): ピックアップフラグ
+  - `uid` (string, 必須): 質問の UID（空文字列の場合はクリア状態）
+
+**注意:** 完全正規化により、以下のフィールドは削除されました:
+
+- `name` → `questions/normal/{uid}/name` または `questions/pickup/{uid}/name` から取得
+- `question` → `questions/normal/{uid}/question` または `questions/pickup/{uid}/question` から取得
+- `participantId` → `questions/normal/{uid}` から `token` を取得し、`questionIntake/tokens/{token}/participantId` から取得
+- `genre` → `questions/normal/{uid}/genre` または `questions/pickup/{uid}/genre` から取得
+- `pickup` → `questions/pickup/{uid}` の存在で判定
+
+表示時は`app.state.questionsByUid`（メモリキャッシュ）から取得します。既存データとの互換性のため、`name`や`question`が直接含まれている場合はフォールバック処理で対応します。
 
 ##### render/events/{eventId}/{scheduleId}/sideTelops
 
@@ -156,13 +164,18 @@
 
 **データ構造:**
 
-- `name` (string, 必須): 表示名
-- `question` (string, 必須): 質問内容
-- `uid` (string, 任意): ユーザー ID
-- `participantId` (string, 任意): 参加者 ID
-- `genre` (string, 任意): ジャンル
-- `pickup` (boolean, 任意): ピックアップフラグ
-- `sideTelopRight` (string, 任意): 右側サイドテロップのテキスト
+- `uid` (string, 必須): 質問の UID（空文字列の場合はクリア状態）
+
+**注意:** 完全正規化により、以下のフィールドは削除されました:
+
+- `name` → `questions/normal/{uid}/name` または `questions/pickup/{uid}/name` から取得
+- `question` → `questions/normal/{uid}/question` または `questions/pickup/{uid}/question` から取得
+- `participantId` → `questions/normal/{uid}` から `token` を取得し、`questionIntake/tokens/{token}/participantId` から取得
+- `genre` → `questions/normal/{uid}/genre` または `questions/pickup/{uid}/genre` から取得
+- `pickup` → `questions/pickup/{uid}` の存在で判定
+- `sideTelopRight` → `render/events/{eventId}/{scheduleId}/sideTelops/right` から取得
+
+表示時は`questions/normal/{uid}`または`questions/pickup/{uid}`から情報を取得します。既存データとの互換性のため、`name`や`question`が直接含まれている場合はフォールバック処理で対応します。
 
 ### render/displayPresence
 
@@ -279,6 +292,7 @@ GL（グループリーダー）の受付情報を管理。
 - `endAt` (string, 任意): 終了時刻
 
 **注意:** 完全正規化により、以下のフィールドは削除されました:
+
 - `eventName` → イベント名は別の場所（`questionIntake/events/{eventId}/name` など）から取得する必要があります
 - `faculties` (array, 任意): 学部情報の配列
   - `$index` (object): 各学部の情報
@@ -362,6 +376,7 @@ GL 応募情報を管理。
 - `updatedAt` (number, 必須): 更新時刻（タイムスタンプ、または`now`）
 
 **注意:** 完全正規化により、以下のフィールドは削除されました:
+
 - `eventName` → イベント名は別の場所（`questionIntake/events/{eventId}/name` など）から取得する必要があります
 
 ### glIntake/slugIndex/{slug}
@@ -437,10 +452,8 @@ GL の割り当て情報を管理。
 - `uid` (string, 必須): ユーザー ID（auth.uid と一致する必要がある）
 - `eventId` (string, 必須): イベント ID（パスパラメータの$eventId と一致する必要がある）
 - `sessionId` (string, 任意): セッション ID（存在する場合、パスパラメータの$sessionId と一致する必要がある）
-- `eventName` (string, 任意): イベント名
 - `scheduleId` (string, 任意): スケジュール ID
 - `scheduleKey` (string, 任意): スケジュールキー
-- `scheduleLabel` (string, 任意): スケジュールラベル
 - `selectedScheduleId` (string, 任意): 選択されたスケジュール ID（読み取り専用、書き込みは行われない）
 - `selectedScheduleLabel` (string, 任意): 選択されたスケジュールラベル（読み取り専用、書き込みは行われない）
 - `displayName` (string, 任意): 表示名
@@ -450,6 +463,11 @@ GL の割り当て情報を管理。
 - `reason` (string, 任意): 理由
 - `skipTelop` (boolean, 任意): テロップをスキップするか
 - `source` (string, 任意): ソース（実際のコードでは`"operator"`が使用される）
+
+**注意:** 完全正規化により、以下のフィールドは削除されました:
+
+- `eventName` → イベント名は`questionIntake/events/{eventId}/name`から取得
+- `scheduleLabel` → スケジュールラベルは`questionIntake/schedules/{eventId}/{scheduleId}/label`から取得（`resolveScheduleLabel`関数を使用）
 
 ---
 
@@ -703,6 +721,7 @@ GL の割り当て情報を管理。
 - `revoked` (boolean, 任意): 取り消し済みかどうか
 
 **注意:** 完全正規化により、以下のフィールドは削除されました（正規化された場所から取得）:
+
 - `eventName` → `questionIntake/events/{eventId}/name` から取得
 - `scheduleLabel` → `questionIntake/schedules/{eventId}/{scheduleId}/label` から取得
 - `scheduleLocation` → `questionIntake/schedules/{eventId}/{scheduleId}/location` から取得

@@ -254,6 +254,7 @@ export const questionStatusRef = ref(database, "questionStatus");
 
 2. **nowShowing のバリデーション** (line 15-21, 102-108, 129-136):
    - 3 箇所に重複しているバリデーションを共通化
+   - **注意**: 完全正規化（2025年実装完了）により、`nowShowing`は`uid`のみ保存されます。`name`, `question`, `participantId`, `genre`, `pickup`などのフィールドは削除され、バリデーションルールも更新されています。
 
 ## データ移行が必要な箇所
 
