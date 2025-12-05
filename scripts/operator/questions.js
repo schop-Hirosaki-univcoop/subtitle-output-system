@@ -89,9 +89,10 @@ async function ensureChannelAligned(app) {
   const sessionSchedule = normalizeScheduleId(
     session?.scheduleId || sessionAssignment?.scheduleId || ""
   );
+  let scheduleKey;
   if (sessionEvent && sessionSchedule && sessionEvent === normalizedEvent && sessionSchedule === normalizedSchedule) {
     // 完全正規化: scheduleLabelは参照先から取得
-    const scheduleKey = `${sessionEvent}::${sessionSchedule}`;
+    scheduleKey = `${sessionEvent}::${sessionSchedule}`;
     const scheduleLabel = typeof app.resolveScheduleLabel === "function"
       ? app.resolveScheduleLabel(scheduleKey, session?.scheduleLabel, sessionSchedule) || sessionSchedule
       : String(session?.scheduleLabel || sessionSchedule || "").trim();
@@ -112,7 +113,7 @@ async function ensureChannelAligned(app) {
     return true;
   }
 
-  const scheduleKey = `${normalizedEvent}::${normalizedSchedule}`;
+  scheduleKey = `${normalizedEvent}::${normalizedSchedule}`;
   let scheduleLabel = normalizedSchedule;
   if (typeof app.resolveScheduleLabel === "function") {
     scheduleLabel =
