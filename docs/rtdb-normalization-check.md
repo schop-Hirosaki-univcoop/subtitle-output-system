@@ -253,7 +253,9 @@ Firebase Realtime Database（RTDB）のデータ構造が第 3 正規形（3NF�
 
 ### ⚠️ render/events/{eventId}/{scheduleId}/state/nowShowing
 
-**状態**: 表示用キャッシュとして機能（正規化の例外として許容可能）
+**状態**: テロップ送出状態管理ノード（正規化の例外として許容可能）
+
+**用途**: operator.html で現在送出中のテロップ情報を表示するために使用
 
 **保存されているフィールド**:
 
@@ -266,17 +268,22 @@ Firebase Realtime Database（RTDB）のデータ構造が第 3 正規形（3NF�
 
 **備考**:
 
+- `render/events/{eventId}/{scheduleId}/state`を監視して、`state.nowShowing`を取得し、operator.html の「オンエア:」セクションに表示している
 - `eventId`と`scheduleId`はパスに含まれているため、データとしては不要
-- ただし、表示用のキャッシュとして機能している可能性がある
+- テロップ送出の状態管理に使われている重要なノードであり、リアルタイム表示のために必要
 - パフォーマンス上の理由で、正規化の例外として許容される可能性がある
 
 **確認箇所**:
 
+- `scripts/operator/display.js:5-58`（`handleRenderUpdate`関数で監視）
+- `scripts/operator/app.js:1355-1362`（`startRenderChannelMonitor`関数で監視開始）
 - `firebase.rules.json:56-62`
 
 ### ⚠️ render/events/{eventId}/{scheduleId}/nowShowing
 
-**状態**: 表示用キャッシュとして機能（正規化の例外として許容可能）
+**状態**: テロップ送出状態管理ノード（正規化の例外として許容可能）
+
+**用途**: operator.html でテロップ送出を行うために使用
 
 **保存されているフィールド**:
 
@@ -290,29 +297,34 @@ Firebase Realtime Database（RTDB）のデータ構造が第 3 正規形（3NF�
 
 **備考**:
 
+- `render/events/{eventId}/{scheduleId}/nowShowing`に直接書き込んで、テロップ送出を行っている
 - `eventId`と`scheduleId`はパスに含まれているため、データとしては不要
-- ただし、表示用のキャッシュとして機能している可能性がある
+- テロップ送出の状態管理に使われている重要なノードであり、リアルタイム表示のために必要
 - パフォーマンス上の理由で、正規化の例外として許容される可能性がある
 
 **確認箇所**:
 
+- `scripts/operator/questions.js:830-902`（`sendNowShowing`関数で書き込み）
+- `scripts/operator/questions.js:1198-1291`（`clearNowShowing`関数でクリア）
+- `scripts/operator/side-telop.js:105-110`（サイドテロップ更新）
+- `scripts/shared/channel-paths.js:70-73`（`getNowShowingPath`関数）
 - `firebase.rules.json:80-91`
 
 ## まとめ
 
 ### 正規化状況
 
-| ノード                                                  | 状態          | 違反内容                               |
-| ------------------------------------------------------- | ------------- | -------------------------------------- |
-| `questionIntake/tokens/{token}`                         | ✅ 完全正規化 | -                                      |
-| `questionIntake/submissions/{token}/{submissionId}`     | ✅ 完全正規化 | -                                      |
-| `questions/normal/{uid}`                                | ✅ 完全正規化 | -                                      |
-| `glIntake/applications/{eventId}/{applicationId}`       | ✅ 完全正規化 | -                                      |
-| `operatorPresence/{eventId}/{sessionId}`                | ❌ 正規化違反 | `eventName`, `scheduleLabel`が重複保存 |
-| `render/events/{eventId}/sessions/{uid}`                | ❌ 正規化違反 | `scheduleLabel`が重複保存              |
-| `render/events/{eventId}/activeSchedule`                | ❌ 正規化違反 | `scheduleLabel`が重複保存              |
-| `render/events/{eventId}/{scheduleId}/state/nowShowing` | ⚠️ 許容可能   | 表示用キャッシュ                       |
-| `render/events/{eventId}/{scheduleId}/nowShowing`       | ⚠️ 許容可能   | 表示用キャッシュ                       |
+| ノード                                                  | 状態          | 違反内容                                         |
+| ------------------------------------------------------- | ------------- | ------------------------------------------------ |
+| `questionIntake/tokens/{token}`                         | ✅ 完全正規化 | -                                                |
+| `questionIntake/submissions/{token}/{submissionId}`     | ✅ 完全正規化 | -                                                |
+| `questions/normal/{uid}`                                | ✅ 完全正規化 | -                                                |
+| `glIntake/applications/{eventId}/{applicationId}`       | ✅ 完全正規化 | -                                                |
+| `operatorPresence/{eventId}/{sessionId}`                | ❌ 正規化違反 | `eventName`, `scheduleLabel`が重複保存           |
+| `render/events/{eventId}/sessions/{uid}`                | ❌ 正規化違反 | `scheduleLabel`が重複保存                        |
+| `render/events/{eventId}/activeSchedule`                | ❌ 正規化違反 | `scheduleLabel`が重複保存                        |
+| `render/events/{eventId}/{scheduleId}/state/nowShowing` | ⚠️ 許容可能   | テロップ送出状態管理（operator.html で表示）     |
+| `render/events/{eventId}/{scheduleId}/nowShowing`       | ⚠️ 許容可能   | テロップ送出状態管理（operator.html で書き込み） |
 
 ### 正規化違反の影響
 
@@ -328,5 +340,9 @@ Firebase Realtime Database（RTDB）のデータ構造が第 3 正規形（3NF�
 
 ### 注意事項
 
-- `render/events/{eventId}/{scheduleId}/state/nowShowing`と`render/events/{eventId}/{scheduleId}/nowShowing`は、表示用キャッシュとして機能している可能性があるため、パフォーマンス上の理由で正規化の例外として許容される可能性がある
-- ただし、これらのノードも完全に正規化する場合は、参照時に取得するように変更する必要がある
+- `render/events/{eventId}/{scheduleId}/state/nowShowing`と`render/events/{eventId}/{scheduleId}/nowShowing`は、operator.html で現在送出中のテロップ情報を表示・管理するために使われている重要なノードです
+  - `state/nowShowing`: operator.html の「オンエア:」セクションに表示するために監視されている
+  - `nowShowing`: テロップ送出時に直接書き込まれる
+- これらはテロップ送出の状態管理に使われているため、リアルタイム表示のために必要です
+- パフォーマンス上の理由で、正規化の例外として許容される可能性があります
+- ただし、これらのノードも完全に正規化する場合は、参照時に取得するように変更する必要があります（ただし、リアルタイム表示のパフォーマンスへの影響を考慮する必要があります）
