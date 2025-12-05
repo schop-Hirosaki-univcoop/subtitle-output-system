@@ -4,22 +4,6 @@
     ".write": false,
 
     "render": {
-      "state": {
-        ".read": true,
-        ".write": "auth != null && ((auth.token.firebase.sign_in_provider === 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true) || root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
-        ".validate": "newData.hasChildren(['phase'])",
-        "phase": {
-          ".validate": "newData.isString() && newData.val().matches(/^(visible|hidden|showing|hiding|error)$/)"
-        },
-        "updatedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-        "nowShowing": {
-          ".validate": "!newData.exists() || (newData.hasChildren(['name','question']) && newData.child('name').isString() && newData.child('question').isString() && (!newData.child('uid').exists() || newData.child('uid').isString()) && (!newData.child('participantId').exists() || newData.child('participantId').isString()) && (!newData.child('genre').exists() || newData.child('genre').isString()) && (!newData.child('pickup').exists() || newData.child('pickup').isBoolean()))",
-          "uid": { ".validate": "newData.isString()" },
-          "participantId": { ".validate": "newData.isString()" },
-          "genre": { ".validate": "newData.isString()" },
-          "pickup": { ".validate": "newData.isBoolean()" }
-        }
-      },
       "events": {
         "$eventId": {
           ".read": true,
@@ -59,36 +43,6 @@
               "presenceUpdatedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
               "$other": { ".validate": false }
             }
-          },
-          "session": {
-            ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
-            ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true || (auth.token.firebase.sign_in_provider === 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true))",
-            ".validate": "!newData.exists() || (newData.hasChildren(['uid','sessionId','status']) && newData.child('uid').isString() && newData.child('sessionId').isString() && newData.child('status').isString() && (!newData.child('eventId').exists() || newData.child('eventId').isString()) && (!newData.child('scheduleId').exists() || newData.child('scheduleId').isString()) && (!newData.child('scheduleLabel').exists() || newData.child('scheduleLabel').isString()) && (!newData.child('assignment').exists() || newData.child('assignment').hasChildren(['eventId','scheduleId']) && newData.child('assignment').child('eventId').isString() && newData.child('assignment').child('scheduleId').isString()) && (!newData.child('startedAt').exists() || newData.child('startedAt').isNumber()) && (!newData.child('lastSeenAt').exists() || newData.child('lastSeenAt').isNumber()) && (!newData.child('expiresAt').exists() || newData.child('expiresAt').isNumber()))",
-            "uid": { ".validate": "newData.isString()" },
-            "sessionId": { ".validate": "newData.isString()" },
-            "status": { ".validate": "newData.isString() && newData.val().matches(/^(active|expired|ended|superseded)$/)" },
-            "eventId": { ".validate": "newData.isString() || !newData.exists()" },
-            "scheduleId": { ".validate": "newData.isString() || !newData.exists()" },
-            "scheduleLabel": { ".validate": "newData.isString() || !newData.exists()" },
-            "assignment": {
-              ".validate": "!newData.exists() || (newData.hasChildren(['eventId','scheduleId']) && newData.child('eventId').isString() && newData.child('scheduleId').isString())",
-              "eventId": { ".validate": "newData.isString()" },
-              "scheduleId": { ".validate": "newData.isString()" },
-              "scheduleLabel": { ".validate": "newData.isString() || !newData.exists()" },
-              "scheduleKey": { ".validate": "newData.isString() || !newData.exists()" },
-              "lockedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-              "lockedByUid": { ".validate": "newData.isString() || !newData.exists()" },
-              "lockedByEmail": { ".validate": "newData.isString() || !newData.exists()" },
-              "lockedByName": { ".validate": "newData.isString() || !newData.exists()" },
-              "$other": { ".validate": false }
-            },
-            "startedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-            "lastSeenAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-            "expiresAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-            "endedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-            "endedReason": { ".validate": "newData.isString() || !newData.exists()" },
-            "grantedBy": { ".validate": "newData.isString() || !newData.exists()" },
-            "$other": { ".validate": false }
           },
           "$scheduleId": {
             ".read": true,
@@ -137,10 +91,6 @@
             }
           }
         }
-      },
-      "session": {
-        ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)",
-        ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true)"
       },
       "displayPresence": {
         ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true || auth.token.firebase.sign_in_provider != 'anonymous')",
@@ -505,10 +455,6 @@
     },
 
     "questionStatus": {
-      ".read": "auth != null",
-      ".write": "true",
-      // イベントごとのquestionStatus（questionStatus/{eventId}/{uid}）
-      // 通常質問もPick Up Questionも同じ構造でイベントごとに分離されます
       "$eventId": {
         ".read": "auth != null",
         ".write": "auth != null && ((auth.token.firebase.sign_in_provider != 'anonymous' || root.child('admins').child(auth.uid).val() == true || auth.token.admin == true) || (auth.token.firebase.sign_in_provider == 'anonymous' && root.child('screens/approved').child(auth.uid).val() == true))",
@@ -730,38 +676,6 @@
         "$uid": {
           ".read": "auth != null && auth.token.firebase.sign_in_provider === 'anonymous' && auth.uid === $uid",
           ".write": false
-        }
-      },
-      "sessions": {
-        "$uid": {
-          ".read": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true || (auth.token.firebase.sign_in_provider === 'anonymous' && auth.uid == $uid))",
-          ".write": "auth != null && (root.child('admins').child(auth.uid).val() == true || auth.token.admin == true || (auth.token.firebase.sign_in_provider === 'anonymous' && auth.uid == $uid))",
-          ".validate": "!newData.exists() || (newData.hasChildren(['uid','sessionId','status']) && newData.child('uid').isString() && newData.child('uid').val() == $uid && newData.child('sessionId').isString() && newData.child('status').isString() && (!newData.child('eventId').exists() || newData.child('eventId').isString()) && (!newData.child('scheduleId').exists() || newData.child('scheduleId').isString()) && (!newData.child('scheduleLabel').exists() || newData.child('scheduleLabel').isString()) && (!newData.child('assignment').exists() || newData.child('assignment').hasChildren(['eventId','scheduleId']) && newData.child('assignment').child('eventId').isString() && newData.child('assignment').child('scheduleId').isString()) && (!newData.child('startedAt').exists() || newData.child('startedAt').isNumber()) && (!newData.child('lastSeenAt').exists() || newData.child('lastSeenAt').isNumber()) && (!newData.child('expiresAt').exists() || newData.child('expiresAt').isNumber()) && (!newData.child('endedAt').exists() || newData.child('endedAt').isNumber()) && (!newData.child('endedReason').exists() || newData.child('endedReason').isString()) && (!newData.child('grantedBy').exists() || newData.child('grantedBy').isString()))",
-          "uid": { ".validate": "newData.isString() && newData.val() == $uid" },
-          "sessionId": { ".validate": "newData.isString()" },
-          "status": { ".validate": "newData.isString() && newData.val().matches(/^(active|expired|ended|superseded)$/)" },
-          "eventId": { ".validate": "newData.isString() || !newData.exists()" },
-          "scheduleId": { ".validate": "newData.isString() || !newData.exists()" },
-          "scheduleLabel": { ".validate": "newData.isString() || !newData.exists()" },
-          "assignment": {
-            ".validate": "!newData.exists() || (newData.hasChildren(['eventId','scheduleId']) && newData.child('eventId').isString() && newData.child('scheduleId').isString())",
-            "eventId": { ".validate": "newData.isString()" },
-            "scheduleId": { ".validate": "newData.isString()" },
-            "scheduleLabel": { ".validate": "newData.isString() || !newData.exists()" },
-            "scheduleKey": { ".validate": "newData.isString() || !newData.exists()" },
-            "lockedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-            "lockedByUid": { ".validate": "newData.isString() || !newData.exists()" },
-            "lockedByEmail": { ".validate": "newData.isString() || !newData.exists()" },
-            "lockedByName": { ".validate": "newData.isString() || !newData.exists()" },
-            "$other": { ".validate": false }
-          },
-          "startedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-          "lastSeenAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-          "expiresAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-          "endedAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-          "endedReason": { ".validate": "newData.isString() || !newData.exists()" },
-          "grantedBy": { ".validate": "newData.isString() || !newData.exists()" },
-          "$other": { ".validate": false }
         }
       }
     }
