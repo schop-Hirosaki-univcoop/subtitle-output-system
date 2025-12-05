@@ -41,7 +41,7 @@ export function handleRenderUpdate(app, snapshot) {
   refreshStaleness(app);
 
   const previousNow = app.state.renderState?.nowShowing || null;
-  const normalizedNow = normalizeNowShowing(now);
+  const normalizedNow = normalizeNowShowing(now, app);
   logDisplayLinkInfo("Render state updated", {
     phase,
     nowShowing: normalizedNow,
@@ -57,31 +57,81 @@ export function handleRenderUpdate(app, snapshot) {
   }
 }
 
-function normalizeNowShowing(now) {
+function normalizeNowShowing(now, app = null) {
   if (!now) return null;
+  const uid = String(now.uid || "").trim();
+  if (!uid) {
+    // 既存データとの互換性: uidがない場合は従来の形式として扱う
+    const normalized = {
+      name: typeof now.name === "string" ? now.name : String(now.name || ""),
+      question: typeof now.question === "string" ? now.question : String(now.question || "")
+    };
+    if (Object.prototype.hasOwnProperty.call(now, "uid")) {
+      normalized.uid = String(now.uid || "");
+    }
+    if (Object.prototype.hasOwnProperty.call(now, "participantId")) {
+      normalized.participantId = String(now.participantId || "");
+    }
+    if (Object.prototype.hasOwnProperty.call(now, "pickup")) {
+      normalized.pickup = Boolean(now.pickup);
+    }
+    if (Object.prototype.hasOwnProperty.call(now, "sideTelopLeft")) {
+      normalized.sideTelopLeft = String(now.sideTelopLeft || "");
+    } else if (Object.prototype.hasOwnProperty.call(now, "sideLeft")) {
+      normalized.sideTelopLeft = String(now.sideLeft || "");
+    }
+    if (Object.prototype.hasOwnProperty.call(now, "sideTelopRight")) {
+      normalized.sideTelopRight = String(now.sideTelopRight || "");
+    } else if (Object.prototype.hasOwnProperty.call(now, "sideRight")) {
+      normalized.sideTelopRight = String(now.sideRight || "");
+    }
+    return normalized;
+  }
+
+  // 完全正規化: uidから情報を取得
+  const questionsByUid = app?.state?.questionsByUid instanceof Map ? app.state.questionsByUid : new Map();
+  const questionRecord = questionsByUid.get(uid);
+  
   const normalized = {
-    name: typeof now.name === "string" ? now.name : String(now.name || ""),
-    question: typeof now.question === "string" ? now.question : String(now.question || "")
+    uid
   };
-  if (Object.prototype.hasOwnProperty.call(now, "uid")) {
-    normalized.uid = String(now.uid || "");
+  
+  if (questionRecord) {
+    normalized.name = String(questionRecord.name || "").trim();
+    normalized.question = String(questionRecord.question || "").trim();
+    if (Object.prototype.hasOwnProperty.call(questionRecord, "participantId")) {
+      normalized.participantId = String(questionRecord.participantId || "");
+    }
+    if (Object.prototype.hasOwnProperty.call(questionRecord, "genre")) {
+      normalized.genre = String(questionRecord.genre || "");
+    }
+    // pickupはquestions/normalには存在しないため、questions/pickupの存在確認が必要
+    // ただし、通常はallQuestionsから取得可能
+    const allQuestions = Array.isArray(app?.state?.allQuestions) ? app.state.allQuestions : [];
+    const fullQuestion = allQuestions.find((q) => String(q.UID || "") === uid);
+    if (fullQuestion) {
+      normalized.pickup = Boolean(fullQuestion["ピックアップ"]);
+    }
+  } else {
+    // 既存データとの互換性: キャッシュにない場合は従来の形式をフォールバック
+    normalized.name = typeof now.name === "string" ? now.name : String(now.name || "");
+    normalized.question = typeof now.question === "string" ? now.question : String(now.question || "");
+    if (Object.prototype.hasOwnProperty.call(now, "participantId")) {
+      normalized.participantId = String(now.participantId || "");
+    }
+    if (Object.prototype.hasOwnProperty.call(now, "pickup")) {
+      normalized.pickup = Boolean(now.pickup);
+    }
   }
-  if (Object.prototype.hasOwnProperty.call(now, "participantId")) {
-    normalized.participantId = String(now.participantId || "");
-  }
-  if (Object.prototype.hasOwnProperty.call(now, "pickup")) {
-    normalized.pickup = Boolean(now.pickup);
-  }
-  if (Object.prototype.hasOwnProperty.call(now, "sideTelopLeft")) {
-    normalized.sideTelopLeft = String(now.sideTelopLeft || "");
-  } else if (Object.prototype.hasOwnProperty.call(now, "sideLeft")) {
-    normalized.sideTelopLeft = String(now.sideLeft || "");
-  }
+
+  // sideTelopRightはrender/events/{eventId}/{scheduleId}/sideTelops/rightから取得
+  // ただし、既存データとの互換性のため、nowShowingに含まれている場合はそれを使用
   if (Object.prototype.hasOwnProperty.call(now, "sideTelopRight")) {
     normalized.sideTelopRight = String(now.sideTelopRight || "");
   } else if (Object.prototype.hasOwnProperty.call(now, "sideRight")) {
     normalized.sideTelopRight = String(now.sideRight || "");
   }
+
   return normalized;
 }
 

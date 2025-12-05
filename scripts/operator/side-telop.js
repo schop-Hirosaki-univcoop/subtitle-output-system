@@ -101,14 +101,32 @@ async function pushActiveSideTelopToDisplay(app, expectedChannelKey = null) {
     }
   }
 
+  // 完全正規化: sideTelopRightはnowShowingから削除（sideTelops/rightから取得可能）
+  // sideTelops/rightは既に別途監視されているため、nowShowingへの書き込みは不要
   const activeText = getActiveSideTelopText(app);
-  const { ref: nowShowingRef, eventId, scheduleId } = resolveNowShowingReference(app);
-  if (!eventId || !scheduleId || !nowShowingRef) {
+  const { ref: sideTelopRef, eventId, scheduleId } = resolveSideTelopChannel(app);
+  if (!eventId || !scheduleId || !sideTelopRef) {
     return;
   }
   try {
-    await update(nowShowingRef, { sideTelopRight: activeText });
-    logDisplayLinkInfo("Updated side telop (right) for display", { eventId, scheduleId });
+    // sideTelops/rightのactiveIndexを更新することで、表示側で取得可能
+    const currentData = await get(sideTelopRef);
+    const currentValue = currentData?.exists?.() ? currentData.val() || {} : {};
+    const items = normalizeItems(currentValue?.right?.items || []);
+    const currentActiveIndex = clampActiveIndex(currentValue?.right?.activeIndex ?? 0, items);
+    const targetIndex = items.findIndex((item) => ensureString(item) === activeText);
+    const newActiveIndex = targetIndex >= 0 ? targetIndex : currentActiveIndex;
+    
+    if (newActiveIndex !== currentActiveIndex) {
+      await update(sideTelopRef, {
+        right: {
+          ...(currentValue?.right || {}),
+          activeIndex: newActiveIndex,
+          updatedAt: serverTimestamp()
+        }
+      });
+      logDisplayLinkInfo("Updated side telop (right) active index for display", { eventId, scheduleId, activeIndex: newActiveIndex });
+    }
   } catch (error) {
     logDisplayLinkWarn("Failed to update side telop text", error);
   }

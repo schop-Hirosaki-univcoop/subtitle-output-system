@@ -1377,20 +1377,16 @@
         let __currentToken = 0;
 
         function buildNowShowingPayload(source = {}) {
-          const payload = {
-            name: source?.name || '',
-            question: source?.question || ''
-          };
-          if (source?.genre) payload.genre = source.genre;
-          if (source?.uid) payload.uid = String(source.uid);
-          if (source?.participantId) payload.participantId = String(source.participantId);
-          if (source?.pickup) payload.pickup = true;
-
-          const left = sideTelopState?.active?.left;
-          const right = sideTelopState?.active?.right;
-          if (left) payload.sideTelopLeft = left;
-          if (right) payload.sideTelopRight = right;
-
+          // 完全正規化: uidのみ保存（name, question, genre, participantId, pickup, sideTelopLeft, sideTelopRightは削除）
+          // sideTelopLeft/Rightはrender/events/{eventId}/{scheduleId}/sideTelopsから取得可能
+          const payload = {};
+          if (source?.uid) {
+            payload.uid = String(source.uid).trim();
+          }
+          // 既存データとの互換性のため、uidがない場合は空文字を設定
+          if (!payload.uid) {
+            payload.uid = '';
+          }
           return payload;
         }
 
@@ -1875,17 +1871,65 @@
 
         applySideTelops();
 
-        function handleNowShowingSnapshot(snapshot) {
+        async function handleNowShowingSnapshot(snapshot) {
           const telopData  = snapshot.val() || null;
-          const name       = telopData?.name ?? '';
-          const question   = telopData?.question ?? '';
-          const genre      = telopData?.genre != null ? String(telopData.genre) : '';
-          const uid        = telopData?.uid ? String(telopData.uid) : '';
-          const participantId = telopData?.participantId ? String(telopData.participantId) : '';
-          const pickup     = telopData?.pickup === true;
+          // 完全正規化: uidから情報を取得（既存データとの互換性のため、telopDataから直接取得をフォールバックとして使用）
+          let name = telopData?.name ?? '';
+          let question = telopData?.question ?? '';
+          let genre = telopData?.genre != null ? String(telopData.genre) : '';
+          const uid = telopData?.uid ? String(telopData.uid).trim() : '';
+          let participantId = telopData?.participantId ? String(telopData.participantId) : '';
+          let pickup = telopData?.pickup === true;
+          
+          // uidがある場合は参照先から取得
+          if (uid) {
+            try {
+              // questions/normal/{uid}から取得
+              const questionRef = ref(database, `questions/normal/${uid}`);
+              const questionSnap = await get(questionRef);
+              if (questionSnap?.exists()) {
+                const questionData = questionSnap.val() || {};
+                if (!name && questionData.name) {
+                  name = String(questionData.name || '').trim();
+                }
+                if (!question && questionData.question) {
+                  question = String(questionData.question || '').trim();
+                }
+                if (!genre && questionData.genre) {
+                  genre = String(questionData.genre || '').trim();
+                }
+                // pickupはquestions/normalには存在しないため、questions/pickupの存在確認が必要
+                // ただし、通常はquestions/normalに存在しない場合はpickupと判断
+                if (questionData.type === 'pickup') {
+                  pickup = true;
+                }
+                // participantIdはtokenから取得する必要があるが、display.htmlでは不要な可能性が高い
+                // 既存データとの互換性のため、telopDataから取得した値を保持
+              } else {
+                // questions/pickup/{uid}を確認
+                const pickupRef = ref(database, `questions/pickup/${uid}`);
+                const pickupSnap = await get(pickupRef);
+                if (pickupSnap?.exists()) {
+                  const pickupData = pickupSnap.val() || {};
+                  if (!name && pickupData.name) {
+                    name = String(pickupData.name || '').trim();
+                  }
+                  if (!question && pickupData.question) {
+                    question = String(pickupData.question || '').trim();
+                  }
+                  pickup = true;
+                }
+              }
+            } catch (error) {
+              logDisplayLinkWarn('Failed to fetch question data from uid', { uid, error });
+              // エラー時は既存データをフォールバックとして使用
+            }
+          }
+          
           const hasQuestion = !!(question && question.trim().length);
 
-          applySideTelops(telopData || {});
+          // 完全正規化: sideTelopRightはnowShowingから削除（sideTelops/rightから取得可能）
+          // applySideTelopsは既にsideTelops/rightを監視しているため、nowShowingから取得する必要はない
 
           if (!hasQuestion){
             logDisplayLinkInfo('Received nowShowing clear request', {
@@ -1951,14 +1995,8 @@
                 const next = { name, question, genre, noLabel: willNoLabel, uid, participantId, pickup };
 
                 // ★ 変更開始＝showing（phase と updatedAt を更新）
-                const showingPayload = buildNowShowingPayload({
-                  name,
-                  question,
-                  uid,
-                  participantId,
-                  pickup,
-                  genre
-                });
+                // 完全正規化: uidのみ保存
+                const showingPayload = buildNowShowingPayload({ uid });
                 reportRender('showing', { nowShowing: showingPayload });
 
                 await fontsReady();
@@ -1972,14 +2010,8 @@
                 ensureTextVisible();
 
                 // ★ 反映完了＝visible（nowShowing と updatedAt を確定）
-                const visiblePayload = buildNowShowingPayload({
-                  name,
-                  question,
-                  uid,
-                  participantId,
-                  pickup,
-                  genre
-                });
+                // 完全正規化: uidのみ保存
+                const visiblePayload = buildNowShowingPayload({ uid });
                 reportRender('visible', { nowShowing: visiblePayload });
               });
             } else {
@@ -2005,7 +2037,11 @@
             eventId: channelEventId || null,
             scheduleId: channelScheduleId || null
           });
-          nowShowingUnsubscribe = onValue(nowShowingRef, handleNowShowingSnapshot);
+          nowShowingUnsubscribe = onValue(nowShowingRef, (snapshot) => {
+            handleNowShowingSnapshot(snapshot).catch((error) => {
+              logDisplayLinkError('Failed to handle nowShowing snapshot', error);
+            });
+          });
         }
 
         function subscribeSideTelops() {

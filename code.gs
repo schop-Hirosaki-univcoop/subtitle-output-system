@@ -3665,11 +3665,11 @@ function buildActiveScheduleRecord_(assignment, session, operatorUid) {
   const sessionUid = normalizeKey_(session && session.uid);
   const sessionId = normalizeKey_(session && session.sessionId);
   const lockedAt = Number(assignment.lockedAt || Date.now());
+  // 完全正規化: scheduleLabelは削除（scheduleIdから取得可能）
   return {
     eventId,
     scheduleId,
     scheduleKey,
-    scheduleLabel: String(assignment.scheduleLabel || "").trim(),
     mode: "locked",
     lockedAt,
     updatedAt: lockedAt,
@@ -3895,17 +3895,17 @@ function beginDisplaySession_(principal, rawEventId) {
     expiresAt,
     grantedBy: "gas",
   };
+  // 完全正規化: scheduleLabelは削除（scheduleIdから取得可能）
   if (preservedAssignment) {
     session.assignment = preservedAssignment;
     session.eventId = preservedAssignment.eventId;
     session.scheduleId = preservedAssignment.scheduleId;
-    session.scheduleLabel = preservedAssignment.scheduleLabel;
+    // scheduleLabelは削除（scheduleIdから取得可能）
   } else if (current) {
     if (current.eventId) session.eventId = normalizeKey_(current.eventId);
     if (current.scheduleId)
       session.scheduleId = normalizeScheduleId_(current.scheduleId);
-    if (current.scheduleLabel)
-      session.scheduleLabel = String(current.scheduleLabel || "").trim();
+    // scheduleLabelは削除（scheduleIdから取得可能）
   }
 
   updates[`screens/approved/${principalUid}`] = true;
@@ -4136,20 +4136,20 @@ function lockDisplaySchedule_(
     normalizedScheduleId === DEFAULT_SCHEDULE_KEY
       ? "未選択"
       : normalizedScheduleId || eventId;
+  // 完全正規化: scheduleLabelは削除（scheduleIdから取得可能）
   const assignment = {
     eventId,
     scheduleId: normalizedScheduleId,
-    scheduleLabel: scheduleLabel || fallbackLabel,
     scheduleKey,
     lockedAt: now,
     lockedByUid: operatorUid,
     lockedByEmail: String(principal.email || "").trim(),
     lockedByName: operatorName || String(principal.email || "").trim(),
   };
+  // 完全正規化: scheduleLabelは削除（scheduleIdから取得可能）
   const nextSession = Object.assign({}, firstSession, {
     eventId,
     scheduleId: normalizedScheduleId,
-    scheduleLabel: assignment.scheduleLabel,
     assignment,
   });
   const updates = {};
@@ -4163,11 +4163,11 @@ function lockDisplaySchedule_(
     }
   }
   // 全ての有効なセッションに対してassignmentを設定（複数display.htmlの同時表示に対応）
+  // 完全正規化: scheduleLabelは削除（scheduleIdから取得可能）
   activeSessions.forEach(({ uid, session }) => {
     const nextSessionForUid = Object.assign({}, session, {
       eventId,
       scheduleId: normalizedScheduleId,
-      scheduleLabel: assignment.scheduleLabel,
       assignment,
     });
     updates[`screens/approved/${uid}`] = true;
@@ -4226,11 +4226,11 @@ function normalizeRotationEntries_(eventId, rawEntries) {
       (toPositiveInteger_(entry.durationSeconds)
         ? toPositiveInteger_(entry.durationSeconds) * 1000
         : null);
+    // 完全正規化: scheduleLabelは削除（scheduleIdから取得可能）
     const record = {
       eventId,
       scheduleId,
       scheduleKey,
-      scheduleLabel: label,
       dwellMs: dwellMs || null,
       order: normalized.length,
     };
@@ -4277,7 +4277,7 @@ function buildRotationActiveScheduleRecord_(
     type: "rotation",
     scheduleId: null,
     scheduleKey: null,
-    scheduleLabel: "rotation",
+    // 完全正規化: scheduleLabelは削除（mode: "rotation"から判断可能）
     lockedAt: now,
     lockedByUid: updatedByUid,
     lockedByEmail: updatedByEmail,

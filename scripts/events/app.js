@@ -4014,7 +4014,17 @@ export class EventAdminApp {
       const normalizedId = ensureString(entryId) || generateShortId("presence-");
       const scheduleKey = this.buildPresenceScheduleKey(eventId, payload, normalizedId);
       const scheduleId = ensureString(payload.scheduleId) || ensureString(payload.selectedScheduleId);
-      const scheduleLabel = ensureString(payload.scheduleLabel) || ensureString(payload.selectedScheduleLabel);
+      // 完全正規化: scheduleLabelは参照先から取得（既存データとの互換性のため、payload.scheduleLabelをフォールバックとして使用）
+      let scheduleLabel = "";
+      if (scheduleId && Array.isArray(this.schedules)) {
+        const schedule = this.schedules.find((s) => ensureString(s?.id) === scheduleId);
+        if (schedule) {
+          scheduleLabel = ensureString(schedule.label || "");
+        }
+      }
+      if (!scheduleLabel) {
+        scheduleLabel = ensureString(payload.scheduleLabel) || ensureString(payload.selectedScheduleLabel) || "";
+      }
       const displayName = ensureString(payload.displayName) || ensureString(payload.email) || ensureString(payload.uid) || normalizedId;
       const uid = ensureString(payload.uid);
       const mode = normalizeOperatorMode(payload.mode);

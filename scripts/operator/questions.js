@@ -90,13 +90,18 @@ async function ensureChannelAligned(app) {
     session?.scheduleId || sessionAssignment?.scheduleId || ""
   );
   if (sessionEvent && sessionSchedule && sessionEvent === normalizedEvent && sessionSchedule === normalizedSchedule) {
+    // 完全正規化: scheduleLabelは参照先から取得
+    const scheduleKey = `${sessionEvent}::${sessionSchedule}`;
+    const scheduleLabel = typeof app.resolveScheduleLabel === "function"
+      ? app.resolveScheduleLabel(scheduleKey, session?.scheduleLabel, sessionSchedule) || sessionSchedule
+      : String(session?.scheduleLabel || sessionSchedule || "").trim();
     const assignment =
       sessionAssignment || {
         eventId: sessionEvent,
         scheduleId: sessionSchedule,
-        scheduleLabel: String(session?.scheduleLabel || "").trim(),
-        scheduleKey: `${sessionEvent}::${sessionSchedule}`,
-        canonicalScheduleKey: `${sessionEvent}::${sessionSchedule}`,
+        scheduleLabel,
+        scheduleKey,
+        canonicalScheduleKey: scheduleKey,
         canonicalScheduleId: sessionSchedule
       };
     if (typeof app.applyAssignmentLocally === "function") {
@@ -201,9 +206,13 @@ export function renderQuestions(app) {
     const displayScheduleId = normalizeScheduleId(displaySession?.scheduleId || assignment?.scheduleId || "");
     const derivedDisplayKey = displayEventId && displayScheduleId ? `${displayEventId}::${displayScheduleId}` : "";
     const displayScheduleKey = String(assignment?.scheduleKey || derivedDisplayKey || "").trim();
-    const displayScheduleLabel = String(
+    // 完全正規化: scheduleLabelは参照先から取得（既存データとの互換性のため、assignment/sessionから直接取得をフォールバックとして使用）
+    const fallbackScheduleLabel = String(
       assignment?.scheduleLabel || displaySession?.scheduleLabel || displaySession?.schedule || ""
     ).trim();
+    const displayScheduleLabel = displayScheduleKey && typeof app.resolveScheduleLabel === "function"
+      ? app.resolveScheduleLabel(displayScheduleKey, fallbackScheduleLabel, displayScheduleId) || fallbackScheduleLabel || displayScheduleId
+      : fallbackScheduleLabel || displayScheduleId;
 
     const normalQuestions = app.state.allQuestions.filter((item) => !isPickUpQuestion(item));
     /* console.info("[schedule-debug] display schedule", {
@@ -486,7 +495,11 @@ export function updateScheduleContext(app, options = {}) {
     if (!scheduleKey && assignmentEvent && assignmentSchedule) {
       scheduleKey = `${assignmentEvent}::${normalizeScheduleId(assignmentSchedule)}`;
     }
-    assignmentLabel = ensure(assignment?.scheduleLabel);
+    // 完全正規化: scheduleLabelは参照先から取得（既存データとの互換性のため、assignmentから直接取得をフォールバックとして使用）
+    const fallbackAssignmentLabel = ensure(assignment?.scheduleLabel);
+    assignmentLabel = scheduleKey && typeof app.resolveScheduleLabel === "function"
+      ? app.resolveScheduleLabel(scheduleKey, fallbackAssignmentLabel, assignmentSchedule) || fallbackAssignmentLabel || assignmentSchedule
+      : fallbackAssignmentLabel || assignmentSchedule;
     assignmentDerivedSelection =
       Boolean(assignmentEvent && assignmentSchedule) &&
       !contextProvidedExplicitSelection &&
@@ -858,9 +871,18 @@ export async function handleDisplay(app) {
       updates[`${previousUid}/answered`] = true;
       updates[`${previousUid}/updatedAt`] = serverTimestamp();
     } else if (previousNowShowing) {
-      const prev = app.state.allQuestions.find(
-        (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
-      );
+      // 完全正規化: uidから取得（既存データとの互換性のため、name/questionをフォールバックとして使用）
+      let prev = null;
+      const prevUid = typeof previousNowShowing.uid !== "undefined" ? String(previousNowShowing.uid || "").trim() : "";
+      if (prevUid) {
+        prev = app.state.allQuestions.find((q) => String(q.UID || "") === prevUid);
+      }
+      if (!prev && previousNowShowing.name && previousNowShowing.question) {
+        // 既存データとの互換性: name/questionから検索
+        prev = app.state.allQuestions.find(
+          (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
+        );
+      }
       if (prev) {
         updates[`${prev.UID}/selecting`] = false;
         updates[`${prev.UID}/answered`] = true;
@@ -881,22 +903,15 @@ export async function handleDisplay(app) {
       app.toast("チャンネルが変更されたため送出を中断しました。", "warning");
       return;
     }
-    const genre = String(app.state.selectedRowData.genre ?? "").trim();
+    // 完全正規化: name, question, participantId, genre, pickup, sideTelopRightは削除（uidから取得可能）
+    // sideTelopRightはrender/events/{eventId}/{scheduleId}/sideTelops/rightから取得
     logDisplayLinkInfo("Sending nowShowing payload", {
       eventId,
       scheduleId,
-      uid: app.state.selectedRowData.uid,
-      participantId: app.state.selectedRowData.participantId || "",
-      name: app.state.selectedRowData.name
+      uid: app.state.selectedRowData.uid
     });
     const nowShowingPayload = {
-      uid: app.state.selectedRowData.uid,
-      participantId: app.state.selectedRowData.participantId || "",
-      name: app.state.selectedRowData.name,
-      question: app.state.selectedRowData.question,
-      genre,
-      pickup: app.state.selectedRowData.isPickup === true,
-      sideTelopRight: getActiveSideTelopRight(app)
+      uid: app.state.selectedRowData.uid
     };
     console.log("[送出] nowShowing更新用JSON:", JSON.stringify(nowShowingPayload, null, 2));
     await update(nowShowingRef, nowShowingPayload);
@@ -909,9 +924,18 @@ export async function handleDisplay(app) {
     if (previousUid) {
       app.api.fireAndForgetApi({ action: "updateStatus", uid: previousUid, status: true, eventId });
     } else if (previousNowShowing) {
-      const prev = app.state.allQuestions.find(
-        (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
-      );
+      // 完全正規化: uidから取得（既存データとの互換性のため、name/questionをフォールバックとして使用）
+      let prev = null;
+      const prevUid = typeof previousNowShowing.uid !== "undefined" ? String(previousNowShowing.uid || "").trim() : "";
+      if (prevUid) {
+        prev = app.state.allQuestions.find((q) => String(q.UID || "") === prevUid);
+      }
+      if (!prev && previousNowShowing.name && previousNowShowing.question) {
+        // 既存データとの互換性: name/questionから検索
+        prev = app.state.allQuestions.find(
+          (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
+        );
+      }
       if (prev) {
         app.api.fireAndForgetApi({ action: "updateStatus", uid: prev.UID, status: true, eventId });
       }
@@ -1275,21 +1299,13 @@ export async function clearNowShowing(app) {
       app.toast("チャンネルが変更されたため送出クリアを中断しました。", "warning");
       return;
     }
-    const sideTelopRight = getActiveSideTelopRight(app);
+    // 完全正規化: クリア時はuidを空文字にする
     const clearedNowShowing = {
-      // バリデーション要件を満たしたまま「送出なし」を表現するため、
-      // name/question を空文字で残しつつその他の値も初期化する。
-      name: "",
-      question: "",
-      uid: "",
-      participantId: "",
-      genre: "",
-      pickup: false,
-      ...(sideTelopRight ? { sideTelopRight } : {})
+      uid: ""
     };
     console.log("[送出クリア] nowShowing更新用JSON:", JSON.stringify(clearedNowShowing, null, 2));
     await update(nowShowingRef, clearedNowShowing);
-    logDisplayLinkInfo("Display nowShowing cleared", { eventId, scheduleId, sideTelopRight });
+    logDisplayLinkInfo("Display nowShowing cleared", { eventId, scheduleId });
     app.api.fireAndForgetApi({ action: "clearSelectingStatus" });
     app.api.logAction("CLEAR");
     app.toast("送出をクリアしました。", "success");
