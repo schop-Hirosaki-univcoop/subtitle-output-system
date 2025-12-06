@@ -195,8 +195,9 @@ scripts/events/
 
 **現状**:
 
-- `app.js` が 8,002 行と非常に大きい
-- 質問管理、参加者管理、カレンダー、ダイアログなどが混在
+- `app.js` が 6,023 行（元の 8,180 行から約 2,157 行削減、リファクタリング進行中）
+- 印刷機能、CSV 処理、イベント管理、参加者管理機能を Manager クラスに分離済み
+- 日程管理、メール送信、認証・初期化、リロケーション機能が残っている
 
 **構造**:
 
@@ -235,13 +236,16 @@ scripts/question-admin/
 
 **改善提案**:
 
-- `app.js` を機能別に分割
-  - `QuestionAdminApp` - メインアプリケーション（初期化とルーティング）
-  - `QuestionAdminManager` - 質問管理機能
-  - `EventManager` - イベント管理機能
-  - `CsvManager` - CSV 処理機能
-  - `PrintManager` - 印刷機能
-  - `ParticipantManager` - 参加者管理（既に `participants.js` に分離済み）
+- `app.js` を機能別に分割（進行中）
+  - ✅ `PrintManager` - 印刷機能（1,004 行）完了
+  - ✅ `CsvManager` - CSV 処理機能（351 行）完了
+  - ✅ `EventManager` - イベント管理機能（405 行）完了
+  - ✅ `ParticipantManager` - 参加者管理機能（1,155 行）完了
+  - ⏳ `ScheduleManager` - 日程管理機能（未着手、約 430-500 行）
+  - ⏳ `MailManager` - メール送信機能（未着手、約 400-500 行）
+  - ⏳ `AuthManager` - 認証・初期化機能（未着手、約 250-300 行）
+  - ⏳ `RelocationManager` - リロケーション機能（未着手、約 200-300 行）
+  - ⏳ その他のユーティリティ関数の整理（未着手、約 1,000-2,000 行）
 
 ---
 
@@ -423,10 +427,20 @@ scripts/
    - テストが困難（改善中）
    - 保守性が低い（改善中）
    - **リファクタリング状況**:
-     - ✅ PrintManager に印刷機能を分離（1,004 行）
-     - ✅ CsvManager に CSV 処理機能を分離（351 行）
-     - ✅ EventManager にイベント管理機能を分離（405 行）
-     - ✅ ParticipantManager に参加者読み込み・描画機能を分離（462 行、進行中）
+     - ✅ フェーズ 1: PrintManager に印刷機能を分離（1,004 行）完了
+     - ✅ フェーズ 2: CsvManager に CSV 処理機能を分離（351 行）完了
+     - ✅ フェーズ 3: EventManager にイベント管理機能を分離（405 行）完了
+     - ✅ フェーズ 4: ParticipantManager に参加者管理機能を分離（1,155 行）完了
+       - 参加者読み込み（`loadParticipants`）
+       - 参加者描画（`renderParticipants`）
+       - 参加者 CRUD 操作（`openParticipantEditor`, `saveParticipantEdits`, `handleDeleteParticipant`, `removeParticipantFromState`）
+       - 参加者保存（`handleSave`）
+     - ⏳ 残りの機能:
+       - 日程管理機能（`renderSchedules`, `selectSchedule`, `openScheduleForm`, `handleAddSchedule`, `handleUpdateSchedule`, `handleDeleteSchedule` など、約 430-500 行）
+       - メール送信機能（`handleSendParticipantMail`, `applyMailSendResults`, `buildMailStatusMessage` など、約 400-500 行）
+       - 認証・初期化機能（`initAuthWatcher`, `verifyEnrollment`, `fetchAuthorizedEmails` など、約 250-300 行）
+       - リロケーション機能（`queueRelocationPrompt`, `renderRelocationPrompt` など、約 200-300 行）
+       - その他のユーティリティ関数（約 1,000-2,000 行）
 
 3. **`scripts/events/tools/gl.js` が 3,249 行**
    - 開発標準の約 2 倍
@@ -509,8 +523,7 @@ scripts/question-admin/
 │   ├── csv-manager.js        # CSV 処理（351行）✅ 完了
 │   ├── event-manager.js      # イベント管理（405行）✅ 完了
 │   └── participant-manager.js # 参加者管理（1,155行）✅ 完了
-├── question-manager.js       # 質問管理（1,200行程度、未着手）
-├── participant-manager.js    # 参加者管理（既に participants.js に分離済み）
+├── participants.js           # 参加者関連ユーティリティ（1,169行）✅
 ├── calendar.js               # 既存
 ├── dialog.js                 # 既存
 ├── loader.js                 # 既存
@@ -521,12 +534,23 @@ scripts/question-admin/
 └── constants.js              # 既存
 ```
 
+**進捗状況**:
+
+- ✅ フェーズ 1: 印刷機能の分離（PrintManager）完了
+- ✅ フェーズ 2: CSV 処理機能の分離（CsvManager）完了
+- ✅ フェーズ 3: イベント管理機能の分離（EventManager）完了
+- ✅ フェーズ 4: 参加者管理機能の分離（ParticipantManager）完了
+- ⏳ フェーズ 5: 日程管理機能の分離（ScheduleManager）未着手
+- ⏳ フェーズ 6: メール送信機能の分離（MailManager）未着手
+- ⏳ フェーズ 7: 認証・初期化機能の分離（AuthManager）未着手
+- ⏳ フェーズ 8: リロケーション機能の分離（RelocationManager）未着手
+
 **手順**:
 
-1. `app.js` の機能を分析し、責務を特定
-2. 各 Manager クラスを作成
-3. 段階的に機能を移行
-4. テストを実施
+1. ✅ `app.js` の機能を分析し、責務を特定（完了）
+2. ✅ 各 Manager クラスを作成（4 つ完了、残り 4 つ）
+3. ⏳ 段階的に機能を移行（4 フェーズ完了、残り 4 フェーズ）
+4. ⏳ テストを実施（未着手）
 
 ### 3. `scripts/events/tools/gl.js` のリファクタリング（優先度: 中）
 
@@ -584,10 +608,21 @@ scripts/login/
    - 影響範囲: イベント管理画面全体
    - リスク: 高（大規模な変更）
 
-2. **`scripts/question-admin/app.js` のリファクタリング**
-   - 期間: 2-3 週間
+2. **`scripts/question-admin/app.js` のリファクタリング**（進行中）
+   - 期間: 2-3 週間（約 50% 完了）
    - 影響範囲: 質問管理画面全体
    - リスク: 高（大規模な変更）
+   - **完了したフェーズ**:
+     - ✅ フェーズ 1: 印刷機能の分離（PrintManager）
+     - ✅ フェーズ 2: CSV 処理機能の分離（CsvManager）
+     - ✅ フェーズ 3: イベント管理機能の分離（EventManager）
+     - ✅ フェーズ 4: 参加者管理機能の分離（ParticipantManager）
+   - **残りのフェーズ**:
+     - ⏳ 日程管理機能の分離（ScheduleManager）
+     - ⏳ メール送信機能の分離（MailManager）
+     - ⏳ 認証・初期化機能の分離（AuthManager）
+     - ⏳ リロケーション機能の分離（RelocationManager）
+     - ⏳ その他のユーティリティ関数の整理
 
 ### フェーズ 2: 中程度の問題の解決（優先度: 中）
 
