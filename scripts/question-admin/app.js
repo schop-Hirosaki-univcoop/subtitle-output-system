@@ -85,11 +85,13 @@ import {
 import { PrintManager } from "./managers/print-manager.js";
 import { CsvManager } from "./managers/csv-manager.js";
 import { EventManager } from "./managers/event-manager.js";
+import { ParticipantManager } from "./managers/participant-manager.js";
 
 let redirectingToIndex = false;
 let printManager = null;
 let csvManager = null;
 let eventManager = null;
+let participantManager = null;
 
 const glDataFetchCache = new Map();
 
@@ -2825,6 +2827,15 @@ function buildParticipantCard(entry, index, { changeInfo, duplicateMap, eventId,
 }
 
 function renderParticipants() {
+  // ParticipantManager に委譲
+  if (!participantManager) {
+    throw new Error("ParticipantManager is not initialized");
+  }
+  participantManager.renderParticipants();
+}
+
+// 元の renderParticipants 実装は ParticipantManager に移行されました
+function renderParticipants_OLD_DELETED() {
   const list = dom.participantCardList;
   if (!list) {
     syncSelectedEventSummary();
@@ -3143,7 +3154,7 @@ async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = 
   // PrintManager に委譲
   if (!printManager) {
     throw new Error("PrintManager is not initialized");
-  }
+        }
   return await printManager.updateParticipantPrintPreview({ autoPrint, forceReveal, quiet });
 }
 
@@ -3182,7 +3193,7 @@ async function updateStaffPrintPreview({ autoPrint = false, forceReveal = false,
   // PrintManager に委譲
   if (!printManager) {
     throw new Error("PrintManager is not initialized");
-  }
+      }
   return await printManager.updateStaffPrintPreview({ autoPrint, forceReveal, quiet });
 }
 
@@ -4005,11 +4016,20 @@ async function loadEvents({ preserveSelection = true } = {}) {
   // EventManager に委譲
   if (!eventManager) {
     throw new Error("EventManager is not initialized");
-  }
+    }
   return await eventManager.loadEvents({ preserveSelection });
 }
 
 async function loadParticipants(options = {}) {
+  // ParticipantManager に委譲
+  if (!participantManager) {
+    throw new Error("ParticipantManager is not initialized");
+  }
+  return await participantManager.loadParticipants(options);
+}
+
+// 元の loadParticipants 実装は ParticipantManager に移行されました
+async function loadParticipants_OLD_DELETED(options = {}) {
   const { statusMessage, statusVariant = "success", suppressStatus = false } = options || {};
   let eventId = state.selectedEventId ? String(state.selectedEventId) : "";
   let scheduleId = state.selectedScheduleId ? String(state.selectedScheduleId) : "";
@@ -4403,7 +4423,7 @@ async function handleAddEvent(name) {
   // EventManager に委譲
   if (!eventManager) {
     throw new Error("EventManager is not initialized");
-  }
+    }
   return await eventManager.createEvent(name);
 }
 
@@ -4419,7 +4439,7 @@ async function handleDeleteEvent(eventId, eventName) {
   // EventManager に委譲
   if (!eventManager) {
     throw new Error("EventManager is not initialized");
-  }
+    }
   return await eventManager.deleteEvent(eventId, eventName);
 }
 
@@ -6263,7 +6283,7 @@ function attachEventHandlers() {
     printManager.setupSettingsDialog();
   } else {
     // フォールバック（初期化前の場合）
-    setupPrintSettingsDialog();
+  setupPrintSettingsDialog();
   }
 
   if (dom.relocationDialog) {
@@ -6869,6 +6889,47 @@ function init() {
     refreshScheduleLocationHistory,
     populateScheduleLocationOptions,
     getSelectionBroadcastSource
+  });
+  
+  // ParticipantManager を初期化
+  participantManager = new ParticipantManager({
+    dom,
+    state,
+    // 依存関数と定数
+    readHostSelectionDataset,
+    getHostSelectionElement,
+    loadGlDataForEvent,
+    renderEvents,
+    renderSchedules,
+    updateParticipantContext,
+    captureParticipantBaseline,
+    syncSaveButtonState,
+    syncMailActionState,
+    syncAllPrintButtonStates,
+    syncClearButtonState,
+    syncTemplateButtons,
+    syncSelectedEventSummary,
+    renderParticipantChangePreview,
+    renderRelocationPrompt,
+    applyParticipantSelectionStyles,
+    updateParticipantActionPanelState,
+    emitParticipantSyncEvent,
+    describeScheduleRange,
+    ensureTokenSnapshot,
+    generateQuestionToken,
+    setUploadStatus,
+    // renderParticipants に必要な依存関係
+    buildParticipantCard,
+    getParticipantGroupKey,
+    createParticipantGroupElements,
+    getEventGlRoster,
+    getEventGlAssignmentsMap,
+    resolveScheduleAssignment,
+    renderGroupGlAssignments,
+    clearParticipantSelection,
+    participantChangeKey,
+    CANCEL_LABEL,
+    GL_STAFF_GROUP_KEY
   });
   
   attachEventHandlers();

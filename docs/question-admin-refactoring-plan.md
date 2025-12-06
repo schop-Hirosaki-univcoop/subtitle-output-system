@@ -419,6 +419,78 @@
 - ✅ エラーハンドリングが実装されている
 - ✅ リンターエラーなし
 
+### フェーズ 4 の進捗内容
+
+#### ステップ 1-2: ParticipantManager クラスの骨格作成と参加者読み込み機能の移行 ✅ 完了
+
+**scripts/question-admin/managers/participant-manager.js** を作成（282 行）
+
+- `ParticipantManager` クラスの骨格
+- 参加者読み込み機能（`loadParticipants`）
+  - ホスト選択データセットからの選択回復
+  - スケジュール参加者データの読み込み
+  - 重複チェックの遅延実行
+  - エラーハンドリング
+
+**app.js の変更**:
+
+- `ParticipantManager` をインポート
+- `let participantManager = null;` でグローバル変数を宣言
+- `init()` で `participantManager = new ParticipantManager({...})` を初期化
+- `loadParticipants()` を `participantManager.loadParticipants()` に委譲
+- 元の実装は `loadParticipants_OLD_DELETED` として保持（後で削除予定）
+
+**ファイルサイズ**:
+
+- `app.js`: 6,946 行 → 6,987 行（約 41 行増加、委譲関数と初期化コードの追加による）
+- `participant-manager.js`: 282 行（新規作成）
+
+**確認済み項目**:
+
+- ✅ ParticipantManager が正しく初期化されている
+- ✅ loadParticipants が正しく委譲されている
+- ✅ 必要な依存関係が context 経由で渡されている
+- ✅ エラーハンドリングが実装されている（ParticipantManager 未初期化時のエラー）
+- ✅ リンターエラーなし
+
+#### ステップ 3: 参加者描画機能の移行 ✅ 完了
+
+**scripts/question-admin/managers/participant-manager.js** に追加した機能：
+
+- `renderParticipants()`: 参加者一覧の描画（約 165 行）
+  - 参加者カードの生成とグループ化
+  - GL 割り当ての表示
+  - 重複候補の表示
+  - 変更プレビューの表示
+
+**app.js の変更**:
+
+- `ParticipantManager` の初期化時に必要な依存関係を context 経由で渡すように変更
+  - `buildParticipantCard`, `getParticipantGroupKey`, `createParticipantGroupElements`
+  - `getEventGlRoster`, `getEventGlAssignmentsMap`, `resolveScheduleAssignment`
+  - `renderGroupGlAssignments`, `clearParticipantSelection`, `participantChangeKey`
+  - `CANCEL_LABEL`, `GL_STAFF_GROUP_KEY`
+- `renderParticipants()` を `participantManager.renderParticipants()` に委譲
+- 元の実装は `renderParticipants_OLD_DELETED` として保持（後で削除予定）
+
+**ファイルサイズ**:
+
+- `app.js`: 6,987 行 → 7,008 行（約 21 行増加、委譲関数と初期化コードの追加による）
+- `participant-manager.js`: 282 行 → 463 行（約 181 行増加）
+
+**確認済み項目**:
+
+- ✅ renderParticipants が正しく委譲されている
+- ✅ 必要な依存関係が context 経由で渡されている
+- ✅ エラーハンドリングが実装されている（ParticipantManager 未初期化時のエラー）
+- ✅ リンターエラーなし
+
+**残りの作業**:
+
+- [ ] ステップ 4: 参加者 CRUD 機能の移行（`createParticipant`, `updateParticipant`, `deleteParticipant`）
+- [ ] ステップ 5: 参加者保存機能の移行（`handleSave`）
+- [ ] ステップ 6: app.js の整理（`loadParticipants_OLD_DELETED`, `renderParticipants_OLD_DELETED` の削除など）
+
 ---
 
 **作成日**: 2025 年

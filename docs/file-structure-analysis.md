@@ -39,18 +39,18 @@
 
 ### ファイルサイズの統計
 
-| ファイル                                      | 行数   | 評価                       |
-| --------------------------------------------- | ------ | -------------------------- |
-| `scripts/events/app.js`                       | 10,180 | ❌ 要改善（基準の約 7 倍） |
-| `scripts/question-admin/app.js`               | 8,002  | ❌ 要改善（基準の約 5 倍） |
-| `scripts/events/tools/gl.js`                  | 3,249  | ❌ 要改善（基準の約 2 倍） |
-| `scripts/operator/app.js`                     | 2,463  | ⚠️ 許容範囲（やや大きい）  |
-| `scripts/operator/questions.js`               | 1,734  | ⚠️ 許容範囲（やや大きい）  |
-| `scripts/shared/print-utils.js`               | 1,341  | ✅ 許容範囲                |
-| `scripts/operator/channel-manager.js`         | 1,314  | ✅ 許容範囲                |
-| `scripts/question-admin/participants.js`      | 1,169  | ✅ 許容範囲                |
-| `scripts/operator/panels/pickup-panel.js`     | 1,125  | ✅ 許容範囲                |
-| `scripts/operator/panels/dictionary-panel.js` | 1,109  | ✅ 許容範囲                |
+| ファイル                                      | 行数   | 評価                                               |
+| --------------------------------------------- | ------ | -------------------------------------------------- |
+| `scripts/events/app.js`                       | 10,180 | ❌ 要改善（基準の約 7 倍）                         |
+| `scripts/question-admin/app.js`               | 7,007  | ❌ 要改善（基準の約 5 倍、リファクタリング進行中） |
+| `scripts/events/tools/gl.js`                  | 3,249  | ❌ 要改善（基準の約 2 倍）                         |
+| `scripts/operator/app.js`                     | 2,463  | ⚠️ 許容範囲（やや大きい）                          |
+| `scripts/operator/questions.js`               | 1,734  | ⚠️ 許容範囲（やや大きい）                          |
+| `scripts/shared/print-utils.js`               | 1,341  | ✅ 許容範囲                                        |
+| `scripts/operator/channel-manager.js`         | 1,314  | ✅ 許容範囲                                        |
+| `scripts/question-admin/participants.js`      | 1,169  | ✅ 許容範囲                                        |
+| `scripts/operator/panels/pickup-panel.js`     | 1,125  | ✅ 許容範囲                                        |
+| `scripts/operator/panels/dictionary-panel.js` | 1,109  | ✅ 許容範囲                                        |
 
 ### 構造パターンの分類
 
@@ -61,7 +61,7 @@
 2. **巨大な単一ファイル**
 
    - `scripts/events/app.js` - 10,180 行
-   - `scripts/question-admin/app.js` - 8,002 行
+   - `scripts/question-admin/app.js` - 7,007 行（リファクタリング進行中、元の 8,180 行から約 1,173 行削減）
 
 3. **中規模の単一ファイル**
 
@@ -203,7 +203,12 @@ scripts/events/
 ```
 scripts/question-admin/
 ├── index.js              # エントリーポイント（2行）✅
-├── app.js                # メインアプリケーション（8,002行）❌
+├── app.js                # メインアプリケーション（7,007行）❌ リファクタリング進行中
+├── managers/
+│   ├── print-manager.js      # 印刷機能（1,004行）✅
+│   ├── csv-manager.js        # CSV 処理（351行）✅
+│   ├── event-manager.js      # イベント管理（405行）✅
+│   └── participant-manager.js # 参加者管理（462行、進行中）✅
 ├── participants.js       # 参加者管理（1,169行）✅
 ├── calendar.js           # カレンダー機能
 ├── dialog.js             # ダイアログ機能
@@ -217,9 +222,11 @@ scripts/question-admin/
 
 **問題点**:
 
-1. **`app.js` が巨大（8,002 行）**
-   - 質問管理、参加者管理、イベント管理、CSV 処理、印刷機能などが混在
-   - 単一責任の原則に違反
+1. **`app.js` が巨大（7,007 行、リファクタリング進行中）**
+   - 元の 8,180 行から約 1,173 行削減
+   - 印刷機能、CSV 処理、イベント管理、参加者読み込み機能を Manager クラスに分離済み
+   - 残りの参加者管理機能（描画、CRUD、保存）の分離が進行中
+   - 単一責任の原則に違反（改善中）
 
 **評価**:
 
@@ -410,12 +417,17 @@ scripts/
    - テストが困難
    - 保守性が低い
 
-2. **`scripts/question-admin/app.js` が 8,002 行**
+2. **`scripts/question-admin/app.js` が 7,007 行（リファクタリング進行中）**
 
-   - 開発標準の約 5 倍
-   - 単一責任の原則に違反
-   - テストが困難
-   - 保守性が低い
+   - 開発標準の約 5 倍（元の 8,180 行から約 1,173 行削減）
+   - 単一責任の原則に違反（改善中）
+   - テストが困難（改善中）
+   - 保守性が低い（改善中）
+   - **リファクタリング状況**:
+     - ✅ PrintManager に印刷機能を分離（1,004 行）
+     - ✅ CsvManager に CSV 処理機能を分離（351 行）
+     - ✅ EventManager にイベント管理機能を分離（405 行）
+     - ✅ ParticipantManager に参加者読み込み・描画機能を分離（462 行、進行中）
 
 3. **`scripts/events/tools/gl.js` が 3,249 行**
    - 開発標準の約 2 倍
@@ -492,11 +504,13 @@ scripts/events/
 ```
 scripts/question-admin/
 ├── index.js
-├── app.js                    # QuestionAdminApp（初期化とルーティング、300行程度）
-├── question-manager.js       # 質問管理（1,200行程度）
-├── event-manager.js          # イベント管理（1,000行程度）
-├── csv-manager.js            # CSV 処理（800行程度）
-├── print-manager.js          # 印刷機能（600行程度）
+├── app.js                    # QuestionAdminApp（初期化とルーティング、7,007行→目標: 3,000行以下）
+├── managers/
+│   ├── print-manager.js      # 印刷機能（1,004行）✅ 完了
+│   ├── csv-manager.js        # CSV 処理（351行）✅ 完了
+│   ├── event-manager.js      # イベント管理（405行）✅ 完了
+│   └── participant-manager.js # 参加者管理（282行、進行中）
+├── question-manager.js       # 質問管理（1,200行程度、未着手）
 ├── participant-manager.js    # 参加者管理（既に participants.js に分離済み）
 ├── calendar.js               # 既存
 ├── dialog.js                 # 既存
@@ -641,7 +655,7 @@ scripts/login/
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
 - ❌ `scripts/events/app.js` - 10,180 行、要改善
-- ❌ `scripts/question-admin/app.js` - 8,002 行、要改善
+- ❌ `scripts/question-admin/app.js` - 7,007 行、要改善（リファクタリング進行中、元の 8,180 行から約 1,173 行削減）
 - ⚠️ `scripts/events/tools/gl.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
 - ⚠️ `scripts/login.js` - 664 行、要検討
