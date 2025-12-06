@@ -13,12 +13,9 @@ import {
   signInWithCredential,
   onAuthStateChanged,
   GoogleAuthProvider,
-  onValue,
   serverTimestamp,
   onDisconnect,
-  getOperatorPresenceEventRef,
   getOperatorPresenceEntryRef,
-  getOperatorScheduleConsensusRef,
   runTransaction
 } from "../operator/firebase.js";
 import { createApiClient } from "../operator/api-client.js";
@@ -59,6 +56,7 @@ import { EventAuthManager } from "./managers/auth-manager.js";
 import { EventStateManager } from "./managers/state-manager.js";
 import { EventNavigationManager } from "./managers/navigation-manager.js";
 import { EventUIRenderer } from "./managers/ui-renderer.js";
+import { EventFirebaseManager } from "./managers/firebase-manager.js";
 // consumeAuthTransfer, loadAuthPreflightContext, preflightContextMatchesUser は EventAuthManager に移行されました
 import { appendAuthDebugLog, replayAuthDebugLog } from "../shared/auth-debug-log.js";
 import {
@@ -197,6 +195,23 @@ export class EventAdminApp {
     this.navigationManager = new EventNavigationManager(this);
     // UI描画を初期化
     this.uiRenderer = new EventUIRenderer(this);
+    // Firebase操作を初期化
+    this.firebaseManager = new EventFirebaseManager(this);
+    // プロパティを初期同期
+    this.operatorPresenceEntries = this.firebaseManager.operatorPresenceEntries;
+    this.operatorPresenceEventId = this.firebaseManager.operatorPresenceEventId;
+    this.operatorPresenceUnsubscribe = this.firebaseManager.operatorPresenceUnsubscribe;
+    this.hostPresenceSessionId = this.firebaseManager.hostPresenceSessionId;
+    this.hostPresenceEntryKey = this.firebaseManager.hostPresenceEntryKey;
+    this.hostPresenceEntryRef = this.firebaseManager.hostPresenceEntryRef;
+    this.hostPresenceDisconnect = this.firebaseManager.hostPresenceDisconnect;
+    this.hostPresenceHeartbeat = this.firebaseManager.hostPresenceHeartbeat;
+    this.hostPresenceLastSignature = this.firebaseManager.hostPresenceLastSignature;
+    this.scheduleConsensusEventId = this.firebaseManager.scheduleConsensusEventId;
+    this.scheduleConsensusUnsubscribe = this.firebaseManager.scheduleConsensusUnsubscribe;
+    this.scheduleConsensusState = this.firebaseManager.scheduleConsensusState;
+    this.scheduleConsensusLastSignature = this.firebaseManager.scheduleConsensusLastSignature;
+    this.scheduleConsensusLastKey = this.firebaseManager.scheduleConsensusLastKey;
     // auth のアタッチ後に ToolCoordinator を初期化する
     this.tools = new ToolCoordinator(this);
     // イベント管理パネルを初期化
@@ -213,12 +228,14 @@ export class EventAdminApp {
     this.operatorPresenceEntries = [];
     this.operatorPresenceEventId = "";
     this.operatorPresenceUnsubscribe = null;
-    this.hostPresenceSessionId = this.generatePresenceSessionId();
+    // EventFirebaseManager に移行（初期化はfirebaseManagerの初期化後に同期）
+    this.hostPresenceSessionId = "";
     this.hostPresenceEntryKey = "";
     this.hostPresenceEntryRef = null;
     this.hostPresenceDisconnect = null;
     this.hostPresenceHeartbeat = null;
     this.hostPresenceLastSignature = "";
+    // EventFirebaseManager に移行（後方互換性のため保持）
     this.cachedHostPresenceStorage = undefined;
     this.hostCommittedScheduleId = "";
     this.hostCommittedScheduleLabel = "";
@@ -238,6 +255,7 @@ export class EventAdminApp {
     this.operatorModeRadioName = generateShortId("flow-operator-mode-radio-");
     this.flowDebugEnabled = false;
     this.operatorPresenceDebugEnabled = false;
+    // EventFirebaseManager に移行（後方互換性のため保持）
     this.scheduleConsensusEventId = "";
     this.scheduleConsensusUnsubscribe = null;
     this.scheduleConsensusState = null;
@@ -337,17 +355,8 @@ export class EventAdminApp {
   }
 
   generatePresenceSessionId() {
-    if (typeof crypto !== "undefined") {
-      if (typeof crypto.randomUUID === "function") {
-        return crypto.randomUUID();
-      }
-      if (typeof crypto.getRandomValues === "function") {
-        const array = new Uint8Array(16);
-        crypto.getRandomValues(array);
-        return Array.from(array, (value) => value.toString(16).padStart(2, "0")).join("");
-      }
-    }
-    return `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.generatePresenceSessionId();
   }
 
   buildFlowState() {
@@ -1492,62 +1501,13 @@ export class EventAdminApp {
   }
 
   resolveHostScheduleContext(eventId = "", { scheduleMap = null } = {}) {
-    const normalizedEventId = ensureString(eventId) || ensureString(this.selectedEventId);
-    const map =
-      scheduleMap instanceof Map
-        ? scheduleMap
-        : new Map(this.schedules.map((schedule) => [schedule.id, schedule]));
-    const selectedScheduleId = ensureString(this.selectedScheduleId);
-    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
-    const pendingNavigationTarget = ensureString(this.pendingNavigationTarget);
-    let resolvedScheduleId = "";
-    if (this.scheduleSelectionCommitted) {
-      resolvedScheduleId = selectedScheduleId || committedScheduleId;
-    } else if (pendingNavigationTarget && selectedScheduleId) {
-      resolvedScheduleId = selectedScheduleId;
-    }
-    if (!resolvedScheduleId && committedScheduleId) {
-      resolvedScheduleId = committedScheduleId;
-    }
-    const schedule = resolvedScheduleId ? map.get(resolvedScheduleId) || null : null;
-    let scheduleLabel = "";
-    if (resolvedScheduleId) {
-      if (resolvedScheduleId === committedScheduleId) {
-        scheduleLabel = ensureString(this.hostCommittedScheduleLabel);
-      }
-      if (!scheduleLabel) {
-        scheduleLabel = ensureString(schedule?.label) || resolvedScheduleId;
-      }
-    }
-    const selectedSchedule = selectedScheduleId ? map.get(selectedScheduleId) || null : null;
-    const selectedScheduleLabel = selectedSchedule
-      ? ensureString(selectedSchedule.label) || selectedScheduleId
-      : selectedScheduleId;
-    const scheduleRange = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
-    const scheduleLocation = schedule ? ensureString(schedule.location) : "";
-    const scheduleKey = resolvedScheduleId
-      ? this.derivePresenceScheduleKey(
-          normalizedEventId,
-          { scheduleId: resolvedScheduleId, scheduleLabel },
-          this.hostPresenceSessionId
-        )
-      : "";
-    return {
-      eventId: normalizedEventId,
-      scheduleId: resolvedScheduleId,
-      scheduleLabel,
-      scheduleRange,
-      location: scheduleLocation,
-      scheduleKey,
-      schedule,
-      committedScheduleId,
-      selectedScheduleId,
-      selectedScheduleLabel
-    };
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.resolveHostScheduleContext(eventId, { scheduleMap });
   }
 
   derivePresenceScheduleKey(eventId, payload = {}, entryId = "") {
-    return sharedDerivePresenceScheduleKey(eventId, payload, entryId);
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.derivePresenceScheduleKey(eventId, payload, entryId);
   }
 
   getDisplayUrlForEvent(eventId) {
@@ -1650,107 +1610,23 @@ export class EventAdminApp {
   }
 
   findScheduleByIdOrAlias(scheduleId = "") {
-    const normalized = ensureString(scheduleId);
-    if (!normalized) {
-      return null;
-    }
-    const directMatch = this.schedules.find((schedule) => schedule.id === normalized) || null;
-    if (directMatch) {
-      return directMatch;
-    }
-    const normalizedCandidate = normalizeScheduleId(normalized);
-    if (!normalizedCandidate) {
-      return null;
-    }
-    return (
-      this.schedules.find((schedule) => normalizeScheduleId(schedule.id) === normalizedCandidate) || null
-    );
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.findScheduleByIdOrAlias(scheduleId);
   }
 
   resolveScheduleFromPresenceEntry(entry = null) {
-    if (!entry || typeof entry !== "object") {
-      return { scheduleId: "", schedule: null };
-    }
-    const direct = this.findScheduleByIdOrAlias(entry.scheduleId);
-    if (direct) {
-      return { scheduleId: direct.id, schedule: direct };
-    }
-    const derivedId = this.extractScheduleIdFromKey(entry.scheduleKey, this.selectedEventId);
-    const derived = this.findScheduleByIdOrAlias(derivedId);
-    if (derived) {
-      return { scheduleId: derived.id, schedule: derived };
-    }
-    const label = ensureString(entry.scheduleLabel);
-    if (label) {
-      const labelMatch = this.schedules.find((schedule) => ensureString(schedule.label) === label) || null;
-      if (labelMatch) {
-        return { scheduleId: labelMatch.id, schedule: labelMatch };
-      }
-    }
-    const fallbackId = ensureString(entry.scheduleId) || ensureString(derivedId);
-    return { scheduleId: fallbackId, schedule: null };
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.resolveScheduleFromPresenceEntry(entry);
   }
 
   getPresenceSourcePriority(entry = null) {
-    const source = ensureString(entry?.source).toLowerCase();
-    if (!source) {
-      return 0;
-    }
-    if (source.includes("operator")) {
-      return 3;
-    }
-    if (source === "events") {
-      return 2;
-    }
-    return 1;
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.getPresenceSourcePriority(entry);
   }
 
   getAssignedScheduleFromPresence() {
-    const uid = ensureString(this.currentUser?.uid);
-    if (!uid) {
-      return null;
-    }
-    const entries = Array.isArray(this.operatorPresenceEntries) ? this.operatorPresenceEntries : [];
-    if (!entries.length) {
-      return null;
-    }
-    const matches = entries.filter((entry) => ensureString(entry?.uid) === uid);
-    if (!matches.length) {
-      return null;
-    }
-    const evaluated = matches.map((entry) => {
-      const { scheduleId, schedule } = this.resolveScheduleFromPresenceEntry(entry);
-      return {
-        entry,
-        scheduleId,
-        schedule,
-        hasSchedule: Boolean(scheduleId),
-        priority: this.getPresenceSourcePriority(entry),
-        updatedAt: Number(entry?.updatedAt || 0) || 0
-      };
-    });
-    const pool = evaluated.some((item) => item.hasSchedule)
-      ? evaluated.filter((item) => item.hasSchedule)
-      : evaluated;
-    if (!pool.length) {
-      return null;
-    }
-    pool.sort((a, b) => {
-      if (b.updatedAt !== a.updatedAt) {
-        return b.updatedAt - a.updatedAt;
-      }
-      if (b.priority !== a.priority) {
-        return b.priority - a.priority;
-      }
-      const aId = ensureString(a.entry?.entryId);
-      const bId = ensureString(b.entry?.entryId);
-      return aId.localeCompare(bId, "ja");
-    });
-    const best = pool[0];
-    if (!best) {
-      return null;
-    }
-    return { entry: best.entry, scheduleId: best.scheduleId, schedule: best.schedule };
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.getAssignedScheduleFromPresence();
   }
 
   navigateToTelopSchedule() {
@@ -3054,105 +2930,18 @@ export class EventAdminApp {
   }
 
   buildPresenceScheduleKey(eventId, payload = {}, entryId = "") {
-    return this.derivePresenceScheduleKey(eventId, payload, entryId);
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.buildPresenceScheduleKey(eventId, payload, entryId);
   }
 
   extractScheduleIdFromKey(scheduleKey, eventId = "") {
-    const key = ensureString(scheduleKey);
-    if (!key) {
-      return "";
-    }
-    const normalizedEvent = ensureString(eventId) || ensureString(this.selectedEventId);
-    let working = key;
-    if (normalizedEvent && working.startsWith(`${normalizedEvent}::`)) {
-      working = working.slice(normalizedEvent.length + 2);
-    }
-    if (!working) {
-      return "";
-    }
-    const [firstPart] = working.split("::");
-    if (!firstPart || firstPart === "label" || firstPart === "session") {
-      return "";
-    }
-    const normalizedCandidate = normalizeScheduleId(firstPart);
-    const candidates = [firstPart];
-    if (normalizedCandidate && normalizedCandidate !== firstPart) {
-      candidates.push(normalizedCandidate);
-    }
-    const match = this.schedules.find((schedule) => {
-      if (!schedule || !schedule.id) {
-        return false;
-      }
-      if (candidates.includes(schedule.id)) {
-        return true;
-      }
-      const normalizedId = normalizeScheduleId(schedule.id);
-      return Boolean(normalizedId) && candidates.includes(normalizedId);
-    });
-    return match ? match.id : "";
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.extractScheduleIdFromKey(scheduleKey, eventId);
   }
 
   normalizeOperatorPresenceEntries(raw = {}, eventId = "") {
-    const entries = [];
-    if (!raw || typeof raw !== "object") {
-      this.logOperatorPresenceDebug("Read operator presence snapshot", {
-        eventId: ensureString(eventId),
-        entryCount: 0,
-        entries: []
-      });
-      return entries;
-    }
-    const selfUid = ensureString(this.currentUser?.uid);
-    Object.entries(raw).forEach(([entryId, payload]) => {
-      if (!payload || typeof payload !== "object") {
-        return;
-      }
-      const normalizedId = ensureString(entryId) || generateShortId("presence-");
-      const scheduleKey = this.buildPresenceScheduleKey(eventId, payload, normalizedId);
-      const scheduleId = ensureString(payload.scheduleId) || ensureString(payload.selectedScheduleId);
-      // 完全正規化: scheduleLabelは参照先から取得（既存データとの互換性のため、payload.scheduleLabelをフォールバックとして使用）
-      let scheduleLabel = "";
-      if (scheduleId && Array.isArray(this.schedules)) {
-        const schedule = this.schedules.find((s) => ensureString(s?.id) === scheduleId);
-        if (schedule) {
-          scheduleLabel = ensureString(schedule.label || "");
-        }
-      }
-      if (!scheduleLabel) {
-        scheduleLabel = ensureString(payload.scheduleLabel) || ensureString(payload.selectedScheduleLabel) || "";
-      }
-      const displayName = ensureString(payload.displayName) || ensureString(payload.email) || ensureString(payload.uid) || normalizedId;
-      const uid = ensureString(payload.uid);
-      const mode = normalizeOperatorMode(payload.mode);
-      const skipTelop = payload.skipTelop === true || mode === OPERATOR_MODE_SUPPORT;
-      const updatedAt = Number(payload.clientTimestamp || payload.updatedAt || 0) || 0;
-      const sessionId = ensureString(payload.sessionId) || normalizedId;
-      const source = ensureString(payload.source);
-      entries.push({
-        entryId: normalizedId,
-        sessionId,
-        source,
-        uid,
-        displayName,
-        scheduleId,
-        scheduleLabel,
-        scheduleKey,
-        selectedScheduleId: ensureString(payload.selectedScheduleId),
-        selectedScheduleLabel: ensureString(payload.selectedScheduleLabel),
-        mode,
-        skipTelop,
-        updatedAt,
-        isSelf: Boolean(selfUid && uid && uid === selfUid)
-      });
-    });
-    entries.sort((a, b) => a.displayName.localeCompare(b.displayName, "ja"));
-    const summary = this.describeOperatorPresenceEntries(entries);
-    this.logOperatorPresenceDebug("Read operator presence snapshot", {
-      eventId: ensureString(eventId),
-      entryCount: summary.length,
-      entries: summary
-    });
-    return entries;
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.normalizeOperatorPresenceEntries(raw, eventId);
   }
 
   buildScheduleConflictContext() {
@@ -3943,71 +3732,6 @@ export class EventAdminApp {
     }
   }
 
-  scheduleHostPresenceHeartbeat() {
-    if (this.hostPresenceHeartbeat) {
-      return;
-    }
-    this.hostPresenceHeartbeat = setInterval(
-      () => this.touchHostPresence(),
-      HOST_PRESENCE_HEARTBEAT_MS
-    );
-  }
-
-  touchHostPresence() {
-    if (!this.hostPresenceEntryRef || !this.hostPresenceEntryKey) {
-      this.stopHostPresenceHeartbeat();
-      return;
-    }
-    const now = Date.now();
-    const key = ensureString(this.hostPresenceEntryKey);
-    const [eventIdPart = "", sessionIdPart = ""] = key.split("/");
-    this.logOperatorPresenceDebug("Write operator presence heartbeat", {
-      eventId: ensureString(eventIdPart) || ensureString(this.selectedEventId),
-      sessionId: ensureString(sessionIdPart),
-      update: {
-        clientTimestamp: now
-      }
-    });
-    update(this.hostPresenceEntryRef, {
-      clientTimestamp: now
-    }).catch((error) => {
-      console.debug("Host presence heartbeat failed:", error);
-    });
-  }
-
-  stopHostPresenceHeartbeat() {
-    if (this.hostPresenceHeartbeat) {
-      clearInterval(this.hostPresenceHeartbeat);
-      this.hostPresenceHeartbeat = null;
-    }
-  }
-
-  clearHostPresence() {
-    this.stopHostPresenceHeartbeat();
-    this.hostPresenceLastSignature = "";
-    const disconnectHandle = this.hostPresenceDisconnect;
-    this.hostPresenceDisconnect = null;
-    if (disconnectHandle && typeof disconnectHandle.cancel === "function") {
-      disconnectHandle.cancel().catch(() => {});
-    }
-    const entryRef = this.hostPresenceEntryRef;
-    this.hostPresenceEntryRef = null;
-    const hadKey = !!this.hostPresenceEntryKey;
-    const entryKey = ensureString(this.hostPresenceEntryKey);
-    this.hostPresenceEntryKey = "";
-    if (entryRef && hadKey) {
-      const [eventIdPart = "", sessionIdPart = ""] = entryKey.split("/");
-      this.logOperatorPresenceDebug("Remove operator presence entry", {
-        eventId: ensureString(eventIdPart) || ensureString(this.selectedEventId),
-        sessionId: ensureString(sessionIdPart),
-        reason: "clear-host-presence"
-      });
-      remove(entryRef).catch((error) => {
-        console.debug("Failed to clear host presence:", error);
-      });
-    }
-  }
-
   setHostCommittedSchedule(
     scheduleId,
     {
@@ -4236,216 +3960,47 @@ export class EventAdminApp {
   }
 
   getHostPresenceStorage() {
-    if (typeof this.cachedHostPresenceStorage !== "undefined") {
-      return this.cachedHostPresenceStorage;
-    }
-    if (typeof window === "undefined") {
-      this.cachedHostPresenceStorage = null;
-      return null;
-    }
-    const candidates = [window.sessionStorage, window.localStorage];
-    for (const storage of candidates) {
-      if (!storage) {
-        continue;
-      }
-      try {
-        const probeKey = "__events_host_presence_probe__";
-        storage.setItem(probeKey, "1");
-        storage.removeItem(probeKey);
-        this.cachedHostPresenceStorage = storage;
-        return storage;
-      } catch (error) {
-        // Ignore storage access errors and continue checking fallbacks.
-      }
-    }
-    this.cachedHostPresenceStorage = null;
-    return null;
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.getHostPresenceStorage();
   }
 
   getHostPresenceStorageKey(uid = "", eventId = "") {
-    const normalizedUid = ensureString(uid);
-    const normalizedEventId = ensureString(eventId);
-    if (!normalizedUid || !normalizedEventId) {
-      return "";
-    }
-    return `events:host-presence:${normalizedUid}:${normalizedEventId}`;
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.getHostPresenceStorageKey(uid, eventId);
   }
 
   loadStoredHostPresenceSessionId(uid = "", eventId = "") {
-    const storage = this.getHostPresenceStorage();
-    const key = this.getHostPresenceStorageKey(uid, eventId);
-    if (!storage || !key) {
-      return "";
-    }
-    try {
-      return ensureString(storage.getItem(key));
-    } catch (error) {
-      return "";
-    }
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.loadStoredHostPresenceSessionId(uid, eventId);
   }
 
   persistHostPresenceSessionId(uid = "", eventId = "", sessionId = "") {
-    const storage = this.getHostPresenceStorage();
-    const key = this.getHostPresenceStorageKey(uid, eventId);
-    const normalizedSessionId = ensureString(sessionId);
-    if (!storage || !key || !normalizedSessionId) {
-      return;
-    }
-    try {
-      storage.setItem(key, normalizedSessionId);
-    } catch (error) {
-      // Ignore storage persistence failures.
-    }
+    // EventFirebaseManager に委譲
+    this.firebaseManager.persistHostPresenceSessionId(uid, eventId, sessionId);
   }
 
   collectLocalHostPresenceEntries(presenceEntries = [], uid = "") {
-    const normalizedUid = ensureString(uid);
-    if (!normalizedUid || !Array.isArray(presenceEntries)) {
-      return [];
-    }
-    return presenceEntries
-      .filter((entry) => {
-        if (!entry || typeof entry !== "object") {
-          return false;
-        }
-        const entryUid = ensureString(entry.uid);
-        if (!entryUid || entryUid !== normalizedUid) {
-          return false;
-        }
-        const source = ensureString(entry.source);
-        return !source || source === "events";
-      })
-      .map((entry) => ({
-        entryId: ensureString(entry.entryId),
-        sessionId: ensureString(entry.sessionId || entry.entryId),
-        source: ensureString(entry.source),
-        updatedAt: Number(entry.updatedAt || 0) || 0
-      }));
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.collectLocalHostPresenceEntries(presenceEntries, uid);
   }
 
   async fetchHostPresenceEntries(eventId = "", uid = "") {
-    const normalizedEventId = ensureString(eventId);
-    const normalizedUid = ensureString(uid);
-    if (!normalizedEventId || !normalizedUid) {
-      return [];
-    }
-    try {
-      const snapshot = await get(getOperatorPresenceEventRef(normalizedEventId));
-      const raw = snapshot.exists() ? snapshot.val() : {};
-      if (!raw || typeof raw !== "object") {
-        this.logOperatorPresenceDebug("Read operator presence (get)", {
-          eventId: normalizedEventId,
-          uid: normalizedUid,
-          entryCount: 0,
-          entries: []
-        });
-        return [];
-      }
-      const entries = [];
-      Object.entries(raw).forEach(([entryId, payload]) => {
-        if (!payload || typeof payload !== "object") {
-          return;
-        }
-        const entryUid = ensureString(payload.uid);
-        if (!entryUid || entryUid !== normalizedUid) {
-          return;
-        }
-        const source = ensureString(payload.source);
-        if (source && source !== "events") {
-          return;
-        }
-        const normalizedEntryId = ensureString(entryId);
-        const sessionId = ensureString(payload.sessionId) || normalizedEntryId;
-        if (!sessionId) {
-          return;
-        }
-        const updatedAt = Number(payload.clientTimestamp || payload.updatedAt || 0) || 0;
-        entries.push({
-          entryId: normalizedEntryId,
-          sessionId,
-          source,
-          updatedAt
-        });
-      });
-      entries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-      this.logOperatorPresenceDebug("Read operator presence (get)", {
-        eventId: normalizedEventId,
-        uid: normalizedUid,
-        entryCount: entries.length,
-        entries: entries.map((entry) => ({
-          entryId: ensureString(entry.entryId),
-          sessionId: ensureString(entry.sessionId),
-          source: ensureString(entry.source),
-          updatedAt: Number(entry.updatedAt || 0) || 0
-        }))
-      });
-      return entries;
-    } catch (error) {
-      console.debug("Failed to fetch host presence entries:", error);
-      return [];
-    }
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.fetchHostPresenceEntries(eventId, uid);
   }
 
   pruneHostPresenceEntries(eventId = "", entries = [], sessionId = "") {
-    const normalizedEventId = ensureString(eventId);
-    if (!normalizedEventId || !Array.isArray(entries) || entries.length === 0) {
-      return;
-    }
-    const keepSessionId = ensureString(sessionId);
-    entries.forEach((entry) => {
-      const entrySessionId = ensureString(entry?.sessionId || entry?.entryId);
-      if (!entrySessionId || entrySessionId === keepSessionId) {
-        return;
-      }
-      try {
-        this.logOperatorPresenceDebug("Remove stale operator presence entry", {
-          eventId: normalizedEventId,
-          sessionId: entrySessionId
-        });
-        remove(getOperatorPresenceEntryRef(normalizedEventId, entrySessionId)).catch(() => {});
-      } catch (error) {
-        console.debug("Failed to remove stale host presence entry:", error);
-      }
-    });
+    // EventFirebaseManager に委譲
+    this.firebaseManager.pruneHostPresenceEntries(eventId, entries, sessionId);
   }
 
   async reconcileHostPresenceSessions(eventId = "", uid = "", sessionId = "", prefetchedEntries = null) {
-    const normalizedEventId = ensureString(eventId);
-    const normalizedUid = ensureString(uid);
-    if (!normalizedEventId || !normalizedUid) {
-      return;
-    }
-    let entries = Array.isArray(prefetchedEntries) ? prefetchedEntries.slice() : null;
-    if (!entries || entries.length === 0) {
-      entries = await this.fetchHostPresenceEntries(normalizedEventId, normalizedUid);
-    }
-    if (!entries || entries.length === 0) {
-      return;
-    }
-    const keepSessionId = ensureString(sessionId);
-    let preferredEntry = null;
-    if (keepSessionId) {
-      preferredEntry = entries.find((entry) => ensureString(entry.sessionId || entry.entryId) === keepSessionId) || null;
-    }
-    if (!preferredEntry) {
-      preferredEntry = entries[0] || null;
-    }
-    const preferredSessionId = ensureString(preferredEntry?.sessionId || preferredEntry?.entryId);
-    if (!preferredSessionId) {
-      return;
-    }
-    const targetSessionId = keepSessionId && preferredSessionId === keepSessionId ? keepSessionId : preferredSessionId;
-    if (ensureString(this.hostPresenceSessionId) !== targetSessionId) {
-      this.hostPresenceSessionId = targetSessionId;
-      this.persistHostPresenceSessionId(normalizedUid, normalizedEventId, targetSessionId);
-    }
-    this.hostPresenceEntryKey = `${normalizedEventId}/${targetSessionId}`;
-    this.hostPresenceEntryRef = getOperatorPresenceEntryRef(normalizedEventId, targetSessionId);
-    const staleEntries = entries.filter((entry) => {
-      const entrySessionId = ensureString(entry.sessionId || entry.entryId);
-      return entrySessionId && entrySessionId !== targetSessionId;
-    });
-    this.pruneHostPresenceEntries(normalizedEventId, staleEntries, targetSessionId);
+    // EventFirebaseManager に委譲
+    await this.firebaseManager.reconcileHostPresenceSessions(eventId, uid, sessionId, prefetchedEntries);
+    // プロパティを同期
+    this.hostPresenceSessionId = this.firebaseManager.hostPresenceSessionId;
+    this.hostPresenceEntryKey = this.firebaseManager.hostPresenceEntryKey;
+    this.hostPresenceEntryRef = this.firebaseManager.hostPresenceEntryRef;
   }
 
   async syncHostPresence(reason = "state-change") {
@@ -4515,6 +4070,7 @@ export class EventAdminApp {
     }
 
     this.hostPresenceSessionId = sessionId;
+    this.firebaseManager.hostPresenceSessionId = sessionId;
     this.persistHostPresenceSessionId(uid, eventId, sessionId);
     const nextKey = `${eventId}/${sessionId}`;
     if (this.hostPresenceEntryKey && this.hostPresenceEntryKey !== nextKey) {
@@ -4649,13 +4205,13 @@ export class EventAdminApp {
   }
 
   clearOperatorPresenceState() {
-    if (this.operatorPresenceUnsubscribe) {
-      this.operatorPresenceUnsubscribe();
-      this.operatorPresenceUnsubscribe = null;
-    }
-    this.clearHostPresence();
-    this.operatorPresenceEventId = "";
-    this.operatorPresenceEntries = [];
+    // EventFirebaseManager に委譲
+    this.firebaseManager.clearOperatorPresenceState();
+    // プロパティを同期
+    this.operatorPresenceEventId = this.firebaseManager.operatorPresenceEventId;
+    this.operatorPresenceUnsubscribe = this.firebaseManager.operatorPresenceUnsubscribe;
+    this.operatorPresenceEntries = this.firebaseManager.operatorPresenceEntries;
+    // app固有のプロパティをクリア
     this.hostCommittedScheduleId = "";
     this.hostCommittedScheduleLabel = "";
     this.eventSelectionCommitted = false;
@@ -6570,55 +6126,6 @@ export class EventAdminApp {
     }
   }
 
-  scheduleHostPresenceHeartbeat() {
-    if (this.hostPresenceHeartbeat) {
-      return;
-    }
-    this.hostPresenceHeartbeat = setInterval(
-      () => this.touchHostPresence(),
-      HOST_PRESENCE_HEARTBEAT_MS
-    );
-  }
-
-  touchHostPresence() {
-    if (!this.hostPresenceEntryRef || !this.hostPresenceEntryKey) {
-      this.stopHostPresenceHeartbeat();
-      return;
-    }
-    const now = Date.now();
-    update(this.hostPresenceEntryRef, {
-      clientTimestamp: now
-    }).catch((error) => {
-      console.debug("Host presence heartbeat failed:", error);
-    });
-  }
-
-  stopHostPresenceHeartbeat() {
-    if (this.hostPresenceHeartbeat) {
-      clearInterval(this.hostPresenceHeartbeat);
-      this.hostPresenceHeartbeat = null;
-    }
-  }
-
-  clearHostPresence() {
-    this.stopHostPresenceHeartbeat();
-    this.hostPresenceLastSignature = "";
-    const disconnectHandle = this.hostPresenceDisconnect;
-    this.hostPresenceDisconnect = null;
-    if (disconnectHandle && typeof disconnectHandle.cancel === "function") {
-      disconnectHandle.cancel().catch(() => {});
-    }
-    const entryRef = this.hostPresenceEntryRef;
-    this.hostPresenceEntryRef = null;
-    const hadKey = !!this.hostPresenceEntryKey;
-    this.hostPresenceEntryKey = "";
-    if (entryRef && hadKey) {
-      remove(entryRef).catch((error) => {
-        console.debug("Failed to clear host presence:", error);
-      });
-    }
-  }
-
   setHostCommittedSchedule(
     scheduleId,
     {
@@ -6734,13 +6241,13 @@ export class EventAdminApp {
   }
 
   clearOperatorPresenceState() {
-    if (this.operatorPresenceUnsubscribe) {
-      this.operatorPresenceUnsubscribe();
-      this.operatorPresenceUnsubscribe = null;
-    }
-    this.clearHostPresence();
-    this.operatorPresenceEventId = "";
-    this.operatorPresenceEntries = [];
+    // EventFirebaseManager に委譲
+    this.firebaseManager.clearOperatorPresenceState();
+    // プロパティを同期
+    this.operatorPresenceEventId = this.firebaseManager.operatorPresenceEventId;
+    this.operatorPresenceUnsubscribe = this.firebaseManager.operatorPresenceUnsubscribe;
+    this.operatorPresenceEntries = this.firebaseManager.operatorPresenceEntries;
+    // app固有のプロパティをクリア
     this.hostCommittedScheduleId = "";
     this.hostCommittedScheduleLabel = "";
     this.eventSelectionCommitted = false;
