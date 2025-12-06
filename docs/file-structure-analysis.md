@@ -49,7 +49,7 @@
 | `scripts/shared/print-utils.js`               | 1,341 | ✅ 許容範囲                                          |
 | `scripts/operator/channel-manager.js`         | 1,314 | ✅ 許容範囲                                          |
 | `scripts/question-admin/participants.js`      | 1,169 | ✅ 許容範囲                                          |
-| `scripts/operator/panels/pickup-panel.js`     | 1,125 | ✅ 許容範囲                                          |
+| `scripts/operator/panels/pickup-panel.js`     | 1,124 | ✅ 許容範囲                                          |
 | `scripts/operator/panels/dictionary-panel.js` | 1,109 | ✅ 許容範囲                                          |
 
 ### 構造パターンの分類
@@ -98,7 +98,7 @@ scripts/operator/
 ├── ui-renderer.js        # UIRenderer（378行）✅
 ├── questions.js          # 質問表示機能（1,734行、やや大きい）
 ├── panels/
-│   ├── pickup-panel.js       # ピックアップ機能（1,125行）✅
+│   ├── pickup-panel.js       # ピックアップ機能（1,124行）✅
 │   ├── dictionary-panel.js  # 辞書機能（1,109行）✅
 │   ├── side-telop-panel.js   # サイドテロップ機能（549行）✅
 │   └── logs-panel.js         # ログ機能（264行）✅
@@ -155,10 +155,6 @@ scripts/events/
 ├── loading-tracker.js    # ローディング追跡
 ├── schedule-calendar.js  # スケジュールカレンダー
 └── tools/
-    └── tools/
-        ├── gl-faculty-builder.js
-        ├── gl-faculty-utils.js
-        └── frame-utils.js
     ├── gl-faculty-builder.js
     ├── gl-faculty-utils.js
     └── frame-utils.js
@@ -644,15 +640,15 @@ scripts/login/
 
 1. **`scripts/events/app.js` のリファクタリング**（進行中）
 
-   - 期間: 2-3 週間（約 20% 完了）
+   - 期間: 2-3 週間（約 60% 完了）
    - 影響範囲: イベント管理画面全体
    - リスク: 高（大規模な変更）
    - **完了したフェーズ**:
      - ✅ フェーズ 1: イベント管理パネルと日程管理パネルの分離（`event-panel.js`, `schedule-panel.js`）
-     - ✅ フェーズ 1.1: 認証管理機能の分離（`auth-manager.js`, 381 行）
+     - ✅ フェーズ 1.1: 認証管理機能の分離（`auth-manager.js`, 384 行）
+     - ✅ フェーズ 1.2: 状態管理機能の分離（`state-manager.js`, 315 行）
+     - ✅ フェーズ 1.3: 画面遷移制御機能の分離（`navigation-manager.js`, 499 行、基本機能完了）
    - **残りのフェーズ**:
-     - ✅ 状態管理機能の分離（`EventStateManager`）完了
-     - ✅ 画面遷移制御機能の分離（`EventNavigationManager`、基本機能完了）
      - ⏳ UI 描画機能の分離（`EventUIRenderer`）
      - ⏳ Firebase 操作機能の分離（`EventFirebaseManager`）
 
