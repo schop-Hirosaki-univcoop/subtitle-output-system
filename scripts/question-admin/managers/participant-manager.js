@@ -13,7 +13,11 @@ import {
   sortParticipants,
   signatureForEntries,
   diffParticipantLists,
-  describeDuplicateMatch
+  describeDuplicateMatch,
+  getScheduleLabel,
+  resolveParticipantStatus,
+  normalizeGroupNumberValue,
+  resolveMailStatusInfo
 } from "../participants.js";
 import { normalizeKey } from "../utils.js";
 
@@ -62,6 +66,23 @@ export class ParticipantManager {
     this.participantChangeKey = context.participantChangeKey;
     this.CANCEL_LABEL = context.CANCEL_LABEL;
     this.GL_STAFF_GROUP_KEY = context.GL_STAFF_GROUP_KEY;
+    
+    // CRUD機能に必要な依存関係
+    this.getDisplayParticipantId = context.getDisplayParticipantId;
+    this.ensurePendingRelocationMap = context.ensurePendingRelocationMap;
+    this.applyRelocationDraft = context.applyRelocationDraft;
+    this.ensureTeamAssignmentMap = context.ensureTeamAssignmentMap;
+    this.applyAssignmentsToEventCache = context.applyAssignmentsToEventCache;
+    this.hasUnsavedChanges = context.hasUnsavedChanges;
+    this.confirmAction = context.confirmAction;
+    this.setFormError = context.setFormError;
+    this.openDialog = context.openDialog;
+    this.closeDialog = context.closeDialog;
+    this.RELOCATE_LABEL = context.RELOCATE_LABEL;
+    
+    // handleSave に必要な依存関係
+    this.getScheduleRecord = context.getScheduleRecord;
+    this.loadEvents = context.loadEvents;
     
     this.bindDom();
   }
@@ -458,5 +479,677 @@ export class ParticipantManager {
     this.syncSelectedEventSummary();
     this.applyParticipantSelectionStyles();
     this.updateParticipantActionPanelState();
+  }
+
+  /**
+   * 参加者編集フォームを開く
+   * @param {string} participantId - 参加者ID
+   * @param {string} rowKey - 行キー
+   */
+  openParticipantEditor(participantId, rowKey) {
+    if (!this.dom.participantDialog) {
+      this.setUploadStatus("編集対象の参加者が見つかりません。", "error");
+      return;
+    }
+    const eventId = this.state.selectedEventId;
+    let entry = null;
+    if (rowKey) {
+      entry = this.state.participants.find(item => String(item.rowKey || "") === String(rowKey));
+    }
+    if (!entry && participantId) {
+      entry = this.state.participants.find(item => String(item.participantId) === String(participantId));
+    }
+    if (!entry) {
+      this.setUploadStatus("指定された参加者が現在のリストに存在しません。", "error");
+      return;
+    }
+    this.state.editingParticipantId = entry.participantId;
+    this.state.editingRowKey = entry.rowKey || null;
+    if (this.dom.participantDialogTitle) {
+      const displayId = this.getDisplayParticipantId(entry.participantId);
+      if (entry.participantId) {
+        this.dom.participantDialogTitle.textContent = `参加者情報を編集（UID: ${displayId}）`;
+        if (displayId !== String(entry.participantId).trim()) {
+          this.dom.participantDialogTitle.setAttribute("title", `UID: ${entry.participantId}`);
+        } else {
+          this.dom.participantDialogTitle.removeAttribute("title");
+        }
+      } else {
+        this.dom.participantDialogTitle.textContent = "参加者情報を編集";
+        this.dom.participantDialogTitle.removeAttribute("title");
+      }
+    }
+    if (this.dom.participantNameInput) this.dom.participantNameInput.value = entry.name || "";
+    if (this.dom.participantPhoneticInput) this.dom.participantPhoneticInput.value = entry.phonetic || entry.furigana || "";
+    if (this.dom.participantGenderInput) this.dom.participantGenderInput.value = entry.gender || "";
+    if (this.dom.participantDepartmentInput) this.dom.participantDepartmentInput.value = entry.department || "";
+    if (this.dom.participantTeamInput) this.dom.participantTeamInput.value = entry.groupNumber || "";
+    if (this.dom.participantPhoneInput) this.dom.participantPhoneInput.value = entry.phone || "";
+    if (this.dom.participantEmailInput) this.dom.participantEmailInput.value = entry.email || "";
+    if (this.dom.participantMailSentInput) {
+      const mailInfo = resolveMailStatusInfo(entry);
+      this.dom.participantMailSentInput.checked = mailInfo.key === "sent";
+      this.dom.participantMailSentInput.indeterminate = mailInfo.key === "missing";
+      this.dom.participantMailSentInput.disabled = false;
+    }
+
+    const currentStatus = entry.status || resolveParticipantStatus(entry, entry.groupNumber || "");
+    const isRelocated = currentStatus === "relocated";
+    const relocationMap = this.ensurePendingRelocationMap();
+    const uid = resolveParticipantUid(entry) || String(entry.participantId || "");
+
+    if (this.dom.participantRelocationSummary) {
+      let summaryText = "";
+      if (isRelocated) {
+        const pendingRelocation = relocationMap.get(uid);
+        const destinationId = pendingRelocation?.toScheduleId || entry.relocationDestinationScheduleId || "";
+        const destinationTeam = pendingRelocation?.destinationTeamNumber || entry.relocationDestinationTeamNumber || "";
+        const destinationLabel = destinationId ? getScheduleLabel(eventId, destinationId) || destinationId : "";
+        if (destinationId) {
+          summaryText = destinationTeam
+            ? `移動先: ${destinationLabel} / 班番号: ${destinationTeam || "未定"}`
+            : `移動先: ${destinationLabel} / 班番号: 未定`;
+        } else {
+          summaryText = `${this.RELOCATE_LABEL}の設定があります。ポップアップから移動先を指定してください。`;
+        }
+      }
+      this.dom.participantRelocationSummary.hidden = !summaryText;
+      if (this.dom.participantRelocationSummaryText) {
+        this.dom.participantRelocationSummaryText.textContent = summaryText;
+      }
+    }
+
+    this.setFormError(this.dom.participantError);
+    this.openDialog(this.dom.participantDialog);
+  }
+
+  /**
+   * 参加者編集内容を保存する
+   */
+  saveParticipantEdits() {
+    const eventId = this.state.selectedEventId;
+    const participantId = this.state.editingParticipantId || "";
+    const rowKey = this.state.editingRowKey || "";
+    if (!participantId && !rowKey) {
+      throw new Error("編集対象の参加者が不明です。");
+    }
+    let index = -1;
+    if (rowKey) {
+      index = this.state.participants.findIndex(entry => String(entry.rowKey || "") === String(rowKey));
+    }
+    if (index === -1) {
+      index = this.state.participants.findIndex(entry => String(entry.participantId) === String(participantId));
+    }
+    if (index === -1) {
+      throw new Error("対象の参加者が見つかりません。");
+    }
+    const name = String(this.dom.participantNameInput?.value || "").trim();
+    if (!name) {
+      throw new Error("氏名を入力してください。");
+    }
+    const phonetic = String(this.dom.participantPhoneticInput?.value || "").trim();
+    const gender = String(this.dom.participantGenderInput?.value || "").trim();
+    const department = String(this.dom.participantDepartmentInput?.value || "").trim();
+    const groupNumber = normalizeGroupNumberValue(this.dom.participantTeamInput?.value || "");
+    const phone = String(this.dom.participantPhoneInput?.value || "").trim();
+    const email = String(this.dom.participantEmailInput?.value || "").trim();
+
+    const existing = this.state.participants[index];
+    const mailSentControl = this.dom.participantMailSentInput;
+    const mailSentChecked = Boolean(mailSentControl && mailSentControl.checked && !mailSentControl.indeterminate);
+    const updated = {
+      ...existing,
+      name,
+      phonetic,
+      furigana: phonetic,
+      gender,
+      department,
+      groupNumber,
+      phone,
+      email
+    };
+    const existingMailSentAt = Number(existing?.mailSentAt || 0);
+    if (!email) {
+      updated.mailStatus = "";
+      updated.mailSentAt = 0;
+      updated.mailError = "";
+    } else if (mailSentChecked) {
+      const resolvedSentAt = existingMailSentAt > 0 ? existingMailSentAt : Date.now();
+      updated.mailStatus = "sent";
+      updated.mailSentAt = resolvedSentAt;
+      updated.mailError = "";
+      const existingAttempt = Number(existing?.mailLastAttemptAt || 0);
+      const nextAttempt = Number.isFinite(existingAttempt) && existingAttempt > 0
+        ? Math.max(existingAttempt, resolvedSentAt)
+        : resolvedSentAt;
+      updated.mailLastAttemptAt = nextAttempt;
+    } else {
+      updated.mailStatus = "";
+      updated.mailSentAt = 0;
+      updated.mailError = "";
+    }
+    const nextStatus = resolveParticipantStatus(updated, groupNumber);
+    updated.status = nextStatus;
+    updated.isCancelled = nextStatus === "cancelled";
+    updated.isRelocated = nextStatus === "relocated";
+
+    const uid = resolveParticipantUid(updated) || participantId;
+    if (updated.isRelocated) {
+      const relocationMap = this.ensurePendingRelocationMap();
+      const pendingRelocation = uid ? relocationMap.get(uid) : null;
+      const destinationScheduleId = String(
+        pendingRelocation?.toScheduleId || existing.relocationDestinationScheduleId || ""
+      ).trim();
+      const destinationTeamNumber = String(
+        pendingRelocation?.destinationTeamNumber || existing.relocationDestinationTeamNumber || ""
+      ).trim();
+      this.applyRelocationDraft(updated, destinationScheduleId, destinationTeamNumber);
+    } else {
+      this.applyRelocationDraft(updated, "", "");
+    }
+
+    this.state.participants[index] = updated;
+    this.state.participants = sortParticipants(this.state.participants);
+
+    if (eventId && uid) {
+      const assignmentMap = this.ensureTeamAssignmentMap(eventId);
+      if (assignmentMap) {
+        assignmentMap.set(uid, groupNumber);
+      }
+      const singleMap = new Map([[uid, groupNumber]]);
+      this.applyAssignmentsToEventCache(eventId, singleMap);
+    }
+
+    syncCurrentScheduleCache();
+    updateDuplicateMatches();
+    this.renderParticipants();
+    this.syncSaveButtonState();
+    if (this.hasUnsavedChanges()) {
+      this.setUploadStatus("編集内容は未保存です。「適用」で確定します。");
+    } else {
+      this.setUploadStatus("適用済みの内容と同じため変更はありません。");
+    }
+
+    this.state.editingParticipantId = null;
+    this.state.editingRowKey = null;
+  }
+
+  /**
+   * 参加者を削除する
+   * @param {string} participantId - 参加者ID
+   * @param {number} rowIndex - 行インデックス
+   * @param {string} rowKey - 行キー
+   * @returns {Promise<void>}
+   */
+  async handleDeleteParticipant(participantId, rowIndex, rowKey) {
+    let entry = null;
+    if (rowKey) {
+      entry = this.state.participants.find(item => String(item.rowKey || "") === String(rowKey));
+    }
+    if (participantId) {
+      entry = entry || this.state.participants.find(item => String(item.participantId) === String(participantId));
+    }
+    if (!entry && Number.isInteger(rowIndex) && rowIndex >= 0) {
+      const sorted = sortParticipants(this.state.participants);
+      const candidate = sorted[rowIndex];
+      if (candidate) {
+        entry = this.state.participants.find(item => item === candidate || String(item.participantId) === String(candidate.participantId));
+      }
+    }
+
+    if (!entry) {
+      this.setUploadStatus("削除対象の参加者が見つかりません。", "error");
+      return;
+    }
+
+    const nameLabel = entry.name ? `「${entry.name}」` : "";
+    const displayId = this.getDisplayParticipantId(entry.participantId);
+    const idLabel = entry.participantId ? `UID: ${displayId}` : "UID未設定";
+    const description = nameLabel
+      ? `参加者${nameLabel}（${idLabel}）を削除します。適用するまで確定されません。よろしいですか？`
+      : `参加者（${idLabel}）を削除します。適用するまで確定されません。よろしいですか？`;
+
+    const confirmed = await this.confirmAction({
+      title: "参加者の削除",
+      description,
+      confirmLabel: "削除する",
+      cancelLabel: "キャンセル",
+      tone: "danger"
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    const removed = this.removeParticipantFromState(entry.participantId, entry, entry.rowKey);
+    if (!removed) {
+      this.setUploadStatus("参加者の削除に失敗しました。", "error");
+      return;
+    }
+
+    const removedDisplayId = this.getDisplayParticipantId(removed.participantId);
+    const identifier = removed.name
+      ? `参加者「${removed.name}」`
+      : removed.participantId
+        ? `UID: ${removedDisplayId}`
+        : "UID未設定";
+
+    updateDuplicateMatches();
+    this.renderParticipants();
+    if (this.hasUnsavedChanges()) {
+      this.setUploadStatus(`${identifier}を削除予定です。「適用」で確定します。`);
+    } else {
+      this.setUploadStatus("変更は適用済みの状態に戻りました。");
+    }
+  }
+
+  /**
+   * 状態から参加者を削除する（内部メソッド）
+   * @param {string} participantId - 参加者ID
+   * @param {Object} fallbackEntry - フォールバックエントリ
+   * @param {string} rowKey - 行キー
+   * @returns {Object|null} 削除された参加者エントリ
+   */
+  removeParticipantFromState(participantId, fallbackEntry, rowKey) {
+    const targetId = String(participantId || "").trim();
+    let removed = null;
+    let nextList = [];
+
+    if (rowKey) {
+      const index = this.state.participants.findIndex(entry => String(entry.rowKey || "") === String(rowKey));
+      if (index !== -1) {
+        removed = this.state.participants[index];
+        nextList = this.state.participants.filter((_, idx) => idx !== index);
+      }
+    }
+
+    if (targetId) {
+      removed = removed || this.state.participants.find(entry => String(entry.participantId) === targetId) || null;
+      if (!removed) {
+        return null;
+      }
+      if (!nextList.length) {
+        nextList = this.state.participants.filter(entry => {
+          if (String(entry.participantId) !== targetId) return true;
+          if (!rowKey) return false;
+          return String(entry.rowKey || "") !== String(rowKey);
+        });
+      }
+    } else if (fallbackEntry) {
+      const index = this.state.participants.findIndex(entry => entry === fallbackEntry);
+      if (index === -1) {
+        return null;
+      }
+      removed = this.state.participants[index];
+      nextList = this.state.participants.filter((_, idx) => idx !== index);
+    } else {
+      return null;
+    }
+
+    this.state.participants = sortParticipants(nextList);
+
+    syncCurrentScheduleCache();
+    updateDuplicateMatches();
+
+    const selectedEvent = this.state.events.find(evt => evt.id === this.state.selectedEventId);
+    if (selectedEvent?.schedules) {
+      const schedule = selectedEvent.schedules.find(s => s.id === this.state.selectedScheduleId);
+      if (schedule) {
+        schedule.participantCount = this.state.participants.length;
+      }
+    }
+
+    this.renderParticipants();
+    this.updateParticipantContext({ preserveStatus: true });
+    this.state.editingParticipantId = null;
+    this.state.editingRowKey = null;
+    return removed;
+  }
+
+  /**
+   * 参加者データをFirebaseに保存する
+   * @param {Object} options - オプション
+   * @returns {Promise<boolean>}
+   */
+  async handleSave(options = {}) {
+    const { allowEmpty = false, successMessage = "参加者リストを更新しました。" } = options || {};
+    if (this.state.saving) return;
+    const eventId = this.state.selectedEventId;
+    const scheduleId = this.state.selectedScheduleId;
+    if (!eventId || !scheduleId) return;
+    const savingEmptyList = this.state.participants.length === 0;
+    const hasPendingChanges = this.hasUnsavedChanges();
+
+    if (!allowEmpty && savingEmptyList && !hasPendingChanges) {
+      this.setUploadStatus("適用する参加者がありません。", "error");
+      return false;
+    }
+
+    this.state.saving = true;
+    if (this.dom.saveButton) this.dom.saveButton.disabled = true;
+    this.syncSaveButtonState();
+    this.setUploadStatus("適用中です…");
+    this.syncClearButtonState();
+
+    try {
+      await this.ensureTokenSnapshot(true);
+      const event = this.state.events.find(evt => evt.id === eventId);
+      if (!event) {
+        throw new Error("選択中のイベントが見つかりません。");
+      }
+      const schedule = event.schedules.find(s => s.id === scheduleId);
+      if (!schedule) {
+        throw new Error("選択中の日程が見つかりません。");
+      }
+
+      const now = Date.now();
+      const previousTokens = new Map(this.state.participantTokenMap || []);
+      const tokensToRemove = new Set(previousTokens.values());
+      const participantsPayload = {};
+      const nextTokenMap = new Map();
+      const knownTokens = this.state.knownTokens instanceof Set ? this.state.knownTokens : new Set();
+      const tokenRecords = this.state.tokenRecords || {};
+      this.state.tokenRecords = tokenRecords;
+
+      this.state.participants.forEach(entry => {
+        const uid = resolveParticipantUid(entry);
+        const participantId = uid || String(entry.participantId || "").trim();
+        if (!participantId) return;
+
+        let token = String(entry.token || "").trim();
+        const previousToken = previousTokens.get(participantId) || "";
+        if (previousToken) {
+          tokensToRemove.delete(previousToken);
+        }
+
+        if (!token || (token !== previousToken && knownTokens.has(token))) {
+          token = this.generateQuestionToken(knownTokens);
+        } else if (!knownTokens.has(token)) {
+          knownTokens.add(token);
+        }
+
+        entry.token = token;
+        nextTokenMap.set(participantId, token);
+
+        const guidance = String(entry.guidance || "");
+        const departmentValue = String(entry.department || "");
+        const storedDepartment = departmentValue;
+        const groupNumber = String(entry.groupNumber || "");
+        const status = entry.status || resolveParticipantStatus(entry, groupNumber) || "active";
+        const isCancelled = entry.isCancelled === true || status === "cancelled";
+        const isRelocated = entry.isRelocated === true || status === "relocated";
+        const legacyIdRaw = String(entry.legacyParticipantId || "").trim();
+        const legacyParticipantId = legacyIdRaw && legacyIdRaw !== participantId ? legacyIdRaw : "";
+        const mailStatus = String(entry.mailStatus || "");
+        const mailSentAtValue = Number(entry.mailSentAt || 0);
+        const mailSentAt = Number.isFinite(mailSentAtValue) && mailSentAtValue >= 0 ? mailSentAtValue : 0;
+        const mailError = String(entry.mailError || "");
+        const mailLastSubject = String(entry.mailLastSubject || "");
+        const mailLastMessageId = String(entry.mailLastMessageId || "");
+        const mailSentBy = String(entry.mailSentBy || "");
+        const mailLastAttemptAtValue = Number(entry.mailLastAttemptAt || 0);
+        const mailLastAttemptAt =
+          Number.isFinite(mailLastAttemptAtValue) && mailLastAttemptAtValue >= 0
+            ? mailLastAttemptAtValue
+            : 0;
+        const mailLastAttemptBy = String(entry.mailLastAttemptBy || "");
+
+        participantsPayload[participantId] = {
+          participantId,
+          uid: participantId,
+          legacyParticipantId,
+          name: String(entry.name || ""),
+          phonetic: String(entry.phonetic || entry.furigana || ""),
+          furigana: String(entry.phonetic || entry.furigana || ""),
+          gender: String(entry.gender || ""),
+          department: storedDepartment,
+          groupNumber,
+          phone: String(entry.phone || ""),
+          email: String(entry.email || ""),
+          token,
+          guidance,
+          status,
+          isCancelled,
+          isRelocated,
+          relocationSourceScheduleId: String(entry.relocationSourceScheduleId || ""),
+          relocationSourceScheduleLabel: String(entry.relocationSourceScheduleLabel || ""),
+          relocationDestinationScheduleId: String(entry.relocationDestinationScheduleId || ""),
+          relocationDestinationScheduleLabel: String(entry.relocationDestinationScheduleLabel || ""),
+          relocationDestinationTeamNumber: String(entry.relocationDestinationTeamNumber || ""),
+          mailStatus,
+          mailSentAt,
+          mailError,
+          mailLastSubject,
+          mailLastMessageId,
+          mailSentBy,
+          mailLastAttemptAt,
+          mailLastAttemptBy,
+          updatedAt: now
+        };
+
+        const existingTokenRecord = tokenRecords[token] || {};
+        // 完全正規化: IDのみを保存し、名前やラベルなどの情報は正規化された場所から取得
+        tokenRecords[token] = {
+          eventId,
+          scheduleId,
+          participantId,
+          participantUid: participantId,
+          groupNumber,
+          guidance: guidance || existingTokenRecord.guidance || "",
+          revoked: false,
+          expiresAt: existingTokenRecord.expiresAt,
+          createdAt: existingTokenRecord.createdAt || now,
+          updatedAt: now
+        };
+      });
+
+      const relocationMap = this.ensurePendingRelocationMap();
+      const relocationsToProcess = [];
+      if (relocationMap instanceof Map) {
+        relocationMap.forEach(relocation => {
+          if (relocation && relocation.eventId === eventId && relocation.fromScheduleId === scheduleId) {
+            relocationsToProcess.push(relocation);
+          }
+        });
+      }
+
+      const additionalUpdates = [];
+      const processedRelocations = [];
+      const questionsByParticipant = new Map();
+      let questionStatusBranch = {};
+
+      if (relocationsToProcess.length) {
+        try {
+          const fetchedQuestions = await fetchDbValue("questions/normal");
+          if (fetchedQuestions && typeof fetchedQuestions === "object") {
+            // tokenからparticipantIdを取得して質問をフィルタリング
+            const tokenRecords = this.state.tokenRecords || {};
+            Object.entries(fetchedQuestions).forEach(([questionUid, record]) => {
+              if (!record || typeof record !== "object") return;
+              const questionToken = String(record.token || "").trim();
+              if (!questionToken) return;
+              const tokenRecord = tokenRecords[questionToken] || {};
+              const participantKey = String(tokenRecord.participantId || "");
+              if (!participantKey) return;
+              if (!questionsByParticipant.has(participantKey)) {
+                questionsByParticipant.set(participantKey, []);
+              }
+              questionsByParticipant.get(participantKey).push({ questionUid, record });
+            });
+          }
+        } catch (error) {
+          console.warn("質問データの取得に失敗しました", error);
+        }
+
+        // questionStatusはイベントごとに分離されているため、eventIdが必要
+        // レガシーパスquestionStatusからの取得は削除（イベントごとのquestionStatusのみ使用）
+        // 質問データからeventIdを取得してquestionStatusを参照する必要がある場合は、
+        // 個別の質問レコードからeventIdを取得してquestionStatus/${eventId}から取得する
+        // ここでは空のオブジェクトを設定（必要に応じて個別に取得）
+        questionStatusBranch = {};
+      }
+
+      relocationsToProcess.forEach(relocation => {
+        if (!relocation || !relocation.toScheduleId) {
+          return;
+        }
+        const uid = String(relocation.uid || relocation.participantId || "");
+        if (!uid) {
+          return;
+        }
+        const destinationScheduleId = String(relocation.toScheduleId);
+        const originEntry = this.state.participants.find(item => String(item.participantId || "") === uid) || relocation.entrySnapshot || {};
+        const destinationSchedule = this.getScheduleRecord(eventId, destinationScheduleId) || {};
+        const destinationLabel = destinationSchedule.label || destinationSchedule.date || destinationSchedule.id || "";
+        const destinationDate = destinationSchedule.date || "";
+        const destinationStart = destinationSchedule.startAt || "";
+        const destinationEnd = destinationSchedule.endAt || "";
+        const destinationLocation = destinationSchedule.location || "";
+        const destinationTeam = String(relocation.destinationTeamNumber || "");
+        const token = nextTokenMap.get(uid) || "";
+        const legacyId = String(originEntry.legacyParticipantId || "").trim();
+        const guidanceText = String(originEntry.guidance || "");
+
+        const relocatedRecord = {
+          participantId: uid,
+          uid: uid,
+          legacyParticipantId: legacyId && legacyId !== uid ? legacyId : "",
+          name: String(originEntry.name || ""),
+          phonetic: String(originEntry.phonetic || originEntry.furigana || ""),
+          furigana: String(originEntry.phonetic || originEntry.furigana || ""),
+          gender: String(originEntry.gender || ""),
+          department: String(originEntry.department || ""),
+          phone: String(originEntry.phone || ""),
+          email: String(originEntry.email || ""),
+          groupNumber: destinationTeam,
+          token,
+          guidance: guidanceText,
+          status: "relocated",
+          isCancelled: false,
+          isRelocated: true,
+          relocationSourceScheduleId: scheduleId,
+          relocationSourceScheduleLabel: schedule.label || scheduleId,
+          relocationDestinationTeamNumber: destinationTeam,
+          updatedAt: now
+        };
+
+        additionalUpdates.push([
+          `questionIntake/participants/${eventId}/${destinationScheduleId}/${uid}`,
+          relocatedRecord
+        ]);
+
+        const cacheBranch = this.state.eventParticipantCache instanceof Map ? this.state.eventParticipantCache.get(eventId) : null;
+        const destinationList = cacheBranch && Array.isArray(cacheBranch[destinationScheduleId])
+          ? cacheBranch[destinationScheduleId]
+          : [];
+        additionalUpdates.push([
+          `questionIntake/schedules/${eventId}/${destinationScheduleId}/participantCount`,
+          destinationList.length
+        ]);
+        additionalUpdates.push([
+          `questionIntake/schedules/${eventId}/${destinationScheduleId}/updatedAt`,
+          now
+        ]);
+
+        if (token) {
+          const existingTokenRecord = this.state.tokenRecords[token] || {};
+          // 完全正規化: IDのみを保存し、名前やラベルなどの情報は正規化された場所から取得
+          this.state.tokenRecords[token] = {
+            eventId,
+            scheduleId: destinationScheduleId,
+            participantId: uid,
+            participantUid: uid,
+            groupNumber: destinationTeam,
+            guidance: guidanceText || existingTokenRecord.guidance || "",
+            revoked: false,
+            expiresAt: existingTokenRecord.expiresAt,
+            createdAt: existingTokenRecord.createdAt || now,
+            updatedAt: now
+          };
+        }
+
+        const questionEntries = questionsByParticipant.get(uid) || [];
+        questionEntries.forEach(({ questionUid, record }) => {
+          if (!questionUid || !record) return;
+          // questions/normalのレコードから削除されたフィールド（eventId, scheduleId, schedule等）は設定しない
+          // tokenを更新することで、tokenから情報を取得できるようになる
+          const updatedQuestion = { ...record };
+          updatedQuestion.updatedAt = now;
+          additionalUpdates.push([
+            `questions/normal/${questionUid}`,
+            updatedQuestion
+          ]);
+
+          // questionStatusはイベントごとに分離されているため、tokenからeventIdを取得
+          const questionToken = String(record.token || "").trim();
+          if (questionToken) {
+            const tokenRecord = this.state.tokenRecords[questionToken] || {};
+            const questionEventId = String(tokenRecord.eventId || eventId || "").trim();
+            if (questionEventId) {
+              // イベントごとのquestionStatusから取得を試みる（必要に応じて）
+              // ここでは質問データの更新のみ行い、questionStatusは個別に管理される
+              // 必要に応じて、questionStatus/${questionEventId}/${questionUid}から取得する処理を追加
+            }
+          }
+        });
+
+        processedRelocations.push(uid);
+      });
+
+      tokensToRemove.forEach(token => {
+        if (!token) return;
+        knownTokens.delete(token);
+        delete this.state.tokenRecords[token];
+      });
+
+      this.state.knownTokens = knownTokens;
+
+      const updates = {
+        [`questionIntake/participants/${eventId}/${scheduleId}`]: participantsPayload,
+        [`questionIntake/schedules/${eventId}/${scheduleId}/participantCount`]: this.state.participants.length,
+        [`questionIntake/schedules/${eventId}/${scheduleId}/updatedAt`]: now,
+        [`questionIntake/events/${eventId}/updatedAt`]: now
+      };
+
+      additionalUpdates.forEach(([path, value]) => {
+        updates[path] = value;
+      });
+
+      Object.entries(this.state.tokenRecords).forEach(([token, record]) => {
+        updates[`questionIntake/tokens/${token}`] = record;
+      });
+
+      tokensToRemove.forEach(token => {
+        if (!token) return;
+        updates[`questionIntake/tokens/${token}`] = null;
+      });
+
+      await update(rootDbRef(), updates);
+
+      if (processedRelocations.length) {
+        const relocationState = this.ensurePendingRelocationMap();
+        processedRelocations.forEach(uid => {
+          relocationState.delete(uid);
+        });
+      }
+
+      this.state.participantTokenMap = nextTokenMap;
+      this.captureParticipantBaseline(this.state.participants);
+      this.setUploadStatus(successMessage || "参加者リストを更新しました。", "success");
+      await this.loadEvents({ preserveSelection: true });
+      await this.loadParticipants();
+      this.state.tokenSnapshotFetchedAt = Date.now();
+      this.updateParticipantContext({ preserveStatus: true });
+      return true;
+    } catch (error) {
+      console.error(error);
+      this.setUploadStatus(error.message || "適用に失敗しました。", "error");
+      if (this.dom.saveButton) this.dom.saveButton.disabled = false;
+      return false;
+    } finally {
+      this.state.saving = false;
+      this.syncSaveButtonState();
+      this.syncClearButtonState();
+    }
   }
 }
