@@ -22,7 +22,7 @@
 - `scripts/question-admin/` - 質問管理画面
 - `scripts/question-form/` - 質問フォーム画面
 - `scripts/shared/` - 共有モジュール
-- `scripts/gl-form/` - GLフォーム画面
+- `scripts/gl-form/` - GL フォーム画面
 - `scripts/participant-mail-view/` - 参加者メール閲覧画面
 - `scripts/login.js` - ログイン画面
 
@@ -39,29 +39,32 @@
 
 ### ファイルサイズの統計
 
-| ファイル | 行数 | 評価 |
-|---------|------|------|
-| `scripts/events/app.js` | 10,180 | ❌ 要改善（基準の約7倍） |
-| `scripts/question-admin/app.js` | 8,002 | ❌ 要改善（基準の約5倍） |
-| `scripts/events/tools/gl.js` | 3,249 | ❌ 要改善（基準の約2倍） |
-| `scripts/operator/app.js` | 2,463 | ⚠️ 許容範囲（やや大きい） |
-| `scripts/operator/questions.js` | 1,734 | ⚠️ 許容範囲（やや大きい） |
-| `scripts/shared/print-utils.js` | 1,341 | ✅ 許容範囲 |
-| `scripts/operator/channel-manager.js` | 1,314 | ✅ 許容範囲 |
-| `scripts/question-admin/participants.js` | 1,169 | ✅ 許容範囲 |
-| `scripts/operator/pickup.js` | 1,125 | ✅ 許容範囲 |
-| `scripts/operator/dictionary.js` | 1,109 | ✅ 許容範囲 |
+| ファイル                                 | 行数   | 評価                       |
+| ---------------------------------------- | ------ | -------------------------- |
+| `scripts/events/app.js`                  | 10,180 | ❌ 要改善（基準の約 7 倍） |
+| `scripts/question-admin/app.js`          | 8,002  | ❌ 要改善（基準の約 5 倍） |
+| `scripts/events/tools/gl.js`             | 3,249  | ❌ 要改善（基準の約 2 倍） |
+| `scripts/operator/app.js`                | 2,463  | ⚠️ 許容範囲（やや大きい）  |
+| `scripts/operator/questions.js`          | 1,734  | ⚠️ 許容範囲（やや大きい）  |
+| `scripts/shared/print-utils.js`          | 1,341  | ✅ 許容範囲                |
+| `scripts/operator/channel-manager.js`    | 1,314  | ✅ 許容範囲                |
+| `scripts/question-admin/participants.js` | 1,169  | ✅ 許容範囲                |
+| `scripts/operator/pickup.js`             | 1,125  | ✅ 許容範囲                |
+| `scripts/operator/dictionary.js`         | 1,109  | ✅ 許容範囲                |
 
 ### 構造パターンの分類
 
 1. **リファクタリング済み（Manager パターン）**
+
    - `scripts/operator/` - 適切に分割されている
 
 2. **巨大な単一ファイル**
+
    - `scripts/events/app.js` - 10,180 行
    - `scripts/question-admin/app.js` - 8,002 行
 
 3. **中規模の単一ファイル**
+
    - `scripts/gl-form/index.js` - 860 行
    - `scripts/login.js` - 664 行
    - `scripts/participant-mail-view/index.js` - 310 行
@@ -77,11 +80,13 @@
 ### 1. `scripts/operator/` ✅ 良好
 
 **現状**:
+
 - リファクタリング済みで、Manager パターンを採用
 - 各 Manager クラスが適切な責務を持っている
 - ファイルサイズも許容範囲内
 
 **構造**:
+
 ```
 scripts/operator/
 ├── index.js              # エントリーポイント（48行）
@@ -107,11 +112,13 @@ scripts/operator/
 ```
 
 **評価**:
+
 - ✅ Manager パターンが適切に適用されている
 - ✅ 責務が明確に分離されている
 - ⚠️ `app.js` と `questions.js` がやや大きいが許容範囲
 
 **改善提案**:
+
 - `app.js` の一部機能をさらに分割することを検討（優先度: 低）
 - `questions.js` を機能別に分割することを検討（優先度: 低）
 
@@ -120,11 +127,13 @@ scripts/operator/
 ### 2. `scripts/events/` ❌ 要改善
 
 **現状**:
+
 - `app.js` が 10,180 行と非常に大きい
 - 単一の `EventAdminApp` クラスに多くの責務が集中
 - ツール関連は `tools/` ディレクトリに分割されているが、メインの `app.js` が巨大
 
 **構造**:
+
 ```
 scripts/events/
 ├── index.js              # エントリーポイント（8行）✅
@@ -147,21 +156,25 @@ scripts/events/
 ```
 
 **問題点**:
-1. **`app.js` が巨大（10,180行）**
+
+1. **`app.js` が巨大（10,180 行）**
+
    - 認証、状態管理、画面遷移、Firebase 操作、UI 更新などが混在
    - 単一責任の原則に違反
    - テストが困難
 
-2. **`tools/gl.js` が大きい（3,249行）**
+2. **`tools/gl.js` が大きい（3,249 行）**
    - GL ツールの機能が単一ファイルに集約
    - 分割を検討すべき
 
 **評価**:
+
 - ❌ ファイルサイズが開発標準を大幅に超過
 - ❌ 責務の分離が不十分
 - ✅ ツール関連は適切に分割されている
 
 **改善提案**:
+
 - `app.js` を `scripts/operator/` と同様に Manager パターンで分割
   - `EventAuthManager` - 認証管理
   - `EventStateManager` - 状態管理
@@ -175,10 +188,12 @@ scripts/events/
 ### 3. `scripts/question-admin/` ❌ 要改善
 
 **現状**:
+
 - `app.js` が 8,002 行と非常に大きい
 - 質問管理、参加者管理、カレンダー、ダイアログなどが混在
 
 **構造**:
+
 ```
 scripts/question-admin/
 ├── index.js              # エントリーポイント（2行）✅
@@ -195,16 +210,19 @@ scripts/question-admin/
 ```
 
 **問題点**:
-1. **`app.js` が巨大（8,002行）**
+
+1. **`app.js` が巨大（8,002 行）**
    - 質問管理、参加者管理、イベント管理、CSV 処理、印刷機能などが混在
    - 単一責任の原則に違反
 
 **評価**:
+
 - ❌ ファイルサイズが開発標準を大幅に超過
 - ❌ 責務の分離が不十分
 - ✅ `participants.js` は適切に分離されている
 
 **改善提案**:
+
 - `app.js` を機能別に分割
   - `QuestionAdminApp` - メインアプリケーション（初期化とルーティング）
   - `QuestionAdminManager` - 質問管理機能
@@ -218,10 +236,12 @@ scripts/question-admin/
 ### 4. `scripts/question-form/` ✅ 良好
 
 **現状**:
+
 - 適切に機能別に分割されている
 - 各ファイルの責務が明確
 
 **構造**:
+
 ```
 scripts/question-form/
 ├── index.js              # エントリーポイント（5行）✅
@@ -239,11 +259,13 @@ scripts/question-form/
 ```
 
 **評価**:
+
 - ✅ 適切に分割されている
 - ✅ 各ファイルの責務が明確
 - ✅ ファイルサイズも適切
 
 **改善提案**:
+
 - 現状維持で問題なし
 
 ---
@@ -251,10 +273,12 @@ scripts/question-form/
 ### 5. `scripts/shared/` ✅ 良好
 
 **現状**:
+
 - 共有モジュールが適切に機能別に分割されている
 - 各ファイルの責務が明確
 
 **構造**:
+
 ```
 scripts/shared/
 ├── auth-preflight.js     # 認証プリフライト（304行）✅
@@ -273,11 +297,13 @@ scripts/shared/
 ```
 
 **評価**:
+
 - ✅ 適切に分割されている
 - ✅ 各ファイルの責務が明確
 - ✅ ファイルサイズも適切（`print-utils.js` は許容範囲）
 
 **改善提案**:
+
 - 現状維持で問題なし
 
 ---
@@ -285,21 +311,25 @@ scripts/shared/
 ### 6. `scripts/gl-form/` ⚠️ 要検討
 
 **現状**:
+
 - 単一ファイル（`index.js`）に全機能が集約
 - 860 行で、許容範囲内だが分割を検討すべき
 
 **構造**:
+
 ```
 scripts/gl-form/
 └── index.js              # 全機能（860行）⚠️
 ```
 
 **評価**:
+
 - ⚠️ 単一ファイルに全機能が集約
 - ✅ ファイルサイズは許容範囲内
 - ⚠️ 責務の分離が不十分（フォーム処理、バリデーション、Firebase 操作、UI 更新が混在）
 
 **改善提案**:
+
 - 機能別に分割することを検討（優先度: 中）
   - `gl-form-app.js` - メインアプリケーション
   - `gl-form-validator.js` - バリデーション
@@ -311,21 +341,25 @@ scripts/gl-form/
 ### 7. `scripts/participant-mail-view/` ✅ 良好
 
 **現状**:
+
 - 単一ファイル（`index.js`）に全機能が集約
 - 310 行で、適切なサイズ
 
 **構造**:
+
 ```
 scripts/participant-mail-view/
 └── index.js              # 全機能（310行）✅
 ```
 
 **評価**:
+
 - ✅ ファイルサイズが適切
 - ✅ 責務が明確（メール表示専用）
 - ✅ 現状維持で問題なし
 
 **改善提案**:
+
 - 現状維持で問題なし
 
 ---
@@ -333,21 +367,25 @@ scripts/participant-mail-view/
 ### 8. `scripts/login.js` ⚠️ 要検討
 
 **現状**:
+
 - 単一ファイルに全機能が集約
 - 664 行で、許容範囲内だが分割を検討すべき
 
 **構造**:
+
 ```
 scripts/
 └── login.js              # 全機能（664行）⚠️
 ```
 
 **評価**:
+
 - ⚠️ 単一ファイルに全機能が集約
 - ✅ ファイルサイズは許容範囲内
 - ⚠️ 責務の分離が不十分（認証処理、UI 更新、エラーハンドリングが混在）
 
 **改善提案**:
+
 - 機能別に分割することを検討（優先度: 低）
   - `login/app.js` - メインアプリケーション
   - `login/auth-handler.js` - 認証処理
@@ -360,12 +398,14 @@ scripts/
 ### 重大な問題（優先度: 高）
 
 1. **`scripts/events/app.js` が 10,180 行**
+
    - 開発標準の約 7 倍
    - 単一責任の原則に違反
    - テストが困難
    - 保守性が低い
 
 2. **`scripts/question-admin/app.js` が 8,002 行**
+
    - 開発標準の約 5 倍
    - 単一責任の原則に違反
    - テストが困難
@@ -378,6 +418,7 @@ scripts/
 ### 中程度の問題（優先度: 中）
 
 4. **`scripts/gl-form/index.js` が 860 行**
+
    - 許容範囲内だが、分割を検討すべき
    - 責務の分離が不十分
 
@@ -388,6 +429,7 @@ scripts/
 ### 軽微な問題（優先度: 低）
 
 6. **`scripts/operator/app.js` が 2,463 行**
+
    - 許容範囲内だが、やや大きい
    - 既に Manager パターンで分割されているため、優先度は低い
 
@@ -404,6 +446,7 @@ scripts/
 **目標**: Manager パターンを適用し、`scripts/operator/` と同様の構造にする
 
 **分割案**:
+
 ```
 scripts/events/
 ├── index.js
@@ -428,6 +471,7 @@ scripts/events/
 ```
 
 **手順**:
+
 1. `app.js` の機能を分析し、責務を特定
 2. 各 Manager クラスを作成
 3. 段階的に機能を移行
@@ -438,6 +482,7 @@ scripts/events/
 **目標**: 機能別に分割し、責務を明確化
 
 **分割案**:
+
 ```
 scripts/question-admin/
 ├── index.js
@@ -458,6 +503,7 @@ scripts/question-admin/
 ```
 
 **手順**:
+
 1. `app.js` の機能を分析し、責務を特定
 2. 各 Manager クラスを作成
 3. 段階的に機能を移行
@@ -468,6 +514,7 @@ scripts/question-admin/
 **目標**: 機能別に分割
 
 **分割案**:
+
 ```
 scripts/events/tools/
 ├── gl.js                     # GlToolManager（メイン、500行程度）
@@ -482,6 +529,7 @@ scripts/events/tools/
 **目標**: 機能別に分割
 
 **分割案**:
+
 ```
 scripts/gl-form/
 ├── index.js                  # エントリーポイント（20行程度）
@@ -496,6 +544,7 @@ scripts/gl-form/
 **目標**: 機能別に分割
 
 **分割案**:
+
 ```
 scripts/login/
 ├── index.js                  # エントリーポイント（10行程度）
@@ -508,9 +557,10 @@ scripts/login/
 
 ## 優先度別リファクタリング計画
 
-### フェーズ1: 重大な問題の解決（優先度: 高）
+### フェーズ 1: 重大な問題の解決（優先度: 高）
 
 1. **`scripts/events/app.js` のリファクタリング**
+
    - 期間: 2-3 週間
    - 影響範囲: イベント管理画面全体
    - リスク: 高（大規模な変更）
@@ -520,9 +570,10 @@ scripts/login/
    - 影響範囲: 質問管理画面全体
    - リスク: 高（大規模な変更）
 
-### フェーズ2: 中程度の問題の解決（優先度: 中）
+### フェーズ 2: 中程度の問題の解決（優先度: 中）
 
 3. **`scripts/events/tools/gl.js` のリファクタリング**
+
    - 期間: 1 週間
    - 影響範囲: GL ツール機能
    - リスク: 中
@@ -532,9 +583,10 @@ scripts/login/
    - 影響範囲: GL フォーム画面
    - リスク: 低
 
-### フェーズ3: 軽微な問題の解決（優先度: 低）
+### フェーズ 3: 軽微な問題の解決（優先度: 低）
 
 5. **`scripts/login.js` のリファクタリング**
+
    - 期間: 2-3 日
    - 影響範囲: ログイン画面
    - リスク: 低
@@ -602,6 +654,372 @@ scripts/login/
 
 ---
 
-**最終更新**: 2025 年
-**バージョン**: 1.0.0
+---
 
+## ファイル名とディレクトリ構造の評価
+
+### ファイル名の命名規則への準拠状況
+
+#### ✅ 準拠している点
+
+1. **kebab-case の統一**
+
+   - すべてのファイル名が `kebab-case` で統一されている
+   - PascalCase やスネークケースのファイルは存在しない
+   - 例: `context-manager.js`, `auth-manager.js`, `channel-manager.js`
+
+2. **命名パターンの適用**
+
+   - Manager クラス: `*-manager.js`（`context-manager.js`, `auth-manager.js` など）✅
+   - Renderer クラス: `*-renderer.js`（`ui-renderer.js`）✅
+   - ユーティリティ: `utils.js`, `dom.js`, `firebase.js` など ✅
+   - 機能領域: `questions.js`, `dictionary.js`, `pickup.js` など ✅
+
+3. **接尾辞の一貫性**
+   - `*-utils.js`: `string-utils.js`, `value-utils.js`, `submission-utils.js` ✅
+   - `*-service.js`: `context-service.js`, `submission-service.js` ✅
+   - `*-manager.js`: 複数の Manager クラス ✅
+
+#### ⚠️ 改善が必要な点
+
+1. **同名ファイルの重複**
+
+   | ファイル名     | 出現回数 | 場所                                                                                              | 問題点                                                 |
+   | -------------- | -------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+   | `index.js`     | 6 個     | `operator/`, `events/`, `question-admin/`, `question-form/`, `gl-form/`, `participant-mail-view/` | エントリーポイントとして適切だが、検索時に混乱の可能性 |
+   | `app.js`       | 4 個     | `operator/`, `events/`, `question-admin/`, `question-form/`                                       | 各ディレクトリで異なるクラスを定義                     |
+   | `firebase.js`  | 3 個     | `operator/`, `question-admin/`, `question-form/`                                                  | Firebase 設定の重複                                    |
+   | `dom.js`       | 3 個     | `operator/`, `events/`, `question-admin/`                                                         | DOM 操作の重複                                         |
+   | `constants.js` | 3 個     | `operator/`, `question-admin/`, `question-form/`                                                  | 定数の重複                                             |
+   | `utils.js`     | 2 個     | `operator/`, `question-admin/`                                                                    | ユーティリティの重複                                   |
+
+   **影響**:
+
+   - ファイル検索時に複数の候補が表示される
+   - インポート時にパスを完全に指定する必要がある（これは良い習慣だが、混乱の原因になる可能性）
+   - 同じ名前でも内容が異なるため、理解が困難
+
+   **改善提案**:
+
+   - `firebase.js` → `shared/firebase-config.js` に統一（既に `shared/firebase-config.js` が存在）
+   - `dom.js` → 各ディレクトリで用途が異なる場合は現状維持、共通部分は `shared/` に移動
+   - `constants.js` → 各ディレクトリ固有の定数は現状維持、共通定数は `shared/` に移動
+   - `utils.js` → 各ディレクトリ固有のユーティリティは現状維持、共通ユーティリティは `shared/` に移動
+
+2. **ディレクトリ構造の一貫性**
+
+   **現状**:
+
+   - `scripts/operator/` - ディレクトリ構成
+   - `scripts/events/` - ディレクトリ構成
+   - `scripts/question-admin/` - ディレクトリ構成
+   - `scripts/question-form/` - ディレクトリ構成
+   - `scripts/shared/` - ディレクトリ構成
+   - `scripts/gl-form/` - 単一ファイル（`index.js`）
+   - `scripts/participant-mail-view/` - 単一ファイル（`index.js`）
+   - `scripts/login.js` - ルートに単一ファイル
+
+   **問題点**:
+
+   - `login.js` がルートに配置されている（他の画面はディレクトリ構成）
+   - `gl-form/` と `participant-mail-view/` はディレクトリだが単一ファイル
+
+   **改善提案**:
+
+   - `scripts/login.js` → `scripts/login/index.js` に移動（一貫性のため）
+   - `gl-form/` と `participant-mail-view/` は現状維持（将来的に分割する可能性を考慮）
+
+3. **エントリーポイントの命名**
+
+   **現状**:
+
+   - すべて `index.js` を使用
+   - これは一般的な慣習で問題ないが、プロジェクト内で一貫している
+
+   **評価**: ✅ 問題なし（標準的な慣習に従っている）
+
+### ディレクトリ構造の評価
+
+#### ✅ 良好な点
+
+1. **機能別の分割**
+
+   - `scripts/operator/` - オペレーター画面専用
+   - `scripts/events/` - イベント管理専用
+   - `scripts/question-admin/` - 質問管理専用
+   - `scripts/question-form/` - 質問フォーム専用
+   - `scripts/shared/` - 共有モジュール
+
+2. **サブディレクトリの使用**
+   - `scripts/events/tools/` - ツール関連を分離
+   - 適切に機能が分離されている
+
+#### ⚠️ 改善が必要な点
+
+1. **`scripts/login.js` の配置**
+
+   - ルートに単一ファイルとして配置
+   - 他の画面はディレクトリ構成のため、一貫性に欠ける
+
+   **改善提案**:
+
+   ```
+   scripts/
+   ├── login/
+   │   ├── index.js      # エントリーポイント
+   │   ├── app.js        # LoginPage クラス
+   │   ├── auth-handler.js
+   │   └── ui-handler.js
+   └── ...
+   ```
+
+2. **共通機能の重複**
+   - `firebase.js`, `dom.js`, `constants.js`, `utils.js` が複数のディレクトリに存在
+   - 共通部分は `shared/` に移動すべき
+
+### 開発標準への準拠状況まとめ
+
+| 項目                     | 準拠状況 | 評価                               |
+| ------------------------ | -------- | ---------------------------------- |
+| ファイル名（kebab-case） | ✅       | 完全準拠                           |
+| Manager パターン         | ✅       | `operator/` で適用済み             |
+| 命名パターン             | ✅       | 一貫して適用                       |
+| ディレクトリ構造         | ⚠️       | `login.js` の配置が不一致          |
+| 共通機能の重複           | ⚠️       | `firebase.js`, `dom.js` などが重複 |
+| エントリーポイント       | ✅       | `index.js` で統一                  |
+
+### 推奨される改善アクション
+
+#### 優先度: 高
+
+1. **`scripts/login.js` を `scripts/login/` ディレクトリに移動**
+   - 一貫性の向上
+   - 将来的な拡張に対応
+
+#### 優先度: 中
+
+2. **共通機能の統合**
+
+   - `firebase.js` の共通部分を `shared/firebase-config.js` に統合
+   - `dom.js` の共通部分を `shared/` に移動（必要に応じて）
+   - `constants.js` の共通定数を `shared/` に移動
+
+3. **ファイル名の明確化（オプション）**
+   - 各ディレクトリの `app.js` は現状維持で問題なし
+   - ただし、検索時の混乱を避けるため、完全なパスでのインポートを推奨
+
+#### 優先度: 低
+
+4. **ドキュメントの整備**
+   - 各ディレクトリの役割を明確化
+   - ファイル命名規則のガイドラインを追加
+
+---
+
+## UI パネルとファイル構造の対応関係
+
+### 問題の指摘
+
+UI 上には以下のパネルが存在しますが、ファイル構造や命名が必ずしも対応していません：
+
+1. **イベント管理パネル** (`events`)
+2. **日程管理パネル** (`schedules`)
+3. **参加者リスト管理パネル** (`participants`)
+4. **GL 管理パネル** (`gl`)
+5. **学部学科管理パネル** (`gl-faculties`)
+6. **テロップ操作パネル** (`operator`)
+7. **辞書管理パネル** (`dictionary`)
+8. **Pick Up Question 管理パネル** (`pickup`)
+9. **ログパネル** (`logs`)
+10. **チャットパネル** (`chat`)
+11. **右サイドテロップ操作パネル** (`side-telop`)
+
+### 現状の対応関係
+
+| UI パネル                   | ファイル構造                               | 対応状況 | 問題点                                       |
+| --------------------------- | ------------------------------------------ | -------- | -------------------------------------------- |
+| イベント管理パネル          | `scripts/events/app.js` (10,180 行)        | ⚠️ 混在  | `events` と `schedules` が同じファイルに混在 |
+| 日程管理パネル              | `scripts/events/app.js` (10,180 行)        | ⚠️ 混在  | `events` と `schedules` が同じファイルに混在 |
+| 参加者リスト管理パネル      | `scripts/events/tools/participant.js`      | ✅ 対応  | 適切に分離されている                         |
+| GL 管理パネル               | `scripts/events/tools/gl.js` (3,249 行)    | ✅ 対応  | ファイルが大きいが対応している               |
+| 学部学科管理パネル          | `scripts/events/tools/gl-faculty-admin.js` | ✅ 対応  | 適切に分離されている                         |
+| テロップ操作パネル          | `scripts/events/tools/operator.js`         | ✅ 対応  | 適切に分離されている                         |
+| 辞書管理パネル              | `scripts/operator/dictionary.js`           | ✅ 対応  | 適切に分離されている                         |
+| Pick Up Question 管理パネル | `scripts/operator/pickup.js`               | ✅ 対応  | 適切に分離されている                         |
+| ログパネル                  | `scripts/operator/logs.js`                 | ✅ 対応  | 適切に分離されている                         |
+| チャットパネル              | `scripts/events/chat.js`                   | ✅ 対応  | 適切に分離されている                         |
+| 右サイドテロップ操作パネル  | `scripts/operator/side-telop.js`           | ✅ 対応  | 適切に分離されている                         |
+
+### 問題点の詳細
+
+#### 1. **イベント管理パネルと日程管理パネルの混在**
+
+**現状**:
+
+- `scripts/events/app.js` (10,180 行) に両方のパネルの実装が混在
+- `EventAdminApp` クラスが両方の責務を持っている
+
+**問題点**:
+
+- UI 上では別々のパネルとして認識されているが、ファイル構造では区別されていない
+- パネル名（`events`, `schedules`）とファイル名（`app.js`）が対応していない
+- 開発者が特定のパネルのコードを探すのが困難
+
+**改善提案**:
+
+```
+scripts/events/
+├── app.js                    # EventAdminApp（初期化とルーティング）
+├── event-panel-manager.js    # イベント管理パネルの実装
+├── schedule-panel-manager.js # 日程管理パネルの実装
+└── ...
+```
+
+または、より明確に：
+
+```
+scripts/events/
+├── app.js
+├── panels/
+│   ├── event-panel.js       # イベント管理パネル
+│   └── schedule-panel.js    # 日程管理パネル
+└── ...
+```
+
+#### 2. **パネル実装の分散**
+
+**現状**:
+
+- 一部のパネルは `scripts/events/tools/` に配置
+- 一部のパネルは `scripts/operator/` に配置
+- パネル実装の配置場所が一貫していない
+
+**問題点**:
+
+- パネル実装を探す際に、複数のディレクトリを確認する必要がある
+- パネルとファイルの対応関係が直感的でない
+
+**改善提案**:
+すべてのパネル実装を統一的な構造に配置：
+
+```
+scripts/panels/  # または scripts/events/panels/
+├── participants-panel.js    # 参加者リスト管理パネル
+├── gl-panel.js             # GL管理パネル
+├── gl-faculty-panel.js     # 学部学科管理パネル
+├── operator-panel.js       # テロップ操作パネル
+├── dictionary-panel.js      # 辞書管理パネル
+├── pickup-panel.js         # Pick Up Question管理パネル
+├── logs-panel.js           # ログパネル
+├── chat-panel.js           # チャットパネル
+└── side-telop-panel.js    # 右サイドテロップ操作パネル
+```
+
+または、既存の構造を維持しつつ、命名を明確化：
+
+```
+scripts/events/
+├── panels/
+│   ├── event-panel.js
+│   ├── schedule-panel.js
+│   ├── participants-panel.js  # tools/participant.js から移動
+│   ├── gl-panel.js            # tools/gl.js から移動
+│   ├── gl-faculty-panel.js    # tools/gl-faculty-admin.js から移動
+│   └── operator-panel.js      # tools/operator.js から移動
+└── ...
+
+scripts/operator/
+├── panels/
+│   ├── dictionary-panel.js   # dictionary.js から移動
+│   ├── pickup-panel.js       # pickup.js から移動
+│   ├── logs-panel.js         # logs.js から移動
+│   └── side-telop-panel.js   # side-telop.js から移動
+└── ...
+```
+
+#### 3. **命名の不一致**
+
+**現状**:
+
+- UI パネル名: `participants`, `gl`, `gl-faculties`, `operator`, `dictionary`, `pickup`, `logs`, `chat`, `side-telop`
+- ファイル名: `participant.js`, `gl.js`, `gl-faculty-admin.js`, `operator.js`, `dictionary.js`, `pickup.js`, `logs.js`, `chat.js`, `side-telop.js`
+
+**問題点**:
+
+- 一部のファイル名がパネル名と完全に一致していない（例: `gl-faculty-admin.js` vs `gl-faculties`）
+- ファイル名からパネル実装であることが明確でない
+
+**改善提案**:
+
+- ファイル名に `-panel` または `-panel-manager` サフィックスを追加
+- パネル名とファイル名を一致させる
+
+例:
+
+- `participant.js` → `participants-panel.js` または `participants-panel-manager.js`
+- `gl-faculty-admin.js` → `gl-faculties-panel.js` または `gl-faculties-panel-manager.js`
+- `dictionary.js` → `dictionary-panel.js` または `dictionary-panel-manager.js`
+
+### 推奨される改善アクション
+
+#### 優先度: 高
+
+1. **イベント管理パネルと日程管理パネルの分離**
+
+   - `scripts/events/app.js` から `event-panel-manager.js` と `schedule-panel-manager.js` を分離
+   - パネル実装を明確に区別
+
+2. **パネル実装の統一的な配置**
+   - すべてのパネル実装を `panels/` ディレクトリに配置
+   - または、既存の構造を維持しつつ、命名を明確化
+
+#### 優先度: 中
+
+3. **命名の統一**
+
+   - ファイル名に `-panel` サフィックスを追加
+   - パネル名とファイル名を一致させる
+
+4. **ドキュメントの整備**
+   - UI パネルとファイル構造の対応関係を明確にドキュメント化
+   - 各パネルの実装場所を明確に記載
+
+#### 優先度: 低
+
+5. **パネル実装のリファクタリング**
+   - 各パネルを独立したクラスとして実装
+   - パネル間の依存関係を明確化
+
+### 理想的なファイル構造
+
+```
+scripts/
+├── events/
+│   ├── app.js                    # EventAdminApp
+│   ├── panels/
+│   │   ├── event-panel.js       # イベント管理パネル
+│   │   ├── schedule-panel.js    # 日程管理パネル
+│   │   ├── participants-panel.js # 参加者リスト管理パネル
+│   │   ├── gl-panel.js          # GL管理パネル
+│   │   ├── gl-faculties-panel.js # 学部学科管理パネル
+│   │   ├── operator-panel.js    # テロップ操作パネル
+│   │   ├── dictionary-panel.js  # 辞書管理パネル
+│   │   ├── pickup-panel.js     # Pick Up Question管理パネル
+│   │   ├── logs-panel.js        # ログパネル
+│   │   ├── chat-panel.js        # チャットパネル
+│   │   └── side-telop-panel.js  # 右サイドテロップ操作パネル
+│   └── ...
+└── ...
+```
+
+この構造により：
+
+- UI パネルとファイル構造が 1 対 1 で対応
+- パネル実装を探すのが容易
+- 新しいパネルを追加する際の場所が明確
+- パネル名とファイル名が一致
+
+---
+
+**最終更新**: 2025 年
+**バージョン**: 1.2.0
