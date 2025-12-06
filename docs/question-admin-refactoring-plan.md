@@ -589,6 +589,23 @@
 - 参加者 CRUD 操作（`openParticipantEditor`, `saveParticipantEdits`, `handleDeleteParticipant`, `removeParticipantFromState`）
 - 参加者保存（`handleSave`）
 
+**フェーズ 5 完了**:
+
+フェーズ 5（日程管理機能の分離）が完了しました。`ScheduleManager` に以下の機能が移行されました：
+
+- 日程描画（`renderSchedules`）
+- 日程選択（`selectSchedule`）
+- 日程フォーム表示（`openScheduleForm`）
+- 日程追加（`createSchedule` / `handleAddSchedule`）
+- 日程更新（`updateSchedule` / `handleUpdateSchedule`）
+- 日程削除（`deleteSchedule` / `handleDeleteSchedule`）
+- フォーム値解決（`resolveScheduleFormValues`）
+
+**ファイルサイズ**:
+
+- `app.js`: 6,023 行 → 5,812 行（約 211 行削減）
+- `schedule-manager.js`: 478 行（新規作成）
+
 **残りの作業**:
 
 - [ ] 動作確認とテスト

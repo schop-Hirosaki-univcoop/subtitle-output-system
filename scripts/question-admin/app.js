@@ -86,12 +86,14 @@ import { PrintManager } from "./managers/print-manager.js";
 import { CsvManager } from "./managers/csv-manager.js";
 import { EventManager } from "./managers/event-manager.js";
 import { ParticipantManager } from "./managers/participant-manager.js";
+import { ScheduleManager } from "./managers/schedule-manager.js";
 
 let redirectingToIndex = false;
 let printManager = null;
 let csvManager = null;
 let eventManager = null;
 let participantManager = null;
+let scheduleManager = null;
 
 const glDataFetchCache = new Map();
 
@@ -3276,77 +3278,11 @@ function renderEvents() {
 }
 
 function renderSchedules() {
-  const list = dom.scheduleList;
-  if (!list) return;
-  list.innerHTML = "";
-
-  const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
-  if (!selectedEvent) {
-    if (dom.scheduleEmpty) dom.scheduleEmpty.hidden = true;
-    if (dom.scheduleDescription) {
-      dom.scheduleDescription.textContent = "イベントを選択すると、日程の一覧が表示されます。";
-    }
-    if (dom.addScheduleButton) dom.addScheduleButton.disabled = true;
+  // ScheduleManager に委譲
+  if (!scheduleManager) {
     return;
   }
-
-  if (dom.addScheduleButton) dom.addScheduleButton.disabled = false;
-  if (dom.scheduleDescription) {
-    dom.scheduleDescription.textContent = `イベント「${selectedEvent.name}」の日程を管理します。`;
-  }
-
-  if (!selectedEvent.schedules || !selectedEvent.schedules.length) {
-    if (dom.scheduleEmpty) dom.scheduleEmpty.hidden = false;
-    return;
-  }
-  if (dom.scheduleEmpty) dom.scheduleEmpty.hidden = true;
-
-  selectedEvent.schedules.forEach(schedule => {
-    const li = document.createElement("li");
-    li.className = "entity-item" + (schedule.id === state.selectedScheduleId ? " is-active" : "");
-    li.dataset.scheduleId = schedule.id;
-
-    const label = document.createElement("div");
-    label.className = "entity-label";
-    const nameEl = document.createElement("span");
-    nameEl.className = "entity-name";
-    nameEl.textContent = schedule.label || schedule.id;
-    const metaEl = document.createElement("span");
-    metaEl.className = "entity-meta";
-    const rangeText = describeScheduleRange(schedule);
-    const metaParts = [];
-    if (rangeText) metaParts.push(rangeText);
-    metaParts.push(`参加者 ${schedule.participantCount || 0} 名`);
-    metaEl.textContent = metaParts.join(" / ");
-    label.append(nameEl, metaEl);
-
-    const actions = document.createElement("div");
-    actions.className = "entity-actions";
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "btn-icon";
-    editBtn.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z\" fill=\"currentColor\"/></svg>";
-    editBtn.title = "日程を編集";
-    editBtn.addEventListener("click", evt => {
-      evt.stopPropagation();
-      openScheduleForm({ mode: "edit", schedule });
-    });
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "btn-icon";
-    deleteBtn.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z\"/></svg>";
-    deleteBtn.title = "日程を削除";
-    deleteBtn.addEventListener("click", evt => {
-      evt.stopPropagation();
-      handleDeleteSchedule(schedule.id, schedule.label).catch(err => console.error(err));
-    });
-    actions.append(editBtn, deleteBtn);
-
-    li.append(label, actions);
-    li.addEventListener("click", () => selectSchedule(schedule.id));
-    list.appendChild(li);
-  });
-
+  scheduleManager.renderSchedules();
 }
 
 function syncSaveButtonState() {
@@ -3875,104 +3811,14 @@ function selectEvent(eventId, options = {}) {
 }
 
 function selectSchedule(scheduleId, options = {}) {
-  const {
-    preserveStatus = false,
-    suppressParticipantLoad = false,
-    forceReload = false,
-    source = getSelectionBroadcastSource()
-  } = options || {};
-
-  const normalizedId = scheduleId ? String(scheduleId) : null;
-  const previousScheduleId = state.selectedScheduleId;
-  const shouldReload = forceReload || previousScheduleId !== normalizedId;
-
-  state.selectedScheduleId = normalizedId;
-  queueRelocationPrompt([], { replace: true });
-
-  const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
-  const schedule = normalizedId ? selectedEvent?.schedules?.find(s => s.id === normalizedId) : null;
-  if (schedule) {
-    const primaryDate = getSchedulePrimaryDate(schedule);
-    if (primaryDate) {
-      setCalendarPickedDate(formatDatePart(primaryDate), { updateInput: true });
-    }
-  } else if (!normalizedId) {
-    setCalendarPickedDate("", { updateInput: true });
+  // ScheduleManager に委譲
+  if (!scheduleManager) {
+    return;
   }
-
-  renderSchedules();
-
-  if (!normalizedId) {
-    state.participants = [];
-    state.participantTokenMap = new Map();
-    state.duplicateMatches = new Map();
-    state.duplicateGroups = new Map();
-    captureParticipantBaseline([], { ready: false });
-    renderParticipants();
-    syncSaveButtonState();
-  } else if (shouldReload) {
-    captureParticipantBaseline([], { ready: false });
-  }
-
-  updateParticipantContext({ preserveStatus });
-
-  const needsParticipantLoad = Boolean(
-    normalizedId &&
-    !suppressParticipantLoad &&
-    (shouldReload || !state.participantBaselineReady)
-  );
-
-  if (needsParticipantLoad) {
-    loadParticipants().catch(err => console.error(err));
-  }
-
-  broadcastSelectionChange({ source });
+  scheduleManager.selectSchedule(scheduleId, options);
 }
 
-function resolveScheduleFormValues({ label, location, date, startTime, endTime }) {
-  const trimmedLabel = normalizeKey(label || "");
-  if (!trimmedLabel) {
-    throw new Error("日程の表示名を入力してください。");
-  }
-
-  const normalizedLocation = String(location || "").trim();
-
-  const normalizedDate = normalizeDateInputValue(date);
-  if (!normalizedDate) {
-    throw new Error("日付を入力してください。");
-  }
-
-  const startTimeValue = String(startTime || "").trim();
-  const endTimeValue = String(endTime || "").trim();
-  if (!startTimeValue || !endTimeValue) {
-    throw new Error("開始と終了の時刻を入力してください。");
-  }
-
-  const startValueText = combineDateAndTime(normalizedDate, startTimeValue);
-  const endValueText = combineDateAndTime(normalizedDate, endTimeValue);
-  let startDate = parseDateTimeLocal(startValueText);
-  let endDate = parseDateTimeLocal(endValueText);
-  if (!startDate || !endDate) {
-    throw new Error("開始・終了時刻の形式が正しくありません。");
-  }
-
-  if (endDate <= startDate) {
-    endDate = new Date(endDate.getTime() + MS_PER_DAY);
-  }
-
-  const startValue = formatDateTimeLocal(startDate);
-  const endValue = formatDateTimeLocal(endDate);
-
-  return {
-    label: trimmedLabel,
-    location: normalizedLocation,
-    date: normalizedDate,
-    startValue,
-    endValue,
-    startTimeValue,
-    endTimeValue
-  };
-}
+// resolveScheduleFormValues は ScheduleManager に移行されました
 
 function openEventForm({ mode = "create", event = null } = {}) {
   // EventManager に委譲
@@ -3983,52 +3829,11 @@ function openEventForm({ mode = "create", event = null } = {}) {
 }
 
 function openScheduleForm({ mode = "create", schedule = null } = {}) {
-  if (!dom.scheduleForm) return;
-  dom.scheduleForm.reset();
-  dom.scheduleForm.dataset.mode = mode;
-  dom.scheduleForm.dataset.scheduleId = schedule?.id || "";
-  setFormError(dom.scheduleError);
-  if (dom.scheduleDialogTitle) {
-    dom.scheduleDialogTitle.textContent = mode === "edit" ? "日程を編集" : "日程を追加";
+  // ScheduleManager に委譲
+  if (!scheduleManager) {
+    return;
   }
-  const submitButton = dom.scheduleForm.querySelector("button[type='submit']");
-  if (submitButton) {
-    submitButton.textContent = mode === "edit" ? "保存" : "追加";
-  }
-
-  populateScheduleLocationOptions(schedule?.location || "");
-
-  const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
-  if (mode === "edit" && schedule) {
-    if (dom.scheduleLabelInput) dom.scheduleLabelInput.value = schedule.label || "";
-    if (dom.scheduleLocationInput) dom.scheduleLocationInput.value = schedule.location || "";
-    const dateValue = schedule.date || (schedule.startAt ? String(schedule.startAt).slice(0, 10) : "");
-    if (dom.scheduleDateInput) dom.scheduleDateInput.value = normalizeDateInputValue(dateValue);
-    const startTime = schedule.startAt ? String(schedule.startAt).slice(11, 16) : "";
-    const endTime = schedule.endAt ? String(schedule.endAt).slice(11, 16) : "";
-    if (dom.scheduleStartTimeInput) dom.scheduleStartTimeInput.value = startTime;
-    if (dom.scheduleEndTimeInput) dom.scheduleEndTimeInput.value = endTime;
-    setCalendarPickedDate(dom.scheduleDateInput?.value || dateValue || "", { updateInput: true });
-  } else {
-    if (dom.scheduleLabelInput) {
-      dom.scheduleLabelInput.value = selectedEvent?.name ? `${selectedEvent.name}` : "";
-    }
-    if (dom.scheduleLocationInput) {
-      dom.scheduleLocationInput.value = "";
-    }
-    if (dom.scheduleDateInput) {
-      dom.scheduleDateInput.value = calendarState.pickedDate || "";
-    }
-    setCalendarPickedDate(dom.scheduleDateInput?.value || calendarState.pickedDate || "", { updateInput: true });
-  }
-
-  const initialDateValue = dom.scheduleDateInput?.value || calendarState.pickedDate || "";
-  prepareScheduleDialogCalendar(initialDateValue);
-  if (dom.scheduleEndTimeInput) {
-    dom.scheduleEndTimeInput.min = dom.scheduleStartTimeInput?.value || "";
-  }
-  syncScheduleEndMin();
-  openDialog(dom.scheduleDialog);
+  scheduleManager.openScheduleForm({ mode, schedule });
 }
 
 async function handleAddEvent(name) {
@@ -4056,158 +3861,27 @@ async function handleDeleteEvent(eventId, eventName) {
 }
 
 async function handleAddSchedule({ label, location, date, startTime, endTime }) {
-  const eventId = state.selectedEventId;
-  if (!eventId) {
-    throw new Error("イベントを選択してください。");
+  // ScheduleManager に委譲
+  if (!scheduleManager) {
+    throw new Error("ScheduleManager is not initialized");
   }
-
-  const { label: trimmedLabel, location: normalizedLocation, date: normalizedDate, startValue, endValue } = resolveScheduleFormValues({
-    label,
-    location,
-    date,
-    startTime,
-    endTime
-  });
-
-  try {
-    const now = Date.now();
-    const event = state.events.find(evt => evt.id === eventId);
-    const existingSchedules = new Set((event?.schedules || []).map(schedule => schedule.id));
-    let scheduleId = generateShortId("sch_");
-    while (existingSchedules.has(scheduleId)) {
-      scheduleId = generateShortId("sch_");
-    }
-
-    await update(rootDbRef(), {
-      [`questionIntake/schedules/${eventId}/${scheduleId}`]: {
-        label: trimmedLabel,
-        location: normalizedLocation,
-        date: normalizedDate,
-        startAt: startValue,
-        endAt: endValue,
-        participantCount: 0,
-        createdAt: now,
-        updatedAt: now
-      },
-      [`questionIntake/events/${eventId}/updatedAt`]: now
-    });
-
-    await loadEvents({ preserveSelection: true });
-    selectEvent(eventId);
-    selectSchedule(scheduleId);
-    setCalendarPickedDate(normalizedDate, { updateInput: true });
-  } catch (error) {
-    console.error(error);
-    throw new Error(error.message || "日程の追加に失敗しました。");
-  }
+  return await scheduleManager.createSchedule({ label, location, date, startTime, endTime });
 }
 
 async function handleUpdateSchedule(scheduleId, { label, location, date, startTime, endTime }) {
-  const eventId = state.selectedEventId;
-  if (!eventId) {
-    throw new Error("イベントを選択してください。");
+  // ScheduleManager に委譲
+  if (!scheduleManager) {
+    throw new Error("ScheduleManager is not initialized");
   }
-  if (!scheduleId) {
-    throw new Error("日程IDが不明です。");
-  }
-
-  const { label: trimmedLabel, location: normalizedLocation, date: normalizedDate, startValue, endValue } = resolveScheduleFormValues({
-    label,
-    location,
-    date,
-    startTime,
-    endTime
-  });
-
-  try {
-    const now = Date.now();
-    await update(rootDbRef(), {
-      [`questionIntake/schedules/${eventId}/${scheduleId}/label`]: trimmedLabel,
-      [`questionIntake/schedules/${eventId}/${scheduleId}/location`]: normalizedLocation,
-      [`questionIntake/schedules/${eventId}/${scheduleId}/date`]: normalizedDate,
-      [`questionIntake/schedules/${eventId}/${scheduleId}/startAt`]: startValue,
-      [`questionIntake/schedules/${eventId}/${scheduleId}/endAt`]: endValue,
-      [`questionIntake/schedules/${eventId}/${scheduleId}/updatedAt`]: now,
-      [`questionIntake/events/${eventId}/updatedAt`]: now
-    });
-
-    await loadEvents({ preserveSelection: true });
-    selectEvent(eventId);
-    selectSchedule(scheduleId);
-    setCalendarPickedDate(normalizedDate, { updateInput: true });
-  } catch (error) {
-    console.error(error);
-    throw new Error(error.message || "日程の更新に失敗しました。");
-  }
+  return await scheduleManager.updateSchedule(scheduleId, { label, location, date, startTime, endTime });
 }
 
 async function handleDeleteSchedule(scheduleId, scheduleLabel) {
-  const eventId = state.selectedEventId;
-  if (!eventId) return;
-  const label = scheduleLabel || scheduleId;
-  const confirmed = await confirmAction({
-    title: "日程の削除",
-    description: `日程「${label}」と、紐づく参加者・専用リンクをすべて削除します。よろしいですか？`,
-    confirmLabel: "削除する",
-    cancelLabel: "キャンセル",
-    tone: "danger"
-  });
-
-  if (!confirmed) {
+  // ScheduleManager に委譲
+  if (!scheduleManager) {
     return;
   }
-
-  try {
-    const participantBranch = await fetchDbValue(`questionIntake/participants/${eventId}/${scheduleId}`);
-    const tokensToRemove = new Set();
-    if (participantBranch && typeof participantBranch === "object") {
-      Object.values(participantBranch).forEach(entry => {
-        const token = entry?.token;
-        if (token) tokensToRemove.add(String(token));
-      });
-    }
-
-    const now = Date.now();
-    const updates = {
-      [`questionIntake/schedules/${eventId}/${scheduleId}`]: null,
-      [`questionIntake/participants/${eventId}/${scheduleId}`]: null,
-      [`questionIntake/events/${eventId}/updatedAt`]: now
-    };
-
-    tokensToRemove.forEach(token => {
-      updates[`questionIntake/tokens/${token}`] = null;
-      state.knownTokens.delete(token);
-      delete state.tokenRecords[token];
-    });
-
-    await update(rootDbRef(), updates);
-
-    if (state.selectedScheduleId === scheduleId) {
-      state.selectedScheduleId = null;
-      state.participants = [];
-      state.participantTokenMap = new Map();
-      state.duplicateMatches = new Map();
-      state.duplicateGroups = new Map();
-      captureParticipantBaseline([], { ready: false });
-    }
-
-    if (state.eventParticipantCache instanceof Map) {
-      const cache = state.eventParticipantCache.get(eventId);
-      if (cache && typeof cache === "object") {
-        delete cache[scheduleId];
-        state.eventParticipantCache.set(eventId, cache);
-      }
-    }
-
-    await loadEvents({ preserveSelection: true });
-    renderParticipants();
-    updateParticipantContext();
-    state.tokenSnapshotFetchedAt = Date.now();
-    setUploadStatus(`日程「${label}」を削除しました。`, "success");
-  } catch (error) {
-    console.error(error);
-    setUploadStatus(error.message || "日程の削除に失敗しました。", "error");
-  }
+  return await scheduleManager.deleteSchedule(scheduleId, scheduleLabel);
 }
 
 // handleCsvChange, handleTeamCsvChange, downloadParticipantTemplate, downloadTeamTemplate は CsvManager に移行されました
@@ -5871,7 +5545,10 @@ function init() {
     hostIntegration,
     applyHostEvents,
     finalizeEventLoad,
-    renderSchedules,
+    renderSchedules: () => {
+      if (!scheduleManager) return;
+      scheduleManager.renderSchedules();
+    },
     renderParticipants,
     updateParticipantContext,
     loadGlDataForEvent,
@@ -5901,7 +5578,10 @@ function init() {
     getHostSelectionElement,
     loadGlDataForEvent,
     renderEvents,
-    renderSchedules,
+    renderSchedules: () => {
+      if (!scheduleManager) return;
+      scheduleManager.renderSchedules();
+    },
     updateParticipantContext,
     captureParticipantBaseline,
     syncSaveButtonState,
@@ -5947,6 +5627,55 @@ function init() {
     getScheduleRecord,
     loadEvents
   });
+  
+  // ScheduleManager を初期化
+  scheduleManager = new ScheduleManager({
+    dom,
+    state,
+    calendarState,
+    // 依存関数と定数
+    loadEvents: () => {
+      if (!eventManager) return Promise.resolve();
+      return eventManager.loadEvents();
+    },
+    selectEvent: (eventId) => {
+      if (!eventManager) return;
+      eventManager.selectEvent(eventId);
+    },
+    selectSchedule: (scheduleId, options) => {
+      // 循環参照を避けるため、ここで直接実装を呼び出す
+      if (!scheduleManager) return;
+      scheduleManager.selectSchedule(scheduleId, options);
+    },
+    setCalendarPickedDate,
+    renderParticipants: () => {
+      if (!participantManager) return;
+      participantManager.renderParticipants();
+    },
+    updateParticipantContext,
+    captureParticipantBaseline,
+    syncSaveButtonState,
+    queueRelocationPrompt,
+    getSelectionBroadcastSource,
+    populateScheduleLocationOptions,
+    prepareScheduleDialogCalendar,
+    syncScheduleEndMin,
+    openDialog,
+    closeDialog,
+    setFormError,
+    confirmAction,
+    setUploadStatus,
+    getScheduleRecord,
+    loadParticipants: (options) => {
+      if (!participantManager) return Promise.resolve();
+      return participantManager.loadParticipants(options);
+    },
+    broadcastSelectionChange,
+    selectScheduleSelf: null // 後で設定
+  });
+  
+  // 循環参照を避けるため、selectScheduleSelf を設定
+  scheduleManager.selectScheduleSelf = scheduleManager.selectSchedule.bind(scheduleManager);
   
   attachEventHandlers();
   setAuthUi(Boolean(state.user));

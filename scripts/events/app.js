@@ -191,8 +191,8 @@ export class EventAdminApp {
     this.applyMetaNote();
     this.chat = new EventChat(this);
     this.operatorMode = OPERATOR_MODE_TELOP;
-    // auth のアタッチ後に ToolCoordinator を初期化する
-    this.tools = new ToolCoordinator(this);
+    // auth のアタッチ後に ToolCoordinator を初期化する
+    this.tools = new ToolCoordinator(this);
     // イベント管理パネルを初期化
     this.eventPanel = new EventPanelManager(this);
     // 日程管理パネルを初期化
@@ -2308,7 +2308,7 @@ export class EventAdminApp {
     // SchedulePanelManager に委譲
     this.schedulePanel.renderScheduleList();
     // app.js 固有の処理を実行
-    this.updateScheduleActionPanelState();
+        this.updateScheduleActionPanelState();
   }
 
   updateEventActionPanelState() {

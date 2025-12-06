@@ -204,12 +204,13 @@ scripts/events/
 ```
 scripts/question-admin/
 ├── index.js              # エントリーポイント（2行）✅
-├── app.js                # メインアプリケーション（6,023行）❌ リファクタリング進行中
+├── app.js                # メインアプリケーション（5,812行）❌ リファクタリング進行中
 ├── managers/
 │   ├── print-manager.js      # 印刷機能（1,004行）✅
 │   ├── csv-manager.js        # CSV 処理（351行）✅
 │   ├── event-manager.js      # イベント管理（405行）✅
-│   └── participant-manager.js # 参加者管理（1,155行）✅
+│   ├── participant-manager.js # 参加者管理（1,155行）✅
+│   └── schedule-manager.js   # 日程管理（478行）✅
 ├── participants.js       # 参加者管理（1,169行）✅
 ├── calendar.js           # カレンダー機能
 ├── dialog.js             # ダイアログ機能
@@ -223,9 +224,9 @@ scripts/question-admin/
 
 **問題点**:
 
-1. **`app.js` が巨大（6,023 行、リファクタリング進行中）**
-   - 元の 8,180 行から約 2,157 行削減
-   - 印刷機能、CSV 処理、イベント管理、参加者管理機能（読み込み、描画、CRUD、保存）を Manager クラスに分離済み
+1. **`app.js` が巨大（5,812 行、リファクタリング進行中）**
+   - 元の 8,180 行から約 2,368 行削減
+   - 印刷機能、CSV 処理、イベント管理、参加者管理機能、日程管理機能を Manager クラスに分離済み
    - 単一責任の原則に違反（改善中）
 
 **評価**:
@@ -420,9 +421,9 @@ scripts/
    - テストが困難
    - 保守性が低い
 
-2. **`scripts/question-admin/app.js` が 6,023 行（リファクタリング進行中）**
+2. **`scripts/question-admin/app.js` が 5,812 行（リファクタリング進行中）**
 
-   - 開発標準の約 4.0 倍（元の 8,180 行から約 2,157 行削減）
+   - 開発標準の約 3.9 倍（元の 8,180 行から約 2,368 行削減）
    - 単一責任の原則に違反（改善中）
    - テストが困難（改善中）
    - 保守性が低い（改善中）
@@ -435,8 +436,13 @@ scripts/
        - 参加者描画（`renderParticipants`）
        - 参加者 CRUD 操作（`openParticipantEditor`, `saveParticipantEdits`, `handleDeleteParticipant`, `removeParticipantFromState`）
        - 参加者保存（`handleSave`）
+     - ✅ フェーズ 5: ScheduleManager に日程管理機能を分離（478 行）完了
+       - 日程描画（`renderSchedules`）
+       - 日程選択（`selectSchedule`）
+       - 日程フォーム表示（`openScheduleForm`）
+       - 日程 CRUD 操作（`createSchedule`, `updateSchedule`, `deleteSchedule`）
+       - フォーム値解決（`resolveScheduleFormValues`）
      - ⏳ 残りの機能:
-       - 日程管理機能（`renderSchedules`, `selectSchedule`, `openScheduleForm`, `handleAddSchedule`, `handleUpdateSchedule`, `handleDeleteSchedule` など、約 430-500 行）
        - メール送信機能（`handleSendParticipantMail`, `applyMailSendResults`, `buildMailStatusMessage` など、約 400-500 行）
        - 認証・初期化機能（`initAuthWatcher`, `verifyEnrollment`, `fetchAuthorizedEmails` など、約 250-300 行）
        - リロケーション機能（`queueRelocationPrompt`, `renderRelocationPrompt` など、約 200-300 行）
@@ -517,12 +523,13 @@ scripts/events/
 ```
 scripts/question-admin/
 ├── index.js
-├── app.js                    # QuestionAdminApp（初期化とルーティング、6,023行→目標: 3,000行以下）
+├── app.js                    # QuestionAdminApp（初期化とルーティング、5,812行→目標: 3,000行以下）
 ├── managers/
 │   ├── print-manager.js      # 印刷機能（1,004行）✅ 完了
 │   ├── csv-manager.js        # CSV 処理（351行）✅ 完了
 │   ├── event-manager.js      # イベント管理（405行）✅ 完了
-│   └── participant-manager.js # 参加者管理（1,155行）✅ 完了
+│   ├── participant-manager.js # 参加者管理（1,155行）✅ 完了
+│   └── schedule-manager.js   # 日程管理（478行）✅ 完了
 ├── participants.js           # 参加者関連ユーティリティ（1,169行）✅
 ├── calendar.js               # 既存
 ├── dialog.js                 # 既存
@@ -540,7 +547,7 @@ scripts/question-admin/
 - ✅ フェーズ 2: CSV 処理機能の分離（CsvManager）完了
 - ✅ フェーズ 3: イベント管理機能の分離（EventManager）完了
 - ✅ フェーズ 4: 参加者管理機能の分離（ParticipantManager）完了
-- ⏳ フェーズ 5: 日程管理機能の分離（ScheduleManager）未着手
+- ✅ フェーズ 5: 日程管理機能の分離（ScheduleManager）完了
 - ⏳ フェーズ 6: メール送信機能の分離（MailManager）未着手
 - ⏳ フェーズ 7: 認証・初期化機能の分離（AuthManager）未着手
 - ⏳ フェーズ 8: リロケーション機能の分離（RelocationManager）未着手
@@ -548,8 +555,8 @@ scripts/question-admin/
 **手順**:
 
 1. ✅ `app.js` の機能を分析し、責務を特定（完了）
-2. ✅ 各 Manager クラスを作成（4 つ完了、残り 4 つ）
-3. ⏳ 段階的に機能を移行（4 フェーズ完了、残り 4 フェーズ）
+2. ✅ 各 Manager クラスを作成（5 つ完了、残り 3 つ）
+3. ⏳ 段階的に機能を移行（5 フェーズ完了、残り 3 フェーズ）
 4. ⏳ テストを実施（未着手）
 
 ### 3. `scripts/events/tools/gl.js` のリファクタリング（優先度: 中）
@@ -609,7 +616,7 @@ scripts/login/
    - リスク: 高（大規模な変更）
 
 2. **`scripts/question-admin/app.js` のリファクタリング**（進行中）
-   - 期間: 2-3 週間（約 50% 完了）
+   - 期間: 2-3 週間（約 62.5% 完了）
    - 影響範囲: 質問管理画面全体
    - リスク: 高（大規模な変更）
    - **完了したフェーズ**:
@@ -617,8 +624,8 @@ scripts/login/
      - ✅ フェーズ 2: CSV 処理機能の分離（CsvManager）
      - ✅ フェーズ 3: イベント管理機能の分離（EventManager）
      - ✅ フェーズ 4: 参加者管理機能の分離（ParticipantManager）
+     - ✅ フェーズ 5: 日程管理機能の分離（ScheduleManager）
    - **残りのフェーズ**:
-     - ⏳ 日程管理機能の分離（ScheduleManager）
      - ⏳ メール送信機能の分離（MailManager）
      - ⏳ 認証・初期化機能の分離（AuthManager）
      - ⏳ リロケーション機能の分離（RelocationManager）
@@ -689,7 +696,7 @@ scripts/login/
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
 - ❌ `scripts/events/app.js` - 10,180 行、要改善
-- ❌ `scripts/question-admin/app.js` - 6,023 行、要改善（リファクタリング進行中、元の 8,180 行から約 2,157 行削減）
+- ❌ `scripts/question-admin/app.js` - 5,812 行、要改善（リファクタリング進行中、元の 8,180 行から約 2,368 行削減）
 - ⚠️ `scripts/events/tools/gl.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
 - ⚠️ `scripts/login.js` - 664 行、要検討
