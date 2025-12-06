@@ -132,7 +132,7 @@ Firebase Realtime Database（RTDB）のデータ構造が第 3 正規形（3NF�
 
 **確認箇所**:
 
-- `scripts/events/tools/gl.js:2395`（コメント: "完全正規化: eventName は削除（eventId から取得可能）"）
+- `scripts/events/panels/gl-panel.js`（コメント: "完全正規化: eventName は削除（eventId から取得可能）"）
 
 ## 正規化が完了したノード
 
