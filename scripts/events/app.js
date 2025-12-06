@@ -57,11 +57,9 @@ import { ToolCoordinator } from "./tool-coordinator.js";
 import { EventChat } from "./panels/chat-panel.js";
 import { EventPanelManager } from "./panels/event-panel.js";
 import { SchedulePanelManager } from "./panels/schedule-panel.js";
-import { consumeAuthTransfer } from "../shared/auth-transfer.js";
-import {
-  loadAuthPreflightContext,
-  preflightContextMatchesUser
-} from "../shared/auth-preflight.js";
+import { EventAuthManager } from "./managers/auth-manager.js";
+import { EventStateManager } from "./managers/state-manager.js";
+// consumeAuthTransfer, loadAuthPreflightContext, preflightContextMatchesUser は EventAuthManager に移行されました
 import { appendAuthDebugLog, replayAuthDebugLog } from "../shared/auth-debug-log.js";
 import {
   DEFAULT_PRINT_SETTINGS,
@@ -143,28 +141,28 @@ export class EventAdminApp {
     this.dom = queryDom();
     this.scheduleCalendar = createScheduleDialogCalendarController(this.dom);
     this.api = createApiClient(auth, onAuthStateChanged);
-    this.auth = auth; // Firebase auth サービスをインスタンスにアタッチ
-    this.authUnsubscribe = null;
-    this.currentUser = null;
-    this.events = [];
+    this.auth = auth; // Firebase auth サービスをインスタンスにアタッチ（後方互換性のため保持）
+    this.authUnsubscribe = null; // EventAuthManager に移行（後方互換性のため保持）
+    this.currentUser = null; // EventAuthManager に移行（後方互換性のため保持）
+    this.events = []; // EventStateManager に移行（後方互換性のため保持）
     this.scheduleLocationHistory = new Set();
     this.lastScheduleLocation = "";
     this.lastScheduleStartTime = "";
     this.lastScheduleEndTime = "";
-    this.selectedEventId = "";
-    this.eventBatchSet = new Set();
-    this.schedules = [];
-    this.selectedScheduleId = "";
-    this.scheduleBatchSet = new Set();
-    this.selectionListeners = new Set();
-    this.eventListeners = new Set();
-    this.participantHostInterface = null;
-    this.suppressSelectionNotifications = false;
-    this.lastSelectionSignature = "";
-    this.lastSelectionSource = "";
-    this.forceSelectionBroadcast = true;
+    this.selectedEventId = ""; // EventStateManager に移行（後方互換性のため保持）
+    this.eventBatchSet = new Set(); // EventStateManager に移行（後方互換性のため保持）
+    this.schedules = []; // EventStateManager に移行（後方互換性のため保持）
+    this.selectedScheduleId = ""; // EventStateManager に移行（後方互換性のため保持）
+    this.scheduleBatchSet = new Set(); // EventStateManager に移行（後方互換性のため保持）
+    this.selectionListeners = new Set(); // EventStateManager に移行（後方互換性のため保持）
+    this.eventListeners = new Set(); // EventStateManager に移行（後方互換性のため保持）
+    this.participantHostInterface = null; // EventStateManager に移行（後方互換性のため保持）
+    this.suppressSelectionNotifications = false; // EventStateManager に移行（後方互換性のため保持）
+    this.lastSelectionSignature = ""; // EventStateManager に移行（後方互換性のため保持）
+    this.lastSelectionSource = ""; // EventStateManager に移行（後方互換性のため保持）
+    this.forceSelectionBroadcast = true; // EventStateManager に移行（後方互換性のため保持）
     this.stage = "events";
-    this.preflightContext = null;
+    this.preflightContext = null; // EventAuthManager に移行（後方互換性のため保持）
     this.stageHistory = new Set(["events"]);
     this.activePanel = "events";
     this.activeDialog = null;
@@ -172,10 +170,10 @@ export class EventAdminApp {
     this.confirmResolver = null;
     this.redirectingToIndex = false;
     this.fullscreenPromptShown = false;
-    this.hasSeenAuthenticatedUser = Boolean(auth?.currentUser);
-    this.authResumeFallbackTimer = 0;
-    this.authResumeGracePeriodMs = AUTH_RESUME_FALLBACK_DELAY_MS;
-    this.authResumeTimerHost = getTimerHost();
+    this.hasSeenAuthenticatedUser = Boolean(auth?.currentUser); // EventAuthManager に移行（後方互換性のため保持）
+    this.authResumeFallbackTimer = 0; // EventAuthManager に移行（後方互換性のため保持）
+    this.authResumeGracePeriodMs = AUTH_RESUME_FALLBACK_DELAY_MS; // EventAuthManager に移行（後方互換性のため保持）
+    this.authResumeTimerHost = getTimerHost(); // EventAuthManager に移行（後方互換性のため保持）
     this.eventsLoadingTracker = new LoadingTracker({
       onChange: (state) => this.applyEventsLoadingState(state)
     });
@@ -191,8 +189,12 @@ export class EventAdminApp {
     this.applyMetaNote();
     this.chat = new EventChat(this);
     this.operatorMode = OPERATOR_MODE_TELOP;
-    // auth のアタッチ後に ToolCoordinator を初期化する
-    this.tools = new ToolCoordinator(this);
+    // 認証管理を初期化
+    this.authManager = new EventAuthManager(this);
+    // 状態管理を初期化
+    this.stateManager = new EventStateManager(this);
+    // auth のアタッチ後に ToolCoordinator を初期化する
+    this.tools = new ToolCoordinator(this);
     // イベント管理パネルを初期化
     this.eventPanel = new EventPanelManager(this);
     // 日程管理パネルを初期化
@@ -255,7 +257,7 @@ export class EventAdminApp {
     this.activeMobilePanel = "";
     this.chatUnreadCount = 0;
     this.chatScrollUnreadCount = 0;
-    this.authTransferAttempted = false;
+    this.authTransferAttempted = false; // EventAuthManager に移行（後方互換性のため保持）
     this.chatAcknowledged = true;
     this.chatMessages = [];
     this.chatLatestMessageId = "";
@@ -272,6 +274,30 @@ export class EventAdminApp {
     this.handleScheduleFallbackSubmit = this.handleScheduleFallbackSubmit.bind(this);
     this.handleOperatorModeSubmit = this.handleOperatorModeSubmit.bind(this);
     this.resolveOperatorModeChoice = this.resolveOperatorModeChoice.bind(this);
+    // EventAuthManager のプロパティを app に同期
+    this.currentUser = this.authManager.currentUser;
+    this.preflightContext = this.authManager.preflightContext;
+    this.hasSeenAuthenticatedUser = this.authManager.hasSeenAuthenticatedUser;
+    this.authResumeFallbackTimer = this.authManager.authResumeFallbackTimer;
+    this.authResumeGracePeriodMs = this.authManager.authResumeGracePeriodMs;
+    this.authResumeTimerHost = this.authManager.authResumeTimerHost;
+    this.authTransferAttempted = this.authManager.authTransferAttempted;
+    
+    // EventStateManager のプロパティを app に同期
+    this.events = this.stateManager.events;
+    this.selectedEventId = this.stateManager.selectedEventId;
+    this.eventBatchSet = this.stateManager.eventBatchSet;
+    this.schedules = this.stateManager.schedules;
+    this.selectedScheduleId = this.stateManager.selectedScheduleId;
+    this.scheduleBatchSet = this.stateManager.scheduleBatchSet;
+    this.selectionListeners = this.stateManager.selectionListeners;
+    this.eventListeners = this.stateManager.eventListeners;
+    this.participantHostInterface = this.stateManager.participantHostInterface;
+    this.suppressSelectionNotifications = this.stateManager.suppressSelectionNotifications;
+    this.lastSelectionSignature = this.stateManager.lastSelectionSignature;
+    this.lastSelectionSource = this.stateManager.lastSelectionSource;
+    this.forceSelectionBroadcast = this.stateManager.forceSelectionBroadcast;
+    
     appendAuthDebugLog("events:app-constructed", {
       hasCurrentUser: Boolean(this.currentUser)
     });
@@ -313,68 +339,8 @@ export class EventAdminApp {
   }
 
   buildFlowState() {
-    const event = this.getSelectedEvent();
-    const schedule = this.getSelectedSchedule();
-    const presence = this.operatorPresenceEntries.map((entry) => ({
-      entryId: entry.entryId,
-      uid: entry.uid,
-      displayName: entry.displayName,
-      scheduleId: entry.scheduleId,
-      scheduleKey: entry.scheduleKey,
-      scheduleLabel: entry.scheduleLabel,
-      isSelf: Boolean(entry.isSelf),
-      mode: entry.mode,
-      updatedAt: entry.updatedAt
-    }));
-    const conflict = this.scheduleConflictContext
-      ? {
-          eventId: this.scheduleConflictContext.eventId,
-          hasConflict: this.scheduleConflictContext.hasConflict,
-          hasOtherOperators: this.scheduleConflictContext.hasOtherOperators,
-          hostScheduleId: this.scheduleConflictContext.hostScheduleId,
-          hostScheduleKey: this.scheduleConflictContext.hostScheduleKey,
-          defaultKey: this.scheduleConflictContext.defaultKey,
-          options: this.scheduleConflictContext.options.map((option) => ({
-            key: option.key,
-            scheduleId: option.scheduleId,
-            scheduleLabel: option.scheduleLabel,
-            scheduleRange: option.scheduleRange,
-            containsSelf: option.containsSelf,
-            memberCount: option.members?.length || 0
-          }))
-        }
-      : null;
-    return {
-      stage: this.stage,
-      activePanel: this.activePanel,
-      pendingNavigationTarget: this.pendingNavigationTarget || "",
-      operatorMode: this.operatorMode,
-      currentUser: this.currentUser
-        ? {
-            uid: this.currentUser.uid || "",
-            displayName: this.currentUser.displayName || "",
-            email: this.currentUser.email || ""
-          }
-        : null,
-      selectedEvent: event
-        ? {
-            id: event.id,
-            name: event.name || "",
-            scheduleCount: Array.isArray(event.schedules) ? event.schedules.length : 0
-          }
-        : null,
-      selectedSchedule: schedule
-        ? {
-            id: schedule.id,
-            label: schedule.label || "",
-            startAt: schedule.startAt || "",
-            endAt: schedule.endAt || ""
-          }
-        : null,
-      operatorPresenceEventId: this.operatorPresenceEventId || "",
-      operatorPresence: presence,
-      scheduleConflict: conflict
-    };
+    // EventStateManager に委譲
+    return this.stateManager.buildFlowState();
   }
 
   logFlowState(message, detail = null) {
@@ -515,6 +481,7 @@ export class EventAdminApp {
     });
     if (auth && auth.currentUser) {
       this.currentUser = auth.currentUser;
+      this.authManager.currentUser = this.currentUser;
       this.updateUserLabel();
     }
     this.bindEvents();
@@ -558,9 +525,17 @@ export class EventAdminApp {
   }
 
   resetFlowState() {
-    this.selectedEventId = "";
-    this.schedules = [];
-    this.selectedScheduleId = "";
+    // EventStateManager の状態をリセット
+    this.stateManager.resetState();
+    // app の状態を EventStateManager と同期
+    this.events = this.stateManager.events;
+    this.selectedEventId = this.stateManager.selectedEventId;
+    this.eventBatchSet = this.stateManager.eventBatchSet;
+    this.schedules = this.stateManager.schedules;
+    this.selectedScheduleId = this.stateManager.selectedScheduleId;
+    this.scheduleBatchSet = this.stateManager.scheduleBatchSet;
+    this.forceSelectionBroadcast = this.stateManager.forceSelectionBroadcast;
+    
     this.stage = "events";
     this.stageHistory = new Set(["events"]);
     this.activePanel = "events";
@@ -569,7 +544,6 @@ export class EventAdminApp {
     this.clearOperatorPresenceState();
     this.eventCountNote = "";
     this.stageNote = "";
-    this.forceSelectionBroadcast = true;
     this.tools.resetFlowState();
     this.chatUnreadCount = 0;
     this.chatScrollUnreadCount = 0;
@@ -1042,16 +1016,9 @@ export class EventAdminApp {
   }
 
   observeAuthState() {
-    if (this.authUnsubscribe) {
-      this.authUnsubscribe();
-      this.authUnsubscribe = null;
-    }
-    this.authUnsubscribe = onAuthStateChanged(auth, (user) => {
-      this.handleAuthState(user).catch((error) => {
-        logError("Failed to handle event admin auth state", error);
-        this.showAlert(error.message || "初期化に失敗しました。時間をおいて再度お試しください。");
-      });
-    });
+    // EventAuthManager に委譲
+    this.authManager.observeAuthState();
+    this.authUnsubscribe = this.authManager.authUnsubscribe;
   }
 
   showLoggedOutState() {
@@ -1114,252 +1081,54 @@ export class EventAdminApp {
   }
 
   loadPreflightContextForUser(user) {
-    if (!user) {
-      appendAuthDebugLog("events:preflight-context:skip", { reason: "no-user" }, { level: "debug" });
-      return null;
-    }
-    const context = loadAuthPreflightContext();
-    if (!context) {
-      appendAuthDebugLog("events:preflight-context:missing");
-      return null;
-    }
-    if (!preflightContextMatchesUser(context, user)) {
-      appendAuthDebugLog("events:preflight-context:identity-mismatch", {
-        contextUid: context?.uid || null,
-        userUid: user?.uid || null
-      });
-      return null;
-    }
-    appendAuthDebugLog("events:preflight-context:loaded", {
-      questionCount: context?.mirror?.questionCount ?? null
-    });
-    return context;
+    // EventAuthManager に委譲
+    return this.authManager.loadPreflightContextForUser(user);
   }
 
   async tryResumeAuth() {
-    if (this.authTransferAttempted) {
-      appendAuthDebugLog("events:auth-resume:skipped", { reason: "already-attempted" }, { level: "debug" });
-      return false;
-    }
-    this.authTransferAttempted = true;
-    appendAuthDebugLog("events:auth-resume:start");
-
-    let transfer = consumeAuthTransfer();
-    if (!this.isValidTransferPayload(transfer)) {
-      const fallbackContext = loadAuthPreflightContext();
-      appendAuthDebugLog("events:auth-resume:transfer-missing", {
-        hasFallbackContext: Boolean(fallbackContext)
-      });
-      const fallbackCredential = fallbackContext?.credential;
-      if (fallbackCredential && (fallbackCredential.idToken || fallbackCredential.accessToken)) {
-        appendAuthDebugLog("events:auth-resume:fallback-credential", {
-          hasIdToken: Boolean(fallbackCredential.idToken),
-          hasAccessToken: Boolean(fallbackCredential.accessToken)
-        });
-        transfer = {
-          providerId: fallbackCredential.providerId || GoogleAuthProvider.PROVIDER_ID,
-          signInMethod: fallbackCredential.signInMethod || "",
-          idToken: fallbackCredential.idToken || "",
-          accessToken: fallbackCredential.accessToken || "",
-          timestamp: Date.now()
-        };
-      }
-    }
-
-    if (!this.isValidTransferPayload(transfer)) {
-      appendAuthDebugLog("events:auth-resume:invalid-payload", null, { level: "warn" });
-      return false;
-    }
-
-    const providerId = transfer.providerId || "";
-    if (providerId && providerId !== GoogleAuthProvider.PROVIDER_ID) {
-      logError("Unsupported auth transfer provider", new Error(providerId));
-      appendAuthDebugLog("events:auth-resume:unsupported-provider", { providerId }, { level: "error" });
-      return false;
-    }
-
-    const idToken = transfer.idToken || "";
-    const accessToken = transfer.accessToken || "";
-    const credential = GoogleAuthProvider.credential(
-      idToken || undefined,
-      accessToken || undefined
-    );
-    if (!credential) {
-      return false;
-    }
-
-    try {
-      await signInWithCredential(auth, credential);
-      appendAuthDebugLog("events:auth-resume:success");
-      return true;
-    } catch (error) {
-      logError("Failed to resume auth from transfer payload", error);
-      appendAuthDebugLog(
-        "events:auth-resume:error",
-        { code: error?.code || null, message: error?.message || null },
-        { level: "error" }
-      );
-      return false;
-    }
+    // EventAuthManager に委譲
+    return await this.authManager.tryResumeAuth();
   }
 
   isValidTransferPayload(payload) {
-    if (!payload || typeof payload !== "object") {
-      return false;
-    }
-    const hasToken = Boolean((payload.idToken || "").trim()) || Boolean((payload.accessToken || "").trim());
-    return hasToken;
+    // EventAuthManager に委譲
+    return this.authManager.isValidTransferPayload(payload);
   }
 
   scheduleAuthResumeFallback(reason = "unknown") {
-    if (this.authResumeFallbackTimer) {
-      appendAuthDebugLog("events:auth-resume:fallback-already-scheduled", { reason }, { level: "debug" });
-      return;
-    }
-    const host = this.authResumeTimerHost || getTimerHost();
-    const delayMs = Number.isFinite(this.authResumeGracePeriodMs)
-      ? Math.max(0, this.authResumeGracePeriodMs)
-      : 0;
-    this.authResumeFallbackTimer = host.setTimeout(() => {
-      this.authResumeFallbackTimer = 0;
-      if (auth?.currentUser) {
-        appendAuthDebugLog("events:auth-resume:fallback-aborted", {
-          reason,
-          uid: auth.currentUser.uid || null
-        });
-        return;
-      }
-      appendAuthDebugLog("events:auth-resume:fallback-trigger", { reason });
-      this.showLoggedOutState();
-    }, delayMs);
-    appendAuthDebugLog("events:auth-resume:fallback-scheduled", { reason, delayMs });
+    // EventAuthManager に委譲
+    this.authManager.scheduleAuthResumeFallback(reason);
+    this.authResumeFallbackTimer = this.authManager.authResumeFallbackTimer;
   }
 
   cancelAuthResumeFallback(reason = "unknown") {
-    if (!this.authResumeFallbackTimer) {
-      return;
-    }
-    const host = this.authResumeTimerHost || getTimerHost();
-    host.clearTimeout(this.authResumeFallbackTimer);
-    this.authResumeFallbackTimer = 0;
-    appendAuthDebugLog("events:auth-resume:fallback-cancelled", { reason }, { level: "debug" });
+    // EventAuthManager に委譲
+    this.authManager.cancelAuthResumeFallback(reason);
+    this.authResumeFallbackTimer = this.authManager.authResumeFallbackTimer;
   }
 
   async handleAuthState(user) {
-    appendAuthDebugLog("events:handle-auth-state", {
-      uid: user?.uid || null
-    });
-    this.currentUser = user;
-    this.chat.handleAuthChange(user);
-    this.startChatReadListener(user);
-    this.updateUserLabel();
-    this.preflightContext = this.loadPreflightContextForUser(user);
-    if (!user) {
-      this.fullscreenPromptShown = false;
-      if (this.hasSeenAuthenticatedUser) {
-        appendAuthDebugLog("events:handle-auth-state:signed-out");
-        this.cancelAuthResumeFallback("signed-out");
-        this.clearHostPresence();
-        this.events = [];
-        this.renderEvents();
-        this.notifyEventListeners();
-        this.notifySelectionListeners("host");
-        this.clearAlert();
-        this.showLoggedOutState();
-        return;
-      }
-      if (await this.tryResumeAuth()) {
-        appendAuthDebugLog("events:handle-auth-state:resuming");
-        return;
-      }
-      this.scheduleAuthResumeFallback("initial-null-user");
-      this.clearHostPresence();
-      this.events = [];
-      this.renderEvents();
-      this.notifyEventListeners();
-      this.notifySelectionListeners("host");
-      this.clearAlert();
-      return;
-    }
-
-    this.hasSeenAuthenticatedUser = true;
-    this.cancelAuthResumeFallback("user-present");
-    appendAuthDebugLog("events:handle-auth-state:user-present", {
-      uid: user.uid || null
-    });
-    this.showLoggedInState();
-    this.clearAlert();
-    this.promptFullscreenChoice();
-
-    try {
-      this.beginEventsLoading("権限を確認しています…");
-      await this.ensureAdminAccess();
-      this.updateEventsLoadingMessage("イベント情報を読み込んでいます…");
-      await this.loadEvents();
-      this.updateEventSummary();
-      this.updateScheduleSummary();
-      this.updateStageHeader();
-      this.updateSelectionNotes();
-      this.tools.preloadOperatorGlobals();
-    } catch (error) {
-      logError("Event admin initialization failed", error);
-      if (this.isPermissionError(error)) {
-        const message =
-          (error instanceof Error && error.message) ||
-          "アクセス権限がありません。管理者に確認してください。";
-        this.showAlert(message);
-        await this.safeSignOut();
-        return;
-      }
-      const fallback = "イベント情報の読み込みに失敗しました。時間をおいて再度お試しください。";
-      const message = error instanceof Error && error.message ? error.message : fallback;
-      this.showAlert(message || fallback);
-    } finally {
-      this.endEventsLoading();
-      this.clearLoadingIndicators();
-      if (user) {
-        this.syncHostPresence("auth-refresh");
-      }
-    }
+    // EventAuthManager に委譲
+    await this.authManager.handleAuthState(user);
+    // EventAuthManager のプロパティを app に同期
+    this.currentUser = this.authManager.currentUser;
+    this.preflightContext = this.authManager.preflightContext;
+    this.hasSeenAuthenticatedUser = this.authManager.hasSeenAuthenticatedUser;
   }
 
   async ensureAdminAccess() {
-    if (!this.api) {
-      return;
-    }
-    if (this.preflightContext?.admin?.ensuredAt) {
-      return;
-    }
-    try {
-      await this.api.apiPost({ action: "ensureAdmin" });
-    } catch (error) {
-      const rawMessage = error instanceof Error ? error.message : String(error || "");
-      let message = "権限の確認に失敗しました。時間をおいて再度お試しください。";
-      if (/not in users sheet/i.test(rawMessage)) {
-        message = "あなたのアカウントにはこのページへのアクセス権限がありません。管理者に確認してください。";
-      }
-      const err = new Error(message);
-      err.code = "EVENT_INDEX_ACCESS_DENIED";
-      err.cause = error;
-      throw err;
-    }
+    // EventAuthManager に委譲
+    return await this.authManager.ensureAdminAccess();
   }
 
   async safeSignOut() {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.warn("Failed to sign out after permission error:", error);
-    }
+    // EventAuthManager に委譲
+    return await this.authManager.safeSignOut();
   }
 
   isPermissionError(error) {
-    if (!error) return false;
-    if (error.code === "EVENT_INDEX_ACCESS_DENIED") return true;
-    const code = typeof error.code === "string" ? error.code : "";
-    if (code.includes("PERMISSION")) return true;
-    const message = error instanceof Error ? error.message : String(error || "");
-    return /permission/i.test(message) || message.includes("権限");
+    // EventAuthManager に委譲
+    return this.authManager.isPermissionError(error);
   }
 
   async loadEvents() {
@@ -1369,8 +1138,9 @@ export class EventAdminApp {
     const previousEventId = this.selectedEventId;
     const previousScheduleId = this.selectedScheduleId;
 
-    // eventPanel の events を app の events に同期
+    // eventPanel の events を app と EventStateManager に同期
     this.events = this.eventPanel.events;
+    this.stateManager.events = this.events;
     // eventPanel の selectedEventId と eventBatchSet を app と同期
     this.eventPanel.selectedEventId = this.selectedEventId;
     this.eventPanel.eventBatchSet = this.eventBatchSet;
@@ -1426,9 +1196,11 @@ export class EventAdminApp {
   }
 
   renderEvents() {
-    // eventPanel の selectedEventId と eventBatchSet を同期
+    // eventPanel の selectedEventId と eventBatchSet を EventStateManager と同期
     this.eventPanel.selectedEventId = this.selectedEventId;
     this.eventPanel.eventBatchSet = this.eventBatchSet;
+    this.stateManager.selectedEventId = this.selectedEventId;
+    this.stateManager.eventBatchSet = this.eventBatchSet;
     // EventPanelManager に委譲
     this.eventPanel.renderEvents();
     // app.js 固有の処理を実行
@@ -1569,8 +1341,10 @@ export class EventAdminApp {
     const desiredId = preferredId || this.selectedEventId;
     if (desiredId && availableIds.has(desiredId)) {
       this.selectedEventId = desiredId;
+      this.stateManager.selectedEventId = desiredId;
     } else {
       this.selectedEventId = "";
+      this.stateManager.selectedEventId = "";
     }
   }
 
@@ -1595,7 +1369,8 @@ export class EventAdminApp {
     }
 
     this.selectedEventId = normalized;
-    // eventPanel の selectedEventId を同期
+    // EventStateManager と eventPanel の selectedEventId を同期
+    this.stateManager.selectedEventId = normalized;
     this.eventPanel.selectedEventId = normalized;
     const changed = previous !== normalized;
     if (changed) {
@@ -1656,6 +1431,7 @@ export class EventAdminApp {
     const desiredId = preferredId || this.selectedScheduleId;
     if (desiredId && availableIds.has(desiredId)) {
       this.selectedScheduleId = desiredId;
+      this.stateManager.selectedScheduleId = desiredId;
       this.logFlowState("利用可能な日程選択を維持しました", {
         scheduleId: this.selectedScheduleId,
         preferredScheduleId: preferredId || ""
@@ -1663,6 +1439,7 @@ export class EventAdminApp {
     } else {
       const previousScheduleId = this.selectedScheduleId;
       this.selectedScheduleId = "";
+      this.stateManager.selectedScheduleId = "";
       this.tools.resetContext({ clearDataset: true });
       this.logFlowState("利用可能な日程が見つからないため選択をクリアしました", {
         previousScheduleId: previousScheduleId || "",
@@ -1692,44 +1469,8 @@ export class EventAdminApp {
   }
 
   getCurrentSelectionContext() {
-    const event = this.getSelectedEvent();
-    const selectedSchedule = this.getSelectedSchedule();
-    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
-    const committedScheduleLabel = ensureString(this.hostCommittedScheduleLabel);
-    const committedSchedule = committedScheduleId ? this.getCommittedSchedule() : null;
-    const schedule = selectedSchedule || committedSchedule || null;
-    const fallbackScheduleId = ensureString(this.selectedScheduleId) || committedScheduleId;
-    const scheduleId = ensureString(schedule?.id) || fallbackScheduleId;
-    const scheduleLabel = ensureString(schedule?.label) || committedScheduleLabel || scheduleId;
-    const startAt = ensureString(schedule?.startAt) || ensureString(committedSchedule?.startAt);
-    const endAt = ensureString(schedule?.endAt) || ensureString(committedSchedule?.endAt);
-    const location = ensureString(schedule?.location) || ensureString(committedSchedule?.location);
-    const committedScheduleKey = committedScheduleId
-      ? this.derivePresenceScheduleKey(
-          ensureString(event?.id || ""),
-          { scheduleId: committedScheduleId, scheduleLabel: committedScheduleLabel },
-          ensureString(this.hostPresenceSessionId)
-        )
-      : "";
-    const scheduleKey = this.derivePresenceScheduleKey(
-      ensureString(event?.id || ""),
-      { scheduleId, scheduleLabel },
-      ensureString(this.hostPresenceSessionId)
-    );
-    return {
-      eventId: event?.id || "",
-      eventName: event?.name || event?.id || "",
-      scheduleId,
-      scheduleLabel,
-      startAt,
-      endAt,
-      location,
-      operatorMode: this.operatorMode,
-      committedScheduleId,
-      committedScheduleLabel,
-      committedScheduleKey,
-      scheduleKey
-    };
+    // EventStateManager に委譲
+    return this.stateManager.getCurrentSelectionContext();
   }
 
   resolveHostScheduleContext(eventId = "", { scheduleMap = null } = {}) {
@@ -2111,116 +1852,46 @@ export class EventAdminApp {
   }
 
   getParticipantEventsSnapshot() {
-    return this.events.map((event) => ({
-      ...event,
-      schedules: Array.isArray(event.schedules)
-        ? event.schedules.map((schedule) => ({ ...schedule }))
-        : []
-    }));
+    // EventStateManager に委譲
+    return this.stateManager.getParticipantEventsSnapshot();
   }
 
   addSelectionListener(listener) {
-    if (typeof listener !== "function") {
-      return () => {};
-    }
-    this.selectionListeners.add(listener);
-    this.forceSelectionBroadcast = true;
-    return () => {
-      this.selectionListeners.delete(listener);
-    };
+    // EventStateManager に委譲
+    return this.stateManager.addSelectionListener(listener);
   }
 
   addEventListener(listener) {
-    if (typeof listener !== "function") {
-      return () => {};
-    }
-    this.eventListeners.add(listener);
-    return () => {
-      this.eventListeners.delete(listener);
-    };
+    // EventStateManager に委譲
+    return this.stateManager.addEventListener(listener);
   }
 
   notifySelectionListeners(source = "host") {
-    if (this.suppressSelectionNotifications) {
-      this.logParticipantAction("選択通知は抑制設定のため送信しません", { source });
-      return;
-    }
-    const detail = { ...this.getCurrentSelectionContext(), source };
-    const signature = [
-      detail.eventId,
-      detail.scheduleId,
-      detail.eventName,
-      detail.scheduleLabel,
-      detail.startAt,
-      detail.endAt
-    ].join("::");
-    if (
-      !this.forceSelectionBroadcast &&
-      signature === this.lastSelectionSignature &&
-      source === this.lastSelectionSource
-    ) {
-      this.logParticipantAction("前回と同じ内容のため選択通知を省略しました", detail);
-      return;
-    }
-    this.lastSelectionSignature = signature;
-    this.lastSelectionSource = source;
-    this.forceSelectionBroadcast = false;
-    this.logParticipantAction("選択内容をリスナーに通知します", detail);
-    this.selectionListeners.forEach((listener) => {
-      try {
-        listener(detail);
-      } catch (error) {
-        logError("Selection listener failed", error);
-      }
-    });
+    // EventStateManager に委譲
+    this.stateManager.notifySelectionListeners(source);
+    // EventStateManager のプロパティを app に同期
+    this.lastSelectionSignature = this.stateManager.lastSelectionSignature;
+    this.lastSelectionSource = this.stateManager.lastSelectionSource;
+    this.forceSelectionBroadcast = this.stateManager.forceSelectionBroadcast;
   }
 
   notifyEventListeners() {
-    const snapshot = this.getParticipantEventsSnapshot();
-    this.eventListeners.forEach((listener) => {
-      try {
-        listener(snapshot);
-      } catch (error) {
-        logError("Event listener failed", error);
-      }
-    });
+    // EventStateManager に委譲
+    this.stateManager.notifyEventListeners();
   }
 
   applySelectionFromParticipant(detail = {}) {
-    const eventId = ensureString(detail?.eventId);
-    const scheduleId = ensureString(detail?.scheduleId);
-    const previousSuppression = this.suppressSelectionNotifications;
-    this.suppressSelectionNotifications = true;
-    this.logParticipantAction("参加者ツールからの選択反映リクエストを受け取りました", {
-      eventId,
-      scheduleId,
-      source: detail?.source || "participants"
-    });
-    try {
-      if (eventId || (!eventId && detail?.eventId === "")) {
-        this.selectEvent(eventId);
-      }
-      if (scheduleId || (!scheduleId && detail?.scheduleId === "")) {
-        this.selectSchedule(scheduleId);
-      }
-    } finally {
-      this.suppressSelectionNotifications = previousSuppression;
-    }
-    this.notifySelectionListeners(detail?.source || "participants");
+    // EventStateManager に委譲
+    this.stateManager.applySelectionFromParticipant(detail);
+    // EventStateManager のプロパティを app に同期
+    this.suppressSelectionNotifications = this.stateManager.suppressSelectionNotifications;
   }
 
   getParticipantHostInterface() {
-    if (!this.participantHostInterface) {
-      this.logParticipantAction("参加者ツール用ホストインターフェースを初期化します");
-      this.participantHostInterface = {
-        getSelection: () => this.getCurrentSelectionContext(),
-        getEvents: () => this.getParticipantEventsSnapshot(),
-        subscribeSelection: (listener) => this.addSelectionListener(listener),
-        subscribeEvents: (listener) => this.addEventListener(listener),
-        setSelection: (detail) => this.applySelectionFromParticipant(detail || {})
-      };
-    }
-    return this.participantHostInterface;
+    // EventStateManager に委譲
+    const interface = this.stateManager.getParticipantHostInterface();
+    this.participantHostInterface = interface;
+    return interface;
   }
 
   selectSchedule(scheduleId) {
@@ -2239,7 +1910,8 @@ export class EventAdminApp {
     }
 
     this.selectedScheduleId = normalized;
-    // schedulePanel の selectedScheduleId を同期
+    // EventStateManager と schedulePanel の selectedScheduleId を同期
+    this.stateManager.selectedScheduleId = normalized;
     this.schedulePanel.selectedScheduleId = normalized;
     const changed = previous !== normalized;
     const selectedSchedule = this.getSelectedSchedule();
@@ -2275,11 +1947,14 @@ export class EventAdminApp {
   updateScheduleStateFromSelection(preferredScheduleId = "") {
     const event = this.getSelectedEvent();
     this.schedules = event ? [...event.schedules] : [];
-    // schedulePanel の schedules を同期
+    // EventStateManager と schedulePanel の schedules を同期
+    this.stateManager.schedules = this.schedules;
     this.schedulePanel.schedules = this.schedules;
-    // schedulePanel の selectedScheduleId と scheduleBatchSet を同期
+    // schedulePanel の selectedScheduleId と scheduleBatchSet を EventStateManager と同期
     this.schedulePanel.selectedScheduleId = this.selectedScheduleId;
     this.schedulePanel.scheduleBatchSet = this.scheduleBatchSet;
+    this.stateManager.selectedScheduleId = this.selectedScheduleId;
+    this.stateManager.scheduleBatchSet = this.scheduleBatchSet;
     this.logFlowState("イベント選択に基づいて日程一覧を更新します", {
       selectedEventId: event?.id || "",
       scheduleCount: this.schedules.length,
@@ -2302,9 +1977,11 @@ export class EventAdminApp {
   }
 
   renderScheduleList() {
-    // schedulePanel の selectedScheduleId と scheduleBatchSet を同期
+    // schedulePanel の selectedScheduleId と scheduleBatchSet を EventStateManager と同期
     this.schedulePanel.selectedScheduleId = this.selectedScheduleId;
     this.schedulePanel.scheduleBatchSet = this.scheduleBatchSet;
+    this.stateManager.selectedScheduleId = this.selectedScheduleId;
+    this.stateManager.scheduleBatchSet = this.scheduleBatchSet;
     // SchedulePanelManager に委譲
     this.schedulePanel.renderScheduleList();
     // app.js 固有の処理を実行
@@ -2391,8 +2068,10 @@ export class EventAdminApp {
     }
     const selectedId = this.selectedEventId;
     this.eventBatchSet.clear();
+    this.stateManager.eventBatchSet.clear();
     if (selectedId && batchIds.includes(selectedId)) {
       this.selectedEventId = "";
+      this.stateManager.selectedEventId = "";
     }
     this.updateEventActionPanelState();
     try {
@@ -2423,8 +2102,10 @@ export class EventAdminApp {
     }
     const selectedId = this.selectedScheduleId;
     this.scheduleBatchSet.clear();
+    this.stateManager.scheduleBatchSet.clear();
     if (selectedId && batchIds.includes(selectedId)) {
       this.selectedScheduleId = "";
+      this.stateManager.selectedScheduleId = "";
     }
     this.updateScheduleActionPanelState();
     try {
@@ -6265,6 +5946,10 @@ export class EventAdminApp {
   }
 
   cleanup() {
+    // EventAuthManager のクリーンアップ
+    if (this.authManager) {
+      this.authManager.cleanup();
+    }
     this.cancelAuthResumeFallback("cleanup");
     this.clearOperatorPresenceState();
     if (typeof document !== "undefined") {
@@ -6288,8 +5973,10 @@ export class EventAdminApp {
       this.dom.eventList.removeEventListener("focusin", this.handleEventListFocus);
     }
     this.closeMobilePanel({ restoreFocus: false });
-    this.selectionListeners.clear();
-    this.eventListeners.clear();
+    // EventStateManager のクリーンアップ
+    if (this.stateManager) {
+      this.stateManager.cleanup();
+    }
     this.teardownChatLayoutObservers();
     this.stopChatReadListener();
     this.chat.dispose();
@@ -8091,6 +7778,10 @@ export class EventAdminApp {
   }
 
   cleanup() {
+    // EventAuthManager のクリーンアップ
+    if (this.authManager) {
+      this.authManager.cleanup();
+    }
     this.cancelAuthResumeFallback("cleanup");
     this.clearOperatorPresenceState();
     if (typeof document !== "undefined") {
@@ -8114,8 +7805,10 @@ export class EventAdminApp {
       this.dom.eventList.removeEventListener("focusin", this.handleEventListFocus);
     }
     this.closeMobilePanel({ restoreFocus: false });
-    this.selectionListeners.clear();
-    this.eventListeners.clear();
+    // EventStateManager のクリーンアップ
+    if (this.stateManager) {
+      this.stateManager.cleanup();
+    }
     this.teardownChatLayoutObservers();
     this.stopChatReadListener();
     this.chat.dispose();
