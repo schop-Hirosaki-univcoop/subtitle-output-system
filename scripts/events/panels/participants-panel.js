@@ -1,4 +1,4 @@
-// tools/participant.js: 参加者データを扱うツール連携処理と状態同期を担当します。
+// participants-panel.js: 参加者リスト管理パネルの実装です。
 import { PANEL_CONFIG } from "../config.js";
 import {
   ensureString,

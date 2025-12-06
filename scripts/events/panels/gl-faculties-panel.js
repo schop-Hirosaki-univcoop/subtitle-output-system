@@ -5,8 +5,8 @@ import {
   serverTimestamp
 } from "../../operator/firebase.js";
 import { ensureString, formatDateTimeLocal, logError } from "../helpers.js";
-import { GlFacultyBuilder } from "./gl-faculty-builder.js";
-import { normalizeFacultyList } from "./gl-faculty-utils.js";
+import { GlFacultyBuilder } from "../tools/gl-faculty-builder.js";
+import { normalizeFacultyList } from "../tools/gl-faculty-utils.js";
 
 function createSignature(list) {
   try {

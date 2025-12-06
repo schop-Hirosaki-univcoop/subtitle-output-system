@@ -13,7 +13,7 @@ import {
   glIntakeFacultyCatalogRef
 } from "../../operator/firebase.js";
 import { ensureString, formatDateTimeLocal, logError } from "../helpers.js";
-import { normalizeFacultyList } from "./gl-faculty-utils.js";
+import { normalizeFacultyList } from "../tools/gl-faculty-utils.js";
 import { buildGlShiftTablePrintHtml, logPrintWarn } from "../../shared/print-utils.js";
 
 const ASSIGNMENT_VALUE_ABSENT = "__absent";

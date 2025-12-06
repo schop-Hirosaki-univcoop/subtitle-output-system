@@ -39,12 +39,12 @@ import {
 } from "../shared/auth-preflight.js";
 import * as Questions from "./questions.js";
 import { resolveGenreLabel } from "./utils.js";
-import * as Dictionary from "./dictionary.js";
-import * as Logs from "./logs.js";
+import * as Dictionary from "./panels/dictionary-panel.js";
+import * as Logs from "./panels/logs-panel.js";
 import * as Display from "./display.js";
 import * as UIHelpers from "./ui-helpers.js";
-import * as Pickup from "./pickup.js";
-import * as SideTelop from "./side-telop.js";
+import * as Pickup from "./panels/pickup-panel.js";
+import * as SideTelop from "./panels/side-telop-panel.js";
 import { ContextManager } from "./context-manager.js";
 import { AuthManager } from "./auth-manager.js";
 import { PresenceManager } from "./presence-manager.js";

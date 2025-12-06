@@ -1,4 +1,4 @@
-// chat.js: 管理チャットの送受信とUI更新を制御するリアルタイム連携モジュールです。
+// chat-panel.js: チャットパネルの実装です。 管理チャットの送受信とUI更新を制御するリアルタイム連携モジュールです。
 import {
   operatorChatMessagesRef,
   onValue,

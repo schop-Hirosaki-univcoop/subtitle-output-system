@@ -1,7 +1,7 @@
-// logs.js: 操作ログの取得・整形・表示を司るモジュールです。
-import { LOGS_STATE_KEY } from "./constants.js";
-import { escapeHtml, getLogLevel, parseLogTimestamp } from "./utils.js";
-import { database, updateTriggerRef, onValue, ref, get, query, orderByChild, limitToLast } from "./firebase.js";
+// logs-panel.js: 操作ログパネルの実装です。 操作ログの取得・整形・表示を司るモジュールです。
+import { LOGS_STATE_KEY } from "../constants.js";
+import { escapeHtml, getLogLevel, parseLogTimestamp } from "../utils.js";
+import { database, updateTriggerRef, onValue, ref, get, query, orderByChild, limitToLast } from "../firebase.js";
 
 const LOGS_LOADER_STEPS = [
   { label: "初期化", message: "操作ログパネルを初期化しています…" },

@@ -1,7 +1,7 @@
-// dictionary.js: ルビ辞書のロードと検索、編集操作をまとめたモジュールです。
-import { database, dictionaryRef, onValue, ref, set, update, get } from "./firebase.js";
-import { DICTIONARY_STATE_KEY } from "./constants.js";
-import { escapeHtml } from "./utils.js";
+// dictionary-panel.js: ルビ辞書管理パネルのロードと検索、編集操作をまとめたモジュールです。
+import { database, dictionaryRef, onValue, ref, set, update, get } from "../firebase.js";
+import { DICTIONARY_STATE_KEY } from "../constants.js";
+import { escapeHtml } from "../utils.js";
 
 const DICTIONARY_LOADER_STEPS = [
   { label: "初期化", message: "辞書パネルを初期化しています…" },

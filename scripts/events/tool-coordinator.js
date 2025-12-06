@@ -1,10 +1,10 @@
 // tool-coordinator.js: イベント向けツール同期のハブとなるコーディネーターモジュールです。
 import { logError } from "./helpers.js";
 import { normalizeOperatorMode } from "../shared/operator-modes.js";
-import { OperatorToolManager } from "./tools/operator.js";
-import { ParticipantToolManager } from "./tools/participant.js";
-import { GlToolManager } from "./tools/gl.js";
-import { GlFacultyAdminManager } from "./tools/gl-faculty-admin.js";
+import { OperatorToolManager } from "./panels/operator-panel.js";
+import { ParticipantToolManager } from "./panels/participants-panel.js";
+import { GlToolManager } from "./panels/gl-panel.js";
+import { GlFacultyAdminManager } from "./panels/gl-faculties-panel.js";
 import { prepareEmbeddedFrames, resetEmbeddedFrames } from "./tools/frame-utils.js";
 
 export class ToolCoordinator {

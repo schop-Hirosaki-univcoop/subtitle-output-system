@@ -49,8 +49,8 @@
 | `scripts/shared/print-utils.js`          | 1,341  | ✅ 許容範囲                |
 | `scripts/operator/channel-manager.js`    | 1,314  | ✅ 許容範囲                |
 | `scripts/question-admin/participants.js` | 1,169  | ✅ 許容範囲                |
-| `scripts/operator/pickup.js`             | 1,125  | ✅ 許容範囲                |
-| `scripts/operator/dictionary.js`         | 1,109  | ✅ 許容範囲                |
+| `scripts/operator/pickup-panel.js`       | 1,125  | ✅ 許容範囲                |
+| `scripts/operator/dictionary-panel.js`   | 1,109  | ✅ 許容範囲                |
 
 ### 構造パターンの分類
 
@@ -97,11 +97,11 @@ scripts/operator/
 ├── presence-manager.js   # PresenceManager（741行）✅
 ├── ui-renderer.js        # UIRenderer（378行）✅
 ├── questions.js          # 質問表示機能（1,734行、やや大きい）
-├── pickup.js             # ピックアップ機能（1,125行）✅
-├── dictionary.js         # 辞書機能（1,109行）✅
-├── side-telop.js         # サイドテロップ機能（549行）✅
+├── pickup-panel.js       # ピックアップ機能（1,125行）✅
+├── dictionary-panel.js   # 辞書機能（1,109行）✅
+├── side-telop-panel.js   # サイドテロップ機能（549行）✅
 ├── display.js            # 表示制御（202行）✅
-├── logs.js               # ログ機能（264行）✅
+├── logs-panel.js         # ログ機能（264行）✅
 ├── firebase.js           # Firebase設定
 ├── api-client.js         # API クライアント
 ├── dom.js                # DOM操作
@@ -139,17 +139,17 @@ scripts/events/
 ├── index.js              # エントリーポイント（8行）✅
 ├── app.js                # EventAdminApp クラス（10,180行）❌
 ├── tool-coordinator.js   # ToolCoordinator（342行）✅
-├── chat.js               # EventChat（926行）✅
+├── chat-panel.js         # EventChat（926行）✅
 ├── config.js             # 設定定数
 ├── dom.js                # DOM操作（262行）✅
 ├── helpers.js            # ヘルパー関数
 ├── loading-tracker.js    # ローディング追跡
 ├── schedule-calendar.js  # スケジュールカレンダー
 └── tools/
-    ├── operator.js       # OperatorToolManager
-    ├── participant.js    # ParticipantToolManager（729行）✅
-    ├── gl.js             # GlToolManager（3,249行）❌
-    ├── gl-faculty-admin.js
+    ├── operator-panel.js       # OperatorToolManager
+    ├── participants-panel.js   # ParticipantToolManager（729行）✅
+    ├── gl-panel.js             # GlToolManager（3,249行）❌
+    ├── gl-faculties-panel.js
     ├── gl-faculty-builder.js
     ├── gl-faculty-utils.js
     └── frame-utils.js
@@ -836,19 +836,19 @@ UI 上には以下のパネルが存在しますが、ファイル構造や命�
 
 ### 現状の対応関係
 
-| UI パネル                   | ファイル構造                               | 対応状況 | 問題点                                       |
-| --------------------------- | ------------------------------------------ | -------- | -------------------------------------------- |
-| イベント管理パネル          | `scripts/events/app.js` (10,180 行)        | ⚠️ 混在  | `events` と `schedules` が同じファイルに混在 |
-| 日程管理パネル              | `scripts/events/app.js` (10,180 行)        | ⚠️ 混在  | `events` と `schedules` が同じファイルに混在 |
-| 参加者リスト管理パネル      | `scripts/events/tools/participant.js`      | ✅ 対応  | 適切に分離されている                         |
-| GL 管理パネル               | `scripts/events/tools/gl.js` (3,249 行)    | ✅ 対応  | ファイルが大きいが対応している               |
-| 学部学科管理パネル          | `scripts/events/tools/gl-faculty-admin.js` | ✅ 対応  | 適切に分離されている                         |
-| テロップ操作パネル          | `scripts/events/tools/operator.js`         | ✅ 対応  | 適切に分離されている                         |
-| 辞書管理パネル              | `scripts/operator/dictionary.js`           | ✅ 対応  | 適切に分離されている                         |
-| Pick Up Question 管理パネル | `scripts/operator/pickup.js`               | ✅ 対応  | 適切に分離されている                         |
-| ログパネル                  | `scripts/operator/logs.js`                 | ✅ 対応  | 適切に分離されている                         |
-| チャットパネル              | `scripts/events/chat.js`                   | ✅ 対応  | 適切に分離されている                         |
-| 右サイドテロップ操作パネル  | `scripts/operator/side-telop.js`           | ✅ 対応  | 適切に分離されている                         |
+| UI パネル                   | ファイル構造                                  | 対応状況 | 問題点                                       |
+| --------------------------- | --------------------------------------------- | -------- | -------------------------------------------- |
+| イベント管理パネル          | `scripts/events/app.js` (10,180 行)           | ⚠️ 混在  | `events` と `schedules` が同じファイルに混在 |
+| 日程管理パネル              | `scripts/events/app.js` (10,180 行)           | ⚠️ 混在  | `events` と `schedules` が同じファイルに混在 |
+| 参加者リスト管理パネル      | `scripts/events/tools/participants-panel.js`  | ✅ 対応  | 適切に分離されている                         |
+| GL 管理パネル               | `scripts/events/tools/gl-panel.js` (3,249 行) | ✅ 対応  | ファイルが大きいが対応している               |
+| 学部学科管理パネル          | `scripts/events/tools/gl-faculties-panel.js`  | ✅ 対応  | 適切に分離されている                         |
+| テロップ操作パネル          | `scripts/events/tools/operator-panel.js`      | ✅ 対応  | 適切に分離されている                         |
+| 辞書管理パネル              | `scripts/operator/dictionary-panel.js`        | ✅ 対応  | 適切に分離されている                         |
+| Pick Up Question 管理パネル | `scripts/operator/pickup-panel.js`            | ✅ 対応  | 適切に分離されている                         |
+| ログパネル                  | `scripts/operator/logs-panel.js`              | ✅ 対応  | 適切に分離されている                         |
+| チャットパネル              | `scripts/events/chat-panel.js`                | ✅ 対応  | 適切に分離されている                         |
+| 右サイドテロップ操作パネル  | `scripts/operator/side-telop-panel.js`        | ✅ 対応  | 適切に分離されている                         |
 
 ### 問題点の詳細
 
@@ -930,10 +930,10 @@ scripts/events/
 
 scripts/operator/
 ├── panels/
-│   ├── dictionary-panel.js   # dictionary.js から移動
-│   ├── pickup-panel.js       # pickup.js から移動
-│   ├── logs-panel.js         # logs.js から移動
-│   └── side-telop-panel.js   # side-telop.js から移動
+│   ├── dictionary-panel.js   # dictionary-panel.js から移動（予定）
+│   ├── pickup-panel.js       # pickup-panel.js から移動（予定）
+│   ├── logs-panel.js         # logs-panel.js から移動（予定）
+│   └── side-telop-panel.js   # side-telop-panel.js から移動（予定）
 └── ...
 ```
 
@@ -942,23 +942,19 @@ scripts/operator/
 **現状**:
 
 - UI パネル名: `participants`, `gl`, `gl-faculties`, `operator`, `dictionary`, `pickup`, `logs`, `chat`, `side-telop`
-- ファイル名: `participant.js`, `gl.js`, `gl-faculty-admin.js`, `operator.js`, `dictionary.js`, `pickup.js`, `logs.js`, `chat.js`, `side-telop.js`
+- ファイル名: `participants-panel.js`, `gl-panel.js`, `gl-faculties-panel.js`, `operator-panel.js`, `dictionary-panel.js`, `pickup-panel.js`, `logs-panel.js`, `chat-panel.js`, `side-telop-panel.js` ✅
 
 **問題点**:
 
-- 一部のファイル名がパネル名と完全に一致していない（例: `gl-faculty-admin.js` vs `gl-faculties`）
-- ファイル名からパネル実装であることが明確でない
+- ✅ ファイル名に `-panel` サフィックスを追加済み
+- ✅ パネル名とファイル名が一致している
 
-**改善提案**:
+**完了した改善**:
 
-- ファイル名に `-panel` または `-panel-manager` サフィックスを追加
-- パネル名とファイル名を一致させる
-
-例:
-
-- `participant.js` → `participants-panel.js` または `participants-panel-manager.js`
-- `gl-faculty-admin.js` → `gl-faculties-panel.js` または `gl-faculties-panel-manager.js`
-- `dictionary.js` → `dictionary-panel.js` または `dictionary-panel-manager.js`
+- ✅ `participant.js` → `participants-panel.js` ✅
+- ✅ `gl-faculty-admin.js` → `gl-faculties-panel.js` ✅
+- ✅ `dictionary.js` → `dictionary-panel.js` ✅
+- ✅ その他のパネルファイルもすべて `-panel.js` サフィックスを追加済み
 
 ### 推奨される改善アクション
 
@@ -975,10 +971,10 @@ scripts/operator/
 
 #### 優先度: 中
 
-3. **命名の統一**
+3. **命名の統一** ✅ 完了
 
-   - ファイル名に `-panel` サフィックスを追加
-   - パネル名とファイル名を一致させる
+   - ✅ ファイル名に `-panel` サフィックスを追加済み
+   - ✅ パネル名とファイル名が一致している
 
 4. **ドキュメントの整備**
    - UI パネルとファイル構造の対応関係を明確にドキュメント化

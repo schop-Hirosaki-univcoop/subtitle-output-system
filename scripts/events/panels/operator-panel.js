@@ -1,4 +1,4 @@
-// tools/operator.js: オペレーター用ツールの状態管理と同期処理を提供します。
+// operator-panel.js: テロップ操作パネルの実装です。
 import { logError } from "../helpers.js";
 
 /**

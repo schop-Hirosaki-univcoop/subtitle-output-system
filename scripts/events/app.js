@@ -53,7 +53,7 @@ import {
   FOCUSABLE_SELECTOR
 } from "./config.js";
 import { ToolCoordinator } from "./tool-coordinator.js";
-import { EventChat } from "./chat.js";
+import { EventChat } from "./panels/chat-panel.js";
 import { consumeAuthTransfer } from "../shared/auth-transfer.js";
 import {
   loadAuthPreflightContext,

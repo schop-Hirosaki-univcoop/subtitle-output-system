@@ -1,7 +1,7 @@
-// pickup.js: Pick Up Question機能の抽選・管理ロジックをまとめています。
-import { GENRE_OPTIONS, GENRE_ALL_VALUE } from "./constants.js";
-import { pickupQuestionsRef, database, ref, update, onValue, get, getQuestionStatusRef } from "./firebase.js";
-import { escapeHtml, resolveGenreLabel, formatRelative } from "./utils.js";
+// pickup-panel.js: Pick Up Question 管理パネルの実装です。 Pick Up Question機能の抽選・管理ロジックをまとめています。
+import { GENRE_OPTIONS, GENRE_ALL_VALUE } from "../constants.js";
+import { pickupQuestionsRef, database, ref, update, onValue, get, getQuestionStatusRef } from "../firebase.js";
+import { escapeHtml, resolveGenreLabel, formatRelative } from "../utils.js";
 
 const ALL_FILTER_VALUE = GENRE_ALL_VALUE;
 
