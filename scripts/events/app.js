@@ -29,7 +29,6 @@ import {
   ensureString,
   formatDateTimeLocal,
   logError,
-  formatParticipantCount,
   collectParticipantTokens
 } from "./helpers.js";
 import {
@@ -59,6 +58,7 @@ import { SchedulePanelManager } from "./panels/schedule-panel.js";
 import { EventAuthManager } from "./managers/auth-manager.js";
 import { EventStateManager } from "./managers/state-manager.js";
 import { EventNavigationManager } from "./managers/navigation-manager.js";
+import { EventUIRenderer } from "./managers/ui-renderer.js";
 // consumeAuthTransfer, loadAuthPreflightContext, preflightContextMatchesUser は EventAuthManager に移行されました
 import { appendAuthDebugLog, replayAuthDebugLog } from "../shared/auth-debug-log.js";
 import {
@@ -195,6 +195,8 @@ export class EventAdminApp {
     this.stateManager = new EventStateManager(this);
     // 画面遷移制御を初期化
     this.navigationManager = new EventNavigationManager(this);
+    // UI描画を初期化
+    this.uiRenderer = new EventUIRenderer(this);
     // auth のアタッチ後に ToolCoordinator を初期化する
     this.tools = new ToolCoordinator(this);
     // イベント管理パネルを初期化
@@ -1840,31 +1842,8 @@ export class EventAdminApp {
   }
 
   syncOperatorModeUi() {
-    const hasEvent = Boolean(this.selectedEventId);
-    if (this.dom.eventSummaryActions) {
-      this.dom.eventSummaryActions.hidden = !hasEvent;
-    }
-    const copyButton = this.dom.eventSummaryCopyButton;
-    if (copyButton) {
-      const hasEventSelection = Boolean(this.selectedEventId);
-      copyButton.disabled = !hasEventSelection;
-      if (!hasEventSelection) {
-        copyButton.classList.remove("is-success", "is-error");
-        const defaultLabel = copyButton.dataset.defaultLabel || "表示URLをコピー";
-        copyButton.textContent = defaultLabel;
-        if (this.displayUrlCopyTimer) {
-          clearTimeout(this.displayUrlCopyTimer);
-          this.displayUrlCopyTimer = 0;
-        }
-        if (this.dom.eventSummaryCopyStatus) {
-          this.dom.eventSummaryCopyStatus.textContent = "";
-        }
-      }
-    }
-    const gotoScheduleButton = this.dom.eventSummaryGotoScheduleButton;
-    if (gotoScheduleButton) {
-      gotoScheduleButton.disabled = !this.selectedEventId;
-    }
+    // EventUIRenderer に委譲
+    this.uiRenderer.syncOperatorModeUi();
   }
 
   getParticipantEventsSnapshot() {
@@ -2005,63 +1984,13 @@ export class EventAdminApp {
   }
 
   updateEventActionPanelState() {
-    const selected = this.getSelectedEvent();
-    const batchIds = Array.from(this.eventBatchSet);
-    const hasBatch = batchIds.length > 0;
-    const panel = this.dom.eventActionPanel;
-    if (panel) {
-      panel.hidden = false;
-      panel.classList.toggle("is-idle", !selected && !hasBatch);
-    }
-    if (this.dom.eventEditButton) {
-      this.dom.eventEditButton.disabled = !selected || hasBatch;
-    }
-    if (this.dom.eventDeleteButton) {
-      this.dom.eventDeleteButton.disabled = !selected || hasBatch;
-    }
-    if (this.dom.eventBatchDeleteButton) {
-      this.dom.eventBatchDeleteButton.hidden = !hasBatch;
-      this.dom.eventBatchDeleteButton.disabled = !hasBatch;
-    }
-    if (this.dom.eventSelectedInfo) {
-      if (hasBatch) {
-        this.dom.eventSelectedInfo.textContent = `${batchIds.length}件を選択中`;
-      } else if (selected) {
-        this.dom.eventSelectedInfo.textContent = selected.name || selected.id;
-      } else {
-        this.dom.eventSelectedInfo.textContent = "イベントを選択してください";
-      }
-    }
+    // EventUIRenderer に委譲
+    this.uiRenderer.updateEventActionPanelState();
   }
 
   updateScheduleActionPanelState() {
-    const selected = this.getSelectedSchedule();
-    const batchIds = Array.from(this.scheduleBatchSet);
-    const hasBatch = batchIds.length > 0;
-    const panel = this.dom.scheduleActionPanel;
-    if (panel) {
-      panel.hidden = false;
-      panel.classList.toggle("is-idle", !selected && !hasBatch);
-    }
-    if (this.dom.scheduleEditButton) {
-      this.dom.scheduleEditButton.disabled = !selected || hasBatch;
-    }
-    if (this.dom.scheduleDeleteButton) {
-      this.dom.scheduleDeleteButton.disabled = !selected || hasBatch;
-    }
-    if (this.dom.scheduleBatchDeleteButton) {
-      this.dom.scheduleBatchDeleteButton.hidden = !hasBatch;
-      this.dom.scheduleBatchDeleteButton.disabled = !hasBatch;
-    }
-    if (this.dom.scheduleSelectedInfo) {
-      if (hasBatch) {
-        this.dom.scheduleSelectedInfo.textContent = `${batchIds.length}件を選択中`;
-      } else if (selected) {
-        this.dom.scheduleSelectedInfo.textContent = selected.label || selected.id;
-      } else {
-        this.dom.scheduleSelectedInfo.textContent = "日程を選択してください";
-      }
-    }
+    // EventUIRenderer に委譲
+    this.uiRenderer.updateScheduleActionPanelState();
   }
 
   async handleEventBatchDelete() {
@@ -2133,25 +2062,8 @@ export class EventAdminApp {
   }
 
   updateEventSummary() {
-    const event = this.getSelectedEvent();
-    if (this.dom.eventSummaryName) {
-      this.dom.eventSummaryName.textContent = event ? event.name || event.id : "—";
-    }
-    if (this.dom.eventSummarySchedules) {
-      if (event) {
-        const count = typeof event.scheduleCount === "number" ? event.scheduleCount : (event.schedules?.length || 0);
-        this.dom.eventSummarySchedules.textContent = `${count}件`;
-      } else {
-        this.dom.eventSummarySchedules.textContent = "—";
-      }
-    }
-    if (this.dom.eventSummaryParticipants) {
-      this.dom.eventSummaryParticipants.textContent = event
-        ? formatParticipantCount(event.totalParticipants)
-        : "—";
-    }
-    this.updateStageHeader();
-    this.syncOperatorModeUi();
+    // EventUIRenderer に委譲
+    this.uiRenderer.updateEventSummary();
   }
 
   getScheduleListItems() {
@@ -2185,51 +2097,8 @@ export class EventAdminApp {
   }
 
   updateScheduleSummary() {
-    if (!this.dom.scheduleSummary) return;
-
-    const event = this.getSelectedEvent();
-    const schedule = this.getSelectedSchedule();
-    const hasSchedule = Boolean(event && schedule);
-    const hasSelection = Boolean(this.selectedScheduleId);
-    this.dom.scheduleSummary.hidden = !hasSchedule;
-    if (this.dom.scheduleSummaryEmpty) {
-      const shouldHidePlaceholder = hasSchedule || hasSelection;
-      this.dom.scheduleSummaryEmpty.hidden = shouldHidePlaceholder;
-      this.dom.scheduleSummaryEmpty.classList.toggle("is-hidden", shouldHidePlaceholder);
-      if (!shouldHidePlaceholder) {
-        this.dom.scheduleSummaryEmpty.textContent = event
-          ? "日程を選択してください。"
-          : "イベントを選択してください。";
-      }
-    }
-    this.updateStageHeader();
-    if (!hasSchedule) {
-      return;
-    }
-    if (this.dom.scheduleSummaryLabel) {
-      this.dom.scheduleSummaryLabel.textContent = schedule.label || schedule.id;
-    }
-    const rangeText = formatScheduleRange(schedule.startAt, schedule.endAt);
-    if (this.dom.scheduleSummaryRangeRow && this.dom.scheduleSummaryRange) {
-      if (rangeText) {
-        this.dom.scheduleSummaryRangeRow.hidden = false;
-        this.dom.scheduleSummaryRange.textContent = rangeText;
-      } else {
-        this.dom.scheduleSummaryRangeRow.hidden = true;
-        this.dom.scheduleSummaryRange.textContent = "";
-      }
-    }
-    const locationText = ensureString(schedule.location).trim();
-    if (this.dom.scheduleSummaryLocationRow && this.dom.scheduleSummaryLocation) {
-      if (locationText) {
-        this.dom.scheduleSummaryLocationRow.hidden = false;
-        this.dom.scheduleSummaryLocation.textContent = locationText;
-      } else {
-        this.dom.scheduleSummaryLocationRow.hidden = true;
-        this.dom.scheduleSummaryLocation.textContent = "";
-      }
-    }
-    this.syncOperatorModeUi();
+    // EventUIRenderer に委譲
+    this.uiRenderer.updateScheduleSummary();
   }
 
   clearLoadingIndicators() {
@@ -2729,14 +2598,8 @@ export class EventAdminApp {
   }
 
   updateSelectionNotes() {
-    if (this.dom.eventSelectionNote) {
-      const shouldShow = !this.selectedEventId && this.events.length > 0;
-      this.dom.eventSelectionNote.hidden = !shouldShow;
-    }
-    if (this.dom.scheduleSelectionNote) {
-      const shouldShow = Boolean(this.selectedEventId) && !this.selectedScheduleId && this.schedules.length > 0;
-      this.dom.scheduleSelectionNote.hidden = !shouldShow;
-    }
+    // EventUIRenderer に委譲
+    this.uiRenderer.updateSelectionNotes();
   }
 
   setStage(stage) {
@@ -7915,84 +7778,8 @@ export class EventAdminApp {
   }
 
   refreshChatIndicators() {
-    this.refreshMobileChatIndicator();
-    this.refreshDesktopChatIndicator();
-  }
-
-  refreshDesktopChatIndicator() {
-    const container = this.dom.chatContainer;
-    const indicator = this.dom.chatAttention;
-    const countNode = this.dom.chatAttentionCount;
-    const textNode = this.dom.chatAttentionText;
-    const hasAttention = this.hasChatAttention();
-    const count = this.chatUnreadCount || 0;
-
-    if (container) {
-      if (hasAttention) {
-        container.setAttribute("data-has-updates", "true");
-      } else {
-        container.removeAttribute("data-has-updates");
-      }
-    }
-
-    if (indicator) {
-      if (hasAttention) {
-        indicator.hidden = false;
-      } else {
-        indicator.hidden = true;
-      }
-    }
-
-    if (countNode) {
-      countNode.textContent = hasAttention ? (count > 99 ? "99+" : String(count)) : "";
-    }
-
-    if (textNode) {
-      if (hasAttention) {
-        const announce = count > 99 ? "99件以上" : `${count}件`;
-        textNode.textContent = `新着メッセージが${announce}あります`;
-      } else {
-        textNode.textContent = "";
-      }
-    }
-  }
-
-  refreshMobileChatIndicator() {
-    const button = this.dom.chatMobileToggle;
-    const badge = this.dom.chatMobileBadge;
-    const srText = this.dom.chatMobileBadgeText;
-    const count = this.chatUnreadCount || 0;
-    const hasAttention = this.hasChatAttention();
-    const isMobile = this.isMobileLayout();
-    const isChatOpen = this.activeMobilePanel === "chat";
-    const shouldShow = isMobile && !isChatOpen && hasAttention;
-
-    if (button) {
-      if (shouldShow) {
-        button.setAttribute("data-has-updates", "true");
-      } else {
-        button.removeAttribute("data-has-updates");
-      }
-    }
-
-    if (badge) {
-      if (shouldShow) {
-        badge.textContent = count > 99 ? "99+" : String(count);
-        badge.removeAttribute("hidden");
-      } else {
-        badge.textContent = "";
-        badge.setAttribute("hidden", "");
-      }
-    }
-
-    if (srText) {
-      if (hasAttention) {
-        const announce = count > 99 ? "99件以上" : `${count}件`;
-        srText.textContent = `新着メッセージが${announce}あります`;
-      } else {
-        srText.textContent = "";
-      }
-    }
+    // EventUIRenderer に委譲
+    this.uiRenderer.refreshChatIndicators();
   }
 
   toggleMobilePanel(target) {
@@ -8210,25 +7997,13 @@ export class EventAdminApp {
   }
 
   revealEventSelectionCue() {
-    if (this.dom.eventSelectionNote) {
-      this.dom.eventSelectionNote.hidden = false;
-      this.dom.eventSelectionNote.classList.add("section-focus-highlight");
-      setTimeout(() => this.dom.eventSelectionNote.classList.remove("section-focus-highlight"), 600);
-    }
-    if (this.dom.eventList) {
-      this.dom.eventList.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    // EventUIRenderer に委譲
+    this.uiRenderer.revealEventSelectionCue();
   }
 
   revealScheduleSelectionCue() {
-    if (this.dom.scheduleSelectionNote) {
-      this.dom.scheduleSelectionNote.hidden = false;
-      this.dom.scheduleSelectionNote.classList.add("section-focus-highlight");
-      setTimeout(() => this.dom.scheduleSelectionNote.classList.remove("section-focus-highlight"), 600);
-    }
-    if (this.dom.scheduleList) {
-      this.dom.scheduleList.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    // EventUIRenderer に委譲
+    this.uiRenderer.revealScheduleSelectionCue();
   }
 
   beginScheduleLoading(message = "") {
@@ -8491,17 +8266,8 @@ export class EventAdminApp {
   }
 
   applyMetaNote() {
-    if (!this.dom.metaNote) {
-      return;
-    }
-    const note = (this.eventCountNote || "").trim();
-    if (!note) {
-      this.dom.metaNote.hidden = true;
-      this.dom.metaNote.textContent = "";
-      return;
-    }
-    this.dom.metaNote.hidden = false;
-    this.dom.metaNote.textContent = note;
+    // EventUIRenderer に委譲
+    this.uiRenderer.applyMetaNote();
   }
 
   updateMetaNote() {
