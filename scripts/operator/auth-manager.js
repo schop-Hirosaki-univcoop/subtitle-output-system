@@ -315,9 +315,9 @@ export class AuthManager {
     if (this.app.redirectingToIndex) {
       return;
     }
-    const ensure = (value) => String(value ?? "").trim();
-    const previousUid = ensure(this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
-    const sessionId = ensure(this.app.operatorPresenceSessionId);
+    const ensureString = (value) => String(value ?? "").trim();
+    const previousUid = ensureString(this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
+    const sessionId = ensureString(this.app.operatorPresenceSessionId);
     if (previousUid) {
       this.app.purgeOperatorPresenceSessionsForUser(previousUid, { excludeSessionId: sessionId });
     }

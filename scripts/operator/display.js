@@ -3,24 +3,24 @@ import { info as logDisplayLinkInfo } from "../shared/display-link-logger.js";
 import { escapeHtml, formatOperatorName, formatRelative, normalizeUpdatedAt, renderRubyHtml } from "./utils.js";
 
 export function handleRenderUpdate(app, snapshot) {
-  const rawValue = typeof snapshot?.val === "function" ? snapshot.val() : null;
-  const exists = typeof snapshot?.exists === "function" ? snapshot.exists() : rawValue != null;
+  const rawSnapshotData = typeof snapshot?.val === "function" ? snapshot.val() : null;
+  const exists = typeof snapshot?.exists === "function" ? snapshot.exists() : rawSnapshotData != null;
   const hadState = app?.state?.renderState != null;
-  const sessionActive = app?.state?.displaySessionActive === true;
+  const sessionActive = app?.state?.isDisplaySessionActive === true;
   const snapshotActive = app?.displaySessionStatusFromSnapshot === true;
   if (typeof app.updateRenderAvailability === "function") {
     const status = exists ? true : hadState && !(sessionActive || snapshotActive) ? false : null;
     app.updateRenderAvailability(status);
   }
-  const value = rawValue || {};
-  setLamp(app, value.phase);
-  const phase = value.phase || "";
+  const snapshotData = rawSnapshotData || {};
+  setLamp(app, snapshotData.phase);
+  const phase = snapshotData.phase || "";
   // phase が hidden でも nowShowing 自体は最新値を参照し、送出クリア（nowShowing: null）を
   // 受け取ったタイミングだけでカード強調やステータスをリセットする。
-  const now = value.nowShowing || null;
+  const now = snapshotData.nowShowing || null;
   renderNowShowingSummary(app, now, phase);
 
-  const updatedAt = normalizeUpdatedAt(value.updatedAt) || 0;
+  const updatedAt = normalizeUpdatedAt(snapshotData.updatedAt) || 0;
   const previous = app.lastUpdatedAt || 0;
   app.lastUpdatedAt = updatedAt;
   redrawUpdatedAt(app);
@@ -48,7 +48,7 @@ export function handleRenderUpdate(app, snapshot) {
     updatedAt: updatedAt || null
   });
   if (exists) {
-    app.state.renderState = { ...value, nowShowing: normalizedNow };
+    app.state.renderState = { ...snapshotData, nowShowing: normalizedNow };
   } else {
     app.state.renderState = null;
   }

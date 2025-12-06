@@ -61,24 +61,24 @@ export class ChannelManager {
    * @returns {{ eventId: string, scheduleId: string }}
    */
   getActiveChannel() {
-    const ensure = (value) => String(value ?? "").trim();
+    const ensureString = (value) => String(value ?? "").trim();
     const context = this.app.pageContext || {};
     const contextConfirmed = context.selectionConfirmed === true;
-    let eventId = ensure(this.app.state?.activeEventId || (contextConfirmed ? context.eventId : ""));
-    let scheduleId = ensure(this.app.state?.activeScheduleId || (contextConfirmed ? context.scheduleId : ""));
+    let eventId = ensureString(this.app.state?.activeEventId || (contextConfirmed ? context.eventId : ""));
+    let scheduleId = ensureString(this.app.state?.activeScheduleId || (contextConfirmed ? context.scheduleId : ""));
 
     if (!eventId || !scheduleId) {
-      const scheduleKey = ensure(
-        this.app.state?.currentSchedule || (contextConfirmed ? context.scheduleKey : "") || ""
-      );
-      if (scheduleKey) {
-        const parts = extractScheduleKeyParts(scheduleKey);
-        if (!eventId && parts.eventId) {
-          eventId = ensure(parts.eventId);
-        }
-        if (!scheduleId && parts.scheduleId) {
-          scheduleId = ensure(parts.scheduleId);
-        }
+        const scheduleKey = ensureString(
+          this.app.state?.currentSchedule || (contextConfirmed ? context.scheduleKey : "") || ""
+        );
+        if (scheduleKey) {
+          const parts = extractScheduleKeyParts(scheduleKey);
+          if (!eventId && parts.eventId) {
+            eventId = ensureString(parts.eventId);
+          }
+          if (!scheduleId && parts.scheduleId) {
+            scheduleId = ensureString(parts.scheduleId);
+          }
         if (!scheduleId && parts.label) {
           const normalizedLabel = sanitizePresenceLabel(parts.label);
           const metadataMap = this.app.state?.scheduleMetadata instanceof Map ? this.app.state.scheduleMetadata : null;
@@ -93,10 +93,10 @@ export class ChannelManager {
               if (candidateLabel && candidateLabel === normalizedLabel) {
                 const resolved = extractScheduleKeyParts(metaKey);
                 if (resolved.scheduleId) {
-                  scheduleId = ensure(resolved.scheduleId);
+                  scheduleId = ensureString(resolved.scheduleId);
                 }
                 if (!eventId && resolved.eventId) {
-                  eventId = ensure(resolved.eventId);
+                  eventId = ensureString(resolved.eventId);
                 }
                 if (scheduleId) {
                   break;
@@ -117,10 +117,10 @@ export class ChannelManager {
         if (assignment) {
           const assignmentKey = extractScheduleKeyParts(assignment.canonicalScheduleKey || assignment.scheduleKey);
           if (!eventId) {
-            eventId = ensure(assignment.eventId || assignmentKey.eventId);
+            eventId = ensureString(assignment.eventId || assignmentKey.eventId);
           }
           if (!scheduleId) {
-            scheduleId = ensure(assignment.scheduleId || assignmentKey.scheduleId);
+            scheduleId = ensureString(assignment.scheduleId || assignmentKey.scheduleId);
           }
         }
       }
@@ -134,18 +134,18 @@ export class ChannelManager {
    * @returns {string}
    */
   getCurrentScheduleKey() {
-    const ensure = (value) => String(value ?? "").trim();
+    const ensureString = (value) => String(value ?? "").trim();
     const context = this.app.pageContext || {};
     const contextConfirmed = context.selectionConfirmed === true;
-    const directKey = ensure(this.app.state?.currentSchedule || (contextConfirmed ? context.scheduleKey : "") || "");
+    const directKey = ensureString(this.app.state?.currentSchedule || (contextConfirmed ? context.scheduleKey : "") || "");
     if (directKey) {
       return directKey;
     }
     const { eventId, scheduleId } = this.getActiveChannel();
-    const scheduleLabel = ensure(
+    const scheduleLabel = ensureString(
       this.app.state?.activeScheduleLabel || (contextConfirmed ? context.scheduleLabel : "") || ""
     );
-    const entryId = ensure(this.app.operatorPresenceSessionId);
+    const entryId = ensureString(this.app.operatorPresenceSessionId);
     return this.app.derivePresenceScheduleKey(eventId, { scheduleId, scheduleLabel }, entryId);
   }
 
@@ -597,7 +597,7 @@ export class ChannelManager {
     const label = String(scheduleLabel || "").trim();
     const fromModal = options?.fromModal === true;
     const silent = options?.silent === true;
-    const assetChecked = this.app.state.displayAssetChecked === true;
+    const assetChecked = this.app.state.isDisplayAssetChecked === true;
     const assetAvailable = this.app.state.displayAssetAvailable !== false;
     if (assetChecked && !assetAvailable) {
       const message = "表示端末ページ（display.html）が配置されていないため固定できません。";
@@ -639,10 +639,10 @@ export class ChannelManager {
       }
       return;
     }
-    if (this.app.state.channelLocking) {
+    if (this.app.state.isChannelLocking) {
       return;
     }
-    this.app.state.channelLocking = true;
+    this.app.state.isChannelLocking = true;
     this.app.renderChannelBanner();
     if (fromModal && this.app.dom.conflictConfirmButton) {
       this.app.dom.conflictConfirmButton.disabled = true;
@@ -746,7 +746,7 @@ export class ChannelManager {
         this.app.toast(message, "error");
       }
     } finally {
-      this.app.state.channelLocking = false;
+      this.app.state.isChannelLocking = false;
       if (fromModal && this.app.dom.conflictConfirmButton) {
         this.app.dom.conflictConfirmButton.disabled = false;
       }
@@ -1067,7 +1067,7 @@ export class ChannelManager {
       const members = Array.isArray(soleOption?.members) ? soleOption.members : [];
       const hasTelopOperators = members.some((member) => member && !member.skipTelop);
       const canLock = Boolean(targetEventId && targetScheduleId && soleKey && hasTelopOperators);
-      if (!assignmentMatches && canLock && !recentlyAttempted && !this.app.state.channelLocking) {
+      if (!assignmentMatches && canLock && !recentlyAttempted && !this.app.state.isChannelLocking) {
         this.app.state.autoLockAttemptKey = soleKey;
         this.app.state.autoLockAttemptAt = now;
         this.lockDisplayToSchedule(targetEventId, targetScheduleId, soleOption?.label || "", { silent: true, autoLock: true });
@@ -1156,30 +1156,30 @@ export class ChannelManager {
     if (!option || typeof option !== "object") {
       return;
     }
-    const ensure = (value) => String(value ?? "").trim();
+    const ensureString = (value) => String(value ?? "").trim();
     const context = this.app.pageContext || {};
     const contextConfirmed = context.selectionConfirmed === true;
-    const eventId = ensure(
+    const eventId = ensureString(
       option.eventId || this.app.state?.activeEventId || (contextConfirmed ? context.eventId : "") || ""
     );
-    const scheduleIdRaw = ensure(option.scheduleId || "");
+    const scheduleIdRaw = ensureString(option.scheduleId || "");
     const scheduleId = normalizeScheduleId(scheduleIdRaw);
-    const keyCandidate = ensure(option.key);
+    const keyCandidate = ensureString(option.key);
     const scheduleKey = keyCandidate || (eventId && scheduleId ? `${eventId}::${scheduleId}` : "");
     if (!eventId || !scheduleId || !scheduleKey) {
       return;
     }
 
     const resolvedLabel = this.resolveScheduleLabel(scheduleKey, option.label, option.scheduleId);
-    const reason = ensure(meta.reason) || "consensus-adopt";
+    const reason = ensureString(meta.reason) || "consensus-adopt";
     const publishPresence = meta.publishPresence !== false;
     const presenceOptions = {
       allowFallback: false,
       ...(meta.presenceOptions || {})
     };
 
-    const contextStart = ensure(option.startAt || option.scheduleStart || this.app.pageContext?.startAt || "");
-    const contextEnd = ensure(option.endAt || option.scheduleEnd || this.app.pageContext?.endAt || "");
+    const contextStart = ensureString(option.startAt || option.scheduleStart || this.app.pageContext?.startAt || "");
+    const contextEnd = ensureString(option.endAt || option.scheduleEnd || this.app.pageContext?.endAt || "");
 
     this.app.pageContext = {
       ...(this.app.pageContext || {}),

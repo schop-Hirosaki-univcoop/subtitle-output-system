@@ -161,10 +161,10 @@ export class ContextManager {
         stack: new Error().stack
       });
     }
-    const ensure = (value) => String(value ?? "").trim();
-    const ownerUid = ensure(context.ownerUid || context.operatorUid || context.uid);
+    const ensureString = (value) => String(value ?? "").trim();
+    const ownerUid = ensureString(context.ownerUid || context.operatorUid || context.uid);
     if (ownerUid) {
-      const currentUid = ensure(this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
+      const currentUid = ensureString(this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
       if (!currentUid) {
         if (typeof console !== "undefined" && typeof console.log === "function") {
           console.log("[setExternalContext] Early return: no currentUid, storing as pending", {
@@ -186,17 +186,17 @@ export class ContextManager {
         return;
       }
     }
-    const eventId = ensure(context.eventId);
-    const scheduleId = ensure(context.scheduleId);
-    const eventName = ensure(context.eventName);
-    const scheduleLabel = ensure(context.scheduleLabel);
-    const committedScheduleId = ensure(context.committedScheduleId);
-    const committedScheduleLabel = ensure(context.committedScheduleLabel);
-    const committedScheduleKey = ensure(context.committedScheduleKey);
-    const startAt = ensure(context.startAt);
-    const endAt = ensure(context.endAt);
-    const scheduleKeyFromContext = ensure(context.scheduleKey);
-    const presenceEntryId = ensure(context.presenceEntryId || context.entryId || context.sessionId);
+    const eventId = ensureString(context.eventId);
+    const scheduleId = ensureString(context.scheduleId);
+    const eventName = ensureString(context.eventName);
+    const scheduleLabel = ensureString(context.scheduleLabel);
+    const committedScheduleId = ensureString(context.committedScheduleId);
+    const committedScheduleLabel = ensureString(context.committedScheduleLabel);
+    const committedScheduleKey = ensureString(context.committedScheduleKey);
+    const startAt = ensureString(context.startAt);
+    const endAt = ensureString(context.endAt);
+    const scheduleKeyFromContext = ensureString(context.scheduleKey);
+    const presenceEntryId = ensureString(context.presenceEntryId || context.entryId || context.sessionId);
     const scheduleKey = this.app.derivePresenceScheduleKey(
       eventId,
       { scheduleKey: scheduleKeyFromContext, scheduleId, scheduleLabel },

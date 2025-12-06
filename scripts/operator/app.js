@@ -92,20 +92,20 @@ function createInitialState(autoScroll = true) {
     renderState: null,
     displaySession: null,
     displaySessions: [], // 複数display.htmlの同時表示に対応
-    displaySessionActive: false,
+    isDisplaySessionActive: false,
     displaySessionLastActive: null,
     displayPresenceEntries: [],
     renderChannelOnline: null,
     displayAssetAvailable: null,
-    displayAssetChecked: false,
-    displayAssetChecking: false,
+    isDisplayAssetChecked: false,
+    isDisplayAssetChecking: false,
     autoLockAttemptKey: "",
     autoLockAttemptAt: 0,
     operatorPresenceEventId: "",
     operatorPresenceByUser: new Map(),
     operatorPresenceSelf: null,
     channelAssignment: null,
-    channelLocking: false,
+    isChannelLocking: false,
     scheduleConflict: null,
     conflictSelection: "",
     operatorMode: OPERATOR_MODE_TELOP,
@@ -430,7 +430,7 @@ export class OperatorApp {
     this.displayPresenceUnsubscribe = null;
     this.displayPresenceCleanupTimer = 0;
     this.displayPresenceEntries = [];
-    this.displayPresenceLastRefreshAt = 0;
+    this.displayPresenceRefreshedAt = 0;
     this.displayPresenceLastInactiveAt = 0;
     this.displayPresencePrimedForSession = false;
     this.displayPresencePrimedSessionId = "";
@@ -495,7 +495,7 @@ export class OperatorApp {
     this.operatorPresenceEntryRef = null;
     this.operatorPresenceDisconnect = null;
     this.operatorPresenceHeartbeat = null;
-    this.operatorPresenceSubscribedEventId = "";
+    this.presenceSubscribedEventId = "";
     this.operatorPresenceUnsubscribe = null;
     this.operatorPresenceLastSignature = "";
     this.operatorPresenceSessionId = this.presenceManager.generatePresenceSessionId();
@@ -623,7 +623,7 @@ export class OperatorApp {
    */
   isDisplayOnline() {
     const renderOnline = this.state?.renderChannelOnline !== false;
-    return !!this.state?.displaySessionActive && renderOnline;
+    return !!this.state?.isDisplaySessionActive && renderOnline;
   }
 
   /**
@@ -1242,15 +1242,15 @@ export class OperatorApp {
     const finalize = (available) => {
       const normalized = available === true ? true : available === false ? false : null;
       this.state.displayAssetAvailable = normalized;
-      this.state.displayAssetChecked = true;
-      this.state.displayAssetChecking = false;
+      this.state.isDisplayAssetChecked = true;
+      this.state.isDisplayAssetChecking = false;
       this.displayAssetProbe = null;
       this.updateActionAvailability();
       this.renderChannelBanner();
       return normalized;
     };
-    if (!this.state.displayAssetChecking) {
-      this.state.displayAssetChecking = true;
+    if (!this.state.isDisplayAssetChecking) {
+      this.state.isDisplayAssetChecking = true;
     }
     if (typeof window === "undefined" || typeof fetch !== "function") {
       return Promise.resolve(finalize(true));
@@ -1565,7 +1565,7 @@ export class OperatorApp {
       this.displayPresenceCleanupTimer = 0;
     }
     this.displayPresenceEntries = [];
-    this.displayPresenceLastRefreshAt = 0;
+    this.displayPresenceRefreshedAt = 0;
     this.displayPresenceLastInactiveAt = 0;
     this.displayPresencePrimedForSession = false;
     this.displayPresencePrimedSessionId = "";
@@ -1610,12 +1610,12 @@ export class OperatorApp {
       this.operatorPresenceUnsubscribe();
       this.operatorPresenceUnsubscribe = null;
     }
-    this.operatorPresenceSubscribedEventId = "";
+    this.presenceSubscribedEventId = "";
     this.state.operatorPresenceEventId = "";
     this.state.operatorPresenceByUser = new Map();
     this.state.operatorPresenceSelf = null;
     this.state.channelAssignment = null;
-    this.state.channelLocking = false;
+    this.state.isChannelLocking = false;
     this.state.scheduleConflict = null;
     this.state.conflictSelection = "";
     this.conflictDialogOpen = false;
@@ -2230,7 +2230,7 @@ export class OperatorApp {
    * @param {string} reason
    */
   evaluateDisplaySessionActivity(reason = "unknown") {
-    const previousActive = this.state.displaySessionActive;
+    const previousActive = this.state.isDisplaySessionActive;
     const activeEventId = String(this.state?.activeEventId || "").trim();
     const presenceEntries = Array.isArray(this.displayPresenceEntries) ? this.displayPresenceEntries : [];
     const displaySessions = Array.isArray(this.state.displaySessions) ? this.state.displaySessions : [];
@@ -2301,11 +2301,11 @@ export class OperatorApp {
       }
     }
     
-    const assetChecked = this.state.displayAssetChecked === true;
+    const assetChecked = this.state.isDisplayAssetChecked === true;
     const assetAvailable = this.state.displayAssetAvailable !== false;
     const allowActive = !assetChecked || assetAvailable;
     const nextActive = allowActive && hasActiveConnection;
-    this.state.displaySessionActive = nextActive;
+    this.state.isDisplaySessionActive = nextActive;
 
     if (nextActive && this.state.renderChannelOnline === false) {
       this.updateRenderAvailability(null);
@@ -2344,7 +2344,7 @@ export class OperatorApp {
       return;
     }
     const now = Date.now();
-    const lastRefresh = this.displayPresenceLastRefreshAt || 0;
+    const lastRefresh = this.displayPresenceRefreshedAt || 0;
     const expiresAt = Number(session?.expiresAt || 0) || 0;
     const shouldRefresh =
       !expiresAt ||
@@ -2381,7 +2381,7 @@ export class OperatorApp {
     update(sessionRef, payload).catch((error) => {
       console.debug("Failed to extend display session TTL:", error);
     });
-    this.displayPresenceLastRefreshAt = now;
+    this.displayPresenceRefreshedAt = now;
   }
 
   /**

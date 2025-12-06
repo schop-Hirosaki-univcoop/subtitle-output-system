@@ -64,7 +64,7 @@ export class PresenceManager {
   refreshOperatorPresenceSubscription() {
     const { eventId } = this.app.getActiveChannel();
     const nextEventId = String(eventId || "").trim();
-    if (this.app.operatorPresenceSubscribedEventId === nextEventId) {
+    if (this.app.presenceSubscribedEventId === nextEventId) {
       return;
     }
     if (this.app.operatorPresenceUnsubscribe) {
@@ -74,7 +74,7 @@ export class PresenceManager {
     if (this.app.operatorPresencePrimedEventId && this.app.operatorPresencePrimedEventId !== nextEventId) {
       this.app.operatorPresencePrimedEventId = "";
     }
-    this.app.operatorPresenceSubscribedEventId = nextEventId;
+    this.app.presenceSubscribedEventId = nextEventId;
     this.app.state.operatorPresenceEventId = nextEventId;
     this.app.state.operatorPresenceByUser = new Map();
     if (!nextEventId) {
@@ -88,9 +88,9 @@ export class PresenceManager {
     this.app.operatorPresenceUnsubscribe = onValue(
       eventRef,
       (snapshot) => {
-        const raw = snapshot.val() || {};
+        const rawPresenceData = snapshot.val() || {};
         const presenceMap = new Map();
-        Object.entries(raw).forEach(([entryId, payload]) => {
+        Object.entries(rawPresenceData).forEach(([entryId, payload]) => {
           presenceMap.set(String(entryId), payload || {});
         });
         this.app.state.operatorPresenceEventId = nextEventId;
@@ -137,9 +137,9 @@ export class PresenceManager {
    * @returns {Promise<void>}
    */
   primeOperatorPresenceSession(eventId = "") {
-    const ensure = (value) => String(value ?? "").trim();
-    const normalizedEventId = ensure(eventId);
-    const uid = ensure(this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
+    const ensureString = (value) => String(value ?? "").trim();
+    const normalizedEventId = ensureString(eventId);
+    const uid = ensureString(this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
     if (!normalizedEventId || !uid) {
       this.app.operatorPresencePrimedEventId = normalizedEventId ? normalizedEventId : "";
       return Promise.resolve();
@@ -150,7 +150,7 @@ export class PresenceManager {
     const presenceMap = this.app.state?.operatorPresenceByUser instanceof Map ? this.app.state.operatorPresenceByUser : null;
     if (presenceMap && presenceMap.size) {
       const resolution = this.resolveSelfPresenceEntry(normalizedEventId, presenceMap);
-      const resolvedSessionId = ensure(resolution?.sessionId);
+      const resolvedSessionId = ensureString(resolution?.sessionId);
       if (resolvedSessionId) {
         this.app.operatorPresencePrimedEventId = normalizedEventId;
         this.adoptOperatorPresenceSession(normalizedEventId, resolvedSessionId);
@@ -172,23 +172,23 @@ export class PresenceManager {
         if (!snapshot.exists()) {
           return;
         }
-        const raw = snapshot.val();
-        if (!raw || typeof raw !== "object") {
+        const rawPresenceData = snapshot.val();
+        if (!rawPresenceData || typeof rawPresenceData !== "object") {
           return;
         }
         let resolvedSessionId = "";
-        Object.entries(raw).some(([entryId, payload]) => {
+        Object.entries(rawPresenceData).some(([entryId, payload]) => {
           if (resolvedSessionId) {
             return true;
           }
           if (!payload || typeof payload !== "object") {
             return false;
           }
-          const entryUid = ensure(payload.uid);
+          const entryUid = ensureString(payload.uid);
           if (!entryUid || entryUid !== uid) {
             return false;
           }
-          const sessionId = ensure(payload.sessionId) || ensure(entryId);
+          const sessionId = ensureString(payload.sessionId) || ensureString(entryId);
           if (!sessionId) {
             return false;
           }
@@ -219,46 +219,46 @@ export class PresenceManager {
    * @returns {{ payload: any, sessionId: string, duplicates: any[] }|null}
    */
   resolveSelfPresenceEntry(eventId, presenceMap) {
-    const ensure = (value) => String(value ?? "").trim();
-    const normalizedEventId = ensure(eventId);
+    const ensureString = (value) => String(value ?? "").trim();
+    const normalizedEventId = ensureString(eventId);
     if (!normalizedEventId) {
       return null;
     }
-    const selfUid = ensure(this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
+    const selfUid = ensureString(this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
     if (!selfUid) {
       return null;
     }
     const map = presenceMap instanceof Map ? presenceMap : new Map();
     const entries = [];
-    map.forEach((value, entryId) => {
-      if (!value) {
+    map.forEach((entryPayload, entryId) => {
+      if (!entryPayload) {
         return;
       }
-      const valueEventId = ensure(value.eventId);
+      const valueEventId = ensureString(entryPayload.eventId);
       if (valueEventId && valueEventId !== normalizedEventId) {
         return;
       }
-      const valueUid = ensure(value.uid);
+      const valueUid = ensureString(entryPayload.uid);
       if (!valueUid || valueUid !== selfUid) {
         return;
       }
-      const normalizedEntryId = ensure(entryId);
-      const sessionId = ensure(value.sessionId) || normalizedEntryId;
+      const normalizedEntryId = ensureString(entryId);
+      const sessionId = ensureString(entryPayload.sessionId) || normalizedEntryId;
       if (!sessionId) {
         return;
       }
-      const timestamp = Number(value.clientTimestamp || value.updatedAt || 0) || 0;
+      const timestamp = Number(entryPayload.clientTimestamp || entryPayload.updatedAt || 0) || 0;
       entries.push({
         entryId: normalizedEntryId,
         sessionId,
-        payload: value,
+        payload: entryPayload,
         timestamp
       });
     });
     if (!entries.length) {
       return null;
     }
-    const existingSessionId = ensure(this.app.operatorPresenceSessionId);
+    const existingSessionId = ensureString(this.app.operatorPresenceSessionId);
     let canonical = null;
     if (existingSessionId) {
       canonical = entries.find((entry) => entry.sessionId === existingSessionId) || null;
@@ -288,15 +288,15 @@ export class PresenceManager {
    * @param {string} sessionId
    */
   adoptOperatorPresenceSession(eventId, sessionId) {
-    const ensure = (value) => String(value ?? "").trim();
-    const normalizedEventId = ensure(eventId);
-    const normalizedSessionId = ensure(sessionId);
+    const ensureString = (value) => String(value ?? "").trim();
+    const normalizedEventId = ensureString(eventId);
+    const normalizedSessionId = ensureString(sessionId);
     if (!normalizedEventId || !normalizedSessionId) {
       return;
     }
-    const currentSessionId = ensure(this.app.operatorPresenceSessionId);
+    const currentSessionId = ensureString(this.app.operatorPresenceSessionId);
     if (currentSessionId === normalizedSessionId) {
-      const currentKey = ensure(this.app.operatorPresenceEntryKey);
+      const currentKey = ensureString(this.app.operatorPresenceEntryKey);
       if (currentKey !== `${normalizedEventId}/${normalizedSessionId}`) {
         this.app.operatorPresenceEntryKey = "";
         this.app.operatorPresenceEntryRef = null;
@@ -329,12 +329,12 @@ export class PresenceManager {
    * @returns {Promise<void>}
    */
   purgeOperatorPresenceSessionsForUser(uid = "", options = {}) {
-    const ensure = (value) => String(value ?? "").trim();
-    const normalizedUid = ensure(uid || this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
+    const ensureString = (value) => String(value ?? "").trim();
+    const normalizedUid = ensureString(uid || this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
     if (!normalizedUid) {
       return Promise.resolve();
     }
-    const excludeSessionId = ensure(options?.excludeSessionId);
+    const excludeSessionId = ensureString(options?.excludeSessionId);
     if (
       this.app.operatorPresencePurgePromise &&
       this.app.operatorPresencePurgeUid === normalizedUid &&
@@ -353,17 +353,17 @@ export class PresenceManager {
         }
         const removals = [];
         snapshot.forEach((eventSnap) => {
-          const eventId = ensure(eventSnap.key);
+          const eventId = ensureString(eventSnap.key);
           if (!eventId || typeof eventSnap.forEach !== "function") {
             return;
           }
           eventSnap.forEach((entrySnap) => {
-            const value = entrySnap && typeof entrySnap.val === "function" ? entrySnap.val() || {} : {};
-            const entryUid = ensure(value.uid);
+            const entryPayload = entrySnap && typeof entrySnap.val === "function" ? entrySnap.val() || {} : {};
+            const entryUid = ensureString(entryPayload.uid);
             if (!entryUid || entryUid !== normalizedUid) {
               return;
             }
-            const sessionId = ensure(value.sessionId || entrySnap.key);
+            const sessionId = ensureString(entryPayload.sessionId || entrySnap.key);
             if (excludeSessionId && sessionId === excludeSessionId) {
               return;
             }
@@ -434,21 +434,21 @@ export class PresenceManager {
       return;
     }
 
-    const ensure = (value) => String(value ?? "").trim();
-    const committedScheduleId = selectionConfirmed ? ensure(this.app.state?.committedScheduleId) : "";
-    const committedScheduleLabel = selectionConfirmed ? ensure(this.app.state?.committedScheduleLabel) : "";
-    const committedScheduleKey = selectionConfirmed ? ensure(this.app.state?.committedScheduleKey) : "";
-    const intentScheduleId = ensure(this.app.state?.operatorPresenceIntentId);
-    const intentScheduleLabel = ensure(this.app.state?.operatorPresenceIntentLabel);
-    const intentScheduleKey = ensure(this.app.state?.operatorPresenceIntentKey);
+    const ensureString = (value) => String(value ?? "").trim();
+    const committedScheduleId = selectionConfirmed ? ensureString(this.app.state?.committedScheduleId) : "";
+    const committedScheduleLabel = selectionConfirmed ? ensureString(this.app.state?.committedScheduleLabel) : "";
+    const committedScheduleKey = selectionConfirmed ? ensureString(this.app.state?.committedScheduleKey) : "";
+    const intentScheduleId = ensureString(this.app.state?.operatorPresenceIntentId);
+    const intentScheduleLabel = ensureString(this.app.state?.operatorPresenceIntentLabel);
+    const intentScheduleKey = ensureString(this.app.state?.operatorPresenceIntentKey);
     const activeScheduleId = selectionConfirmed
-      ? ensure(this.app.state?.activeScheduleId || context.scheduleId || "")
+      ? ensureString(this.app.state?.activeScheduleId || context.scheduleId || "")
       : "";
     const activeScheduleLabel = selectionConfirmed
-      ? ensure(this.app.state?.activeScheduleLabel || context.scheduleLabel || "")
+      ? ensureString(this.app.state?.activeScheduleLabel || context.scheduleLabel || "")
       : "";
     const activeScheduleKey = selectionConfirmed
-      ? ensure(
+      ? ensureString(
           this.app.state?.currentSchedule ||
             this.app.state?.lastNormalSchedule ||
             context.scheduleKey || ""
@@ -461,7 +461,7 @@ export class PresenceManager {
         : reason === "heartbeat";
     const useActiveSchedule = options?.useActiveSchedule !== false;
     const publishScheduleOption = options?.publishSchedule;
-    const sessionId = ensure(this.app.operatorPresenceSessionId) || this.generatePresenceSessionId();
+    const sessionId = ensureString(this.app.operatorPresenceSessionId) || this.generatePresenceSessionId();
 
     const schedulePublicationExplicit = publishScheduleOption === true;
     const scheduleSuppressed =
@@ -484,10 +484,10 @@ export class PresenceManager {
       }
       if (!scheduleId && intentScheduleKey) {
         const [, schedulePart = ""] = intentScheduleKey.split("::");
-        scheduleId = ensure(schedulePart || intentScheduleKey);
+        scheduleId = ensureString(schedulePart || intentScheduleKey);
       }
       if (!scheduleId && allowPresenceFallback) {
-        scheduleId = ensure(previousPresence?.scheduleId);
+        scheduleId = ensureString(previousPresence?.scheduleId);
       }
 
       scheduleLabel = committedScheduleLabel || (useActiveSchedule ? activeScheduleLabel : "");
@@ -495,7 +495,7 @@ export class PresenceManager {
         scheduleLabel = intentScheduleLabel;
       }
       if (!scheduleLabel && allowPresenceFallback) {
-        scheduleLabel = ensure(previousPresence?.scheduleLabel);
+        scheduleLabel = ensureString(previousPresence?.scheduleLabel);
       }
       if (!scheduleLabel && scheduleId) {
         scheduleLabel = scheduleId;
@@ -509,7 +509,7 @@ export class PresenceManager {
         scheduleKey = `${eventId}::${normalizeScheduleId(scheduleId)}`;
       }
       if (!scheduleKey && allowPresenceFallback) {
-        scheduleKey = ensure(previousPresence?.scheduleKey);
+        scheduleKey = ensureString(previousPresence?.scheduleKey);
       }
       if (!scheduleKey && scheduleId) {
         scheduleKey = this.derivePresenceScheduleKey(eventId, { scheduleId, scheduleLabel }, sessionId);
@@ -614,27 +614,16 @@ export class PresenceManager {
       return;
     }
 
-    const ensure = (value) => {
-      if (typeof value === "string") {
-        return value.trim();
-      }
-      if (typeof value === "number" && Number.isFinite(value)) {
-        return String(value);
-      }
-      if (value === null || value === undefined) {
-        return "";
-      }
-      return String(value).trim();
-    };
+    const ensureString = (value) => String(value ?? "").trim();
 
-    const uid = ensure(this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
+    const uid = ensureString(this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
     if (!uid || !this.app.isAuthorized) {
       this.clearOperatorPresence();
       return;
     }
 
     const selfEntry = this.app.state?.operatorPresenceSelf || null;
-    const entryUid = ensure(selfEntry?.uid);
+    const entryUid = ensureString(selfEntry?.uid);
     if (!selfEntry || !entryUid || entryUid !== uid) {
       this.stopOperatorPresenceHeartbeat();
       this.app.operatorPresenceEntryRef = null;
@@ -704,12 +693,12 @@ export class PresenceManager {
     this.app.operatorPresenceEntryRef = null;
     const hadKey = !!this.app.operatorPresenceEntryKey;
     this.app.operatorPresenceEntryKey = "";
-    const ensure = (value) => String(value ?? "").trim();
-    const sessionId = ensure(this.app.operatorPresenceSessionId);
+    const ensureString = (value) => String(value ?? "").trim();
+    const sessionId = ensureString(this.app.operatorPresenceSessionId);
     if (entryRef && hadKey) {
       remove(entryRef).catch(() => {});
     } else {
-      const uid = ensure(this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
+      const uid = ensureString(this.app.operatorIdentity?.uid || auth.currentUser?.uid || "");
       if (uid) {
         this.purgeOperatorPresenceSessionsForUser(uid, { excludeSessionId: sessionId });
       }

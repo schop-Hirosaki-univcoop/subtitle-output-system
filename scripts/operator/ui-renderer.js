@@ -38,7 +38,7 @@ export class UIRenderer {
     const statusEl = this.app.dom.channelStatus;
     const assignmentEl = this.app.dom.channelAssignment;
     const lockButton = this.app.dom.channelLockButton;
-    const displaySessionActive = !!this.app.state.displaySessionActive;
+    const displaySessionActive = !!this.app.state.isDisplaySessionActive;
     const renderOnline = this.app.state.renderChannelOnline !== false;
     const displayActive = this.app.isDisplayOnline();
     // activeEventIdが空の場合は、getDisplayAssignment()を呼ばずにnullにする
@@ -68,7 +68,7 @@ export class UIRenderer {
     }
     const channelAligned = !this.app.hasChannelMismatch();
     const telopEnabled = this.app.isTelopEnabled();
-    const assetChecked = this.app.state.displayAssetChecked === true;
+    const assetChecked = this.app.state.isDisplayAssetChecked === true;
     const assetAvailable = this.app.state.displayAssetAvailable !== false;
     let statusText = "";
     let statusClass = "channel-banner__status";
@@ -139,7 +139,7 @@ export class UIRenderer {
           displayActive &&
           !!String(activeEventId || "").trim() &&
           !!String(scheduleId || "").trim() &&
-          !this.app.state.channelLocking;
+          !this.app.state.isChannelLocking;
         if (displayActive && assignment && assignment.eventId && channelAligned) {
           lockButton.textContent = "固定済み";
           lockButton.disabled = true;
@@ -344,7 +344,7 @@ export class UIRenderer {
     if (!this.app.state) {
       return;
     }
-    const sessionActive = this.app.state.displaySessionActive === true;
+    const sessionActive = this.app.state.isDisplaySessionActive === true;
     const snapshotActive = this.app.displaySessionStatusFromSnapshot === true;
     let normalized = status === true ? true : status === false ? false : null;
     if (normalized === false && (sessionActive || snapshotActive)) {

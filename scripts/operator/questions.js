@@ -51,7 +51,7 @@ export function resolveNowShowingReference(app) {
 }
 
 async function ensureChannelAligned(app) {
-  if (app.state.displayAssetChecked && app.state.displayAssetAvailable === false) {
+  if (app.state.isDisplayAssetChecked && app.state.displayAssetAvailable === false) {
     app.toast("表示端末ページ（display.html）が見つからないため送出できません。", "error");
     return false;
   }
@@ -282,14 +282,14 @@ export function renderQuestions(app) {
   // ローディング中のUIDについて、更新が反映されたか確認
   // （Firebaseリスナーが新しいデータを拾った時にローディング状態を解除）
   loadingUids.forEach((uid) => {
-    const item = list.find((q) => String(q.UID) === uid);
+    const question = list.find((q) => String(q.UID) === uid);
     const loadingState = loadingUidStates.get(uid);
-    if (item && loadingState) {
+    if (question && loadingState) {
       // 更新が反映されたか確認
       // 未回答に戻す場合は、previousAnsweredがtrueで、現在answeredがfalseになっていることを確認
       if (loadingState.expectedAnswered === false && 
           loadingState.previousAnswered === true && 
-          !item["回答済"]) {
+          !question["回答済"]) {
         // 更新が反映された
         loadingUids.delete(uid);
         loadingUidStates.delete(uid);
@@ -440,16 +440,16 @@ export function updateScheduleContext(app, options = {}) {
     force = false
   } = typeof options === "object" && options !== null ? options : {};
 
-  const ensure = (value) => String(value ?? "").trim();
+  const ensureString = (value) => String(value ?? "").trim();
   const contextSelectionConfirmed =
     typeof selectionConfirmedOption === "boolean"
       ? selectionConfirmedOption
       : context.selectionConfirmed === true;
   // contextSelectionConfirmedがfalseでも、pageContextにeventIdやscheduleIdがある場合は使用する
   // （lockDisplayToScheduleでpageContextを更新した後に、別の処理でupdateScheduleContextが呼ばれる場合に対応）
-  const contextEventId = ensure(context.eventId);
-  const contextScheduleId = ensure(context.scheduleId);
-  const contextScheduleKey = ensure(context.scheduleKey);
+  const contextEventId = ensureString(context.eventId);
+  const contextScheduleId = ensureString(context.scheduleId);
+  const contextScheduleKey = ensureString(context.scheduleKey);
   
   // デバッグログ: contextの値を確認
   if (typeof console !== "undefined" && typeof console.log === "function") {
@@ -464,7 +464,7 @@ export function updateScheduleContext(app, options = {}) {
   
   let eventId = contextEventId;
   let scheduleId = contextScheduleId;
-  let scheduleKey = contextSelectionConfirmed ? ensure(app.state.currentSchedule) : "";
+  let scheduleKey = contextSelectionConfirmed ? ensureString(app.state.currentSchedule) : "";
   if (!scheduleKey && contextSelectionConfirmed) {
     scheduleKey = contextScheduleKey;
   }
@@ -492,8 +492,8 @@ export function updateScheduleContext(app, options = {}) {
     const assignment = activeEventId
       ? (app?.state?.channelAssignment || (typeof app.getDisplayAssignment === "function" ? app.getDisplayAssignment() : null))
       : null;
-    const assignmentEvent = ensure(assignment?.eventId);
-    const assignmentSchedule = ensure(assignment?.scheduleId);
+    const assignmentEvent = ensureString(assignment?.eventId);
+    const assignmentSchedule = ensureString(assignment?.scheduleId);
     if (!eventId && assignmentEvent) {
       eventId = assignmentEvent;
     }
@@ -504,7 +504,7 @@ export function updateScheduleContext(app, options = {}) {
       scheduleKey = `${assignmentEvent}::${normalizeScheduleId(assignmentSchedule)}`;
     }
     // 完全正規化: scheduleLabelは参照先から取得（既存データとの互換性のため、assignmentから直接取得をフォールバックとして使用）
-    const fallbackAssignmentLabel = ensure(assignment?.scheduleLabel);
+    const fallbackAssignmentLabel = ensureString(assignment?.scheduleLabel);
     assignmentLabel = scheduleKey && typeof app.resolveScheduleLabel === "function"
       ? app.resolveScheduleLabel(scheduleKey, fallbackAssignmentLabel, assignmentSchedule) || fallbackAssignmentLabel || assignmentSchedule
       : fallbackAssignmentLabel || assignmentSchedule;
@@ -525,29 +525,29 @@ export function updateScheduleContext(app, options = {}) {
   }
 
   if (meta) {
-    eventId = ensure(meta.eventId) || eventId;
-    scheduleId = ensure(meta.scheduleId) || scheduleId;
+    eventId = ensureString(meta.eventId) || eventId;
+    scheduleId = ensureString(meta.scheduleId) || scheduleId;
   }
 
   if (scheduleKey && (!eventId || !scheduleId)) {
     const [eventPart, schedulePart] = scheduleKey.split("::");
-    if (!eventId && eventPart) eventId = ensure(eventPart);
-    if (!scheduleId && schedulePart) scheduleId = ensure(schedulePart);
+    if (!eventId && eventPart) eventId = ensureString(eventPart);
+    if (!scheduleId && schedulePart) scheduleId = ensureString(schedulePart);
   }
 
-  let eventName = contextSelectionConfirmed ? ensure(context.eventName) : "";
+  let eventName = contextSelectionConfirmed ? ensureString(context.eventName) : "";
   if (meta?.eventName) {
-    eventName = ensure(meta.eventName);
+    eventName = ensureString(meta.eventName);
   } else if (!eventName && eventId && eventsMap) {
-    eventName = ensure(eventsMap.get(eventId)?.name);
+    eventName = ensureString(eventsMap.get(eventId)?.name);
   }
 
-  let scheduleLabel = contextSelectionConfirmed ? ensure(context.scheduleLabel) : "";
+  let scheduleLabel = contextSelectionConfirmed ? ensureString(context.scheduleLabel) : "";
   if (!scheduleLabel && assignmentLabel) {
     scheduleLabel = assignmentLabel;
   }
   if (meta?.label) {
-    scheduleLabel = ensure(meta.label);
+    scheduleLabel = ensureString(meta.label);
   }
 
   const startValue =
@@ -558,8 +558,8 @@ export function updateScheduleContext(app, options = {}) {
     meta?.endAt ||
     (contextSelectionConfirmed ? context.endAt || context.scheduleEnd : "") ||
     "";
-  let startText = ensure(startValue);
-  let endText = ensure(endValue);
+  let startText = ensureString(startValue);
+  let endText = ensureString(endValue);
 
   // selectionConfirmedがfalseの場合、assignmentDerivedSelectionによる自動選択を適用しない
   // これにより、初期状態で何も選択されていない状態を維持できる
@@ -642,13 +642,13 @@ export function updateScheduleContext(app, options = {}) {
   // コンテキストが実際に変更されるかどうかをチェック（forceオプションが指定されている場合はスキップ）
   let shouldSkipUpdate = false;
   if (!force) {
-    const currentEventId = ensure(context.eventId);
-    const currentScheduleId = ensure(context.scheduleId);
-    const currentScheduleKey = ensure(context.scheduleKey);
-    const currentEventName = ensure(context.eventName);
-    const currentScheduleLabel = ensure(context.scheduleLabel);
-    const currentStartAt = ensure(context.startAt);
-    const currentEndAt = ensure(context.endAt);
+    const currentEventId = ensureString(context.eventId);
+    const currentScheduleId = ensureString(context.scheduleId);
+    const currentScheduleKey = ensureString(context.scheduleKey);
+    const currentEventName = ensureString(context.eventName);
+    const currentScheduleLabel = ensureString(context.scheduleLabel);
+    const currentStartAt = ensureString(context.startAt);
+    const currentEndAt = ensureString(context.endAt);
     const currentSelectionConfirmed = context.selectionConfirmed === true;
 
     const eventIdChanged = currentEventId !== eventId;
@@ -835,7 +835,7 @@ export function switchGenre(app, genreKey) {
 
 export async function handleDisplay(app) {
   const renderOnline = app.state.renderChannelOnline !== false;
-  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.displaySessionActive;
+  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.isDisplaySessionActive;
   if (!renderOnline) {
     app.toast("送出端末の表示画面が切断されています。", "error");
     return;
@@ -960,7 +960,7 @@ export async function handleDisplay(app) {
 
 export async function handleUnanswer(app) {
   const renderOnline = app.state.renderChannelOnline !== false;
-  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.displaySessionActive;
+  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.isDisplaySessionActive;
   if (!renderOnline) {
     app.toast("送出端末の表示画面が切断されています。", "error");
     return;
@@ -1028,7 +1028,7 @@ export async function handleUnanswer(app) {
     const checkInterval = 150;
     const startTime = Date.now();
     const checkLoading = () => {
-      const item = app.state.allQuestions.find((q) => String(q.UID) === uid);
+      const question = app.state.allQuestions.find((q) => String(q.UID) === uid);
       const loadingState = loadingUidStates.get(uid);
       // 更新が反映されたか確認（answeredがfalseになった）
       if (item && !item["回答済"] && loadingState && loadingState.previousAnswered === true) {
@@ -1085,7 +1085,7 @@ export function handleRowCheckboxChange(app, event) {
 
 export async function handleBatchUnanswer(app) {
   const renderOnline = app.state.renderChannelOnline !== false;
-  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.displaySessionActive;
+  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.isDisplaySessionActive;
   if (!renderOnline) {
     app.toast("送出端末の表示画面が切断されています。", "error");
     return;
@@ -1176,7 +1176,7 @@ export async function handleBatchUnanswer(app) {
     const startTime = Date.now();
     const checkLoading = () => {
       const remainingUids = uidsToUpdate.filter((uid) => {
-        const item = app.state.allQuestions.find((q) => String(q.UID) === uid);
+        const question = app.state.allQuestions.find((q) => String(q.UID) === uid);
         const loadingState = loadingUidStates.get(uid);
         // 更新が反映されたか確認（answeredがfalseになった）
         if (item && !item["回答済"] && loadingState && loadingState.previousAnswered === true) {
@@ -1215,7 +1215,7 @@ export async function handleBatchUnanswer(app) {
 
 export async function clearNowShowing(app) {
   const renderOnline = app.state.renderChannelOnline !== false;
-  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.displaySessionActive;
+  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.isDisplaySessionActive;
   if (!renderOnline) {
     app.toast("送出端末の表示画面が切断されています。", "error");
     return;
@@ -1426,9 +1426,9 @@ function summarizeActionPanelDebug(debug) {
 
 export function updateActionAvailability(app) {
   const renderOnline = app.state.renderChannelOnline !== false;
-  const sessionActive = !!app.state.displaySessionActive;
+  const sessionActive = !!app.state.isDisplaySessionActive;
   const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : sessionActive;
-  const assetChecked = app.state.displayAssetChecked === true;
+  const assetChecked = app.state.isDisplayAssetChecked === true;
   const assetAvailable = app.state.displayAssetAvailable !== false;
   const selection = app.state.selectedRowData;
   const checkedCount = getBatchSelectionCount(app);
@@ -1547,10 +1547,10 @@ export function updateActionAvailability(app) {
 
 export function updateBatchButtonVisibility(app, providedCount) {
   if (!app.dom.batchUnanswerBtn) return;
-  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.displaySessionActive;
+  const displayOnline = typeof app.isDisplayOnline === "function" ? app.isDisplayOnline() : !!app.state.isDisplaySessionActive;
   const telopEnabled = typeof app.isTelopEnabled === "function" ? app.isTelopEnabled() : true;
   const assetAvailable = app.state.displayAssetAvailable !== false;
-  const assetChecked = app.state.displayAssetChecked === true;
+  const assetChecked = app.state.isDisplayAssetChecked === true;
   const checkedCount = displayOnline ? providedCount ?? getBatchSelectionCount(app) : 0;
   const disabled = assetChecked && !assetAvailable;
   app.dom.batchUnanswerBtn.disabled = disabled || !displayOnline || !telopEnabled || checkedCount === 0;
