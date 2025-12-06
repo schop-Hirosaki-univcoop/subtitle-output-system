@@ -4,7 +4,7 @@ import { getSideTelopsRef } from "./firebase.js";
 import { normalizeScheduleId } from "../shared/channel-paths.js";
 import { resolveNowShowingReference } from "./questions.js";
 import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn } from "../shared/display-link-logger.js";
-import { openDialog, closeDialog } from "./dialog.js";
+import { openDialog, closeDialog } from "./ui-helpers.js";
 
 const DEFAULT_SIDE_TELOP_ITEMS = [
   "まずは自己紹介です…",

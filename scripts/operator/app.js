@@ -31,7 +31,6 @@ import { OPERATOR_MODE_TELOP, normalizeOperatorMode, isTelopMode } from "../shar
 import { goToLogin } from "../shared/routes.js";
 import { info as logDisplayLinkInfo, error as logDisplayLinkError } from "../shared/display-link-logger.js";
 import { queryDom } from "./dom.js";
-import { createInitialState } from "./state.js";
 import { createApiClient } from "./api-client.js";
 import { showToast } from "./toast.js";
 import {
@@ -43,10 +42,79 @@ import { resolveGenreLabel } from "./utils.js";
 import * as Dictionary from "./dictionary.js";
 import * as Logs from "./logs.js";
 import * as Display from "./display.js";
-import * as Dialog from "./dialog.js";
-import * as Loader from "./loader.js";
+import * as UIHelpers from "./ui-helpers.js";
 import * as Pickup from "./pickup.js";
 import * as SideTelop from "./side-telop.js";
+import { ContextManager } from "./context-manager.js";
+import { AuthManager } from "./auth-manager.js";
+import { PresenceManager } from "./presence-manager.js";
+
+// ============================================================================
+// 状態管理
+// ============================================================================
+
+/**
+ * オペレーター画面の初期状態を生成します。
+ * @param {boolean} autoScroll - ログの自動スクロールを有効にするか
+ * @returns {object} 初期状態オブジェクト
+ */
+function createInitialState(autoScroll = true) {
+  return {
+    questionsByUid: new Map(),
+    questionStatusByUid: new Map(),
+    allQuestions: [],
+    allLogs: [],
+    currentSubTab: "all",
+    currentGenre: "",
+    currentSchedule: "",
+    lastNormalSchedule: "",
+    availableSchedules: [],
+    scheduleDetails: new Map(),
+    scheduleMetadata: new Map(),
+    activeEventId: "",
+    activeScheduleId: "",
+    activeEventName: "",
+    activeScheduleLabel: "",
+    committedScheduleId: "",
+    committedScheduleLabel: "",
+    committedScheduleKey: "",
+    operatorPresenceIntentId: "",
+    operatorPresenceIntentLabel: "",
+    operatorPresenceIntentKey: "",
+    selectionConfirmed: false,
+    eventsById: new Map(),
+    tokensByToken: new Map(),
+    selectedRowData: null,
+    lastDisplayedUid: null,
+    autoScrollLogs: autoScroll,
+    renderState: null,
+    displaySession: null,
+    displaySessions: [], // 複数display.htmlの同時表示に対応
+    displaySessionActive: false,
+    displaySessionLastActive: null,
+    displayPresenceEntries: [],
+    renderChannelOnline: null,
+    displayAssetAvailable: null,
+    displayAssetChecked: false,
+    displayAssetChecking: false,
+    autoLockAttemptKey: "",
+    autoLockAttemptAt: 0,
+    operatorPresenceEventId: "",
+    operatorPresenceByUser: new Map(),
+    operatorPresenceSelf: null,
+    channelAssignment: null,
+    channelLocking: false,
+    scheduleConflict: null,
+    conflictSelection: "",
+    operatorMode: OPERATOR_MODE_TELOP,
+    sideTelopChannelKey: "",
+    sideTelopLastPushedText: "",
+    sideTelopEntries: [],
+    sideTelopActiveIndex: 0,
+    sideTelopEditingIndex: null,
+    sideTelopSelectedIndex: null
+  };
+}
 
 const DOM_EVENT_BINDINGS = [
   { element: "loginButton", type: "click", handler: "login", guard: (app) => !app.isEmbedded },
@@ -248,18 +316,13 @@ const MODULE_METHOD_GROUPS = [
     methods: ["handleRenderUpdate", "redrawUpdatedAt", "refreshStaleness", "refreshRenderSummary"]
   },
   {
-    module: Dialog,
+    module: UIHelpers,
     methods: [
       "openDialog",
       "closeEditDialog",
       "handleDialogKeydown",
       "handleEdit",
-      "handleEditSubmit"
-    ]
-  },
-  {
-    module: Loader,
-    methods: [
+      "handleEditSubmit",
       "showLoader",
       "updateLoader",
       "hideLoader",
@@ -363,10 +426,19 @@ export class OperatorApp {
     this.dom = queryDom();
     const autoScroll = this.dom.logAutoscroll ? this.dom.logAutoscroll.checked : true;
     this.state = createInitialState(autoScroll);
-    this.pageContext = this.extractPageContext();
-    this.initialPageContext = { ...(this.pageContext || {}) };
-    this.applyContextToState();
     this.api = createApiClient(auth, onAuthStateChanged);
+    
+    // コンテキスト管理の初期化
+    this.contextManager = new ContextManager(this);
+    this.pageContext = this.contextManager.extractPageContext();
+    this.initialPageContext = { ...(this.pageContext || {}) };
+    this.contextManager.applyContextToState();
+    
+    // 認証管理の初期化
+    this.authManager = new AuthManager(this);
+    
+    // プレゼンス管理の初期化
+    this.presenceManager = new PresenceManager(this);
     this.isEmbedded = Boolean(OperatorApp.embedPrefix);
     if (this.isEmbedded && this.dom.loginContainer) {
       this.dom.loginContainer.style.display = "none";
@@ -449,7 +521,7 @@ export class OperatorApp {
     this.operatorPresenceSubscribedEventId = "";
     this.operatorPresenceUnsubscribe = null;
     this.operatorPresenceLastSignature = "";
-    this.operatorPresenceSessionId = this.generatePresenceSessionId();
+    this.operatorPresenceSessionId = this.presenceManager.generatePresenceSessionId();
     this.operatorPresenceSyncQueued = false;
     this.operatorPresencePrimePromise = null;
     this.operatorPresencePrimedEventId = "";
@@ -502,154 +574,34 @@ export class OperatorApp {
 
   /**
    * オペレーターpresence用のセッションIDを生成します。
-   * crypto APIの利用可否に応じて最適な乱数生成手段を選択します。
    * @returns {string}
    */
   generatePresenceSessionId() {
-    if (typeof crypto !== "undefined") {
-      if (typeof crypto.randomUUID === "function") {
-        return crypto.randomUUID();
-      }
-      if (typeof crypto.getRandomValues === "function") {
-        const array = new Uint8Array(16);
-        crypto.getRandomValues(array);
-        return Array.from(array, (value) => value.toString(16).padStart(2, "0")).join("");
-      }
-    }
-    return `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return this.presenceManager.generatePresenceSessionId();
   }
 
   /**
    * URLクエリや埋め込み設定からイベント/日程情報を解析し、ページコンテキストとして返却します。
    * エラーに強い実装とし、欠落値には空文字を設定します。
    * @returns {{ eventId: string, scheduleId: string, eventName: string, scheduleLabel: string, startAt: string, endAt: string, scheduleKey: string, operatorMode: string }}
+   * @deprecated ContextManagerを使用してください
    */
   extractPageContext() {
-    const context = {
-      eventId: "",
-      scheduleId: "",
-      eventName: "",
-      scheduleLabel: "",
-      startAt: "",
-      endAt: "",
-      scheduleKey: "",
-      operatorMode: OPERATOR_MODE_TELOP
-    };
-    if (typeof window === "undefined") {
-      return context;
-    }
-    try {
-      const params = new URLSearchParams(window.location.search || "");
-      const channel = parseChannelParams(params);
-      context.eventId = channel.eventId || "";
-      context.scheduleId = channel.scheduleId || "";
-      context.eventName = String(params.get("eventName") ?? "").trim();
-      context.scheduleLabel = String(params.get("scheduleLabel") ?? params.get("scheduleName") ?? "").trim();
-      context.startAt = String(params.get("startAt") ?? params.get("scheduleStart") ?? params.get("start") ?? "").trim();
-      context.endAt = String(params.get("endAt") ?? params.get("scheduleEnd") ?? params.get("end") ?? "").trim();
-      const rawScheduleKey = String(params.get("scheduleKey") ?? "").trim();
-      context.scheduleKey = this.derivePresenceScheduleKey(
-        context.eventId,
-        {
-          scheduleKey: rawScheduleKey,
-          scheduleId: context.scheduleId,
-          scheduleLabel: context.scheduleLabel
-        }
-      );
-      const hasInitialSelection = Boolean(context.eventId || context.scheduleId || context.scheduleKey);
-      if (hasInitialSelection) {
-        context.selectionConfirmed = false;
-      }
-    } catch (error) {
-      // Ignore malformed page context payloads.
-    }
-    return context;
+    return this.contextManager.extractPageContext();
   }
 
   /**
    * ページ読み込み時に抽出した文脈情報をアプリケーションのstateに反映します。
-   * URL指定のチャンネルが存在する場合にはローカルstateの選択肢として保持します。
    */
   applyContextToState() {
-    if (!this.state) return;
-    const context = this.pageContext || {};
-    const selectionConfirmed = context.selectionConfirmed === true;
-    const scheduleKey = this.derivePresenceScheduleKey(
-      context.eventId,
-      {
-        scheduleKey: context.scheduleKey,
-        scheduleId: context.scheduleId,
-        scheduleLabel: context.scheduleLabel
-      }
-    );
-    const committedScheduleKey = this.derivePresenceScheduleKey(
-      context.eventId,
-      {
-        scheduleKey: context.committedScheduleKey,
-        scheduleId: context.committedScheduleId,
-        scheduleLabel: context.committedScheduleLabel
-      }
-    );
-    this.state.activeEventId = selectionConfirmed ? context.eventId || "" : "";
-    this.state.activeScheduleId = selectionConfirmed ? context.scheduleId || "" : "";
-    this.state.activeEventName = selectionConfirmed ? context.eventName || "" : "";
-    this.state.activeScheduleLabel = selectionConfirmed ? context.scheduleLabel || "" : "";
-    this.state.selectionConfirmed = selectionConfirmed;
-    this.state.committedScheduleId = context.committedScheduleId || "";
-    this.state.committedScheduleLabel = context.committedScheduleLabel || "";
-    this.state.committedScheduleKey = committedScheduleKey;
-    if (selectionConfirmed && committedScheduleKey) {
-      this.state.currentSchedule = committedScheduleKey;
-      this.state.lastNormalSchedule = committedScheduleKey;
-    } else if (selectionConfirmed && scheduleKey) {
-      this.state.currentSchedule = scheduleKey;
-      this.state.lastNormalSchedule = scheduleKey;
-    } else if (!selectionConfirmed) {
-      this.state.currentSchedule = "";
-      this.state.lastNormalSchedule = "";
-    }
-    this.state.operatorMode = this.operatorMode;
+    return this.contextManager.applyContextToState();
   }
 
   /**
    * 画面コンテキストに保持しているイベント/日程選択情報を初期状態へ戻します。
-   * 既存のその他のメタデータは維持しつつ、selectionConfirmedをfalseに戻します。
    */
   resetPageContextSelection() {
-    let baseContext = {};
-    if (this.pageContext && typeof this.pageContext === "object") {
-      baseContext = { ...this.pageContext };
-    } else if (this.initialPageContext && typeof this.initialPageContext === "object") {
-      baseContext = { ...this.initialPageContext };
-    }
-    const normalizedMode = normalizeOperatorMode(baseContext.operatorMode ?? this.operatorMode);
-    this.pageContext = {
-      ...baseContext,
-      eventId: "",
-      scheduleId: "",
-      eventName: "",
-      scheduleLabel: "",
-      startAt: "",
-      endAt: "",
-      scheduleKey: "",
-      committedScheduleId: "",
-      committedScheduleLabel: "",
-      committedScheduleKey: "",
-      selectionConfirmed: false,
-      operatorMode: normalizedMode || OPERATOR_MODE_TELOP
-    };
-    if (this.state) {
-      this.state.selectionConfirmed = false;
-      // 前回の選択情報をクリア
-      this.state.activeEventId = "";
-      this.state.activeScheduleId = "";
-      this.state.activeEventName = "";
-      this.state.activeScheduleLabel = "";
-      this.state.currentSchedule = "";
-      this.state.lastNormalSchedule = "";
-      // channelAssignmentもクリアして、古い割り当て情報が表示されないようにする
-      this.state.channelAssignment = null;
-    }
+    return this.contextManager.resetPageContextSelection();
   }
 
   /**
@@ -748,14 +700,13 @@ export class OperatorApp {
 
   /**
    * presenceデータから比較・集計に利用する一意のキーを導出します。
-   * scheduleKey > scheduleId > label > entryIdの優先順位で構成します。
    * @param {string} eventId
    * @param {object} payload
    * @param {string} entryId
    * @returns {string}
    */
   derivePresenceScheduleKey(eventId, payload = {}, entryId = "") {
-    return sharedDerivePresenceScheduleKey(eventId, payload, entryId);
+    return this.presenceManager.derivePresenceScheduleKey(eventId, payload, entryId);
   }
 
   /**
@@ -1384,227 +1335,29 @@ export class OperatorApp {
 
   /**
    * オペレーターpresenceの監視対象を切り替えます。
-   * イベントが変わった際には既存購読を解除し、新しいイベントのpresenceノードを監視します。
    */
   refreshOperatorPresenceSubscription() {
-    const { eventId } = this.getActiveChannel();
-    const nextEventId = String(eventId || "").trim();
-    if (this.operatorPresenceSubscribedEventId === nextEventId) {
-      return;
-    }
-    if (this.operatorPresenceUnsubscribe) {
-      this.operatorPresenceUnsubscribe();
-      this.operatorPresenceUnsubscribe = null;
-    }
-    if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== nextEventId) {
-      this.operatorPresencePrimedEventId = "";
-    }
-    this.operatorPresenceSubscribedEventId = nextEventId;
-    this.state.operatorPresenceEventId = nextEventId;
-    this.state.operatorPresenceByUser = new Map();
-    if (!nextEventId) {
-      this.state.operatorPresenceSelf = null;
-      this.renderChannelBanner();
-      this.evaluateScheduleConflict();
-      return;
-    }
-
-    const eventRef = getOperatorPresenceEventRef(nextEventId);
-    this.operatorPresenceUnsubscribe = onValue(
-      eventRef,
-      (snapshot) => {
-        const raw = snapshot.val() || {};
-        const presenceMap = new Map();
-        Object.entries(raw).forEach(([entryId, payload]) => {
-          presenceMap.set(String(entryId), payload || {});
-        });
-        this.state.operatorPresenceEventId = nextEventId;
-        this.state.operatorPresenceByUser = presenceMap;
-        const selfResolution = this.resolveSelfPresenceEntry(nextEventId, presenceMap);
-        let selfEntry = null;
-        if (selfResolution) {
-          const { payload, sessionId: resolvedSessionId, duplicates } = selfResolution;
-          selfEntry = payload ? { ...payload, sessionId: resolvedSessionId || String(payload.sessionId || "") } : null;
-          if (resolvedSessionId) {
-            this.adoptOperatorPresenceSession(nextEventId, resolvedSessionId);
-          }
-          if (Array.isArray(duplicates) && duplicates.length) {
-            duplicates.forEach((duplicate) => {
-              const duplicateSessionId = String(duplicate?.sessionId || duplicate?.entryId || "").trim();
-              if (!duplicateSessionId || duplicateSessionId === resolvedSessionId) {
-                return;
-              }
-              try {
-                remove(getOperatorPresenceEntryRef(nextEventId, duplicateSessionId)).catch(() => {});
-              } catch (error) {
-                // Ignore removal failures.
-              }
-            });
-          }
-        } else {
-          const sessionId = String(this.operatorPresenceSessionId || "").trim();
-          if (sessionId && presenceMap.has(sessionId)) {
-            selfEntry = presenceMap.get(sessionId) || null;
-          }
-        }
-        this.state.operatorPresenceSelf = selfEntry || null;
-        this.renderChannelBanner();
-        this.evaluateScheduleConflict();
-      },
-      () => {}
-    );
+    return this.presenceManager.refreshOperatorPresenceSubscription();
   }
+
 
   /**
    * presenceに自身のセッションを登録する準備を行います。
-   * 書き込み競合を避けるため、既存のエントリを確認しながら初期データを投入します。
    * @param {string} eventId
    * @returns {Promise<void>}
    */
   primeOperatorPresenceSession(eventId = "") {
-    const ensure = (value) => String(value ?? "").trim();
-    const normalizedEventId = ensure(eventId);
-    const uid = ensure(this.operatorIdentity?.uid || auth.currentUser?.uid || "");
-    if (!normalizedEventId || !uid) {
-      this.operatorPresencePrimedEventId = normalizedEventId ? normalizedEventId : "";
-      return Promise.resolve();
-    }
-    if (this.operatorPresencePrimedEventId === normalizedEventId && !this.operatorPresencePrimePromise) {
-      return Promise.resolve();
-    }
-    const presenceMap = this.state?.operatorPresenceByUser instanceof Map ? this.state.operatorPresenceByUser : null;
-    if (presenceMap && presenceMap.size) {
-      const resolution = this.resolveSelfPresenceEntry(normalizedEventId, presenceMap);
-      const resolvedSessionId = ensure(resolution?.sessionId);
-      if (resolvedSessionId) {
-        this.operatorPresencePrimedEventId = normalizedEventId;
-        this.adoptOperatorPresenceSession(normalizedEventId, resolvedSessionId);
-        return Promise.resolve();
-      }
-    }
-    if (this.operatorPresencePrimePromise) {
-      if (this.operatorPresencePrimeTargetEventId === normalizedEventId) {
-        return this.operatorPresencePrimePromise;
-      }
-    }
-    const requestId = ++this.operatorPresencePrimeRequestId;
-    this.operatorPresencePrimeTargetEventId = normalizedEventId;
-    const primePromise = get(getOperatorPresenceEventRef(normalizedEventId))
-      .then((snapshot) => {
-        if (this.operatorPresencePrimeRequestId !== requestId) {
-          return;
-        }
-        if (!snapshot.exists()) {
-          return;
-        }
-        const raw = snapshot.val();
-        if (!raw || typeof raw !== "object") {
-          return;
-        }
-        let resolvedSessionId = "";
-        Object.entries(raw).some(([entryId, payload]) => {
-          if (resolvedSessionId) {
-            return true;
-          }
-          if (!payload || typeof payload !== "object") {
-            return false;
-          }
-          const entryUid = ensure(payload.uid);
-          if (!entryUid || entryUid !== uid) {
-            return false;
-          }
-          const sessionId = ensure(payload.sessionId) || ensure(entryId);
-          if (!sessionId) {
-            return false;
-          }
-          resolvedSessionId = sessionId;
-          return true;
-        });
-        if (resolvedSessionId) {
-          this.adoptOperatorPresenceSession(normalizedEventId, resolvedSessionId);
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (this.operatorPresencePrimeRequestId === requestId) {
-          this.operatorPresencePrimePromise = null;
-          this.operatorPresencePrimedEventId = normalizedEventId;
-          this.operatorPresencePrimeTargetEventId = "";
-        }
-      });
-    this.operatorPresencePrimePromise = primePromise;
-    return primePromise;
+    return this.presenceManager.primeOperatorPresenceSession(eventId);
   }
 
   /**
    * presence一覧から自身に該当するエントリを特定します。
-   * セッションIDの競合や重複がある場合には整理された結果を返します。
    * @param {string} eventId
    * @param {Map<string, any>} presenceMap
    * @returns {{ payload: any, sessionId: string, duplicates: any[] }|null}
    */
   resolveSelfPresenceEntry(eventId, presenceMap) {
-    const ensure = (value) => String(value ?? "").trim();
-    const normalizedEventId = ensure(eventId);
-    if (!normalizedEventId) {
-      return null;
-    }
-    const selfUid = ensure(this.operatorIdentity?.uid || auth.currentUser?.uid || "");
-    if (!selfUid) {
-      return null;
-    }
-    const map = presenceMap instanceof Map ? presenceMap : new Map();
-    const entries = [];
-    map.forEach((value, entryId) => {
-      if (!value) {
-        return;
-      }
-      const valueEventId = ensure(value.eventId);
-      if (valueEventId && valueEventId !== normalizedEventId) {
-        return;
-      }
-      const valueUid = ensure(value.uid);
-      if (!valueUid || valueUid !== selfUid) {
-        return;
-      }
-      const normalizedEntryId = ensure(entryId);
-      const sessionId = ensure(value.sessionId) || normalizedEntryId;
-      if (!sessionId) {
-        return;
-      }
-      const timestamp = Number(value.clientTimestamp || value.updatedAt || 0) || 0;
-      entries.push({
-        entryId: normalizedEntryId,
-        sessionId,
-        payload: value,
-        timestamp
-      });
-    });
-    if (!entries.length) {
-      return null;
-    }
-    const existingSessionId = ensure(this.operatorPresenceSessionId);
-    let canonical = null;
-    if (existingSessionId) {
-      canonical = entries.find((entry) => entry.sessionId === existingSessionId) || null;
-    }
-    if (!canonical) {
-      entries.sort((a, b) => {
-        if (b.timestamp !== a.timestamp) {
-          return (b.timestamp || 0) - (a.timestamp || 0);
-        }
-        return a.sessionId.localeCompare(b.sessionId);
-      });
-      canonical = entries[0];
-    }
-    const duplicates = entries.filter((entry) => entry !== canonical);
-    return {
-      eventId: normalizedEventId,
-      entryId: canonical.entryId,
-      sessionId: canonical.sessionId,
-      payload: canonical.payload,
-      duplicates
-    };
+    return this.presenceManager.resolveSelfPresenceEntry(eventId, presenceMap);
   }
 
   /**
@@ -1613,319 +1366,42 @@ export class OperatorApp {
    * @param {string} sessionId
    */
   adoptOperatorPresenceSession(eventId, sessionId) {
-    const ensure = (value) => String(value ?? "").trim();
-    const normalizedEventId = ensure(eventId);
-    const normalizedSessionId = ensure(sessionId);
-    if (!normalizedEventId || !normalizedSessionId) {
-      return;
-    }
-    const currentSessionId = ensure(this.operatorPresenceSessionId);
-    if (currentSessionId === normalizedSessionId) {
-      const currentKey = ensure(this.operatorPresenceEntryKey);
-      if (currentKey !== `${normalizedEventId}/${normalizedSessionId}`) {
-        this.operatorPresenceEntryKey = "";
-        this.operatorPresenceEntryRef = null;
-        this.operatorPresenceLastSignature = "";
-        this.queueOperatorPresenceSync();
-      }
-      return;
-    }
-    this.stopOperatorPresenceHeartbeat();
-    if (this.operatorPresenceDisconnect && typeof this.operatorPresenceDisconnect.cancel === "function") {
-      try {
-        this.operatorPresenceDisconnect.cancel().catch(() => {});
-      } catch (error) {
-        // Ignore disconnect cancellation errors.
-      }
-    }
-    this.operatorPresenceDisconnect = null;
-    this.operatorPresenceEntryRef = null;
-    this.operatorPresenceEntryKey = "";
-    this.operatorPresenceLastSignature = "";
-    this.operatorPresenceSessionId = normalizedSessionId;
-    this.queueOperatorPresenceSync();
+    return this.presenceManager.adoptOperatorPresenceSession(eventId, sessionId);
   }
 
   /**
    * 現在のユーザーに紐づく古いpresenceエントリを全イベントから削除します。
-   * sessionIdを指定した場合はそのエントリを除外します。
    * @param {string} uid
    * @param {{ excludeSessionId?: string }} [options]
    * @returns {Promise<void>}
    */
   purgeOperatorPresenceSessionsForUser(uid = "", options = {}) {
-    const ensure = (value) => String(value ?? "").trim();
-    const normalizedUid = ensure(uid || this.operatorIdentity?.uid || auth.currentUser?.uid || "");
-    if (!normalizedUid) {
-      return Promise.resolve();
-    }
-    const excludeSessionId = ensure(options?.excludeSessionId);
-    if (
-      this.operatorPresencePurgePromise &&
-      this.operatorPresencePurgeUid === normalizedUid &&
-      this.operatorPresencePurgeExclude === excludeSessionId
-    ) {
-      return this.operatorPresencePurgePromise;
-    }
-    const requestId = ++this.operatorPresencePurgeRequestId;
-    this.operatorPresencePurgeUid = normalizedUid;
-    this.operatorPresencePurgeExclude = excludeSessionId;
-    const rootRef = getOperatorPresenceEventRef();
-    const purgePromise = get(rootRef)
-      .then((snapshot) => {
-        if (!snapshot || typeof snapshot.exists !== "function" || !snapshot.exists()) {
-          return;
-        }
-        const removals = [];
-        snapshot.forEach((eventSnap) => {
-          const eventId = ensure(eventSnap.key);
-          if (!eventId || typeof eventSnap.forEach !== "function") {
-            return;
-          }
-          eventSnap.forEach((entrySnap) => {
-            const value = entrySnap && typeof entrySnap.val === "function" ? entrySnap.val() || {} : {};
-            const entryUid = ensure(value.uid);
-            if (!entryUid || entryUid !== normalizedUid) {
-              return;
-            }
-            const sessionId = ensure(value.sessionId || entrySnap.key);
-            if (excludeSessionId && sessionId === excludeSessionId) {
-              return;
-            }
-            if (!sessionId) {
-              return;
-            }
-            removals.push(remove(getOperatorPresenceEntryRef(eventId, sessionId)).catch(() => {}));
-          });
-        });
-        if (removals.length) {
-          return Promise.all(removals).catch(() => {});
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (this.operatorPresencePurgeRequestId === requestId) {
-          this.operatorPresencePurgePromise = null;
-          this.operatorPresencePurgeUid = "";
-          this.operatorPresencePurgeExclude = "";
-        }
-      });
-    this.operatorPresencePurgePromise = purgePromise;
-    return purgePromise;
+    return this.presenceManager.purgeOperatorPresenceSessionsForUser(uid, options);
   }
 
   /**
    * presence同期処理を次のマイクロタスクに遅延させ、短時間に複数回呼ばれた場合もまとめて実行します。
    */
   queueOperatorPresenceSync() {
-    if (this.operatorPresenceSyncQueued) {
-      return;
-    }
-    this.operatorPresenceSyncQueued = true;
-    Promise.resolve().then(() => {
-      this.operatorPresenceSyncQueued = false;
-      this.syncOperatorPresence();
-    });
+    return this.presenceManager.queueOperatorPresenceSync();
   }
 
   /**
    * 現在のオペレーター状態をpresenceツリーに反映します。
-   * 書き込みは必要な場合のみ行い、サーバータイムスタンプで同期性を確保します。
    * @param {string} reason
+   * @param {object} options
    * @returns {Promise<void>}
    */
   syncOperatorPresence(reason = "context-sync", options = {}) {
-    const primePending = Boolean(this.operatorPresencePrimePromise);
-    const user = this.operatorIdentity?.uid ? this.operatorIdentity : auth.currentUser || null;
-    const uid = String(user?.uid || "").trim();
-    if (!uid || !this.isAuthorized) {
-      this.clearOperatorPresence();
-      return;
-    }
-
-    const context = this.pageContext || {};
-    const contextConfirmed = context.selectionConfirmed === true;
-    const selectionConfirmed = contextConfirmed && this.state?.selectionConfirmed === true;
-    const eventId = selectionConfirmed
-      ? String(this.state?.activeEventId || context.eventId || "").trim()
-      : "";
-    if (!selectionConfirmed || !eventId) {
-      this.clearOperatorPresence();
-      return;
-    }
-
-    if (primePending) {
-      return;
-    }
-
-    const ensure = (value) => String(value ?? "").trim();
-    const committedScheduleId = selectionConfirmed ? ensure(this.state?.committedScheduleId) : "";
-    const committedScheduleLabel = selectionConfirmed ? ensure(this.state?.committedScheduleLabel) : "";
-    const committedScheduleKey = selectionConfirmed ? ensure(this.state?.committedScheduleKey) : "";
-    const intentScheduleId = ensure(this.state?.operatorPresenceIntentId);
-    const intentScheduleLabel = ensure(this.state?.operatorPresenceIntentLabel);
-    const intentScheduleKey = ensure(this.state?.operatorPresenceIntentKey);
-    const activeScheduleId = selectionConfirmed
-      ? ensure(this.state?.activeScheduleId || context.scheduleId || "")
-      : "";
-    const activeScheduleLabel = selectionConfirmed
-      ? ensure(this.state?.activeScheduleLabel || context.scheduleLabel || "")
-      : "";
-    const activeScheduleKey = selectionConfirmed
-      ? ensure(
-          this.state?.currentSchedule ||
-            this.state?.lastNormalSchedule ||
-            context.scheduleKey || ""
-        )
-      : "";
-    const previousPresence = this.state?.operatorPresenceSelf || null;
-    const allowPresenceFallback =
-      typeof options?.allowFallback === "boolean"
-        ? options.allowFallback
-        : reason === "heartbeat";
-    const useActiveSchedule = options?.useActiveSchedule !== false;
-    const publishScheduleOption = options?.publishSchedule;
-    const sessionId = ensure(this.operatorPresenceSessionId) || this.generatePresenceSessionId();
-
-    const schedulePublicationExplicit = publishScheduleOption === true;
-    const scheduleSuppressed =
-      publishScheduleOption === false || (!selectionConfirmed && !schedulePublicationExplicit);
-    const activeScheduleAvailable =
-      useActiveSchedule && (activeScheduleKey || activeScheduleId || activeScheduleLabel);
-    const shouldPublishSchedule =
-      schedulePublicationExplicit ||
-      (!scheduleSuppressed &&
-        (committedScheduleKey || intentScheduleKey || intentScheduleId || intentScheduleLabel || activeScheduleAvailable));
-
-    let scheduleId = "";
-    let scheduleLabel = "";
-    let scheduleKey = "";
-
-    if (shouldPublishSchedule) {
-      scheduleId = committedScheduleId || (useActiveSchedule ? activeScheduleId : "");
-      if (!scheduleId && intentScheduleId) {
-        scheduleId = intentScheduleId;
-      }
-      if (!scheduleId && intentScheduleKey) {
-        const [, schedulePart = ""] = intentScheduleKey.split("::");
-        scheduleId = ensure(schedulePart || intentScheduleKey);
-      }
-      if (!scheduleId && allowPresenceFallback) {
-        scheduleId = ensure(previousPresence?.scheduleId);
-      }
-
-      scheduleLabel = committedScheduleLabel || (useActiveSchedule ? activeScheduleLabel : "");
-      if (!scheduleLabel && intentScheduleLabel) {
-        scheduleLabel = intentScheduleLabel;
-      }
-      if (!scheduleLabel && allowPresenceFallback) {
-        scheduleLabel = ensure(previousPresence?.scheduleLabel);
-      }
-      if (!scheduleLabel && scheduleId) {
-        scheduleLabel = scheduleId;
-      }
-
-      scheduleKey = committedScheduleKey || (useActiveSchedule ? activeScheduleKey : "");
-      if (!scheduleKey && intentScheduleKey) {
-        scheduleKey = intentScheduleKey;
-      }
-      if (!scheduleKey && scheduleId && eventId) {
-        scheduleKey = `${eventId}::${normalizeScheduleId(scheduleId)}`;
-      }
-      if (!scheduleKey && allowPresenceFallback) {
-        scheduleKey = ensure(previousPresence?.scheduleKey);
-      }
-      if (!scheduleKey && scheduleId) {
-        scheduleKey = this.derivePresenceScheduleKey(eventId, { scheduleId, scheduleLabel }, sessionId);
-      }
-      if (!scheduleKey && scheduleLabel) {
-        scheduleKey = this.derivePresenceScheduleKey(
-          eventId,
-          {
-            scheduleId: "",
-            scheduleLabel
-          },
-          sessionId
-        );
-      }
-    }
-    const publishEvent = shouldPublishSchedule || options?.publishEvent === true;
-    const eventName = publishEvent
-      ? String(this.state?.activeEventName || (selectionConfirmed ? context.eventName : "") || "").trim()
-      : "";
-    const skipTelop = !this.isTelopEnabled();
-    this.operatorPresenceSessionId = sessionId;
-    const nextKey = `${eventId}/${sessionId}`;
-
-    if (this.operatorPresenceEntryKey && this.operatorPresenceEntryKey !== nextKey) {
-      this.clearOperatorPresence();
-    }
-
-    const signature = JSON.stringify({
-      eventId,
-      scheduleId,
-      scheduleKey,
-      scheduleLabel,
-      sessionId,
-      skipTelop
-    });
-    if (reason !== "heartbeat" && signature === this.operatorPresenceLastSignature) {
-      this.scheduleOperatorPresenceHeartbeat();
-      return;
-    }
-    this.operatorPresenceLastSignature = signature;
-
-    const entryRef = getOperatorPresenceEntryRef(eventId, sessionId);
-    this.operatorPresenceEntryKey = nextKey;
-    this.operatorPresenceEntryRef = entryRef;
-
-    // 完全正規化: eventNameとscheduleLabelは削除（eventIdとscheduleIdから取得可能）
-    const payload = {
-      sessionId,
-      uid,
-      email: String(user?.email || "").trim(),
-      displayName: String(user?.displayName || "").trim(),
-      eventId: publishEvent ? eventId : "",
-      scheduleId,
-      scheduleKey,
-      skipTelop,
-      updatedAt: serverTimestamp(),
-      clientTimestamp: Date.now(),
-      reason,
-      source: "operator"
-    };
-
-    set(entryRef, payload).catch(() => {});
-
-    try {
-      if (this.operatorPresenceDisconnect) {
-        this.operatorPresenceDisconnect.cancel().catch(() => {});
-      }
-      const disconnectHandle = onDisconnect(entryRef);
-      this.operatorPresenceDisconnect = disconnectHandle;
-      disconnectHandle.remove().catch(() => {});
-    } catch (error) {
-      // Ignore disconnect cleanup errors.
-    }
-
-    this.state.operatorPresenceSelf = {
-      ...payload,
-      updatedAt: Date.now()
-    };
-
-    this.scheduleOperatorPresenceHeartbeat();
-    this.renderChannelBanner();
-    this.evaluateScheduleConflict();
+    return this.presenceManager.syncOperatorPresence(reason, options);
   }
+
 
   /**
    * 定期的にpresenceを更新するハートビートタイマーを設定します。
    */
   scheduleOperatorPresenceHeartbeat() {
-    if (this.operatorPresenceHeartbeat) {
-      return;
-    }
-    this.operatorPresenceHeartbeat = setInterval(() => this.touchOperatorPresence(), OPERATOR_PRESENCE_HEARTBEAT_MS);
+    return this.presenceManager.scheduleOperatorPresenceHeartbeat();
   }
 
   /**
@@ -1933,78 +1409,15 @@ export class OperatorApp {
    * @returns {Promise<void>}
    */
   touchOperatorPresence() {
-    if (!this.operatorPresenceEntryRef || !this.operatorPresenceEntryKey) {
-      this.stopOperatorPresenceHeartbeat();
-      return;
-    }
-
-    const ensure = (value) => {
-      if (typeof value === "string") {
-        return value.trim();
-      }
-      if (typeof value === "number" && Number.isFinite(value)) {
-        return String(value);
-      }
-      if (value === null || value === undefined) {
-        return "";
-      }
-      return String(value).trim();
-    };
-
-    const uid = ensure(this.operatorIdentity?.uid || auth.currentUser?.uid || "");
-    if (!uid || !this.isAuthorized) {
-      this.clearOperatorPresence();
-      return;
-    }
-
-    const selfEntry = this.state?.operatorPresenceSelf || null;
-    const entryUid = ensure(selfEntry?.uid);
-    if (!selfEntry || !entryUid || entryUid !== uid) {
-      this.stopOperatorPresenceHeartbeat();
-      this.operatorPresenceEntryRef = null;
-      this.operatorPresenceEntryKey = "";
-      this.operatorPresenceLastSignature = "";
-      Promise.resolve().then(() =>
-        this.syncOperatorPresence("heartbeat-recover", { allowFallback: true })
-      );
-      return;
-    }
-
-    const now = Date.now();
-    update(this.operatorPresenceEntryRef, {
-      clientTimestamp: now
-    }).catch((error) => {
-      const codeText = typeof error?.code === "string" ? error.code.toUpperCase() : "";
-      const messageText = typeof error?.message === "string" ? error.message.toLowerCase() : "";
-      const permissionDenied =
-        codeText === "PERMISSION_DENIED" || messageText.includes("permission_denied");
-      if (permissionDenied) {
-        this.stopOperatorPresenceHeartbeat();
-        this.operatorPresenceEntryRef = null;
-        this.operatorPresenceEntryKey = "";
-        this.operatorPresenceLastSignature = "";
-        Promise.resolve().then(() =>
-          this.syncOperatorPresence("heartbeat-recover", { allowFallback: true })
-        );
-      }
-    });
-
-    if (this.state.operatorPresenceSelf) {
-      this.state.operatorPresenceSelf = {
-        ...this.state.operatorPresenceSelf,
-        clientTimestamp: now
-      };
-    }
+    return this.presenceManager.touchOperatorPresence();
   }
+
 
   /**
    * ハートビートタイマーを解除して、追加のpresence更新を停止します。
    */
   stopOperatorPresenceHeartbeat() {
-    if (this.operatorPresenceHeartbeat) {
-      clearInterval(this.operatorPresenceHeartbeat);
-      this.operatorPresenceHeartbeat = null;
-    }
+    return this.presenceManager.stopOperatorPresenceHeartbeat();
   }
 
   /**
@@ -2012,46 +1425,15 @@ export class OperatorApp {
    * @returns {Promise<void>}
    */
   clearOperatorPresence() {
-    this.stopOperatorPresenceHeartbeat();
-    this.operatorPresenceSyncQueued = false;
-    this.operatorPresenceLastSignature = "";
-    this.operatorPresencePrimedEventId = "";
-    this.operatorPresencePrimePromise = null;
-    this.operatorPresencePrimeTargetEventId = "";
-    this.operatorPresencePrimeRequestId += 1;
-    const disconnectHandle = this.operatorPresenceDisconnect;
-    this.operatorPresenceDisconnect = null;
-    if (disconnectHandle && typeof disconnectHandle.cancel === "function") {
-      disconnectHandle.cancel().catch(() => {});
-    }
-    const entryRef = this.operatorPresenceEntryRef;
-    this.operatorPresenceEntryRef = null;
-    const hadKey = !!this.operatorPresenceEntryKey;
-    this.operatorPresenceEntryKey = "";
-    const ensure = (value) => String(value ?? "").trim();
-    const sessionId = ensure(this.operatorPresenceSessionId);
-    if (entryRef && hadKey) {
-      remove(entryRef).catch(() => {});
-    } else {
-      const uid = ensure(this.operatorIdentity?.uid || auth.currentUser?.uid || "");
-      if (uid) {
-        this.purgeOperatorPresenceSessionsForUser(uid, { excludeSessionId: sessionId });
-      }
-    }
-    this.state.operatorPresenceSelf = null;
-    this.clearOperatorPresenceIntent();
+    return this.presenceManager.clearOperatorPresence();
   }
+
 
   /**
    * オペレーターpresenceで使用する日程意図をクリアします。
    */
   clearOperatorPresenceIntent() {
-    if (!this.state) {
-      return;
-    }
-    this.state.operatorPresenceIntentId = "";
-    this.state.operatorPresenceIntentLabel = "";
-    this.state.operatorPresenceIntentKey = "";
+    return this.presenceManager.clearOperatorPresenceIntent();
   }
 
   /**
@@ -2061,16 +1443,7 @@ export class OperatorApp {
    * @param {string} scheduleLabel
    */
   markOperatorPresenceIntent(eventId, scheduleId, scheduleLabel = "") {
-    if (!this.state) {
-      return;
-    }
-    const normalizedEvent = String(eventId || "").trim();
-    const normalizedSchedule = normalizeScheduleId(scheduleId || "");
-    const label = String(scheduleLabel || "").trim();
-    const scheduleKey = normalizedEvent && normalizedSchedule ? `${normalizedEvent}::${normalizedSchedule}` : "";
-    this.state.operatorPresenceIntentId = normalizedSchedule;
-    this.state.operatorPresenceIntentLabel = label || normalizedSchedule;
-    this.state.operatorPresenceIntentKey = scheduleKey;
+    return this.presenceManager.markOperatorPresenceIntent(eventId, scheduleId, scheduleLabel);
   }
 
   /**
@@ -2449,7 +1822,7 @@ export class OperatorApp {
     if (!this.dom.conflictDialog) {
       return;
     }
-    Dialog.openDialog(this, this.dom.conflictDialog, this.dom.conflictConfirmButton);
+    UIHelpers.openDialog(this, this.dom.conflictDialog, this.dom.conflictConfirmButton);
     this.conflictDialogOpen = true;
   }
 
@@ -2464,7 +1837,7 @@ export class OperatorApp {
       this.dom.conflictError.hidden = true;
       this.dom.conflictError.textContent = "";
     }
-    Dialog.closeDialog(this, this.dom.conflictDialog);
+    UIHelpers.closeDialog(this, this.dom.conflictDialog);
     this.conflictDialogOpen = false;
   }
 
@@ -3274,7 +2647,7 @@ export class OperatorApp {
       this.closeConflictDialog();
       return;
     }
-    Dialog.closeDialog(this, this.activeDialog);
+    UIHelpers.closeDialog(this, this.activeDialog);
   }
 
   /**
@@ -3283,174 +2656,9 @@ export class OperatorApp {
    * @param {Record<string, any>} context
    */
   setExternalContext(context = {}) {
-    if (typeof console !== "undefined" && typeof console.log === "function") {
-      console.log("[setExternalContext] Called", {
-        eventId: context.eventId || "(empty)",
-        scheduleId: context.scheduleId || "(empty)",
-        selectionConfirmed: context.selectionConfirmed,
-        committedScheduleId: context.committedScheduleId || "(empty)",
-        stack: new Error().stack
-      });
-    }
-    const ensure = (value) => String(value ?? "").trim();
-    const ownerUid = ensure(context.ownerUid || context.operatorUid || context.uid);
-    if (ownerUid) {
-      const currentUid = ensure(this.operatorIdentity?.uid || auth.currentUser?.uid || "");
-      if (!currentUid) {
-        if (typeof console !== "undefined" && typeof console.log === "function") {
-          console.log("[setExternalContext] Early return: no currentUid, storing as pending", {
-            ownerUid,
-            hasOperatorIdentity: !!this.operatorIdentity,
-            hasAuthCurrentUser: !!auth.currentUser
-          });
-        }
-        this.pendingExternalContext = { ...context };
-        return;
-      }
-      if (ownerUid !== currentUid) {
-        if (typeof console !== "undefined" && typeof console.log === "function") {
-          console.log("[setExternalContext] Early return: ownerUid mismatch", {
-            ownerUid,
-            currentUid
-          });
-        }
-        return;
-      }
-    }
-    const eventId = ensure(context.eventId);
-    const scheduleId = ensure(context.scheduleId);
-    const eventName = ensure(context.eventName);
-    const scheduleLabel = ensure(context.scheduleLabel);
-    const committedScheduleId = ensure(context.committedScheduleId);
-    const committedScheduleLabel = ensure(context.committedScheduleLabel);
-    const committedScheduleKey = ensure(context.committedScheduleKey);
-    const startAt = ensure(context.startAt);
-    const endAt = ensure(context.endAt);
-    const scheduleKeyFromContext = ensure(context.scheduleKey);
-    const presenceEntryId = ensure(context.presenceEntryId || context.entryId || context.sessionId);
-    const scheduleKey = this.derivePresenceScheduleKey(
-      eventId,
-      { scheduleKey: scheduleKeyFromContext, scheduleId, scheduleLabel },
-      presenceEntryId
-    );
-    const resolvedCommittedKey = this.derivePresenceScheduleKey(
-      eventId,
-      {
-        scheduleKey: committedScheduleKey,
-        scheduleId: committedScheduleId,
-        scheduleLabel: committedScheduleLabel
-      },
-      presenceEntryId
-    );
-    const operatorMode = normalizeOperatorMode(context.operatorMode ?? context.mode);
-
-    this.clearOperatorPresenceIntent();
-
-    const selectionConfirmed = context.selectionConfirmed === true;
-    if (typeof console !== "undefined" && typeof console.log === "function") {
-      console.log("[setExternalContext] Selection state", {
-        selectionConfirmed,
-        eventId: eventId || "(empty)",
-        scheduleId: scheduleId || "(empty)",
-        committedScheduleId: committedScheduleId || "(empty)"
-      });
-    }
-    const effectiveEventId = selectionConfirmed ? eventId : "";
-    const baseContext = { ...(this.pageContext || {}) };
-    if (!selectionConfirmed) {
-      baseContext.eventId = "";
-      baseContext.scheduleId = "";
-      baseContext.eventName = "";
-      baseContext.scheduleLabel = "";
-      baseContext.startAt = "";
-      baseContext.endAt = "";
-      baseContext.scheduleKey = "";
-      baseContext.committedScheduleId = "";
-      baseContext.committedScheduleLabel = "";
-      baseContext.committedScheduleKey = "";
-    }
-
-    this.pageContext = {
-      ...baseContext,
-      eventId: selectionConfirmed ? eventId : "",
-      scheduleId: selectionConfirmed ? scheduleId : "",
-      eventName: selectionConfirmed ? eventName : "",
-      scheduleLabel: selectionConfirmed ? scheduleLabel : "",
-      committedScheduleId: selectionConfirmed ? committedScheduleId : "",
-      committedScheduleLabel: selectionConfirmed ? committedScheduleLabel : "",
-      committedScheduleKey: selectionConfirmed ? resolvedCommittedKey : "",
-      startAt: selectionConfirmed ? startAt : "",
-      endAt: selectionConfirmed ? endAt : "",
-      scheduleKey: selectionConfirmed ? scheduleKey : "",
-      operatorMode,
-      selectionConfirmed
-    };
-
-    this.operatorMode = operatorMode;
-
-    this.applyContextToState();
-
-    if (!this.state.scheduleMetadata || !(this.state.scheduleMetadata instanceof Map)) {
-      this.state.scheduleMetadata = new Map();
-    }
-
-    if (scheduleKey) {
-      this.state.scheduleMetadata.set(scheduleKey, {
-        key: scheduleKey,
-        eventId,
-        scheduleId,
-        eventName,
-        label: scheduleLabel || scheduleId,
-        startAt,
-        endAt
-      });
-    }
-    if (resolvedCommittedKey) {
-      this.state.scheduleMetadata.set(resolvedCommittedKey, {
-        key: resolvedCommittedKey,
-        eventId,
-        scheduleId: committedScheduleId,
-        eventName,
-        label: committedScheduleLabel || committedScheduleId,
-        startAt,
-        endAt
-      });
-    }
-
-    if (this.isAuthorized) {
-      if (this.dom.mainContainer) {
-        this.dom.mainContainer.style.display = "";
-        this.dom.mainContainer.hidden = false;
-      }
-      if (this.dom.actionPanel) {
-        this.dom.actionPanel.style.display = "flex";
-        this.dom.actionPanel.hidden = false;
-      }
-    }
-
-    const presenceOptions = selectionConfirmed
-      ? { allowFallback: false }
-      : { allowFallback: false, publishSchedule: false, publishEvent: false, useActiveSchedule: false };
-    // selectionConfirmedがtrueの場合、明示的に渡してupdateScheduleContext内で正しく処理されるようにする
-    // force: trueを指定して、外部コンテキストからの更新を確実に実行する
-    this.updateScheduleContext({ 
-      syncPresence: false, 
-      presenceOptions,
-      selectionConfirmed: selectionConfirmed ? true : undefined,
-      force: true
-    });
-    this.refreshChannelSubscriptions();
-    if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== effectiveEventId) {
-      this.operatorPresencePrimedEventId = "";
-    }
-    this.primeOperatorPresenceSession(effectiveEventId).finally(() =>
-      this.syncOperatorPresence("context-sync", presenceOptions)
-    );
-    this.renderChannelBanner();
-    this.renderQuestions();
-    this.updateActionAvailability();
-    this.updateBatchButtonVisibility();
+    return this.contextManager.setExternalContext(context);
   }
+
 
   /**
    * 埋め込み利用時に外部ホストが完了通知を送るまで待機します。
@@ -3458,18 +2666,7 @@ export class OperatorApp {
    * @returns {Promise<void>}
    */
   waitUntilReady() {
-    if (this.isAuthorized) {
-      return Promise.resolve();
-    }
-    if (this.embedReadyDeferred?.promise) {
-      return this.embedReadyDeferred.promise;
-    }
-    let resolve;
-    const promise = new Promise((res) => {
-      resolve = res;
-    });
-    this.embedReadyDeferred = { promise, resolve };
-    return promise;
+    return this.contextManager.waitUntilReady();
   }
 
   /**
@@ -3500,7 +2697,7 @@ export class OperatorApp {
         this.pendingAuthUser = user || null;
         return;
       }
-      this.handleAuthState(user);
+      this.authManager.handleAuthState(user);
     });
   }
 
@@ -3790,328 +2987,30 @@ export class OperatorApp {
   }
 
   async login() {
-    const btn = this.dom.loginButton;
-    const originalText = btn ? btn.textContent : "";
-    try {
-      this.authFlow = "prompting";
-      this.showLoader("サインイン中…");
-      if (btn) {
-        btn.disabled = true;
-        btn.classList.add("is-busy");
-        btn.textContent = "サインイン中…";
-      }
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      this.toast("ログインに失敗しました。", "error");
-      this.hideLoader();
-    } finally {
-      this.authFlow = "done";
-      if (btn) {
-        btn.disabled = false;
-        btn.classList.remove("is-busy");
-        btn.textContent = originalText;
-      }
-      if (this.pendingAuthUser !== null) {
-        const user = this.pendingAuthUser;
-        this.pendingAuthUser = null;
-        this.handleAuthState(user);
-      }
-    }
+    return this.authManager.login();
   }
 
   async logout() {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      // Ignore logout errors; UI state will refresh on auth callbacks.
-    }
-    this.authFlow = "idle";
-    this.pendingAuthUser = null;
-    this.preflightContext = null;
-    this.hideLoader();
+    return this.authManager.logout();
   }
 
   loadPreflightContextForUser(user) {
-    if (!user) {
-      return null;
-    }
-    const context = loadAuthPreflightContext();
-    if (!context) {
-      return null;
-    }
-    if (!preflightContextMatchesUser(context, user)) {
-      return null;
-    }
-    return context;
+    return this.authManager.loadPreflightContextForUser(user);
   }
 
   async handleAuthState(user) {
-    if (!user) {
-      this.preflightContext = null;
-      this.showLoggedOutState();
-      return;
-    }
-    this.preflightContext = this.loadPreflightContextForUser(user);
-    const preflight = this.preflightContext;
-    try {
-      this.showLoader(this.isEmbedded ? "利用準備を確認しています…" : "権限を確認しています…");
-      this.initLoaderSteps();
-      const loginEmail = String(user.email || "").trim().toLowerCase();
-      if (!preflight) {
-        this.setLoaderStep(0, this.isEmbedded ? "利用状態を確認しています…" : "認証OK。ユーザー情報を確認中…");
-        const result = await this.api.apiPost({ action: "fetchSheet", sheet: "users" });
-        this.setLoaderStep(1, this.isEmbedded ? "必要な設定を確認しています…" : "在籍チェック中…");
-        if (!result.success || !result.data) {
-          throw new Error("ユーザー権限の確認に失敗しました。");
-        }
-        const authorizedUsers = result.data
-          .map((item) => String(item["メールアドレス"] || "").trim().toLowerCase())
-          .filter(Boolean);
-        if (!authorizedUsers.includes(loginEmail)) {
-          this.toast("あなたのアカウントはこのシステムへのアクセスが許可されていません。", "error");
-          await this.logout();
-          this.hideLoader();
-          return;
-        }
-      } else {
-        this.setLoaderStep(0, this.isEmbedded ? "プリフライト結果を確認しています…" : "プリフライト結果を適用しています…");
-        this.setLoaderStep(1, this.isEmbedded ? "権限キャッシュを適用しています…" : "在籍チェックをスキップしました。");
-      }
-
-      const shouldEnsureAdmin = !preflight?.admin?.ensuredAt;
-      if (shouldEnsureAdmin) {
-        this.setLoaderStep(2, this.isEmbedded ? "必要な権限を同期しています…" : "管理者権限の確認/付与…");
-        try {
-          await this.api.apiPost({ action: "ensureAdmin" });
-        } catch (error) {
-          const rawMessage = error instanceof Error ? error.message : String(error || "");
-          let message = "管理者権限の同期に失敗しました。時間をおいて再度お試しください。";
-          if (/not in users sheet/i.test(rawMessage) || /Forbidden: not in users sheet/i.test(rawMessage)) {
-            message = "あなたのアカウントはこのシステムへのアクセスが許可されていません。";
-            this.toast(message, "error");
-            await this.logout();
-            this.hideLoader();
-            return;
-          }
-          // 技術的なエラー（ネットワークエラーなど）の場合も処理を中断
-          throw new Error(message);
-        }
-      } else {
-        this.setLoaderStep(2, this.isEmbedded ? "管理者権限を適用しています…" : "管理者権限はプリフライト済みです。");
-      }
-
-      await this.renderLoggedInUi(user);
-      this.setLoaderStep(3, this.isEmbedded ? "初期データを準備しています…" : "初期ミラーを確認しています…");
-      this.updateLoader("初期データを準備しています…");
-      let questionsSnapshot = null;
-      try {
-        questionsSnapshot = await get(questionsRef);
-      } catch (error) {
-        console.warn("Failed to load questions before subscriptions", error);
-      }
-
-      const hasQuestions = questionsSnapshot?.exists?.() && questionsSnapshot.exists();
-      if (!hasQuestions) {
-        this.setLoaderStep(3, this.isEmbedded ? "プリフライト済みの空データを適用しています…" : "プリフライトの結果を適用しています…");
-      }
-
-      this.setLoaderStep(4, this.isEmbedded ? "リアルタイム購読を開始しています…" : "購読開始…");
-      this.updateLoader("データ同期中…");
-      // questionStatusはイベントごとに分離されているため、初期ロード時は取得しない
-      // リアルタイム購読で取得する（startQuestionStatusStream）
-      const [eventsSnapshot, schedulesSnapshot] = await Promise.all([
-        get(questionIntakeEventsRef),
-        get(questionIntakeSchedulesRef)
-      ]);
-      const questionsValue = hasQuestions && questionsSnapshot?.val ? questionsSnapshot.val() || {} : {};
-      this.eventsBranch = eventsSnapshot.val() || {};
-      this.schedulesBranch = schedulesSnapshot.val() || {};
-      this.applyQuestionsBranch(questionsValue);
-      // questionStatusはstartQuestionStatusStreamで取得するため、ここでは空のMapを設定
-      this.applyQuestionStatusSnapshot({});
-      this.rebuildScheduleMetadata();
-      this.applyContextToState();
-      this.startQuestionsStream();
-      this.startQuestionStatusStream();
-      this.startScheduleMetadataStreams();
-      this.fetchDictionary().catch((error) => {
-        console.error("辞書の取得に失敗しました", error);
-      });
-      this.startDictionaryListener();
-      this.startPickupListener();
-      this.startSideTelopListener();
-      // 初期化時にchannelAssignmentをクリアして、古い割り当て情報が表示されないようにする
-      if (this.state) {
-        this.state.channelAssignment = null;
-      }
-      this.startDisplaySessionMonitor();
-      this.startDisplayPresenceMonitor();
-      this.fetchLogs().catch((error) => {
-        console.error("ログの取得に失敗しました", error);
-      });
-      this.finishLoaderSteps("準備完了");
-      this.hideLoader();
-      this.toggleDictionaryDrawer(!!this.preferredDictionaryOpen, false);
-      this.toggleLogsDrawer(!!this.preferredLogsOpen, false);
-      this.toast(`ようこそ、${user.displayName || ""}さん`, "success");
-      this.startLogsUpdateMonitor();
-      this.resolveEmbedReady();
-    } catch (error) {
-      this.toast("ユーザー権限の確認中にエラーが発生しました。", "error");
-      await this.logout();
-      this.hideLoader();
-    }
+    return this.authManager.handleAuthState(user);
   }
 
-  /**
-   * ログイン済みユーザー向けにUIを初期化し、必要な購読を開始します。
-   * @param {import("firebase/auth").User} user
-   * @returns {Promise<void>}
-   */
   async renderLoggedInUi(user) {
-    const previousUid = String(this.operatorIdentity?.uid || "").trim();
-    const nextUid = String(user?.uid || "").trim();
-    const wasAuthorized = this.isAuthorized === true;
-    this.redirectingToIndex = false;
-    this.operatorIdentity = {
-      uid: nextUid,
-      email: String(user?.email || "").trim(),
-      displayName: String(user?.displayName || "").trim()
-    };
-    if (this.dom.loginContainer) this.dom.loginContainer.style.display = "none";
-    if (this.dom.mainContainer) {
-      this.dom.mainContainer.style.display = "";
-      this.dom.mainContainer.hidden = false;
-    }
-    if (this.dom.actionPanel) {
-      this.dom.actionPanel.style.display = "flex";
-      this.dom.actionPanel.hidden = false;
-    }
-    const userChanged = !wasAuthorized || !previousUid || previousUid !== nextUid;
-    this.isAuthorized = true;
-    if (userChanged) {
-      this.operatorMode = OPERATOR_MODE_TELOP;
-      this.stopOperatorPresenceHeartbeat();
-      this.operatorPresenceSyncQueued = false;
-      this.operatorPresenceEntryKey = "";
-      this.operatorPresenceEntryRef = null;
-      this.operatorPresenceLastSignature = "";
-      this.operatorPresenceSessionId = this.generatePresenceSessionId();
-      this.operatorPresencePrimedEventId = "";
-      this.operatorPresencePrimePromise = null;
-      this.operatorPresencePrimeTargetEventId = "";
-      await this.purgeOperatorPresenceSessionsForUser(nextUid, {
-        excludeSessionId: String(this.operatorPresenceSessionId || "")
-      });
-      if (this.state) {
-        this.state.operatorPresenceEventId = "";
-        this.state.operatorPresenceByUser = new Map();
-        this.state.operatorPresenceSelf = null;
-      }
-      this.resetPageContextSelection();
-      if (this.pageContext && typeof this.pageContext === "object") {
-        this.pageContext.operatorMode = OPERATOR_MODE_TELOP;
-      }
-      this.applyContextToState();
-      if (typeof this.clearOperatorPresenceIntent === "function") {
-        this.clearOperatorPresenceIntent();
-      }
-      Questions.updateScheduleContext(this, {
-        syncPresence: false,
-        trackIntent: false,
-        presenceReason: "context-reset",
-        selectionConfirmed: false,
-        presenceOptions: {
-          allowFallback: false,
-          publishSchedule: false,
-          publishEvent: false,
-          useActiveSchedule: false
-        }
-      });
-      this.renderChannelBanner();
-      this.evaluateScheduleConflict();
-    }
-    if (this.dom.userInfo) {
-      this.dom.userInfo.innerHTML = "";
-      const label = document.createElement("span");
-      label.className = "user-label";
-      const safeDisplayName = String(user.displayName || "").trim();
-      const safeEmail = String(user.email || "").trim();
-      label.textContent = safeDisplayName && safeEmail ? `${safeDisplayName} (${safeEmail})` : safeDisplayName || safeEmail || "";
-      const logoutButton = document.createElement("button");
-      logoutButton.id = "logout-button";
-      logoutButton.type = "button";
-      logoutButton.textContent = "ログアウト";
-      logoutButton.className = "btn btn-ghost btn-sm";
-      logoutButton.addEventListener("click", () => this.logout());
-      this.dom.userInfo.append(label, logoutButton);
-      this.dom.userInfo.hidden = false;
-    }
-    if (this.pendingExternalContext) {
-      const pendingContext = this.pendingExternalContext;
-      this.pendingExternalContext = null;
-      this.setExternalContext(pendingContext);
-    }
-    this.applyPreferredSubTab();
-    const context = this.pageContext || {};
-    const contextConfirmed = context.selectionConfirmed === true;
-    const activeEventId = String(
-      this.state?.activeEventId || (contextConfirmed ? context.eventId : "") || ""
-    ).trim();
-    if (this.operatorPresencePrimedEventId && this.operatorPresencePrimedEventId !== activeEventId) {
-      this.operatorPresencePrimedEventId = "";
-    }
-    this.primeOperatorPresenceSession(activeEventId).finally(() => this.syncOperatorPresence());
-    this.refreshOperatorPresenceSubscription();
+    return this.authManager.renderLoggedInUi(user);
   }
 
-  /**
-   * 未ログイン時のUIを表示し、リアルタイム購読やpresenceを解放します。
-   */
   showLoggedOutState() {
-    if (this.redirectingToIndex) {
-      return;
-    }
-    const ensure = (value) => String(value ?? "").trim();
-    const previousUid = ensure(this.operatorIdentity?.uid || auth.currentUser?.uid || "");
-    const sessionId = ensure(this.operatorPresenceSessionId);
-    if (previousUid) {
-      this.purgeOperatorPresenceSessionsForUser(previousUid, { excludeSessionId: sessionId });
-    }
-    this.isAuthorized = false;
-    this.operatorIdentity = { uid: "", email: "", displayName: "" };
-    this.dictionaryLoaded = false;
-    this.toggleDictionaryDrawer(false, false);
-    this.toggleLogsDrawer(false, false);
-    this.cleanupRealtime();
-    if (this.isEmbedded) {
-      this.showLoader("サインイン状態を確認しています…");
-    } else {
-      this.hideLoader();
-    }
-    this.closeEditDialog();
-    if (this.dom.loginContainer) {
-      this.dom.loginContainer.style.display = this.isEmbedded ? "none" : "";
-    }
-    if (!this.isEmbedded && this.dom.loginButton) {
-      this.dom.loginButton.disabled = false;
-    }
-    if (this.dom.mainContainer) {
-      this.dom.mainContainer.style.display = "none";
-    }
-    if (this.dom.actionPanel) {
-      this.dom.actionPanel.style.display = "none";
-      this.dom.actionPanel.hidden = true;
-    }
-    if (this.dom.userInfo) {
-      this.dom.userInfo.hidden = true;
-      this.dom.userInfo.innerHTML = "";
-    }
-    if (typeof window !== "undefined" && !this.isEmbedded) {
-      this.redirectingToIndex = true;
-      goToLogin();
-    }
+    return this.authManager.showLoggedOutState();
   }
+
+
 
   /**
    * すべてのリアルタイム購読とpresence関連のリソースを破棄します。
