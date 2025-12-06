@@ -83,9 +83,11 @@ import {
 } from "../shared/print-utils.js";
 // DEFAULT_PREVIEW_NOTE, DEFAULT_LOAD_TIMEOUT_MS, createPrintPreviewController は PrintManager に移行されました
 import { PrintManager } from "./managers/print-manager.js";
+import { CsvManager } from "./managers/csv-manager.js";
 
 let redirectingToIndex = false;
 let printManager = null;
+let csvManager = null;
 
 const glDataFetchCache = new Map();
 
@@ -2049,19 +2051,6 @@ function emitParticipantSyncEvent(detail = {}) {
   }
 }
 
-function encodeCsvValue(value) {
-  if (value == null) return "";
-  const text = String(value);
-  if (/[",\r\n]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`;
-  }
-  return text;
-}
-
-function createCsvContent(rows) {
-  return rows.map(row => row.map(encodeCsvValue).join(",")).join("\r\n");
-}
-
 function getSelectionIdentifiers() {
   return {
     eventId: state.selectedEventId ? String(state.selectedEventId) : "",
@@ -2069,38 +2058,7 @@ function getSelectionIdentifiers() {
   };
 }
 
-function buildParticipantCsvFilename(eventId, scheduleId) {
-  return `${eventId}_${scheduleId}_participants.csv`;
-}
-
-function buildTeamCsvFilename(eventId, scheduleId) {
-  return `${eventId}_${scheduleId}_teams.csv`;
-}
-
-function downloadCsvFile(filename, rows) {
-  if (!rows || !rows.length) return;
-  const content = createCsvContent(rows);
-  const bomBytes = new Uint8Array([0xef, 0xbb, 0xbf]);
-  let blob;
-
-  if (typeof TextEncoder !== "undefined") {
-    const encoder = new TextEncoder();
-    const body = encoder.encode(content);
-    blob = new Blob([bomBytes, body], { type: "text/csv;charset=utf-8;" });
-  } else {
-    blob = new Blob(["\ufeff" + content], { type: "text/csv;charset=utf-8;" });
-  }
-
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.style.display = "none";
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
-}
+// encodeCsvValue, createCsvContent, buildParticipantCsvFilename, buildTeamCsvFilename, downloadCsvFile は CsvManager に移行されました
 
 function createShareUrl(token) {
   const url = new URL(FORM_PAGE_PATH, window.location.href);
@@ -4887,215 +4845,7 @@ async function handleDeleteSchedule(scheduleId, scheduleLabel) {
   }
 }
 
-async function handleCsvChange(event) {
-  const files = event.target.files;
-  if (!files || !files.length) {
-    return;
-  }
-
-  const file = files[0];
-  const { eventId, scheduleId } = getSelectionIdentifiers();
-
-  try {
-    if (!eventId || !scheduleId) {
-      throw new Error(getSelectionRequiredMessage());
-    }
-
-    const expectedName = buildParticipantCsvFilename(eventId, scheduleId);
-    if (file.name !== expectedName) {
-      throw new Error(`ファイル名が一致しません。${expectedName} をアップロードしてください。`);
-    }
-
-    const text = await readFileAsText(file);
-    const rows = parseCsv(text);
-    const parsedEntries = parseParticipantRows(rows);
-    const sortedEntries = parsedEntries.slice().sort((a, b) => {
-      const deptA = String(a.department || "");
-      const deptB = String(b.department || "");
-      const deptCompare = deptA.localeCompare(deptB, "ja", { sensitivity: "base", numeric: true });
-      if (deptCompare !== 0) return deptCompare;
-      const phoneticA = String(a.phonetic || a.furigana || a.name || "");
-      const phoneticB = String(b.phonetic || b.furigana || b.name || "");
-      const phoneticCompare = phoneticA.localeCompare(phoneticB, "ja", { sensitivity: "base", numeric: true });
-      if (phoneticCompare !== 0) return phoneticCompare;
-      return String(a.name || "").localeCompare(String(b.name || ""), "ja", { sensitivity: "base", numeric: true });
-    });
-    const entries = assignParticipantIds(
-      sortedEntries,
-      state.participants,
-      { eventId: state.selectedEventId, scheduleId: state.selectedScheduleId }
-    );
-    const existingMap = new Map(
-      state.participants
-        .map(entry => {
-          const key = resolveParticipantUid(entry) || entry.participantId || entry.id;
-          return key ? [key, entry] : null;
-        })
-        .filter(Boolean)
-    );
-    state.participants = sortParticipants(
-      entries.map(entry => {
-        const uid = resolveParticipantUid(entry) || entry.participantId;
-        const entryKey = uid;
-        const existing = entryKey ? existingMap.get(entryKey) || {} : {};
-        const department = entry.department || existing.department || "";
-    const groupNumber = entry.groupNumber || existing.groupNumber || "";
-    const phonetic = entry.phonetic || entry.furigana || existing.phonetic || existing.furigana || "";
-    const status = resolveParticipantStatus({ ...existing, ...entry, groupNumber }, groupNumber) || existing.status || "active";
-        const legacyParticipantId = existing.legacyParticipantId || (existing.participantId && existing.participantId !== uid ? existing.participantId : "");
-        return {
-          participantId: uid,
-          uid,
-          legacyParticipantId,
-          name: entry.name || existing.name || "",
-          phonetic,
-          furigana: phonetic,
-          gender: entry.gender || existing.gender || "",
-          department,
-          groupNumber,
-          phone: entry.phone || existing.phone || "",
-          email: entry.email || existing.email || "",
-          token: existing.token || "",
-          guidance: existing.guidance || "",
-          status,
-          isCancelled: status === "cancelled",
-          isRelocated: status === "relocated"
-        };
-      })
-    );
-    syncCurrentScheduleCache();
-    updateDuplicateMatches();
-    if (dom.fileLabel) dom.fileLabel.textContent = file.name;
-    renderParticipants();
-    const relocationCandidates = state.participants
-      .filter(entry => {
-        const teamValue = String(entry.groupNumber || "");
-        return resolveParticipantStatus(entry, teamValue) === "relocated";
-      })
-      .map(entry => ({ participantId: entry.participantId || "", rowKey: entry.rowKey || "" }));
-    queueRelocationPrompt(relocationCandidates, { replace: true });
-    const signature = signatureForEntries(state.participants);
-    if (signature === state.lastSavedSignature) {
-      if (dom.saveButton) dom.saveButton.disabled = true;
-      setUploadStatus("既存のデータと同じ内容です。", "success");
-    } else {
-      if (dom.saveButton) dom.saveButton.disabled = false;
-      setUploadStatus(`読み込み成功: ${state.participants.length}名`, "success");
-    }
-    updateParticipantActionPanelState();
-  } catch (error) {
-    console.error(error);
-    setUploadStatus(error.message || "CSVの読み込みに失敗しました。", "error");
-  } finally {
-    if (dom.csvInput) {
-      dom.csvInput.value = "";
-    }
-  }
-}
-
-async function handleTeamCsvChange(event) {
-  const files = event.target.files;
-  if (!files || !files.length) {
-    return;
-  }
-
-  const file = files[0];
-  const { eventId, scheduleId } = getSelectionIdentifiers();
-
-  try {
-    if (!eventId || !scheduleId) {
-      throw new Error(getSelectionRequiredMessage());
-    }
-
-    const expectedName = buildTeamCsvFilename(eventId, scheduleId);
-    if (file.name !== expectedName) {
-      throw new Error(`ファイル名が一致しません。${expectedName} をアップロードしてください。`);
-    }
-
-    const text = await readFileAsText(file);
-    const rows = parseCsv(text);
-    const assignments = parseTeamAssignmentRows(rows);
-    const eventAssignmentMap = ensureTeamAssignmentMap(eventId);
-    const currentMapMatches = applyAssignmentsToEntries(state.participants, assignments);
-
-    assignments.forEach((groupNumber, participantId) => {
-      if (eventAssignmentMap) {
-        eventAssignmentMap.set(participantId, groupNumber);
-      }
-    });
-
-    const aggregateMap = eventAssignmentMap || assignments;
-    const applyResult = applyAssignmentsToEntries(state.participants, aggregateMap);
-    state.participants = sortParticipants(applyResult.entries);
-    syncCurrentScheduleCache();
-    const cacheMatched = applyAssignmentsToEventCache(eventId, aggregateMap);
-    updateDuplicateMatches();
-    renderParticipants();
-    syncSaveButtonState();
-
-    if (dom.teamFileLabel) {
-      dom.teamFileLabel.textContent = file.name;
-    }
-
-    const matchedIds = currentMapMatches.matchedIds || new Set();
-    const updatedIds = currentMapMatches.updatedIds || new Set();
-    const allMatched = new Set([...(matchedIds || []), ...(cacheMatched || [])]);
-    const unmatchedCount = Math.max(assignments.size - allMatched.size, 0);
-    const summaryParts = [];
-    summaryParts.push(`班番号を照合: ${allMatched.size}名`);
-    summaryParts.push(`変更: ${updatedIds.size}件`);
-    if (unmatchedCount > 0) {
-      summaryParts.push(`未一致: ${unmatchedCount}名`);
-    }
-    setUploadStatus(summaryParts.join(" / "), "success");
-  } catch (error) {
-    console.error(error);
-    setUploadStatus(error.message || "班番号CSVの読み込みに失敗しました。", "error");
-  } finally {
-    if (dom.teamCsvInput) {
-      dom.teamCsvInput.value = "";
-    }
-  }
-}
-
-function downloadParticipantTemplate() {
-  const { eventId, scheduleId } = getSelectionIdentifiers();
-  if (!eventId || !scheduleId) {
-    setUploadStatus(getSelectionRequiredMessage("参加者CSVテンプレをダウンロードするには"), "error");
-    return;
-  }
-
-  const filename = buildParticipantCsvFilename(eventId, scheduleId);
-  downloadCsvFile(filename, [PARTICIPANT_TEMPLATE_HEADERS]);
-  setUploadStatus(`${filename} をダウンロードしました。`, "success");
-}
-
-function downloadTeamTemplate() {
-  const { eventId, scheduleId } = getSelectionIdentifiers();
-  if (!eventId || !scheduleId) {
-    setUploadStatus(getSelectionRequiredMessage("班番号CSVテンプレをダウンロードするには"), "error");
-    return;
-  }
-
-  const rows = sortParticipants(state.participants)
-    .filter(entry => resolveParticipantUid(entry))
-    .map(entry => [
-      String(entry.department || ""),
-      String(entry.gender || ""),
-      String(entry.name || ""),
-      String(entry.groupNumber || ""),
-      resolveParticipantUid(entry)
-    ]);
-
-  if (!rows.length) {
-    setUploadStatus("テンプレに出力できる参加者が見つかりません。参加者リストを読み込んでからお試しください。", "error");
-    return;
-  }
-
-  const filename = buildTeamCsvFilename(eventId, scheduleId);
-  downloadCsvFile(filename, [TEAM_TEMPLATE_HEADERS, ...rows]);
-  setUploadStatus(`${filename} をダウンロードしました。（${rows.length}名）`, "success");
-}
+// handleCsvChange, handleTeamCsvChange, downloadParticipantTemplate, downloadTeamTemplate は CsvManager に移行されました
 
 async function handleSave(options = {}) {
   const { allowEmpty = false, successMessage = "参加者リストを更新しました。" } = options || {};
@@ -6647,13 +6397,19 @@ function attachEventHandlers() {
 
   if (dom.downloadParticipantTemplateButton) {
     dom.downloadParticipantTemplateButton.addEventListener("click", () => {
-      downloadParticipantTemplate();
+      if (!csvManager) {
+        throw new Error("CsvManager is not initialized");
+      }
+      csvManager.downloadParticipantTemplate();
     });
   }
 
   if (dom.downloadTeamTemplateButton) {
     dom.downloadTeamTemplateButton.addEventListener("click", () => {
-      downloadTeamTemplate();
+      if (!csvManager) {
+        throw new Error("CsvManager is not initialized");
+      }
+      csvManager.downloadTeamTemplate();
     });
   }
 
@@ -6882,12 +6638,22 @@ function attachEventHandlers() {
   }
 
   if (dom.csvInput) {
-    dom.csvInput.addEventListener("change", handleCsvChange);
+    dom.csvInput.addEventListener("change", (event) => {
+      if (!csvManager) {
+        throw new Error("CsvManager is not initialized");
+      }
+      csvManager.handleCsvChange(event);
+    });
     dom.csvInput.disabled = true;
   }
 
   if (dom.teamCsvInput) {
-    dom.teamCsvInput.addEventListener("change", handleTeamCsvChange);
+    dom.teamCsvInput.addEventListener("change", (event) => {
+      if (!csvManager) {
+        throw new Error("CsvManager is not initialized");
+      }
+      csvManager.handleTeamCsvChange(event);
+    });
     dom.teamCsvInput.disabled = true;
   }
 
@@ -7322,6 +7088,26 @@ function init() {
   });
   
   printManager.hydrateSettingsFromStorage();
+  
+  // CsvManager を初期化
+  csvManager = new CsvManager({
+    dom,
+    state,
+    // 依存関数と定数
+    getSelectionIdentifiers,
+    getSelectionRequiredMessage,
+    setUploadStatus,
+    PARTICIPANT_TEMPLATE_HEADERS,
+    TEAM_TEMPLATE_HEADERS,
+    sortParticipants,
+    resolveParticipantUid,
+    renderParticipants,
+    updateParticipantActionPanelState,
+    syncSaveButtonState,
+    queueRelocationPrompt,
+    captureParticipantBaseline
+  });
+  
   attachEventHandlers();
   setAuthUi(Boolean(state.user));
   initLoaderSteps(isEmbeddedMode() ? [] : STEP_LABELS);
