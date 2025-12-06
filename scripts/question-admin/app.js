@@ -81,13 +81,11 @@ import {
   logPrintError,
   logPrintDebug
 } from "../shared/print-utils.js";
-import {
-  DEFAULT_PREVIEW_NOTE,
-  DEFAULT_LOAD_TIMEOUT_MS,
-  createPrintPreviewController
-} from "../shared/print-preview.js";
+// DEFAULT_PREVIEW_NOTE, DEFAULT_LOAD_TIMEOUT_MS, createPrintPreviewController は PrintManager に移行されました
+import { PrintManager } from "./managers/print-manager.js";
 
 let redirectingToIndex = false;
+let printManager = null;
 
 const glDataFetchCache = new Map();
 
@@ -3031,414 +3029,110 @@ function renderParticipants() {
   updateParticipantActionPanelState();
 }
 
-function buildParticipantPrintGroups({ eventId, scheduleId }) {
-  const participants = sortParticipants(state.participants);
-  const rosterMap = getEventGlRoster(eventId);
-  const assignmentsMap = getEventGlAssignmentsMap(eventId);
-  const groupsByKey = new Map();
-
-  participants.forEach(entry => {
-    const groupKey = getParticipantGroupKey(entry);
-    let group = groupsByKey.get(groupKey);
-    if (!group) {
-      const { label, value } = describeParticipantGroup(groupKey);
-      group = {
-        key: groupKey,
-        label,
-        value,
-        participants: []
-      };
-      groupsByKey.set(groupKey, group);
-    }
-    group.participants.push(entry);
-  });
-
-  return Array.from(groupsByKey.values())
-    .filter(group => Array.isArray(group.participants) && group.participants.length > 0)
-    .map(group => ({
-      ...group,
-      glLeaders: collectGroupGlLeaders(group.key, {
-        eventId,
-        scheduleId,
-      rosterMap,
-      assignmentsMap
-    })
-  }));
-}
-
-const staffSortCollator = new Intl.Collator("ja", { numeric: true, sensitivity: "base" });
-
-function compareNullableStringsForStaff(a, b) {
-  const aText = normalizeKey(a || "");
-  const bText = normalizeKey(b || "");
-  if (aText && bText) {
-    return staffSortCollator.compare(aText, bText);
-  }
-  if (aText && !bText) return -1;
-  if (!aText && bText) return 1;
-  return 0;
-}
-
-function resolveGradeSortKey(grade) {
-  const raw = normalizeKey(grade || "");
-  if (!raw) {
-    return { priority: 1, letter: "", number: Number.POSITIVE_INFINITY, text: "" };
-  }
-  const normalized = raw.replace(/[０-９]/g, digit => String.fromCharCode(digit.charCodeAt(0) - 0xfee0));
-  const letterMatch = normalized.match(/^[A-Za-z]+/);
-  const numberMatch = normalized.match(/(\d+)/);
-  return {
-    priority: 0,
-    letter: (letterMatch ? letterMatch[0] : "").toLowerCase(),
-    number: numberMatch ? parseInt(numberMatch[1], 10) : Number.POSITIVE_INFINITY,
-    text: normalized
-  };
-}
-
-function compareStaffEntries(a, b) {
-  const facultyDiff = compareNullableStringsForStaff(a.faculty, b.faculty);
-  if (facultyDiff) return facultyDiff;
-  const departmentDiff = compareNullableStringsForStaff(a.department, b.department);
-  if (departmentDiff) return departmentDiff;
-
-  const gradeA = resolveGradeSortKey(a.grade);
-  const gradeB = resolveGradeSortKey(b.grade);
-  if (gradeA.priority !== gradeB.priority) return gradeA.priority - gradeB.priority;
-  const letterDiff = staffSortCollator.compare(gradeA.letter, gradeB.letter);
-  if (letterDiff) return letterDiff;
-  if (gradeA.number !== gradeB.number) return gradeA.number - gradeB.number;
-  const gradeTextDiff = staffSortCollator.compare(gradeA.text, gradeB.text);
-  if (gradeTextDiff) return gradeTextDiff;
-
-  const nameDiff = compareNullableStringsForStaff(a.name, b.name);
-  if (nameDiff) return nameDiff;
-  return compareNullableStringsForStaff(a.phonetic, b.phonetic);
-}
-
-function buildStaffPrintGroups({ eventId, scheduleId }) {
-  const roster = getEventGlRoster(eventId);
-  const assignments = getEventGlAssignmentsMap(eventId);
-  if (!(roster instanceof Map) || !(assignments instanceof Map)) {
-    return [];
-  }
-
-  const staffEntries = [];
-  assignments.forEach((entry, glId) => {
-    const assignment = resolveScheduleAssignment(entry, scheduleId);
-    if (!assignment) return;
-    const status = assignment.status || "";
-    if (status === "absent" || status === "unavailable") {
-      return;
-    }
-    if (status !== "team" && status !== "staff") {
-      return;
-    }
-
-    const profile = roster.get(String(glId)) || {};
-    staffEntries.push({
-      id: String(glId),
-      assignment: status === "staff" ? GL_STAFF_LABEL : normalizeKey(assignment.teamId || ""),
-      name: profile.name || String(glId),
-      phonetic: profile.phonetic || "",
-      faculty: profile.faculty || "",
-      department: profile.department || "",
-      grade: profile.grade || "",
-      sourceType: profile.sourceType === "internal" ? "internal" : "external"
-    });
-  });
-
-  staffEntries.sort(compareStaffEntries);
-
-  const groups = [];
-  let currentFaculty = "__init__";
-  let currentGroup = null;
-
-  staffEntries.forEach(entry => {
-    const facultyLabel = entry.faculty || "学部未設定";
-    if (!currentGroup || currentFaculty !== facultyLabel) {
-      currentFaculty = facultyLabel;
-      currentGroup = { faculty: facultyLabel, members: [] };
-      groups.push(currentGroup);
-    }
-    currentGroup.members.push(entry);
-  });
-
-  return groups;
-}
+// buildParticipantPrintGroups と buildStaffPrintGroups は PrintManager に移行されました
 
 function hydratePrintSettingsFromStorage() {
-  logPrintInfo("hydratePrintSettingsFromStorage start");
-  if (typeof localStorage === "undefined") {
-    logPrintWarn("hydratePrintSettingsFromStorage skipped: localStorage unavailable");
-    return;
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
   }
-  try {
-    const stored = localStorage.getItem(PRINT_SETTING_STORAGE_KEY);
-    if (!stored) {
-      logPrintDebug("hydratePrintSettingsFromStorage empty");
-      return;
-    }
-    const parsed = JSON.parse(stored);
-    const normalized = normalizePrintSettings(parsed, state.printSettings || DEFAULT_PRINT_SETTINGS);
-    state.printSettings = normalized;
-    logPrintInfo("hydratePrintSettingsFromStorage loaded", normalized);
-  } catch (error) {
-    console.warn("[Print] Failed to load print settings from storage", error);
-  }
+  printManager.hydrateSettingsFromStorage();
 }
 
 function persistPrintSettings(settings) {
-  logPrintInfo("persistPrintSettings start", settings);
-  const normalized = normalizePrintSettings(settings, state.printSettings || DEFAULT_PRINT_SETTINGS);
-  state.printSettings = normalized;
-  if (typeof localStorage === "undefined") {
-    logPrintWarn("persistPrintSettings skipped: localStorage unavailable");
-    return normalized;
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
   }
-  try {
-    localStorage.setItem(PRINT_SETTING_STORAGE_KEY, JSON.stringify(normalized));
-    logPrintInfo("persistPrintSettings saved", normalized);
-  } catch (error) {
-    console.warn("[Print] Failed to persist print settings", error);
-  }
-  return normalized;
+  return printManager.persistSettings(settings);
 }
 
 function applyPrintSettingsToForm(settings = state.printSettings) {
-  logPrintDebug("applyPrintSettingsToForm", settings);
-  const normalized = normalizePrintSettings(settings, state.printSettings || DEFAULT_PRINT_SETTINGS);
-  if (dom.printPaperSizeInput) {
-    dom.printPaperSizeInput.value = normalized.paperSize;
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
   }
-  if (dom.printOrientationInput) {
-    dom.printOrientationInput.value = normalized.orientation;
-  }
-  if (dom.printMarginInput) {
-    dom.printMarginInput.value = normalized.margin;
-  }
-  if (dom.printCustomWidthInput) {
-    dom.printCustomWidthInput.value = normalized.customWidth;
-  }
-  if (dom.printCustomHeightInput) {
-    dom.printCustomHeightInput.value = normalized.customHeight;
-  }
-  if (dom.printShowHeaderInput) {
-    dom.printShowHeaderInput.checked = normalized.showHeader;
-  }
-  if (dom.printRepeatHeaderInput) {
-    dom.printRepeatHeaderInput.checked = normalized.repeatHeader && normalized.showHeader;
-    dom.printRepeatHeaderInput.disabled = !normalized.showHeader;
-  }
-  if (dom.printShowPageNumberInput) {
-    dom.printShowPageNumberInput.checked = normalized.showPageNumbers;
-  }
-  if (dom.printShowDateInput) {
-    dom.printShowDateInput.checked = normalized.showDate;
-  }
-  if (dom.printShowTimeInput) {
-    dom.printShowTimeInput.checked = normalized.showTime;
-  }
-  if (dom.printShowPhoneInput) {
-    dom.printShowPhoneInput.checked = normalized.showPhone;
-  }
-  if (dom.printShowEmailInput) {
-    dom.printShowEmailInput.checked = normalized.showEmail;
-  }
+  printManager.applySettingsToForm(settings);
 }
 
 function readPrintSettingsFromForm() {
-  logPrintDebug("readPrintSettingsFromForm start");
-  const settings = {
-    paperSize: dom.printPaperSizeInput?.value,
-    orientation: dom.printOrientationInput?.value,
-    margin: dom.printMarginInput?.value,
-    customWidth: dom.printCustomWidthInput?.value,
-    customHeight: dom.printCustomHeightInput?.value,
-    showHeader: dom.printShowHeaderInput ? dom.printShowHeaderInput.checked : undefined,
-    repeatHeader: dom.printRepeatHeaderInput ? dom.printRepeatHeaderInput.checked : undefined,
-    showPageNumbers: dom.printShowPageNumberInput ? dom.printShowPageNumberInput.checked : undefined,
-    showDate: dom.printShowDateInput ? dom.printShowDateInput.checked : undefined,
-    showTime: dom.printShowTimeInput ? dom.printShowTimeInput.checked : undefined,
-    showPhone: dom.printShowPhoneInput ? dom.printShowPhoneInput.checked : undefined,
-    showEmail: dom.printShowEmailInput ? dom.printShowEmailInput.checked : undefined
-  };
-  if (settings.showHeader === false) {
-    settings.repeatHeader = false;
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
   }
-  const normalized = normalizePrintSettings(settings, state.printSettings || DEFAULT_PRINT_SETTINGS);
-  logPrintInfo("readPrintSettingsFromForm normalized", normalized);
-  return normalized;
+  return printManager.readSettingsFromForm();
 }
 
 function setupPrintSettingsDialog() {
-  if (!dom.printSettingsForm) return;
-
-  logPrintInfo("setupPrintSettingsDialog initialized");
-
-  const syncHeaderControls = () => {
-    if (!dom.printShowHeaderInput || !dom.printRepeatHeaderInput) return;
-    const enabled = Boolean(dom.printShowHeaderInput.checked);
-    dom.printRepeatHeaderInput.disabled = !enabled;
-    if (!enabled) {
-      dom.printRepeatHeaderInput.checked = false;
-    }
-    logPrintDebug("syncHeaderControls", { enabled });
-  };
-
-  const syncCustomSizeVisibility = () => {
-    if (!dom.printPaperSizeInput || !dom.printCustomSizeField) return;
-    const isCustom = dom.printPaperSizeInput.value === "Custom";
-    dom.printCustomSizeField.hidden = !isCustom;
-    logPrintDebug("syncCustomSizeVisibility", { isCustom });
-  };
-
-  dom.printShowHeaderInput?.addEventListener("change", syncHeaderControls);
-  dom.printPaperSizeInput?.addEventListener("change", syncCustomSizeVisibility);
-  dom.printSettingsForm.addEventListener("change", () => {
-    logPrintInfo("print settings form changed");
-    const settings = readPrintSettingsFromForm();
-    persistPrintSettings(settings);
-    updateParticipantPrintPreview({ autoPrint: false, forceReveal: true, quiet: true });
-  });
-
-  dom.printSettingsForm.addEventListener("submit", event => {
-    event.preventDefault();
-    logPrintInfo("print settings form submitted");
-    const settings = readPrintSettingsFromForm();
-    persistPrintSettings(settings);
-    updateParticipantPrintPreview({ autoPrint: false, forceReveal: true });
-  });
-
-  applyPrintSettingsToForm(state.printSettings);
-  syncHeaderControls();
-  syncCustomSizeVisibility();
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
+  }
+  printManager.setupSettingsDialog();
 }
 
-const PRINT_PREVIEW_DEFAULT_NOTE = DEFAULT_PREVIEW_NOTE;
-const PRINT_PREVIEW_LOAD_TIMEOUT_MS = DEFAULT_LOAD_TIMEOUT_MS;
-
-let participantPrintInProgress = false;
-let staffPrintInProgress = false;
-
-const participantPrintPreviewController = createPrintPreviewController({
-  previewContainer: dom.printPreview,
-  previewFrame: dom.printPreviewFrame,
-  previewMeta: dom.printPreviewMeta,
-  previewNote: dom.printPreviewNote,
-  previewPrintButton: dom.printPreviewPrintButton,
-  previewDialog: dom.printPreviewDialog,
-  defaultNote: PRINT_PREVIEW_DEFAULT_NOTE,
-  loadTimeoutMs: PRINT_PREVIEW_LOAD_TIMEOUT_MS,
-  defaultSettings: () => state.printSettings || DEFAULT_PRINT_SETTINGS,
-  normalizeSettings: (settings, fallback) => normalizePrintSettings(settings, fallback),
-  onCacheChange: (nextCache) => {
-    participantPrintPreviewCache = nextCache;
-  },
-  openDialog: (element) => openDialog(element),
-  closeDialog: (element) => closeDialog(element),
-  openPopup: (html, title, settings) => openPopupPrintWindow(html, title, settings)
-});
-
-let participantPrintPreviewCache = participantPrintPreviewController.getCache();
+// PRINT_PREVIEW_DEFAULT_NOTE と PRINT_PREVIEW_LOAD_TIMEOUT_MS は PrintManager に移行されました
 
 function cacheParticipantPrintPreview(data = {}, options = {}) {
-  logPrintDebug("cacheParticipantPrintPreview", { data, options });
-  participantPrintPreviewCache = participantPrintPreviewController.cachePreview(data, options);
-  return participantPrintPreviewCache;
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
+  }
+  return printManager.cacheParticipantPrintPreview(data, options);
 }
 
-function setPrintPreviewNote(text = PRINT_PREVIEW_DEFAULT_NOTE, options = {}) {
-  logPrintDebug("setPrintPreviewNote", { text, options });
-  participantPrintPreviewController.setNote(text, options);
+function setPrintPreviewNote(text, options = {}) {
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
+  }
+  printManager.setPrintPreviewNote(text, options);
 }
 function setPrintPreviewVisibility(visible) {
-  logPrintInfo("setPrintPreviewVisibility", { visible });
-  return participantPrintPreviewController.setVisibility(visible);
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
+  }
+  return printManager.setPrintPreviewVisibility(visible);
 }
 
 function setPrintPreviewBusy(isBusy = false) {
-  logPrintDebug("setPrintPreviewBusy", { isBusy });
-  participantPrintPreviewController.setBusy(isBusy);
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
+  }
+  printManager.setPrintPreviewBusy(isBusy);
 }
 
 function clearParticipantPrintPreviewLoader() {
-  logPrintDebug("clearParticipantPrintPreviewLoader");
-  participantPrintPreviewController.setBusy(false);
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
+  }
+  printManager.clearParticipantPrintPreviewLoader();
 }
 
 function resetPrintPreview(options = {}) {
-  const { skipCloseDialog = false } = options || {};
-  logPrintInfo("resetPrintPreview", { skipCloseDialog });
-  participantPrintPreviewCache = participantPrintPreviewController.reset();
-  if (!skipCloseDialog) {
-    participantPrintPreviewController.setVisibility(false);
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
   }
+  printManager.resetPrintPreview(options);
 }
 
 function renderPreviewFallbackNote(message, metaText = "") {
-  logPrintWarn("renderPreviewFallbackNote", { message, metaText });
-  const hasCachedHtml = Boolean(participantPrintPreviewCache?.html || participantPrintPreviewCache?.forcePopupFallback);
-  const noteText = `${message || "プレビューを表示できませんでした。"}${
-    hasCachedHtml ? " 画面右の「このリストを印刷」からポップアップ印刷を再試行できます。" : ""
-  }`;
-  cacheParticipantPrintPreview({
-    ...participantPrintPreviewCache,
-    metaText: metaText || participantPrintPreviewCache.metaText || "",
-    forcePopupFallback: true
-  });
-  participantPrintPreviewController.setVisibility(true);
-  participantPrintPreviewController.setNote(noteText, { forceAnnounce: true, politeness: "assertive" });
-  participantPrintPreviewController.setBusy(false);
-  if (dom.printPreviewMeta) {
-    dom.printPreviewMeta.textContent = metaText || participantPrintPreviewCache.metaText || "";
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
   }
-  if (dom.printPreviewPrintButton) {
-    dom.printPreviewPrintButton.disabled = !hasCachedHtml;
-    if (hasCachedHtml) {
-      dom.printPreviewPrintButton.dataset.popupFallback = "true";
-    } else {
-      delete dom.printPreviewPrintButton.dataset.popupFallback;
-    }
-  }
-  dom.printPreviewNote?.classList.add("print-preview__note--error");
+  printManager.renderPreviewFallbackNote(message, metaText);
 }
 function openPopupPrintWindow(html, docTitle, printSettings = state.printSettings) {
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) {
-    return false;
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
   }
-
-  try {
-    printWindow.opener = null;
-  } catch (error) {
-    // Ignore opener errors
-  }
-
-  try {
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
-  } catch (error) {
-    // Ignore document write errors
-  }
-
-  try {
-    if (docTitle) {
-      printWindow.document.title = docTitle;
-    }
-  } catch (error) {
-    // Ignore title assignment errors
-  }
-
-  window.setTimeout(() => {
-    try {
-      printWindow.print();
-    } catch (error) {
-      // Ignore print errors
-    }
-  }, 150);
-
-  return true;
+  return printManager.openPopupPrintWindow(html, docTitle, printSettings);
 }
 
 function renderParticipantPrintPreview({
@@ -3448,8 +3142,11 @@ function renderParticipantPrintPreview({
   autoPrint = false,
   printSettings
 } = {}) {
-  logPrintInfo("renderParticipantPrintPreview", { hasHtml: Boolean(html), metaText, title, autoPrint, printSettings });
-  return participantPrintPreviewController.renderPreview({
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
+  }
+  return printManager.renderParticipantPrintPreview({
     html,
     metaText,
     title,
@@ -3458,236 +3155,38 @@ function renderParticipantPrintPreview({
   });
 }
 function triggerPrintFromPreview() {
-  logPrintInfo("triggerPrintFromPreview");
-  if (!dom.printPreviewFrame) {
-    logPrintWarn("triggerPrintFromPreview aborted: missing frame");
-    return false;
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
   }
-  const printWindow = dom.printPreviewFrame.contentWindow;
-  if (!printWindow) {
-    logPrintWarn("triggerPrintFromPreview aborted: missing window");
-    return false;
-  }
-  try {
-    printWindow.focus();
-    printWindow.print();
-    logPrintInfo("triggerPrintFromPreview succeeded");
-    return true;
-  } catch (error) {
-    logPrintWarn("triggerPrintFromPreview failed", error);
-    return false;
-  }
+  return printManager.triggerPrintFromPreview();
 }
 
 function printParticipantPreview({ showAlertOnFailure = false } = {}) {
-  logPrintInfo("printParticipantPreview invoked", { showAlertOnFailure });
-  return participantPrintPreviewController.printPreview({ showAlertOnFailure });
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
+  }
+  return printManager.printParticipantPreview({ showAlertOnFailure });
 }
 
 function closeParticipantPrintPreview() {
-  logPrintInfo("closeParticipantPrintPreview");
-  resetPrintPreview();
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
+  }
+  printManager.closeParticipantPrintPreview();
 }
 
 
 async function updateParticipantPrintPreview({ autoPrint = false, forceReveal = false, quiet = false } = {}) {
-  logPrintInfo("updateParticipantPrintPreview start", { autoPrint, forceReveal, quiet });
-  const eventId = state.selectedEventId;
-  const scheduleId = state.selectedScheduleId;
-  if (!eventId || !scheduleId) {
-    clearParticipantPrintPreviewLoader();
-    if (dom.printPreview) {
-      dom.printPreview.classList.remove("print-preview--fallback");
-    }
-    if (dom.printPreviewFrame) {
-      dom.printPreviewFrame.srcdoc = "";
-    }
-    if (dom.printPreviewMeta) {
-      dom.printPreviewMeta.textContent = "";
-    }
-    cacheParticipantPrintPreview({ forcePopupFallback: false });
-    setPrintPreviewVisibility(true);
-    setPrintPreviewNote("印刷するにはイベントと日程を選択してください。", {
-      forceAnnounce: true,
-      politeness: "assertive",
-      role: "alert"
-    });
-    if (dom.printPreviewPrintButton) {
-      dom.printPreviewPrintButton.disabled = true;
-      delete dom.printPreviewPrintButton.dataset.popupFallback;
-    }
-    if (!quiet) {
-      window.alert("印刷するにはイベントと日程を選択してください。");
-    }
-    logPrintWarn("updateParticipantPrintPreview missing selection");
-    return false;
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
   }
-
-  if (!Array.isArray(state.participants) || state.participants.length === 0) {
-    clearParticipantPrintPreviewLoader();
-    if (dom.printPreview) {
-      dom.printPreview.classList.remove("print-preview--fallback");
-    }
-    if (dom.printPreviewFrame) {
-      dom.printPreviewFrame.srcdoc = "";
-    }
-    if (dom.printPreviewMeta) {
-      dom.printPreviewMeta.textContent = "";
-    }
-    cacheParticipantPrintPreview({ forcePopupFallback: false });
-    setPrintPreviewVisibility(true);
-    setPrintPreviewNote("印刷できる参加者がまだ登録されていません。", {
-      forceAnnounce: true,
-      politeness: "assertive",
-      role: "alert"
-    });
-    if (dom.printPreviewPrintButton) {
-      dom.printPreviewPrintButton.disabled = true;
-      delete dom.printPreviewPrintButton.dataset.popupFallback;
-    }
-    if (!quiet) {
-      window.alert("印刷できる参加者がまだ登録されていません。");
-    }
-    logPrintWarn("updateParticipantPrintPreview no participants");
-    return false;
-  }
-
-  if (participantPrintInProgress) {
-    logPrintWarn("updateParticipantPrintPreview already in progress");
-    return false;
-  }
-
-  const button = dom.openPrintViewButton;
-  participantPrintInProgress = true;
-
-  logPrintDebug("updateParticipantPrintPreview lock engaged", { eventId, scheduleId });
-
-  if (button) {
-    button.dataset.printLocked = "true";
-    syncAllPrintButtonStates();
-  }
-
-  if (forceReveal) {
-    setPrintPreviewVisibility(true);
-  }
-
-  const printSettings = readPrintSettingsFromForm();
-  persistPrintSettings(printSettings);
-
-  try {
-    setPrintButtonBusy(true);
-    try {
-      try {
-        await loadGlDataForEvent(eventId);
-      } catch (error) {
-        if (typeof console !== "undefined" && typeof console.error === "function") {
-          console.error("[Print] GLデータの取得に失敗しました。最新の情報が反映されない場合があります。", error);
-        }
-        logPrintError("updateParticipantPrintPreview failed to load GL data", error);
-      }
-
-      const groups = buildParticipantPrintGroups({ eventId, scheduleId });
-      if (!groups.length) {
-        if (!quiet) {
-          window.alert("印刷できる参加者がまだ登録されていません。");
-        }
-        return false;
-      }
-
-      const selectedEvent = state.events.find(evt => evt.id === eventId) || null;
-      const schedule = selectedEvent?.schedules?.find(s => s.id === scheduleId) || null;
-      const eventName = selectedEvent?.name || "";
-      const scheduleLabel = schedule?.label || "";
-      const scheduleLocation = schedule?.location || schedule?.place || "";
-      let startAt = schedule?.startAt || "";
-      let endAt = schedule?.endAt || "";
-      const scheduleDate = String(schedule?.date || "").trim();
-      if (scheduleDate) {
-        if (!startAt && schedule?.startTime) {
-          startAt = combineDateAndTime(scheduleDate, schedule.startTime);
-        }
-        if (!endAt && schedule?.endTime) {
-          endAt = combineDateAndTime(scheduleDate, schedule.endTime);
-        }
-      }
-      const scheduleRange = formatPrintDateTimeRange(startAt, endAt);
-      const totalCount = state.participants.length;
-      const generatedAt = new Date();
-
-      const html = buildParticipantPrintHtml({
-        eventId,
-        scheduleId,
-        eventName,
-        scheduleLabel,
-        scheduleLocation,
-        scheduleRange,
-        groups,
-        totalCount,
-        generatedAt,
-        printOptions: printSettings
-      }, { defaultSettings: state.printSettings || DEFAULT_PRINT_SETTINGS });
-
-      logPrintDebug("updateParticipantPrintPreview generated html", {
-        eventId,
-        scheduleId,
-        totalCount,
-        groupsCount: groups.length,
-        printSettings
-      });
-
-      const titleParts = [eventName || eventId || "", scheduleLabel || scheduleId || ""].filter(Boolean);
-      const docTitle = titleParts.length ? `${titleParts.join(" / ")} - 参加者リスト` : "参加者リスト";
-
-      const metaText = [eventName || eventId || "", scheduleLabel || scheduleId || "", `${totalCount}名`]
-        .filter(text => String(text || "").trim())
-        .join(" / ");
-
-      cacheParticipantPrintPreview(
-        { html, title: docTitle, metaText, printSettings },
-        { preserveFallbackFlag: true }
-      );
-
-      const previewRendered = renderParticipantPrintPreview({
-        html,
-        metaText,
-        title: docTitle,
-        autoPrint,
-        printSettings
-      });
-
-      if (participantPrintPreviewCache.forcePopupFallback) {
-        logPrintInfo("updateParticipantPrintPreview using popup fallback");
-        return true;
-      }
-
-      if (!previewRendered) {
-        logPrintWarn("updateParticipantPrintPreview preview render failed");
-        renderPreviewFallbackNote(
-          "プレビュー枠を開けませんでした。ポップアップ許可後に再度お試しください。",
-          metaText
-        );
-
-        const fallbackOpened = openPopupPrintWindow(html, docTitle, printSettings);
-        if (!fallbackOpened) {
-          logPrintWarn("updateParticipantPrintPreview popup open failed");
-          window.alert("印刷プレビューを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
-          return false;
-        }
-      }
-      logPrintInfo("updateParticipantPrintPreview succeeded");
-      return true;
-    } finally {
-      setPrintButtonBusy(false);
-    }
-  } finally {
-    participantPrintInProgress = false;
-    logPrintDebug("updateParticipantPrintPreview lock released");
-    if (button) {
-      delete button.dataset.printLocked;
-    }
-    syncAllPrintButtonStates();
-  }
+  return await printManager.updateParticipantPrintPreview({ autoPrint, forceReveal, quiet });
 }
+
 
 async function openParticipantPrintView() {
   logPrintInfo("openParticipantPrintView start");
@@ -3705,7 +3204,10 @@ async function openParticipantPrintView() {
     return;
   }
 
-  if (participantPrintInProgress) {
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
+  }
+  if (printManager.participantPrintInProgress) {
     logPrintWarn("openParticipantPrintView skipped: print in progress");
     return;
   }
@@ -3717,156 +3219,13 @@ async function openParticipantPrintView() {
 }
 
 async function updateStaffPrintPreview({ autoPrint = false, forceReveal = false, quiet = false } = {}) {
-  logPrintInfo("updateStaffPrintPreview start", { autoPrint, forceReveal, quiet });
-  const eventId = state.selectedEventId;
-  const scheduleId = state.selectedScheduleId;
-  if (!eventId || !scheduleId) {
-    clearParticipantPrintPreviewLoader();
-    if (dom.printPreview) {
-      dom.printPreview.classList.remove("print-preview--fallback");
-    }
-    if (dom.printPreviewFrame) {
-      dom.printPreviewFrame.srcdoc = "";
-    }
-    if (dom.printPreviewMeta) {
-      dom.printPreviewMeta.textContent = "";
-    }
-    cacheParticipantPrintPreview({ forcePopupFallback: false });
-    setPrintPreviewVisibility(true);
-    setPrintPreviewNote("印刷するにはイベントと日程を選択してください。", {
-      forceAnnounce: true,
-      politeness: "assertive"
-    });
-    if (!quiet) {
-      window.alert("印刷するにはイベントと日程を選択してください。");
-    }
-    return false;
+  // PrintManager に委譲
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
   }
-
-  if (staffPrintInProgress) {
-    logPrintWarn("updateStaffPrintPreview already in progress");
-    return false;
-  }
-
-  const button = dom.openStaffPrintViewButton;
-  staffPrintInProgress = true;
-
-  if (button) {
-    button.dataset.printLocked = "true";
-    syncAllPrintButtonStates();
-  }
-
-  if (forceReveal) {
-    setPrintPreviewVisibility(true);
-  }
-
-  const printSettings = readPrintSettingsFromForm();
-  persistPrintSettings(printSettings);
-
-  try {
-    setStaffPrintButtonBusy(true);
-    try {
-      await loadGlDataForEvent(eventId);
-    } catch (error) {
-      if (typeof console !== "undefined" && typeof console.error === "function") {
-        console.error("[Print] スタッフデータの取得に失敗しました。最新の情報が反映されない場合があります。", error);
-      }
-      logPrintError("updateStaffPrintPreview failed to load GL data", error);
-    }
-
-    const groups = buildStaffPrintGroups({ eventId, scheduleId });
-    const totalCount = groups.reduce((sum, group) => sum + (group.members?.length || 0), 0);
-    if (!totalCount) {
-      if (dom.printPreviewPrintButton) {
-        dom.printPreviewPrintButton.disabled = true;
-        delete dom.printPreviewPrintButton.dataset.popupFallback;
-      }
-      setPrintPreviewVisibility(true);
-      setPrintPreviewNote("印刷できるスタッフがまだ登録されていません。", {
-        forceAnnounce: true,
-        politeness: "assertive"
-      });
-      if (!quiet) {
-        window.alert("印刷できるスタッフがまだ登録されていません。");
-      }
-      logPrintWarn("updateStaffPrintPreview no staff");
-      return false;
-    }
-
-    const selectedEvent = state.events.find(evt => evt.id === eventId) || null;
-    const schedule = selectedEvent?.schedules?.find(s => s.id === scheduleId) || null;
-    const eventName = selectedEvent?.name || "";
-    const scheduleLabel = schedule?.label || "";
-    const scheduleLocation = schedule?.location || schedule?.place || "";
-    let startAt = schedule?.startAt || "";
-    let endAt = schedule?.endAt || "";
-    const scheduleDate = String(schedule?.date || "").trim();
-    if (scheduleDate) {
-      if (!startAt && schedule?.startTime) {
-        startAt = combineDateAndTime(scheduleDate, schedule.startTime);
-      }
-      if (!endAt && schedule?.endTime) {
-        endAt = combineDateAndTime(scheduleDate, schedule.endTime);
-      }
-    }
-    const scheduleRange = formatPrintDateTimeRange(startAt, endAt);
-    const generatedAt = new Date();
-
-    const { html, docTitle, metaText } = buildStaffPrintHtml({
-      eventName,
-      scheduleLabel,
-      scheduleLocation,
-      scheduleRange,
-      groups,
-      totalCount,
-      generatedAt,
-      printOptions: printSettings
-    }, { defaultSettings: state.printSettings || DEFAULT_PRINT_SETTINGS });
-
-    cacheParticipantPrintPreview(
-      { html, title: docTitle, metaText, printSettings },
-      { preserveFallbackFlag: true }
-    );
-
-    const previewRendered = renderParticipantPrintPreview({
-      html,
-      metaText,
-      title: docTitle,
-      autoPrint,
-      printSettings
-    });
-
-    if (participantPrintPreviewCache.forcePopupFallback) {
-      logPrintInfo("updateStaffPrintPreview using popup fallback");
-      return true;
-    }
-
-    if (!previewRendered) {
-      logPrintWarn("updateStaffPrintPreview preview render failed");
-      renderPreviewFallbackNote(
-        "プレビュー枠を開けませんでした。ポップアップ許可後に再度お試しください。",
-        metaText
-      );
-
-      const fallbackOpened = openPopupPrintWindow(html, docTitle, printSettings);
-      if (!fallbackOpened) {
-        logPrintWarn("updateStaffPrintPreview popup open failed");
-        window.alert("印刷プレビューを開けませんでした。ブラウザのポップアップ設定をご確認ください。");
-        return false;
-      }
-    }
-
-    logPrintInfo("updateStaffPrintPreview succeeded");
-    return true;
-  } finally {
-    setStaffPrintButtonBusy(false);
-    staffPrintInProgress = false;
-    if (button) {
-      delete button.dataset.printLocked;
-    }
-    syncAllPrintButtonStates();
-  }
+  return await printManager.updateStaffPrintPreview({ autoPrint, forceReveal, quiet });
 }
+
 
 async function openStaffPrintView() {
   logPrintInfo("openStaffPrintView start");
@@ -3878,7 +3237,10 @@ async function openStaffPrintView() {
     return;
   }
 
-  const staffGroups = buildStaffPrintGroups({ eventId, scheduleId });
+  if (!printManager) {
+    throw new Error("PrintManager is not initialized");
+  }
+  const staffGroups = printManager.buildStaffPrintGroups({ eventId, scheduleId });
   const totalStaff = staffGroups.reduce((sum, group) => sum + (group.members?.length || 0), 0);
   if (!totalStaff) {
     window.alert("印刷できるスタッフがまだ登録されていません。");
@@ -3886,7 +3248,8 @@ async function openStaffPrintView() {
     return;
   }
 
-  if (staffPrintInProgress) {
+  const inProgress = printManager.staffPrintInProgress;
+  if (inProgress) {
     logPrintWarn("openStaffPrintView skipped: print in progress");
     return;
   }
@@ -4415,7 +3778,7 @@ function syncStaffPrintViewButtonState() {
   const eventId = state.selectedEventId;
   const scheduleId = state.selectedScheduleId;
   const hasSelection = Boolean(eventId && scheduleId);
-  const staffGroups = hasSelection ? buildStaffPrintGroups({ eventId, scheduleId }) : [];
+  const staffGroups = hasSelection && printManager ? printManager.buildStaffPrintGroups({ eventId, scheduleId }) : [];
   const totalStaff = staffGroups.reduce((sum, group) => sum + (group.members?.length || 0), 0);
   const disabled = !hasSelection || totalStaff === 0;
 
@@ -7407,7 +6770,12 @@ function attachEventHandlers() {
   bindDialogDismiss(dom.participantDialog);
   bindDialogDismiss(dom.relocationDialog);
   bindDialogDismiss(dom.printPreviewDialog);
-  setupPrintSettingsDialog();
+  if (printManager) {
+    printManager.setupSettingsDialog();
+  } else {
+    // フォールバック（初期化前の場合）
+    setupPrintSettingsDialog();
+  }
 
   if (dom.relocationDialog) {
     dom.relocationDialog.addEventListener("dialog:close", handleRelocationDialogClose);
@@ -7926,7 +7294,34 @@ async function applySelectionContext(selection = {}) {
 }
 
 function init() {
-  hydratePrintSettingsFromStorage();
+  // PrintManager を初期化
+  printManager = new PrintManager({
+    dom,
+    state,
+    openDialog,
+    closeDialog,
+    // 依存関数と定数
+    sortParticipants,
+    getParticipantGroupKey,
+    describeParticipantGroup,
+    collectGroupGlLeaders,
+    getEventGlRoster,
+    getEventGlAssignmentsMap,
+    resolveScheduleAssignment,
+    loadGlDataForEvent,
+    normalizeKey,
+    normalizeGroupNumberValue,
+    NO_TEAM_GROUP_KEY,
+    CANCEL_LABEL,
+    RELOCATE_LABEL,
+    GL_STAFF_GROUP_KEY,
+    // ボタン状態管理関数
+    syncAllPrintButtonStates,
+    setPrintButtonBusy,
+    setStaffPrintButtonBusy
+  });
+  
+  printManager.hydrateSettingsFromStorage();
   attachEventHandlers();
   setAuthUi(Boolean(state.user));
   initLoaderSteps(isEmbeddedMode() ? [] : STEP_LABELS);
