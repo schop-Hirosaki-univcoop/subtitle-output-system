@@ -4305,7 +4305,7 @@ export class OperatorApp {
     if (this.questionStatusUnsubscribe) this.questionStatusUnsubscribe();
     const eventId = String(this.state?.activeEventId || "").trim();
     if (!eventId) {
-      console.warn("startQuestionStatusStream: activeEventId is empty; skipping subscription.");
+      console.debug("startQuestionStatusStream: activeEventId is empty; skipping subscription.");
       this.questionStatusUnsubscribe = null;
       return;
     }
