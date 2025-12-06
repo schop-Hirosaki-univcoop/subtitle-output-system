@@ -99,8 +99,60 @@
 - 新規追加: 約 918 行（3 つのマネージャーファイル）
 - 実質削減: 約 515 行（`app.js`の可読性向上）
 
-## 🔄 次のステップ
+### 4. PresenceManager の作成
 
-- [ ] `PresenceManager`の作成（プレゼンス関連メソッドの移動）
-- [ ] `ChannelManager`の作成（チャンネル/スケジュール管理の移動）
-- [ ] `UIRenderer`の作成（UI 描画の移動）
+- [x] `presence-manager.js`を作成
+- [x] `derivePresenceScheduleKey()`を移動
+- [x] `refreshOperatorPresenceSubscription()`を移動
+- [x] `app.js`で`PresenceManager`を初期化
+- [x] `app.js`のメソッドを`PresenceManager`に委譲
+- [x] 古い実装を削除
+
+### 5. ChannelManager の作成
+
+- [x] `channel-manager.js`（510 行）を作成
+- [x] `getActiveChannel()`を移動
+- [x] `getCurrentScheduleKey()`を移動
+- [x] `getDisplayAssignment()`を移動
+- [x] `resolveScheduleLabel()`を移動
+- [x] `describeChannelAssignment()`を移動
+- [x] `hasChannelMismatch()`を移動
+- [x] `extractScheduleKeyParts()`と`sanitizePresenceLabel()`を移動
+- [x] `app.js`で`ChannelManager`を初期化
+- [x] `app.js`のメソッドを`ChannelManager`に委譲
+- [x] 古い実装を削除
+
+### 6. UIRenderer の作成
+
+- [x] `ui-renderer.js`（378 行）を作成
+- [x] `renderChannelBanner()`を移動
+- [x] `renderChannelPresenceList()`を移動
+- [x] `renderConflictDialog()`を移動
+- [x] `updateRenderAvailability()`を移動
+- [x] `updateCopyrightYear()`を移動
+- [x] `app.js`で`UIRenderer`を初期化
+- [x] `app.js`のメソッドを`UIRenderer`に委譲
+- [x] 古い実装を削除
+
+## 📊 最終進捗状況
+
+### ファイルサイズの変化
+
+- `app.js`: 5,040 行 → **3,192 行**（約 1,848 行削減、36.7%削減）
+- 新規作成ファイル:
+  - `ui-helpers.js`: 228 行
+  - `context-manager.js`: 332 行
+  - `auth-manager.js`: 358 行
+  - `presence-manager.js`: 753 行
+  - `channel-manager.js`: 510 行
+  - `ui-renderer.js`: 378 行
+
+### 削減効果
+
+- 合計削減: 約 1,848 行（`app.js`から）
+- 新規追加: 約 2,559 行（6 つのマネージャーファイル）
+- 実質削減: 約 1,848 行（`app.js`の可読性向上）
+
+## ✅ 完了
+
+すべてのリファクタリングタスクが完了しました。

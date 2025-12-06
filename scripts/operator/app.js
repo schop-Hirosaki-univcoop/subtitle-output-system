@@ -49,6 +49,7 @@ import { ContextManager } from "./context-manager.js";
 import { AuthManager } from "./auth-manager.js";
 import { PresenceManager } from "./presence-manager.js";
 import { ChannelManager, extractScheduleKeyParts } from "./channel-manager.js";
+import { UIRenderer } from "./ui-renderer.js";
 
 // ============================================================================
 // 状態管理
@@ -412,6 +413,9 @@ export class OperatorApp {
     
     // チャンネル管理の初期化
     this.channelManager = new ChannelManager(this);
+    
+    // UI描画の初期化
+    this.uiRenderer = new UIRenderer(this);
     this.isEmbedded = Boolean(OperatorApp.embedPrefix);
     if (this.isEmbedded && this.dom.loginContainer) {
       this.dom.loginContainer.style.display = "none";
@@ -627,26 +631,7 @@ export class OperatorApp {
    * @param {boolean|null|undefined} status
    */
   updateRenderAvailability(status) {
-    if (!this.state) {
-      return;
-    }
-    const sessionActive = this.state.displaySessionActive === true;
-    const snapshotActive = this.displaySessionStatusFromSnapshot === true;
-    let normalized = status === true ? true : status === false ? false : null;
-    if (normalized === false && (sessionActive || snapshotActive)) {
-      normalized = null;
-    }
-    if (this.state.renderChannelOnline === normalized) {
-      return;
-    }
-    this.state.renderChannelOnline = normalized;
-    if (typeof this.updateActionAvailability === "function") {
-      this.updateActionAvailability();
-    }
-    if (typeof this.updateBatchButtonVisibility === "function") {
-      this.updateBatchButtonVisibility();
-    }
-    this.renderChannelBanner();
+    return this.uiRenderer.updateRenderAvailability(status);
   }
 
   /**
@@ -1070,143 +1055,7 @@ export class OperatorApp {
   }
 
   renderChannelBanner() {
-    const banner = this.dom.channelBanner;
-    if (!banner) {
-      if (typeof console !== "undefined" && typeof console.log === "function") {
-        console.log("[Operator] renderChannelBanner: banner element not found");
-      }
-      return;
-    }
-    const eventId = String(this.state?.activeEventId || "").trim();
-    if (!eventId || !this.isAuthorized) {
-      if (typeof console !== "undefined" && typeof console.log === "function") {
-        console.log("[Operator] renderChannelBanner: early return", {
-          eventId: eventId || "(empty)",
-          isAuthorized: this.isAuthorized
-        });
-      }
-      banner.hidden = true;
-      return;
-    }
-    banner.hidden = false;
-    const statusEl = this.dom.channelStatus;
-    const assignmentEl = this.dom.channelAssignment;
-    const lockButton = this.dom.channelLockButton;
-    const displaySessionActive = !!this.state.displaySessionActive;
-    const renderOnline = this.state.renderChannelOnline !== false;
-    const displayActive = this.isDisplayOnline();
-    // activeEventIdが空の場合は、getDisplayAssignment()を呼ばずにnullにする
-    // これにより、イベントを選んでいない状態で古いassignmentが表示されることを防ぐ
-    const rawAssignment = eventId ? (this.state?.channelAssignment || this.getDisplayAssignment()) : null;
-    // 現在選択中のイベントとディスプレイの割り当てのイベントが一致する場合のみ表示
-    // これにより、イベントを選んでいないのに別のイベントの情報が表示されることを防ぐ
-    const assignment = rawAssignment && String(rawAssignment.eventId || "").trim() === eventId ? rawAssignment : null;
-    
-    // デバッグログ: assignmentの取得状況を確認
-    if (typeof console !== "undefined" && typeof console.log === "function") {
-      console.log("[Operator] renderChannelBanner assignment check", {
-        eventId,
-        hasChannelAssignment: !!this.state?.channelAssignment,
-        channelAssignmentEventId: this.state?.channelAssignment ? String(this.state.channelAssignment.eventId || "").trim() : null,
-        channelAssignmentScheduleId: this.state?.channelAssignment ? String(this.state.channelAssignment.scheduleId || "").trim() : null,
-        hasDisplaySession: !!this.state?.displaySession,
-        displaySessionEventId: this.state?.displaySession ? String(this.state.displaySession.eventId || "").trim() : null,
-        displaySessionScheduleId: this.state?.displaySession ? String(this.state.displaySession.scheduleId || "").trim() : null,
-        hasDisplaySessionAssignment: this.state?.displaySession ? !!(this.state.displaySession.assignment && typeof this.state.displaySession.assignment === "object") : false,
-        rawAssignmentEventId: rawAssignment ? String(rawAssignment.eventId || "").trim() : null,
-        rawAssignmentScheduleId: rawAssignment ? String(rawAssignment.scheduleId || "").trim() : null,
-        assignmentEventId: assignment ? String(assignment.eventId || "").trim() : null,
-        assignmentScheduleId: assignment ? String(assignment.scheduleId || "").trim() : null,
-        assignmentMatches: rawAssignment ? String(rawAssignment.eventId || "").trim() === eventId : false
-      });
-    }
-    const channelAligned = !this.hasChannelMismatch();
-    const telopEnabled = this.isTelopEnabled();
-    const assetChecked = this.state.displayAssetChecked === true;
-    const assetAvailable = this.state.displayAssetAvailable !== false;
-    let statusText = "";
-    let statusClass = "channel-banner__status";
-    if (assetChecked && !assetAvailable) {
-      statusText = "表示端末ページ（display.html）が見つかりません。";
-      statusClass += " is-alert";
-    } else if (!telopEnabled) {
-      statusText = "テロップ操作なしモードです。送出・固定は行えません。";
-      statusClass += " is-muted";
-    } else if (!renderOnline) {
-      statusText = "送出端末の表示画面が切断されています。";
-      statusClass += " is-alert";
-    } else if (!displaySessionActive) {
-      statusText = "送出端末が接続されていません。";
-      statusClass += " is-alert";
-    } else if (!assignment || !assignment.eventId) {
-      statusText = "ディスプレイの日程が未確定です。";
-      statusClass += " is-alert";
-    } else if (!channelAligned) {
-      const summary = this.describeChannelAssignment();
-      statusText = summary ? `ディスプレイは${summary}に固定されています。` : "ディスプレイは別の日程に固定されています。";
-      statusClass += " is-alert";
-    } else {
-      statusText = "ディスプレイと日程が同期しています。";
-    }
-    if (statusEl) {
-      statusEl.className = statusClass;
-      statusEl.textContent = statusText;
-    }
-    if (assignmentEl) {
-      // assignmentがnullの場合は空文字列を表示
-      const summary = assignment ? this.describeChannelAssignment() : "";
-      assignmentEl.textContent = summary || "—";
-    }
-    
-    // ログ出力: ディスプレイの日程情報
-    if (assignment && assignment.eventId) {
-      const scheduleKey = assignment.canonicalScheduleKey || `${assignment.eventId}::${normalizeScheduleId(assignment.scheduleId || "")}`;
-      const formattedDate = this.formatScheduleDateForLog(assignment, scheduleKey);
-      if (typeof console !== "undefined" && typeof console.log === "function") {
-        console.log(`[Operator] ディスプレイの日程は${formattedDate}です`, {
-          eventId: assignment.eventId,
-          scheduleId: assignment.scheduleId,
-          scheduleLabel: assignment.scheduleLabel,
-          scheduleKey,
-          formattedDate
-        });
-      }
-    } else {
-      if (typeof console !== "undefined" && typeof console.log === "function") {
-        console.log("[Operator] ディスプレイの日程は(未設定)です", {
-          hasAssignment: !!assignment,
-          eventId: assignment?.eventId || null
-        });
-      }
-    }
-    
-    if (lockButton) {
-      if (assetChecked && !assetAvailable) {
-        lockButton.textContent = "ページ未配置";
-        lockButton.disabled = true;
-      } else if (!telopEnabled) {
-        lockButton.textContent = "テロップ操作なし";
-        lockButton.disabled = true;
-      } else {
-        const { eventId: activeEventId, scheduleId } = this.getActiveChannel();
-        const canLock =
-          displayActive &&
-          !!String(activeEventId || "").trim() &&
-          !!String(scheduleId || "").trim() &&
-          !this.state.channelLocking;
-        if (displayActive && assignment && assignment.eventId && channelAligned) {
-          lockButton.textContent = "固定済み";
-          lockButton.disabled = true;
-        } else {
-          lockButton.textContent = assignment && assignment.eventId ? "この日程に切り替え" : "この日程に固定";
-          lockButton.disabled = !canLock;
-        }
-        if (!displayActive) {
-          lockButton.textContent = "この日程に固定";
-        }
-      }
-    }
-    this.renderChannelPresenceList();
+    return this.uiRenderer.renderChannelBanner();
   }
 
   /**
@@ -1214,103 +1063,7 @@ export class OperatorApp {
    * 自身のpresenceやスキップ設定に応じて補足情報を加えます。
    */
   renderChannelPresenceList() {
-    const list = this.dom.channelPresenceList;
-    const placeholder = this.dom.channelPresenceEmpty;
-    if (!list) {
-      return;
-    }
-    list.innerHTML = "";
-    const eventId = String(this.state?.activeEventId || "").trim();
-    if (!eventId) {
-      if (placeholder) {
-        placeholder.hidden = false;
-      }
-      return;
-    }
-    const presenceMap = this.state?.operatorPresenceByUser instanceof Map ? this.state.operatorPresenceByUser : new Map();
-    const groups = new Map();
-    const selfUid = String(this.operatorIdentity?.uid || auth.currentUser?.uid || "").trim();
-    const selfSessionId = String(this.operatorPresenceSessionId || "").trim();
-    presenceMap.forEach((value, entryId) => {
-      if (!value) return;
-      const valueEventId = String(value.eventId || "").trim();
-      if (valueEventId && valueEventId !== eventId) return;
-      const scheduleKey = this.derivePresenceScheduleKey(eventId, value, entryId);
-      const label = this.resolveScheduleLabel(scheduleKey, value.scheduleLabel, value.scheduleId);
-      const skipTelop = Boolean(value.skipTelop);
-      const entry = groups.get(scheduleKey) || {
-        key: scheduleKey,
-        scheduleId: String(value.scheduleId || ""),
-        label,
-        members: []
-      };
-      if (!groups.has(scheduleKey)) {
-        groups.set(scheduleKey, entry);
-      }
-      entry.label = entry.label || label;
-      const memberUid = String(value.uid || "").trim();
-      const fallbackId = String(entryId);
-      const isSelfSession = selfSessionId && fallbackId === selfSessionId;
-      const isSelfUid = memberUid && memberUid === selfUid;
-      entry.members.push({
-        uid: memberUid || fallbackId,
-        name: String(value.displayName || value.email || memberUid || fallbackId || "").trim() || memberUid || fallbackId,
-        isSelf: Boolean(isSelfSession || isSelfUid),
-        skipTelop
-      });
-    });
-    const items = Array.from(groups.values());
-    if (!items.length) {
-      if (placeholder) {
-        placeholder.hidden = false;
-      }
-      return;
-    }
-    if (placeholder) {
-      placeholder.hidden = true;
-    }
-    items.sort((a, b) => (a.label || "").localeCompare(b.label || "", "ja"));
-    const currentKey = this.getCurrentScheduleKey();
-    items.forEach((group) => {
-      const item = document.createElement("li");
-      item.className = "channel-presence-group";
-      if (group.key && group.key === currentKey) {
-        item.classList.add("is-active");
-      }
-      const title = document.createElement("div");
-      title.className = "channel-presence-group__label";
-      title.textContent = group.label || "未選択";
-      item.appendChild(title);
-      const members = document.createElement("div");
-      members.className = "channel-presence-group__names";
-      if (group.members && group.members.length) {
-        group.members.forEach((member) => {
-          const entry = document.createElement("span");
-          entry.className = "channel-presence-group__name";
-          entry.textContent = member.name || member.uid || "—";
-          if (member.isSelf) {
-            const badge = document.createElement("span");
-            badge.className = "channel-presence-self";
-            badge.textContent = "自分";
-            entry.appendChild(badge);
-          }
-          if (member.skipTelop) {
-            const badge = document.createElement("span");
-            badge.className = "channel-presence-support";
-            badge.textContent = "テロップ操作なし";
-            entry.appendChild(badge);
-          }
-          members.appendChild(entry);
-        });
-      } else {
-        const empty = document.createElement("span");
-        empty.className = "channel-presence-group__name";
-        empty.textContent = "オペレーターなし";
-        members.appendChild(empty);
-      }
-      item.appendChild(members);
-      list.appendChild(item);
-    });
+    return this.uiRenderer.renderChannelPresenceList();
   }
 
   /**
@@ -1318,76 +1071,7 @@ export class OperatorApp {
    * 選択肢の表示と操作ボタンの活性状態を整えます。
    */
   renderConflictDialog() {
-    const conflict = this.state?.scheduleConflict;
-    const optionsContainer = this.dom.conflictOptions;
-    if (!optionsContainer) {
-      return;
-    }
-    optionsContainer.innerHTML = "";
-    if (this.dom.conflictError) {
-      this.dom.conflictError.hidden = true;
-      this.dom.conflictError.textContent = "";
-    }
-    if (!conflict || !Array.isArray(conflict.options) || conflict.options.length === 0) {
-      return;
-    }
-    const radioName = "op-conflict-schedule";
-    conflict.options.forEach((option, index) => {
-      const optionKey = option.key || `${conflict.eventId}::${normalizeScheduleId(option.scheduleId || "")}`;
-      const optionId = `op-conflict-option-${index}`;
-      const labelEl = document.createElement("label");
-      labelEl.className = "conflict-option";
-      labelEl.setAttribute("for", optionId);
-
-      const radio = document.createElement("input");
-      radio.type = "radio";
-      radio.id = optionId;
-      radio.name = radioName;
-      radio.value = optionKey;
-      radio.checked = optionKey === this.state.conflictSelection;
-      radio.className = "visually-hidden";
-      labelEl.appendChild(radio);
-
-      const header = document.createElement("div");
-      header.className = "conflict-option__header";
-      const title = document.createElement("span");
-      title.className = "conflict-option__title";
-      title.textContent = this.resolveScheduleLabel(optionKey, option.label, option.scheduleId);
-      header.appendChild(title);
-      if (conflict.assignmentKey && conflict.assignmentKey === optionKey) {
-        const badge = document.createElement("span");
-        badge.className = "conflict-option__badge";
-        badge.textContent = "ディスプレイ";
-        header.appendChild(badge);
-      }
-      labelEl.appendChild(header);
-
-      const members = document.createElement("div");
-      members.className = "conflict-option__members";
-      if (option.members && option.members.length) {
-        members.textContent = option.members
-          .map((member) => {
-            const base = String(member.name || member.uid || "").trim() || member.uid;
-            const tags = [];
-            if (member.isSelf) {
-              tags.push("自分");
-            }
-            if (member.skipTelop) {
-              tags.push("テロップ操作なし");
-            }
-            if (!tags.length) {
-              return base;
-            }
-            return `${base}（${tags.join("・")}）`;
-          })
-          .join("、");
-      } else {
-        members.textContent = "参加オペレーターなし";
-      }
-      labelEl.appendChild(members);
-
-      optionsContainer.appendChild(labelEl);
-    });
+    return this.uiRenderer.renderConflictDialog();
   }
 
   /**
@@ -3503,12 +3187,6 @@ export class OperatorApp {
    * フッターに表示する著作権表記を現在の年に合わせて更新します。
    */
   updateCopyrightYear() {
-    if (!this.dom.copyrightYear) return;
-    const currentYear = new Date().getFullYear();
-    if (currentYear <= 2025) {
-      this.dom.copyrightYear.textContent = "2025";
-    } else {
-      this.dom.copyrightYear.textContent = `2025 - ${currentYear}`;
-    }
+    return this.uiRenderer.updateCopyrightYear();
   }
 }
