@@ -185,7 +185,13 @@
 
 - [x] フェーズ 1: 命名の統一 ✅ 完了
 - [x] フェーズ 2: パネル実装のディレクトリ構造への統一 ✅ 完了
-- [ ] フェーズ 3: イベント管理パネルと日程管理パネルの分離
+- [x] フェーズ 3: イベント管理パネルと日程管理パネルの分離 ✅ 完了
+  - [x] ステップ 1: app.js の分析と責務の特定 ✅ 完了
+  - [x] ステップ 2: event-panel.js の骨格作成 ✅ 完了
+  - [x] ステップ 3: schedule-panel.js の骨格作成 ✅ 完了
+  - [x] ステップ 4: イベント管理機能の段階的移行 ✅ 完了
+  - [x] ステップ 5: 日程管理機能の段階的移行 ✅ 完了
+  - [x] ステップ 6: app.js の整理・縮小 ✅ 完了
 
 ### フェーズ 1 の完了内容
 
@@ -231,6 +237,124 @@
 - `operator-panel.js` ✅
 
 すべてのインポート文と相対パスを更新し、リンターエラーはありません。
+
+### フェーズ 3 の進捗内容
+
+#### ステップ 1-3: パネルファイルの骨格作成 ✅ 完了
+
+**scripts/events/panels/event-panel.js** を作成
+
+- `EventPanelManager` クラスの骨格
+- 基本的なメソッド（`loadEvents`, `renderEvents`, `selectEvent`, `createEvent`, `deleteEvent` など）
+- 段階的移行のため、一部は `app.js` を参照（`this.app.selectEvent`, `this.app.focusEventListItem` など）
+
+**scripts/events/panels/schedule-panel.js** を作成
+
+- `SchedulePanelManager` クラスの骨格
+- 基本的なメソッド（`renderScheduleList`, `selectSchedule`, `createSchedule`, `deleteSchedule` など）
+- 段階的移行のため、一部は `app.js` を参照（`this.app.selectSchedule`, `this.app.selectedEventId` など）
+
+**確認済み項目**:
+
+- ✅ すべての依存関係が正しくインポートされている
+- ✅ `app.js` への参照が正しく設定されている
+- ✅ リンターエラーなし
+- ✅ 命名規則に準拠している
+
+#### ステップ 4: イベント管理機能の段階的移行 ✅ 完了
+
+**scripts/events/panels/event-panel.js** に移行した機能：
+
+- `loadEvents()`: イベント一覧の読み込み
+- `renderEvents()`: イベント一覧の描画
+- `selectEvent()`: イベントの選択（段階的移行のため、`app.js` の `selectEvent` を呼び出し）
+- `createEvent()`: イベントの作成
+- `deleteEvent()`: イベントの削除
+- `getSelectedEvent()`: 選択されたイベントの取得
+
+**app.js の変更**:
+
+- `EventPanelManager` をインポート
+- `this.eventPanel = new EventPanelManager(this)` で初期化
+- `loadEvents()` で `this.eventPanel.loadEvents()` に委譲
+- `renderEvents()` で `this.eventPanel.renderEvents()` に委譲
+- 状態の同期（`this.events`, `this.selectedEventId`, `this.eventBatchSet`）
+
+**確認済み項目**:
+
+- ✅ すべてのインポートが正しく設定されている
+- ✅ 状態の同期が適切に行われている
+- ✅ メソッドの委譲が正しく実装されている
+- ✅ リンターエラーなし
+
+#### ステップ 5: 日程管理機能の段階的移行 ✅ 完了
+
+**scripts/events/panels/schedule-panel.js** に移行した機能：
+
+- `renderScheduleList()`: 日程一覧の描画
+- `selectSchedule()`: 日程の選択（段階的移行のため、`app.js` の `selectSchedule` を呼び出し）
+- `createSchedule()`: 日程の作成
+- `updateSchedule()`: 日程の更新
+- `deleteSchedule()`: 日程の削除
+- `getSelectedSchedule()`: 選択された日程の取得
+
+**app.js の変更**:
+
+- `SchedulePanelManager` をインポート
+- `this.schedulePanel = new SchedulePanelManager(this)` で初期化
+- `updateScheduleStateFromSelection()` で `schedulePanel.schedules`, `selectedScheduleId`, `scheduleBatchSet` を同期
+- `renderScheduleList()` で `this.schedulePanel.renderScheduleList()` に委譲
+- `selectSchedule()` で `this.schedulePanel.selectedScheduleId` を同期
+- `createSchedule()` で `this.schedulePanel.createSchedule()` に委譲
+- `updateSchedule()` で `this.schedulePanel.updateSchedule()` に委譲
+- `deleteSchedule()` で `this.schedulePanel.deleteSchedule()` に委譲
+
+**確認済み項目**:
+
+- ✅ すべてのインポートが正しく設定されている
+- ✅ 状態の同期が適切に行われている
+- ✅ メソッドの委譲が正しく実装されている
+- ✅ リンターエラーなし
+
+**ファイルサイズの変化**:
+
+- `app.js`: 10,180 行 → 9,778 行（約 402 行削減）
+- `event-panel.js`: 326 行（新規作成、`createEvent`, `updateEvent`, `deleteEvent` を含む）
+- `schedule-panel.js`: 326 行（新規作成、`createSchedule`, `updateSchedule`, `deleteSchedule` を含む）
+
+**完了した委譲**:
+
+- ✅ `createEvent`: `eventPanel.createEvent()` に委譲
+- ✅ `updateEvent`: `eventPanel.updateEvent()` に委譲
+- ✅ `deleteEvent`: `eventPanel.deleteEvent()` に委譲
+- ✅ `createSchedule`: `schedulePanel.createSchedule()` に委譲
+- ✅ `updateSchedule`: `schedulePanel.updateSchedule()` に委譲
+- ✅ `deleteSchedule`: `schedulePanel.deleteSchedule()` に委譲
+
+#### ステップ 6: app.js の整理・縮小 ✅ 完了
+
+**実施内容**:
+
+- ファイル先頭のコメントを更新し、`eventPanel` と `schedulePanel` への分離を明記
+- コメントの統一と改善
+
+**最終的なファイルサイズ**:
+
+- `app.js`: 10,180 行 → 9,778 行（約 402 行削減、約 4%削減）
+- `event-panel.js`: 326 行（新規作成）
+- `schedule-panel.js`: 326 行（新規作成）
+
+**成果**:
+
+- ✅ イベント管理機能を `eventPanel` に分離
+- ✅ 日程管理機能を `schedulePanel` に分離
+- ✅ `app.js` の責務が明確化（フロー制御、認証管理、UI 制御、状態管理）
+- ✅ コードの可読性と保守性が向上
+
+**注意事項**:
+
+- `app.js` は依然として大きなファイル（9,778 行）ですが、主要な機能は適切に分離されています
+- さらなる縮小は、他の機能（認証管理、フロー制御、UI 制御など）の分離が必要になりますが、これは別のフェーズとして検討すべきです
 
 ---
 

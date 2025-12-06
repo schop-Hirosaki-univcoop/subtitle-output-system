@@ -1,4 +1,5 @@
 // app.js: イベント管理フローの中核ロジックを担い、Firebaseとの同期と画面遷移制御をまとめます。
+// イベント管理と日程管理の機能は event-panel.js と schedule-panel.js に分離されています。
 import { queryDom } from "./dom.js";
 import {
   database,
@@ -54,6 +55,8 @@ import {
 } from "./config.js";
 import { ToolCoordinator } from "./tool-coordinator.js";
 import { EventChat } from "./panels/chat-panel.js";
+import { EventPanelManager } from "./panels/event-panel.js";
+import { SchedulePanelManager } from "./panels/schedule-panel.js";
 import { consumeAuthTransfer } from "../shared/auth-transfer.js";
 import {
   loadAuthPreflightContext,
@@ -179,7 +182,6 @@ export class EventAdminApp {
     this.scheduleLoadingTracker = new LoadingTracker({
       onChange: (state) => this.applyScheduleLoadingState(state)
     });
-//    this.tools = new ToolCoordinator(this);
     this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
     this.handleEventListKeydown = this.handleEventListKeydown.bind(this);
     this.handleEventListFocus = this.handleEventListFocus.bind(this);
@@ -189,8 +191,12 @@ export class EventAdminApp {
     this.applyMetaNote();
     this.chat = new EventChat(this);
     this.operatorMode = OPERATOR_MODE_TELOP;
-    // auth のアタッチ後に ToolCoordinator を初期化する
-    this.tools = new ToolCoordinator(this);
+    // auth のアタッチ後に ToolCoordinator を初期化する
+    this.tools = new ToolCoordinator(this);
+    // イベント管理パネルを初期化
+    this.eventPanel = new EventPanelManager(this);
+    // 日程管理パネルを初期化
+    this.schedulePanel = new SchedulePanelManager(this);
     this.backupInFlight = false;
     this.restoreInFlight = false;
     this.displayUrlCopyTimer = 0;
@@ -1357,57 +1363,19 @@ export class EventAdminApp {
   }
 
   async loadEvents() {
-    const [eventsSnapshot, schedulesSnapshot] = await Promise.all([
-      get(ref(database, "questionIntake/events")),
-      get(ref(database, "questionIntake/schedules"))
-    ]);
-
-    const eventsValue = eventsSnapshot.exists() ? eventsSnapshot.val() : {};
-    const schedulesTree = schedulesSnapshot.exists() ? schedulesSnapshot.val() : {};
-
-    const normalized = Object.entries(eventsValue).map(([eventId, eventValue]) => {
-      const scheduleBranch = schedulesTree?.[eventId] && typeof schedulesTree[eventId] === "object"
-        ? schedulesTree[eventId]
-        : {};
-      const schedules = Object.entries(scheduleBranch).map(([scheduleId, scheduleValue]) => ({
-        id: ensureString(scheduleId),
-        label: ensureString(scheduleValue?.label),
-        location: ensureString(scheduleValue?.location),
-        date: ensureString(scheduleValue?.date || ""),
-        startAt: ensureString(scheduleValue?.startAt || scheduleValue?.date),
-        endAt: ensureString(scheduleValue?.endAt || ""),
-        participantCount: Number(scheduleValue?.participantCount || 0),
-        createdAt: scheduleValue?.createdAt || 0
-      }));
-
-      schedules.sort((a, b) => {
-        const startDiff = toMillis(a.startAt || a.createdAt) - toMillis(b.startAt || b.createdAt);
-        if (startDiff !== 0) return startDiff;
-        return a.id.localeCompare(b.id, "ja", { numeric: true });
-      });
-
-      const totalParticipants = schedules.reduce((acc, item) => acc + (item.participantCount || 0), 0);
-
-      return {
-        id: ensureString(eventId),
-        name: ensureString(eventValue?.name) || ensureString(eventId),
-        schedules,
-        totalParticipants,
-        scheduleCount: schedules.length,
-        createdAt: eventValue?.createdAt || 0,
-        updatedAt: eventValue?.updatedAt || 0
-      };
-    });
-
-    normalized.sort((a, b) => {
-      const createdDiff = toMillis(a.createdAt) - toMillis(b.createdAt);
-      if (createdDiff !== 0) return createdDiff;
-      return a.name.localeCompare(b.name, "ja", { numeric: true });
-    });
+    // EventPanelManager に委譲してイベント一覧を読み込む
+    const normalized = await this.eventPanel.loadEvents();
 
     const previousEventId = this.selectedEventId;
     const previousScheduleId = this.selectedScheduleId;
 
+    // eventPanel の events を app の events に同期
+    this.events = this.eventPanel.events;
+    // eventPanel の selectedEventId と eventBatchSet を app と同期
+    this.eventPanel.selectedEventId = this.selectedEventId;
+    this.eventPanel.eventBatchSet = this.eventBatchSet;
+
+    // scheduleLocationHistory を更新
     const locationHistory = new Set();
     normalized.forEach((event) => {
       if (!Array.isArray(event?.schedules)) {
@@ -1420,8 +1388,6 @@ export class EventAdminApp {
         }
       });
     });
-
-    this.events = normalized;
     this.scheduleLocationHistory = locationHistory;
     this.tools.resetContext({ reason: "events-refreshed" });
     this.updateMetaNote();
@@ -1460,98 +1426,13 @@ export class EventAdminApp {
   }
 
   renderEvents() {
-    const list = this.dom.eventList;
-    if (!list) return;
-
-    list.innerHTML = "";
-    if (!this.events.length) {
-      list.hidden = true;
-      if (this.dom.eventEmpty) this.dom.eventEmpty.hidden = false;
-      list.removeAttribute("role");
-      list.removeAttribute("aria-label");
-      list.removeAttribute("aria-orientation");
-      list.removeAttribute("aria-activedescendant");
-      list.removeAttribute("tabindex");
-      return;
-    }
-
-    list.hidden = false;
-    if (this.dom.eventEmpty) this.dom.eventEmpty.hidden = true;
-
-    list.setAttribute("role", "listbox");
-    list.setAttribute("aria-label", "イベント一覧");
-    list.setAttribute("aria-orientation", "vertical");
-    list.tabIndex = 0;
-    const fragment = document.createDocumentFragment();
-    this.events.forEach((event) => {
-      const item = document.createElement("li");
-      item.className = "entity-item";
-      item.dataset.eventId = event.id;
-      item.setAttribute("role", "option");
-      item.id = `flow-event-option-${event.id}`;
-
-      const isSelected = event.id === this.selectedEventId && this.selectedEventId;
-      if (isSelected) {
-        item.classList.add("is-selected");
-        item.setAttribute("aria-selected", "true");
-      } else {
-        item.setAttribute("aria-selected", "false");
-      }
-      item.tabIndex = 0;
-
-      const indicator = document.createElement("span");
-      indicator.className = "entity-indicator";
-      indicator.setAttribute("aria-hidden", "true");
-      const indicatorDot = document.createElement("span");
-      indicatorDot.className = "entity-indicator__dot";
-      indicator.appendChild(indicatorDot);
-
-      const label = document.createElement("div");
-      label.className = "entity-label";
-
-      const nameEl = document.createElement("span");
-      nameEl.className = "entity-name";
-      nameEl.textContent = event.name || event.id;
-
-      const metaEl = document.createElement("span");
-      metaEl.className = "entity-meta";
-      metaEl.textContent = `日程 ${event.scheduleCount} 件 / 参加者 ${formatParticipantCount(event.totalParticipants)}`;
-
-      label.append(nameEl, metaEl);
-
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "entity-checkbox";
-      checkbox.setAttribute("aria-label", `${event.name || event.id} を選択`);
-      checkbox.checked = this.eventBatchSet.has(event.id);
-      checkbox.addEventListener("change", (evt) => {
-        evt.stopPropagation();
-        if (checkbox.checked) {
-          this.eventBatchSet.add(event.id);
-        } else {
-          this.eventBatchSet.delete(event.id);
-        }
-        this.updateEventActionPanelState();
-      });
-
-      item.append(indicator, label, checkbox);
-
-      item.addEventListener("click", () => {
-        this.focusEventListItem(item, { select: true });
-      });
-      item.addEventListener("keydown", (evt) => {
-        if (evt.key === "Enter" || evt.key === " ") {
-          evt.preventDefault();
-          this.selectEvent(event.id);
-        }
-      });
-
-      fragment.appendChild(item);
-    });
-
-    list.appendChild(fragment);
+    // eventPanel の selectedEventId と eventBatchSet を同期
+    this.eventPanel.selectedEventId = this.selectedEventId;
+    this.eventPanel.eventBatchSet = this.eventBatchSet;
+    // EventPanelManager に委譲
+    this.eventPanel.renderEvents();
+    // app.js 固有の処理を実行
     this.updateEventListKeyboardMetadata();
-    this.updateEventActionPanelState();
   }
 
   getEventListItems() {
@@ -1714,6 +1595,8 @@ export class EventAdminApp {
     }
 
     this.selectedEventId = normalized;
+    // eventPanel の selectedEventId を同期
+    this.eventPanel.selectedEventId = normalized;
     const changed = previous !== normalized;
     if (changed) {
       this.eventSelectionCommitted = false;
@@ -2356,6 +2239,8 @@ export class EventAdminApp {
     }
 
     this.selectedScheduleId = normalized;
+    // schedulePanel の selectedScheduleId を同期
+    this.schedulePanel.selectedScheduleId = normalized;
     const changed = previous !== normalized;
     const selectedSchedule = this.getSelectedSchedule();
     this.rememberLastScheduleLocation(selectedSchedule?.location);
@@ -2390,6 +2275,11 @@ export class EventAdminApp {
   updateScheduleStateFromSelection(preferredScheduleId = "") {
     const event = this.getSelectedEvent();
     this.schedules = event ? [...event.schedules] : [];
+    // schedulePanel の schedules を同期
+    this.schedulePanel.schedules = this.schedules;
+    // schedulePanel の selectedScheduleId と scheduleBatchSet を同期
+    this.schedulePanel.selectedScheduleId = this.selectedScheduleId;
+    this.schedulePanel.scheduleBatchSet = this.scheduleBatchSet;
     this.logFlowState("イベント選択に基づいて日程一覧を更新します", {
       selectedEventId: event?.id || "",
       scheduleCount: this.schedules.length,
@@ -2412,119 +2302,12 @@ export class EventAdminApp {
   }
 
   renderScheduleList() {
-    const list = this.dom.scheduleList;
-    if (!list) return;
-
-    const committedId = ensureString(this.hostCommittedScheduleId);
-    const committedLabel = ensureString(this.hostCommittedScheduleLabel);
-    const committedSchedule = committedId
-      ? this.schedules.find((schedule) => schedule.id === committedId) || null
-      : null;
-    const resolvedCommittedLabel = committedLabel || committedSchedule?.label || committedId;
-    if (this.dom.scheduleCommittedNote) {
-      const labelEl = this.dom.scheduleCommittedLabel;
-      const hasCommitted = Boolean(committedId);
-      this.dom.scheduleCommittedNote.hidden = !hasCommitted;
-      if (labelEl) {
-        labelEl.textContent = hasCommitted ? resolvedCommittedLabel || "未設定" : "未設定";
-      }
-    }
-
-    list.innerHTML = "";
-    if (!this.schedules.length) {
-      list.hidden = true;
-      if (this.dom.scheduleEmpty) this.dom.scheduleEmpty.hidden = false;
-      list.removeAttribute("role");
-      list.removeAttribute("aria-label");
-      list.removeAttribute("aria-orientation");
-      return;
-    }
-
-    list.hidden = false;
-    if (this.dom.scheduleEmpty) this.dom.scheduleEmpty.hidden = true;
-
-    list.setAttribute("role", "listbox");
-    list.setAttribute("aria-label", "日程一覧");
-    list.setAttribute("aria-orientation", "vertical");
-    const fragment = document.createDocumentFragment();
-    this.schedules.forEach((schedule) => {
-      const item = document.createElement("li");
-      item.className = "entity-item";
-      item.dataset.scheduleId = schedule.id;
-      item.setAttribute("role", "option");
-
-      const isSelected = schedule.id === this.selectedScheduleId && this.selectedScheduleId;
-      if (isSelected) {
-        item.classList.add("is-selected");
-        item.setAttribute("aria-selected", "true");
-      } else {
-        item.setAttribute("aria-selected", "false");
-      }
-      item.tabIndex = 0;
-
-      const indicator = document.createElement("span");
-      indicator.className = "entity-indicator";
-      indicator.setAttribute("aria-hidden", "true");
-      const indicatorDot = document.createElement("span");
-      indicatorDot.className = "entity-indicator__dot";
-      indicator.appendChild(indicatorDot);
-
-      const label = document.createElement("div");
-      label.className = "entity-label";
-
-      const nameEl = document.createElement("span");
-      nameEl.className = "entity-name";
-      nameEl.textContent = schedule.label || schedule.id;
-      if (committedId && schedule.id === committedId) {
-        const badge = document.createElement("span");
-        badge.className = "entity-badge entity-badge--active";
-        badge.textContent = "テロップ操作中";
-        nameEl.appendChild(badge);
-      }
-
-      const metaEl = document.createElement("span");
-      metaEl.className = "entity-meta";
-      const rangeText = formatScheduleRange(schedule.startAt, schedule.endAt);
-      const metaParts = [];
-      if (rangeText) metaParts.push(rangeText);
-      const locationText = ensureString(schedule.location).trim();
-      if (locationText) metaParts.push(`会場 ${locationText}`);
-      metaParts.push(`参加者 ${formatParticipantCount(schedule.participantCount)}`);
-      metaEl.textContent = metaParts.join(" / ");
-
-      label.append(nameEl, metaEl);
-
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "entity-checkbox";
-      checkbox.setAttribute("aria-label", `${schedule.label || schedule.id} を選択`);
-      checkbox.checked = this.scheduleBatchSet.has(schedule.id);
-      checkbox.addEventListener("change", (evt) => {
-        evt.stopPropagation();
-        if (checkbox.checked) {
-          this.scheduleBatchSet.add(schedule.id);
-        } else {
-          this.scheduleBatchSet.delete(schedule.id);
-        }
-        this.updateScheduleActionPanelState();
-      });
-
-      item.append(indicator, label, checkbox);
-
-      item.addEventListener("click", () => {
-        this.selectSchedule(schedule.id);
-      });
-      item.addEventListener("keydown", (evt) => {
-        if (evt.key === "Enter" || evt.key === " ") {
-          evt.preventDefault();
-          this.selectSchedule(schedule.id);
-        }
-      });
-
-      fragment.appendChild(item);
-    });
-
-    list.appendChild(fragment);
+    // schedulePanel の selectedScheduleId と scheduleBatchSet を同期
+    this.schedulePanel.selectedScheduleId = this.selectedScheduleId;
+    this.schedulePanel.scheduleBatchSet = this.scheduleBatchSet;
+    // SchedulePanelManager に委譲
+    this.schedulePanel.renderScheduleList();
+    // app.js 固有の処理を実行
     this.updateScheduleActionPanelState();
   }
 
@@ -9213,126 +8996,18 @@ export class EventAdminApp {
   }
 
   async createSchedule(payload) {
-    const eventId = this.selectedEventId;
-    if (!eventId) {
-      throw new Error("イベントを選択してください。");
-    }
-
-    const { label, location, date, startValue, endValue } = this.resolveScheduleFormValues(payload);
-    let scheduleId = generateShortId("sch_");
-    const existingIds = new Set(this.schedules.map((schedule) => schedule.id));
-    while (existingIds.has(scheduleId)) {
-      scheduleId = generateShortId("sch_");
-    }
-
-    const now = Date.now();
-    this.beginScheduleLoading("日程を保存しています…");
-    try {
-      await set(ref(database, `questionIntake/schedules/${eventId}/${scheduleId}`), {
-        label,
-        location,
-        date,
-        startAt: startValue,
-        endAt: endValue,
-        participantCount: 0,
-        createdAt: now,
-        updatedAt: now
-      });
-
-      await update(ref(database), {
-        [`questionIntake/events/${eventId}/updatedAt`]: now
-      });
-
-      await this.loadEvents();
-      this.selectSchedule(scheduleId);
-    } finally {
-      this.endScheduleLoading();
-    }
+    // schedulePanel に委譲
+    return await this.schedulePanel.createSchedule(payload);
   }
 
   async updateSchedule(scheduleId, payload) {
-    const eventId = this.selectedEventId;
-    if (!eventId) {
-      throw new Error("イベントを選択してください。");
-    }
-    if (!scheduleId) {
-      throw new Error("日程IDが不明です。");
-    }
-
-    const { label, location, date, startValue, endValue } = this.resolveScheduleFormValues(payload);
-    const now = Date.now();
-    this.beginScheduleLoading("日程を更新しています…");
-    try {
-      await update(ref(database), {
-        [`questionIntake/schedules/${eventId}/${scheduleId}/label`]: label,
-        [`questionIntake/schedules/${eventId}/${scheduleId}/location`]: location,
-        [`questionIntake/schedules/${eventId}/${scheduleId}/date`]: date,
-        [`questionIntake/schedules/${eventId}/${scheduleId}/startAt`]: startValue,
-        [`questionIntake/schedules/${eventId}/${scheduleId}/endAt`]: endValue,
-        [`questionIntake/schedules/${eventId}/${scheduleId}/updatedAt`]: now,
-        [`questionIntake/events/${eventId}/updatedAt`]: now
-      });
-
-      await this.loadEvents();
-      this.selectSchedule(scheduleId);
-    } finally {
-      this.endScheduleLoading();
-    }
+    // schedulePanel に委譲
+    return await this.schedulePanel.updateSchedule(scheduleId, payload);
   }
 
   async deleteSchedule(schedule) {
-    const eventId = this.selectedEventId;
-    if (!eventId) {
-      throw new Error("イベントを選択してください。");
-    }
-    const scheduleId = schedule?.id;
-    if (!scheduleId) {
-      throw new Error("日程IDが不明です。");
-    }
-    const label = schedule?.label || scheduleId;
-
-    const confirmed = await this.confirm({
-      title: "日程の削除",
-      description: `日程「${label}」と、紐づく参加者・専用リンクをすべて削除します。よろしいですか？`,
-      confirmLabel: "削除する",
-      cancelLabel: "キャンセル",
-      tone: "danger"
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      this.beginScheduleLoading(`日程「${label}」を削除しています…`);
-      const participantSnapshot = await get(ref(database, `questionIntake/participants/${eventId}/${scheduleId}`));
-      const participantBranch = participantSnapshot.exists() ? participantSnapshot.val() : {};
-      const tokens = new Set();
-      if (participantBranch && typeof participantBranch === "object") {
-        Object.values(participantBranch).forEach((entry) => {
-          const token = entry?.token;
-          if (token) tokens.add(String(token));
-        });
-      }
-
-      const now = Date.now();
-      const updates = {
-        [`questionIntake/schedules/${eventId}/${scheduleId}`]: null,
-        [`questionIntake/participants/${eventId}/${scheduleId}`]: null,
-        [`questionIntake/events/${eventId}/updatedAt`]: now
-      };
-      tokens.forEach((token) => {
-        updates[`questionIntake/tokens/${token}`] = null;
-      });
-
-      await update(ref(database), updates);
-      await this.loadEvents();
-      this.selectSchedule("");
-    } catch (error) {
-      throw new Error(error?.message || "日程の削除に失敗しました。");
-    } finally {
-      this.endScheduleLoading();
-    }
+    // schedulePanel に委譲
+    return await this.schedulePanel.deleteSchedule(schedule);
   }
 
   applyMetaNote() {
@@ -9449,95 +9124,18 @@ export class EventAdminApp {
   }
 
   async createEvent(name) {
-    const trimmed = normalizeKey(name || "");
-    if (!trimmed) {
-      throw new Error("イベント名を入力してください。");
-    }
-
-    const existingIds = new Set(this.events.map((event) => event.id));
-    let eventId = generateShortId("evt_");
-    while (existingIds.has(eventId)) {
-      eventId = generateShortId("evt_");
-    }
-
-    const now = Date.now();
-    this.beginEventsLoading("イベントを追加しています…");
-    try {
-      await set(ref(database, `questionIntake/events/${eventId}`), {
-        name: trimmed,
-        createdAt: now,
-        updatedAt: now
-      });
-      await this.loadEvents();
-      this.selectEvent(eventId);
-    } finally {
-      this.endEventsLoading();
-    }
+    // eventPanel に委譲
+    return await this.eventPanel.createEvent(name);
   }
 
   async updateEvent(eventId, name) {
-    const trimmed = normalizeKey(name || "");
-    if (!trimmed) {
-      throw new Error("イベント名を入力してください。");
-    }
-    if (!eventId) {
-      throw new Error("イベントIDが不明です。");
-    }
-
-    const now = Date.now();
-    this.beginEventsLoading("イベントを更新しています…");
-    try {
-      await update(ref(database), {
-        [`questionIntake/events/${eventId}/name`]: trimmed,
-        [`questionIntake/events/${eventId}/updatedAt`]: now
-      });
-      await this.loadEvents();
-      this.selectEvent(eventId);
-    } finally {
-      this.endEventsLoading();
-    }
+    // eventPanel に委譲
+    return await this.eventPanel.updateEvent(eventId, name);
   }
 
   async deleteEvent(event) {
-    const eventId = event?.id;
-    if (!eventId) {
-      throw new Error("イベントIDが不明です。");
-    }
-    const label = event?.name || eventId;
-    const confirmed = await this.confirm({
-      title: "イベントの削除",
-      description: `イベント「${label}」と、その日程・参加者・発行済みリンクをすべて削除します。よろしいですか？`,
-      confirmLabel: "削除する",
-      cancelLabel: "キャンセル",
-      tone: "danger"
-    });
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      this.beginEventsLoading(`イベント「${label}」を削除しています…`);
-      const participantSnapshot = await get(ref(database, `questionIntake/participants/${eventId}`));
-      const participantBranch = participantSnapshot.exists() ? participantSnapshot.val() : {};
-      const tokensToRemove = collectParticipantTokens(participantBranch);
-
-      const updates = {
-        [`questionIntake/events/${eventId}`]: null,
-        [`questionIntake/schedules/${eventId}`]: null,
-        [`questionIntake/participants/${eventId}`]: null
-      };
-      tokensToRemove.forEach((token) => {
-        updates[`questionIntake/tokens/${token}`] = null;
-      });
-
-      await update(ref(database), updates);
-      await this.loadEvents();
-      this.showAlert(`イベント「${label}」を削除しました。`);
-    } catch (error) {
-      throw new Error(error?.message || "イベントの削除に失敗しました。");
-    } finally {
-      this.endEventsLoading();
-    }
+    // eventPanel に委譲
+    return await this.eventPanel.deleteEvent(event);
   }
 
   bindDialogDismiss(element) {
