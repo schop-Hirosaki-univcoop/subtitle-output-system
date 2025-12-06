@@ -104,3 +104,4 @@
 - [ ] `PresenceManager`の作成（プレゼンス関連メソッドの移動）
 - [ ] `ChannelManager`の作成（チャンネル/スケジュール管理の移動）
 - [ ] `UIRenderer`の作成（UI 描画の移動）
+
