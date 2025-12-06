@@ -195,8 +195,8 @@
   - [x] ステップ 4: app.js の整理 ✅ 完了
     - [x] 不要な関数と定数の削除 ✅ 完了
   - [ ] ステップ 5: 動作確認
-- [ ] フェーズ 2: CSV 処理機能の分離
-- [ ] フェーズ 3: イベント管理機能の分離
+- [x] フェーズ 2: CSV 処理機能の分離 ✅ 完了
+- [x] フェーズ 3: イベント管理機能の分離 ✅ 完了
 - [ ] フェーズ 4: 参加者管理機能の分離
 
 ### フェーズ 1 の進捗内容
@@ -353,6 +353,71 @@
 - ✅ 不要な関数と定数が完全に削除されている
 - ✅ リンターエラーなし
 - ✅ すべての機能が PrintManager に正しく移行されている
+
+### フェーズ 2 の進捗内容
+
+#### ステップ 1-4: CsvManager クラスの作成と CSV 処理機能の移行 ✅ 完了
+
+**scripts/question-admin/managers/csv-manager.js** を作成（351 行）
+
+- `CsvManager` クラスの骨格
+- CSV ユーティリティ関数（`encodeCsvValue`, `createCsvContent`, `buildParticipantCsvFilename`, `buildTeamCsvFilename`, `downloadCsvFile`）
+- CSV アップロード処理（`handleCsvChange`, `handleTeamCsvChange`）
+- CSV テンプレートダウンロード機能（`downloadParticipantTemplate`, `downloadTeamTemplate`）
+
+**app.js の変更**:
+
+- `CsvManager` をインポート
+- `let csvManager = null;` でグローバル変数を宣言
+- `init()` で `csvManager = new CsvManager({...})` を初期化
+- すべての CSV 処理関数を `csvManager` に委譲
+- CSV 処理関数を削除（約 214 行削減）
+
+**ファイルサイズ**:
+
+- `app.js`: 7,397 行 → 7,183 行（約 214 行削減）
+- `csv-manager.js`: 351 行（新規作成）
+
+**確認済み項目**:
+
+- ✅ すべての CSV 処理機能が CsvManager に移行されている
+- ✅ イベントハンドラーが正しく委譲されている
+- ✅ 必要な依存関係が context 経由で渡されている
+- ✅ エラーハンドリングが実装されている
+- ✅ リンターエラーなし
+
+### フェーズ 3 の進捗内容
+
+#### ステップ 1-5: EventManager クラスの作成とイベント管理機能の移行 ✅ 完了
+
+**scripts/question-admin/managers/event-manager.js** を作成（405 行）
+
+- `EventManager` クラスの骨格
+- イベント読み込み機能（`loadEvents`）
+- イベント描画機能（`renderEvents`）
+- イベント選択機能（`selectEvent`）
+- イベントフォーム表示機能（`openEventForm`）
+- イベント CRUD 機能（`createEvent`, `updateEvent`, `deleteEvent`）
+
+**app.js の変更**:
+
+- `EventManager` をインポート
+- `let eventManager = null;` でグローバル変数を宣言
+- `init()` で `eventManager = new EventManager({...})` を初期化
+- すべてのイベント管理関数を `eventManager` に委譲
+- イベント管理関数を削除（約 237 行削減）
+
+**ファイルサイズ**:
+
+- `app.js`: 7,183 行 → 6,946 行（約 237 行削減）
+- `event-manager.js`: 405 行（新規作成）
+
+**確認済み項目**:
+
+- ✅ すべてのイベント管理機能が EventManager に移行されている
+- ✅ 必要な依存関係が context 経由で渡されている
+- ✅ エラーハンドリングが実装されている
+- ✅ リンターエラーなし
 
 ---
 

@@ -84,10 +84,12 @@ import {
 // DEFAULT_PREVIEW_NOTE, DEFAULT_LOAD_TIMEOUT_MS, createPrintPreviewController は PrintManager に移行されました
 import { PrintManager } from "./managers/print-manager.js";
 import { CsvManager } from "./managers/csv-manager.js";
+import { EventManager } from "./managers/event-manager.js";
 
 let redirectingToIndex = false;
 let printManager = null;
 let csvManager = null;
+let eventManager = null;
 
 const glDataFetchCache = new Map();
 
@@ -3419,62 +3421,11 @@ function syncSelectedEventSummary() {
 }
 
 function renderEvents() {
-  const list = dom.eventList;
-  if (!list) return;
-  list.innerHTML = "";
-  const totalEvents = state.events.length;
-
-  if (!totalEvents) {
-    if (dom.eventEmpty) dom.eventEmpty.hidden = false;
-    return;
+  // EventManager に委譲
+  if (!eventManager) {
+    throw new Error("EventManager is not initialized");
   }
-  if (dom.eventEmpty) dom.eventEmpty.hidden = true;
-
-  state.events.forEach(event => {
-    const li = document.createElement("li");
-    li.className = "entity-item" + (event.id === state.selectedEventId ? " is-active" : "");
-    li.dataset.eventId = event.id;
-
-    const label = document.createElement("div");
-    label.className = "entity-label";
-    const nameEl = document.createElement("span");
-    nameEl.className = "entity-name";
-    nameEl.textContent = event.name;
-    const scheduleCount = event.schedules ? event.schedules.length : 0;
-    const participantTotal = event.schedules
-      ? event.schedules.reduce((acc, s) => acc + (s.participantCount || 0), 0)
-      : 0;
-    const metaEl = document.createElement("span");
-    metaEl.className = "entity-meta";
-    metaEl.textContent = `日程 ${scheduleCount} 件 / 参加者 ${participantTotal} 名`;
-    label.append(nameEl, metaEl);
-
-    const actions = document.createElement("div");
-    actions.className = "entity-actions";
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "btn-icon";
-    editBtn.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z\" fill=\"currentColor\"/></svg>";
-    editBtn.title = "イベントを編集";
-    editBtn.addEventListener("click", evt => {
-      evt.stopPropagation();
-      openEventForm({ mode: "edit", event });
-    });
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "btn-icon";
-    deleteBtn.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M6.5 1a1 1 0 0 0-.894.553L5.382 2H2.5a.5.5 0 0 0 0 1H3v9c0 .825.675 1.5 1.5 1.5h7c.825 0 1.5-.675 1.5-1.5V3h.5a.5.5 0 0 0 0-1h-2.882l-.224-.447A1 1 0 0 0 9.5 1h-3ZM5 3h6v9c0 .277-.223.5-.5.5h-5c-.277 0-.5-.223-.5-.5V3Z\"/></svg>";
-    deleteBtn.title = "イベントを削除";
-    deleteBtn.addEventListener("click", eventObj => {
-      eventObj.stopPropagation();
-      handleDeleteEvent(event.id, event.name).catch(err => console.error(err));
-    });
-    actions.append(editBtn, deleteBtn);
-
-    li.append(label, actions);
-    li.addEventListener("click", () => selectEvent(event.id));
-    list.appendChild(li);
-  });
+  eventManager.renderEvents();
 }
 
 function renderSchedules() {
@@ -4051,77 +4002,11 @@ function updateParticipantContext(options = {}) {
 }
 
 async function loadEvents({ preserveSelection = true } = {}) {
-  if (isHostAttached() && hostIntegration.controller) {
-    try {
-      if (typeof hostIntegration.controller.getEvents === "function") {
-        const events = hostIntegration.controller.getEvents();
-        applyHostEvents(events, { preserveSelection });
-        return state.events;
-      }
-    } catch (error) {
-      console.warn("Failed to retrieve host events", error);
-    }
+  // EventManager に委譲
+  if (!eventManager) {
+    throw new Error("EventManager is not initialized");
   }
-  const previousEventId = preserveSelection ? state.selectedEventId : null;
-  const previousScheduleId = preserveSelection ? state.selectedScheduleId : null;
-
-  const [eventsBranch, schedulesBranch] = await Promise.all([
-    fetchDbValue("questionIntake/events"),
-    fetchDbValue("questionIntake/schedules")
-  ]);
-
-  const events = eventsBranch && typeof eventsBranch === "object" ? eventsBranch : {};
-  const schedulesTree = schedulesBranch && typeof schedulesBranch === "object" ? schedulesBranch : {};
-
-  const normalized = Object.entries(events).map(([eventId, eventValue]) => {
-    const scheduleBranch = schedulesTree[eventId] && typeof schedulesTree[eventId] === "object"
-      ? schedulesTree[eventId]
-      : {};
-    const scheduleList = Object.entries(scheduleBranch).map(([scheduleId, scheduleValue]) => ({
-      id: String(scheduleId),
-      label: String(scheduleValue?.label || ""),
-      location: String(scheduleValue?.location || ""),
-      date: String(scheduleValue?.date || ""),
-      startAt: String(scheduleValue?.startAt || ""),
-      endAt: String(scheduleValue?.endAt || ""),
-      createdAt: scheduleValue?.createdAt || 0,
-      updatedAt: scheduleValue?.updatedAt || 0,
-      participantCount: Number(scheduleValue?.participantCount || 0)
-    }));
-
-    scheduleList.sort((a, b) => {
-      const startDiff = toMillis(a.startAt || `${a.date}T00:00`) - toMillis(b.startAt || `${b.date}T00:00`);
-      if (startDiff !== 0) return startDiff;
-      const createdDiff = toMillis(a.createdAt) - toMillis(b.createdAt);
-      if (createdDiff !== 0) return createdDiff;
-      return a.label.localeCompare(b.label, "ja", { numeric: true });
-    });
-
-    return {
-      id: String(eventId),
-      name: String(eventValue?.name || ""),
-      createdAt: eventValue?.createdAt || 0,
-      updatedAt: eventValue?.updatedAt || 0,
-      schedules: scheduleList
-    };
-  });
-
-  normalized.sort((a, b) => {
-    const createdDiff = toMillis(a.createdAt) - toMillis(b.createdAt);
-    if (createdDiff !== 0) return createdDiff;
-    return a.name.localeCompare(b.name, "ja", { numeric: true });
-  });
-
-  state.events = normalized;
-
-  finalizeEventLoad({
-    preserveSelection,
-    previousEventId,
-    previousScheduleId,
-    preserveStatus: false
-  });
-
-  return state.events;
+  return await eventManager.loadEvents({ preserveSelection });
 }
 
 async function loadParticipants(options = {}) {
@@ -4350,62 +4235,11 @@ async function loadParticipants(options = {}) {
 }
 
 function selectEvent(eventId, options = {}) {
-  const {
-    nextScheduleId = null,
-    skipContextUpdate = false,
-    skipParticipantLoad = false,
-    source = getSelectionBroadcastSource()
-  } = options || {};
-
-  const previousEventId = state.selectedEventId;
-  const preservingScheduleId = nextScheduleId ? String(nextScheduleId) : null;
-
-  if (previousEventId === eventId) {
-    let scheduleHandled = false;
-    if (preservingScheduleId && state.selectedScheduleId !== preservingScheduleId) {
-      selectSchedule(preservingScheduleId, {
-        preserveStatus: Boolean(preservingScheduleId),
-        suppressParticipantLoad: skipParticipantLoad,
-        source
-      });
-      scheduleHandled = true;
-    } else {
-      broadcastSelectionChange({ source });
-    }
-    if (!skipContextUpdate && !scheduleHandled) {
-      updateParticipantContext({ preserveStatus: Boolean(preservingScheduleId) });
-    }
-    return;
+  // EventManager に委譲
+  if (!eventManager) {
+    throw new Error("EventManager is not initialized");
   }
-
-  state.selectedEventId = eventId;
-  state.selectedScheduleId = preservingScheduleId;
-  setCalendarPickedDate("", { updateInput: true });
-  state.participants = [];
-  state.participantTokenMap = new Map();
-  state.duplicateMatches = new Map();
-  state.duplicateGroups = new Map();
-  captureParticipantBaseline([], { ready: false });
-  if (state.eventParticipantCache instanceof Map && previousEventId) {
-    state.eventParticipantCache.delete(previousEventId);
-  }
-  renderEvents();
-  renderSchedules();
-  renderParticipants();
-  loadGlDataForEvent(eventId).catch(error => console.error(error));
-
-  if (!skipContextUpdate) {
-    updateParticipantContext({ preserveStatus: Boolean(preservingScheduleId) });
-  } else {
-    syncTemplateButtons();
-    syncClearButtonState();
-  }
-
-  if (!skipParticipantLoad && !preservingScheduleId) {
-    loadParticipants().catch(err => console.error(err));
-  }
-
-  broadcastSelectionChange({ source });
+  eventManager.selectEvent(eventId, options);
 }
 
 function selectSchedule(scheduleId, options = {}) {
@@ -4509,22 +4343,11 @@ function resolveScheduleFormValues({ label, location, date, startTime, endTime }
 }
 
 function openEventForm({ mode = "create", event = null } = {}) {
-  if (!dom.eventForm) return;
-  dom.eventForm.reset();
-  dom.eventForm.dataset.mode = mode;
-  dom.eventForm.dataset.eventId = event?.id || "";
-  setFormError(dom.eventError);
-  if (dom.eventDialogTitle) {
-    dom.eventDialogTitle.textContent = mode === "edit" ? "イベントを編集" : "イベントを追加";
+  // EventManager に委譲
+  if (!eventManager) {
+    throw new Error("EventManager is not initialized");
   }
-  if (dom.eventNameInput) {
-    dom.eventNameInput.value = mode === "edit" ? String(event?.name || "") : "";
-  }
-  const submitButton = dom.eventForm.querySelector("button[type='submit']");
-  if (submitButton) {
-    submitButton.textContent = mode === "edit" ? "保存" : "追加";
-  }
-  openDialog(dom.eventDialog);
+  eventManager.openEventForm({ mode, event });
 }
 
 function openScheduleForm({ mode = "create", schedule = null } = {}) {
@@ -4577,117 +4400,27 @@ function openScheduleForm({ mode = "create", schedule = null } = {}) {
 }
 
 async function handleAddEvent(name) {
-  const trimmed = normalizeKey(name || "");
-  if (!trimmed) {
-    throw new Error("イベント名を入力してください。");
+  // EventManager に委譲
+  if (!eventManager) {
+    throw new Error("EventManager is not initialized");
   }
-
-  try {
-    const now = Date.now();
-    let eventId = generateShortId("evt_");
-    const existingIds = new Set(state.events.map(evt => evt.id));
-    while (existingIds.has(eventId)) {
-      eventId = generateShortId("evt_");
-    }
-
-    await set(rootDbRef(`questionIntake/events/${eventId}`), {
-      name: trimmed,
-      createdAt: now,
-      updatedAt: now
-    });
-
-    await loadEvents({ preserveSelection: false });
-    selectEvent(eventId);
-  } catch (error) {
-    console.error(error);
-    throw new Error(error.message || "イベントの追加に失敗しました。");
-  }
+  return await eventManager.createEvent(name);
 }
 
 async function handleUpdateEvent(eventId, name) {
-  const trimmed = normalizeKey(name || "");
-  if (!trimmed) {
-    throw new Error("イベント名を入力してください。");
+  // EventManager に委譲
+  if (!eventManager) {
+    throw new Error("EventManager is not initialized");
   }
-  if (!eventId) {
-    throw new Error("イベントIDが不明です。");
-  }
-
-  try {
-    const now = Date.now();
-    await update(rootDbRef(), {
-      [`questionIntake/events/${eventId}/name`]: trimmed,
-      [`questionIntake/events/${eventId}/updatedAt`]: now
-    });
-    await loadEvents({ preserveSelection: true });
-    selectEvent(eventId);
-  } catch (error) {
-    console.error(error);
-    throw new Error(error.message || "イベントの更新に失敗しました。");
-  }
+  return await eventManager.updateEvent(eventId, name);
 }
 
 async function handleDeleteEvent(eventId, eventName) {
-  const label = eventName || eventId;
-  const confirmed = await confirmAction({
-    title: "イベントの削除",
-    description: `イベント「${label}」と、その日程・参加者・発行済みリンクをすべて削除します。よろしいですか？`,
-    confirmLabel: "削除する",
-    cancelLabel: "キャンセル",
-    tone: "danger"
-  });
-
-  if (!confirmed) {
-    return;
+  // EventManager に委譲
+  if (!eventManager) {
+    throw new Error("EventManager is not initialized");
   }
-
-  try {
-    const participantBranch = await fetchDbValue(`questionIntake/participants/${eventId}`);
-    const tokensToRemove = collectParticipantTokens(participantBranch);
-
-    const updates = {
-      [`questionIntake/events/${eventId}`]: null,
-      [`questionIntake/schedules/${eventId}`]: null,
-      [`questionIntake/participants/${eventId}`]: null
-    };
-
-    tokensToRemove.forEach(token => {
-      updates[`questionIntake/tokens/${token}`] = null;
-      if (token) {
-        state.knownTokens.delete(token);
-        delete state.tokenRecords[token];
-      }
-    });
-
-    await update(rootDbRef(), updates);
-
-    if (state.selectedEventId === eventId) {
-      state.selectedEventId = null;
-      state.selectedScheduleId = null;
-      state.participants = [];
-      state.participantTokenMap = new Map();
-      state.duplicateMatches = new Map();
-      state.duplicateGroups = new Map();
-      captureParticipantBaseline([], { ready: false });
-    }
-
-    if (state.eventParticipantCache instanceof Map) {
-      state.eventParticipantCache.delete(eventId);
-    }
-
-    if (state.teamAssignments instanceof Map) {
-      state.teamAssignments.delete(eventId);
-    }
-
-    await loadEvents({ preserveSelection: false });
-    renderParticipants();
-    updateParticipantContext();
-    state.tokenSnapshotFetchedAt = Date.now();
-    setUploadStatus(`イベント「${label}」を削除しました。`, "success");
-  } catch (error) {
-    console.error(error);
-    setUploadStatus(error.message || "イベントの削除に失敗しました。", "error");
-  }
+  return await eventManager.deleteEvent(eventId, eventName);
 }
 
 async function handleAddSchedule({ label, location, date, startTime, endTime }) {
@@ -7106,6 +6839,36 @@ function init() {
     syncSaveButtonState,
     queueRelocationPrompt,
     captureParticipantBaseline
+  });
+  
+  // EventManager を初期化
+  eventManager = new EventManager({
+    dom,
+    state,
+    // 依存関数と定数
+    isHostAttached,
+    hostIntegration,
+    applyHostEvents,
+    finalizeEventLoad,
+    renderSchedules,
+    renderParticipants,
+    updateParticipantContext,
+    loadGlDataForEvent,
+    loadParticipants,
+    broadcastSelectionChange,
+    selectSchedule,
+    setCalendarPickedDate,
+    captureParticipantBaseline,
+    syncTemplateButtons,
+    syncClearButtonState,
+    openDialog,
+    closeDialog,
+    setFormError,
+    confirmAction,
+    setUploadStatus,
+    refreshScheduleLocationHistory,
+    populateScheduleLocationOptions,
+    getSelectionBroadcastSource
   });
   
   attachEventHandlers();
