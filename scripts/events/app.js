@@ -16,6 +16,8 @@ import {
   serverTimestamp,
   onDisconnect,
   getOperatorPresenceEntryRef,
+  getOperatorScheduleConsensusRef,
+  onValue,
   runTransaction
 } from "../operator/firebase.js";
 import { createApiClient } from "../operator/api-client.js";
@@ -1403,7 +1405,7 @@ export class EventAdminApp {
     if (changed) {
       this.eventSelectionCommitted = false;
       this.scheduleSelectionCommitted = false;
-      this.clearHostPresence();
+      this.firebaseManager.clearHostPresence();
     }
     if (changed) {
       this.logFlowState("イベント選択を更新しました", {
@@ -3249,6 +3251,48 @@ export class EventAdminApp {
     }
   }
 
+  syncOperatorPresenceSubscription() {
+    // EventFirebaseManager に委譲
+    this.firebaseManager.syncOperatorPresenceSubscription();
+    // プロパティを同期
+    this.operatorPresenceEventId = this.firebaseManager.operatorPresenceEventId;
+    this.operatorPresenceUnsubscribe = this.firebaseManager.operatorPresenceUnsubscribe;
+    this.operatorPresenceEntries = this.firebaseManager.operatorPresenceEntries;
+  }
+
+  syncScheduleConsensusSubscription() {
+    // EventFirebaseManager に委譲
+    this.firebaseManager.syncScheduleConsensusSubscription();
+    // プロパティを同期
+    this.scheduleConsensusEventId = this.firebaseManager.scheduleConsensusEventId;
+    this.scheduleConsensusUnsubscribe = this.firebaseManager.scheduleConsensusUnsubscribe;
+    this.scheduleConsensusState = this.firebaseManager.scheduleConsensusState;
+    this.scheduleConsensusLastSignature = this.firebaseManager.scheduleConsensusLastSignature;
+    this.scheduleConsensusLastKey = this.firebaseManager.scheduleConsensusLastKey;
+    // app固有の処理
+    this.hideScheduleConsensusToast();
+  }
+
+  clearScheduleConsensusState({ reason = "" } = {}) {
+    // EventFirebaseManager に委譲
+    this.firebaseManager.clearScheduleConsensusState({ reason });
+    // プロパティを同期
+    this.scheduleConsensusEventId = this.firebaseManager.scheduleConsensusEventId;
+    this.scheduleConsensusUnsubscribe = this.firebaseManager.scheduleConsensusUnsubscribe;
+    this.scheduleConsensusState = this.firebaseManager.scheduleConsensusState;
+    this.scheduleConsensusLastSignature = this.firebaseManager.scheduleConsensusLastSignature;
+    this.scheduleConsensusLastKey = this.firebaseManager.scheduleConsensusLastKey;
+    // app固有のプロパティをクリア
+    this.scheduleConflictPromptSignature = "";
+    this.scheduleConflictLastPromptSignature = "";
+    this.hideScheduleConsensusToast();
+  }
+
+  normalizeScheduleConsensus(raw = null) {
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.normalizeScheduleConsensus(raw);
+  }
+
   handleScheduleConsensusUpdate(eventId, consensus) {
     if (!eventId || eventId !== ensureString(this.selectedEventId)) {
       if (!consensus) {
@@ -3880,20 +3924,20 @@ export class EventAdminApp {
     const user = this.currentUser || auth.currentUser || null;
     const uid = ensureString(user?.uid);
     if (!uid) {
-      this.clearHostPresence();
+      this.firebaseManager.clearHostPresence();
       this.logFlowState("在席情報をクリアしました (未ログイン)", { reason });
       return;
     }
 
     const eventId = ensureString(this.selectedEventId);
     if (!eventId) {
-      this.clearHostPresence();
+      this.firebaseManager.clearHostPresence();
       this.logFlowState("在席情報をクリアしました (イベント未選択)", { reason });
       return;
     }
 
     if (!this.eventSelectionCommitted) {
-      this.clearHostPresence();
+      this.firebaseManager.clearHostPresence();
       this.logFlowState("イベント未確定のため在席情報の更新を保留します", {
         reason,
         eventId
@@ -3947,7 +3991,7 @@ export class EventAdminApp {
     this.persistHostPresenceSessionId(uid, eventId, sessionId);
     const nextKey = `${eventId}/${sessionId}`;
     if (this.hostPresenceEntryKey && this.hostPresenceEntryKey !== nextKey) {
-      this.clearHostPresence();
+      this.firebaseManager.clearHostPresence();
       this.hostPresenceSessionId = sessionId;
     }
 
@@ -4001,7 +4045,7 @@ export class EventAdminApp {
       committedScheduleLabel: ensureString(this.hostCommittedScheduleLabel)
     });
     if (reason !== "heartbeat" && signature === this.hostPresenceLastSignature) {
-      this.scheduleHostPresenceHeartbeat();
+      this.firebaseManager.scheduleHostPresenceHeartbeat();
       this.logFlowState("在席情報に変更はありません", {
         reason,
         eventId,
@@ -4064,7 +4108,7 @@ export class EventAdminApp {
       console.debug("Failed to register host presence cleanup:", error);
     }
 
-    this.scheduleHostPresenceHeartbeat();
+    this.firebaseManager.scheduleHostPresenceHeartbeat();
     this.logFlowState("在席情報を更新しました", {
       reason,
       eventId,
@@ -5515,257 +5559,6 @@ export class EventAdminApp {
     } else if (shouldPromptDueToConflict && signature) {
       this.scheduleConflictLastPromptSignature = signature;
     }
-  }
-
-  handleScheduleConsensusUpdate(eventId, consensus) {
-    if (!eventId || eventId !== ensureString(this.selectedEventId)) {
-      if (!consensus) {
-        this.hideScheduleConsensusToast();
-      }
-      return;
-    }
-    this.scheduleConsensusState = consensus || null;
-    if (!consensus) {
-      if (this.scheduleConsensusLastSignature || this.scheduleConsensusLastKey) {
-        this.logFlowState("スケジュール合意情報をクリアしました", {
-          eventId
-        });
-      }
-      this.scheduleConsensusLastSignature = "";
-      this.scheduleConsensusLastKey = "";
-      this.scheduleConflictPromptSignature = "";
-      this.scheduleConflictLastPromptSignature = "";
-      this.hideScheduleConsensusToast();
-      return;
-    }
-    const signature = consensus.conflictSignature || "";
-    const key = consensus.scheduleKey || "";
-    const changed =
-      this.scheduleConsensusLastSignature !== signature ||
-      this.scheduleConsensusLastKey !== key;
-    if (changed) {
-      this.logFlowState("スケジュール合意情報を受信しました", {
-        eventId,
-        conflictSignature: signature,
-        scheduleKey: key,
-        scheduleId: consensus.scheduleId || "",
-        resolvedByUid: consensus.resolvedByUid || ""
-      });
-      this.scheduleConsensusLastSignature = signature;
-      this.scheduleConsensusLastKey = key;
-      if (signature && key) {
-        this.scheduleConflictPromptSignature = "";
-        this.scheduleConflictLastPromptSignature = "";
-        this.applyScheduleConsensus(consensus);
-      } else if (signature && !key) {
-        this.scheduleConflictPromptSignature = signature;
-        this.hideScheduleConsensusToast();
-        this.handleScheduleConsensusPrompt(consensus);
-      } else {
-        this.hideScheduleConsensusToast();
-      }
-    }
-  }
-
-  handleScheduleConsensusPrompt(consensus) {
-    if (!consensus) {
-      return;
-    }
-    const signature = ensureString(consensus.conflictSignature);
-    if (!signature) {
-      return;
-    }
-    const context = this.scheduleConflictContext || this.buildScheduleConflictContext();
-    this.scheduleConflictContext = context;
-    if (!context?.hasConflict || ensureString(context.signature) !== signature) {
-      return;
-    }
-    this.scheduleConflictContext = context;
-    if (context?.signature) {
-      this.scheduleConflictLastSignature = context.signature;
-    }
-    this.syncScheduleConflictPromptState(context);
-    this.logFlowState("スケジュール合意の確認が保留中です", {
-      eventId: context?.eventId || "",
-      conflictSignature: signature,
-      originPanel: this.activePanel,
-      pendingNavigationTarget: this.pendingNavigationTarget || ""
-    });
-    const requestedBySessionId = ensureString(consensus.requestedBySessionId);
-    const hostSessionId = ensureString(this.hostPresenceSessionId);
-    const isRequester = requestedBySessionId && requestedBySessionId === hostSessionId;
-    const hasCommittedSchedule = Boolean(ensureString(this.hostCommittedScheduleId));
-    const hasSelection = Boolean(ensureString(this.selectedScheduleId));
-    if (!isRequester && hasCommittedSchedule && hasSelection && !this.isScheduleConflictDialogOpen()) {
-      this.openScheduleConflictDialog(context, {
-        reason: "consensus-prompt",
-        originPanel: this.activePanel,
-        target: this.activePanel
-      });
-    }
-  }
-
-  applyScheduleConsensus(consensus) {
-    if (!consensus) {
-      return;
-    }
-    const eventId = ensureString(this.selectedEventId);
-    if (!eventId) {
-      return;
-    }
-    this.setScheduleConflictSubmitting(false);
-    const scheduleKey = ensureString(consensus.scheduleKey);
-    let scheduleId = ensureString(consensus.scheduleId);
-    const context = this.scheduleConflictContext || this.buildScheduleConflictContext();
-    const options = Array.isArray(context?.selectableOptions) && context.selectableOptions.length
-      ? context.selectableOptions
-      : Array.isArray(context?.options)
-        ? context.options
-        : [];
-    let option = null;
-    if (options.length) {
-      option =
-        options.find((item) => {
-          if (scheduleKey && item.key === scheduleKey) return true;
-          if (scheduleId && item.scheduleId === scheduleId) return true;
-          return false;
-        }) || null;
-    }
-    if (!scheduleId && option && option.scheduleId) {
-      scheduleId = option.scheduleId;
-    }
-    if (this.dom.scheduleConflictForm) {
-      this.dom.scheduleConflictForm.reset();
-    }
-    if (this.dom.scheduleConflictDialog) {
-      this.closeDialog(this.dom.scheduleConflictDialog);
-    }
-    this.clearScheduleConflictError();
-    const navMeta = this.pendingNavigationMeta;
-    const pendingTarget = this.pendingNavigationTarget || "";
-    this.pendingNavigationTarget = "";
-    this.navigationManager.pendingNavigationTarget = "";
-    this.pendingNavigationMeta = null;
-    this.navigationManager.pendingNavigationMeta = null;
-    this.awaitingScheduleConflictPrompt = false;
-    this.clearPendingNavigationTimer();
-    let resolvedTarget = pendingTarget;
-    let usedFallback = false;
-    const metaOrigin = navMeta?.originPanel || "";
-    const metaTarget = navMeta?.target || "";
-    const isFlowFromSchedules =
-      navMeta?.reason === "flow-navigation" && metaOrigin === "schedules";
-    if (!resolvedTarget && metaTarget) {
-      resolvedTarget = metaTarget;
-      usedFallback = resolvedTarget !== pendingTarget;
-    }
-    if (isFlowFromSchedules) {
-      const preferredTarget = metaTarget && metaTarget !== metaOrigin ? metaTarget : "";
-      const fallbackTarget = preferredTarget || "participants";
-      if (resolvedTarget !== fallbackTarget) {
-        usedFallback = usedFallback || resolvedTarget !== pendingTarget;
-        resolvedTarget = fallbackTarget;
-      }
-    }
-    if (resolvedTarget) {
-      this.showPanel(resolvedTarget);
-      const message = usedFallback
-        ? "スケジュール合意の適用により参加者パネルへ移動しました"
-        : "スケジュール合意の適用後に保留していたパネルを開きます";
-      this.logFlowState(message, {
-        target: resolvedTarget,
-        scheduleId: scheduleId || "",
-        scheduleKey
-      });
-    }
-    const fallbackSchedule = scheduleId
-      ? this.schedules.find((schedule) => schedule.id === scheduleId) || null
-      : null;
-    const label = option?.scheduleLabel || ensureString(consensus.scheduleLabel) || fallbackSchedule?.label || scheduleId || "";
-    let range = option?.scheduleRange || ensureString(consensus.scheduleRange);
-    if (!range && fallbackSchedule) {
-      range = formatScheduleRange(fallbackSchedule.startAt, fallbackSchedule.endAt);
-    }
-    const byline = ensureString(consensus.resolvedByDisplayName) || ensureString(consensus.resolvedByUid);
-    this.logFlowState("スケジュール合意を適用しました", {
-      eventId,
-      scheduleId: scheduleId || "",
-      scheduleKey,
-      label,
-      range,
-      byline
-    });
-    this.showScheduleConsensusToast({ label, range, byline });
-    const selectedScheduleId = ensureString(this.selectedScheduleId);
-    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
-    const selectionMatches = Boolean(scheduleId) && scheduleId === selectedScheduleId;
-    const shouldFollow = Boolean(scheduleId) &&
-      (scheduleId === committedScheduleId || selectionMatches || (!selectedScheduleId && scheduleId));
-    if (shouldFollow) {
-      if (!selectionMatches && scheduleId && this.schedules.some((schedule) => schedule.id === scheduleId)) {
-        this.selectSchedule(scheduleId);
-      }
-      this.setHostCommittedSchedule(scheduleId, {
-        schedule: fallbackSchedule,
-        reason: "consensus-apply",
-        sync: true,
-        updateContext: true,
-        force: true,
-        suppressConflictPrompt: true
-      });
-    } else if (scheduleId && selectedScheduleId && scheduleId !== selectedScheduleId) {
-      const currentSchedule = this.schedules.find((schedule) => schedule.id === selectedScheduleId) || null;
-      const currentLabel = currentSchedule?.label || selectedScheduleId;
-      this.setHostCommittedSchedule("", {
-        reason: "consensus-pending",
-        sync: true,
-        updateContext: true,
-        force: true,
-        suppressConflictPrompt: true
-      });
-      if (this.operatorMode === OPERATOR_MODE_SUPPORT) {
-        this.logFlowState("テロップ操作なしモードのためスケジュール合意モーダルを表示しません", {
-          consensusScheduleId: scheduleId,
-          currentScheduleId: selectedScheduleId,
-          consensusLabel: label || "",
-          consensusRange: range || ""
-        });
-      } else {
-        const conflictContext =
-          (this.scheduleConflictContext &&
-            ensureString(this.scheduleConflictContext?.signature) === ensureString(consensus.conflictSignature))
-            ? this.scheduleConflictContext
-            : this.buildScheduleConflictContext();
-        this.openScheduleFallbackDialog({
-          consensusScheduleId: scheduleId,
-          consensusLabel: label,
-          consensusRange: range,
-          consensusByline: byline,
-          currentScheduleId: selectedScheduleId,
-          currentScheduleLabel: currentLabel,
-          conflictContext,
-          pendingNavigationTarget: this.pendingNavigationTarget || ""
-        });
-      }
-    } else if (scheduleId) {
-      this.setHostCommittedSchedule(scheduleId, {
-        schedule: fallbackSchedule,
-        reason: "consensus-align",
-        sync: true,
-        updateContext: true,
-        force: true,
-        suppressConflictPrompt: true
-      });
-    } else {
-      this.setHostCommittedSchedule("", {
-        reason: "consensus-clear",
-        sync: true,
-        updateContext: true,
-        force: true,
-        suppressConflictPrompt: true
-      });
-    }
-    this.syncScheduleConflictPromptState();
   }
 
   showScheduleConsensusToast({ label = "", range = "", byline = "" } = {}) {

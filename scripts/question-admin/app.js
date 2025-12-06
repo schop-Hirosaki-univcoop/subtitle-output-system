@@ -3816,7 +3816,7 @@ function selectSchedule(scheduleId, options = {}) {
     return;
   }
   scheduleManager.selectSchedule(scheduleId, options);
-}
+  }
 
 // resolveScheduleFormValues は ScheduleManager に移行されました
 
@@ -4550,7 +4550,7 @@ async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
   // ParticipantManager に委譲
   if (!participantManager) {
     throw new Error("ParticipantManager is not initialized");
-  }
+    }
   return await participantManager.handleDeleteParticipant(participantId, rowIndex, rowKey);
 }
 
@@ -4558,7 +4558,7 @@ function openParticipantEditor(participantId, rowKey) {
   // ParticipantManager に委譲
   if (!participantManager) {
     throw new Error("ParticipantManager is not initialized");
-  }
+    }
   participantManager.openParticipantEditor(participantId, rowKey);
 }
 
@@ -4568,7 +4568,7 @@ function saveParticipantEdits() {
     throw new Error("ParticipantManager is not initialized");
   }
   participantManager.saveParticipantEdits();
-}
+    }
 
 // 元の removeParticipantFromState 実装は ParticipantManager に移行されました
 
