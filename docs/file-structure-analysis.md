@@ -41,7 +41,7 @@
 
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
-| `scripts/events/app.js`                       | 8,594 | ❌ 要改善（基準の約 5.7 倍、リファクタリング進行中） |
+| `scripts/events/app.js`                       | 8,279 | ❌ 要改善（基準の約 5.5 倍、リファクタリング進行中） |
 | `scripts/question-admin/app.js`               | 5,752 | ❌ 要改善（基準の約 3.8 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
@@ -60,7 +60,7 @@
 
 2. **巨大な単一ファイル**
 
-   - `scripts/events/app.js` - 8,594 行（リファクタリング進行中、元の 10,180 行から約 1,586 行削減）
+   - `scripts/events/app.js` - 8,279 行（リファクタリング進行中、元の 10,180 行から約 1,901 行削減）
    - `scripts/question-admin/app.js` - 5,752 行（リファクタリング進行中、元の 8,180 行から約 2,428 行削減）
 
 3. **中規模の単一ファイル**
@@ -129,7 +129,7 @@ scripts/operator/
 
 **現状**:
 
-- `app.js` が 8,594 行と非常に大きい（リファクタリング進行中、元の 10,180 行から約 1,586 行削減）
+- `app.js` が 8,200 行と非常に大きい（リファクタリング進行中、元の 10,180 行から約 1,980 行削減）
 - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
 - 単一の `EventAdminApp` クラスに多くの責務が集中
 - ツール関連は `tools/` ディレクトリに分割されているが、メインの `app.js` が巨大
@@ -139,7 +139,7 @@ scripts/operator/
 ```
 scripts/events/
 ├── index.js              # エントリーポイント（8行）✅
-├── app.js                # EventAdminApp クラス（8,594行）❌ リファクタリング進行中
+├── app.js                # EventAdminApp クラス（8,279行）❌ リファクタリング進行中
 ├── tool-coordinator.js   # ToolCoordinator（342行）✅
 ├── panels/
 │   ├── event-panel.js        # EventPanelManager（326行）✅
@@ -162,9 +162,9 @@ scripts/events/
 
 **問題点**:
 
-1. **`app.js` が巨大（8,594 行、リファクタリング進行中）**
+1. **`app.js` が巨大（8,279 行、リファクタリング進行中）**
 
-   - 元の 10,180 行から約 1,586 行削減
+   - 元の 10,180 行から約 1,901 行削減
    - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
    - 認証、状態管理、画面遷移、Firebase 操作、UI 更新などが混在
    - 単一責任の原則に違反（改善中）
@@ -418,9 +418,9 @@ scripts/
 
 ### 重大な問題（優先度: 高）
 
-1. **`scripts/events/app.js` が 8,594 行（リファクタリング進行中）**
+1. **`scripts/events/app.js` が 8,279 行（リファクタリング進行中）**
 
-   - 開発標準の約 5.7 倍（元の 10,180 行から約 1,586 行削減）
+   - 開発標準の約 5.5 倍（元の 10,180 行から約 1,901 行削減）
    - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
    - 単一責任の原則に違反（改善中）
    - テストが困難（改善中）
@@ -508,17 +508,17 @@ scripts/
 - ✅ フェーズ 1.5: Firebase 操作機能の分離完了
   - `managers/firebase-manager.js` (774 行) - Firebase 操作機能を分離
   - `app.js` の行数: 9,027 行 → 8,594 行（約 433 行削減）
-- ⏳ フェーズ 1.6: 重複メソッドの削除とクリーンアップ（進行中）
-  - `syncOperatorPresenceSubscription`, `syncScheduleConsensusSubscription`, `clearScheduleConsensusState`, `normalizeScheduleConsensus` などの重複メソッドを削除
-  - 不要なインポートの削除
-  - 段階的に進めるため、1 つ目の実装を委譲に置き換え、2 つ目の実装を削除する方針
+- ✅ フェーズ 1.6: 重複メソッドの削除とクリーンアップ完了
+  - `syncOperatorPresenceSubscription`, `syncScheduleConsensusSubscription`, `clearScheduleConsensusState`, `normalizeScheduleConsensus` の重複メソッドを削除
+  - 1 つ目の実装を委譲に置き換え、2 つ目の実装を削除
+  - `app.js` の行数: 8,594 行 → 8,279 行（約 315 行削減）
 
 **分割案**:
 
 ```
 scripts/events/
 ├── index.js
-├── app.js                    # EventAdminApp（初期化とルーティング、8,594行→目標: 3,000行以下）
+├── app.js                    # EventAdminApp（初期化とルーティング、8,279行→目標: 3,000行以下）
 ├── panels/
 │   ├── event-panel.js        # イベント管理パネル（326行）✅ 完了
 │   ├── schedule-panel.js     # 日程管理パネル（326行）✅ 完了
@@ -750,7 +750,7 @@ scripts/login/
 - ✅ `scripts/operator/` - リファクタリング済み、良好
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
-- ❌ `scripts/events/app.js` - 8,594 行、要改善（リファクタリング進行中、元の 10,180 行から約 1,586 行削減）
+- ❌ `scripts/events/app.js` - 8,279 行、要改善（リファクタリング進行中、元の 10,180 行から約 1,901 行削減）
 - ❌ `scripts/question-admin/app.js` - 5,752 行、要改善（リファクタリング進行中、元の 8,180 行から約 2,428 行削減）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
