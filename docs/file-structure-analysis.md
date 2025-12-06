@@ -41,7 +41,7 @@
 
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
-| `scripts/events/app.js`                       | 9,462 | ❌ 要改善（基準の約 6.3 倍、リファクタリング進行中） |
+| `scripts/events/app.js`                       | 9,233 | ❌ 要改善（基準の約 6.2 倍、リファクタリング進行中） |
 | `scripts/question-admin/app.js`               | 5,752 | ❌ 要改善（基準の約 3.8 倍、リファクタリング進行中） |
 | `scripts/events/tools/gl.js`                  | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
@@ -191,8 +191,8 @@ scripts/events/
   - ✅ `EventPanelManager` - イベント管理パネル（326 行）完了
   - ✅ `SchedulePanelManager` - 日程管理パネル（326 行）完了
   - ✅ `EventAuthManager` - 認証管理（384 行）完了
-  - ✅ `EventStateManager` - 状態管理（303 行）完了
-  - ⏳ `EventNavigationManager` - 画面遷移制御（未着手）
+  - ✅ `EventStateManager` - 状態管理（315 行）完了
+  - ✅ `EventNavigationManager` - 画面遷移制御（499 行、基本機能完了）
   - ⏳ `EventUIRenderer` - UI 描画（未着手）
   - ⏳ `EventFirebaseManager` - Firebase 操作（未着手）
 - `tools/gl.js` を機能別に分割
@@ -501,15 +501,18 @@ scripts/
   - `managers/auth-manager.js` (384 行) - 認証管理機能を分離
   - `app.js` の行数: 9,778 行 → 9,590 行（約 188 行削減）
 - ✅ フェーズ 1.2: 状態管理機能の分離完了
-  - `managers/state-manager.js` (303 行) - 状態管理機能を分離
-  - `app.js` の行数: 9,590 行 → 9,462 行（約 128 行削減）
+  - `managers/state-manager.js` (315 行) - 状態管理機能を分離
+  - `app.js` の行数: 9,590 行 → 9,471 行（約 119 行削減）
+- ✅ フェーズ 1.3: 画面遷移制御機能の分離完了（基本機能）
+  - `managers/navigation-manager.js` (499 行) - 画面遷移制御機能を分離
+  - `app.js` の行数: 9,471 行 → 9,233 行（約 238 行削減）
 
 **分割案**:
 
 ```
 scripts/events/
 ├── index.js
-├── app.js                    # EventAdminApp（初期化とルーティング、9,462行→目標: 3,000行以下）
+├── app.js                    # EventAdminApp（初期化とルーティング、9,233行→目標: 3,000行以下）
 ├── panels/
 │   ├── event-panel.js        # イベント管理パネル（326行）✅ 完了
 │   ├── schedule-panel.js     # 日程管理パネル（326行）✅ 完了
@@ -520,8 +523,8 @@ scripts/events/
 │   └── operator-panel.js     # 既存
 ├── managers/
 │   ├── auth-manager.js       # 認証管理（384行）✅ 完了
-│   └── state-manager.js     # 状態管理（303行）✅ 完了
-├── navigation-manager.js     # 画面遷移制御（500行程度）⏳ 未着手
+│   ├── state-manager.js     # 状態管理（315行）✅ 完了
+│   └── navigation-manager.js # 画面遷移制御（499行）✅ 完了（基本機能）
 ├── ui-renderer.js            # UI 描画（600行程度）⏳ 未着手
 ├── firebase-manager.js       # Firebase 操作（800行程度）⏳ 未着手
 ├── tool-coordinator.js       # 既存
@@ -539,9 +542,10 @@ scripts/events/
 2. ✅ イベント管理パネルと日程管理パネルを分離（完了）
 3. ✅ 認証管理機能を分離（完了）
 4. ✅ 状態管理機能を分離（完了）
-5. ⏳ 各 Manager クラスを作成（残り 3 つ）
-6. ⏳ 段階的に機能を移行（残り 3 フェーズ）
-7. ⏳ テストを実施（未着手）
+5. ✅ 画面遷移制御機能を分離（基本機能完了）
+6. ⏳ 各 Manager クラスを作成（残り 2 つ）
+7. ⏳ 段階的に機能を移行（残り 2 フェーズ）
+8. ⏳ テストを実施（未着手）
 
 ### 2. `scripts/question-admin/app.js` のリファクタリング（優先度: 高）
 
@@ -648,7 +652,7 @@ scripts/login/
      - ✅ フェーズ 1.1: 認証管理機能の分離（`auth-manager.js`, 381 行）
    - **残りのフェーズ**:
      - ✅ 状態管理機能の分離（`EventStateManager`）完了
-     - ⏳ 画面遷移制御機能の分離（`EventNavigationManager`）
+     - ✅ 画面遷移制御機能の分離（`EventNavigationManager`、基本機能完了）
      - ⏳ UI 描画機能の分離（`EventUIRenderer`）
      - ⏳ Firebase 操作機能の分離（`EventFirebaseManager`）
 

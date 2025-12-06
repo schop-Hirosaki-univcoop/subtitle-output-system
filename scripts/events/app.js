@@ -28,7 +28,6 @@ import { LoadingTracker } from "./loading-tracker.js";
 import {
   ensureString,
   formatDateTimeLocal,
-  buildContextDescription,
   logError,
   formatParticipantCount,
   collectParticipantTokens
@@ -59,6 +58,7 @@ import { EventPanelManager } from "./panels/event-panel.js";
 import { SchedulePanelManager } from "./panels/schedule-panel.js";
 import { EventAuthManager } from "./managers/auth-manager.js";
 import { EventStateManager } from "./managers/state-manager.js";
+import { EventNavigationManager } from "./managers/navigation-manager.js";
 // consumeAuthTransfer, loadAuthPreflightContext, preflightContextMatchesUser は EventAuthManager に移行されました
 import { appendAuthDebugLog, replayAuthDebugLog } from "../shared/auth-debug-log.js";
 import {
@@ -161,10 +161,10 @@ export class EventAdminApp {
     this.lastSelectionSignature = ""; // EventStateManager に移行（後方互換性のため保持）
     this.lastSelectionSource = ""; // EventStateManager に移行（後方互換性のため保持）
     this.forceSelectionBroadcast = true; // EventStateManager に移行（後方互換性のため保持）
-    this.stage = "events";
+    this.stage = "events"; // EventNavigationManager に移行（後方互換性のため保持）
     this.preflightContext = null; // EventAuthManager に移行（後方互換性のため保持）
-    this.stageHistory = new Set(["events"]);
-    this.activePanel = "events";
+    this.stageHistory = new Set(["events"]); // EventNavigationManager に移行（後方互換性のため保持）
+    this.activePanel = "events"; // EventNavigationManager に移行（後方互換性のため保持）
     this.activeDialog = null;
     this.lastFocused = null;
     this.confirmResolver = null;
@@ -193,6 +193,8 @@ export class EventAdminApp {
     this.authManager = new EventAuthManager(this);
     // 状態管理を初期化
     this.stateManager = new EventStateManager(this);
+    // 画面遷移制御を初期化
+    this.navigationManager = new EventNavigationManager(this);
     // auth のアタッチ後に ToolCoordinator を初期化する
     this.tools = new ToolCoordinator(this);
     // イベント管理パネルを初期化
@@ -225,9 +227,9 @@ export class EventAdminApp {
     this.scheduleConflictPromptSignature = "";
     this.scheduleConflictLastPromptSignature = "";
     this.lastScheduleCommitChanged = false;
-    this.pendingNavigationTarget = "";
-    this.pendingNavigationMeta = null;
-    this.pendingNavigationClearTimer = 0;
+    this.pendingNavigationTarget = ""; // EventNavigationManager に移行（後方互換性のため保持）
+    this.pendingNavigationMeta = null; // EventNavigationManager に移行（後方互換性のため保持）
+    this.pendingNavigationClearTimer = 0; // EventNavigationManager に移行（後方互換性のため保持）
     this.awaitingScheduleConflictPrompt = false;
     this.scheduleConflictRadioName = generateShortId("flow-conflict-radio-");
     this.scheduleFallbackRadioName = generateShortId("flow-fallback-radio-");
@@ -297,6 +299,14 @@ export class EventAdminApp {
     this.lastSelectionSignature = this.stateManager.lastSelectionSignature;
     this.lastSelectionSource = this.stateManager.lastSelectionSource;
     this.forceSelectionBroadcast = this.stateManager.forceSelectionBroadcast;
+    
+    // EventNavigationManager のプロパティを app に同期
+    this.stage = this.navigationManager.stage;
+    this.stageHistory = this.navigationManager.stageHistory;
+    this.activePanel = this.navigationManager.activePanel;
+    this.pendingNavigationTarget = this.navigationManager.pendingNavigationTarget;
+    this.pendingNavigationMeta = this.navigationManager.pendingNavigationMeta;
+    this.pendingNavigationClearTimer = this.navigationManager.pendingNavigationClearTimer;
     
     appendAuthDebugLog("events:app-constructed", {
       hasCurrentUser: Boolean(this.currentUser)
@@ -536,9 +546,15 @@ export class EventAdminApp {
     this.scheduleBatchSet = this.stateManager.scheduleBatchSet;
     this.forceSelectionBroadcast = this.stateManager.forceSelectionBroadcast;
     
-    this.stage = "events";
-    this.stageHistory = new Set(["events"]);
-    this.activePanel = "events";
+    // EventNavigationManager の状態をリセット
+    this.navigationManager.resetState();
+    // app の状態を EventNavigationManager と同期
+    this.stage = this.navigationManager.stage;
+    this.stageHistory = this.navigationManager.stageHistory;
+    this.activePanel = this.navigationManager.activePanel;
+    this.pendingNavigationTarget = this.navigationManager.pendingNavigationTarget;
+    this.pendingNavigationMeta = this.navigationManager.pendingNavigationMeta;
+    this.pendingNavigationClearTimer = this.navigationManager.pendingNavigationClearTimer;
     this.eventsLoadingTracker.reset();
     this.scheduleLoadingTracker.reset();
     this.clearOperatorPresenceState();
@@ -2222,101 +2238,25 @@ export class EventAdminApp {
   }
 
   updateStageUi() {
-    if (this.dom.main) {
-      this.dom.main.dataset.stage = this.stage;
-    }
-    this.updateStageHeader();
-    this.updateStageIndicator();
-    this.updatePanelVisibility();
-    this.updatePanelNavigation();
-    this.updateChatLayoutMetrics();
+    // EventNavigationManager に委譲
+    this.navigationManager.updateStageUi();
+    // EventNavigationManager のプロパティを app に同期
+    this.stage = this.navigationManager.stage;
   }
 
   updateStageIndicator() {
-    if (!Array.isArray(this.dom.stageIndicators)) return;
-    const currentIndex = STAGE_SEQUENCE.indexOf(this.stage);
-    this.dom.stageIndicators.forEach((indicator) => {
-      const stageId = indicator?.dataset?.stageIndicator || "";
-      const stageIndex = STAGE_SEQUENCE.indexOf(stageId);
-      if (stageIndex === -1) return;
-      indicator.classList.toggle("is-active", stageIndex === currentIndex);
-      indicator.classList.toggle("is-complete", stageIndex < currentIndex);
-      if (stageIndex === currentIndex) {
-        indicator.setAttribute("aria-current", "step");
-      } else {
-        indicator.removeAttribute("aria-current");
-      }
-    });
+    // EventNavigationManager に委譲
+    this.navigationManager.updateStageIndicator();
   }
 
   updateStageHeader() {
-    const activePanel = PANEL_CONFIG[this.activePanel] ? this.activePanel : "events";
-    const panelConfig = PANEL_CONFIG[activePanel] || PANEL_CONFIG.events;
-    const stageInfo = PANEL_STAGE_INFO[activePanel] || STAGE_INFO[panelConfig.stage] || null;
-
-    const title = stageInfo?.title ? String(stageInfo.title).trim() : "";
-    const description = stageInfo?.description ? String(stageInfo.description).trim() : "";
-    let baseText = "";
-    if (title && description) {
-      baseText = `${title} — ${description}`;
-    } else if (description) {
-      baseText = description;
-    } else if (title) {
-      baseText = title;
-    }
-
-    const needsEvent = Boolean(panelConfig.requireEvent || panelConfig.requireSchedule);
-    const needsSchedule = Boolean(panelConfig.requireSchedule);
-    const event = needsEvent ? this.getSelectedEvent() : null;
-    const schedule = needsSchedule ? this.getSelectedSchedule() : null;
-
-    if (needsEvent || needsSchedule) {
-      const prefix = baseText || title || "選択対象";
-      baseText = buildContextDescription(prefix, event, needsSchedule ? schedule : null);
-    }
-
-    this.stageNote = (baseText || "").trim();
-    this.applyMetaNote();
+    // EventNavigationManager に委譲
+    this.navigationManager.updateStageHeader();
   }
 
   setModuleAccessibility(module, isActive) {
-    if (!module) return;
-    if (typeof module.inert !== "undefined") {
-      module.inert = !isActive;
-    } else if (!isActive) {
-      module.setAttribute("inert", "");
-    } else {
-      module.removeAttribute("inert");
-    }
-
-    if (isActive) {
-      module.removeAttribute("aria-hidden");
-      module.classList.remove("is-inert");
-    } else {
-      module.setAttribute("aria-hidden", "true");
-      module.classList.add("is-inert");
-    }
-
-    const focusable = module.querySelectorAll(FOCUSABLE_SELECTOR);
-    focusable.forEach((element) => {
-      if (isActive) {
-        if (Object.prototype.hasOwnProperty.call(element.dataset, "flowSavedTabindex")) {
-          const previous = element.dataset.flowSavedTabindex;
-          if (previous === "") {
-            element.removeAttribute("tabindex");
-          } else {
-            element.setAttribute("tabindex", previous);
-          }
-          delete element.dataset.flowSavedTabindex;
-        }
-      } else if (!Object.prototype.hasOwnProperty.call(element.dataset, "flowSavedTabindex")) {
-        const current = element.getAttribute("tabindex");
-        element.dataset.flowSavedTabindex = current ?? "";
-        element.setAttribute("tabindex", "-1");
-      } else {
-        element.setAttribute("tabindex", "-1");
-      }
-    });
+    // EventNavigationManager に委譲
+    this.navigationManager.setModuleAccessibility(module, isActive);
   }
 
   isFullscreenSupported() {
@@ -2463,34 +2403,8 @@ export class EventAdminApp {
   }
 
   updateFlowButtons() {
-    const signedIn = Boolean(this.currentUser);
-    const hasEvent = Boolean(this.selectedEventId);
-    const hasSchedule = Boolean(this.selectedScheduleId);
-
-    if (this.dom.addEventButton) {
-      this.dom.addEventButton.disabled = !signedIn;
-    }
-    if (this.dom.refreshButton) {
-      this.dom.refreshButton.disabled = !signedIn;
-    }
-    if (this.dom.eventPrintButton) {
-      const hasEvents = this.events.length > 0;
-      this.dom.eventPrintButton.disabled = !signedIn || !hasEvents;
-    }
-    if (this.dom.nextButton) {
-      this.dom.nextButton.disabled = !signedIn || !hasEvent;
-    }
-    if (this.dom.addScheduleButton) {
-      this.dom.addScheduleButton.disabled = !signedIn || !hasEvent;
-    }
-    if (this.dom.scheduleRefreshButton) {
-      this.dom.scheduleRefreshButton.disabled = !signedIn || !hasEvent;
-    }
-    if (this.dom.scheduleNextButton) {
-      this.dom.scheduleNextButton.disabled = !signedIn || !hasSchedule;
-    }
-    this.updateNavigationButtons();
-    this.updateSidebarButtons();
+    // EventNavigationManager に委譲
+    this.navigationManager.updateFlowButtons();
   }
 
   loadEventPrintSettings() {
@@ -2826,236 +2740,83 @@ export class EventAdminApp {
   }
 
   setStage(stage) {
-    if (!STAGE_SEQUENCE.includes(stage)) {
-      return;
-    }
-    this.stage = stage;
-    this.stageHistory.add(stage);
-    this.updateStageUi();
-    this.updateFlowButtons();
-    this.updateSelectionNotes();
+    // EventNavigationManager に委譲
+    this.navigationManager.setStage(stage);
+    // EventNavigationManager のプロパティを app に同期
+    this.stage = this.navigationManager.stage;
+    this.stageHistory = this.navigationManager.stageHistory;
   }
 
   canActivatePanel(panel, config = PANEL_CONFIG[panel]) {
-    const rules = config || PANEL_CONFIG.events;
-    if ((panel || "") === "operator" && this.operatorMode !== OPERATOR_MODE_TELOP) {
-      return false;
-    }
-    if (rules.requireEvent && !this.selectedEventId) {
-      return false;
-    }
-    if (rules.requireSchedule && (!this.selectedScheduleId || !this.currentUser)) {
-      return false;
-    }
-    return true;
+    // EventNavigationManager に委譲
+    return this.navigationManager.canActivatePanel(panel, config);
   }
 
   showPanel(panel) {
-    let normalized = PANEL_CONFIG[panel] ? panel : "events";
-    if (normalized === "operator" && this.operatorMode !== OPERATOR_MODE_TELOP) {
-      const fallback = this.getOperatorPanelFallbackTarget();
-      if (fallback && fallback !== "operator") {
-        this.logFlowState("テロップ操作なしモードのためテロップ操作パネルを開けません", {
-          requestedPanel: panel || "",
-          fallbackPanel: fallback
-        });
-        normalized = fallback;
-      } else {
-        normalized = "events";
-      }
-    }
-    const config = PANEL_CONFIG[normalized] || PANEL_CONFIG.events;
-    if (config.requireEvent && !this.selectedEventId) {
-      this.revealEventSelectionCue();
-      this.activePanel = "events";
-      this.setStage("events");
-      this.updatePanelVisibility();
-      this.updatePanelNavigation();
-      return;
-    }
-    if (config.requireSchedule && !this.selectedScheduleId) {
-      this.revealScheduleSelectionCue();
-      this.activePanel = this.selectedEventId ? "schedules" : "events";
-      this.setStage(this.activePanel);
-      this.updatePanelVisibility();
-      this.updatePanelNavigation();
-      return;
-    }
-    this.activePanel = normalized;
-    this.setStage(config.stage);
-    this.updatePanelVisibility();
-    this.updatePanelNavigation();
-    if (config.stage === "tabs") {
-      this.tools.prepareFrames();
-      const hasSelection = this.selectedEventId && this.selectedScheduleId;
-      if (config.requireSchedule && hasSelection) {
-        this.tools.setPendingSync(false);
-        this.tools
-          .syncEmbeddedTools({ reason: "panel-activation" })
-          .catch((error) => logError("Failed to sync tools", error));
-      } else if (this.tools.isPendingSync() && hasSelection) {
-        this.tools.setPendingSync(false);
-        this.tools
-          .syncEmbeddedTools({ reason: "pending-sync-flush" })
-          .catch((error) => logError("Failed to sync tools", error));
-      }
-    }
-    this.handlePanelSetup(normalized, config).catch((error) => logError("Failed to prepare panel", error));
-    
-    // パネル表示後にflow-stage-panelsにフォーカスを当てる
-    if (this.dom.flowStagePanels) {
-      // 次のフレームでフォーカスを当てる（DOM更新を待つ）
-      requestAnimationFrame(() => {
-        if (this.dom.flowStagePanels && !this.activeDialog) {
-          this.dom.flowStagePanels.focus();
-        }
-      });
-    }
+    // EventNavigationManager に委譲
+    this.navigationManager.showPanel(panel);
+    // EventNavigationManager のプロパティを app に同期
+    this.activePanel = this.navigationManager.activePanel;
+    this.stage = this.navigationManager.stage;
+    this.stageHistory = this.navigationManager.stageHistory;
   }
 
   async handlePanelSetup(panel, config) {
-    if (config.stage !== "tabs") {
-      await this.tools.setDrawerState({ dictionary: false, logs: false });
-      return;
-    }
-    if (config.requireSchedule) {
-      await this.tools.setDrawerState({ dictionary: false, logs: false });
-      return;
-    }
-    if (panel === "dictionary") {
-      await this.tools.setDrawerState({ dictionary: true, logs: false });
-    } else if (panel === "logs") {
-      await this.tools.setDrawerState({ dictionary: false, logs: true });
-    } else {
-      await this.tools.setDrawerState({ dictionary: false, logs: false });
-    }
+    // EventNavigationManager に委譲
+    return await this.navigationManager.handlePanelSetup(panel, config);
   }
 
   getOperatorPanelFallbackTarget({ preferSchedules = false } = {}) {
-    if (!preferSchedules && this.canActivatePanel("participants", PANEL_CONFIG.participants)) {
-      return "participants";
-    }
-    if (this.canActivatePanel("schedules", PANEL_CONFIG.schedules)) {
-      return "schedules";
-    }
-    return "events";
+    // EventNavigationManager に委譲
+    return this.navigationManager.getOperatorPanelFallbackTarget({ preferSchedules });
   }
 
   getPanelModules() {
-    return {
-      events: this.dom.eventsModule,
-      schedules: this.dom.schedulesModule,
-      gl: this.dom.glPanel,
-      "gl-faculties": this.dom.glFacultyPanel,
-      participants: this.dom.participantsPanel,
-      operator: this.dom.operatorPanel,
-      dictionary: this.dom.dictionaryPanel,
-      pickup: this.dom.pickupPanel,
-      logs: this.dom.logsPanel
-    };
+    // EventNavigationManager に委譲
+    return this.navigationManager.getPanelModules();
   }
 
   setModuleVisibility(module, isVisible) {
-    if (!module) return;
-    module.hidden = !isVisible;
-    module.classList.toggle("is-active", isVisible);
-    this.setModuleAccessibility(module, isVisible);
+    // EventNavigationManager に委譲
+    this.navigationManager.setModuleVisibility(module, isVisible);
   }
 
   updatePanelVisibility() {
-    const activePanel = PANEL_CONFIG[this.activePanel] ? this.activePanel : "events";
-    const modules = this.getPanelModules();
-    Object.entries(modules).forEach(([name, element]) => {
-      this.setModuleVisibility(element, name === activePanel);
-    });
+    // EventNavigationManager に委譲
+    this.navigationManager.updatePanelVisibility();
   }
 
   updatePanelNavigation() {
-    const buttons = this.dom.panelButtons || [];
-    buttons.forEach((button) => {
-      const target = button.dataset.panelTarget || "";
-      const config = PANEL_CONFIG[target] || PANEL_CONFIG.events;
-      const disabled = !this.canActivatePanel(target, config);
-      button.disabled = disabled;
-      const isActive = target === this.activePanel;
-      button.classList.toggle("is-active", isActive);
-      if (isActive) {
-        button.setAttribute("aria-current", "page");
-      } else {
-        button.removeAttribute("aria-current");
-      }
-    });
-    const activeConfig = PANEL_CONFIG[this.activePanel] || PANEL_CONFIG.events;
-    const shouldHidePanelNavigation = activeConfig.stage === "tabs";
-    const navigations = this.dom.flowNavigations || [];
-    navigations.forEach((nav) => {
-      if (!nav) return;
-      const isPanelNavigation = nav.classList.contains("flow-navigation--panel");
-      if (isPanelNavigation) {
-        nav.hidden = shouldHidePanelNavigation;
-      } else {
-        nav.hidden = false;
-      }
-    });
-    this.updateNavigationButtons();
+    // EventNavigationManager に委譲
+    this.navigationManager.updatePanelNavigation();
+    // EventNavigationManager のプロパティを app に同期
+    this.activePanel = this.navigationManager.activePanel;
   }
 
   updateNavigationButtons() {
-    const buttons = this.dom.navigationButtons || [];
-    buttons.forEach((button) => {
-      if (!button) return;
-      const target = button.dataset.flowNavTarget || "";
-      const config = PANEL_CONFIG[target] || PANEL_CONFIG.events;
-      const disabled = !target || target === this.activePanel || !this.canActivatePanel(target, config);
-      button.disabled = disabled;
-    });
+    // EventNavigationManager に委譲
+    this.navigationManager.updateNavigationButtons();
   }
 
   updateSidebarButtons() {
-    // サイドバーボタン（3-9: participants, gl, gl-faculties, operator, dictionary, pickup, logs）
-    // をイベント確定または日程確定後に有効化
-    const buttons = this.dom.sidebarPanelButtons || [];
-    const eventCommitted = this.eventSelectionCommitted;
-    const scheduleCommitted = this.scheduleSelectionCommitted;
-    const canUseSidebarButtons = eventCommitted || scheduleCommitted;
-
-    buttons.forEach((button) => {
-      if (!button) return;
-      const target = button.dataset.panelTarget || "";
-      
-      // イベントと日程のカード（1-2）は除外
-      if (target === "events" || target === "schedules") {
-        return;
-      }
-
-      const config = PANEL_CONFIG[target] || PANEL_CONFIG.events;
-      const canActivate = this.canActivatePanel(target, config);
-      
-      // サイドバーボタン（3-9）は、イベント確定または日程確定後に有効化
-      const shouldEnable = canUseSidebarButtons && canActivate && target !== this.activePanel;
-      button.disabled = !shouldEnable;
-    });
+    // EventNavigationManager に委譲
+    this.navigationManager.updateSidebarButtons();
   }
 
   clearPendingNavigationTimer() {
-    if (!this.pendingNavigationClearTimer) {
-      return;
-    }
-    const timerHost = getTimerHost();
-    timerHost.clearTimeout(this.pendingNavigationClearTimer);
-    this.pendingNavigationClearTimer = 0;
+    // EventNavigationManager に委譲
+    this.navigationManager.clearPendingNavigationTimer();
+    // EventNavigationManager のプロパティを app に同期
+    this.pendingNavigationClearTimer = this.navigationManager.pendingNavigationClearTimer;
   }
 
   schedulePendingNavigationClear() {
-    const timerHost = getTimerHost();
-    this.clearPendingNavigationTimer();
-    this.pendingNavigationClearTimer = timerHost.setTimeout(() => {
-      this.pendingNavigationClearTimer = 0;
-      this.pendingNavigationTarget = "";
-      this.pendingNavigationMeta = null;
-      this.awaitingScheduleConflictPrompt = false;
-      this.syncScheduleConflictPromptState();
-    }, PENDING_NAVIGATION_CLEAR_DELAY_MS);
+    // EventNavigationManager に委譲
+    this.navigationManager.schedulePendingNavigationClear();
+    // EventNavigationManager のプロパティを app に同期
+    this.pendingNavigationClearTimer = this.navigationManager.pendingNavigationClearTimer;
+    this.pendingNavigationTarget = this.navigationManager.pendingNavigationTarget;
+    this.pendingNavigationMeta = this.navigationManager.pendingNavigationMeta;
   }
 
   async handleFlowNavigation(target, { sourceButton = null, originPanel: providedOriginPanel = null } = {}) {
@@ -3064,8 +2825,10 @@ export class EventAdminApp {
     let config = PANEL_CONFIG[normalized] || PANEL_CONFIG.events;
     this.clearPendingNavigationTimer();
     this.pendingNavigationTarget = "";
+    this.navigationManager.pendingNavigationTarget = "";
     this.awaitingScheduleConflictPrompt = false;
     this.pendingNavigationMeta = null;
+    this.navigationManager.pendingNavigationMeta = null;
     this.logFlowState("フローナビゲーションが要求されました", {
       target: normalized,
       originPanel
@@ -3103,7 +2866,9 @@ export class EventAdminApp {
       }
       if (normalizedModeChoice === OPERATOR_MODE_SUPPORT) {
         this.pendingNavigationTarget = "";
+        this.navigationManager.pendingNavigationTarget = "";
         this.pendingNavigationMeta = null;
+        this.navigationManager.pendingNavigationMeta = null;
         this.awaitingScheduleConflictPrompt = false;
         this.setHostCommittedSchedule("", {
           reason: "support-mode",
@@ -3115,11 +2880,13 @@ export class EventAdminApp {
         this.lastScheduleCommitChanged = false;
       } else {
         this.pendingNavigationTarget = normalized;
+        this.navigationManager.pendingNavigationTarget = normalized;
         this.pendingNavigationMeta = {
           target: normalized,
           originPanel,
           reason: "flow-navigation"
         };
+        this.navigationManager.pendingNavigationMeta = this.pendingNavigationMeta;
         this.awaitingScheduleConflictPrompt = true;
         if (typeof console !== "undefined" && typeof console.log === "function") {
           console.log("[handleFlowNavigation] About to call commitSelectedScheduleForTelop", {
@@ -3137,7 +2904,9 @@ export class EventAdminApp {
         }
         if (!committed) {
           this.pendingNavigationTarget = "";
+          this.navigationManager.pendingNavigationTarget = "";
           this.pendingNavigationMeta = null;
+          this.navigationManager.pendingNavigationMeta = null;
           this.awaitingScheduleConflictPrompt = false;
           this.syncScheduleConflictPromptState();
           this.lastScheduleCommitChanged = false;
@@ -4083,7 +3852,9 @@ export class EventAdminApp {
     const navMeta = this.pendingNavigationMeta;
     const pendingTarget = this.pendingNavigationTarget || "";
     this.pendingNavigationTarget = "";
+    this.navigationManager.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
+    this.navigationManager.pendingNavigationMeta = null;
     this.awaitingScheduleConflictPrompt = false;
     this.clearPendingNavigationTimer();
     let resolvedTarget = pendingTarget;
@@ -5031,7 +4802,9 @@ export class EventAdminApp {
     this.scheduleConflictPromptSignature = "";
     this.scheduleConflictLastPromptSignature = "";
     this.pendingNavigationTarget = "";
+    this.navigationManager.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
+    this.navigationManager.pendingNavigationMeta = null;
     this.awaitingScheduleConflictPrompt = false;
     this.clearPendingNavigationTimer();
     this.setScheduleConflictSubmitting(false);
@@ -5388,7 +5161,9 @@ export class EventAdminApp {
         const navMeta = this.pendingNavigationMeta;
         const navTarget = this.pendingNavigationTarget || "";
         this.pendingNavigationTarget = "";
+        this.navigationManager.pendingNavigationTarget = "";
         this.pendingNavigationMeta = null;
+        this.navigationManager.pendingNavigationMeta = null;
         this.awaitingScheduleConflictPrompt = false;
         this.clearPendingNavigationTimer();
         let resolvedTarget = navTarget;
@@ -5749,11 +5524,13 @@ export class EventAdminApp {
         suppressConflictPrompt: true
       });
       this.pendingNavigationTarget = context.pendingNavigationTarget || "participants";
+      this.navigationManager.pendingNavigationTarget = this.pendingNavigationTarget;
       this.pendingNavigationMeta = {
         target: this.pendingNavigationTarget,
         originPanel: "schedules",
         reason: "fallback-retry"
       };
+      this.navigationManager.pendingNavigationMeta = this.pendingNavigationMeta;
       this.awaitingScheduleConflictPrompt = false;
       if (conflictContext && conflictContext.hasConflict) {
         followupAction = { type: "conflict", context: conflictContext };
@@ -6702,7 +6479,9 @@ export class EventAdminApp {
     const navMeta = this.pendingNavigationMeta;
     const pendingTarget = this.pendingNavigationTarget || "";
     this.pendingNavigationTarget = "";
+    this.navigationManager.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
+    this.navigationManager.pendingNavigationMeta = null;
     this.awaitingScheduleConflictPrompt = false;
     this.clearPendingNavigationTimer();
     let resolvedTarget = pendingTarget;
@@ -7108,7 +6887,9 @@ export class EventAdminApp {
     this.scheduleConflictPromptSignature = "";
     this.scheduleConflictLastPromptSignature = "";
     this.pendingNavigationTarget = "";
+    this.navigationManager.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
+    this.navigationManager.pendingNavigationMeta = null;
     this.awaitingScheduleConflictPrompt = false;
     this.clearPendingNavigationTimer();
     this.setScheduleConflictSubmitting(false);
@@ -7299,7 +7080,9 @@ export class EventAdminApp {
         const navMeta = this.pendingNavigationMeta;
         const navTarget = this.pendingNavigationTarget || "";
         this.pendingNavigationTarget = "";
+        this.navigationManager.pendingNavigationTarget = "";
         this.pendingNavigationMeta = null;
+        this.navigationManager.pendingNavigationMeta = null;
         this.awaitingScheduleConflictPrompt = false;
         this.clearPendingNavigationTimer();
         let resolvedTarget = navTarget;
@@ -7337,7 +7120,9 @@ export class EventAdminApp {
   handleScheduleConflictCancel() {
     this.setScheduleConflictSubmitting(false);
     this.pendingNavigationTarget = "";
+    this.navigationManager.pendingNavigationTarget = "";
     this.pendingNavigationMeta = null;
+    this.navigationManager.pendingNavigationMeta = null;
     this.awaitingScheduleConflictPrompt = false;
     this.clearPendingNavigationTimer();
     if (this.dom.scheduleConflictForm) {
@@ -7581,11 +7366,13 @@ export class EventAdminApp {
         suppressConflictPrompt: true
       });
       this.pendingNavigationTarget = context.pendingNavigationTarget || "participants";
+      this.navigationManager.pendingNavigationTarget = this.pendingNavigationTarget;
       this.pendingNavigationMeta = {
         target: this.pendingNavigationTarget,
         originPanel: "schedules",
         reason: "fallback-retry"
       };
+      this.navigationManager.pendingNavigationMeta = this.pendingNavigationMeta;
       this.awaitingScheduleConflictPrompt = false;
       if (conflictContext && conflictContext.hasConflict) {
         followupAction = { type: "conflict", context: conflictContext };
@@ -8889,7 +8676,9 @@ export class EventAdminApp {
       }
       this.clearScheduleConflictError();
       this.pendingNavigationTarget = "";
+      this.navigationManager.pendingNavigationTarget = "";
       this.pendingNavigationMeta = null;
+      this.navigationManager.pendingNavigationMeta = null;
       this.awaitingScheduleConflictPrompt = false;
       this.clearPendingNavigationTimer();
     }
