@@ -770,12 +770,12 @@ scripts/login/
        - 削減量: 約 285 行（7,734 行 → 7,449 行）
        - `EventFirebaseManager.buildPresenceEntries()` を追加（約 50 行）
        - `EventUIRenderer` に 4 つのメソッドを追加（約 235 行）
-   - **残りのフェーズ**:
      - ✅ フェーズ 1.8: スケジュールコンフリクトダイアログ機能の整理（完了）
        - 重複メソッドの削除完了: `handleScheduleConflictSubmit`の 2 つ目、`requestScheduleConflictPrompt`の 2 つ目、`confirmScheduleConsensus`の 2 つ目、`setScheduleConflictSubmitting`の 1 つ目を削除済み（約 477 行削減）
        - UI 関連メソッドの移行完了: `openScheduleConflictDialog`, `handleScheduleConflictSubmit` → `EventUIRenderer`（約 150 行削減）
        - Firebase 関連メソッドの移行完了: `confirmScheduleConsensus`, `requestScheduleConflictPrompt` → `EventFirebaseManager`（約 233 行削減）
        - 合計削減: 約 860 行（`app.js` は 6,723 行、`ui-renderer.js` は 798 行、`firebase-manager.js` は 1,085 行）
+   - **残りのフェーズ**:
      - ⏳ フェーズ 1.9: ホストコミットスケジュール管理機能の整理（未着手）
        - `setHostCommittedSchedule`, `syncHostPresence` などの整理
        - 見積もり: 約 100-150 行の削減
