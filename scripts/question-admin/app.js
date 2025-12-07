@@ -92,6 +92,7 @@ import { AuthManager } from "./managers/auth-manager.js";
 import { RelocationManager } from "./managers/relocation-manager.js";
 import { HostIntegrationManager } from "./managers/host-integration-manager.js";
 import { GlManager } from "./managers/gl-manager.js";
+import { ParticipantUIManager } from "./managers/participant-ui-manager.js";
 
 // redirectingToIndex は AuthManager と共有するため、参照オブジェクトとして管理
 const redirectingToIndexRef = { current: false };
@@ -108,6 +109,7 @@ let stateManager = null;
 let uiManager = null;
 let confirmDialogManager = null;
 let glManager = null;
+let participantUIManager = null;
 
 // glDataFetchCache は GlManager に移行されました
 
@@ -830,172 +832,35 @@ function resolveRelocationDraftKey(entry, target = null, draftMap = state.reloca
 }
 
 function resolveParticipantActionTarget({ participantId = "", rowKey = "", rowIndex = null } = {}) {
-  const normalizedId = String(participantId || "").trim();
-  const normalizedRowKey = String(rowKey || "").trim();
-  const numericIndex = Number.isInteger(rowIndex) && rowIndex >= 0 ? rowIndex : null;
-
-  let index = -1;
-  let entry = null;
-
-  if (normalizedRowKey) {
-    index = state.participants.findIndex(item => String(item?.rowKey || "") === normalizedRowKey);
-    if (index !== -1) {
-      entry = state.participants[index];
-    }
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-
-  if (!entry && normalizedId) {
-    index = state.participants.findIndex(item => String(item?.participantId || "") === normalizedId);
-    if (index !== -1) {
-      entry = state.participants[index];
-    }
-  }
-
-  if (!entry && numericIndex !== null) {
-    const sorted = sortParticipants(state.participants);
-    const candidate = sorted[numericIndex];
-    if (candidate) {
-      index = state.participants.findIndex(item => item === candidate);
-      if (index === -1) {
-        const candidateRowKey = String(candidate?.rowKey || "");
-        if (candidateRowKey) {
-          index = state.participants.findIndex(item => String(item?.rowKey || "") === candidateRowKey);
-        }
-      }
-      if (index === -1) {
-        const candidateId = String(candidate?.participantId || "");
-        if (candidateId) {
-          index = state.participants.findIndex(item => String(item?.participantId || "") === candidateId);
-        }
-      }
-      if (index !== -1) {
-        entry = state.participants[index];
-      }
-    }
-  }
-
-  return { entry: entry || null, index };
+  return participantUIManager.resolveParticipantActionTarget({ participantId, rowKey, rowIndex });
 }
 
 function formatParticipantIdentifier(entry) {
-  if (!entry) {
-    return "参加者";
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  const name = String(entry.name || "").trim();
-  if (name) {
-    return `参加者「${name}」`;
-  }
-  const displayId = getDisplayParticipantId(entry.participantId);
-  if (displayId) {
-    return `UID: ${displayId}`;
-  }
-  return "UID未設定";
+  return participantUIManager.formatParticipantIdentifier(entry);
 }
 
 function commitParticipantQuickEdit(index, updated, { successMessage, successVariant = "success" } = {}) {
-  if (index < 0 || !updated) {
-    return null;
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-
-  const nextEntry = ensureRowKey({ ...updated });
-  const rowKey = String(nextEntry.rowKey || "");
-  const uid = resolveParticipantUid(nextEntry) || String(nextEntry.participantId || "");
-
-  state.participants[index] = nextEntry;
-  state.participants = sortParticipants(state.participants);
-
-  const eventId = state.selectedEventId;
-  const groupNumber = String(nextEntry.groupNumber || "");
-  if (eventId && uid) {
-    const assignmentMap = ensureTeamAssignmentMap(eventId);
-    if (assignmentMap) {
-      assignmentMap.set(uid, groupNumber);
-    }
-    const singleMap = new Map([[uid, groupNumber]]);
-    applyAssignmentsToEventCache(eventId, singleMap);
-  }
-
-  syncCurrentScheduleCache();
-  updateDuplicateMatches();
-  renderParticipants();
-  syncSaveButtonState();
-
-  if (successMessage) {
-    setUploadStatus(successMessage, successVariant);
-  } else if (hasUnsavedChanges()) {
-    setUploadStatus("編集内容は未保存です。「適用」で確定します。");
-  } else {
-    setUploadStatus("適用済みの内容と同じため変更はありません。");
-  }
-
-  if (rowKey) {
-    return state.participants.find(item => String(item?.rowKey || "") === rowKey) || nextEntry;
-  }
-  if (uid) {
-    return (
-      state.participants.find(item => {
-        const itemUid = resolveParticipantUid(item) || String(item?.participantId || "");
-        return itemUid === uid;
-      }) || nextEntry
-    );
-  }
-  return nextEntry;
+  return participantUIManager.commitParticipantQuickEdit(index, updated, { successMessage, successVariant });
 }
 
 function handleQuickCancelAction(participantId, rowIndex, rowKey) {
-  const target = resolveParticipantActionTarget({ participantId, rowKey, rowIndex });
-  const entry = target.entry;
-  const index = target.index;
-  if (!entry || index === -1) {
-    setUploadStatus("キャンセル対象の参加者が見つかりません。", "error");
-    return;
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-
-  const cancellationLabel = CANCEL_LABEL;
-  const updated = {
-    ...entry,
-    groupNumber: cancellationLabel
-  };
-  const nextStatus = resolveParticipantStatus(updated, cancellationLabel);
-  updated.status = nextStatus;
-  updated.isCancelled = nextStatus === "cancelled";
-  updated.isRelocated = nextStatus === "relocated";
-  updated.relocationDestinationScheduleId = "";
-  updated.relocationDestinationScheduleLabel = "";
-  updated.relocationDestinationTeamNumber = "";
-
-  const uid = resolveParticipantUid(updated) || String(updated.participantId || "");
-  if (uid && relocationManager) {
-    const relocationMap = relocationManager.ensurePendingRelocationMap();
-    const previous = relocationMap.get(uid);
-    if (previous) {
-      relocationManager.clearRelocationPreview(previous);
-      relocationMap.delete(uid);
-    }
-  }
-
-  const identifier = formatParticipantIdentifier(entry);
-  const message = `${identifier}を${CANCEL_LABEL}に設定しました。「適用」で確定します。`;
-  commitParticipantQuickEdit(index, updated, { successMessage: message, successVariant: "success" });
-
-  if (uid && relocationManager && Array.isArray(state.relocationPromptTargets)) {
-    const previousLength = state.relocationPromptTargets.length;
-    state.relocationPromptTargets = state.relocationPromptTargets.filter(item => {
-      const key = item?.uid || item?.participantId || item?.rowKey;
-      return key && key !== uid && key !== String(updated.rowKey || "");
-    });
-    if (state.relocationPromptTargets.length !== previousLength) {
-      relocationManager.renderRelocationPrompt();
-    }
-  }
-
-  if (relocationManager && state.relocationDraftOriginals instanceof Map) {
-    const draftMap = state.relocationDraftOriginals;
-    [uid, String(updated.rowKey || ""), String(updated.participantId || "")]
-      .map(value => String(value || "").trim())
-      .filter(Boolean)
-      .forEach(key => draftMap.delete(key));
-  }
+  return participantUIManager.handleQuickCancelAction(participantId, rowIndex, rowKey);
 }
 
 function handleQuickRelocateAction(participantId, rowIndex, rowKey) {
@@ -1275,90 +1140,27 @@ async function copyShareLink(token) {
 }
 
 function getParticipantGroupKey(entry) {
-  const raw = entry && entry.groupNumber;
-  const value = raw != null ? String(raw).trim() : "";
-  if (!value) {
-    return NO_TEAM_GROUP_KEY;
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  if (value === CANCEL_LABEL || value === RELOCATE_LABEL || value === GL_STAFF_GROUP_KEY) {
-    return value;
-  }
-  const normalized = normalizeGroupNumberValue(value);
-  return normalized || NO_TEAM_GROUP_KEY;
+  return participantUIManager.getParticipantGroupKey(entry);
 }
 
 function describeParticipantGroup(groupKey) {
-  const raw = String(groupKey || "").trim();
-  if (!raw || raw === NO_TEAM_GROUP_KEY) {
-    return { label: "班番号", value: "未設定" };
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  if (raw === CANCEL_LABEL) {
-    return { label: "ステータス", value: CANCEL_LABEL };
-  }
-  if (raw === RELOCATE_LABEL) {
-    return { label: "ステータス", value: RELOCATE_LABEL };
-  }
-  if (raw === GL_STAFF_GROUP_KEY) {
-    return { label: "ステータス", value: GL_STAFF_LABEL };
-  }
-  const normalized = normalizeGroupNumberValue(raw) || raw;
-  return { label: "班番号", value: normalized };
+  return participantUIManager.describeParticipantGroup(groupKey);
 }
 
 function createParticipantGroupElements(groupKey) {
-  const { label, value } = describeParticipantGroup(groupKey);
-  const section = document.createElement("section");
-  section.className = "participant-card-group";
-  section.setAttribute("role", "group");
-  if (groupKey && groupKey !== NO_TEAM_GROUP_KEY) {
-    section.dataset.team = groupKey;
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  if (label || value) {
-    section.setAttribute("aria-label", `${label} ${value}`.trim());
-  }
-
-  const header = document.createElement("header");
-  header.className = "participant-card-group__header";
-
-  const badge = document.createElement("span");
-  badge.className = "participant-card-group__badge";
-  const badgeLabel = document.createElement("span");
-  badgeLabel.className = "participant-card-group__badge-label";
-  badgeLabel.textContent = label;
-  const badgeValue = document.createElement("span");
-  badgeValue.className = "participant-card-group__badge-value";
-  badgeValue.textContent = value;
-  badge.append(badgeLabel, badgeValue);
-
-  const countElement = document.createElement("span");
-  countElement.className = "participant-card-group__count";
-
-  const cardsContainer = document.createElement("div");
-  cardsContainer.className = "participant-card-group__cards";
-
-  const leadersContainer = document.createElement("div");
-  leadersContainer.className = "participant-card-group__leaders";
-  leadersContainer.hidden = true;
-
-  const leadersLabel = document.createElement("span");
-  leadersLabel.className = "participant-card-group__leaders-label";
-  leadersLabel.textContent = "GL";
-
-  const leadersList = document.createElement("div");
-  leadersList.className = "participant-card-group__leaders-list";
-
-  leadersContainer.append(leadersLabel, leadersList);
-
-  header.append(badge, leadersContainer, countElement);
-  section.append(header, cardsContainer);
-
-  return {
-    section,
-    cardsContainer,
-    countElement,
-    leadersContainer,
-    leadersList
-  };
+  return participantUIManager.createParticipantGroupElements(groupKey);
 }
 
 function getEventGlRoster(eventId) {
@@ -1434,25 +1236,14 @@ async function loadGlDataForEvent(eventId, { force = false } = {}) {
 }
 
 function createParticipantBadge(label, value, { hideLabel = false } = {}) {
-  const badge = document.createElement("span");
-  badge.className = "participant-badge";
-  const textValue = value ? String(value) : "—";
-  if (!hideLabel && label) {
-    const labelSpan = document.createElement("span");
-    labelSpan.className = "participant-badge__label";
-    labelSpan.textContent = label;
-    badge.appendChild(labelSpan);
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  const valueSpan = document.createElement("span");
-  valueSpan.className = "participant-badge__value";
-  valueSpan.textContent = textValue;
-  if (label) {
-    badge.title = `${label}: ${textValue}`;
-  }
-  badge.appendChild(valueSpan);
-  return badge;
+  return participantUIManager.createParticipantBadge(label, value, { hideLabel });
 }
 
+// MAIL_STATUS_ICON_SVG は ParticipantUIManager に移行されました（初期化時に渡すため、定義を保持）
 const MAIL_STATUS_ICON_SVG = {
   sent:
     "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M13.854 4.146a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3-3a.5.5 0 0 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0Z\"/></svg>",
@@ -1467,304 +1258,67 @@ const MAIL_STATUS_ICON_SVG = {
 };
 
 function createMailStatusBadge(entry) {
-  const info = resolveMailStatusInfo(entry);
-  const badge = document.createElement("span");
-  badge.className = "participant-badge participant-mail-badge";
-  const statusKey = info.key || "unknown";
-  badge.dataset.mailStatus = statusKey;
-  badge.classList.add(`participant-mail-badge--${statusKey}`);
-  if (info.description) {
-    badge.title = info.description;
-  } else {
-    badge.removeAttribute("title");
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  badge.setAttribute("role", "text");
-  badge.setAttribute("aria-label", info.ariaLabel || info.label);
-
-  const icon = document.createElement("span");
-  icon.className = "participant-mail-badge__icon";
-  icon.setAttribute("aria-hidden", "true");
-  icon.innerHTML = MAIL_STATUS_ICON_SVG[statusKey] || MAIL_STATUS_ICON_SVG.default;
-
-  const text = document.createElement("span");
-  text.className = "participant-badge__value participant-mail-badge__text";
-  text.textContent = info.label;
-
-  badge.append(icon, text);
-  return { badge, info };
+  return participantUIManager.createMailStatusBadge(entry);
 }
 
 function getEntryIdentifiers(entry) {
-  const rowKey = entry && entry.rowKey != null ? String(entry.rowKey) : "";
-  const participantId = entry && entry.participantId != null ? String(entry.participantId) : "";
-  const uidValue = resolveParticipantUid(entry);
-  const uid = uidValue != null ? String(uidValue) : "";
-  return { rowKey, participantId, uid };
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
+  }
+  return participantUIManager.getEntryIdentifiers(entry);
 }
 
 function isEntryCurrentlySelected(entry) {
-  if (!entry) {
-    return false;
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  const identifiers = getEntryIdentifiers(entry);
-  const selectedRowKey = String(state.selectedParticipantRowKey || "");
-  if (selectedRowKey) {
-    return identifiers.rowKey && identifiers.rowKey === selectedRowKey;
-  }
-  const selectedId = String(state.selectedParticipantId || "");
-  if (!selectedId) {
-    return false;
-  }
-  return (
-    (identifiers.participantId && identifiers.participantId === selectedId) ||
-    (identifiers.uid && identifiers.uid === selectedId)
-  );
+  return participantUIManager.isEntryCurrentlySelected(entry);
 }
 
 function getSelectedParticipantTarget() {
-  const selectedRowKey = String(state.selectedParticipantRowKey || "");
-  const selectedId = String(state.selectedParticipantId || "");
-  if (!selectedRowKey && !selectedId) {
-    return { entry: null, index: -1 };
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  const target = resolveParticipantActionTarget({ rowKey: selectedRowKey, participantId: selectedId });
-  if (!target.entry) {
-    clearParticipantSelection({ silent: true });
-    applyParticipantSelectionStyles();
-    return { entry: null, index: -1 };
-  }
-  return target;
+  return participantUIManager.getSelectedParticipantTarget();
 }
 
 function applyParticipantSelectionStyles({ focusCard = null } = {}) {
-  const list = dom.participantCardList;
-  if (!list) {
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
     return;
   }
-  const cards = list.querySelectorAll(".participant-card");
-  const selectedRowKey = String(state.selectedParticipantRowKey || "");
-  const selectedId = String(state.selectedParticipantId || "");
-  const shouldFocus = Boolean(focusCard);
-  let focusTarget = focusCard || null;
-  cards.forEach(card => {
-    const rowKey = card.dataset.rowKey ? String(card.dataset.rowKey) : "";
-    const participantId = card.dataset.participantId ? String(card.dataset.participantId) : "";
-    const uid = card.dataset.uid ? String(card.dataset.uid) : "";
-    const matches = selectedRowKey
-      ? rowKey && rowKey === selectedRowKey
-      : selectedId && (participantId === selectedId || uid === selectedId);
-    card.classList.toggle("is-selected", matches);
-    card.setAttribute("aria-selected", matches ? "true" : "false");
-    if (shouldFocus && matches && !focusTarget) {
-      focusTarget = card;
-    }
-  });
-  if (shouldFocus && focusTarget) {
-    focusTarget.focus();
-  }
+  return participantUIManager.applyParticipantSelectionStyles({ focusCard });
 }
 
 function clearParticipantSelection({ silent = false } = {}) {
-  state.selectedParticipantRowKey = "";
-  state.selectedParticipantId = "";
-  if (!silent) {
-    applyParticipantSelectionStyles();
-    updateParticipantActionPanelState();
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    return;
   }
+  return participantUIManager.clearParticipantSelection({ silent });
 }
 
 function selectParticipantFromCardElement(card, { focus = false } = {}) {
-  if (!card) {
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
     return;
   }
-  const rowKey = card.dataset.rowKey ? String(card.dataset.rowKey) : "";
-  const participantId = card.dataset.participantId ? String(card.dataset.participantId) : "";
-  const uid = card.dataset.uid ? String(card.dataset.uid) : "";
-  const currentRowKey = String(state.selectedParticipantRowKey || "");
-  const currentId = String(state.selectedParticipantId || "");
-  const nextId = participantId || uid || "";
-  if (currentRowKey === rowKey && currentId === nextId) {
-    if (focus) {
-      card.focus();
-    }
-    return;
-  }
-  state.selectedParticipantRowKey = rowKey;
-  state.selectedParticipantId = nextId;
-  applyParticipantSelectionStyles({ focusCard: focus ? card : null });
-  updateParticipantActionPanelState();
+  return participantUIManager.selectParticipantFromCardElement(card, { focus });
 }
 
 function buildParticipantCard(entry, index, { changeInfo, duplicateMap, eventId, scheduleId }) {
-  const card = document.createElement("article");
-  card.className = "participant-card";
-  card.setAttribute("role", "listitem");
-
-  const identifiers = getEntryIdentifiers(entry);
-  if (identifiers.rowKey) {
-    card.dataset.rowKey = identifiers.rowKey;
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  if (identifiers.participantId) {
-    card.dataset.participantId = identifiers.participantId;
-  }
-  if (identifiers.uid) {
-    card.dataset.uid = identifiers.uid;
-  }
-  card.dataset.rowIndex = String(index);
-
-  const isSelected = isEntryCurrentlySelected(entry);
-  card.classList.toggle("is-selected", isSelected);
-  card.setAttribute("aria-selected", isSelected ? "true" : "false");
-  card.tabIndex = 0;
-
-  const header = document.createElement("header");
-  header.className = "participant-card__header";
-
-  const headerMain = document.createElement("div");
-  headerMain.className = "participant-card__header-main";
-
-  const badgeRow = document.createElement("div");
-  badgeRow.className = "participant-card__badges";
-
-  const numberBadge = document.createElement("span");
-  numberBadge.className = "participant-card__no";
-  applyParticipantNoText(numberBadge, index + 1);
-  badgeRow.appendChild(numberBadge);
-
-  const departmentText = entry.department || entry.groupNumber || "";
-  const departmentBadge = createParticipantBadge("学部学科", departmentText, { hideLabel: true });
-  badgeRow.appendChild(departmentBadge);
-
-  const genderText = entry.gender || "";
-  const genderBadge = createParticipantBadge("性別", genderText, { hideLabel: true });
-  badgeRow.appendChild(genderBadge);
-
-  const { badge: mailBadge, info: mailStatusInfo } = createMailStatusBadge(entry);
-  badgeRow.appendChild(mailBadge);
-
-  headerMain.appendChild(badgeRow);
-
-  if (mailStatusInfo?.key) {
-    card.dataset.mailStatus = mailStatusInfo.key;
-    card.classList.add(`participant-card--mail-${mailStatusInfo.key}`);
-  }
-
-  const nameWrapper = document.createElement("span");
-  nameWrapper.className = "participant-card__name participant-name";
-  const phoneticText = entry.phonetic || entry.furigana || "";
-  if (phoneticText) {
-    const phoneticSpan = document.createElement("span");
-    phoneticSpan.className = "participant-name__phonetic";
-    phoneticSpan.textContent = phoneticText;
-    nameWrapper.appendChild(phoneticSpan);
-  }
-  const fullNameSpan = document.createElement("span");
-  fullNameSpan.className = "participant-name__text";
-  fullNameSpan.textContent = entry.name || "";
-  nameWrapper.appendChild(fullNameSpan);
-
-  headerMain.appendChild(nameWrapper);
-
-  header.appendChild(headerMain);
-
-  const body = document.createElement("div");
-  body.className = "participant-card__body";
-
-  const actions = document.createElement("div");
-  actions.className = "participant-card__actions";
-  const linkRow = document.createElement("div");
-  linkRow.className = "link-action-row participant-card__buttons participant-card__link-row";
-
-  if (entry.token) {
-    const shareUrl = createShareUrl(entry.token);
-    const previewLink = document.createElement("a");
-    previewLink.href = shareUrl;
-    previewLink.target = "_blank";
-    previewLink.rel = "noopener noreferrer";
-    previewLink.className = "share-link-preview";
-    previewLink.textContent = shareUrl;
-    linkRow.appendChild(previewLink);
-
-    const copyButton = document.createElement("button");
-    copyButton.type = "button";
-    copyButton.className = "link-action-btn copy-link-btn";
-    copyButton.dataset.token = entry.token;
-    copyButton.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M6.25 1.75A2.25 2.25 0 0 0 4 4v7A2.25 2.25 0 0 0 6.25 13.25h4A2.25 2.25 0 0 0 12.5 11V4A2.25 2.25 0 0 0 10.25 1.75h-4Zm0 1.5h4c.414 0 .75.336.75.75v7c0 .414-.336.75-.75.75h-4a.75.75 0 0 1-.75-.75V4c0-.414.336-.75.75-.75ZM3 4.75A.75.75 0 0 0 2.25 5.5v7A2.25 2.25 0 0 0 4.5 14.75h4a.75.75 0 0 0 0-1.5h-4a.75.75 0 0 1-.75-.75v-7A.75.75 0 0 0 3 4.75Z\" fill=\"currentColor\"/></svg><span>コピー</span>";
-    linkRow.appendChild(copyButton);
-  } else {
-    const placeholder = document.createElement("span");
-    placeholder.className = "link-placeholder";
-    placeholder.textContent = "リンク未発行";
-    linkRow.appendChild(placeholder);
-  }
-
-  actions.appendChild(linkRow);
-
-  body.appendChild(actions);
-
-  const duplicateKey = entry.rowKey
-    ? String(entry.rowKey)
-    : entry.participantId
-      ? String(entry.participantId)
-      : `__row${index}`;
-  const duplicateInfo = duplicateMap.get(duplicateKey);
-  const matches = duplicateInfo?.others || [];
-  const duplicateCount = duplicateInfo?.totalCount || (matches.length ? matches.length + 1 : 0);
-  if (matches.length) {
-    card.classList.add("is-duplicate");
-    const warning = document.createElement("div");
-    warning.className = "duplicate-warning participant-card__warning";
-    warning.setAttribute("role", "text");
-
-    const icon = document.createElement("span");
-    icon.className = "duplicate-warning__icon";
-    icon.innerHTML = "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M8 1.333a6.667 6.667 0 1 0 0 13.334A6.667 6.667 0 0 0 8 1.333Zm0 2a.833.833 0 0 1 .833.834v3.75a.833.833 0 1 1-1.666 0v-3.75A.833.833 0 0 1 8 3.333Zm0 7a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z\"/></svg>";
-
-    const text = document.createElement("span");
-    text.className = "duplicate-warning__text";
-    const detail = matches
-      .map(match => describeDuplicateMatch(match, eventId, scheduleId))
-      .filter(Boolean)
-      .join("、");
-    if (duplicateCount > 1) {
-      text.textContent = detail
-        ? `重複候補 (${duplicateCount}件): ${detail}`
-        : `重複候補 (${duplicateCount}件)`;
-    } else {
-      text.textContent = detail ? `重複候補: ${detail}` : "重複候補があります";
-    }
-
-    warning.append(icon, text);
-    body.appendChild(warning);
-  }
-
-  if (entry.isCancelled) {
-    card.classList.add("is-cancelled-origin");
-  }
-  if (entry.isRelocated) {
-    card.classList.add("is-relocated-destination");
-  }
-
-  if (changeInfo?.type === "added") {
-    card.classList.add("is-added");
-  } else if (changeInfo?.type === "updated") {
-    card.classList.add("is-updated");
-  }
-
-  if (changeInfo) {
-    const chip = document.createElement("span");
-    chip.className = `change-chip change-chip--${changeInfo.type}`;
-    chip.textContent = changeInfo.type === "added" ? "新規" : "更新";
-    if (changeInfo.type === "updated" && Array.isArray(changeInfo.changes) && changeInfo.changes.length) {
-      chip.title = changeInfo.changes
-        .map(change => `${change.label}: ${formatChangeValue(change.previous)} → ${formatChangeValue(change.current)}`)
-        .join("\n");
-    }
-    nameWrapper.appendChild(chip);
-  }
-
-  card.append(header, body);
-  return { card, isSelected };
+  return participantUIManager.buildParticipantCard(entry, index, { changeInfo, duplicateMap, eventId, scheduleId });
 }
 
 function renderParticipants() {
@@ -2009,21 +1563,22 @@ async function openStaffPrintView() {
 }
 
 function participantChangeKey(entry, fallbackIndex = 0) {
-  if (!entry) {
-    return `__row${fallbackIndex}`;
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  const id = entry.participantId ? String(entry.participantId) : "";
-  if (id) return id;
-  const rowKey = entry.rowKey ? String(entry.rowKey) : "";
-  if (rowKey) return rowKey;
-  return `__row${fallbackIndex}`;
+  return participantUIManager.participantChangeKey(entry, fallbackIndex);
 }
 
 function formatChangeValue(value) {
-  const text = String(value ?? "").trim();
-  return text ? text : "（空欄）";
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
+  }
+  return participantUIManager.formatChangeValue(value);
 }
 
+// CHANGE_ICON_SVG は ParticipantUIManager に移行されました（初期化時に渡すため、定義を保持）
 const CHANGE_ICON_SVG = {
   added: "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M8 1.5a.5.5 0 0 1 .5.5v5.5H14a.5.5 0 0 1 0 1H8.5V14a.5.5 0 0 1-1 0V8.5H2a.5.5 0 0 1 0-1h5.5V2a.5.5 0 0 1 .5-.5Z\"/></svg>",
   updated: "<svg aria-hidden=\"true\" viewBox=\"0 0 16 16\"><path d=\"M12.146 2.146a.5.5 0 0 1 .708 0l1 1a.5.5 0 0 1 0 .708l-7.25 7.25a.5.5 0 0 1-.168.11l-3 1a.5.5 0 0 1-.65-.65l1-3a.5.5 0 0 1 .11-.168l7.25-7.25Zm.708 1.414L12.5 3.207 5.415 10.293l-.646 1.94 1.94-.646 7.085-7.085ZM3 13.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 0-1h-9a.5.5 0 0 0-.5.5Z\" fill=\"currentColor\"/></svg>",
@@ -2031,139 +1586,43 @@ const CHANGE_ICON_SVG = {
 };
 
 function changeTypeLabel(type) {
-  switch (type) {
-    case "added":
-      return "新規追加";
-    case "updated":
-      return "更新";
-    case "removed":
-      return "削除予定";
-    default:
-      return "変更";
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
+  return participantUIManager.changeTypeLabel(type);
 }
 
 function describeParticipantForChange(entry) {
-  if (!entry) return "参加者";
-  const name = String(entry.name || "").trim();
-  const displayId = getDisplayParticipantId(entry.participantId);
-  if (name && displayId) {
-    return `参加者「${name}」（UID: ${displayId}）`;
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  if (name) {
-    return `参加者「${name}」`;
-  }
-  if (displayId) {
-    return `UID: ${displayId}`;
-  }
-  return "参加者";
+  return participantUIManager.describeParticipantForChange(entry);
 }
 
 function buildChangeMeta(entry) {
-  if (!entry) return "";
-  const metaParts = [];
-  const displayId = getDisplayParticipantId(entry.participantId);
-  metaParts.push(displayId ? `UID: ${displayId}` : "UID: 未設定");
-  const team = String(entry.groupNumber || "").trim();
-  if (team) {
-    metaParts.push(`班番号: ${team}`);
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  const department = String(entry.department || "").trim();
-  if (department) {
-    metaParts.push(department);
-  }
-  return metaParts.join(" / ");
+  return participantUIManager.buildChangeMeta(entry);
 }
 
 function createChangePreviewItem(type, entry, info = {}) {
-  const item = document.createElement("li");
-  item.className = `change-preview__item change-preview__item--${type}`;
-
-  const icon = document.createElement("span");
-  icon.className = "change-preview__icon";
-  icon.innerHTML = CHANGE_ICON_SVG[type] || "";
-  icon.setAttribute("aria-hidden", "true");
-  item.appendChild(icon);
-
-  const body = document.createElement("div");
-  body.className = "change-preview__body";
-
-  const heading = document.createElement("p");
-  heading.className = "change-preview__line";
-  heading.textContent = `${changeTypeLabel(type)}: ${describeParticipantForChange(entry)}`;
-  body.appendChild(heading);
-
-  const metaText = buildChangeMeta(entry);
-  if (metaText) {
-    const meta = document.createElement("p");
-    meta.className = "change-preview__line change-preview__line--meta";
-    meta.textContent = metaText;
-    body.appendChild(meta);
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-
-  if (type === "updated" && Array.isArray(info.changes) && info.changes.length) {
-    const changeList = document.createElement("ul");
-    changeList.className = "change-preview__changes";
-    info.changes.forEach(change => {
-      const changeItem = document.createElement("li");
-      changeItem.className = "change-preview__change";
-      changeItem.textContent = `${change.label}: ${formatChangeValue(change.previous)} → ${formatChangeValue(change.current)}`;
-      changeList.appendChild(changeItem);
-    });
-    body.appendChild(changeList);
-  }
-
-  item.appendChild(body);
-  return item;
+  return participantUIManager.createChangePreviewItem(type, entry, info);
 }
 
 function renderParticipantChangePreview(diff, changeInfoByKey, participants = []) {
-  if (!dom.changePreview || !dom.changePreviewList) {
-    return;
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-
-  const totalChanges = (diff.added?.length || 0) + (diff.updated?.length || 0) + (diff.removed?.length || 0);
-  if (!hasUnsavedChanges() || totalChanges === 0) {
-    dom.changePreview.hidden = true;
-    dom.changePreviewList.innerHTML = "";
-    if (dom.changePreviewCount) dom.changePreviewCount.textContent = "";
-    return;
-  }
-
-  dom.changePreview.hidden = false;
-
-  const summaryParts = [];
-  if (diff.updated?.length) summaryParts.push(`更新 ${diff.updated.length}件`);
-  if (diff.added?.length) summaryParts.push(`新規 ${diff.added.length}件`);
-  if (diff.removed?.length) summaryParts.push(`削除 ${diff.removed.length}件`);
-  if (dom.changePreviewCount) {
-    dom.changePreviewCount.textContent = summaryParts.join(" / ");
-  }
-
-  const fragment = document.createDocumentFragment();
-  const seenKeys = new Set();
-
-  (participants || []).forEach((entry, index) => {
-    const key = participantChangeKey(entry, index);
-    const info = changeInfoByKey.get(key);
-    if (!info) return;
-    seenKeys.add(key);
-    const snapshot = info.current || entry;
-    fragment.appendChild(createChangePreviewItem(info.type, snapshot, info));
-  });
-
-  (diff.removed || []).forEach(entry => {
-    const key = participantChangeKey(entry);
-    if (seenKeys.has(key)) return;
-    fragment.appendChild(createChangePreviewItem("removed", entry));
-  });
-
-  dom.changePreviewList.innerHTML = "";
-  dom.changePreviewList.appendChild(fragment);
-
-  if (dom.changePreviewNote) {
-    dom.changePreviewNote.textContent = "「適用」で変更を確定し、「取消」で破棄できます。";
-  }
+  return participantUIManager.renderParticipantChangePreview(diff, changeInfoByKey, participants);
 }
 
 function syncSelectedEventSummary() {
@@ -3714,6 +3173,36 @@ function init() {
     GL_STAFF_LABEL
   });
 
+  // ParticipantUIManager を初期化
+  participantUIManager = new ParticipantUIManager({
+    state,
+    dom,
+    // 依存関数
+    normalizeGroupNumberValue,
+    getDisplayParticipantId,
+    resolveMailStatusInfo,
+    resolveParticipantUid,
+    resolveParticipantActionTarget,
+    updateParticipantActionPanelState,
+    applyParticipantNoText: (element, index) => {
+      if (!uiManager) {
+        throw new Error("UIManager is not initialized");
+      }
+      return uiManager.applyParticipantNoText(element, index);
+    },
+    createShareUrl,
+    describeDuplicateMatch,
+    diffParticipantLists,
+    // 定数
+    CANCEL_LABEL,
+    RELOCATE_LABEL,
+    GL_STAFF_GROUP_KEY,
+    GL_STAFF_LABEL,
+    NO_TEAM_GROUP_KEY,
+    MAIL_STATUS_ICON_SVG,
+    CHANGE_ICON_SVG
+  });
+
   // CsvManager を初期化
   csvManager = new CsvManager({
     dom,
@@ -3855,7 +3344,12 @@ function init() {
     syncClearButtonState,
     syncTemplateButtons,
     syncSelectedEventSummary,
-    renderParticipantChangePreview,
+    renderParticipantChangePreview: (diff, changeInfoByKey, participants) => {
+      if (!participantUIManager) {
+        throw new Error("ParticipantUIManager is not initialized");
+      }
+      return participantUIManager.renderParticipantChangePreview(diff, changeInfoByKey, participants);
+    },
     renderRelocationPrompt: () => {
       if (!relocationManager) return;
       relocationManager.renderRelocationPrompt();
@@ -3868,7 +3362,12 @@ function init() {
     generateQuestionToken,
     setUploadStatus,
     // renderParticipants に必要な依存関係
-    buildParticipantCard,
+    buildParticipantCard: (entry, index, options) => {
+      if (!participantUIManager) {
+        throw new Error("ParticipantUIManager is not initialized");
+      }
+      return participantUIManager.buildParticipantCard(entry, index, options);
+    },
     getParticipantGroupKey,
     createParticipantGroupElements,
     getEventGlRoster,
@@ -3908,7 +3407,12 @@ function init() {
     state,
     // 依存関数と定数
     RELOCATE_LABEL,
-    resolveParticipantActionTarget,
+    resolveParticipantActionTarget: (options) => {
+      if (!participantUIManager) {
+        throw new Error("ParticipantUIManager is not initialized");
+      }
+      return participantUIManager.resolveParticipantActionTarget(options);
+    },
     resolveParticipantUid,
     resolveParticipantStatus,
     getScheduleLabel,
@@ -3927,7 +3431,12 @@ function init() {
     closeDialog,
     setFormError,
     formatParticipantIdentifier,
-    commitParticipantQuickEdit,
+    commitParticipantQuickEdit: (index, updated, options) => {
+      if (!participantUIManager) {
+        throw new Error("ParticipantUIManager is not initialized");
+      }
+      return participantUIManager.commitParticipantQuickEdit(index, updated, options);
+    },
     getScheduleRecord,
     ensureRowKey,
     ensureTeamAssignmentMap,

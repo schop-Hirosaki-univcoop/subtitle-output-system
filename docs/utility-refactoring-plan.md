@@ -140,37 +140,37 @@
 
 ---
 
-### フェーズ 14: 参加者 UI 関連の関数の整理（ParticipantUIManager）
+### フェーズ 14: 参加者 UI 関連の関数の整理（ParticipantUIManager）✅ 完了（段階 1-6 完了）
 
 **対象関数**:
 
-- `resolveParticipantActionTarget()` - 参加者アクションターゲットの解決
-- `formatParticipantIdentifier()` - 参加者識別子のフォーマット
-- `commitParticipantQuickEdit()` - 参加者クイック編集のコミット
-- `handleQuickCancelAction()` - クイックキャンセルアクション
-- `getParticipantGroupKey()` - 参加者グループキーの取得
-- `describeParticipantGroup()` - 参加者グループの説明
-- `createParticipantGroupElements()` - 参加者グループ要素の作成
-- `createParticipantBadge()` - 参加者バッジの作成
-- `createMailStatusBadge()` - メールステータスバッジの作成
-- `MAIL_STATUS_ICON_SVG` - メールステータスアイコン SVG 定数
-- `getEntryIdentifiers()` - エントリ識別子の取得
-- `isEntryCurrentlySelected()` - エントリ選択状態の判定
-- `getSelectedParticipantTarget()` - 選択された参加者ターゲットの取得
-- `applyParticipantSelectionStyles()` - 参加者選択スタイルの適用
-- `clearParticipantSelection()` - 参加者選択のクリア
-- `selectParticipantFromCardElement()` - カード要素からの参加者選択
-- `buildParticipantCard()` - 参加者カードの構築
-- `renderParticipantChangePreview()` - 参加者変更プレビューの描画
-- `participantChangeKey()` - 参加者変更キーの生成
-- `formatChangeValue()` - 変更値のフォーマット
-- `CHANGE_ICON_SVG` - 変更アイコン SVG 定数
-- `changeTypeLabel()` - 変更タイプラベルの取得
-- `describeParticipantForChange()` - 変更用参加者説明の生成
-- `buildChangeMeta()` - 変更メタの構築
-- `createChangePreviewItem()` - 変更プレビューアイテムの作成
+- ✅ `getParticipantGroupKey()` - 参加者グループキーの取得（約 13 行削減）
+- ✅ `describeParticipantGroup()` - 参加者グループの説明（約 16 行削減）
+- ✅ `createParticipantGroupElements()` - 参加者グループ要素の作成（約 54 行削減）
+- ✅ `formatParticipantIdentifier()` - 参加者識別子のフォーマット（約 13 行削減）
+- ✅ `createParticipantBadge()` - 参加者バッジの作成（約 19 行削減）
+- ✅ `createMailStatusBadge()` - メールステータスバッジの作成（約 26 行削減）
+- ✅ `getEntryIdentifiers()` - エントリ識別子の取得（約 6 行削減）
+- ✅ `MAIL_STATUS_ICON_SVG` - メールステータスアイコン SVG 定数（約 12 行削減）
+- ✅ `isEntryCurrentlySelected()` - エントリ選択状態の判定（約 18 行削減、段階 3 完了）
+- ✅ `getSelectedParticipantTarget()` - 選択された参加者ターゲットの取得（約 14 行削減、段階 3 完了）
+- ✅ `applyParticipantSelectionStyles()` - 参加者選択スタイルの適用（約 27 行削減、段階 3 完了）
+- ✅ `clearParticipantSelection()` - 参加者選択のクリア（約 8 行削減、段階 3 完了）
+- ✅ `selectParticipantFromCardElement()` - カード要素からの参加者選択（約 22 行削減、段階 3 完了）
+- ✅ `buildParticipantCard()` - 参加者カードの構築（約 170 行削減、段階 4 完了）
+- ✅ `resolveParticipantActionTarget()` - 参加者アクションターゲットの解決（約 47 行削減、段階 5 完了）
+- ✅ `commitParticipantQuickEdit()` - 参加者クイック編集のコミット（約 49 行削減、段階 5 完了）
+- ✅ `handleQuickCancelAction()` - クイックキャンセルアクション（約 55 行削減、段階 5 完了）
+- ✅ `renderParticipantChangePreview()` - 参加者変更プレビューの描画（約 48 行削減、段階 6 完了）
+- ✅ `participantChangeKey()` - 参加者変更キーの生成（約 10 行削減、段階 6 完了）
+- ✅ `formatChangeValue()` - 変更値のフォーマット（約 4 行削減、段階 6 完了）
+- ✅ `CHANGE_ICON_SVG` - 変更アイコン SVG 定数（約 5 行削減、段階 6 完了）
+- ✅ `changeTypeLabel()` - 変更タイプラベルの取得（約 12 行削減、段階 6 完了）
+- ✅ `describeParticipantForChange()` - 変更用参加者説明の生成（約 15 行削減、段階 6 完了）
+- ✅ `buildChangeMeta()` - 変更メタの構築（約 15 行削減、段階 6 完了）
+- ✅ `createChangePreviewItem()` - 変更プレビューアイテムの作成（約 41 行削減、段階 6 完了）
 
-**推定行数**: 約 600-800 行
+**実績行数**: 約 654 行削減（`app.js` は 3,601 行、`participant-ui-manager.js` は 906 行、段階 1-6 完了）
 
 **依存関係**:
 

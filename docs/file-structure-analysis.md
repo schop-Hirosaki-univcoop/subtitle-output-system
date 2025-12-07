@@ -42,7 +42,7 @@
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
 | `scripts/events/app.js`                       | 6,070 | ❌ 要改善（基準の約 4.0 倍、リファクタリング完了）   |
-| `scripts/question-admin/app.js`               | 4,092 | ❌ 要改善（基準の約 2.7 倍、リファクタリング進行中） |
+| `scripts/question-admin/app.js`               | 3,601 | ❌ 要改善（基準の約 2.6 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
 | `scripts/operator/questions.js`               | 1,734 | ⚠️ 許容範囲（やや大きい）                            |
@@ -61,13 +61,14 @@
 2. **巨大な単一ファイル**
 
    - `scripts/events/app.js` - 6,070 行（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-   - `scripts/question-admin/app.js` - 4,092 行（リファクタリング進行中、元の 8,180 行から約 4,088 行削減）
+   - `scripts/question-admin/app.js` - 3,601 行（リファクタリング進行中、元の 8,180 行から約 4,579 行削減）
    - `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
 - ✅ `scripts/question-admin/managers/ui-manager.js` - 188 行（新規作成、フェーズ 11 完了後）
 - ✅ `scripts/question-admin/managers/confirm-dialog-manager.js` - 128 行（新規作成、フェーズ 12 完了後）
 - ✅ `scripts/question-admin/managers/gl-manager.js` - 386 行（新規作成、フェーズ 13 完了後）
+- ✅ `scripts/question-admin/managers/participant-ui-manager.js` - 906 行（新規作成、フェーズ 14 完了後）
 
 3. **中規模の単一ファイル**
 
@@ -432,9 +433,9 @@ scripts/
    - テストが困難（改善中）
    - 保守性が低い（改善中）
 
-2. **`scripts/question-admin/app.js` が 4,596 行（リファクタリング完了）**
+2. **`scripts/question-admin/app.js` が 3,601 行（リファクタリング進行中）**
 
-   - 開発標準の約 3.1 倍（元の 8,180 行から約 3,584 行削減）
+   - 開発標準の約 2.6 倍（元の 8,180 行から約 4,579 行削減）
    - 単一責任の原則に違反（改善中）
    - テストが困難（改善中）
    - 保守性が低い（改善中）
@@ -481,12 +482,12 @@ scripts/
        - ✅ リロケーション関連のユーティリティ関数を `RelocationManager` に移行完了（約 82 行削減）
        - 実績: 約 641 行の削減（`app.js` は 4,596 行、`relocation-manager.js` は 954 行）
    - **残りの機能**（詳細は `docs/utility-refactoring-plan.md` を参照）:
-     - ⏳ フェーズ 9: 埋め込みモード・ホスト統合機能の分離（HostIntegrationManager、進行中、残り約 230-250 行）
-     - ⏳ フェーズ 10: 状態管理・キャッシュ関連の関数の整理（StateManager / CacheManager、約 120-170 行）
-     - ⏳ フェーズ 11: UI 関連の関数の整理（UIManager、約 150-200 行）
-     - ⏳ フェーズ 12: 確認ダイアログ関連の関数の整理（ConfirmDialogManager、約 100 行）
+     - ✅ フェーズ 9: 埋め込みモード・ホスト統合機能の分離（HostIntegrationManager、671 行）完了
+     - ✅ フェーズ 10: 状態管理・キャッシュ関連の関数の整理（StateManager、165 行）完了
+     - ✅ フェーズ 11: UI 関連の関数の整理（UIManager、188 行）完了
+     - ✅ フェーズ 12: 確認ダイアログ関連の関数の整理（ConfirmDialogManager、128 行）完了
      - ✅ フェーズ 13: GL 関連の関数の整理（GlManager、386 行）完了
-     - ⏳ フェーズ 14: 参加者 UI 関連の関数の整理（ParticipantUIManager、約 600-800 行）
+     - ✅ フェーズ 14: 参加者 UI 関連の関数の整理（ParticipantUIManager、906 行）完了
      - ⏳ フェーズ 15: スケジュール関連の関数の整理（ScheduleUtilityManager、約 150-200 行）
      - ⏳ フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager、約 300-400 行）
      - ⏳ フェーズ 17: その他のユーティリティ関数の整理（約 500-700 行）
@@ -703,7 +704,7 @@ scripts/question-admin/
 - ✅ フェーズ 6: メール送信機能の分離（MailManager）完了
 - ✅ フェーズ 7: 認証・初期化機能の分離（AuthManager）完了
 - ✅ フェーズ 8: リロケーション機能の分離（RelocationManager）完了
-- ⏳ フェーズ 9-17: その他のユーティリティ関数の整理（未着手、詳細は `docs/utility-refactoring-plan.md` を参照）
+- ⏳ フェーズ 15-17: その他のユーティリティ関数の整理（未着手、詳細は `docs/utility-refactoring-plan.md` を参照）
 
 **手順**:
 
@@ -854,7 +855,7 @@ scripts/login/
        - 実績: 約 15 行の削減（`app.js` は 6,070 行）
 
 2. **`scripts/question-admin/app.js` のリファクタリング**（進行中）
-   - 期間: 3-4 週間（約 71% 完了、フェーズ 13 完了、全 17 フェーズ中 12 フェーズ完了）
+   - 期間: 3-4 週間（約 76% 完了、フェーズ 14 完了、全 17 フェーズ中 13 フェーズ完了）
    - 影響範囲: 質問管理画面全体
    - リスク: 高（大規模な変更）
    - **完了したフェーズ**:
@@ -958,8 +959,34 @@ scripts/login/
        - ✅ `loadGlDataForEvent` を `GlManager` に移行完了（約 59 行削減）
        - ✅ `glDataFetchCache` を `GlManager` に移行完了（約 1 行削減）
        - 実績: 約 227 行の削減（`app.js` は 4,092 行、`gl-manager.js` は 386 行）
+     - ✅ フェーズ 14: 参加者 UI 関連の関数の整理（ParticipantUIManager、完了、段階 1-6 完了）
+       - ✅ `getParticipantGroupKey` を `ParticipantUIManager` に移行完了（約 13 行削減）
+       - ✅ `describeParticipantGroup` を `ParticipantUIManager` に移行完了（約 16 行削減）
+       - ✅ `createParticipantGroupElements` を `ParticipantUIManager` に移行完了（約 54 行削減）
+       - ✅ `formatParticipantIdentifier` を `ParticipantUIManager` に移行完了（約 13 行削減）
+       - ✅ `createParticipantBadge` を `ParticipantUIManager` に移行完了（約 19 行削減）
+       - ✅ `createMailStatusBadge` を `ParticipantUIManager` に移行完了（約 26 行削減）
+       - ✅ `getEntryIdentifiers` を `ParticipantUIManager` に移行完了（約 6 行削減）
+       - ✅ `MAIL_STATUS_ICON_SVG` を `ParticipantUIManager` に移行完了（約 12 行削減）
+       - ✅ `isEntryCurrentlySelected` を `ParticipantUIManager` に移行完了（約 18 行削減、段階 3 完了）
+       - ✅ `getSelectedParticipantTarget` を `ParticipantUIManager` に移行完了（約 14 行削減、段階 3 完了）
+       - ✅ `applyParticipantSelectionStyles` を `ParticipantUIManager` に移行完了（約 27 行削減、段階 3 完了）
+       - ✅ `clearParticipantSelection` を `ParticipantUIManager` に移行完了（約 8 行削減、段階 3 完了）
+       - ✅ `selectParticipantFromCardElement` を `ParticipantUIManager` に移行完了（約 22 行削減、段階 3 完了）
+       - ✅ `buildParticipantCard` を `ParticipantUIManager` に移行完了（約 170 行削減、段階 4 完了）
+       - ✅ `resolveParticipantActionTarget` を `ParticipantUIManager` に移行完了（約 47 行削減、段階 5 完了）
+       - ✅ `commitParticipantQuickEdit` を `ParticipantUIManager` に移行完了（約 49 行削減、段階 5 完了）
+       - ✅ `handleQuickCancelAction` を `ParticipantUIManager` に移行完了（約 55 行削減、段階 5 完了）
+       - ✅ `participantChangeKey` を `ParticipantUIManager` に移行完了（約 10 行削減、段階 6 完了）
+       - ✅ `formatChangeValue` を `ParticipantUIManager` に移行完了（約 4 行削減、段階 6 完了）
+       - ✅ `CHANGE_ICON_SVG` を `ParticipantUIManager` に移行完了（約 5 行削減、段階 6 完了）
+       - ✅ `changeTypeLabel` を `ParticipantUIManager` に移行完了（約 12 行削減、段階 6 完了）
+       - ✅ `describeParticipantForChange` を `ParticipantUIManager` に移行完了（約 15 行削減、段階 6 完了）
+       - ✅ `buildChangeMeta` を `ParticipantUIManager` に移行完了（約 15 行削減、段階 6 完了）
+       - ✅ `createChangePreviewItem` を `ParticipantUIManager` に移行完了（約 41 行削減、段階 6 完了）
+       - ✅ `renderParticipantChangePreview` を `ParticipantUIManager` に移行完了（約 48 行削減、段階 6 完了）
+       - 実績: 約 654 行の削減（`app.js` は 3,601 行、`participant-ui-manager.js` は 906 行、段階 1-6 完了）
    - **残りの機能**（詳細は `docs/utility-refactoring-plan.md` を参照）:
-     - ⏳ フェーズ 14: 参加者 UI 関連の関数の整理（ParticipantUIManager、約 600-800 行）
      - ⏳ フェーズ 15: スケジュール関連の関数の整理（ScheduleUtilityManager、約 150-200 行）
      - ⏳ フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager、約 400-500 行）
      - ⏳ フェーズ 17: その他のユーティリティ関数の整理（約 870-1,070 行、`init()`と`window.questionAdminEmbed`を含む）
@@ -1029,12 +1056,13 @@ scripts/login/
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
 - ❌ `scripts/events/app.js` - 6,070 行、要改善（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-- ❌ `scripts/question-admin/app.js` - 4,092 行、要改善（リファクタリング進行中、元の 8,180 行から約 4,088 行削減）
+- ❌ `scripts/question-admin/app.js` - 3,601 行、要改善（リファクタリング進行中、元の 8,180 行から約 4,579 行削減）
 - ✅ `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
 - ✅ `scripts/question-admin/managers/ui-manager.js` - 188 行（新規作成、フェーズ 11 完了後）
 - ✅ `scripts/question-admin/managers/confirm-dialog-manager.js` - 128 行（新規作成、フェーズ 12 完了後）
 - ✅ `scripts/question-admin/managers/gl-manager.js` - 386 行（新規作成、フェーズ 13 完了後）
+- ✅ `scripts/question-admin/managers/participant-ui-manager.js` - 906 行（新規作成、フェーズ 14 完了後）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
 - ⚠️ `scripts/login.js` - 664 行、要検討
