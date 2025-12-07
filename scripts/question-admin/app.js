@@ -83,6 +83,7 @@ import { PrintManager } from "./managers/print-manager.js";
 import { CsvManager } from "./managers/csv-manager.js";
 import { EventManager } from "./managers/event-manager.js";
 import { StateManager } from "./managers/state-manager.js";
+import { UIManager } from "./managers/ui-manager.js";
 import { ParticipantManager } from "./managers/participant-manager.js";
 import { ScheduleManager } from "./managers/schedule-manager.js";
 import { MailManager } from "./managers/mail-manager.js";
@@ -102,6 +103,7 @@ let authManager = null;
 let relocationManager = null;
 let hostIntegrationManager = null;
 let stateManager = null;
+let uiManager = null;
 
 const glDataFetchCache = new Map();
 
@@ -109,24 +111,24 @@ function getEmbedPrefix() {
   // HostIntegrationManager に委譲
   if (!hostIntegrationManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    if (typeof document === "undefined") {
-      return "";
-    }
-    const html = document.documentElement;
-    const existingPrefix = html?.dataset?.qaEmbedPrefix?.trim();
-    if (existingPrefix) {
-      return existingPrefix;
-    }
-    const embedSurface = document.querySelector("[data-qa-embed]");
-    if (embedSurface) {
-      const detectedPrefix =
-        embedSurface.getAttribute("data-qa-embed-prefix")?.trim() || "qa-";
-      if (html) {
-        html.dataset.qaEmbedPrefix = detectedPrefix;
-      }
-      return detectedPrefix;
-    }
+  if (typeof document === "undefined") {
     return "";
+  }
+  const html = document.documentElement;
+  const existingPrefix = html?.dataset?.qaEmbedPrefix?.trim();
+  if (existingPrefix) {
+    return existingPrefix;
+  }
+  const embedSurface = document.querySelector("[data-qa-embed]");
+  if (embedSurface) {
+    const detectedPrefix =
+      embedSurface.getAttribute("data-qa-embed-prefix")?.trim() || "qa-";
+    if (html) {
+      html.dataset.qaEmbedPrefix = detectedPrefix;
+    }
+    return detectedPrefix;
+  }
+  return "";
   }
   return hostIntegrationManager.getEmbedPrefix();
 }
@@ -135,7 +137,7 @@ function isEmbeddedMode() {
   // HostIntegrationManager に委譲
   if (!hostIntegrationManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    return Boolean(getEmbedPrefix());
+  return Boolean(getEmbedPrefix());
   }
   return hostIntegrationManager.isEmbeddedMode();
 }
@@ -188,9 +190,9 @@ function getMissingSelectionStatusMessage() {
   // StateManager に委譲
   if (!stateManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    return isEmbeddedMode()
-      ? "イベントコントロールセンターで対象の日程を選択してください。"
-      : "日程を選択してください。";
+  return isEmbeddedMode()
+    ? "イベントコントロールセンターで対象の日程を選択してください。"
+    : "日程を選択してください。";
   }
   return stateManager.getMissingSelectionStatusMessage();
 }
@@ -199,13 +201,13 @@ function getSelectionRequiredMessage(prefix = "") {
   // StateManager に委譲
   if (!stateManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    const requirement = isEmbeddedMode()
-      ? "イベントコントロールセンターで対象の日程を選択してください。"
-      : "イベントと日程を選択してください。";
-    if (!prefix) {
-      return requirement;
-    }
-    return `${prefix}${requirement}`;
+  const requirement = isEmbeddedMode()
+    ? "イベントコントロールセンターで対象の日程を選択してください。"
+    : "イベントと日程を選択してください。";
+  if (!prefix) {
+    return requirement;
+  }
+  return `${prefix}${requirement}`;
   }
   return stateManager.getSelectionRequiredMessage(prefix);
 }
@@ -229,7 +231,7 @@ function getSelectionBroadcastSource() {
   // HostIntegrationManager に委譲
   if (!hostIntegrationManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    return isEmbeddedMode() ? "participants" : "question-admin";
+  return isEmbeddedMode() ? "participants" : "question-admin";
   }
   return hostIntegrationManager.getSelectionBroadcastSource();
 }
@@ -482,18 +484,18 @@ function signatureForSelectionDetail(detail) {
   // HostIntegrationManager に委譲
   if (!hostIntegrationManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    if (!detail || typeof detail !== "object") {
-      return "";
-    }
-    const {
-      eventId = "",
-      scheduleId = "",
-      eventName = "",
-      scheduleLabel = "",
-      startAt = "",
-      endAt = ""
-    } = detail;
-    return [eventId, scheduleId, eventName, scheduleLabel, startAt, endAt].join("::");
+  if (!detail || typeof detail !== "object") {
+    return "";
+  }
+  const {
+    eventId = "",
+    scheduleId = "",
+    eventName = "",
+    scheduleLabel = "",
+    startAt = "",
+    endAt = ""
+  } = detail;
+  return [eventId, scheduleId, eventName, scheduleLabel, startAt, endAt].join("::");
   }
   return hostIntegrationManager.signatureForSelectionDetail(detail);
 }
@@ -502,27 +504,27 @@ function buildSelectionDetail() {
   // HostIntegrationManager に委譲
   if (!hostIntegrationManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    const eventId = state.selectedEventId || "";
-    const scheduleId = state.selectedScheduleId || "";
-    const selectedEvent = Array.isArray(state.events)
-      ? state.events.find(evt => evt.id === eventId) || null
+  const eventId = state.selectedEventId || "";
+  const scheduleId = state.selectedScheduleId || "";
+  const selectedEvent = Array.isArray(state.events)
+    ? state.events.find(evt => evt.id === eventId) || null
+    : null;
+  const schedules = selectedEvent?.schedules || [];
+  const schedule = scheduleId ? schedules.find(item => item.id === scheduleId) || null : null;
+  const overrideKey = `${eventId}::${scheduleId}`;
+  const override =
+    scheduleId && state.scheduleContextOverrides instanceof Map
+      ? state.scheduleContextOverrides.get(overrideKey) || null
       : null;
-    const schedules = selectedEvent?.schedules || [];
-    const schedule = scheduleId ? schedules.find(item => item.id === scheduleId) || null : null;
-    const overrideKey = `${eventId}::${scheduleId}`;
-    const override =
-      scheduleId && state.scheduleContextOverrides instanceof Map
-        ? state.scheduleContextOverrides.get(overrideKey) || null
-        : null;
 
-    return {
-      eventId,
-      scheduleId,
-      eventName: selectedEvent?.name || "",
-      scheduleLabel: schedule?.label || override?.scheduleLabel || "",
-      startAt: schedule?.startAt || override?.startAt || "",
-      endAt: schedule?.endAt || override?.endAt || ""
-    };
+  return {
+    eventId,
+    scheduleId,
+    eventName: selectedEvent?.name || "",
+    scheduleLabel: schedule?.label || override?.scheduleLabel || "",
+    startAt: schedule?.startAt || override?.startAt || "",
+    endAt: schedule?.endAt || override?.endAt || ""
+  };
   }
   return hostIntegrationManager.buildSelectionDetail();
 }
@@ -531,36 +533,36 @@ function broadcastSelectionChange(options = {}) {
   // HostIntegrationManager に委譲
   if (!hostIntegrationManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    const source = options.source || getSelectionBroadcastSource();
-    const detail = buildSelectionDetail();
-    const signature = signatureForSelectionDetail(detail);
-    const changed = signature !== lastSelectionBroadcastSignature;
-    lastSelectionBroadcastSignature = signature;
-    if (!changed || source === "host") {
-      return;
-    }
+  const source = options.source || getSelectionBroadcastSource();
+  const detail = buildSelectionDetail();
+  const signature = signatureForSelectionDetail(detail);
+  const changed = signature !== lastSelectionBroadcastSignature;
+  lastSelectionBroadcastSignature = signature;
+  if (!changed || source === "host") {
+    return;
+  }
     if (hostIntegration && hostIntegration.controller && typeof hostIntegration.controller.setSelection === "function") {
-      try {
-        hostIntegration.controller.setSelection({ ...detail, source });
-      } catch (error) {
-        console.warn("Failed to propagate selection to host", error);
-      }
-    }
-    if (typeof document === "undefined") {
-      return;
-    }
     try {
-      document.dispatchEvent(
-        new CustomEvent("qa:selection-changed", {
-          detail: {
-            ...detail,
-            source
-          }
-        })
-      );
+      hostIntegration.controller.setSelection({ ...detail, source });
     } catch (error) {
-      console.warn("Failed to dispatch selection change event", error);
+      console.warn("Failed to propagate selection to host", error);
     }
+  }
+  if (typeof document === "undefined") {
+    return;
+  }
+  try {
+    document.dispatchEvent(
+      new CustomEvent("qa:selection-changed", {
+        detail: {
+          ...detail,
+          source
+        }
+      })
+    );
+  } catch (error) {
+    console.warn("Failed to dispatch selection change event", error);
+  }
     return;
   }
   hostIntegrationManager.broadcastSelectionChange(options);
@@ -570,18 +572,18 @@ function waitForEmbedReady() {
   // HostIntegrationManager に委譲
   if (!hostIntegrationManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    if (state.user) {
-      return Promise.resolve();
-    }
-    if (embedReadyDeferred?.promise) {
-      return embedReadyDeferred.promise;
-    }
-    let resolve;
-    const promise = new Promise((res) => {
-      resolve = res;
-    });
-    embedReadyDeferred = { promise, resolve };
-    return promise;
+  if (state.user) {
+    return Promise.resolve();
+  }
+  if (embedReadyDeferred?.promise) {
+    return embedReadyDeferred.promise;
+  }
+  let resolve;
+  const promise = new Promise((res) => {
+    resolve = res;
+  });
+  embedReadyDeferred = { promise, resolve };
+  return promise;
   }
   return hostIntegrationManager.waitForEmbedReady();
 }
@@ -590,38 +592,21 @@ function resolveEmbedReady() {
   // HostIntegrationManager に委譲
   if (!hostIntegrationManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    if (embedReadyDeferred?.resolve) {
-      embedReadyDeferred.resolve();
-    }
-    embedReadyDeferred = null;
+  if (embedReadyDeferred?.resolve) {
+    embedReadyDeferred.resolve();
+  }
+  embedReadyDeferred = null;
     return;
   }
   hostIntegrationManager.resolveEmbedReady();
 }
 
 function getElementById(id) {
-  const prefix = getEmbedPrefix();
-  const candidates = [];
-
-  if (prefix) {
-    candidates.push(`${prefix}${id}`);
+  // UIManager に委譲
+  if (!uiManager) {
+    throw new Error("UIManager is not initialized");
   }
-
-  candidates.push(id);
-
-  if (!prefix) {
-    candidates.push(`qa-${id}`);
-  }
-
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    const element = document.getElementById(candidate);
-    if (element) {
-      return element;
-    }
-  }
-
-  return null;
+  return uiManager.getElementById(id);
 }
 import {
   openDialog,
@@ -735,22 +720,11 @@ async function fetchAuthorizedEmails() {
 }
 
 function renderUserSummary(user) {
-  if (!dom.userInfo) return;
-  dom.userInfo.innerHTML = "";
-  if (!user) {
-    dom.userInfo.hidden = true;
-    dom.userInfo.setAttribute("aria-hidden", "true");
-    return;
+  // UIManager に委譲
+  if (!uiManager) {
+    throw new Error("UIManager is not initialized");
   }
-
-  const safeName = String(user.displayName || "").trim();
-  const safeEmail = String(user.email || "").trim();
-  const label = document.createElement("span");
-  label.className = "user-label";
-  label.textContent = safeName && safeEmail ? `${safeName} (${safeEmail})` : safeName || safeEmail || "";
-  dom.userInfo.appendChild(label);
-  dom.userInfo.hidden = false;
-  dom.userInfo.removeAttribute("aria-hidden");
+  return uiManager.renderUserSummary(user);
 }
 
 function createApiClient(getIdToken) {
@@ -796,12 +770,11 @@ function getDisplayParticipantId(participantId) {
 }
 
 function applyParticipantNoText(element, index) {
-  if (!element) return;
-  if (Number.isFinite(index)) {
-    element.textContent = String(index);
-  } else {
-    element.textContent = "";
+  // UIManager に委譲
+  if (!uiManager) {
+    throw new Error("UIManager is not initialized");
   }
+  return uiManager.applyParticipantNoText(element, index);
 }
 
 function ensurePendingRelocationMap() {
@@ -1252,14 +1225,11 @@ async function confirmAction({
 }
 
 function setLoginError(message = "") {
-  if (!dom.loginError) return;
-  if (message) {
-    dom.loginError.textContent = message;
-    dom.loginError.hidden = false;
-  } else {
-    dom.loginError.textContent = "";
-    dom.loginError.hidden = true;
+  // UIManager に委譲
+  if (!uiManager) {
+    throw new Error("UIManager is not initialized");
   }
+  return uiManager.setLoginError(message);
 }
 
 function legacyCopyToClipboard(text) {
@@ -1283,15 +1253,11 @@ function legacyCopyToClipboard(text) {
 }
 
 function toggleSectionVisibility(element, visible) {
-  if (!element) return;
-  element.hidden = !visible;
-  if (visible) {
-    element.removeAttribute("aria-hidden");
-    element.removeAttribute("inert");
-  } else {
-    element.setAttribute("aria-hidden", "true");
-    element.setAttribute("inert", "");
+  // UIManager に委譲
+  if (!uiManager) {
+    throw new Error("UIManager is not initialized");
   }
+  return uiManager.toggleSectionVisibility(element, visible);
 }
 
 function emitParticipantSyncEvent(detail = {}) {
@@ -3176,102 +3142,27 @@ async function handleClearParticipants() {
   }
 }
 function setAuthUi(signedIn) {
-  const embedded = isEmbeddedMode();
-  const shouldShowLogin = !signedIn && !embedded;
-  const shouldShowAdmin = signedIn || embedded;
-  toggleSectionVisibility(dom.loginCard, shouldShowLogin);
-  toggleSectionVisibility(dom.adminMain, shouldShowAdmin);
-
-  if (signedIn) {
-    renderUserSummary(state.user);
-    setLoginError("");
-  } else {
-    renderUserSummary(null);
+  // UIManager に委譲
+  if (!uiManager) {
+    throw new Error("UIManager is not initialized");
   }
-
-  if (dom.headerLogout) {
-    dom.headerLogout.hidden = !signedIn;
-    if (signedIn) {
-      dom.headerLogout.removeAttribute("aria-hidden");
-      dom.headerLogout.removeAttribute("inert");
-      dom.headerLogout.disabled = false;
-    } else {
-      dom.headerLogout.setAttribute("aria-hidden", "true");
-      dom.headerLogout.setAttribute("inert", "");
-      dom.headerLogout.disabled = true;
-    }
-  }
-
-  if (dom.logoutButton) {
-    dom.logoutButton.hidden = !signedIn;
-    dom.logoutButton.disabled = !signedIn;
-    if (signedIn) {
-      dom.logoutButton.removeAttribute("aria-hidden");
-      dom.logoutButton.removeAttribute("inert");
-    } else {
-      dom.logoutButton.setAttribute("aria-hidden", "true");
-      dom.logoutButton.setAttribute("inert", "");
-    }
-  }
-
-  if (dom.addEventButton) {
-    dom.addEventButton.disabled = !signedIn;
-  }
-
-  if (!signedIn) {
-    if (dom.addScheduleButton) dom.addScheduleButton.disabled = true;
-    if (dom.csvInput) dom.csvInput.disabled = true;
-    if (dom.saveButton) dom.saveButton.disabled = true;
-  }
-
-  updateParticipantActionPanelState();
+  return uiManager.setAuthUi(signedIn);
 }
 
 function resolveFocusTargetElement(target) {
-  if (typeof document === "undefined") {
-    return null;
+  // UIManager に委譲
+  if (!uiManager) {
+    throw new Error("UIManager is not initialized");
   }
-
-  switch (target) {
-    case "participants":
-      return getElementById("participant-title") || dom.participantDescription || null;
-    case "schedules":
-      return getElementById("schedule-title") || dom.scheduleDescription || null;
-    case "events":
-      return getElementById("event-title") || dom.eventList || null;
-    default:
-      return null;
-  }
+  return uiManager.resolveFocusTargetElement(target);
 }
 
 function maybeFocusInitialSection() {
-  const target = state.initialFocusTarget;
-  if (!target) return;
-
-  state.initialFocusTarget = "";
-  const element = resolveFocusTargetElement(target);
-  if (!(element instanceof HTMLElement)) {
-    return;
+  // UIManager に委譲
+  if (!uiManager) {
+    throw new Error("UIManager is not initialized");
   }
-
-  const needsTabIndex = !element.hasAttribute("tabindex");
-  if (needsTabIndex) {
-    element.setAttribute("tabindex", "-1");
-    element.dataset.tempFocusTarget = "true";
-  }
-
-  requestAnimationFrame(() => {
-    element.scrollIntoView({ behavior: "smooth", block: "start" });
-    element.focus({ preventScroll: true });
-    element.classList.add("section-focus-highlight");
-    window.setTimeout(() => {
-      element.classList.remove("section-focus-highlight");
-      if (element.dataset.tempFocusTarget) {
-        element.removeAttribute("tabindex");
-        delete element.dataset.tempFocusTarget;
-      }
-    }, 2000);
-  });
+  return uiManager.maybeFocusInitialSection();
 }
 
 function resetState() {
@@ -3285,7 +3176,7 @@ function resetState() {
   if (hostIntegrationManager) {
     hostIntegrationManager.resetSelectionBroadcastSignature();
   } else {
-    lastSelectionBroadcastSignature = "";
+  lastSelectionBroadcastSignature = "";
   }
   
   // UI更新とその他のリセット処理
@@ -3878,67 +3769,67 @@ function initAuthWatcher() {
   // AuthManager に委譲
   if (!authManager) {
     // フォールバック（初期化前の場合）
-    onAuthStateChanged(auth, async user => {
-      state.user = user;
-      const embedded = isEmbeddedMode();
-      if (!user) {
-        if (embedded) {
-          showLoader("利用状態を確認しています…");
-        } else {
-          hideLoader();
-          if (dom.loginButton) {
-            dom.loginButton.disabled = false;
-            dom.loginButton.classList.remove("is-busy");
-          }
+  onAuthStateChanged(auth, async user => {
+    state.user = user;
+    const embedded = isEmbeddedMode();
+    if (!user) {
+      if (embedded) {
+        showLoader("利用状態を確認しています…");
+      } else {
+        hideLoader();
+        if (dom.loginButton) {
+          dom.loginButton.disabled = false;
+          dom.loginButton.classList.remove("is-busy");
         }
-        setAuthUi(false);
-        resetState();
+      }
+      setAuthUi(false);
+      resetState();
         if (!redirectingToIndexRef.current && typeof window !== "undefined" && !embedded) {
           redirectingToIndexRef.current = true;
-          goToLogin();
-        }
-        return;
+        goToLogin();
       }
+      return;
+    }
 
       redirectingToIndexRef.current = false;
-      showLoader(embedded ? "利用準備を確認しています…" : "権限を確認しています…");
-      const loaderLabels = embedded ? [] : STEP_LABELS;
-      initLoaderSteps(loaderLabels);
+    showLoader(embedded ? "利用準備を確認しています…" : "権限を確認しています…");
+    const loaderLabels = embedded ? [] : STEP_LABELS;
+    initLoaderSteps(loaderLabels);
 
-      try {
-        setLoaderStep(0, embedded ? "利用状態を確認しています…" : "認証OK。ユーザー情報を確認中…");
-        setLoaderStep(1, embedded ? "利用条件を確認しています…" : "在籍状況を確認しています…");
-        await verifyEnrollment(user);
-        setLoaderStep(2, embedded ? "必要な権限を同期しています…" : "管理者権限を確認・同期しています…");
-        await ensureAdminAccess();
-        setLoaderStep(3, embedded ? "参加者データを準備しています…" : "初期データを取得しています…");
-        // --- FIX 3: Parallelize token and event loading ---
-        await Promise.all([
-          ensureTokenSnapshot(true),
-          loadEvents({ preserveSelection: false })
-        ]);
-        await loadParticipants();
-        if (state.initialSelectionNotice) {
-          setUploadStatus(state.initialSelectionNotice, "error");
-          state.initialSelectionNotice = null;
-        }
-        await drainQuestionQueue();
-        setLoaderStep(4, embedded ? "仕上げ処理を行っています…" : "初期データの取得が完了しました。仕上げ中…");
-        setAuthUi(true);
-        finishLoaderSteps("準備完了");
-        resolveEmbedReady();
-        if (state.initialFocusTarget) {
-          window.setTimeout(() => maybeFocusInitialSection(), 400);
-        }
-      } catch (error) {
-        console.error(error);
-        setLoginError(error.message || "権限の確認に失敗しました。");
-        await signOut(auth);
-        resetState();
-      } finally {
-        hideLoader();
+    try {
+      setLoaderStep(0, embedded ? "利用状態を確認しています…" : "認証OK。ユーザー情報を確認中…");
+      setLoaderStep(1, embedded ? "利用条件を確認しています…" : "在籍状況を確認しています…");
+      await verifyEnrollment(user);
+      setLoaderStep(2, embedded ? "必要な権限を同期しています…" : "管理者権限を確認・同期しています…");
+      await ensureAdminAccess();
+      setLoaderStep(3, embedded ? "参加者データを準備しています…" : "初期データを取得しています…");
+      // --- FIX 3: Parallelize token and event loading ---
+      await Promise.all([
+        ensureTokenSnapshot(true),
+        loadEvents({ preserveSelection: false })
+      ]);
+      await loadParticipants();
+      if (state.initialSelectionNotice) {
+        setUploadStatus(state.initialSelectionNotice, "error");
+        state.initialSelectionNotice = null;
       }
-    });
+      await drainQuestionQueue();
+      setLoaderStep(4, embedded ? "仕上げ処理を行っています…" : "初期データの取得が完了しました。仕上げ中…");
+      setAuthUi(true);
+      finishLoaderSteps("準備完了");
+      resolveEmbedReady();
+      if (state.initialFocusTarget) {
+        window.setTimeout(() => maybeFocusInitialSection(), 400);
+      }
+    } catch (error) {
+      console.error(error);
+      setLoginError(error.message || "権限の確認に失敗しました。");
+      await signOut(auth);
+      resetState();
+    } finally {
+      hideLoader();
+    }
+  });
     return;
   }
   authManager.initAuthWatcher();
@@ -3948,14 +3839,14 @@ function hostSelectionSignature(selection = {}) {
   // HostIntegrationManager に委譲
   if (!hostIntegrationManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    const eventId = normalizeKey(selection.eventId || "");
-    const scheduleId = normalizeKey(selection.scheduleId || "");
-    const eventName = selection.eventName != null ? String(selection.eventName) : "";
-    const scheduleLabel = selection.scheduleLabel != null ? String(selection.scheduleLabel) : "";
-    const scheduleLocation = selection.location != null ? String(selection.location) : "";
-    const startAt = selection.startAt != null ? String(selection.startAt) : "";
-    const endAt = selection.endAt != null ? String(selection.endAt) : "";
-    return [eventId, scheduleId, eventName, scheduleLabel, scheduleLocation, startAt, endAt].join("::");
+  const eventId = normalizeKey(selection.eventId || "");
+  const scheduleId = normalizeKey(selection.scheduleId || "");
+  const eventName = selection.eventName != null ? String(selection.eventName) : "";
+  const scheduleLabel = selection.scheduleLabel != null ? String(selection.scheduleLabel) : "";
+  const scheduleLocation = selection.location != null ? String(selection.location) : "";
+  const startAt = selection.startAt != null ? String(selection.startAt) : "";
+  const endAt = selection.endAt != null ? String(selection.endAt) : "";
+  return [eventId, scheduleId, eventName, scheduleLabel, scheduleLocation, startAt, endAt].join("::");
   }
   return hostIntegrationManager.hostSelectionSignature(selection);
 }
@@ -3964,10 +3855,10 @@ function getHostSelectionElement() {
   // HostIntegrationManager に委譲
   if (!hostIntegrationManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    if (typeof document === "undefined") {
-      return null;
-    }
-    return document.querySelector("[data-tool='participants']");
+  if (typeof document === "undefined") {
+    return null;
+  }
+  return document.querySelector("[data-tool='participants']");
   }
   return hostIntegrationManager.getHostSelectionElement();
 }
@@ -3976,21 +3867,21 @@ function readHostSelectionDataset(target) {
   // HostIntegrationManager に委譲
   if (!hostIntegrationManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    if (!target) return null;
-    const dataset = target.dataset || {};
-    const eventId = normalizeKey(dataset.expectedEventId || "");
-    if (!eventId) {
-      return null;
-    }
-    return {
-      eventId,
-      scheduleId: normalizeKey(dataset.expectedScheduleId || ""),
-      eventName: dataset.expectedEventName ? String(dataset.expectedEventName) : "",
-      scheduleLabel: dataset.expectedScheduleLabel ? String(dataset.expectedScheduleLabel) : "",
-      location: dataset.expectedScheduleLocation ? String(dataset.expectedScheduleLocation) : "",
-      startAt: dataset.expectedStartAt ? String(dataset.expectedStartAt) : "",
-      endAt: dataset.expectedEndAt ? String(dataset.expectedEndAt) : ""
-    };
+  if (!target) return null;
+  const dataset = target.dataset || {};
+  const eventId = normalizeKey(dataset.expectedEventId || "");
+  if (!eventId) {
+    return null;
+  }
+  return {
+    eventId,
+    scheduleId: normalizeKey(dataset.expectedScheduleId || ""),
+    eventName: dataset.expectedEventName ? String(dataset.expectedEventName) : "",
+    scheduleLabel: dataset.expectedScheduleLabel ? String(dataset.expectedScheduleLabel) : "",
+    location: dataset.expectedScheduleLocation ? String(dataset.expectedScheduleLocation) : "",
+    startAt: dataset.expectedStartAt ? String(dataset.expectedStartAt) : "",
+    endAt: dataset.expectedEndAt ? String(dataset.expectedEndAt) : ""
+  };
   }
   return hostIntegrationManager.readHostSelectionDataset(target);
 }
@@ -4015,14 +3906,14 @@ function stopHostSelectionBridge() {
   // HostIntegrationManager に委譲
   if (!hostIntegrationManager) {
     // フォールバック: Manager初期化前の呼び出しに対応
-    if (hostSelectionBridge.observer) {
-      try {
-        hostSelectionBridge.observer.disconnect();
-      } catch (error) {
-        console.warn("Failed to disconnect host selection observer", error);
-      }
-      hostSelectionBridge.observer = null;
+  if (hostSelectionBridge.observer) {
+    try {
+      hostSelectionBridge.observer.disconnect();
+    } catch (error) {
+      console.warn("Failed to disconnect host selection observer", error);
     }
+    hostSelectionBridge.observer = null;
+  }
     return;
   }
   hostIntegrationManager.stopHostSelectionBridge();
@@ -4076,6 +3967,17 @@ function init() {
     normalizeKey,
     isEmbeddedMode,
     UPLOAD_STATUS_PLACEHOLDERS
+  });
+
+  // UIManager を初期化
+  uiManager = new UIManager({
+    state,
+    dom,
+    // 依存関数と定数
+    getEmbedPrefix,
+    isEmbeddedMode,
+    updateParticipantActionPanelState,
+    FOCUS_TARGETS
   });
 
   // CsvManager を初期化
@@ -4383,7 +4285,7 @@ function init() {
     authManager.initAuthWatcher();
   } else {
     // フォールバック（初期化前の場合）
-    initAuthWatcher();
+  initAuthWatcher();
   }
 }
 
@@ -4422,13 +4324,13 @@ if (typeof window !== "undefined") {
           applyHostSelectionFromDataset();
           hostIntegrationManager.resetEmbedReady();
         } else {
-          hostSelectionBridge.lastSignature = "";
-          hostSelectionBridge.pendingSignature = "";
-          applyHostSelectionFromDataset();
-          if (embedReadyDeferred?.resolve) {
-            embedReadyDeferred.resolve();
-          }
-          embedReadyDeferred = null;
+        hostSelectionBridge.lastSignature = "";
+        hostSelectionBridge.pendingSignature = "";
+        applyHostSelectionFromDataset();
+        if (embedReadyDeferred?.resolve) {
+          embedReadyDeferred.resolve();
+        }
+        embedReadyDeferred = null;
         }
         if (dom.loginButton) {
           dom.loginButton.disabled = false;

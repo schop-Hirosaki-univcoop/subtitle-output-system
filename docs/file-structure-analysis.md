@@ -42,7 +42,7 @@
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
 | `scripts/events/app.js`                       | 6,070 | ❌ 要改善（基準の約 4.0 倍、リファクタリング完了）   |
-| `scripts/question-admin/app.js`               | 4,444 | ❌ 要改善（基準の約 3.0 倍、リファクタリング進行中） |
+| `scripts/question-admin/app.js`               | 4,347 | ❌ 要改善（基準の約 2.9 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
 | `scripts/operator/questions.js`               | 1,734 | ⚠️ 許容範囲（やや大きい）                            |
@@ -61,10 +61,11 @@
 2. **巨大な単一ファイル**
 
    - `scripts/events/app.js` - 6,070 行（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-   - `scripts/question-admin/app.js` - 4,444 行（リファクタリング進行中、元の 8,180 行から約 3,736 行削減）
+   - `scripts/question-admin/app.js` - 4,347 行（リファクタリング進行中、元の 8,180 行から約 3,833 行削減）
    - `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
+- ✅ `scripts/question-admin/managers/ui-manager.js` - 188 行（新規作成、フェーズ 11 完了後）
 
 3. **中規模の単一ファイル**
 
@@ -851,7 +852,7 @@ scripts/login/
        - 実績: 約 15 行の削減（`app.js` は 6,070 行）
 
 2. **`scripts/question-admin/app.js` のリファクタリング**（進行中）
-   - 期間: 3-4 週間（約 53% 完了、フェーズ 10 完了、全 17 フェーズ中 9 フェーズ完了）
+   - 期間: 3-4 週間（約 59% 完了、フェーズ 11 完了、全 17 フェーズ中 10 フェーズ完了）
    - 影響範囲: 質問管理画面全体
    - リスク: 高（大規模な変更）
    - **完了したフェーズ**:
@@ -926,8 +927,17 @@ scripts/login/
        - ✅ `getSelectionRequiredMessage` を `StateManager` に移行完了（約 9 行削減）
        - ✅ `resetState` を `StateManager` に移行完了（約 32 行削減）
        - 実績: 約 96 行の削減（`app.js` は 4,444 行、`state-manager.js` は 165 行、フェーズ 10 完了後）
+     - ✅ フェーズ 11: UI 関連の関数の整理（UIManager、188 行）完了
+       - ✅ `getElementById` を `UIManager` に移行完了（約 24 行削減）
+       - ✅ `renderUserSummary` を `UIManager` に移行完了（約 18 行削減）
+       - ✅ `setLoginError` を `UIManager` に移行完了（約 10 行削減）
+       - ✅ `setAuthUi` を `UIManager` に移行完了（約 50 行削減）
+       - ✅ `toggleSectionVisibility` を `UIManager` に移行完了（約 11 行削減）
+       - ✅ `applyParticipantNoText` を `UIManager` に移行完了（約 7 行削減）
+       - ✅ `resolveFocusTargetElement` を `UIManager` に移行完了（約 16 行削減）
+       - ✅ `maybeFocusInitialSection` を `UIManager` に移行完了（約 29 行削減）
+       - 実績: 約 93 行の削減（`app.js` は 4,347 行、`ui-manager.js` は 188 行）
    - **残りの機能**（詳細は `docs/utility-refactoring-plan.md` を参照）:
-     - ⏳ フェーズ 11: UI 関連の関数の整理（UIManager、約 150-200 行）
      - ⏳ フェーズ 12: 確認ダイアログ関連の関数の整理（ConfirmDialogManager、約 100 行）
      - ⏳ フェーズ 13: GL 関連の関数の整理（GlManager、約 250-300 行）
      - ⏳ フェーズ 14: 参加者 UI 関連の関数の整理（ParticipantUIManager、約 600-800 行）
@@ -1000,9 +1010,10 @@ scripts/login/
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
 - ❌ `scripts/events/app.js` - 6,070 行、要改善（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-- ❌ `scripts/question-admin/app.js` - 4,444 行、要改善（リファクタリング進行中、元の 8,180 行から約 3,736 行削減）
+- ❌ `scripts/question-admin/app.js` - 4,347 行、要改善（リファクタリング進行中、元の 8,180 行から約 3,833 行削減）
 - ✅ `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
+- ✅ `scripts/question-admin/managers/ui-manager.js` - 188 行（新規作成、フェーズ 11 完了後）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
 - ⚠️ `scripts/login.js` - 664 行、要検討
