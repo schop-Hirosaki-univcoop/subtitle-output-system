@@ -239,28 +239,28 @@
 
 **対象関数**:
 
-- `generateQuestionToken()` - 質問トークンの生成
-- `createApiClient()` - API クライアントの作成
+- ✅ `generateQuestionToken()` - 質問トークンの生成（`TokenApiManager` に移行完了、段階 1）
+- ✅ `createApiClient()` - API クライアントの作成（`TokenApiManager` に移行完了、段階 1）
+- ✅ `ensureTokenSnapshot()` - トークンスナップショットの確保（`TokenApiManager` に移行完了、段階 1）
+- ✅ `drainQuestionQueue()` - 質問キューのドレイン（`TokenApiManager` に移行完了、段階 1）
+- ✅ `legacyCopyToClipboard()` - レガシークリップボードコピー（`ShareClipboardManager` に移行完了、段階 2）
+- ✅ `copyShareLink()` - 共有リンクのクリップボードコピー（`ShareClipboardManager` に移行完了、段階 2）
+- ✅ `getSelectionIdentifiers()` - 選択識別子の取得（`ShareClipboardManager` に移行完了、段階 2）
+- ✅ `createShareUrl()` - 共有 URL の作成（`ShareClipboardManager` に移行完了、段階 2）
+- ✅ `parseInitialSelectionFromUrl()` - URL からの初期選択の解析（`ParticipantContextManager` に移行完了、段階 3）
+- ✅ `emitParticipantSyncEvent()` - 参加者同期イベントの送信（`ParticipantContextManager` に移行完了、段階 3）
+- ✅ `updateParticipantContext()` - 参加者コンテキストの更新（`ParticipantContextManager` に移行完了、段階 3）
 - `getDisplayParticipantId()` - 表示用参加者 ID の取得
-- `legacyCopyToClipboard()` - レガシークリップボードコピー
-- `copyShareLink()` - 共有リンクのクリップボードコピー
-- `emitParticipantSyncEvent()` - 参加者同期イベントの送信
-- `getSelectionIdentifiers()` - 選択識別子の取得
-- `createShareUrl()` - 共有 URL の作成
-- `parseInitialSelectionFromUrl()` - URL からの初期選択の解析
-- `updateParticipantContext()` - 参加者コンテキストの更新
-- `ensureTokenSnapshot()` - トークンスナップショットの確保
-- `drainQuestionQueue()` - 質問キューのドレイン
-- `handleRevertParticipants()` - 参加者の取り消し処理
-- `handleClearParticipants()` - 参加者のクリア処理
-- `handleEditSelectedParticipant()` - 選択参加者の編集処理
-- `handleCancelSelectedParticipant()` - 選択参加者のキャンセル処理
-- `handleDeleteSelectedParticipant()` - 選択参加者の削除処理
+- ✅ `handleRevertParticipants()` - 参加者の取り消し処理（`ParticipantActionManager` に移行完了、段階 4）
+- ✅ `handleClearParticipants()` - 参加者のクリア処理（`ParticipantActionManager` に移行完了、段階 4）
+- ✅ `handleEditSelectedParticipant()` - 選択参加者の編集処理（`ParticipantActionManager` に移行完了、段階 4）
+- ✅ `handleCancelSelectedParticipant()` - 選択参加者のキャンセル処理（`ParticipantActionManager` に移行完了、段階 4）
+- ✅ `handleDeleteSelectedParticipant()` - 選択参加者の削除処理（`ParticipantActionManager` に移行完了、段階 4）
 - `openParticipantEditor()` - 参加者エディタのオープン
 - `saveParticipantEdits()` - 参加者編集の保存
-- `handleParticipantCardListClick()` - 参加者カードリストのクリック処理
-- `handleParticipantCardListKeydown()` - 参加者カードリストのキーダウン処理
-- `handleParticipantListFocus()` - 参加者リストのフォーカス処理
+- ✅ `handleParticipantCardListClick()` - 参加者カードリストのクリック処理（`ParticipantUIManager` に移行完了、段階 5）
+- ✅ `handleParticipantCardListKeydown()` - 参加者カードリストのキーダウン処理（`ParticipantUIManager` に移行完了、段階 5）
+- ✅ `handleParticipantListFocus()` - 参加者リストのフォーカス処理（`ParticipantUIManager` に移行完了、段階 5）
 - `attachEventHandlers()` - イベントハンドラーのアタッチ
 - `initAuthWatcher()` - 認証ウォッチャーの初期化（フォールバック）
 - `init()` - アプリケーションの初期化（約 310 行）

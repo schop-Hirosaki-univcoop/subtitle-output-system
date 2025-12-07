@@ -26,6 +26,7 @@ export class ParticipantUIManager {
     this.hasUnsavedChanges = context.hasUnsavedChanges;
     this.relocationManager = context.relocationManager;
     this.diffParticipantLists = context.diffParticipantLists;
+    this.copyShareLink = context.copyShareLink;
     
     // 定数
     this.CANCEL_LABEL = context.CANCEL_LABEL;
@@ -901,6 +902,65 @@ export class ParticipantUIManager {
     if (this.dom.changePreviewNote) {
       this.dom.changePreviewNote.textContent = "「適用」で変更を確定し、「取消」で破棄できます。";
     }
+  }
+
+  /**
+   * 参加者カードリストのクリック処理
+   * @param {Event} event - クリックイベント
+   */
+  handleParticipantCardListClick(event) {
+    const card = event.target.closest(".participant-card");
+    if (card) {
+      this.selectParticipantFromCardElement(card);
+    }
+
+    const copyButton = event.target.closest(".copy-link-btn");
+    if (copyButton) {
+      event.preventDefault();
+      const token = copyButton.dataset.token;
+      this.copyShareLink(token).catch(err => console.error(err));
+    }
+  }
+
+  /**
+   * 参加者カードリストのキーダウン処理
+   * @param {KeyboardEvent} event - キーダウンイベント
+   */
+  handleParticipantCardListKeydown(event) {
+    const card = event.target.closest(".participant-card");
+    if (!card) {
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      this.selectParticipantFromCardElement(card, { focus: true });
+      return;
+    }
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      const list = this.dom.participantCardList;
+      if (!list) return;
+      const cards = Array.from(list.querySelectorAll(".participant-card"));
+      const currentIndex = cards.indexOf(card);
+      if (currentIndex === -1) return;
+      const delta = event.key === "ArrowUp" ? -1 : 1;
+      const nextCard = cards[currentIndex + delta];
+      if (nextCard) {
+        this.selectParticipantFromCardElement(nextCard, { focus: true });
+      }
+    }
+  }
+
+  /**
+   * 参加者リストのフォーカス処理
+   * @param {FocusEvent} event - フォーカスイベント
+   */
+  handleParticipantListFocus(event) {
+    const card = event.target.closest(".participant-card");
+    if (!card) {
+      return;
+    }
+    this.selectParticipantFromCardElement(card);
   }
 }
 

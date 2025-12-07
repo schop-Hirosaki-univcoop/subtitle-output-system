@@ -95,6 +95,11 @@ import { RelocationManager } from "./managers/relocation-manager.js";
 import { HostIntegrationManager } from "./managers/host-integration-manager.js";
 import { GlManager } from "./managers/gl-manager.js";
 import { ParticipantUIManager } from "./managers/participant-ui-manager.js";
+import { TokenApiManager } from "./managers/token-api-manager.js";
+import { ShareClipboardManager } from "./managers/share-clipboard-manager.js";
+import { ParticipantContextManager } from "./managers/participant-context-manager.js";
+import { ParticipantActionManager } from "./managers/participant-action-manager.js";
+import { EventHandlersManager } from "./managers/event-handlers-manager.js";
 
 // redirectingToIndex は AuthManager と共有するため、参照オブジェクトとして管理
 const redirectingToIndexRef = { current: false };
@@ -113,6 +118,12 @@ let confirmDialogManager = null;
 let glManager = null;
 let participantUIManager = null;
 let buttonStateManager = null;
+let tokenApiManager = null;
+let shareClipboardManager = null;
+let participantContextManager = null;
+let participantActionManager = null;
+let eventHandlersManager = null;
+let scheduleUtilityManager = null;
 
 // glDataFetchCache は GlManager に移行されました
 
@@ -498,74 +509,27 @@ import {
 const FOCUS_TARGETS = new Set(["participants", "schedules", "events"]);
 
 function parseInitialSelectionFromUrl() {
-  if (typeof window === "undefined") {
-    return;
+  // ParticipantContextManager に委譲
+  if (!participantContextManager) {
+    throw new Error("ParticipantContextManager is not initialized");
   }
-
-  try {
-    const params = new URLSearchParams(window.location.search || "");
-    const ensure = (value) => String(value ?? "").trim();
-
-    const eventId = ensure(params.get("eventId") ?? params.get("event"));
-    const scheduleId = ensure(params.get("scheduleId") ?? params.get("schedule"));
-    const scheduleLabel = ensure(params.get("scheduleLabel") ?? params.get("scheduleName"));
-    const eventLabel = ensure(params.get("eventName") ?? params.get("eventLabel"));
-    const focusParam = ensure(params.get("focus") ?? params.get("view"));
-
-    if (eventId) {
-      state.initialSelection = {
-        eventId,
-        scheduleId: scheduleId || null,
-        scheduleLabel: scheduleLabel || null,
-        eventLabel: eventLabel || null
-      };
-    }
-
-    if (focusParam) {
-      const normalizedFocus = focusParam.toLowerCase();
-      if (FOCUS_TARGETS.has(normalizedFocus)) {
-        state.initialFocusTarget = normalizedFocus;
-      }
-    }
-  } catch (error) {
-    console.debug("failed to parse initial selection", error);
-  }
+  return participantContextManager.parseInitialSelectionFromUrl();
 }
 
 function generateQuestionToken(existingTokens = state.knownTokens) {
-  const used = existingTokens instanceof Set ? existingTokens : new Set();
-  const cryptoObj = ensureCrypto();
-
-  while (true) {
-    let candidate = "";
-    if (cryptoObj) {
-      const bytes = new Uint8Array(24);
-      cryptoObj.getRandomValues(bytes);
-      candidate = base64UrlFromBytes(bytes).slice(0, 32);
-    } else {
-      const seed = `${Math.random()}::${Date.now()}::${Math.random()}`;
-      candidate = btoa(seed).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "").slice(0, 32);
-    }
-
-    if (!candidate || candidate.length < 12) {
-      continue;
-    }
-    if (!used.has(candidate)) {
-      used.add(candidate);
-      return candidate;
-    }
+  // TokenApiManager に委譲
+  if (!tokenApiManager) {
+    throw new Error("TokenApiManager is not initialized");
   }
+  return tokenApiManager.generateQuestionToken(existingTokens);
 }
 
 async function ensureTokenSnapshot(force = false) {
-  if (!force && state.tokenSnapshotFetchedAt && Date.now() - state.tokenSnapshotFetchedAt < 10000) {
-    return state.tokenRecords;
+  // TokenApiManager に委譲
+  if (!tokenApiManager) {
+    throw new Error("TokenApiManager is not initialized");
   }
-  const tokens = (await fetchDbValue("questionIntake/tokens")) || {};
-  state.tokenRecords = tokens;
-  state.knownTokens = new Set(Object.keys(tokens));
-  state.tokenSnapshotFetchedAt = Date.now();
-  return state.tokenRecords;
+  return await tokenApiManager.ensureTokenSnapshot(force);
 }
 
 async function fetchAuthorizedEmails() {
@@ -585,41 +549,21 @@ function renderUserSummary(user) {
 }
 
 function createApiClient(getIdToken) {
-  async function apiPost(payload, retryOnAuthError = true) {
-    const idToken = await getIdToken();
-    const response = await fetch(GAS_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify({ ...payload, idToken })
-    });
-    let json;
-    try {
-      json = await response.json();
-    } catch (error) {
-      throw new Error("サーバー応答の解析に失敗しました。");
-    }
-    if (!json.success) {
-      const message = String(json.error || "");
-      if (retryOnAuthError && /Auth/.test(message)) {
-        await getIdToken(true);
-        return await apiPost(payload, false);
-      }
-      throw new Error(message || "APIリクエストに失敗しました。");
-    }
-    return json;
+  // TokenApiManager に委譲
+  if (!tokenApiManager) {
+    throw new Error("TokenApiManager is not initialized");
   }
-
-  return { apiPost };
+  return tokenApiManager.createApiClient(getIdToken);
 }
 
 const api = createApiClient(getAuthIdToken);
 
 async function drainQuestionQueue() {
-  try {
-    await api.apiPost({ action: "processQuestionQueue" });
-  } catch (error) {
-    console.warn("processQuestionQueue failed", error);
+  // TokenApiManager に委譲
+  if (!tokenApiManager) {
+    throw new Error("TokenApiManager is not initialized");
   }
+  return await tokenApiManager.drainQuestionQueue(api);
 }
 
 function getDisplayParticipantId(participantId) {
@@ -899,23 +843,11 @@ function setLoginError(message = "") {
 }
 
 function legacyCopyToClipboard(text) {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  textarea.style.pointerEvents = "none";
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  let success = false;
-  try {
-    success = typeof document.execCommand === "function" ? document.execCommand("copy") : false;
-  } catch (error) {
-    success = false;
+  // ShareClipboardManager に委譲
+  if (!shareClipboardManager) {
+    throw new Error("ShareClipboardManager is not initialized");
   }
-  document.body.removeChild(textarea);
-  return success;
+  return shareClipboardManager.legacyCopyToClipboard(text);
 }
 
 function toggleSectionVisibility(element, visible) {
@@ -927,62 +859,37 @@ function toggleSectionVisibility(element, visible) {
 }
 
 function emitParticipantSyncEvent(detail = {}) {
-  if (typeof document === "undefined") {
-    return;
+  // ParticipantContextManager に委譲
+  if (!participantContextManager) {
+    throw new Error("ParticipantContextManager is not initialized");
   }
-
-  const payload = { ...detail };
-  payload.source = "question-admin";
-  payload.eventId = detail.eventId != null ? String(detail.eventId) : state.selectedEventId || "";
-  payload.scheduleId = detail.scheduleId != null ? String(detail.scheduleId) : state.selectedScheduleId || "";
-  if (typeof detail.participantCount === "number" && Number.isFinite(detail.participantCount)) {
-    payload.participantCount = detail.participantCount;
-  } else {
-    payload.participantCount = Array.isArray(state.participants) ? state.participants.length : 0;
-  }
-  payload.timestamp = detail.timestamp ? Number(detail.timestamp) : Date.now();
-
-  try {
-    document.dispatchEvent(new CustomEvent("qa:participants-synced", { detail: payload }));
-  } catch (error) {
-    console.warn("Failed to dispatch participant sync event", error);
-  }
+  return participantContextManager.emitParticipantSyncEvent(detail);
 }
 
 function getSelectionIdentifiers() {
-  return {
-    eventId: state.selectedEventId ? String(state.selectedEventId) : "",
-    scheduleId: state.selectedScheduleId ? String(state.selectedScheduleId) : ""
-  };
+  // ShareClipboardManager に委譲
+  if (!shareClipboardManager) {
+    throw new Error("ShareClipboardManager is not initialized");
+  }
+  return shareClipboardManager.getSelectionIdentifiers();
 }
 
 // encodeCsvValue, createCsvContent, buildParticipantCsvFilename, buildTeamCsvFilename, downloadCsvFile は CsvManager に移行されました
 
 function createShareUrl(token) {
-  const url = new URL(FORM_PAGE_PATH, window.location.href);
-  url.searchParams.set("token", token);
-  return url.toString();
+  // ShareClipboardManager に委譲
+  if (!shareClipboardManager) {
+    throw new Error("ShareClipboardManager is not initialized");
+  }
+  return shareClipboardManager.createShareUrl(token);
 }
 
 async function copyShareLink(token) {
-  if (!token) return;
-  const url = createShareUrl(token);
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(url);
-      setUploadStatus("専用リンクをクリップボードへコピーしました。", "success");
-    } else {
-      throw new Error("Clipboard API is unavailable");
-    }
-  } catch (error) {
-    console.error(error);
-    const copied = legacyCopyToClipboard(url);
-    if (copied) {
-      setUploadStatus("専用リンクをクリップボードへコピーしました。", "success");
-    } else {
-      setUploadStatus(`クリップボードにコピーできませんでした。URL: ${url}`, "error");
-    }
+  // ShareClipboardManager に委譲
+  if (!shareClipboardManager) {
+    throw new Error("ShareClipboardManager is not initialized");
   }
+  return await shareClipboardManager.copyShareLink(token, setUploadStatus);
 }
 
 function getParticipantGroupKey(entry) {
@@ -1620,55 +1527,11 @@ function setupParticipantTabs() {
 }
 
 function updateParticipantContext(options = {}) {
-  const { preserveStatus = false } = options;
-  const eventId = state.selectedEventId;
-  const scheduleId = state.selectedScheduleId;
-  const shouldPreserveStatus = preserveStatus && !isPlaceholderUploadStatus();
-  const descriptionTarget = dom.participantDescriptionMain || dom.participantDescription;
-  if (!eventId || !scheduleId) {
-    if (descriptionTarget) {
-      descriptionTarget.textContent = PARTICIPANT_DESCRIPTION_DEFAULT;
-    }
-    if (dom.saveButton) dom.saveButton.disabled = true;
-    if (dom.csvInput) {
-      dom.csvInput.disabled = true;
-      dom.csvInput.value = "";
-    }
-    if (dom.teamCsvInput) {
-      dom.teamCsvInput.disabled = true;
-      dom.teamCsvInput.value = "";
-    }
-    if (!shouldPreserveStatus) setUploadStatus(getMissingSelectionStatusMessage());
-    if (dom.fileLabel) dom.fileLabel.textContent = "参加者CSVをアップロード";
-    if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVをアップロード";
-    if (dom.participantCardList) dom.participantCardList.innerHTML = "";
-    if (dom.adminSummary) dom.adminSummary.textContent = "";
-    syncTemplateButtons();
-    syncClearButtonState();
-    return;
+  // ParticipantContextManager に委譲
+  if (!participantContextManager) {
+    throw new Error("ParticipantContextManager is not initialized");
   }
-
-  const overrideKey = `${eventId}::${scheduleId}`;
-  const selectedEvent = state.events.find(evt => evt.id === eventId);
-  const override = state.scheduleContextOverrides instanceof Map
-    ? state.scheduleContextOverrides.get(overrideKey) || null
-    : null;
-  const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === scheduleId);
-
-  if (dom.csvInput) dom.csvInput.disabled = false;
-  if (dom.teamCsvInput) dom.teamCsvInput.disabled = false;
-  if (descriptionTarget) {
-    descriptionTarget.textContent = PARTICIPANT_DESCRIPTION_DEFAULT;
-  }
-  if (state.scheduleContextOverrides instanceof Map && override && selectedSchedule) {
-    state.scheduleContextOverrides.delete(overrideKey);
-  }
-  if (!shouldPreserveStatus) {
-    setUploadStatus("ファイルを選択して参加者リストを更新してください。");
-  }
-
-  syncTemplateButtons();
-  syncClearButtonState();
+  return participantContextManager.updateParticipantContext(options);
 }
 
 async function loadEvents({ preserveSelection = true } = {}) {
@@ -1813,94 +1676,19 @@ async function handleSendParticipantMail() {
 }
 
 async function handleRevertParticipants() {
-  if (!hasUnsavedChanges()) {
-    setUploadStatus("取り消す変更はありません。");
-    return;
+  // ParticipantActionManager に委譲
+  if (!participantActionManager) {
+    throw new Error("ParticipantActionManager is not initialized");
   }
-
-  const confirmed = await confirmAction({
-    title: "変更の取り消し",
-    description: "未保存の変更をすべて破棄し、最新の参加者リストを読み込み直します。よろしいですか？",
-    confirmLabel: "取り消す",
-    cancelLabel: "キャンセル"
-  });
-
-  if (!confirmed) {
-    return;
-  }
-
-  setUploadStatus("未保存の変更を破棄しています…");
-  try {
-    const eventId = state.selectedEventId;
-    if (eventId && state.teamAssignments instanceof Map) {
-      state.teamAssignments.delete(eventId);
-    }
-    state.relocationDraftOriginals = new Map();
-    await loadParticipants({ statusMessage: "未保存の変更を取り消しました。", statusVariant: "success" });
-  } catch (error) {
-    console.error(error);
-    setUploadStatus(error.message || "変更の取り消しに失敗しました。", "error");
-  }
+  return await participantActionManager.handleRevertParticipants();
 }
 
 async function handleClearParticipants() {
-  const eventId = state.selectedEventId;
-  const scheduleId = state.selectedScheduleId;
-  if (!eventId || !scheduleId) {
-    setUploadStatus(getSelectionRequiredMessage(), "error");
-    return;
+  // ParticipantActionManager に委譲
+  if (!participantActionManager) {
+    throw new Error("ParticipantActionManager is not initialized");
   }
-
-  if (!state.participants.length) {
-    setUploadStatus("参加者リストは既に空です。", "success");
-    return;
-  }
-
-  const selectedEvent = state.events.find(evt => evt.id === eventId);
-  const selectedSchedule = selectedEvent?.schedules?.find(s => s.id === scheduleId);
-  const label = selectedSchedule?.label || scheduleId;
-
-  const confirmed = await confirmAction({
-    title: "参加者リストの全削除",
-    description: `日程「${label}」に登録されている参加者を全て削除します。適用すると元に戻せません。よろしいですか？`,
-    confirmLabel: "全て削除する",
-    cancelLabel: "キャンセル",
-    tone: "danger"
-  });
-
-  if (!confirmed) {
-    return;
-  }
-
-  const previousParticipants = state.participants.slice();
-  const previousTokenMap = new Map(state.participantTokenMap);
-  const previousSignature = state.lastSavedSignature;
-  const previousSavedParticipants = Array.isArray(state.savedParticipants)
-    ? state.savedParticipants.slice()
-    : [];
-  const previousSavedEntries = Array.isArray(state.savedParticipantEntries)
-    ? state.savedParticipantEntries.map(entry => cloneParticipantEntry(entry))
-    : [];
-  const previousBaselineReady = state.participantBaselineReady;
-
-  state.participants = [];
-  state.participantTokenMap = new Map();
-  state.duplicateMatches = new Map();
-  state.duplicateGroups = new Map();
-  captureParticipantBaseline(state.participants);
-  renderParticipants();
-
-  const success = await handleSave({ allowEmpty: true, successMessage: "参加者リストを全て削除しました。" });
-  if (!success) {
-    state.participants = previousParticipants;
-    state.participantTokenMap = previousTokenMap;
-    state.lastSavedSignature = previousSignature;
-    state.savedParticipants = previousSavedParticipants;
-    state.savedParticipantEntries = previousSavedEntries;
-    state.participantBaselineReady = previousBaselineReady;
-    updateDuplicateMatches();
-    renderParticipants();
-  }
+  return await participantActionManager.handleClearParticipants();
 }
 function setAuthUi(signedIn) {
   // UIManager に委譲
@@ -1958,76 +1746,43 @@ function resetState() {
 }
 
 function handleParticipantCardListClick(event) {
-  const card = event.target.closest(".participant-card");
-  if (card) {
-    selectParticipantFromCardElement(card);
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-
-  const copyButton = event.target.closest(".copy-link-btn");
-  if (copyButton) {
-    event.preventDefault();
-    const token = copyButton.dataset.token;
-    copyShareLink(token).catch(err => console.error(err));
-  }
+  return participantUIManager.handleParticipantCardListClick(event);
 }
 
 function handleParticipantCardListKeydown(event) {
-  const card = event.target.closest(".participant-card");
-  if (!card) {
-    return;
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
-    selectParticipantFromCardElement(card, { focus: true });
-    return;
-  }
-  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-    event.preventDefault();
-    const list = dom.participantCardList;
-    if (!list) return;
-    const cards = Array.from(list.querySelectorAll(".participant-card"));
-    const currentIndex = cards.indexOf(card);
-    if (currentIndex === -1) return;
-    const delta = event.key === "ArrowUp" ? -1 : 1;
-    const nextCard = cards[currentIndex + delta];
-    if (nextCard) {
-      selectParticipantFromCardElement(nextCard, { focus: true });
-    }
-  }
+  return participantUIManager.handleParticipantCardListKeydown(event);
 }
 
 function handleParticipantListFocus(event) {
-  const card = event.target.closest(".participant-card");
-  if (!card) {
-    return;
+  // ParticipantUIManager に委譲
+  if (!participantUIManager) {
+    throw new Error("ParticipantUIManager is not initialized");
   }
-  selectParticipantFromCardElement(card);
+  return participantUIManager.handleParticipantListFocus(event);
 }
 
 function handleEditSelectedParticipant() {
-  const target = getSelectedParticipantTarget();
-  if (!target.entry) {
-    setUploadStatus("参加者が選択されていません。", "error");
-    return;
+  // ParticipantActionManager に委譲
+  if (!participantActionManager) {
+    throw new Error("ParticipantActionManager is not initialized");
   }
-  const participantId = target.entry.participantId != null ? String(target.entry.participantId) : "";
-  const rowKey = target.entry.rowKey != null ? String(target.entry.rowKey) : "";
-  // ParticipantManager に委譲
-  if (!participantManager) {
-    throw new Error("ParticipantManager is not initialized");
-  }
-  participantManager.openParticipantEditor(participantId, rowKey);
+  return participantActionManager.handleEditSelectedParticipant();
 }
 
 function handleCancelSelectedParticipant() {
-  const target = getSelectedParticipantTarget();
-  if (!target.entry) {
-    setUploadStatus("キャンセル対象の参加者が見つかりません。", "error");
-    return;
+  // ParticipantActionManager に委譲
+  if (!participantActionManager) {
+    throw new Error("ParticipantActionManager is not initialized");
   }
-  const participantId = target.entry.participantId != null ? String(target.entry.participantId) : "";
-  const rowKey = target.entry.rowKey != null ? String(target.entry.rowKey) : "";
-  handleQuickCancelAction(participantId, null, rowKey);
+  return participantActionManager.handleCancelSelectedParticipant();
 }
 
 function handleRelocateSelectedParticipant() {
@@ -2039,17 +1794,11 @@ function handleRelocateSelectedParticipant() {
 }
 
 function handleDeleteSelectedParticipant() {
-  const target = getSelectedParticipantTarget();
-  if (!target.entry) {
-    setUploadStatus("削除対象の参加者が見つかりません。", "error");
-    return;
+  // ParticipantActionManager に委譲
+  if (!participantActionManager) {
+    throw new Error("ParticipantActionManager is not initialized");
   }
-  const participantId = target.entry.participantId != null ? String(target.entry.participantId) : "";
-  const rowKey = target.entry.rowKey != null ? String(target.entry.rowKey) : "";
-  handleDeleteParticipant(participantId, null, rowKey).catch(err => {
-    console.error(err);
-    setUploadStatus(err.message || "参加者の削除に失敗しました。", "error");
-  });
+  return participantActionManager.handleDeleteSelectedParticipant();
 }
 
 async function handleDeleteParticipant(participantId, rowIndex, rowKey) {
@@ -2107,424 +1856,14 @@ async function ensureAdminAccess() {
 }
 
 function attachEventHandlers() {
-  setupParticipantTabs();
-  updateParticipantActionPanelState();
-
-  if (dom.loginButton) {
-    dom.loginButton.addEventListener("click", async () => {
-      if (dom.loginButton.disabled) return;
-      setLoginError("");
-      dom.loginButton.disabled = true;
-      dom.loginButton.classList.add("is-busy");
-      try {
-        await signInWithPopup(auth, provider);
-      } catch (error) {
-        console.error(error);
-        setLoginError("ログインに失敗しました。時間をおいて再度お試しください。");
-        dom.loginButton.disabled = false;
-        dom.loginButton.classList.remove("is-busy");
-      }
-    });
+  // EventHandlersManager に委譲
+  if (!eventHandlersManager) {
+    throw new Error("EventHandlersManager is not initialized");
   }
-
-  if (dom.logoutButton) {
-    dom.logoutButton.addEventListener("click", () => signOut(auth));
-  }
-  if (dom.headerLogout) {
-    dom.headerLogout.addEventListener("click", () => signOut(auth));
-  }
-
-  // ログアウトのキーボードショートカット「l」
-  if (typeof document !== "undefined") {
-    document.addEventListener("keydown", (event) => {
-      const target = event.target;
-      const isFormField =
-        target instanceof HTMLElement &&
-        target.closest("input, textarea, select, [role='textbox'], [contenteditable=''], [contenteditable='true']");
-      
-      // 入力フィールドにフォーカスがある場合は無視
-      if (!isFormField && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-        if (event.key === "l" || event.key === "L") {
-          const logoutButton = dom.logoutButton || dom.headerLogout;
-          if (logoutButton && !logoutButton.disabled && !logoutButton.hidden) {
-            event.preventDefault();
-            signOut(auth);
-          }
-        }
-      }
-    });
-  }
-
-  if (dom.refreshButton) {
-    dom.refreshButton.addEventListener("click", async () => {
-      try {
-        await loadEvents({ preserveSelection: true });
-        await loadParticipants();
-      } catch (error) {
-        console.error(error);
-      }
-    });
-  }
-
-  if (dom.downloadParticipantTemplateButton) {
-    dom.downloadParticipantTemplateButton.addEventListener("click", () => {
-      if (!csvManager) {
-        throw new Error("CsvManager is not initialized");
-      }
-      csvManager.downloadParticipantTemplate();
-    });
-  }
-
-  if (dom.downloadTeamTemplateButton) {
-    dom.downloadTeamTemplateButton.addEventListener("click", () => {
-      if (!csvManager) {
-        throw new Error("CsvManager is not initialized");
-      }
-      csvManager.downloadTeamTemplate();
-    });
-  }
-
-  if (dom.openStaffPrintViewButton) {
-    dom.openStaffPrintViewButton.addEventListener("click", () => {
-      const button = dom.openStaffPrintViewButton;
-      if (!button) {
-        logPrintWarn("openStaffPrintViewButton click without button");
-        return;
-      }
-
-      syncAllPrintButtonStates();
-
-      logPrintInfo("openStaffPrintViewButton clicked", { disabled: button.disabled, printing: button.dataset.printing });
-
-      if (button.disabled || button.dataset.printing === "true") {
-        logPrintWarn("openStaffPrintViewButton ignored due to state", {
-          disabled: button.disabled,
-          printing: button.dataset.printing
-        });
-        return;
-      }
-
-      openStaffPrintView().catch(error => {
-        if (typeof console !== "undefined" && typeof console.error === "function") {
-          console.error("[Print] スタッフ印刷用リストの生成に失敗しました。", error);
-        }
-        logPrintError("openStaffPrintView failed from click", error);
-        window.alert("印刷用リストの生成中にエラーが発生しました。時間をおいて再度お試しください。");
-      });
-    });
-  }
-
-  if (dom.openPrintViewButton) {
-    dom.openPrintViewButton.addEventListener("click", () => {
-      const button = dom.openPrintViewButton;
-      if (!button) {
-        logPrintWarn("openPrintViewButton click without button");
-        return;
-      }
-
-      // ボタンの状態が古い場合に即時同期してから判定する
-      syncAllPrintButtonStates();
-
-      logPrintInfo("openPrintViewButton clicked", { disabled: button.disabled, printing: button.dataset.printing });
-
-      if (button.disabled || button.dataset.printing === "true") {
-        logPrintWarn("openPrintViewButton ignored due to state", {
-          disabled: button.disabled,
-          printing: button.dataset.printing
-        });
-        return;
-      }
-
-      openParticipantPrintView()
-        .catch(error => {
-          if (typeof console !== "undefined" && typeof console.error === "function") {
-            console.error("[Print] 印刷用リストの生成に失敗しました。", error);
-          }
-          logPrintError("openParticipantPrintView failed from click", error);
-          window.alert("印刷用リストの生成中にエラーが発生しました。時間をおいて再度お試しください。");
-        });
-    });
-  }
-
-  if (dom.printPreviewCloseButton) {
-    dom.printPreviewCloseButton.addEventListener("click", () => {
-      logPrintInfo("printPreviewCloseButton clicked");
-      closeParticipantPrintPreview();
-    });
-  }
-
-  if (dom.printPreviewPrintButton) {
-    dom.printPreviewPrintButton.addEventListener("click", () => {
-      if (dom.printPreviewPrintButton.disabled) {
-        logPrintWarn("printPreviewPrintButton ignored: disabled");
-        return;
-      }
-      logPrintInfo("printPreviewPrintButton clicked");
-      printParticipantPreview({ showAlertOnFailure: true });
-    });
-  }
-
-  if (dom.sendMailButton) {
-    dom.sendMailButton.addEventListener("click", async () => {
-      if (dom.sendMailButton.disabled || state.mailSending) {
-        return;
-      }
-      const pendingCount = getPendingMailCount();
-      if (!state.selectedEventId || !state.selectedScheduleId) {
-        setUploadStatus(getSelectionRequiredMessage("メールを送信するには"), "error");
-        return;
-      }
-      if (pendingCount === 0) {
-        setUploadStatus("送信対象の参加者が見つかりません。", "error");
-        return;
-      }
-      const confirmed = await confirmAction({
-        title: "案内メール送信の確認",
-        description: `未送信の参加者 ${pendingCount} 名にHTMLメールを送信します。よろしいですか？`,
-        confirmLabel: "送信する",
-        cancelLabel: "キャンセル",
-        tone: "primary"
-      });
-      if (!confirmed) {
-        return;
-      }
-      await handleSendParticipantMail();
-    });
-  }
-
-  bindDialogDismiss(dom.eventDialog);
-  bindDialogDismiss(dom.scheduleDialog);
-  bindDialogDismiss(dom.participantDialog);
-  bindDialogDismiss(dom.relocationDialog);
-  bindDialogDismiss(dom.printPreviewDialog);
-  if (printManager) {
-    printManager.setupSettingsDialog();
-  } else {
-    // フォールバック（初期化前の場合）
-  setupPrintSettingsDialog();
-  }
-
-  if (dom.relocationDialog) {
-    dom.relocationDialog.addEventListener("dialog:close", handleRelocationDialogClose);
-  }
-
-  if (dom.printPreviewDialog) {
-    dom.printPreviewDialog.addEventListener("dialog:close", () => {
-      resetPrintPreview({ skipCloseDialog: true });
-    });
-  }
-
-  if (dom.addEventButton) {
-    dom.addEventButton.addEventListener("click", () => {
-      openEventForm({ mode: "create" });
-    });
-  }
-
-  if (dom.eventForm) {
-    dom.eventForm.addEventListener("submit", async event => {
-      event.preventDefault();
-      if (!dom.eventNameInput) return;
-      const submitButton = dom.eventForm.querySelector("button[type='submit']");
-      if (submitButton) submitButton.disabled = true;
-      setFormError(dom.eventError);
-      try {
-        const mode = dom.eventForm.dataset.mode || "create";
-        const targetEventId = dom.eventForm.dataset.eventId || "";
-        if (mode === "edit") {
-          await handleUpdateEvent(targetEventId, dom.eventNameInput.value);
-        } else {
-          await handleAddEvent(dom.eventNameInput.value);
-        }
-        dom.eventForm.reset();
-        closeDialog(dom.eventDialog);
-      } catch (error) {
-        console.error(error);
-        const message = dom.eventForm.dataset.mode === "edit"
-          ? error.message || "イベントの更新に失敗しました。"
-          : error.message || "イベントの追加に失敗しました。";
-        setFormError(dom.eventError, message);
-      } finally {
-        if (submitButton) submitButton.disabled = false;
-      }
-    });
-  }
-
-  if (dom.addScheduleButton) {
-    dom.addScheduleButton.addEventListener("click", () => {
-      openScheduleForm({ mode: "create" });
-    });
-  }
-
-  if (dom.scheduleForm) {
-    dom.scheduleForm.addEventListener("submit", async event => {
-      event.preventDefault();
-      const submitButton = dom.scheduleForm.querySelector("button[type='submit']");
-      if (submitButton) submitButton.disabled = true;
-      setFormError(dom.scheduleError);
-      try {
-        const mode = dom.scheduleForm.dataset.mode || "create";
-        const scheduleId = dom.scheduleForm.dataset.scheduleId || "";
-        const payload = {
-          label: dom.scheduleLabelInput?.value,
-          location: dom.scheduleLocationInput?.value,
-          date: dom.scheduleDateInput?.value,
-          startTime: dom.scheduleStartTimeInput?.value,
-          endTime: dom.scheduleEndTimeInput?.value
-        };
-        if (mode === "edit") {
-          await handleUpdateSchedule(scheduleId, payload);
-        } else {
-          await handleAddSchedule(payload);
-        }
-        dom.scheduleForm.reset();
-        closeDialog(dom.scheduleDialog);
-      } catch (error) {
-        console.error(error);
-        const message = dom.scheduleForm.dataset.mode === "edit"
-          ? error.message || "日程の更新に失敗しました。"
-          : error.message || "日程の追加に失敗しました。";
-        setFormError(dom.scheduleError, message);
-      } finally {
-        if (submitButton) submitButton.disabled = false;
-      }
-    });
-  }
-
-  if (dom.scheduleStartTimeInput) {
-    dom.scheduleStartTimeInput.addEventListener("input", () => syncScheduleEndMin());
-  }
-
-  if (dom.scheduleDateInput) {
-    dom.scheduleDateInput.addEventListener("input", () => {
-      setCalendarPickedDate(dom.scheduleDateInput.value, { updateInput: false });
-    });
-  }
-
-  if (dom.scheduleDialogCalendarPrev) {
-    dom.scheduleDialogCalendarPrev.addEventListener("click", () => shiftScheduleDialogCalendarMonth(-1));
-  }
-
-  if (dom.scheduleDialogCalendarNext) {
-    dom.scheduleDialogCalendarNext.addEventListener("click", () => shiftScheduleDialogCalendarMonth(1));
-  }
-
-  if (dom.csvInput) {
-    dom.csvInput.addEventListener("change", (event) => {
-      if (!csvManager) {
-        throw new Error("CsvManager is not initialized");
-      }
-      csvManager.handleCsvChange(event);
-    });
-    dom.csvInput.disabled = true;
-  }
-
-  if (dom.teamCsvInput) {
-    dom.teamCsvInput.addEventListener("change", (event) => {
-      if (!csvManager) {
-        throw new Error("CsvManager is not initialized");
-      }
-      csvManager.handleTeamCsvChange(event);
-    });
-    dom.teamCsvInput.disabled = true;
-  }
-
-  if (dom.participantForm) {
-    dom.participantForm.addEventListener("submit", event => {
-      event.preventDefault();
-      const submitButton = dom.participantForm.querySelector("button[type='submit']");
-      if (submitButton) submitButton.disabled = true;
-      try {
-        setFormError(dom.participantError);
-        saveParticipantEdits();
-        closeDialog(dom.participantDialog);
-        setUploadStatus("参加者情報を更新しました。適用または取消を選択してください。", "success");
-      } catch (error) {
-        console.error(error);
-        setFormError(dom.participantError, error.message || "参加者情報の更新に失敗しました。");
-      } finally {
-        if (submitButton) submitButton.disabled = false;
-      }
-    });
-  }
-
-  if (dom.relocationForm) {
-    dom.relocationForm.addEventListener("submit", handleRelocationFormSubmit);
-  }
-
-  if (dom.saveButton) {
-    dom.saveButton.addEventListener("click", () => {
-      handleSave().catch(err => {
-        console.error(err);
-        setUploadStatus(err.message || "適用に失敗しました。", "error");
-      });
-    });
-    dom.saveButton.disabled = true;
-    updateParticipantActionPanelState();
-  }
-
-  if (dom.discardButton) {
-    dom.discardButton.addEventListener("click", () => {
-      handleRevertParticipants().catch(err => {
-        console.error(err);
-        setUploadStatus(err.message || "変更の取り消しに失敗しました。", "error");
-      });
-    });
-    dom.discardButton.disabled = true;
-    updateParticipantActionPanelState();
-  }
-
-  if (dom.participantCardList) {
-    dom.participantCardList.addEventListener("click", handleParticipantCardListClick);
-    dom.participantCardList.addEventListener("keydown", handleParticipantCardListKeydown);
-    dom.participantCardList.addEventListener("focusin", handleParticipantListFocus);
-  }
-
-  if (dom.editSelectedParticipantButton) {
-    dom.editSelectedParticipantButton.addEventListener("click", handleEditSelectedParticipant);
-  }
-
-  if (dom.cancelSelectedParticipantButton) {
-    dom.cancelSelectedParticipantButton.addEventListener("click", handleCancelSelectedParticipant);
-  }
-
-  if (dom.relocateSelectedParticipantButton) {
-    dom.relocateSelectedParticipantButton.addEventListener("click", handleRelocateSelectedParticipant);
-  }
-
-  if (dom.deleteSelectedParticipantButton) {
-    dom.deleteSelectedParticipantButton.addEventListener("click", handleDeleteSelectedParticipant);
-  }
-
-  if (dom.addScheduleButton) {
-    dom.addScheduleButton.disabled = true;
-  }
-
-  if (dom.clearParticipantsButton) {
-    dom.clearParticipantsButton.addEventListener("click", () => {
-      handleClearParticipants().catch(err => {
-        console.error(err);
-        setUploadStatus(err.message || "参加者リストの削除に失敗しました。", "error");
-      });
-    });
-    updateParticipantActionPanelState();
-  }
-
-  if (dom.eventEmpty) dom.eventEmpty.hidden = true;
-  if (dom.scheduleEmpty) dom.scheduleEmpty.hidden = true;
-
-  if (dom.uploadStatus) {
-    setUploadStatus(getMissingSelectionStatusMessage());
-  }
-
-  if (dom.fileLabel) dom.fileLabel.textContent = "参加者CSVをアップロード";
-  if (dom.teamFileLabel) dom.teamFileLabel.textContent = "班番号CSVをアップロード";
-
-  if (dom.copyrightYear) {
-    dom.copyrightYear.textContent = String(new Date().getFullYear());
-  }
-
-  setupConfirmDialog();
+  return eventHandlersManager.attachEventHandlers();
 }
+
+// 元の attachEventHandlers 実装は EventHandlersManager に移行されました
 
 function initAuthWatcher() {
   // AuthManager に委譲
@@ -2814,6 +2153,123 @@ function init() {
     renderEvents
   });
 
+  // TokenApiManager を初期化
+  tokenApiManager = new TokenApiManager({
+    state,
+    // 依存関数と定数
+    ensureCrypto,
+    base64UrlFromBytes,
+    fetchDbValue,
+    GAS_API_URL
+  });
+
+  // ShareClipboardManager を初期化
+  shareClipboardManager = new ShareClipboardManager({
+    state,
+    // 依存関数と定数
+    FORM_PAGE_PATH
+  });
+
+  // ParticipantContextManager を初期化
+  participantContextManager = new ParticipantContextManager({
+    state,
+    dom,
+    // 依存関数と定数
+    isPlaceholderUploadStatus: () => {
+      if (!stateManager) {
+        throw new Error("StateManager is not initialized");
+      }
+      return stateManager.isPlaceholderUploadStatus();
+    },
+    getMissingSelectionStatusMessage: () => {
+      if (!stateManager) {
+        throw new Error("StateManager is not initialized");
+      }
+      return stateManager.getMissingSelectionStatusMessage();
+    },
+    setUploadStatus: (message, variant) => {
+      if (!stateManager) {
+        throw new Error("StateManager is not initialized");
+      }
+      return stateManager.setUploadStatus(message, variant);
+    },
+    syncTemplateButtons,
+    syncClearButtonState,
+    PARTICIPANT_DESCRIPTION_DEFAULT,
+    FOCUS_TARGETS
+  });
+
+  // ParticipantActionManager を初期化
+  participantActionManager = new ParticipantActionManager({
+    state,
+    dom,
+    // 依存関数
+    hasUnsavedChanges: () => {
+      if (!stateManager) {
+        throw new Error("StateManager is not initialized");
+      }
+      return stateManager.hasUnsavedChanges();
+    },
+    confirmAction: (options) => {
+      if (!confirmDialogManager) {
+        throw new Error("ConfirmDialogManager is not initialized");
+      }
+      return confirmDialogManager.confirmAction(options);
+    },
+    setUploadStatus: (message, variant) => {
+      if (!stateManager) {
+        throw new Error("StateManager is not initialized");
+      }
+      return stateManager.setUploadStatus(message, variant);
+    },
+    loadParticipants,
+    cloneParticipantEntry: (entry) => {
+      if (!stateManager) {
+        throw new Error("StateManager is not initialized");
+      }
+      return stateManager.cloneParticipantEntry(entry);
+    },
+    captureParticipantBaseline: (entries, options) => {
+      if (!stateManager) {
+        throw new Error("StateManager is not initialized");
+      }
+      return stateManager.captureParticipantBaseline(entries, options);
+    },
+    renderParticipants,
+    handleSave,
+    updateDuplicateMatches,
+    getSelectedParticipantTarget: () => {
+      if (!participantUIManager) {
+        throw new Error("ParticipantUIManager is not initialized");
+      }
+      return participantUIManager.getSelectedParticipantTarget();
+    },
+    getSelectionRequiredMessage: (prefix) => {
+      if (!stateManager) {
+        throw new Error("StateManager is not initialized");
+      }
+      return stateManager.getSelectionRequiredMessage(prefix);
+    },
+    handleQuickCancelAction: (participantId, rowIndex, rowKey) => {
+      if (!participantUIManager) {
+        throw new Error("ParticipantUIManager is not initialized");
+      }
+      return participantUIManager.handleQuickCancelAction(participantId, rowIndex, rowKey);
+    },
+    handleDeleteParticipant: (participantId, rowIndex, rowKey) => {
+      if (!participantManager) {
+        throw new Error("ParticipantManager is not initialized");
+      }
+      return participantManager.handleDeleteParticipant(participantId, rowIndex, rowKey);
+    },
+    openParticipantEditor: (participantId, rowKey) => {
+      if (!participantManager) {
+        throw new Error("ParticipantManager is not initialized");
+      }
+      return participantManager.openParticipantEditor(participantId, rowKey);
+    }
+  });
+
   // GlManager を初期化
   glManager = new GlManager({
     state,
@@ -2845,6 +2301,12 @@ function init() {
       return uiManager.applyParticipantNoText(element, index);
     },
     createShareUrl,
+    copyShareLink: (token) => {
+      if (!shareClipboardManager) {
+        throw new Error("ShareClipboardManager is not initialized");
+      }
+      return shareClipboardManager.copyShareLink(token, setUploadStatus);
+    },
     describeDuplicateMatch,
     diffParticipantLists,
     // 定数
@@ -3120,6 +2582,238 @@ function init() {
     startHostSelectionBridge
   });
   
+  // EventHandlersManager を初期化
+  eventHandlersManager = new EventHandlersManager({
+    state,
+    dom,
+    // Managerインスタンス
+    csvManager,
+    printManager,
+    confirmDialogManager,
+    // 依存関数
+    setupParticipantTabs: () => {
+      if (!buttonStateManager) {
+        throw new Error("ButtonStateManager is not initialized");
+      }
+      return buttonStateManager.setupParticipantTabs();
+    },
+    updateParticipantActionPanelState: () => {
+      if (!buttonStateManager) {
+        throw new Error("ButtonStateManager is not initialized");
+      }
+      return buttonStateManager.updateParticipantActionPanelState();
+    },
+    setLoginError: (message) => {
+      if (!uiManager) {
+        throw new Error("UIManager is not initialized");
+      }
+      return uiManager.setLoginError(message);
+    },
+    signInWithPopup,
+    signOut,
+    auth,
+    provider,
+    loadEvents: (options) => {
+      if (!eventManager) return Promise.resolve();
+      return eventManager.loadEvents(options);
+    },
+    loadParticipants: (options) => {
+      if (!participantManager) return Promise.resolve();
+      return participantManager.loadParticipants(options);
+    },
+    syncAllPrintButtonStates: () => {
+      if (!buttonStateManager) {
+        throw new Error("ButtonStateManager is not initialized");
+      }
+      return buttonStateManager.syncAllPrintButtonStates();
+    },
+    openStaffPrintView: () => {
+      if (!printManager) {
+        throw new Error("PrintManager is not initialized");
+      }
+      return printManager.openStaffPrintView();
+    },
+    openParticipantPrintView: () => {
+      if (!printManager) {
+        throw new Error("PrintManager is not initialized");
+      }
+      return printManager.openParticipantPrintView();
+    },
+    closeParticipantPrintPreview: () => {
+      if (!printManager) {
+        throw new Error("PrintManager is not initialized");
+      }
+      return printManager.closeParticipantPrintPreview();
+    },
+    printParticipantPreview: (options) => {
+      if (!printManager) {
+        throw new Error("PrintManager is not initialized");
+      }
+      return printManager.printParticipantPreview(options);
+    },
+    getPendingMailCount: () => {
+      if (!mailManager) return 0;
+      return mailManager.getPendingMailCount();
+    },
+    handleSendParticipantMail: () => {
+      if (!mailManager) {
+        throw new Error("MailManager is not initialized");
+      }
+      return mailManager.handleSendParticipantMail();
+    },
+    bindDialogDismiss,
+    setupPrintSettingsDialog,
+    handleRelocationDialogClose: (event) => {
+      if (!relocationManager) return;
+      return relocationManager.handleRelocationDialogClose(event);
+    },
+    resetPrintPreview: (options) => {
+      if (!printManager) {
+        throw new Error("PrintManager is not initialized");
+      }
+      return printManager.resetPrintPreview(options);
+    },
+    openEventForm: ({ mode, event }) => {
+      if (!eventManager) return;
+      return eventManager.openEventForm({ mode, event });
+    },
+    handleUpdateEvent: async (eventId, name) => {
+      if (!eventManager) {
+        throw new Error("EventManager is not initialized");
+      }
+      return await eventManager.handleUpdateEvent(eventId, name);
+    },
+    handleAddEvent: async (name) => {
+      if (!eventManager) {
+        throw new Error("EventManager is not initialized");
+      }
+      return await eventManager.handleAddEvent(name);
+    },
+    closeDialog,
+    setFormError,
+    openScheduleForm: ({ mode, schedule }) => {
+      if (!scheduleManager) return;
+      return scheduleManager.openScheduleForm({ mode, schedule });
+    },
+    handleUpdateSchedule: async (scheduleId, payload) => {
+      if (!scheduleManager) {
+        throw new Error("ScheduleManager is not initialized");
+      }
+      return await scheduleManager.handleUpdateSchedule(scheduleId, payload);
+    },
+    handleAddSchedule: async (payload) => {
+      if (!scheduleManager) {
+        throw new Error("ScheduleManager is not initialized");
+      }
+      return await scheduleManager.handleAddSchedule(payload);
+    },
+    syncScheduleEndMin,
+    setCalendarPickedDate,
+    shiftScheduleDialogCalendarMonth,
+    saveParticipantEdits: () => {
+      if (!participantManager) {
+        throw new Error("ParticipantManager is not initialized");
+      }
+      return participantManager.saveParticipantEdits();
+    },
+    handleRelocationFormSubmit: (event) => {
+      if (!relocationManager) return;
+      return relocationManager.handleRelocationFormSubmit(event);
+    },
+    handleSave: async (options) => {
+      if (!participantManager) {
+        throw new Error("ParticipantManager is not initialized");
+      }
+      return await participantManager.handleSave(options);
+    },
+    handleRevertParticipants: () => {
+      if (!participantActionManager) {
+        throw new Error("ParticipantActionManager is not initialized");
+      }
+      return participantActionManager.handleRevertParticipants();
+    },
+    handleParticipantCardListClick: (event) => {
+      if (!participantUIManager) {
+        throw new Error("ParticipantUIManager is not initialized");
+      }
+      return participantUIManager.handleParticipantCardListClick(event);
+    },
+    handleParticipantCardListKeydown: (event) => {
+      if (!participantUIManager) {
+        throw new Error("ParticipantUIManager is not initialized");
+      }
+      return participantUIManager.handleParticipantCardListKeydown(event);
+    },
+    handleParticipantListFocus: (event) => {
+      if (!participantUIManager) {
+        throw new Error("ParticipantUIManager is not initialized");
+      }
+      return participantUIManager.handleParticipantListFocus(event);
+    },
+    handleEditSelectedParticipant: () => {
+      if (!participantActionManager) {
+        throw new Error("ParticipantActionManager is not initialized");
+      }
+      return participantActionManager.handleEditSelectedParticipant();
+    },
+    handleCancelSelectedParticipant: () => {
+      if (!participantActionManager) {
+        throw new Error("ParticipantActionManager is not initialized");
+      }
+      return participantActionManager.handleCancelSelectedParticipant();
+    },
+    handleRelocateSelectedParticipant: () => {
+      if (!relocationManager) return;
+      return relocationManager.handleRelocateSelectedParticipant();
+    },
+    handleDeleteSelectedParticipant: () => {
+      if (!participantActionManager) {
+        throw new Error("ParticipantActionManager is not initialized");
+      }
+      return participantActionManager.handleDeleteSelectedParticipant();
+    },
+    handleClearParticipants: () => {
+      if (!participantActionManager) {
+        throw new Error("ParticipantActionManager is not initialized");
+      }
+      return participantActionManager.handleClearParticipants();
+    },
+    getMissingSelectionStatusMessage: () => {
+      if (!stateManager) {
+        throw new Error("StateManager is not initialized");
+      }
+      return stateManager.getMissingSelectionStatusMessage();
+    },
+    getSelectionRequiredMessage: (prefix) => {
+      if (!stateManager) {
+        throw new Error("StateManager is not initialized");
+      }
+      return stateManager.getSelectionRequiredMessage(prefix);
+    },
+    setUploadStatus: (message, variant) => {
+      if (!stateManager) {
+        throw new Error("StateManager is not initialized");
+      }
+      return stateManager.setUploadStatus(message, variant);
+    },
+    confirmAction: (options) => {
+      if (!confirmDialogManager) {
+        throw new Error("ConfirmDialogManager is not initialized");
+      }
+      return confirmDialogManager.confirmAction(options);
+    },
+    setupConfirmDialog: () => {
+      if (!confirmDialogManager) {
+        throw new Error("ConfirmDialogManager is not initialized");
+      }
+      return confirmDialogManager.setupConfirmDialog();
+    },
+    // ログ関数
+    logPrintInfo,
+    logPrintWarn,
+    logPrintError
+  });
+
   // ScheduleManager を初期化
   scheduleManager = new ScheduleManager({
     dom,
