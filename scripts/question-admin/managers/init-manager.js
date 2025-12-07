@@ -211,9 +211,132 @@ export class InitManager {
     
     refs.printManager.hydrateSettingsFromStorage();
     
+    // StateManager を初期化
+    refs.stateManager = new ManagerClasses.StateManager({
+      state: this.state,
+      dom: this.dom,
+      // 依存関数と定数
+      signatureForEntries: this.signatureForEntries,
+      snapshotParticipantList: this.snapshotParticipantList,
+      normalizeKey: this.normalizeKey,
+      isEmbeddedMode: this.isEmbeddedMode,
+      UPLOAD_STATUS_PLACEHOLDERS: this.UPLOAD_STATUS_PLACEHOLDERS
+    });
+
+    // UIManager を初期化
+    refs.uiManager = new ManagerClasses.UIManager({
+      state: this.state,
+      dom: this.dom,
+      // 依存関数と定数
+      getEmbedPrefix: this.getEmbedPrefix,
+      isEmbeddedMode: this.isEmbeddedMode,
+      updateParticipantActionPanelState: this.updateParticipantActionPanelState,
+      FOCUS_TARGETS: this.FOCUS_TARGETS
+    });
+
+    // ConfirmDialogManager を初期化
+    refs.confirmDialogManager = new ManagerClasses.ConfirmDialogManager({
+      dom: this.dom,
+      // 依存関数
+      openDialog: this.openDialog,
+      closeDialog: this.closeDialog
+    });
+
+    // ScheduleUtilityManager を初期化
+    refs.scheduleUtilityManager = new ManagerClasses.ScheduleUtilityManager({
+      state: this.state,
+      dom: this.dom,
+      // 依存関数
+      describeScheduleRange: this.describeScheduleRange,
+      getScheduleLabel: this.getScheduleLabel,
+      normalizeKey: this.normalizeKey,
+      renderEvents: this.renderEvents,
+      renderSchedules: () => {
+        if (!refs.scheduleManager) return;
+        return refs.scheduleManager.renderSchedules();
+      },
+      updateParticipantContext: this.updateParticipantContext
+    });
+
+    // ButtonStateManager を初期化
+    refs.buttonStateManager = new ManagerClasses.ButtonStateManager({
+      state: this.state,
+      dom: this.dom,
+      // 依存関数
+      hasUnsavedChanges: () => {
+        if (!refs.stateManager) {
+          throw new Error("StateManager is not initialized");
+        }
+        return refs.stateManager.hasUnsavedChanges();
+      },
+      resolveParticipantUid: this.resolveParticipantUid,
+      syncMailActionState: () => {
+        if (!refs.mailManager) return;
+        return refs.mailManager.syncMailActionState();
+      },
+      syncAllPrintButtonStates: this.syncAllPrintButtonStates,
+      // 印刷関連の依存関数
+      logPrintDebug: this.logPrintDebug,
+      logPrintWarn: this.logPrintWarn,
+      closeParticipantPrintPreview: () => {
+        if (!refs.printManager) {
+          throw new Error("PrintManager is not initialized");
+        }
+        return refs.printManager.closeParticipantPrintPreview();
+      },
+      printManager: refs.printManager,
+      // 参加者アクションパネル関連の依存関数
+      getSelectedParticipantTarget: () => {
+        if (!refs.participantUIManager) {
+          throw new Error("ParticipantUIManager is not initialized");
+        }
+        return refs.participantUIManager.getSelectedParticipantTarget();
+      },
+      formatParticipantIdentifier: (entry) => {
+        if (!refs.participantUIManager) {
+          throw new Error("ParticipantUIManager is not initialized");
+        }
+        return refs.participantUIManager.formatParticipantIdentifier(entry);
+      },
+      // イベントサマリー関連の依存関数
+      getScheduleLabel: this.getScheduleLabel,
+      renderSchedules: () => {
+        if (!refs.scheduleManager) return;
+        return refs.scheduleManager.renderSchedules();
+      },
+      renderEvents: this.renderEvents
+    });
+    
+    // ConfirmDialogManagerのセットアップ
+    if (refs.confirmDialogManager) {
+      refs.confirmDialogManager.setupConfirmDialog();
+    }
+    
+    // 初期化後の処理
+    this.attachEventHandlers();
+    this.setAuthUi(Boolean(this.state.user));
+    this.initLoaderSteps(this.isEmbeddedMode() ? [] : this.STEP_LABELS);
+    this.resetState();
+    if (this.isEmbeddedMode()) {
+      this.showLoader("利用状態を確認しています…");
+    }
+    this.parseInitialSelectionFromUrl();
+    this.startHostSelectionBridge();
+    
+    // 認証ウォッチャーの初期化
+    if (refs.authManager) {
+      refs.authManager.initAuthWatcher();
+    } else {
+      // フォールバック（初期化前の場合）
+      this.initAuthWatcher();
+    }
+    
+    // window.questionAdminEmbedの設定
+    this.setupQuestionAdminEmbed();
+    
     // 以降のManager初期化は次の段階で実装します
     // このファイルは非常に大きくなるため、段階的に移行します
-    // TODO: すべてのManagerの初期化を段階的に移行
+    // TODO: 残りのManagerの初期化を段階的に移行
   }
 
   /**

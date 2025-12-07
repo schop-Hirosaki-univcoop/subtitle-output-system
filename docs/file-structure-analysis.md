@@ -42,7 +42,7 @@
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
 | `scripts/events/app.js`                       | 6,070 | ❌ 要改善（基準の約 4.0 倍、リファクタリング完了）   |
-| `scripts/question-admin/app.js`               | 2,949 | ❌ 要改善（基準の約 2.2 倍、リファクタリング進行中） |
+| `scripts/question-admin/app.js`               | 3,010 | ❌ 要改善（基準の約 2.2 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
 | `scripts/operator/questions.js`               | 1,734 | ⚠️ 許容範囲（やや大きい）                            |
@@ -61,7 +61,7 @@
 2. **巨大な単一ファイル**
 
    - `scripts/events/app.js` - 6,070 行（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-   - `scripts/question-admin/app.js` - 2,949 行（リファクタリング進行中、元の 8,180 行から約 5,231 行削減）
+   - `scripts/question-admin/app.js` - 3,010 行（リファクタリング進行中、元の 8,180 行から約 5,170 行削減）
    - `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
@@ -459,9 +459,9 @@ scripts/
    - テストが困難（改善中）
    - 保守性が低い（改善中）
 
-2. **`scripts/question-admin/app.js` が 2,949 行（リファクタリング進行中）**
+2. **`scripts/question-admin/app.js` が 3,010 行（リファクタリング進行中）**
 
-   - 開発標準の約 2.2 倍（元の 8,180 行から約 5,231 行削減）
+   - 開発標準の約 2.2 倍（元の 8,180 行から約 5,170 行削減）
    - 単一責任の原則に違反（改善中）
    - テストが困難（改善中）
    - 保守性が低い（改善中）
@@ -1096,12 +1096,17 @@ scripts/login/
          - ✅ `attachEventHandlers` を `EventHandlersManager` に移行完了（約 419 行削減）
          - 実績: 約 419 行の削減（`app.js` は 2,949 行、`event-handlers-manager.js` は 506 行、段階 6 完了）
        - ⏳ **段階 7: 初期化関数の移行**（進行中）
-         - ✅ InitManager クラスの基本構造作成完了（295 行）
-         - ✅ PrintManager の初期化を InitManager に移行完了
-         - ❌ 残り 19 個の Manager 初期化を InitManager に移行（未完了）
-         - ❌ app.js の init()関数を InitManager への委譲に変更（未完了）
-         - ❌ window.questionAdminEmbed の移行（未完了）
-         - ❌ initAuthWatcher()のフォールバック実装の整理（未完了）
+         - ✅ InitManager クラスの基本構造作成完了（418 行）
+         - ✅ InitManager のインポートと初期化を追加完了
+         - ✅ PrintManager, StateManager, UIManager, ConfirmDialogManager, ScheduleUtilityManager, ButtonStateManager の初期化を InitManager に移行完了
+         - ✅ app.js の init()関数を InitManager に委譲完了
+         - ✅ 重複した初期化コードを削除完了
+         - ✅ 初期化後の処理（attachEventHandlers, setAuthUi, initLoaderSteps, resetState, parseInitialSelectionFromUrl, startHostSelectionBridge, initAuthWatcher, confirmDialogManager.setupConfirmDialog）を InitManager に移行完了
+         - ✅ window.questionAdminEmbed の移行完了（InitManager.setupQuestionAdminEmbed()で設定）
+         - ✅ managerRefs への代入を追加完了（15 個の Manager すべて）
+         - ✅ グローバル変数への同期を追加完了（15 個の Manager すべて）
+         - ✅ initAuthWatcher()のフォールバック実装の整理完了（簡略化）
+         - ❌ 残り 15 個の Manager 初期化を InitManager に移行（未完了、現在は app.js で初期化し managerRefs に代入）
        - 実績（段階 1-6）: 約 814 行の削減（`app.js` は 2,949 行、`token-api-manager.js` は 106 行、`share-clipboard-manager.js` は 90 行、`participant-context-manager.js` は 138 行、`participant-action-manager.js` は 168 行、`participant-ui-manager.js` は 966 行、`event-handlers-manager.js` は 506 行）
 
 ### フェーズ 2: 中程度の問題の解決（優先度: 中）
@@ -1169,7 +1174,7 @@ scripts/login/
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
 - ❌ `scripts/events/app.js` - 6,070 行、要改善（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-- ❌ `scripts/question-admin/app.js` - 2,949 行、要改善（リファクタリング進行中、元の 8,180 行から約 5,231 行削減、フェーズ 17 段階 7 進行中）
+- ❌ `scripts/question-admin/app.js` - 3,039 行、要改善（リファクタリング進行中、元の 8,180 行から約 5,141 行削減、フェーズ 17 段階 7 進行中）
 - ✅ `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
 - ✅ `scripts/question-admin/managers/ui-manager.js` - 188 行（新規作成、フェーズ 11 完了後）
@@ -1183,7 +1188,7 @@ scripts/login/
 - ✅ `scripts/question-admin/managers/participant-context-manager.js` - 138 行（新規作成、フェーズ 17 段階 3 完了後）
 - ✅ `scripts/question-admin/managers/participant-action-manager.js` - 168 行（新規作成、フェーズ 17 段階 4 完了後）
 - ✅ `scripts/question-admin/managers/event-handlers-manager.js` - 506 行（新規作成、フェーズ 17 段階 6 完了後）
-- ⏳ `scripts/question-admin/managers/init-manager.js` - 295 行（新規作成、フェーズ 17 段階 7 進行中）
+- ⏳ `scripts/question-admin/managers/init-manager.js` - 418 行（新規作成、フェーズ 17 段階 7 進行中）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
 - ⚠️ `scripts/login.js` - 664 行、要検討

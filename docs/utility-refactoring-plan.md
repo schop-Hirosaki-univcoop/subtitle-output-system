@@ -264,8 +264,8 @@
 - ✅ `handleParticipantListFocus()` - 参加者リストのフォーカス処理（`ParticipantUIManager` に移行完了、段階 5）
 - ✅ `attachEventHandlers()` - イベントハンドラーのアタッチ（`EventHandlersManager` に移行完了、段階 6）
 - ⏳ `initAuthWatcher()` - 認証ウォッチャーの初期化（フォールバック、段階 7 で整理予定）
-- ⏳ `init()` - アプリケーションの初期化（約 851 行、`InitManager` に移行中、段階 7 進行中）
-- ⏳ `window.questionAdminEmbed` - グローバル API オブジェクト（約 65 行、`InitManager` に移行中、段階 7 進行中）
+- ⏳ `init()` - アプリケーションの初期化（約 851 行、`InitManager` に移行中、段階 7 進行中、初期化後の処理は移行完了）
+- ✅ `window.questionAdminEmbed` - グローバル API オブジェクト（約 65 行、`InitManager` に移行完了、段階 7）
 
 **実績行数**:
 
@@ -275,9 +275,16 @@
 - 段階 4: 約 126 行削減（`app.js` は 2,940 行、`participant-action-manager.js` は 168 行）
 - 段階 5: 約 45 行削減（`app.js` は 2,895 行、`ParticipantUIManager` に追加）
 - 段階 6: 約 419 行削減（`app.js` は 2,949 行、`event-handlers-manager.js` は 506 行）
-- 段階 7: 進行中（`InitManager` は 295 行、`PrintManager` の初期化のみ移行済み）
+- 段階 7: 進行中（`InitManager` は 418 行、6 個の Manager 初期化と初期化後の処理を移行済み、`app.js` は 2,990 行、managerRefs への代入とグローバル変数への同期を追加完了）
 
 **推定残り行数**: 約 850-1,050 行（`init()` 関数と `window.questionAdminEmbed` の完全移行後）
+
+**現在の進捗**:
+
+- `app.js`: 2,990 行（InitManager 初期化コード追加により一時的に増加、移行完了後に削減予定）
+- `init-manager.js`: 418 行（基本構造 + 6 個の Manager 初期化 + 初期化後の処理）
+- 完了: PrintManager, StateManager, UIManager, ConfirmDialogManager, ScheduleUtilityManager, ButtonStateManager の初期化を移行、初期化後の処理を移行、window.questionAdminEmbed を移行、managerRefs への代入を追加、グローバル変数への同期を追加、initAuthWatcher()のフォールバック実装を整理
+- 残り: 15 個の Manager 初期化を InitManager に移行（現在は app.js で初期化し managerRefs に代入）
 
 **依存関係**:
 

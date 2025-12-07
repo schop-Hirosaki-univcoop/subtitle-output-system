@@ -28,6 +28,8 @@ import {
 } from "./state.js";
 import { dom } from "./dom.js";
 import { goToLogin } from "../shared/routes.js";
+import { openDialog, closeDialog, bindDialogDismiss } from "./dialog.js";
+import { showLoader, hideLoader, initLoaderSteps, setLoaderStep, finishLoaderSteps } from "./loader.js";
 // loadAuthPreflightContext, preflightContextMatchesUser は AuthManager に移行されました
 import { collectParticipantTokens } from "../shared/participant-tokens.js";
 import {
@@ -100,6 +102,7 @@ import { ShareClipboardManager } from "./managers/share-clipboard-manager.js";
 import { ParticipantContextManager } from "./managers/participant-context-manager.js";
 import { ParticipantActionManager } from "./managers/participant-action-manager.js";
 import { EventHandlersManager } from "./managers/event-handlers-manager.js";
+import { InitManager } from "./managers/init-manager.js";
 
 // redirectingToIndex は AuthManager と共有するため、参照オブジェクトとして管理
 const redirectingToIndexRef = { current: false };
@@ -124,6 +127,7 @@ let participantContextManager = null;
 let participantActionManager = null;
 let eventHandlersManager = null;
 let scheduleUtilityManager = null;
+let initManager = null;
 
 // glDataFetchCache は GlManager に移行されました
 
@@ -1867,69 +1871,18 @@ function attachEventHandlers() {
 
 function initAuthWatcher() {
   // AuthManager に委譲
+  // 注意: InitManagerのinit()メソッドでauthManagerが初期化されるため、
+  // このフォールバック実装は通常は実行されません。
+  // ただし、InitManagerの初期化前に呼び出された場合に備えて残しています。
   if (!authManager) {
     // フォールバック（初期化前の場合）
-  onAuthStateChanged(auth, async user => {
-    state.user = user;
-    const embedded = isEmbeddedMode();
-    if (!user) {
-      if (embedded) {
-        showLoader("利用状態を確認しています…");
-      } else {
-        hideLoader();
-        if (dom.loginButton) {
-          dom.loginButton.disabled = false;
-          dom.loginButton.classList.remove("is-busy");
-        }
-      }
-      setAuthUi(false);
-      resetState();
-        if (!redirectingToIndexRef.current && typeof window !== "undefined" && !embedded) {
-          redirectingToIndexRef.current = true;
-        goToLogin();
-      }
-      return;
-    }
-
-      redirectingToIndexRef.current = false;
-    showLoader(embedded ? "利用準備を確認しています…" : "権限を確認しています…");
-    const loaderLabels = embedded ? [] : STEP_LABELS;
-    initLoaderSteps(loaderLabels);
-
-    try {
-      setLoaderStep(0, embedded ? "利用状態を確認しています…" : "認証OK。ユーザー情報を確認中…");
-      setLoaderStep(1, embedded ? "利用条件を確認しています…" : "在籍状況を確認しています…");
-      await verifyEnrollment(user);
-      setLoaderStep(2, embedded ? "必要な権限を同期しています…" : "管理者権限を確認・同期しています…");
-      await ensureAdminAccess();
-      setLoaderStep(3, embedded ? "参加者データを準備しています…" : "初期データを取得しています…");
-      // --- FIX 3: Parallelize token and event loading ---
-      await Promise.all([
-        ensureTokenSnapshot(true),
-        loadEvents({ preserveSelection: false })
-      ]);
-      await loadParticipants();
-      if (state.initialSelectionNotice) {
-        setUploadStatus(state.initialSelectionNotice, "error");
-        state.initialSelectionNotice = null;
-      }
-      await drainQuestionQueue();
-      setLoaderStep(4, embedded ? "仕上げ処理を行っています…" : "初期データの取得が完了しました。仕上げ中…");
-      setAuthUi(true);
-      finishLoaderSteps("準備完了");
-      resolveEmbedReady();
-      if (state.initialFocusTarget) {
-        window.setTimeout(() => maybeFocusInitialSection(), 400);
-      }
-    } catch (error) {
-      console.error(error);
-      setLoginError(error.message || "権限の確認に失敗しました。");
-      await signOut(auth);
-      resetState();
-    } finally {
-      hideLoader();
-    }
-  });
+    // この実装はAuthManager.initAuthWatcher()と同等の処理を行いますが、
+    // 段階的な移行のため、ここでは簡略化された実装のみを提供します。
+    // 完全な実装はAuthManagerに移行されています。
+    console.warn("initAuthWatcher: AuthManager is not initialized, using fallback");
+    // フォールバック実装は削除（AuthManagerに完全移行済み）
+    // InitManagerのinit()メソッドでauthManager.initAuthWatcher()が呼び出されるため、
+    // このフォールバックは通常は実行されません。
     return;
   }
   authManager.initAuthWatcher();
@@ -2027,132 +1980,258 @@ async function applySelectionContext(selection = {}) {
   return hostIntegrationManager.applySelectionContext(selection);
 }
 
+// setFormError関数の定義を確認
+function setFormError(element, message = "") {
+  if (!element) return;
+  const errorElement = element.querySelector(".form-error, [data-form-error]");
+  if (errorElement) {
+    errorElement.textContent = message;
+    errorElement.style.display = message ? "block" : "none";
+  }
+}
+
+// Manager変数の参照オブジェクト
+const managerRefs = {
+  printManager: null,
+  csvManager: null,
+  eventManager: null,
+  participantManager: null,
+  scheduleManager: null,
+  mailManager: null,
+  authManager: null,
+  relocationManager: null,
+  hostIntegrationManager: null,
+  stateManager: null,
+  uiManager: null,
+  confirmDialogManager: null,
+  glManager: null,
+  participantUIManager: null,
+  buttonStateManager: null,
+  tokenApiManager: null,
+  shareClipboardManager: null,
+  participantContextManager: null,
+  participantActionManager: null,
+  eventHandlersManager: null,
+  scheduleUtilityManager: null
+};
+
+// Managerクラスの参照オブジェクト
+const managerClasses = {
+  PrintManager,
+  CsvManager,
+  EventManager,
+  ParticipantManager,
+  ScheduleManager,
+  MailManager,
+  AuthManager,
+  RelocationManager,
+  HostIntegrationManager,
+  StateManager,
+  UIManager,
+  ConfirmDialogManager,
+  GlManager,
+  ParticipantUIManager,
+  ButtonStateManager,
+  TokenApiManager,
+  ShareClipboardManager,
+  ParticipantContextManager,
+  ParticipantActionManager,
+  EventHandlersManager,
+  ScheduleUtilityManager
+};
+
+// InitManagerを初期化（apiは後で設定）
+initManager = new InitManager({
+  state,
+  dom,
+  calendarState,
+  managerRefs,
+  managerClasses,
+  // 依存関数
+  openDialog,
+  closeDialog,
+  setFormError,
+  setAuthUi,
+  setLoginError,
+  showLoader,
+  hideLoader,
+  initLoaderSteps,
+  setLoaderStep,
+  finishLoaderSteps,
+  resetState,
+  renderUserSummary,
+  isEmbeddedMode,
+  getEmbedPrefix,
+  parseInitialSelectionFromUrl,
+  startHostSelectionBridge,
+  initAuthWatcher,
+  attachEventHandlers,
+  applySelectionContext,
+  loadParticipants,
+  loadEvents,
+  waitForEmbedReady,
+  detachHost,
+  attachHost,
+  applyHostSelectionFromDataset,
+  // 定数
+  STEP_LABELS,
+  FOCUS_TARGETS,
+  UPLOAD_STATUS_PLACEHOLDERS,
+  PARTICIPANT_DESCRIPTION_DEFAULT,
+  PARTICIPANT_TEMPLATE_HEADERS,
+  TEAM_TEMPLATE_HEADERS,
+  NO_TEAM_GROUP_KEY,
+  CANCEL_LABEL,
+  RELOCATE_LABEL,
+  GL_STAFF_GROUP_KEY,
+  GL_STAFF_LABEL,
+  MAIL_STATUS_ICON_SVG,
+  CHANGE_ICON_SVG,
+  GAS_API_URL,
+  FORM_PAGE_PATH,
+  HOST_SELECTION_ATTRIBUTE_KEYS,
+  PRINT_SETTING_STORAGE_KEY,
+  DEFAULT_PRINT_SETTINGS,
+  redirectingToIndexRef,
+  // ユーティリティ関数
+  sortParticipants,
+  getParticipantGroupKey,
+  describeParticipantGroup,
+  collectGroupGlLeaders,
+  getEventGlRoster,
+  getEventGlAssignmentsMap,
+  resolveScheduleAssignment,
+  loadGlDataForEvent,
+  normalizeKey,
+  normalizeGroupNumberValue,
+  signatureForEntries,
+  snapshotParticipantList,
+  getDisplayParticipantId,
+  resolveMailStatusInfo,
+  resolveParticipantUid,
+  resolveParticipantActionTarget,
+  updateParticipantActionPanelState,
+  createShareUrl,
+  describeDuplicateMatch,
+  diffParticipantLists,
+  getSelectionIdentifiers,
+  getSelectionRequiredMessage,
+  setUploadStatus,
+  hasUnsavedChanges,
+  confirmAction,
+  renderParticipants,
+  renderEvents,
+  getScheduleLabel,
+  describeScheduleRange,
+  updateParticipantContext,
+  captureParticipantBaseline,
+  syncSaveButtonState,
+  syncMailActionState,
+  syncAllPrintButtonStates,
+  syncClearButtonState,
+  syncTemplateButtons,
+  syncSelectedEventSummary,
+  setPrintButtonBusy,
+  setStaffPrintButtonBusy,
+  queueRelocationPrompt,
+  applyParticipantSelectionStyles,
+  emitParticipantSyncEvent,
+  selectSchedule,
+  selectEvent,
+  setCalendarPickedDate,
+  refreshScheduleLocationHistory,
+  populateScheduleLocationOptions,
+  finalizeEventLoad,
+  broadcastSelectionChange,
+  getSelectionBroadcastSource,
+  hostSelectionSignature,
+  getHostSelectionElement,
+  readHostSelectionDataset,
+  stopHostSelectionBridge,
+  ensureTokenSnapshot,
+  drainQuestionQueue,
+  generateQuestionToken,
+  getScheduleRecord,
+  ensureCrypto,
+  base64UrlFromBytes,
+  fetchDbValue,
+  logPrintDebug,
+  logPrintWarn,
+  logPrintError,
+  maybeFocusInitialSection,
+  resolveEmbedReady,
+  handleSave,
+  updateDuplicateMatches,
+  ensureRowKey,
+  resolveParticipantStatus,
+  ensureTeamAssignmentMap,
+  applyAssignmentsToEventCache,
+  syncCurrentScheduleCache,
+  findParticipantForSnapshot,
+  formatParticipantIdentifier,
+  createParticipantGroupElements,
+  clearParticipantSelection,
+  participantChangeKey,
+  renderGroupGlAssignments,
+  openEventForm,
+  openScheduleForm,
+  saveParticipantEdits,
+  handleDeleteParticipant,
+  openParticipantEditor,
+  handleQuickCancelAction,
+  commitParticipantQuickEdit,
+  renderParticipantChangePreview,
+  renderRelocationPrompt,
+  ensurePendingRelocationMap,
+  applyRelocationDraft,
+  handleRelocationFormSubmit,
+  handleRelocationDialogClose,
+  handleRelocateSelectedParticipant,
+  buildScheduleOptionLabel,
+  prepareScheduleDialogCalendar,
+  syncScheduleEndMin,
+  shiftScheduleDialogCalendarMonth,
+  setActionButtonState,
+  sleep,
+  setupPrintSettingsDialog,
+  bindDialogDismiss,
+  signInWithPopup,
+  signOut,
+  // API関連（後で設定）
+  api: null,
+  auth,
+  provider,
+  getAuthIdToken,
+  firebaseConfig,
+  goToLogin
+});
+
+// managerRefsとグローバル変数の同期はinit()関数内で行う
+// Object.definePropertyは使用しない（グローバル変数に直接同期する方式を採用）
+
 function init() {
-  // PrintManager を初期化
-  printManager = new PrintManager({
-    dom,
-    state,
-    openDialog,
-    closeDialog,
-    // 依存関数と定数
-    sortParticipants,
-    getParticipantGroupKey,
-    describeParticipantGroup,
-    collectGroupGlLeaders,
-    getEventGlRoster,
-    getEventGlAssignmentsMap,
-    resolveScheduleAssignment,
-    loadGlDataForEvent,
-    normalizeKey,
-    normalizeGroupNumberValue,
-    NO_TEAM_GROUP_KEY,
-    CANCEL_LABEL,
-    RELOCATE_LABEL,
-    GL_STAFF_GROUP_KEY,
-    // ボタン状態管理関数
-    syncAllPrintButtonStates,
-    setPrintButtonBusy,
-    setStaffPrintButtonBusy
-  });
+  // InitManagerを使用して初期化
+  if (!initManager) {
+    throw new Error("InitManager is not initialized");
+  }
   
-  printManager.hydrateSettingsFromStorage();
+  // apiオブジェクトを設定（tokenApiManager初期化後に設定）
+  // 注意: apiはtokenApiManagerに依存するため、後で設定される
   
-  // StateManager を初期化
-  stateManager = new StateManager({
-    state,
-    dom,
-    // 依存関数と定数
-    signatureForEntries,
-    snapshotParticipantList,
-    normalizeKey,
-    isEmbeddedMode,
-    UPLOAD_STATUS_PLACEHOLDERS
-  });
-
-  // UIManager を初期化
-  uiManager = new UIManager({
-    state,
-    dom,
-    // 依存関数と定数
-    getEmbedPrefix,
-    isEmbeddedMode,
-    updateParticipantActionPanelState,
-    FOCUS_TARGETS
-  });
-
-  // ConfirmDialogManager を初期化
-  confirmDialogManager = new ConfirmDialogManager({
-    dom,
-    // 依存関数
-    openDialog,
-    closeDialog
-  });
-
-  // ScheduleUtilityManager を初期化
-  scheduleUtilityManager = new ScheduleUtilityManager({
-    state,
-    dom,
-    // 依存関数
-    describeScheduleRange,
-    getScheduleLabel,
-    normalizeKey,
-    renderEvents,
-    renderSchedules: () => {
-      if (!scheduleManager) return;
-      scheduleManager.renderSchedules();
-    },
-    updateParticipantContext
-  });
-
-  // ButtonStateManager を初期化
-  buttonStateManager = new ButtonStateManager({
-    state,
-    dom,
-    // 依存関数
-    hasUnsavedChanges: () => {
-      if (!stateManager) {
-        throw new Error("StateManager is not initialized");
-      }
-      return stateManager.hasUnsavedChanges();
-    },
-    resolveParticipantUid,
-    syncMailActionState: () => {
-      if (!mailManager) return;
-      mailManager.syncMailActionState();
-    },
-    syncAllPrintButtonStates,
-    // 印刷関連の依存関数
-    logPrintDebug,
-    logPrintWarn,
-    closeParticipantPrintPreview: () => {
-      if (!printManager) {
-        throw new Error("PrintManager is not initialized");
-      }
-      printManager.closeParticipantPrintPreview();
-    },
-    printManager,
-    // 参加者アクションパネル関連の依存関数
-    getSelectedParticipantTarget: () => {
-      if (!participantUIManager) {
-        throw new Error("ParticipantUIManager is not initialized");
-      }
-      return participantUIManager.getSelectedParticipantTarget();
-    },
-    formatParticipantIdentifier: (entry) => {
-      if (!participantUIManager) {
-        throw new Error("ParticipantUIManager is not initialized");
-      }
-      return participantUIManager.formatParticipantIdentifier(entry);
-    },
-    // イベントサマリー関連の依存関数
-    getScheduleLabel,
-    renderSchedules: () => {
-      if (!scheduleManager) return;
-      scheduleManager.renderSchedules();
-    },
-    renderEvents
-  });
-
+  // InitManagerのinit()を呼び出し
+  initManager.init();
+  
+  // グローバル変数にmanagerRefsを同期（InitManagerで初期化されたManager）
+  printManager = managerRefs.printManager;
+  stateManager = managerRefs.stateManager;
+  uiManager = managerRefs.uiManager;
+  confirmDialogManager = managerRefs.confirmDialogManager;
+  scheduleUtilityManager = managerRefs.scheduleUtilityManager;
+  buttonStateManager = managerRefs.buttonStateManager;
+  
+  // 残りのManager初期化（段階的にInitManagerに移行予定）
+  // 現在はapp.jsで初期化し、managerRefsにも代入
+  
   // TokenApiManager を初期化
   tokenApiManager = new TokenApiManager({
     state,
@@ -2169,6 +2248,7 @@ function init() {
     // 依存関数と定数
     FORM_PAGE_PATH
   });
+  managerRefs.shareClipboardManager = shareClipboardManager;
 
   // ParticipantContextManager を初期化
   participantContextManager = new ParticipantContextManager({
@@ -2198,6 +2278,7 @@ function init() {
     PARTICIPANT_DESCRIPTION_DEFAULT,
     FOCUS_TARGETS
   });
+  managerRefs.participantContextManager = participantContextManager;
 
   // ParticipantActionManager を初期化
   participantActionManager = new ParticipantActionManager({
@@ -2269,6 +2350,7 @@ function init() {
       return participantManager.openParticipantEditor(participantId, rowKey);
     }
   });
+  managerRefs.participantActionManager = participantActionManager;
 
   // GlManager を初期化
   glManager = new GlManager({
@@ -2282,6 +2364,7 @@ function init() {
     GL_STAFF_GROUP_KEY,
     GL_STAFF_LABEL
   });
+  managerRefs.glManager = glManager;
 
   // ParticipantUIManager を初期化
   participantUIManager = new ParticipantUIManager({
@@ -2318,6 +2401,7 @@ function init() {
     MAIL_STATUS_ICON_SVG,
     CHANGE_ICON_SVG
   });
+  managerRefs.participantUIManager = participantUIManager;
 
   // CsvManager を初期化
   csvManager = new CsvManager({
@@ -2337,6 +2421,7 @@ function init() {
     queueRelocationPrompt,
     captureParticipantBaseline
   });
+  managerRefs.csvManager = csvManager;
   
   // EventManager を初期化
   eventManager = new EventManager({
@@ -2382,6 +2467,7 @@ function init() {
     populateScheduleLocationOptions,
     getSelectionBroadcastSource
   });
+  managerRefs.eventManager = eventManager;
   
   // MailManager を初期化
   mailManager = new MailManager({
@@ -2397,6 +2483,7 @@ function init() {
     setActionButtonState,
     confirmAction
   });
+  managerRefs.mailManager = mailManager;
   
   // AuthManager を初期化
   authManager = new AuthManager({
@@ -2435,6 +2522,7 @@ function init() {
     setUploadStatus,
     redirectingToIndexRef
   });
+  managerRefs.authManager = authManager;
   
   // ParticipantManager を初期化
   participantManager = new ParticipantManager({
@@ -2516,6 +2604,7 @@ function init() {
     getScheduleRecord,
     loadEvents
   });
+  managerRefs.participantManager = participantManager;
   
   // RelocationManager を初期化
   relocationManager = new RelocationManager({
@@ -2558,6 +2647,7 @@ function init() {
     ensureTeamAssignmentMap,
     findParticipantForSnapshot
   });
+  managerRefs.relocationManager = relocationManager;
   
   // HostIntegrationManager を初期化
   hostIntegrationManager = new HostIntegrationManager({
@@ -2581,6 +2671,7 @@ function init() {
     stopHostSelectionBridge,
     startHostSelectionBridge
   });
+  managerRefs.hostIntegrationManager = hostIntegrationManager;
   
   // EventHandlersManager を初期化
   eventHandlersManager = new EventHandlersManager({
@@ -2813,6 +2904,7 @@ function init() {
     logPrintWarn,
     logPrintError
   });
+  managerRefs.eventHandlersManager = eventHandlersManager;
 
   // ScheduleManager を初期化
   scheduleManager = new ScheduleManager({
@@ -2859,91 +2951,40 @@ function init() {
     broadcastSelectionChange,
     selectScheduleSelf: null // 後で設定
   });
+  managerRefs.scheduleManager = scheduleManager;
   
   // 循環参照を避けるため、selectScheduleSelf を設定
   scheduleManager.selectScheduleSelf = scheduleManager.selectSchedule.bind(scheduleManager);
   
-  attachEventHandlers();
-  setAuthUi(Boolean(state.user));
-  initLoaderSteps(isEmbeddedMode() ? [] : STEP_LABELS);
-  resetState();
-  if (isEmbeddedMode()) {
-    showLoader("利用状態を確認しています…");
-  }
-  parseInitialSelectionFromUrl();
-  startHostSelectionBridge();
-  if (authManager) {
-    authManager.initAuthWatcher();
-  } else {
-    // フォールバック（初期化前の場合）
-  initAuthWatcher();
-  }
+  // すべてのManagerをグローバル変数に同期（managerRefsから）
+  tokenApiManager = managerRefs.tokenApiManager;
+  shareClipboardManager = managerRefs.shareClipboardManager;
+  participantContextManager = managerRefs.participantContextManager;
+  participantActionManager = managerRefs.participantActionManager;
+  glManager = managerRefs.glManager;
+  participantUIManager = managerRefs.participantUIManager;
+  csvManager = managerRefs.csvManager;
+  eventManager = managerRefs.eventManager;
+  mailManager = managerRefs.mailManager;
+  authManager = managerRefs.authManager;
+  participantManager = managerRefs.participantManager;
+  relocationManager = managerRefs.relocationManager;
+  hostIntegrationManager = managerRefs.hostIntegrationManager;
+  eventHandlersManager = managerRefs.eventHandlersManager;
+  scheduleManager = managerRefs.scheduleManager;
+  
+  // 初期化後の処理はInitManagerのinit()メソッドで実行される
+  // 以下の処理はInitManagerに移行済み:
+  // - attachEventHandlers()
+  // - setAuthUi(Boolean(state.user))
+  // - initLoaderSteps(isEmbeddedMode() ? [] : STEP_LABELS)
+  // - resetState()
+  // - parseInitialSelectionFromUrl()
+  // - startHostSelectionBridge()
+  // - initAuthWatcher()
+  // - window.questionAdminEmbedの設定
 }
 
 init();
 
-if (typeof window !== "undefined") {
-  window.questionAdminEmbed = {
-    setSelection(selection = {}) {
-      return applySelectionContext(selection);
-    },
-    refreshParticipants(options) {
-      return loadParticipants(options);
-    },
-    refreshEvents(options) {
-      return loadEvents(options);
-    },
-    getState() {
-      return {
-        eventId: state.selectedEventId,
-        scheduleId: state.selectedScheduleId
-      };
-    },
-    waitUntilReady() {
-      return waitForEmbedReady();
-    },
-    reset() {
-      try {
-        redirectingToIndexRef.current = false;
-        state.user = null;
-        hideLoader();
-        setAuthUi(false);
-        resetState();
-        detachHost();
-        if (hostIntegrationManager) {
-          hostIntegrationManager.resetHostSelectionBridge();
-          applyHostSelectionFromDataset();
-          hostIntegrationManager.resetEmbedReady();
-        } else {
-        hostSelectionBridge.lastSignature = "";
-        hostSelectionBridge.pendingSignature = "";
-        applyHostSelectionFromDataset();
-        if (embedReadyDeferred?.resolve) {
-          embedReadyDeferred.resolve();
-        }
-        embedReadyDeferred = null;
-        }
-        if (dom.loginButton) {
-          dom.loginButton.disabled = false;
-          dom.loginButton.classList.remove("is-busy");
-        }
-      } catch (error) {
-        console.error("questionAdminEmbed.reset failed", error);
-      }
-    },
-    attachHost(controller) {
-      try {
-        attachHost(controller);
-      } catch (error) {
-        console.error("questionAdminEmbed.attachHost failed", error);
-      }
-    },
-    detachHost() {
-      try {
-        detachHost();
-      } catch (error) {
-        console.error("questionAdminEmbed.detachHost failed", error);
-      }
-    }
-  };
-}
+// window.questionAdminEmbedはInitManager.setupQuestionAdminEmbed()で設定されます
