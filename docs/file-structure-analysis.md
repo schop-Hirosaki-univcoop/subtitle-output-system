@@ -41,7 +41,7 @@
 
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
-| `scripts/events/app.js`                       | 6,085 | ❌ 要改善（基準の約 4.1 倍、リファクタリング進行中） |
+| `scripts/events/app.js`                       | 6,070 | ❌ 要改善（基準の約 4.0 倍、リファクタリング進行中） |
 | `scripts/question-admin/app.js`               | 5,752 | ❌ 要改善（基準の約 3.8 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
@@ -60,7 +60,7 @@
 
 2. **巨大な単一ファイル**
 
-   - `scripts/events/app.js` - 6,085 行（リファクタリング進行中、元の 10,180 行から約 4,095 行削減）
+   - `scripts/events/app.js` - 6,070 行（リファクタリング進行中、元の 10,180 行から約 4,110 行削減）
    - `scripts/question-admin/app.js` - 5,752 行（リファクタリング進行中、元の 8,180 行から約 2,428 行削減）
 
 3. **中規模の単一ファイル**
@@ -419,7 +419,7 @@ scripts/
 
 ### 重大な問題（優先度: 高）
 
-1. **`scripts/events/app.js` が 6,085 行（リファクタリング進行中）**
+1. **`scripts/events/app.js` が 6,070 行（リファクタリング進行中）**
 
    - 開発標準の約 4.3 倍（元の 10,180 行から約 3,734 行削減）
    - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
@@ -522,21 +522,21 @@ scripts/
   - `enforceScheduleConflictState()` の重複を削除
   - 未使用の定数 `HOST_PRESENCE_HEARTBEAT_MS` を削除（`EventFirebaseManager`に移行済み）
   - 未使用のインポート `sharedDerivePresenceScheduleKey` を削除
-- ⏳ フェーズ 1.6: 重複メソッドの削除とクリーンアップ（進行中）
-  - ⏳ フェーズ 1.6.1: 委譲メソッドの追加（進行中）
-    - `syncOperatorPresenceSubscription()` の委譲メソッドを追加
-    - `syncScheduleConsensusSubscription()` の委譲メソッドを追加
-    - `clearScheduleConsensusState()` の委譲メソッドを追加
-    - `normalizeScheduleConsensus()` の委譲メソッドを追加
-    - プロパティの同期を確認
-  - ⏳ フェーズ 1.6.2: 重複メソッドの削除（進行中）
-    - `handleScheduleConsensusUpdate` の重複を削除
-    - `applyScheduleConsensus` の重複を削除
-    - `handleScheduleConsensusPrompt` の重複を削除
-  - ⏳ フェーズ 1.6.3: その他のメソッドの委譲確認（進行中）
-    - `scheduleHostPresenceHeartbeat()` の委譲を確認・追加
-    - `clearHostPresence()` の委譲を確認・追加
-    - すべての呼び出し箇所を確認
+- ✅ フェーズ 1.6: 重複メソッドの削除とクリーンアップ（完了）
+  - ✅ フェーズ 1.6.1: 委譲メソッドの追加（完了）
+    - `syncOperatorPresenceSubscription()` の委譲メソッドを追加完了
+    - `syncScheduleConsensusSubscription()` の委譲メソッドを追加完了
+    - `clearScheduleConsensusState()` の委譲メソッドを追加完了
+    - `normalizeScheduleConsensus()` の委譲メソッドを追加完了
+    - プロパティの同期を確認完了
+  - ✅ フェーズ 1.6.2: 重複メソッドの削除（完了）
+    - `handleScheduleConsensusUpdate` の重複を削除完了
+    - `applyScheduleConsensus` の重複を削除完了
+    - `handleScheduleConsensusPrompt` の重複を削除完了
+  - ✅ フェーズ 1.6.3: その他のメソッドの委譲確認（完了）
+    - `scheduleHostPresenceHeartbeat()` の委譲を確認・追加完了
+    - `clearHostPresence()` の委譲を確認・追加完了
+    - すべての呼び出し箇所を確認完了
   - ✅ フェーズ 1.6.4: インポートの確認（完了）
     - 必要なインポート（`getOperatorScheduleConsensusRef`, `onValue`）を追加完了
     - 不要なインポートの確認完了（一部は後方互換性のため保持）
@@ -620,10 +620,10 @@ scripts/events/
 12. ✅ フェーズ 1.7: スケジュールコンフリクト管理機能の整理（完了）
 13. ✅ フェーズ 1.8: スケジュールコンフリクトダイアログ機能の整理（完了）
 14. ✅ フェーズ 1.9: ホストコミットスケジュール管理機能の整理（完了）
-15. ⏳ フェーズ 1.10: ディスプレイロック機能の整理（未着手）
-16. ⏳ フェーズ 1.11: スケジュール合意トースト機能の整理（未着手）
-17. ⏳ フェーズ 1.12: ユーティリティ関数の整理（未着手）
-18. ⏳ フェーズ 1.13: 未使用コードの削除と最終クリーンアップ（未着手）
+15. ✅ フェーズ 1.10: ディスプレイロック機能の整理（完了）
+16. ✅ フェーズ 1.11: スケジュール合意トースト機能の整理（完了）
+17. ✅ フェーズ 1.12: ユーティリティ関数の整理（完了）
+18. ✅ フェーズ 1.13: 未使用コードの削除と最終クリーンアップ（完了）
 19. ⏳ テストを実施（未着手）
 
 ### 2. `scripts/question-admin/app.js` のリファクタリング（優先度: 高）
@@ -721,9 +721,9 @@ scripts/login/
 
 ### フェーズ 1: 重大な問題の解決（優先度: 高）
 
-1. **`scripts/events/app.js` のリファクタリング**（進行中）
+1. **`scripts/events/app.js` のリファクタリング**（完了）
 
-   - 期間: 2-3 週間（約 67% 完了、フェーズ 1.7 完了、全 18 ステップ中 12 ステップ完了）
+   - 期間: 2-3 週間（100% 完了、フェーズ 1.13 完了、全 18 ステップ完了）
    - 影響範囲: イベント管理画面全体
    - リスク: 高（大規模な変更）
    - **完了したフェーズ**:
@@ -783,7 +783,6 @@ scripts/login/
        - ✅ フェーズ 1.9.3: `syncHostPresence`の完全移行完了（`EventFirebaseManager`に移行、約 200 行削減、未使用インポート削除で約 2 行削減）
        - ✅ フェーズ 1.9.4: 関連メソッドの整理と最終確認完了
        - 合計削減: 約 296 行削減済み（`app.js` は 6,446 行、`firebase-manager.js` は 1,352 行）
-   - **残りのフェーズ**:
      - ✅ フェーズ 1.10: ディスプレイロック機能の整理（完了）
        - ✅ フェーズ 1.10.1: `DisplayLockManager`クラスの作成と`shouldAutoLockDisplaySchedule`の委譲完了
        - ✅ フェーズ 1.10.2: 残りのメソッドの移行完了（`requestDisplayScheduleLock`, `requestDisplayScheduleLockWithRetry`, `performDisplayLockAttempt`, `scheduleDisplayLockRetry`, `clearDisplayLockRetryTimer`, `clearPendingDisplayLock`）
@@ -801,10 +800,17 @@ scripts/login/
        - ✅ `extractTimePart` を `schedule-panel.js` に移行完了
        - 注: `getScheduleRecord` と `buildScheduleOptionLabel` は `scripts/events/app.js` には存在せず、`scripts/question-admin/app.js` に存在する関数です（`question-admin`のリファクタリング対象）
        - 実績: 約 40 行の削減（`app.js` は 6,085 行、`schedule-panel.js` は 391 行）
-     - ⏳ フェーズ 1.13: 未使用コードの削除と最終クリーンアップ（未着手）
-       - 未使用のインポート、関数、定数の削除
-       - コメントの整理
-       - 見積もり: 約 50-100 行の削減
+     - ✅ フェーズ 1.13: 未使用コードの削除と最終クリーンアップ（完了）
+       - ✅ フェーズ 1.13.1: 未使用インポートの削除完了（約 14 行削減）
+         - 削除したインポート: `get`, `update`, `remove`, `signInWithCredential`, `GoogleAuthProvider`, `getOperatorScheduleConsensusRef`, `runTransaction`, `toMillis`, `formatRelative`, `formatDateTimeLocal`, `collectParticipantTokens`, `isTelopMode`, `STAGE_SEQUENCE`, `STAGE_INFO`, `PANEL_STAGE_INFO`, `FOCUSABLE_SELECTOR`
+       - ✅ フェーズ 1.13.2: 未使用関数の確認完了（すべて使用中）
+         - `getTimerHost`, `parseCssPixels`, `extractTimePart` はすべて使用中
+       - ✅ フェーズ 1.13.3: 未使用定数の削除完了（約 1 行削減）
+         - 削除した定数: `PENDING_NAVIGATION_CLEAR_DELAY_MS`（`navigation-manager.js`で直接値を使用）
+       - ✅ フェーズ 1.13.4: コメントの整理完了
+         - 後方互換性のコメントは将来のリファクタリングの参考のため保持
+       - ✅ フェーズ 1.13.5: 最終確認とドキュメント更新完了
+       - 実績: 約 15 行の削減（`app.js` は 6,070 行）
 
 2. **`scripts/question-admin/app.js` のリファクタリング**（進行中）
    - 期間: 2-3 週間（約 62.5% 完了）
@@ -886,7 +892,7 @@ scripts/login/
 - ✅ `scripts/operator/` - リファクタリング済み、良好
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
-- ❌ `scripts/events/app.js` - 6,085 行、要改善（リファクタリング進行中、元の 10,180 行から約 4,095 行削減）
+- ❌ `scripts/events/app.js` - 6,070 行、要改善（リファクタリング進行中、元の 10,180 行から約 4,110 行削減）
 - ❌ `scripts/question-admin/app.js` - 5,752 行、要改善（リファクタリング進行中、元の 8,180 行から約 2,428 行削減）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
@@ -1267,5 +1273,5 @@ scripts/
 
 ---
 
-**最終更新**: 2025 年
-**バージョン**: 1.2.0
+**最終更新**: 2025 年 1 月
+**バージョン**: 1.3.0

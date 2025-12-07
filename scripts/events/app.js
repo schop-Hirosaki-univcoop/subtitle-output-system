@@ -4,29 +4,20 @@ import { queryDom } from "./dom.js";
 import {
   database,
   ref,
-  get,
   set,
-  update,
-  remove,
   auth,
   signOut,
-  signInWithCredential,
   onAuthStateChanged,
-  GoogleAuthProvider,
   serverTimestamp,
-  getOperatorScheduleConsensusRef,
-  onValue,
-  runTransaction
+  onValue
 } from "../operator/firebase.js";
 import { createApiClient } from "../operator/api-client.js";
-import { generateShortId, normalizeKey, toMillis } from "../question-admin/utils.js";
-import { formatRelative, formatScheduleRange } from "../operator/utils.js";
+import { generateShortId, normalizeKey } from "../question-admin/utils.js";
+import { formatScheduleRange } from "../operator/utils.js";
 import { LoadingTracker } from "./loading-tracker.js";
 import {
   ensureString,
-  formatDateTimeLocal,
-  logError,
-  collectParticipantTokens
+  logError
 } from "./helpers.js";
 import {
   createScheduleDialogCalendarController,
@@ -35,17 +26,12 @@ import {
 import {
   OPERATOR_MODE_TELOP,
   OPERATOR_MODE_SUPPORT,
-  normalizeOperatorMode,
-  isTelopMode
+  normalizeOperatorMode
 } from "../shared/operator-modes.js";
 import { normalizeScheduleId } from "../shared/channel-paths.js";
 import { goToLogin } from "../shared/routes.js";
 import {
-  STAGE_SEQUENCE,
-  STAGE_INFO,
-  PANEL_CONFIG,
-  PANEL_STAGE_INFO,
-  FOCUSABLE_SELECTOR
+  PANEL_CONFIG
 } from "./config.js";
 import { ToolCoordinator } from "./tool-coordinator.js";
 import { EventChat } from "./panels/chat-panel.js";
@@ -73,7 +59,6 @@ import {
   createPrintPreviewController
 } from "../shared/print-preview.js";
 
-const PENDING_NAVIGATION_CLEAR_DELAY_MS = 5_000;
 const AUTH_RESUME_FALLBACK_DELAY_MS = 4_000;
 /**
  * setTimeout/clearTimeout を持つホストオブジェクトを検出します。
