@@ -56,6 +56,7 @@ import { EventStateManager } from "./managers/state-manager.js";
 import { EventNavigationManager } from "./managers/navigation-manager.js";
 import { EventUIRenderer } from "./managers/ui-renderer.js";
 import { EventFirebaseManager } from "./managers/firebase-manager.js";
+import { DisplayLockManager } from "./managers/display-lock-manager.js";
 // consumeAuthTransfer, loadAuthPreflightContext, preflightContextMatchesUser は EventAuthManager に移行されました
 import { appendAuthDebugLog, replayAuthDebugLog } from "../shared/auth-debug-log.js";
 import {
@@ -75,17 +76,6 @@ import {
 const SCHEDULE_CONSENSUS_TOAST_MS = 3_000;
 const PENDING_NAVIGATION_CLEAR_DELAY_MS = 5_000;
 const AUTH_RESUME_FALLBACK_DELAY_MS = 4_000;
-const DISPLAY_LOCK_REASONS = new Set([
-  "schedule-commit",
-  "navigation",
-  "consensus-submit",
-  "consensus-apply",
-  "consensus-align",
-  "consensus-follow"
-]);
-const DISPLAY_LOCK_RETRY_DELAY_MS = 5_000;
-const DISPLAY_LOCK_RETRY_LIMIT = 6;
-
 /**
  * setTimeout/clearTimeout を持つホストオブジェクトを検出します。
  * ブラウザ/Nodeの両環境で安全にタイマーを利用するためのフォールバックです。
@@ -195,6 +185,8 @@ export class EventAdminApp {
     this.uiRenderer = new EventUIRenderer(this);
     // Firebase操作を初期化
     this.firebaseManager = new EventFirebaseManager(this);
+    // ディスプレイロック機能を初期化
+    this.displayLockManager = new DisplayLockManager(this);
     // プロパティを初期同期
     this.operatorPresenceEntries = this.firebaseManager.operatorPresenceEntries;
     this.operatorPresenceEventId = this.firebaseManager.operatorPresenceEventId;
@@ -249,8 +241,6 @@ export class EventAdminApp {
     this.operatorModeChoiceContext = null;
     this.operatorModeChoiceResolver = null;
     this.suppressScheduleConflictPromptOnce = false;
-    this.displayLockRetryTimer = 0;
-    this.pendingDisplayLockRequest = null;
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.updateChatLayoutMetrics = this.updateChatLayoutMetrics.bind(this);
     this.chatLayoutResizeObserver = null;
@@ -3383,166 +3373,38 @@ export class EventAdminApp {
   }
 
   shouldAutoLockDisplaySchedule(reason = "") {
-    const normalized = ensureString(reason);
-    return DISPLAY_LOCK_REASONS.has(normalized);
+    // DisplayLockManager に委譲
+    return this.displayLockManager.shouldAutoLockDisplaySchedule(reason);
   }
 
   async requestDisplayScheduleLock(scheduleId, { schedule = null, reason = "" } = {}) {
-    const eventId = ensureString(this.selectedEventId);
-    const normalizedScheduleId = ensureString(scheduleId);
-    if (!eventId || !normalizedScheduleId) {
-      this.logFlowState("ディスプレイ固定リクエストをスキップします", {
-        reason,
-        eventId,
-        scheduleId: normalizedScheduleId
-      });
-      this.clearPendingDisplayLock();
-      return false;
-    }
-    if (!this.api) {
-      this.logFlowState("API未初期化のためディスプレイ固定リクエストをスキップします", {
-        reason,
-        eventId,
-        scheduleId: normalizedScheduleId
-      });
-      this.clearPendingDisplayLock();
-      return false;
-    }
-    const scheduleLabel =
-      ensureString(schedule?.label) || ensureString(this.hostCommittedScheduleLabel) || normalizedScheduleId;
-    const operatorName =
-      ensureString(this.currentUser?.displayName) || ensureString(this.currentUser?.email) || "";
-    try {
-      await this.api.apiPost({
-        action: "lockDisplaySchedule",
-        eventId,
-        scheduleId: normalizedScheduleId,
-        scheduleLabel,
-        operatorName
-      });
-      this.logFlowState("ディスプレイのチャンネル固定を要求しました", {
-        eventId,
-        scheduleId: normalizedScheduleId,
-        scheduleLabel,
-        reason
-      });
-      this.clearPendingDisplayLock();
-      return true;
-    } catch (error) {
-      this.logFlowState("ディスプレイのチャンネル固定に失敗しました", {
-        eventId,
-        scheduleId: normalizedScheduleId,
-        scheduleLabel,
-        reason,
-        error: error instanceof Error ? error.message : String(error ?? "")
-      });
-      logError("Failed to lock display schedule", error);
-      this.scheduleDisplayLockRetry(normalizedScheduleId, { schedule, reason });
-      return false;
-    }
+    // DisplayLockManager に委譲
+    return this.displayLockManager.requestDisplayScheduleLock(scheduleId, { schedule, reason });
   }
 
   requestDisplayScheduleLockWithRetry(scheduleId, { schedule = null, reason = "" } = {}) {
-    const eventId = ensureString(this.selectedEventId);
-    const normalizedScheduleId = ensureString(scheduleId);
-    if (!eventId || !normalizedScheduleId) {
-      this.clearPendingDisplayLock();
-      return;
-    }
-    const attempt = {
-      eventId,
-      scheduleId: normalizedScheduleId,
-      reason: ensureString(reason),
-      schedule: schedule || null,
-      attempts: 0
-    };
-    this.pendingDisplayLockRequest = attempt;
-    this.clearDisplayLockRetryTimer();
-    this.logFlowState("ディスプレイ固定の自動リクエストを開始します", {
-      eventId,
-      scheduleId: normalizedScheduleId,
-      reason: ensureString(reason)
-    });
-    void this.performDisplayLockAttempt();
+    // DisplayLockManager に委譲
+    return this.displayLockManager.requestDisplayScheduleLockWithRetry(scheduleId, { schedule, reason });
   }
 
   async performDisplayLockAttempt() {
-    const pending = this.pendingDisplayLockRequest;
-    if (!pending) {
-      return;
-    }
-    const eventId = ensureString(this.selectedEventId);
-    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
-    if (!eventId || !committedScheduleId || committedScheduleId !== pending.scheduleId) {
-      this.clearPendingDisplayLock();
-      return;
-    }
-    const scheduleForLock =
-      pending.schedule || this.schedules.find((item) => item.id === pending.scheduleId) || null;
-    const success = await this.requestDisplayScheduleLock(pending.scheduleId, {
-      schedule: scheduleForLock,
-      reason: pending.reason
-    });
-    if (success) {
-      return;
-    }
-    const attempts = Number(pending.attempts || 0) + 1;
-    pending.attempts = attempts;
-    if (attempts >= DISPLAY_LOCK_RETRY_LIMIT) {
-      this.logFlowState("ディスプレイ固定の自動再試行を終了します", {
-        eventId,
-        scheduleId: pending.scheduleId,
-        reason: pending.reason,
-        attempts
-      });
-      this.clearPendingDisplayLock();
-      return;
-    }
+    // DisplayLockManager に委譲
+    return this.displayLockManager.performDisplayLockAttempt();
   }
 
   scheduleDisplayLockRetry(scheduleId, { schedule = null, reason = "" } = {}) {
-    const pending = this.pendingDisplayLockRequest;
-    const eventId = ensureString(this.selectedEventId);
-    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
-    if (!eventId || !committedScheduleId || committedScheduleId !== ensureString(scheduleId)) {
-      this.clearPendingDisplayLock();
-      return;
-    }
-    if (!pending) {
-      this.pendingDisplayLockRequest = {
-        eventId,
-        scheduleId: ensureString(scheduleId),
-        reason: ensureString(reason),
-        schedule: schedule || null,
-        attempts: 0
-      };
-    }
-    const timerHost = getTimerHost();
-    this.clearDisplayLockRetryTimer();
-    this.displayLockRetryTimer = timerHost.setTimeout(() => {
-      this.displayLockRetryTimer = 0;
-      void this.performDisplayLockAttempt();
-    }, DISPLAY_LOCK_RETRY_DELAY_MS);
-    this.logFlowState("ディスプレイ固定を再試行します", {
-      eventId,
-      scheduleId: ensureString(scheduleId),
-      reason: ensureString(reason),
-      attempts: this.pendingDisplayLockRequest?.attempts || 0
-    });
+    // DisplayLockManager に委譲
+    return this.displayLockManager.scheduleDisplayLockRetry(scheduleId, { schedule, reason });
   }
 
   clearDisplayLockRetryTimer() {
-    if (!this.displayLockRetryTimer) {
-      return;
-    }
-    const timerHost = getTimerHost();
-    timerHost.clearTimeout(this.displayLockRetryTimer);
-    this.displayLockRetryTimer = 0;
+    // DisplayLockManager に委譲
+    return this.displayLockManager.clearDisplayLockRetryTimer();
   }
 
   clearPendingDisplayLock() {
-    this.pendingDisplayLockRequest = null;
-    this.clearDisplayLockRetryTimer();
+    // DisplayLockManager に委譲
+    return this.displayLockManager.clearPendingDisplayLock();
   }
 
   getHostPresenceStorage() {
@@ -4216,6 +4078,10 @@ export class EventAdminApp {
     if (this.stateManager) {
       this.stateManager.cleanup();
     }
+    // DisplayLockManager のクリーンアップ
+    if (this.displayLockManager) {
+      this.displayLockManager.cleanup();
+    }
     this.teardownChatLayoutObservers();
     this.stopChatReadListener();
     this.chat.dispose();
@@ -4878,6 +4744,10 @@ export class EventAdminApp {
     // EventStateManager のクリーンアップ
     if (this.stateManager) {
       this.stateManager.cleanup();
+    }
+    // DisplayLockManager のクリーンアップ
+    if (this.displayLockManager) {
+      this.displayLockManager.cleanup();
     }
     this.teardownChatLayoutObservers();
     this.stopChatReadListener();

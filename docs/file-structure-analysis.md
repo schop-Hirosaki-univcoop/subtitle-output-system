@@ -41,7 +41,7 @@
 
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
-| `scripts/events/app.js`                       | 6,446 | ❌ 要改善（基準の約 4.3 倍、リファクタリング進行中） |
+| `scripts/events/app.js`                       | 6,316 | ❌ 要改善（基準の約 4.2 倍、リファクタリング進行中） |
 | `scripts/question-admin/app.js`               | 5,752 | ❌ 要改善（基準の約 3.8 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
@@ -60,7 +60,7 @@
 
 2. **巨大な単一ファイル**
 
-   - `scripts/events/app.js` - 6,446 行（リファクタリング進行中、元の 10,180 行から約 3,734 行削減）
+   - `scripts/events/app.js` - 6,316 行（リファクタリング進行中、元の 10,180 行から約 3,864 行削減）
    - `scripts/question-admin/app.js` - 5,752 行（リファクタリング進行中、元の 8,180 行から約 2,428 行削減）
 
 3. **中規模の単一ファイル**
@@ -189,8 +189,9 @@ scripts/events/
   - ✅ `EventAuthManager` - 認証管理（384 行）完了
   - ✅ `EventStateManager` - 状態管理（315 行）完了
   - ✅ `EventNavigationManager` - 画面遷移制御（499 行、完了）
-  - ✅ `EventUIRenderer` - UI 描画（643 行、完了）
-  - ✅ `EventFirebaseManager` - Firebase 操作（833 行、基本実装完了）
+  - ✅ `EventUIRenderer` - UI 描画（798 行、完了）
+  - ✅ `EventFirebaseManager` - Firebase 操作（1,352 行、基本実装完了）
+  - ✅ `DisplayLockManager` - ディスプレイロック機能（255 行、完了）
 - `panels/gl-panel.js` を機能別に分割
 
 ---
@@ -418,7 +419,7 @@ scripts/
 
 ### 重大な問題（優先度: 高）
 
-1. **`scripts/events/app.js` が 6,446 行（リファクタリング進行中）**
+1. **`scripts/events/app.js` が 6,316 行（リファクタリング進行中）**
 
    - 開発標準の約 4.3 倍（元の 10,180 行から約 3,734 行削減）
    - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
@@ -776,16 +777,19 @@ scripts/login/
        - Firebase 関連メソッドの移行完了: `confirmScheduleConsensus`, `requestScheduleConflictPrompt` → `EventFirebaseManager`（約 233 行削減）
        - 合計削減: 約 860 行（`app.js` は 6,723 行、`ui-renderer.js` は 798 行、`firebase-manager.js` は 1,085 行）
        - その後、フェーズ 1.9 で追加削減: 約 296 行（`app.js` は 6,446 行、`firebase-manager.js` は 1,352 行）
-   - **残りのフェーズ**:
      - ✅ フェーズ 1.9: ホストコミットスケジュール管理機能の整理（完了）
        - ✅ フェーズ 1.9.1: `setHostCommittedSchedule`の重複削除完了（約 64 行削減）
        - ✅ フェーズ 1.9.2: `setHostCommittedSchedule`の部分移行完了（Firebase 関連を`EventFirebaseManager`に移行、約 30 行削減）
        - ✅ フェーズ 1.9.3: `syncHostPresence`の完全移行完了（`EventFirebaseManager`に移行、約 200 行削減、未使用インポート削除で約 2 行削減）
        - ✅ フェーズ 1.9.4: 関連メソッドの整理と最終確認完了
        - 合計削減: 約 296 行削減済み（`app.js` は 6,446 行、`firebase-manager.js` は 1,352 行）
-     - ⏳ フェーズ 1.10: ディスプレイロック機能の整理（未着手）
-       - `clearPendingDisplayLock`, `requestDisplayScheduleLockWithRetry` などの整理
-       - 見積もり: 約 50-100 行の削減
+   - **残りのフェーズ**:
+     - ✅ フェーズ 1.10: ディスプレイロック機能の整理（完了）
+       - ✅ フェーズ 1.10.1: `DisplayLockManager`クラスの作成と`shouldAutoLockDisplaySchedule`の委譲完了
+       - ✅ フェーズ 1.10.2: 残りのメソッドの移行完了（`requestDisplayScheduleLock`, `requestDisplayScheduleLockWithRetry`, `performDisplayLockAttempt`, `scheduleDisplayLockRetry`, `clearDisplayLockRetryTimer`, `clearPendingDisplayLock`）
+       - ✅ フェーズ 1.10.3: 定数の削除とプロパティの同期完了
+       - ✅ フェーズ 1.10.4: 最終確認とドキュメント更新完了
+       - 実績: 約 134 行の削減（`app.js` は 6,316 行、`display-lock-manager.js` は 255 行）
      - ⏳ フェーズ 1.11: スケジュール合意トースト機能の整理（未着手）
        - `showScheduleConsensusToast`, `hideScheduleConsensusToast`, `maybeClearScheduleConsensus` などの整理
        - 見積もり: 約 50-100 行の削減
@@ -877,7 +881,7 @@ scripts/login/
 - ✅ `scripts/operator/` - リファクタリング済み、良好
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
-- ❌ `scripts/events/app.js` - 6,446 行、要改善（リファクタリング進行中、元の 10,180 行から約 3,734 行削減）
+- ❌ `scripts/events/app.js` - 6,316 行、要改善（リファクタリング進行中、元の 10,180 行から約 3,864 行削減）
 - ❌ `scripts/question-admin/app.js` - 5,752 行、要改善（リファクタリング進行中、元の 8,180 行から約 2,428 行削減）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
