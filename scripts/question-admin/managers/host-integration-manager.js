@@ -24,9 +24,6 @@ export class HostIntegrationManager {
     this.selectSchedule = context.selectSchedule;
     this.refreshScheduleLocationHistory = context.refreshScheduleLocationHistory;
     this.populateScheduleLocationOptions = context.populateScheduleLocationOptions;
-    this.hostSelectionSignature = context.hostSelectionSignature;
-    this.stopHostSelectionBridge = context.stopHostSelectionBridge;
-    this.startHostSelectionBridge = context.startHostSelectionBridge;
     
     // 内部状態
     this.embedReadyDeferred = null;
@@ -521,6 +518,154 @@ export class HostIntegrationManager {
       console.error("questionAdminEmbed.setSelection failed", error);
       throw error;
     }
+  }
+
+  /**
+   * ホスト選択シグネチャの生成
+   * @param {Object} selection - 選択オブジェクト
+   * @returns {string}
+   */
+  hostSelectionSignature(selection = {}) {
+    const eventId = this.normalizeKey(selection.eventId || "");
+    const scheduleId = this.normalizeKey(selection.scheduleId || "");
+    const eventName = selection.eventName != null ? String(selection.eventName) : "";
+    const scheduleLabel = selection.scheduleLabel != null ? String(selection.scheduleLabel) : "";
+    const scheduleLocation = selection.location != null ? String(selection.location) : "";
+    const startAt = selection.startAt != null ? String(selection.startAt) : "";
+    const endAt = selection.endAt != null ? String(selection.endAt) : "";
+    return [eventId, scheduleId, eventName, scheduleLabel, scheduleLocation, startAt, endAt].join("::");
+  }
+
+  /**
+   * ホスト選択要素の取得
+   * @returns {Element|null}
+   */
+  getHostSelectionElement() {
+    if (typeof document === "undefined") {
+      return null;
+    }
+    return document.querySelector("[data-tool='participants']");
+  }
+
+  /**
+   * ホスト選択データセットの読み取り
+   * @param {Element} target - ターゲット要素
+   * @returns {Object|null}
+   */
+  readHostSelectionDataset(target) {
+    if (!target) return null;
+    const dataset = target.dataset || {};
+    const eventId = this.normalizeKey(dataset.expectedEventId || "");
+    if (!eventId) {
+      return null;
+    }
+    return {
+      eventId,
+      scheduleId: this.normalizeKey(dataset.expectedScheduleId || ""),
+      eventName: dataset.expectedEventName ? String(dataset.expectedEventName) : "",
+      scheduleLabel: dataset.expectedScheduleLabel ? String(dataset.expectedScheduleLabel) : "",
+      location: dataset.expectedScheduleLocation ? String(dataset.expectedScheduleLocation) : "",
+      startAt: dataset.expectedStartAt ? String(dataset.expectedStartAt) : "",
+      endAt: dataset.expectedEndAt ? String(dataset.expectedEndAt) : ""
+    };
+  }
+
+  /**
+   * ホスト選択データセットの適用
+   */
+  async applyHostSelectionFromDataset() {
+    if (this.isHostAttached()) {
+      return;
+    }
+    const selection = this.readHostSelectionDataset(this.getHostSelectionElement());
+    if (!selection) {
+      this.hostSelectionBridge.lastSignature = "";
+      this.hostSelectionBridge.pendingSignature = "";
+      return;
+    }
+    const signature = this.hostSelectionSignature(selection);
+    const selectedEventKey = this.normalizeKey(this.state.selectedEventId || "");
+    const selectedScheduleKey = this.normalizeKey(this.state.selectedScheduleId || "");
+    const matchesCurrentSelection = Boolean(
+      this.normalizeKey(selection.eventId || "") === selectedEventKey &&
+      this.normalizeKey(selection.scheduleId || "") === selectedScheduleKey &&
+      selectedEventKey &&
+      selectedScheduleKey
+    );
+    const signatureUnchanged = Boolean(
+      signature &&
+      (signature === this.hostSelectionBridge.lastSignature || signature === this.hostSelectionBridge.pendingSignature)
+    );
+    if (signatureUnchanged && matchesCurrentSelection) {
+      return;
+    }
+    this.hostSelectionBridge.pendingSignature = signature;
+    try {
+      await this.applySelectionContext(selection);
+    } catch (error) {
+      console.error("Failed to sync selection from host dataset", error);
+    } finally {
+      if (this.hostSelectionBridge.pendingSignature === signature) {
+        this.hostSelectionBridge.pendingSignature = "";
+      }
+    }
+  }
+
+  /**
+   * ホスト選択ブリッジの開始
+   */
+  startHostSelectionBridge() {
+    if (this.isHostAttached()) {
+      return;
+    }
+    if (typeof document === "undefined") {
+      return;
+    }
+    const target = this.getHostSelectionElement();
+    if (!target) {
+      return;
+    }
+    if (typeof MutationObserver === "function" && !this.hostSelectionBridge.observer) {
+      const observer = new MutationObserver(() => this.applyHostSelectionFromDataset());
+      observer.observe(target, {
+        attributes: true,
+        attributeFilter: this.HOST_SELECTION_ATTRIBUTE_KEYS
+      });
+      this.hostSelectionBridge.observer = observer;
+    }
+    this.applyHostSelectionFromDataset();
+  }
+
+  /**
+   * ホスト選択ブリッジの停止
+   */
+  stopHostSelectionBridge() {
+    if (this.hostSelectionBridge.observer) {
+      try {
+        this.hostSelectionBridge.observer.disconnect();
+      } catch (error) {
+        console.warn("Failed to disconnect host selection observer", error);
+      }
+      this.hostSelectionBridge.observer = null;
+    }
+  }
+
+  /**
+   * ホスト選択ブリッジのリセット
+   */
+  resetHostSelectionBridge() {
+    this.hostSelectionBridge.lastSignature = "";
+    this.hostSelectionBridge.pendingSignature = "";
+  }
+
+  /**
+   * 埋め込み準備完了のリセット
+   */
+  resetEmbedReady() {
+    if (this.embedReadyDeferred?.resolve) {
+      this.embedReadyDeferred.resolve();
+    }
+    this.embedReadyDeferred = null;
   }
 }
 

@@ -82,6 +82,7 @@ import {
 import { PrintManager } from "./managers/print-manager.js";
 import { CsvManager } from "./managers/csv-manager.js";
 import { EventManager } from "./managers/event-manager.js";
+import { StateManager } from "./managers/state-manager.js";
 import { ParticipantManager } from "./managers/participant-manager.js";
 import { ScheduleManager } from "./managers/schedule-manager.js";
 import { MailManager } from "./managers/mail-manager.js";
@@ -100,6 +101,7 @@ let mailManager = null;
 let authManager = null;
 let relocationManager = null;
 let hostIntegrationManager = null;
+let stateManager = null;
 
 const glDataFetchCache = new Map();
 
@@ -139,31 +141,19 @@ function isEmbeddedMode() {
 }
 
 function cloneParticipantEntry(entry) {
-  if (!entry || typeof entry !== "object") {
-    return {};
+  // StateManager に委譲
+  if (!stateManager) {
+    throw new Error("StateManager is not initialized");
   }
-  if (typeof structuredClone === "function") {
-    try {
-      return structuredClone(entry);
-    } catch (error) {
-      console.warn("Failed to structuredClone participant entry, falling back to JSON", error);
-    }
-  }
-  try {
-    return JSON.parse(JSON.stringify(entry));
-  } catch (error) {
-    console.warn("Failed to JSON-clone participant entry", error);
-    return { ...entry };
-  }
+  return stateManager.cloneParticipantEntry(entry);
 }
 
 function captureParticipantBaseline(entries = state.participants, options = {}) {
-  const { ready = true } = options || {};
-  const list = Array.isArray(entries) ? entries : [];
-  state.savedParticipantEntries = list.map(entry => cloneParticipantEntry(entry));
-  state.savedParticipants = snapshotParticipantList(list);
-  state.lastSavedSignature = signatureForEntries(list);
-  state.participantBaselineReady = Boolean(ready);
+  // StateManager に委譲
+  if (!stateManager) {
+    throw new Error("StateManager is not initialized");
+  }
+  return stateManager.captureParticipantBaseline(entries, options);
 }
 
 let embedReadyDeferred = null;
@@ -195,19 +185,29 @@ const NO_TEAM_GROUP_KEY = "__no_team__";
 // AUTHORIZED_EMAIL_CACHE_MS, cachedAuthorizedEmails, cachedAuthorizedFetchedAt, authorizedEmailsPromise は AuthManager に移行されました
 
 function getMissingSelectionStatusMessage() {
-  return isEmbeddedMode()
-    ? "イベントコントロールセンターで対象の日程を選択してください。"
-    : "日程を選択してください。";
+  // StateManager に委譲
+  if (!stateManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    return isEmbeddedMode()
+      ? "イベントコントロールセンターで対象の日程を選択してください。"
+      : "日程を選択してください。";
+  }
+  return stateManager.getMissingSelectionStatusMessage();
 }
 
 function getSelectionRequiredMessage(prefix = "") {
-  const requirement = isEmbeddedMode()
-    ? "イベントコントロールセンターで対象の日程を選択してください。"
-    : "イベントと日程を選択してください。";
-  if (!prefix) {
-    return requirement;
+  // StateManager に委譲
+  if (!stateManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    const requirement = isEmbeddedMode()
+      ? "イベントコントロールセンターで対象の日程を選択してください。"
+      : "イベントと日程を選択してください。";
+    if (!prefix) {
+      return requirement;
+    }
+    return `${prefix}${requirement}`;
   }
-  return `${prefix}${requirement}`;
+  return stateManager.getSelectionRequiredMessage(prefix);
 }
 
 // embedReadyDeferred, hostSelectionBridge, lastSelectionBroadcastSignature, hostIntegration は HostIntegrationManager に移行されました（段階4-6で完全移行予定）
@@ -1133,32 +1133,27 @@ function applyRelocationDraft(entry, destinationScheduleId, destinationTeamNumbe
 }
 
 function hasUnsavedChanges() {
-  return signatureForEntries(state.participants) !== state.lastSavedSignature;
+  // StateManager に委譲
+  if (!stateManager) {
+    throw new Error("StateManager is not initialized");
+  }
+  return stateManager.hasUnsavedChanges();
 }
 
 function setUploadStatus(message, variant = "") {
-  const normalized = normalizeKey(message);
-  if (normalized && UPLOAD_STATUS_PLACEHOLDERS.has(normalized)) {
-    message = getMissingSelectionStatusMessage();
+  // StateManager に委譲
+  if (!stateManager) {
+    throw new Error("StateManager is not initialized");
   }
-  state.lastUploadStatusMessage = message;
-  state.lastUploadStatusVariant = variant || "";
-  if (!dom.uploadStatus) return;
-  dom.uploadStatus.textContent = message;
-  dom.uploadStatus.classList.remove("status-pill--success", "status-pill--error");
-  if (variant === "success") {
-    dom.uploadStatus.classList.add("status-pill--success");
-  } else if (variant === "error") {
-    dom.uploadStatus.classList.add("status-pill--error");
-  }
+  return stateManager.setUploadStatus(message, variant);
 }
 
 function isPlaceholderUploadStatus() {
-  const message = normalizeKey(state.lastUploadStatusMessage || "");
-  if (!message) {
-    return true;
+  // StateManager に委譲
+  if (!stateManager) {
+    throw new Error("StateManager is not initialized");
   }
-  return UPLOAD_STATUS_PLACEHOLDERS.has(message);
+  return stateManager.isPlaceholderUploadStatus();
 }
 
 const confirmState = {
@@ -3280,36 +3275,20 @@ function maybeFocusInitialSection() {
 }
 
 function resetState() {
-  state.events = [];
-  state.participants = [];
-  state.selectedEventId = null;
-  state.selectedScheduleId = null;
-  state.mailSending = false;
+  // StateManager に委譲（状態のリセット）
+  if (!stateManager) {
+    throw new Error("StateManager is not initialized");
+  }
+  stateManager.resetState();
+  
   // HostIntegrationManager に委譲
   if (hostIntegrationManager) {
     hostIntegrationManager.resetSelectionBroadcastSignature();
   } else {
     lastSelectionBroadcastSignature = "";
   }
-  state.participantTokenMap = new Map();
-  state.duplicateMatches = new Map();
-  state.duplicateGroups = new Map();
-  captureParticipantBaseline([], { ready: false });
-  state.eventParticipantCache = new Map();
-  state.teamAssignments = new Map();
-  state.scheduleContextOverrides = new Map();
-  state.scheduleLocationHistory = new Set();
-  state.editingParticipantId = null;
-  state.editingRowKey = null;
-  state.selectedParticipantId = "";
-  state.selectedParticipantRowKey = "";
-  state.pendingRelocations = new Map();
-  state.relocationDraftOriginals = new Map();
-  state.relocationPromptTargets = [];
-  state.initialSelection = null;
-  state.initialSelectionApplied = false;
-  state.initialSelectionNotice = null;
-  state.initialFocusTarget = "";
+  
+  // UI更新とその他のリセット処理
   resetTokenState();
   renderEvents();
   renderSchedules();
@@ -3966,110 +3945,87 @@ function initAuthWatcher() {
 }
 
 function hostSelectionSignature(selection = {}) {
-  const eventId = normalizeKey(selection.eventId || "");
-  const scheduleId = normalizeKey(selection.scheduleId || "");
-  const eventName = selection.eventName != null ? String(selection.eventName) : "";
-  const scheduleLabel = selection.scheduleLabel != null ? String(selection.scheduleLabel) : "";
-  const scheduleLocation = selection.location != null ? String(selection.location) : "";
-  const startAt = selection.startAt != null ? String(selection.startAt) : "";
-  const endAt = selection.endAt != null ? String(selection.endAt) : "";
-  return [eventId, scheduleId, eventName, scheduleLabel, scheduleLocation, startAt, endAt].join("::");
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    const eventId = normalizeKey(selection.eventId || "");
+    const scheduleId = normalizeKey(selection.scheduleId || "");
+    const eventName = selection.eventName != null ? String(selection.eventName) : "";
+    const scheduleLabel = selection.scheduleLabel != null ? String(selection.scheduleLabel) : "";
+    const scheduleLocation = selection.location != null ? String(selection.location) : "";
+    const startAt = selection.startAt != null ? String(selection.startAt) : "";
+    const endAt = selection.endAt != null ? String(selection.endAt) : "";
+    return [eventId, scheduleId, eventName, scheduleLabel, scheduleLocation, startAt, endAt].join("::");
+  }
+  return hostIntegrationManager.hostSelectionSignature(selection);
 }
 
 function getHostSelectionElement() {
-  if (typeof document === "undefined") {
-    return null;
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    if (typeof document === "undefined") {
+      return null;
+    }
+    return document.querySelector("[data-tool='participants']");
   }
-  return document.querySelector("[data-tool='participants']");
+  return hostIntegrationManager.getHostSelectionElement();
 }
 
 function readHostSelectionDataset(target) {
-  if (!target) return null;
-  const dataset = target.dataset || {};
-  const eventId = normalizeKey(dataset.expectedEventId || "");
-  if (!eventId) {
-    return null;
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    if (!target) return null;
+    const dataset = target.dataset || {};
+    const eventId = normalizeKey(dataset.expectedEventId || "");
+    if (!eventId) {
+      return null;
+    }
+    return {
+      eventId,
+      scheduleId: normalizeKey(dataset.expectedScheduleId || ""),
+      eventName: dataset.expectedEventName ? String(dataset.expectedEventName) : "",
+      scheduleLabel: dataset.expectedScheduleLabel ? String(dataset.expectedScheduleLabel) : "",
+      location: dataset.expectedScheduleLocation ? String(dataset.expectedScheduleLocation) : "",
+      startAt: dataset.expectedStartAt ? String(dataset.expectedStartAt) : "",
+      endAt: dataset.expectedEndAt ? String(dataset.expectedEndAt) : ""
+    };
   }
-  return {
-    eventId,
-    scheduleId: normalizeKey(dataset.expectedScheduleId || ""),
-    eventName: dataset.expectedEventName ? String(dataset.expectedEventName) : "",
-    scheduleLabel: dataset.expectedScheduleLabel ? String(dataset.expectedScheduleLabel) : "",
-    location: dataset.expectedScheduleLocation ? String(dataset.expectedScheduleLocation) : "",
-    startAt: dataset.expectedStartAt ? String(dataset.expectedStartAt) : "",
-    endAt: dataset.expectedEndAt ? String(dataset.expectedEndAt) : ""
-  };
+  return hostIntegrationManager.readHostSelectionDataset(target);
 }
 
 function applyHostSelectionFromDataset() {
-  if (isHostAttached()) {
-    return;
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    throw new Error("HostIntegrationManager is not initialized");
   }
-  const selection = readHostSelectionDataset(getHostSelectionElement());
-  if (!selection) {
-    hostSelectionBridge.lastSignature = "";
-    hostSelectionBridge.pendingSignature = "";
-    return;
-  }
-  const signature = hostSelectionSignature(selection);
-  const selectedEventKey = normalizeKey(state.selectedEventId || "");
-  const selectedScheduleKey = normalizeKey(state.selectedScheduleId || "");
-  const matchesCurrentSelection = Boolean(
-    normalizeKey(selection.eventId || "") === selectedEventKey &&
-    normalizeKey(selection.scheduleId || "") === selectedScheduleKey &&
-    selectedEventKey &&
-    selectedScheduleKey
-  );
-  const signatureUnchanged = Boolean(
-    signature &&
-    (signature === hostSelectionBridge.lastSignature || signature === hostSelectionBridge.pendingSignature)
-  );
-  if (signatureUnchanged && matchesCurrentSelection) {
-    return;
-  }
-  hostSelectionBridge.pendingSignature = signature;
-  applySelectionContext(selection)
-    .catch((error) => {
-      console.error("Failed to sync selection from host dataset", error);
-    })
-    .finally(() => {
-      if (hostSelectionBridge.pendingSignature === signature) {
-        hostSelectionBridge.pendingSignature = "";
-      }
-    });
+  return hostIntegrationManager.applyHostSelectionFromDataset();
 }
 
 function startHostSelectionBridge() {
-  if (isHostAttached()) {
-    return;
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    throw new Error("HostIntegrationManager is not initialized");
   }
-  if (typeof document === "undefined") {
-    return;
-  }
-  const target = getHostSelectionElement();
-  if (!target) {
-    return;
-  }
-  if (typeof MutationObserver === "function" && !hostSelectionBridge.observer) {
-    const observer = new MutationObserver(() => applyHostSelectionFromDataset());
-    observer.observe(target, {
-      attributes: true,
-      attributeFilter: HOST_SELECTION_ATTRIBUTE_KEYS
-    });
-    hostSelectionBridge.observer = observer;
-  }
-  applyHostSelectionFromDataset();
+  hostIntegrationManager.startHostSelectionBridge();
 }
 
 function stopHostSelectionBridge() {
-  if (hostSelectionBridge.observer) {
-    try {
-      hostSelectionBridge.observer.disconnect();
-    } catch (error) {
-      console.warn("Failed to disconnect host selection observer", error);
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    if (hostSelectionBridge.observer) {
+      try {
+        hostSelectionBridge.observer.disconnect();
+      } catch (error) {
+        console.warn("Failed to disconnect host selection observer", error);
+      }
+      hostSelectionBridge.observer = null;
     }
-    hostSelectionBridge.observer = null;
+    return;
   }
+  hostIntegrationManager.stopHostSelectionBridge();
 }
 
 async function applySelectionContext(selection = {}) {
@@ -4110,6 +4066,18 @@ function init() {
   
   printManager.hydrateSettingsFromStorage();
   
+  // StateManager を初期化
+  stateManager = new StateManager({
+    state,
+    dom,
+    // 依存関数と定数
+    signatureForEntries,
+    snapshotParticipantList,
+    normalizeKey,
+    isEmbeddedMode,
+    UPLOAD_STATUS_PLACEHOLDERS
+  });
+
   // CsvManager を初期化
   csvManager = new CsvManager({
     dom,
@@ -4449,17 +4417,23 @@ if (typeof window !== "undefined") {
         setAuthUi(false);
         resetState();
         detachHost();
-        hostSelectionBridge.lastSignature = "";
-        hostSelectionBridge.pendingSignature = "";
-        applyHostSelectionFromDataset();
+        if (hostIntegrationManager) {
+          hostIntegrationManager.resetHostSelectionBridge();
+          applyHostSelectionFromDataset();
+          hostIntegrationManager.resetEmbedReady();
+        } else {
+          hostSelectionBridge.lastSignature = "";
+          hostSelectionBridge.pendingSignature = "";
+          applyHostSelectionFromDataset();
+          if (embedReadyDeferred?.resolve) {
+            embedReadyDeferred.resolve();
+          }
+          embedReadyDeferred = null;
+        }
         if (dom.loginButton) {
           dom.loginButton.disabled = false;
           dom.loginButton.classList.remove("is-busy");
         }
-        if (embedReadyDeferred?.resolve) {
-          embedReadyDeferred.resolve();
-        }
-        embedReadyDeferred = null;
       } catch (error) {
         console.error("questionAdminEmbed.reset failed", error);
       }
