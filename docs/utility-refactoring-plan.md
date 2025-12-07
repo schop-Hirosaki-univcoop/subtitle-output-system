@@ -181,17 +181,17 @@
 
 ---
 
-### フェーズ 15: スケジュール関連の関数の整理（ScheduleUtilityManager）
+### フェーズ 15: スケジュール関連の関数の整理（ScheduleUtilityManager）✅ 完了
 
 **対象関数**:
 
-- `getScheduleRecord()` - スケジュールレコードの取得
-- `buildScheduleOptionLabel()` - スケジュールオプションラベルの構築
-- `refreshScheduleLocationHistory()` - スケジュール場所履歴の更新
-- `populateScheduleLocationOptions()` - スケジュール場所オプションの生成
-- `finalizeEventLoad()` - イベント読み込みの確定
+- ✅ `getScheduleRecord()` - スケジュールレコードの取得（約 8 行削減、段階 1 完了）
+- ✅ `buildScheduleOptionLabel()` - スケジュールオプションラベルの構築（約 11 行削減、段階 1 完了）
+- ✅ `refreshScheduleLocationHistory()` - スケジュール場所履歴の更新（約 29 行削減、段階 2 完了）
+- ✅ `populateScheduleLocationOptions()` - スケジュール場所オプションの生成（約 42 行削減、段階 2 完了）
+- ✅ `finalizeEventLoad()` - イベント読み込みの確定（約 115 行削減、段階 3 完了）
 
-**推定行数**: 約 150-200 行
+**実績行数**: 約 205 行削減（`app.js` は 3,461 行、`schedule-utility-manager.js` は 252 行、段階 1-3 完了）
 
 **依存関係**:
 

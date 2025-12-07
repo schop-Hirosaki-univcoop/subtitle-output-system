@@ -82,6 +82,7 @@ import {
 import { PrintManager } from "./managers/print-manager.js";
 import { CsvManager } from "./managers/csv-manager.js";
 import { EventManager } from "./managers/event-manager.js";
+import { ScheduleUtilityManager } from "./managers/schedule-utility-manager.js";
 import { StateManager } from "./managers/state-manager.js";
 import { UIManager } from "./managers/ui-manager.js";
 import { ConfirmDialogManager } from "./managers/confirm-dialog-manager.js";
@@ -267,75 +268,19 @@ function cloneHostEvent(event) {
 }
 
 function refreshScheduleLocationHistory() {
-  const history = new Set();
-  if (Array.isArray(state.events)) {
-    state.events.forEach((event) => {
-      if (!Array.isArray(event?.schedules)) {
-        return;
-      }
-      event.schedules.forEach((schedule) => {
-        const location = typeof schedule?.location === "string"
-          ? schedule.location.trim()
-          : String(schedule?.location || "").trim();
-        if (location) {
-          history.add(location);
-        }
-      });
-    });
+  // ScheduleUtilityManager に委譲
+  if (!scheduleUtilityManager) {
+    throw new Error("ScheduleUtilityManager is not initialized");
   }
-  if (state.scheduleContextOverrides instanceof Map) {
-    state.scheduleContextOverrides.forEach((override) => {
-      const location = typeof override?.location === "string"
-        ? override.location.trim()
-        : String(override?.location || "").trim();
-      if (location) {
-        history.add(location);
-      }
-    });
-  }
-  state.scheduleLocationHistory = history;
+  return scheduleUtilityManager.refreshScheduleLocationHistory();
 }
 
 function populateScheduleLocationOptions(preferred = "") {
-  const list = dom.scheduleLocationList;
-  if (!list) {
-    return;
+  // ScheduleUtilityManager に委譲
+  if (!scheduleUtilityManager) {
+    throw new Error("ScheduleUtilityManager is not initialized");
   }
-  const normalize = (value) => (value == null ? "" : String(value).trim());
-  const options = new Set();
-
-  if (state.scheduleLocationHistory instanceof Set) {
-    state.scheduleLocationHistory.forEach((value) => {
-      const location = normalize(value);
-      if (location) {
-        options.add(location);
-      }
-    });
-  }
-
-  const selectedEvent = state.events.find(evt => evt.id === state.selectedEventId);
-  if (selectedEvent?.schedules) {
-    selectedEvent.schedules.forEach((schedule) => {
-      const location = normalize(schedule?.location);
-      if (location) {
-        options.add(location);
-      }
-    });
-  }
-
-  const preferredLocation = normalize(preferred);
-  if (preferredLocation) {
-    options.add(preferredLocation);
-  }
-
-  list.innerHTML = "";
-  Array.from(options)
-    .sort((a, b) => a.localeCompare(b, "ja", { numeric: true, sensitivity: "base" }))
-    .forEach((value) => {
-      const option = document.createElement("option");
-      option.value = value;
-      list.appendChild(option);
-    });
+  return scheduleUtilityManager.populateScheduleLocationOptions(preferred);
 }
 
 function finalizeEventLoad({
@@ -345,113 +290,17 @@ function finalizeEventLoad({
   previousEventsSnapshot = [],
   preserveStatus = false
 } = {}) {
-  if (!preserveSelection) {
-    state.selectedEventId = null;
-    state.selectedScheduleId = null;
+  // ScheduleUtilityManager に委譲
+  if (!scheduleUtilityManager) {
+    throw new Error("ScheduleUtilityManager is not initialized");
   }
-
-  let selectionNotice = null;
-
-  let initialSelectionSatisfied = false;
-
-  if (!state.initialSelectionApplied && state.initialSelection?.eventId) {
-    const {
-      eventId,
-      scheduleId,
-      scheduleLabel,
-      eventLabel,
-      location: initialLocation = null,
-      startAt: initialStartAt = null,
-      endAt: initialEndAt = null
-    } = state.initialSelection;
-    const targetEvent = state.events.find(evt => evt.id === eventId) || null;
-    if (targetEvent) {
-      state.selectedEventId = eventId;
-      if (scheduleId) {
-        const targetSchedule = targetEvent.schedules?.find(s => s.id === scheduleId) || null;
-        if (targetSchedule) {
-          state.selectedScheduleId = scheduleId;
-          if (state.scheduleContextOverrides instanceof Map) {
-            state.scheduleContextOverrides.delete(`${eventId}::${scheduleId}`);
-          }
-        } else {
-          const overrideKey = `${eventId}::${scheduleId}`;
-          if (!(state.scheduleContextOverrides instanceof Map)) {
-            state.scheduleContextOverrides = new Map();
-          }
-          const existingOverride = state.scheduleContextOverrides.get(overrideKey) || null;
-          const override = existingOverride || {
-            eventId,
-            eventName: eventLabel || targetEvent.name || eventId,
-            scheduleId,
-            scheduleLabel: scheduleLabel || scheduleId,
-            location: initialLocation || "",
-            startAt: initialStartAt || "",
-            endAt: initialEndAt || ""
-          };
-          state.scheduleContextOverrides.set(overrideKey, override);
-          state.selectedScheduleId = scheduleId;
-        }
-      } else {
-        state.selectedScheduleId = null;
-      }
-      initialSelectionSatisfied = true;
-    } else {
-      state.selectedEventId = null;
-      state.selectedScheduleId = null;
-      const label = eventLabel || eventId;
-      selectionNotice = `指定されたイベント「${label}」が見つかりません。`;
-    }
-    state.initialSelectionApplied = initialSelectionSatisfied;
-    if (initialSelectionSatisfied) {
-      state.initialSelection = null;
-    }
-  } else if (preserveSelection && previousEventId && state.events.some(evt => evt.id === previousEventId)) {
-    state.selectedEventId = previousEventId;
-    if (previousScheduleId) {
-      const selectedEvent = state.events.find(evt => evt.id === previousEventId) || null;
-      const hasSchedule = selectedEvent?.schedules?.some(schedule => schedule.id === previousScheduleId) || false;
-      const overrideKey = `${previousEventId}::${previousScheduleId}`;
-      if (!(state.scheduleContextOverrides instanceof Map)) {
-        state.scheduleContextOverrides = new Map();
-      }
-      let hasOverride = state.scheduleContextOverrides.has(overrideKey);
-      if (!hasSchedule && previousEventsSnapshot?.length && previousEventId && previousScheduleId && !hasOverride) {
-        const previousEvent = previousEventsSnapshot.find(event => event.id === previousEventId) || null;
-        const previousSchedule = previousEvent?.schedules?.find(schedule => schedule.id === previousScheduleId) || null;
-        if (previousSchedule) {
-          const fallbackOverride = {
-            eventId: previousEventId,
-            eventName: previousEvent?.name || previousEventId,
-            scheduleId: previousScheduleId,
-            scheduleLabel: previousSchedule.label || previousScheduleId,
-            location: previousSchedule.location || "",
-            startAt: previousSchedule.startAt || "",
-            endAt: previousSchedule.endAt || ""
-          };
-          state.scheduleContextOverrides.set(overrideKey, fallbackOverride);
-          hasOverride = true;
-        }
-      }
-      state.selectedScheduleId = hasSchedule || hasOverride ? previousScheduleId : null;
-      if (hasSchedule && state.scheduleContextOverrides instanceof Map) {
-        state.scheduleContextOverrides.delete(overrideKey);
-      }
-    } else {
-      state.selectedScheduleId = null;
-    }
-  } else if (preserveSelection) {
-    state.selectedEventId = null;
-    state.selectedScheduleId = null;
-  }
-
-  refreshScheduleLocationHistory();
-  populateScheduleLocationOptions(dom.scheduleLocationInput?.value || "");
-
-  state.initialSelectionNotice = selectionNotice;
-  renderEvents();
-  renderSchedules();
-  updateParticipantContext({ preserveStatus });
+  return scheduleUtilityManager.finalizeEventLoad({
+    preserveSelection,
+    previousEventId,
+    previousScheduleId,
+    previousEventsSnapshot,
+    preserveStatus
+  });
 }
 
 function applyHostEvents(events = [], { preserveSelection = true } = {}) {
@@ -928,24 +777,19 @@ function handleRelocationDialogClose(event) {
 }
 
 function getScheduleRecord(eventId, scheduleId) {
-  if (!eventId || !scheduleId) return null;
-  const event = state.events.find(evt => evt.id === eventId);
-  if (!event || !Array.isArray(event.schedules)) {
-    return null;
+  // ScheduleUtilityManager に委譲
+  if (!scheduleUtilityManager) {
+    throw new Error("ScheduleUtilityManager is not initialized");
   }
-  return event.schedules.find(schedule => schedule.id === scheduleId) || null;
+  return scheduleUtilityManager.getScheduleRecord(eventId, scheduleId);
 }
 
 function buildScheduleOptionLabel(schedule) {
-  if (!schedule) {
-    return "";
+  // ScheduleUtilityManager に委譲
+  if (!scheduleUtilityManager) {
+    throw new Error("ScheduleUtilityManager is not initialized");
   }
-  const baseLabel = schedule.label || schedule.date || schedule.id || "";
-  const rangeText = describeScheduleRange(schedule);
-  if (rangeText && rangeText !== baseLabel) {
-    return baseLabel ? `${baseLabel}（${rangeText}）` : rangeText;
-  }
-  return baseLabel || rangeText || "";
+  return scheduleUtilityManager.buildScheduleOptionLabel(schedule);
 }
 
 
@@ -3158,6 +3002,22 @@ function init() {
     // 依存関数
     openDialog,
     closeDialog
+  });
+
+  // ScheduleUtilityManager を初期化
+  scheduleUtilityManager = new ScheduleUtilityManager({
+    state,
+    dom,
+    // 依存関数
+    describeScheduleRange,
+    getScheduleLabel,
+    normalizeKey,
+    renderEvents,
+    renderSchedules: () => {
+      if (!scheduleManager) return;
+      scheduleManager.renderSchedules();
+    },
+    updateParticipantContext
   });
 
   // GlManager を初期化
