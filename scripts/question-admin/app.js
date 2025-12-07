@@ -87,6 +87,7 @@ import { ScheduleManager } from "./managers/schedule-manager.js";
 import { MailManager } from "./managers/mail-manager.js";
 import { AuthManager } from "./managers/auth-manager.js";
 import { RelocationManager } from "./managers/relocation-manager.js";
+import { HostIntegrationManager } from "./managers/host-integration-manager.js";
 
 // redirectingToIndex は AuthManager と共有するため、参照オブジェクトとして管理
 const redirectingToIndexRef = { current: false };
@@ -98,34 +99,43 @@ let scheduleManager = null;
 let mailManager = null;
 let authManager = null;
 let relocationManager = null;
+let hostIntegrationManager = null;
 
 const glDataFetchCache = new Map();
 
 function getEmbedPrefix() {
-  if (typeof document === "undefined") {
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    if (typeof document === "undefined") {
+      return "";
+    }
+    const html = document.documentElement;
+    const existingPrefix = html?.dataset?.qaEmbedPrefix?.trim();
+    if (existingPrefix) {
+      return existingPrefix;
+    }
+    const embedSurface = document.querySelector("[data-qa-embed]");
+    if (embedSurface) {
+      const detectedPrefix =
+        embedSurface.getAttribute("data-qa-embed-prefix")?.trim() || "qa-";
+      if (html) {
+        html.dataset.qaEmbedPrefix = detectedPrefix;
+      }
+      return detectedPrefix;
+    }
     return "";
   }
-  const html = document.documentElement;
-  const existingPrefix = html?.dataset?.qaEmbedPrefix?.trim();
-  if (existingPrefix) {
-    return existingPrefix;
-  }
-
-  const embedSurface = document.querySelector("[data-qa-embed]");
-  if (embedSurface) {
-    const detectedPrefix =
-      embedSurface.getAttribute("data-qa-embed-prefix")?.trim() || "qa-";
-    if (html) {
-      html.dataset.qaEmbedPrefix = detectedPrefix;
-    }
-    return detectedPrefix;
-  }
-
-  return "";
+  return hostIntegrationManager.getEmbedPrefix();
 }
 
 function isEmbeddedMode() {
-  return Boolean(getEmbedPrefix());
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    return Boolean(getEmbedPrefix());
+  }
+  return hostIntegrationManager.isEmbeddedMode();
 }
 
 function cloneParticipantEntry(entry) {
@@ -200,66 +210,47 @@ function getSelectionRequiredMessage(prefix = "") {
   return `${prefix}${requirement}`;
 }
 
+// embedReadyDeferred, hostSelectionBridge, lastSelectionBroadcastSignature, hostIntegration は HostIntegrationManager に移行されました（段階4-6で完全移行予定）
 const hostSelectionBridge = {
   observer: null,
   lastSignature: "",
   pendingSignature: ""
-};
+}; // フォールバック処理用（段階4-6で削除予定）
 
-let lastSelectionBroadcastSignature = "";
+let lastSelectionBroadcastSignature = ""; // フォールバック処理用（段階4-6で削除予定）
 
 const hostIntegration = {
   controller: null,
   selectionUnsubscribe: null,
   eventsUnsubscribe: null
-};
+}; // フォールバック処理用（段階4-6で削除予定）
 
 function getSelectionBroadcastSource() {
   return isEmbeddedMode() ? "participants" : "question-admin";
 }
 
 function isHostAttached() {
-  return Boolean(hostIntegration.controller);
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    return false;
+  }
+  return hostIntegrationManager.isHostAttached();
 }
 
 function detachHost() {
-  if (hostIntegration.selectionUnsubscribe) {
-    try {
-      hostIntegration.selectionUnsubscribe();
-    } catch (error) {
-      console.warn("Failed to detach host selection listener", error);
-    }
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    return;
   }
-  if (hostIntegration.eventsUnsubscribe) {
-    try {
-      hostIntegration.eventsUnsubscribe();
-    } catch (error) {
-      console.warn("Failed to detach host events listener", error);
-    }
-  }
-  hostIntegration.controller = null;
-  hostIntegration.selectionUnsubscribe = null;
-  hostIntegration.eventsUnsubscribe = null;
-  startHostSelectionBridge();
+  hostIntegrationManager.detachHost();
 }
 
 function cloneHostEvent(event) {
-  if (!event || typeof event !== "object") {
-    return null;
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    throw new Error("HostIntegrationManager is not initialized");
   }
-  const schedules = Array.isArray(event.schedules)
-    ? event.schedules.map((schedule) => ({ ...schedule }))
-    : [];
-  const scheduleCount = typeof event.scheduleCount === "number" ? event.scheduleCount : schedules.length;
-  const totalParticipants = typeof event.totalParticipants === "number"
-    ? event.totalParticipants
-    : schedules.reduce((acc, item) => acc + Number(item?.participantCount || 0), 0);
-  return {
-    ...event,
-    schedules,
-    scheduleCount,
-    totalParticipants
-  };
+  return hostIntegrationManager.cloneHostEvent(event);
 }
 
 function refreshScheduleLocationHistory() {
@@ -451,87 +442,35 @@ function finalizeEventLoad({
 }
 
 function applyHostEvents(events = [], { preserveSelection = true } = {}) {
-  const previousEventId = preserveSelection ? state.selectedEventId : null;
-  const previousScheduleId = preserveSelection ? state.selectedScheduleId : null;
-  const previousEventsSnapshot = preserveSelection && Array.isArray(state.events)
-    ? state.events.map((event) => ({
-        id: event.id,
-        name: event.name,
-        schedules: Array.isArray(event.schedules)
-          ? event.schedules.map((schedule) => ({ ...schedule }))
-          : []
-      }))
-    : [];
-  const cloned = Array.isArray(events)
-    ? events.map((event) => cloneHostEvent(event)).filter(Boolean)
-    : [];
-  state.events = cloned;
-  finalizeEventLoad({
-    preserveSelection,
-    previousEventId,
-    previousScheduleId,
-    previousEventsSnapshot,
-    preserveStatus: true
-  });
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    throw new Error("HostIntegrationManager is not initialized");
+  }
+  hostIntegrationManager.applyHostEvents(events, { preserveSelection });
 }
 
 function handleHostSelection(detail) {
-  if (!detail || typeof detail !== "object") {
-    return;
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    throw new Error("HostIntegrationManager is not initialized");
   }
-  const promise = applySelectionContext(detail);
-  if (promise && typeof promise.catch === "function") {
-    promise.catch((error) => {
-      console.error("Failed to apply selection from host", error);
-    });
-  }
+  hostIntegrationManager.handleHostSelection(detail);
 }
 
 function handleHostEventsUpdate(events) {
-  applyHostEvents(events, { preserveSelection: true });
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    throw new Error("HostIntegrationManager is not initialized");
+  }
+  hostIntegrationManager.handleHostEventsUpdate(events);
 }
 
 function attachHost(controller) {
-  detachHost();
-  if (!controller || typeof controller !== "object") {
-    return;
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    throw new Error("HostIntegrationManager is not initialized");
   }
-  hostIntegration.controller = controller;
-  stopHostSelectionBridge();
-  hostSelectionBridge.lastSignature = "";
-  hostSelectionBridge.pendingSignature = "";
-
-  if (typeof controller.subscribeSelection === "function") {
-    hostIntegration.selectionUnsubscribe = controller.subscribeSelection(handleHostSelection);
-  }
-  if (typeof controller.subscribeEvents === "function") {
-    hostIntegration.eventsUnsubscribe = controller.subscribeEvents(handleHostEventsUpdate);
-  }
-
-  if (typeof controller.getEvents === "function") {
-    try {
-      const events = controller.getEvents();
-      applyHostEvents(events, { preserveSelection: true });
-    } catch (error) {
-      console.warn("Failed to fetch events from host", error);
-    }
-  }
-
-  if (typeof controller.getSelection === "function") {
-    try {
-      const selection = controller.getSelection();
-      if (selection) {
-        const promise = applySelectionContext(selection);
-        if (promise && typeof promise.catch === "function") {
-          promise.catch((error) => {
-            console.error("Failed to apply initial host selection", error);
-          });
-        }
-      }
-    } catch (error) {
-      console.warn("Failed to fetch selection from host", error);
-    }
-  }
+  hostIntegrationManager.attachHost(controller);
 }
 
 function signatureForSelectionDetail(detail) {
@@ -582,11 +521,15 @@ function broadcastSelectionChange(options = {}) {
   if (!changed || source === "host") {
     return;
   }
-  if (hostIntegration.controller && typeof hostIntegration.controller.setSelection === "function") {
-    try {
-      hostIntegration.controller.setSelection({ ...detail, source });
-    } catch (error) {
-      console.warn("Failed to propagate selection to host", error);
+  // HostIntegrationManager 経由でホストコントローラーにアクセス
+  if (hostIntegrationManager && hostIntegrationManager.isHostAttached()) {
+    const controller = hostIntegrationManager.getHostController();
+    if (controller && typeof controller.setSelection === "function") {
+      try {
+        controller.setSelection({ ...detail, source });
+      } catch (error) {
+        console.warn("Failed to propagate selection to host", error);
+      }
     }
   }
   if (typeof document === "undefined") {
@@ -607,25 +550,36 @@ function broadcastSelectionChange(options = {}) {
 }
 
 function waitForEmbedReady() {
-  if (state.user) {
-    return Promise.resolve();
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    if (state.user) {
+      return Promise.resolve();
+    }
+    if (embedReadyDeferred?.promise) {
+      return embedReadyDeferred.promise;
+    }
+    let resolve;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    embedReadyDeferred = { promise, resolve };
+    return promise;
   }
-  if (embedReadyDeferred?.promise) {
-    return embedReadyDeferred.promise;
-  }
-  let resolve;
-  const promise = new Promise((res) => {
-    resolve = res;
-  });
-  embedReadyDeferred = { promise, resolve };
-  return promise;
+  return hostIntegrationManager.waitForEmbedReady();
 }
 
 function resolveEmbedReady() {
-  if (embedReadyDeferred?.resolve) {
-    embedReadyDeferred.resolve();
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    if (embedReadyDeferred?.resolve) {
+      embedReadyDeferred.resolve();
+    }
+    embedReadyDeferred = null;
+    return;
   }
-  embedReadyDeferred = null;
+  hostIntegrationManager.resolveEmbedReady();
 }
 
 function getElementById(id) {
@@ -4283,9 +4237,21 @@ function init() {
     dom,
     state,
     // 依存関数と定数
-    isHostAttached,
-    hostIntegration,
-    applyHostEvents,
+    isHostAttached: () => {
+      if (!hostIntegrationManager) return false;
+      return hostIntegrationManager.isHostAttached();
+    },
+    hostIntegration: null, // HostIntegrationManager に移行されたため、直接参照しない
+    getHostController: () => {
+      if (!hostIntegrationManager) return null;
+      return hostIntegrationManager.getHostController();
+    },
+    applyHostEvents: (events, options) => {
+      if (!hostIntegrationManager) {
+        throw new Error("HostIntegrationManager is not initialized");
+      }
+      return hostIntegrationManager.applyHostEvents(events, options);
+    },
     finalizeEventLoad,
     renderSchedules: () => {
       if (!scheduleManager) return;
@@ -4465,6 +4431,23 @@ function init() {
     ensureRowKey,
     ensureTeamAssignmentMap,
     findParticipantForSnapshot
+  });
+  
+  // HostIntegrationManager を初期化
+  hostIntegrationManager = new HostIntegrationManager({
+    dom,
+    state,
+    // 依存関数と定数
+    normalizeKey,
+    selectEvent,
+    loadEvents,
+    finalizeEventLoad,
+    updateParticipantContext,
+    HOST_SELECTION_ATTRIBUTE_KEYS,
+    // 一時的な依存関数（後で移行予定）
+    applySelectionContext,
+    stopHostSelectionBridge,
+    startHostSelectionBridge
   });
   
   // ScheduleManager を初期化

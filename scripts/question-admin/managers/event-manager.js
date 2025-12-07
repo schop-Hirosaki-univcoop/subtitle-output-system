@@ -16,7 +16,8 @@ export class EventManager {
     
     // 依存関数と定数
     this.isHostAttached = context.isHostAttached;
-    this.hostIntegration = context.hostIntegration;
+    this.hostIntegration = context.hostIntegration; // null が渡される（HostIntegrationManager に移行済み）
+    this.getHostController = context.getHostController; // HostIntegrationManager 経由でホストコントローラーを取得
     this.applyHostEvents = context.applyHostEvents;
     this.finalizeEventLoad = context.finalizeEventLoad;
     this.renderSchedules = context.renderSchedules;
@@ -53,15 +54,18 @@ export class EventManager {
    * @returns {Promise<Array>} イベント一覧
    */
   async loadEvents({ preserveSelection = true } = {}) {
-    if (this.isHostAttached() && this.hostIntegration.controller) {
-      try {
-        if (typeof this.hostIntegration.controller.getEvents === "function") {
-          const events = this.hostIntegration.controller.getEvents();
-          this.applyHostEvents(events, { preserveSelection });
-          return this.state.events;
+    if (this.isHostAttached()) {
+      const controller = this.getHostController();
+      if (controller) {
+        try {
+          if (typeof controller.getEvents === "function") {
+            const events = controller.getEvents();
+            this.applyHostEvents(events, { preserveSelection });
+            return this.state.events;
+          }
+        } catch (error) {
+          console.warn("Failed to retrieve host events", error);
         }
-      } catch (error) {
-        console.warn("Failed to retrieve host events", error);
       }
     }
     const previousEventId = preserveSelection ? this.state.selectedEventId : null;
