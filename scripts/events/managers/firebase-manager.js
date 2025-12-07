@@ -1081,5 +1081,272 @@ export class EventFirebaseManager {
       return false;
     }
   }
+
+  /**
+   * ホストコミット済みスケジュールを設定します。
+   * Firebase関連の処理（プレゼンス同期など）を担当します。
+   * @param {string} scheduleId - スケジュールID
+   * @param {Object} options - オプション
+   * @param {Object} options.schedule - スケジュールオブジェクト（オプション）
+   * @param {string} options.reason - 変更理由（デフォルト: "state-change"）
+   * @param {boolean} options.sync - プレゼンスを同期するか（デフォルト: true）
+   * @param {boolean} options.force - 強制更新フラグ（デフォルト: false）
+   * @returns {boolean} 変更があったかどうか
+   */
+  setHostCommittedSchedule(
+    scheduleId,
+    {
+      schedule = null,
+      reason = "state-change",
+      sync = true,
+      force = false
+    } = {}
+  ) {
+    const normalizedId = ensureString(scheduleId);
+    let resolvedSchedule = schedule;
+    if (normalizedId && (!resolvedSchedule || resolvedSchedule.id !== normalizedId)) {
+      resolvedSchedule = this.app.schedules.find((item) => item.id === normalizedId) || null;
+    }
+    const previousId = ensureString(this.app.hostCommittedScheduleId);
+    const previousLabel = ensureString(this.app.hostCommittedScheduleLabel);
+    const nextLabel = normalizedId ? ensureString(resolvedSchedule?.label) || normalizedId : "";
+    const changed = previousId !== normalizedId || previousLabel !== nextLabel;
+    
+    // プロパティの更新（app.jsに同期）
+    this.app.hostCommittedScheduleId = normalizedId;
+    this.app.hostCommittedScheduleLabel = normalizedId ? nextLabel : "";
+    
+    if (normalizedId) {
+      this.app.scheduleSelectionCommitted = true;
+    } else {
+      this.app.scheduleSelectionCommitted = false;
+      this.app.clearPendingDisplayLock();
+    }
+    
+    // Firebase関連の処理
+    if (force) {
+      this.hostPresenceLastSignature = "";
+    }
+    if (sync) {
+      // syncHostPresenceを直接呼び出し（再帰的呼び出しを避けるため）
+      void this.syncHostPresence(reason);
+    } else if (changed) {
+      this.hostPresenceLastSignature = "";
+    }
+    
+    return changed;
+  }
+
+  /**
+   * ホストプレゼンスを同期します。
+   * @param {string} reason - 同期理由（デフォルト: "state-change"）
+   */
+  async syncHostPresence(reason = "state-change") {
+    const user = this.app.currentUser || auth.currentUser || null;
+    const uid = ensureString(user?.uid);
+    if (!uid) {
+      this.clearHostPresence();
+      this.app.logFlowState("在席情報をクリアしました (未ログイン)", { reason });
+      return;
+    }
+
+    const eventId = ensureString(this.app.selectedEventId);
+    if (!eventId) {
+      this.clearHostPresence();
+      this.app.logFlowState("在席情報をクリアしました (イベント未選択)", { reason });
+      return;
+    }
+
+    if (!this.app.eventSelectionCommitted) {
+      this.clearHostPresence();
+      this.app.logFlowState("イベント未確定のため在席情報の更新を保留します", {
+        reason,
+        eventId
+      });
+      return;
+    }
+
+    const presenceEntries = Array.isArray(this.app.operatorPresenceEntries)
+      ? this.app.operatorPresenceEntries
+      : [];
+    let hostEntries = this.collectLocalHostPresenceEntries(presenceEntries, uid);
+    if (hostEntries.length === 0) {
+      const fetchedEntries = await this.fetchHostPresenceEntries(eventId, uid);
+      hostEntries = Array.isArray(fetchedEntries) ? fetchedEntries : [];
+    }
+    hostEntries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    const hostSessionIds = new Set(
+      hostEntries.map((entry) => ensureString(entry.sessionId || entry.entryId)).filter(Boolean)
+    );
+    const entryKey = ensureString(this.hostPresenceEntryKey);
+    const [entryKeyEventId = ""] = entryKey.split("/");
+    const previousSessionId = entryKeyEventId === eventId ? ensureString(this.hostPresenceSessionId) : "";
+    const storedSessionId = ensureString(this.loadStoredHostPresenceSessionId(uid, eventId));
+    const preferredEntry = hostEntries.length > 0 ? hostEntries[0] : null;
+    const preferredSessionId = ensureString(preferredEntry?.sessionId || preferredEntry?.entryId);
+    const baselineSessionId = previousSessionId || storedSessionId || "";
+
+    let sessionId = "";
+    let reusedSessionId = "";
+
+    if (previousSessionId && hostSessionIds.has(previousSessionId)) {
+      sessionId = previousSessionId;
+      reusedSessionId = previousSessionId;
+    } else if (storedSessionId && hostSessionIds.has(storedSessionId)) {
+      sessionId = storedSessionId;
+      reusedSessionId = storedSessionId;
+    } else if (preferredSessionId) {
+      sessionId = preferredSessionId;
+      reusedSessionId = preferredSessionId;
+    } else if (storedSessionId) {
+      sessionId = storedSessionId;
+    } else if (previousSessionId) {
+      sessionId = previousSessionId;
+    } else {
+      sessionId = this.generatePresenceSessionId();
+    }
+
+    this.hostPresenceSessionId = sessionId;
+    this.app.hostPresenceSessionId = sessionId;
+    this.persistHostPresenceSessionId(uid, eventId, sessionId);
+    const nextKey = `${eventId}/${sessionId}`;
+    if (this.hostPresenceEntryKey && this.hostPresenceEntryKey !== nextKey) {
+      this.clearHostPresence();
+      this.hostPresenceSessionId = sessionId;
+      this.app.hostPresenceSessionId = sessionId;
+    }
+
+    if (reusedSessionId) {
+      this.app.logFlowState("既存の在席セッションを引き継ぎます", {
+        reason,
+        eventId,
+        previousSessionId: baselineSessionId || "",
+        sessionId
+      });
+    }
+
+    const event = this.app.getSelectedEvent();
+    const hostContext = this.resolveHostScheduleContext(eventId);
+    let presenceScheduleId = ensureString(hostContext.scheduleId);
+    const committedScheduleId = ensureString(hostContext.committedScheduleId);
+    const selectedScheduleId = ensureString(hostContext.selectedScheduleId);
+    const selectedScheduleLabel = ensureString(hostContext.selectedScheduleLabel);
+    const scheduleLabel = ensureString(hostContext.scheduleLabel);
+    const scheduleKey = ensureString(hostContext.scheduleKey);
+    const pendingNavigationTarget = ensureString(this.app.pendingNavigationTarget);
+    if (!presenceScheduleId && selectedScheduleId && pendingNavigationTarget) {
+      presenceScheduleId = selectedScheduleId;
+    }
+    if (!presenceScheduleId && committedScheduleId) {
+      presenceScheduleId = committedScheduleId;
+    }
+    let effectiveScheduleLabel = scheduleLabel;
+    if (!effectiveScheduleLabel && presenceScheduleId) {
+      if (presenceScheduleId === committedScheduleId) {
+        effectiveScheduleLabel = ensureString(this.app.hostCommittedScheduleLabel) || presenceScheduleId;
+      } else if (selectedScheduleId === presenceScheduleId) {
+        effectiveScheduleLabel = selectedScheduleLabel || presenceScheduleId;
+      } else {
+        const fallbackSchedule = this.findScheduleByIdOrAlias(presenceScheduleId);
+        effectiveScheduleLabel = ensureString(fallbackSchedule?.label) || presenceScheduleId;
+      }
+    }
+    const operatorMode = normalizeOperatorMode(this.app.operatorMode);
+    const skipTelop = operatorMode === OPERATOR_MODE_SUPPORT;
+    const signature = JSON.stringify({
+      eventId,
+      scheduleId: presenceScheduleId,
+      scheduleKey,
+      scheduleLabel: effectiveScheduleLabel,
+      sessionId,
+      skipTelop,
+      committedScheduleId,
+      selectedScheduleId,
+      selectedScheduleLabel,
+      committedScheduleLabel: ensureString(this.app.hostCommittedScheduleLabel)
+    });
+    if (reason !== "heartbeat" && signature === this.hostPresenceLastSignature) {
+      this.scheduleHostPresenceHeartbeat();
+      this.app.logFlowState("在席情報に変更はありません", {
+        reason,
+        eventId,
+        scheduleId: presenceScheduleId,
+        committedScheduleId,
+        scheduleKey,
+        sessionId
+      });
+      return;
+    }
+    this.hostPresenceLastSignature = signature;
+    this.app.hostPresenceLastSignature = signature;
+
+    const entryRef = getOperatorPresenceEntryRef(eventId, sessionId);
+    this.hostPresenceEntryKey = nextKey;
+    this.hostPresenceEntryRef = entryRef;
+    this.app.hostPresenceEntryKey = nextKey;
+    this.app.hostPresenceEntryRef = entryRef;
+
+    const payload = {
+      sessionId,
+      uid,
+      email: ensureString(user?.email),
+      displayName: ensureString(user?.displayName),
+      eventId,
+      eventName: ensureString(event?.name || eventId),
+      scheduleId: presenceScheduleId,
+      scheduleKey,
+      scheduleLabel: effectiveScheduleLabel,
+      selectedScheduleId,
+      selectedScheduleLabel,
+      skipTelop,
+      updatedAt: serverTimestamp(),
+      clientTimestamp: Date.now(),
+      reason,
+      source: "events"
+    };
+
+    if (this.app.logOperatorPresenceDebug) {
+      this.app.logOperatorPresenceDebug("Write operator presence entry", {
+        eventId,
+        sessionId,
+        payload: this.app.describeOperatorPresencePayload ? this.app.describeOperatorPresencePayload(payload) : payload
+      });
+    }
+
+    set(entryRef, payload).catch((error) => {
+      console.error("Failed to persist host presence:", error);
+    });
+
+    const staleEntries = hostEntries.filter((entry) => {
+      const entrySessionId = ensureString(entry.sessionId || entry.entryId);
+      return entrySessionId && entrySessionId !== sessionId;
+    });
+    this.pruneHostPresenceEntries(eventId, staleEntries, sessionId);
+
+    try {
+      if (this.hostPresenceDisconnect) {
+        this.hostPresenceDisconnect.cancel().catch(() => {});
+      }
+      const disconnectHandle = onDisconnect(entryRef);
+      this.hostPresenceDisconnect = disconnectHandle;
+      this.app.hostPresenceDisconnect = disconnectHandle;
+      disconnectHandle.remove().catch(() => {});
+    } catch (error) {
+      console.debug("Failed to register host presence cleanup:", error);
+    }
+
+    this.scheduleHostPresenceHeartbeat();
+    this.app.logFlowState("在席情報を更新しました", {
+      reason,
+      eventId,
+      scheduleId: presenceScheduleId,
+      committedScheduleId,
+      scheduleKey,
+      sessionId
+    });
+
+    this.reconcileHostPresenceSessions(eventId, uid, sessionId).catch(() => {});
+  }
 }
 

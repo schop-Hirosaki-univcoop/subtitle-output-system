@@ -41,7 +41,7 @@
 
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
-| `scripts/events/app.js`                       | 6,723 | ❌ 要改善（基準の約 4.5 倍、リファクタリング進行中） |
+| `scripts/events/app.js`                       | 6,446 | ❌ 要改善（基準の約 4.3 倍、リファクタリング進行中） |
 | `scripts/question-admin/app.js`               | 5,752 | ❌ 要改善（基準の約 3.8 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
@@ -60,7 +60,7 @@
 
 2. **巨大な単一ファイル**
 
-   - `scripts/events/app.js` - 6,723 行（リファクタリング進行中、元の 10,180 行から約 3,457 行削減）
+   - `scripts/events/app.js` - 6,446 行（リファクタリング進行中、元の 10,180 行から約 3,734 行削減）
    - `scripts/question-admin/app.js` - 5,752 行（リファクタリング進行中、元の 8,180 行から約 2,428 行削減）
 
 3. **中規模の単一ファイル**
@@ -418,9 +418,9 @@ scripts/
 
 ### 重大な問題（優先度: 高）
 
-1. **`scripts/events/app.js` が 7,087 行（リファクタリング進行中）**
+1. **`scripts/events/app.js` が 6,446 行（リファクタリング進行中）**
 
-   - 開発標準の約 5.0 倍（元の 10,180 行から約 2,731 行削減）
+   - 開発標準の約 4.3 倍（元の 10,180 行から約 3,734 行削減）
    - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
    - 単一責任の原則に違反（改善中）
    - テストが困難（改善中）
@@ -616,9 +616,9 @@ scripts/events/
     - ✅ フェーズ 1.6.5: 最終確認とドキュメント更新（完了）
       - すべての委譲が正しく動作していることを確認完了
       - ドキュメントを更新完了（現在の行数: 7,734 行、削減量: 2,446 行）
-12. ⏳ フェーズ 1.7: スケジュールコンフリクト管理機能の整理（未着手）
-13. ⏳ フェーズ 1.8: スケジュールコンフリクトダイアログ機能の整理（未着手）
-14. ⏳ フェーズ 1.9: ホストコミットスケジュール管理機能の整理（未着手）
+12. ✅ フェーズ 1.7: スケジュールコンフリクト管理機能の整理（完了）
+13. ✅ フェーズ 1.8: スケジュールコンフリクトダイアログ機能の整理（完了）
+14. 🔄 フェーズ 1.9: ホストコミットスケジュール管理機能の整理（進行中、フェーズ 1.9.3 まで完了）
 15. ⏳ フェーズ 1.10: ディスプレイロック機能の整理（未着手）
 16. ⏳ フェーズ 1.11: スケジュール合意トースト機能の整理（未着手）
 17. ⏳ フェーズ 1.12: ユーティリティ関数の整理（未着手）
@@ -775,10 +775,14 @@ scripts/login/
        - UI 関連メソッドの移行完了: `openScheduleConflictDialog`, `handleScheduleConflictSubmit` → `EventUIRenderer`（約 150 行削減）
        - Firebase 関連メソッドの移行完了: `confirmScheduleConsensus`, `requestScheduleConflictPrompt` → `EventFirebaseManager`（約 233 行削減）
        - 合計削減: 約 860 行（`app.js` は 6,723 行、`ui-renderer.js` は 798 行、`firebase-manager.js` は 1,085 行）
+       - その後、フェーズ 1.9 で追加削減: 約 296 行（`app.js` は 6,446 行、`firebase-manager.js` は 1,352 行）
    - **残りのフェーズ**:
-     - ⏳ フェーズ 1.9: ホストコミットスケジュール管理機能の整理（未着手）
-       - `setHostCommittedSchedule`, `syncHostPresence` などの整理
-       - 見積もり: 約 100-150 行の削減
+     - 🔄 フェーズ 1.9: ホストコミットスケジュール管理機能の整理（進行中）
+       - ✅ フェーズ 1.9.1: `setHostCommittedSchedule`の重複削除完了（約 64 行削減）
+       - ✅ フェーズ 1.9.2: `setHostCommittedSchedule`の部分移行完了（Firebase 関連を`EventFirebaseManager`に移行、約 30 行削減）
+       - ✅ フェーズ 1.9.3: `syncHostPresence`の完全移行完了（`EventFirebaseManager`に移行、約 200 行削減、未使用インポート削除で約 2 行削減）
+       - 残り: その他の関連メソッドの整理（フェーズ 1.9.4）
+       - 現在の削減: 約 296 行削減済み（`app.js` は 6,446 行、`firebase-manager.js` は 1,352 行）
      - ⏳ フェーズ 1.10: ディスプレイロック機能の整理（未着手）
        - `clearPendingDisplayLock`, `requestDisplayScheduleLockWithRetry` などの整理
        - 見積もり: 約 50-100 行の削減
@@ -873,7 +877,7 @@ scripts/login/
 - ✅ `scripts/operator/` - リファクタリング済み、良好
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
-- ❌ `scripts/events/app.js` - 7,087 行、要改善（リファクタリング進行中、元の 10,180 行から約 3,093 行削減）
+- ❌ `scripts/events/app.js` - 6,446 行、要改善（リファクタリング進行中、元の 10,180 行から約 3,734 行削減）
 - ❌ `scripts/question-admin/app.js` - 5,752 行、要改善（リファクタリング進行中、元の 8,180 行から約 2,428 行削減）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
@@ -1098,7 +1102,7 @@ UI 上には以下のパネルが存在しますが、ファイル構造や命�
 - ✅ `scripts/events/panels/event-panel.js` (326 行) - イベント管理パネルの実装
 - ✅ `scripts/events/panels/schedule-panel.js` (326 行) - 日程管理パネルの実装
 - ✅ `EventPanelManager` と `SchedulePanelManager` クラスが分離されている
-- `scripts/events/app.js` (7,087 行) から両方のパネルの実装を分離済み
+- `scripts/events/app.js` (6,446 行) から両方のパネルの実装を分離済み
 
 **完了した改善**:
 
