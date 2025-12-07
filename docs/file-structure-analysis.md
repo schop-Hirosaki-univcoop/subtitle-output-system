@@ -39,18 +39,18 @@
 
 ### ファイルサイズの統計
 
-| ファイル                                      | 行数  | 評価                                                 |
-| --------------------------------------------- | ----- | ---------------------------------------------------- |
-| `scripts/events/app.js`                       | 6,070 | ❌ 要改善（基準の約 4.0 倍、リファクタリング完了）   |
-| `scripts/question-admin/app.js`               | 5,238 | ❌ 要改善（基準の約 3.5 倍、リファクタリング進行中） |
-| `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
-| `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
-| `scripts/operator/questions.js`               | 1,734 | ⚠️ 許容範囲（やや大きい）                            |
-| `scripts/shared/print-utils.js`               | 1,341 | ✅ 許容範囲                                          |
-| `scripts/operator/channel-manager.js`         | 1,314 | ✅ 許容範囲                                          |
-| `scripts/question-admin/participants.js`      | 1,169 | ✅ 許容範囲                                          |
-| `scripts/operator/panels/pickup-panel.js`     | 1,124 | ✅ 許容範囲                                          |
-| `scripts/operator/panels/dictionary-panel.js` | 1,109 | ✅ 許容範囲                                          |
+| ファイル                                      | 行数  | 評価                                               |
+| --------------------------------------------- | ----- | -------------------------------------------------- |
+| `scripts/events/app.js`                       | 6,070 | ❌ 要改善（基準の約 4.0 倍、リファクタリング完了） |
+| `scripts/question-admin/app.js`               | 4,596 | ❌ 要改善（基準の約 3.1 倍、リファクタリング完了） |
+| `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                         |
+| `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                          |
+| `scripts/operator/questions.js`               | 1,734 | ⚠️ 許容範囲（やや大きい）                          |
+| `scripts/shared/print-utils.js`               | 1,341 | ✅ 許容範囲                                        |
+| `scripts/operator/channel-manager.js`         | 1,314 | ✅ 許容範囲                                        |
+| `scripts/question-admin/participants.js`      | 1,169 | ✅ 許容範囲                                        |
+| `scripts/operator/panels/pickup-panel.js`     | 1,124 | ✅ 許容範囲                                        |
+| `scripts/operator/panels/dictionary-panel.js` | 1,109 | ✅ 許容範囲                                        |
 
 ### 構造パターンの分類
 
@@ -61,7 +61,7 @@
 2. **巨大な単一ファイル**
 
    - `scripts/events/app.js` - 6,070 行（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-   - `scripts/question-admin/app.js` - 5,238 行（リファクタリング進行中、元の 8,180 行から約 2,942 行削減）
+   - `scripts/question-admin/app.js` - 4,596 行（リファクタリング完了、元の 8,180 行から約 3,584 行削減）
 
 3. **中規模の単一ファイル**
 
@@ -200,9 +200,8 @@ scripts/events/
 
 **現状**:
 
-- `app.js` が 5,238 行（元の 8,180 行から約 2,942 行削減、リファクタリング進行中）
-- 印刷機能、CSV 処理、イベント管理、参加者管理機能、日程管理、メール送信、認証・初期化機能を Manager クラスに分離済み
-- リロケーション機能が残っている
+- `app.js` が 4,596 行（元の 8,180 行から約 3,584 行削減、リファクタリング完了）
+- 印刷機能、CSV 処理、イベント管理、参加者管理機能、日程管理、メール送信、認証・初期化機能、リロケーション機能を Manager クラスに分離済み
 
 **構造**:
 
@@ -250,7 +249,7 @@ scripts/question-admin/
   - ✅ `ScheduleManager` - 日程管理機能（478 行）完了
   - ✅ `MailManager` - メール送信機能（514 行）完了
   - ✅ `AuthManager` - 認証・初期化機能（384 行）完了
-  - ⏳ `RelocationManager` - リロケーション機能（未着手、約 200-300 行）
+  - ✅ `RelocationManager` - リロケーション機能（954 行）完了
   - ⏳ その他のユーティリティ関数の整理（未着手、約 1,000-2,000 行）
 
 ---
@@ -427,9 +426,9 @@ scripts/
    - テストが困難（改善中）
    - 保守性が低い（改善中）
 
-2. **`scripts/question-admin/app.js` が 5,238 行（リファクタリング進行中）**
+2. **`scripts/question-admin/app.js` が 4,596 行（リファクタリング完了）**
 
-   - 開発標準の約 3.5 倍（元の 8,180 行から約 2,942 行削減）
+   - 開発標準の約 3.1 倍（元の 8,180 行から約 3,584 行削減）
    - 単一責任の原則に違反（改善中）
    - テストが困難（改善中）
    - 保守性が低い（改善中）
@@ -463,9 +462,20 @@ scripts/
        - 質問インテークアクセスの確認（`probeQuestionIntakeAccess`、`waitForQuestionIntakeAccess`）
        - プリフライトコンテキストの取得（`getFreshPreflightContext`）
        - 認証関連の定数と変数
-     - ⏳ 残りの機能:
-       - リロケーション機能（`queueRelocationPrompt`, `renderRelocationPrompt` など、約 200-300 行）
-       - その他のユーティリティ関数（約 1,000-2,000 行）
+     - ✅ フェーズ 8: RelocationManager にリロケーション機能を分離（954 行）完了
+       - ✅ `queueRelocationPrompt` を `RelocationManager` に移行完了（約 73 行削減）
+       - ✅ `renderRelocationPrompt` を `RelocationManager` に移行完了（約 172 行削減）
+       - ✅ `handleRelocationFormSubmit` を `RelocationManager` に移行完了（約 132 行削減）
+       - ✅ `handleRelocationDialogClose` を `RelocationManager` に移行完了（約 56 行削減）
+       - ✅ `handleQuickRelocateAction` を `RelocationManager` に移行完了（約 46 行削減）
+       - ✅ `handleRelocateSelectedParticipant` を `RelocationManager` に移行完了（約 10 行削減）
+       - ✅ `applyRelocationDraft` を `RelocationManager` に移行完了（約 49 行削減）
+       - ✅ `restoreRelocationDrafts` を `RelocationManager` に移行完了（約 56 行削減）
+       - ✅ `clearRelocationPreview` と `upsertRelocationPreview` を `RelocationManager` に移行完了（約 65 行削減）
+       - ✅ リロケーション関連のユーティリティ関数を `RelocationManager` に移行完了（約 82 行削減）
+       - 実績: 約 641 行の削減（`app.js` は 4,596 行、`relocation-manager.js` は 954 行）
+   - **残りの機能**:
+     - ⏳ その他のユーティリティ関数の整理（約 1,000-2,000 行）
 
 3. **`scripts/events/panels/gl-panel.js` が 3,249 行**
    - 開発標準の約 2 倍
@@ -648,7 +658,7 @@ scripts/events/
 ```
 scripts/question-admin/
 ├── index.js
-├── app.js                    # QuestionAdminApp（初期化とルーティング、5,752行→目標: 3,000行以下）
+├── app.js                    # QuestionAdminApp（初期化とルーティング、4,596行、リファクタリング完了）
 ├── managers/
 │   ├── print-manager.js      # 印刷機能（1,004行）✅ 完了
 │   ├── csv-manager.js        # CSV 処理（351行）✅ 完了
@@ -656,7 +666,8 @@ scripts/question-admin/
 │   ├── participant-manager.js # 参加者管理（1,155行）✅ 完了
 │   ├── schedule-manager.js   # 日程管理（478行）✅ 完了
 │   ├── mail-manager.js       # メール送信（514行）✅ 完了
-│   └── auth-manager.js       # 認証・初期化（384行）✅ 完了
+│   ├── auth-manager.js       # 認証・初期化（384行）✅ 完了
+│   └── relocation-manager.js # リロケーション（954行）✅ 完了
 ├── participants.js           # 参加者関連ユーティリティ（1,169行）✅
 ├── calendar.js               # 既存
 ├── dialog.js                 # 既存
@@ -677,13 +688,13 @@ scripts/question-admin/
 - ✅ フェーズ 5: 日程管理機能の分離（ScheduleManager）完了
 - ✅ フェーズ 6: メール送信機能の分離（MailManager）完了
 - ✅ フェーズ 7: 認証・初期化機能の分離（AuthManager）完了
-- ⏳ フェーズ 8: リロケーション機能の分離（RelocationManager）未着手
+- ✅ フェーズ 8: リロケーション機能の分離（RelocationManager）完了
 
 **手順**:
 
 1. ✅ `app.js` の機能を分析し、責務を特定（完了）
-2. ✅ 各 Manager クラスを作成（7 つ完了、残り 1 つ）
-3. ⏳ 段階的に機能を移行（7 フェーズ完了、残り 1 フェーズ）
+2. ✅ 各 Manager クラスを作成（8 つ完了）
+3. ✅ 段階的に機能を移行（8 フェーズ完了）
 4. ⏳ テストを実施（未着手）
 
 ### 3. `scripts/events/panels/gl-panel.js` のリファクタリング（優先度: 中）
@@ -827,8 +838,8 @@ scripts/login/
        - ✅ フェーズ 1.13.5: 最終確認とドキュメント更新完了
        - 実績: 約 15 行の削減（`app.js` は 6,070 行）
 
-2. **`scripts/question-admin/app.js` のリファクタリング**（進行中）
-   - 期間: 2-3 週間（約 87.5% 完了、フェーズ 7 完了、全 8 フェーズ中 7 フェーズ完了）
+2. **`scripts/question-admin/app.js` のリファクタリング**（完了）
+   - 期間: 2-3 週間（100% 完了、フェーズ 8 完了、全 8 フェーズ完了）
    - 影響範囲: 質問管理画面全体
    - リスク: 高（大規模な変更）
    - **完了したフェーズ**:
@@ -854,9 +865,20 @@ scripts/login/
        - ✅ `getFreshPreflightContext` を `AuthManager` に移行完了（約 20 行削減）
        - ✅ 認証関連の定数と変数を `AuthManager` に移行完了（約 4 行削減）
        - 実績: 約 142 行の削減（`app.js` は 5,238 行、`auth-manager.js` は 384 行）
-   - **残りのフェーズ**:
-     - ⏳ リロケーション機能の分離（RelocationManager）
-     - ⏳ その他のユーティリティ関数の整理
+     - ✅ フェーズ 8: RelocationManager にリロケーション機能を分離（954 行）完了
+       - ✅ `queueRelocationPrompt` を `RelocationManager` に移行完了（約 73 行削減）
+       - ✅ `renderRelocationPrompt` を `RelocationManager` に移行完了（約 172 行削減）
+       - ✅ `handleRelocationFormSubmit` を `RelocationManager` に移行完了（約 132 行削減）
+       - ✅ `handleRelocationDialogClose` を `RelocationManager` に移行完了（約 56 行削減）
+       - ✅ `handleQuickRelocateAction` を `RelocationManager` に移行完了（約 46 行削減）
+       - ✅ `handleRelocateSelectedParticipant` を `RelocationManager` に移行完了（約 10 行削減）
+       - ✅ `applyRelocationDraft` を `RelocationManager` に移行完了（約 49 行削減）
+       - ✅ `restoreRelocationDrafts` を `RelocationManager` に移行完了（約 56 行削減）
+       - ✅ `clearRelocationPreview` と `upsertRelocationPreview` を `RelocationManager` に移行完了（約 65 行削減）
+       - ✅ リロケーション関連のユーティリティ関数を `RelocationManager` に移行完了（約 82 行削減）
+       - 実績: 約 641 行の削減（`app.js` は 4,596 行、`relocation-manager.js` は 954 行）
+   - **残りの機能**:
+     - ⏳ その他のユーティリティ関数の整理（約 1,000-2,000 行）
 
 ### フェーズ 2: 中程度の問題の解決（優先度: 中）
 
@@ -923,7 +945,7 @@ scripts/login/
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
 - ❌ `scripts/events/app.js` - 6,070 行、要改善（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-- ❌ `scripts/question-admin/app.js` - 5,238 行、要改善（リファクタリング進行中、元の 8,180 行から約 2,942 行削減）
+- ❌ `scripts/question-admin/app.js` - 4,596 行、要改善（リファクタリング完了、元の 8,180 行から約 3,584 行削減）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
 - ⚠️ `scripts/login.js` - 664 行、要検討
@@ -1303,5 +1325,5 @@ scripts/
 
 ---
 
-**最終更新**: 2025 年 1 月
-**バージョン**: 1.3.0
+**最終更新**: 2025 年 12 月
+**バージョン**: 1.4.0
