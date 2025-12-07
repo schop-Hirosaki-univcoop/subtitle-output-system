@@ -42,7 +42,7 @@
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
 | `scripts/events/app.js`                       | 6,070 | ❌ 要改善（基準の約 4.0 倍、リファクタリング完了）   |
-| `scripts/question-admin/app.js`               | 3,461 | ❌ 要改善（基準の約 2.5 倍、リファクタリング進行中） |
+| `scripts/question-admin/app.js`               | 3,290 | ❌ 要改善（基準の約 2.4 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
 | `scripts/operator/questions.js`               | 1,734 | ⚠️ 許容範囲（やや大きい）                            |
@@ -61,7 +61,7 @@
 2. **巨大な単一ファイル**
 
    - `scripts/events/app.js` - 6,070 行（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-   - `scripts/question-admin/app.js` - 3,461 行（リファクタリング進行中、元の 8,180 行から約 4,719 行削減）
+   - `scripts/question-admin/app.js` - 3,290 行（リファクタリング進行中、元の 8,180 行から約 4,890 行削減）
    - `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
@@ -433,9 +433,9 @@ scripts/
    - テストが困難（改善中）
    - 保守性が低い（改善中）
 
-2. **`scripts/question-admin/app.js` が 3,461 行（リファクタリング進行中）**
+2. **`scripts/question-admin/app.js` が 3,290 行（リファクタリング進行中）**
 
-   - 開発標準の約 2.5 倍（元の 8,180 行から約 4,719 行削減）
+   - 開発標準の約 2.4 倍（元の 8,180 行から約 4,890 行削減）
    - 単一責任の原則に違反（改善中）
    - テストが困難（改善中）
    - 保守性が低い（改善中）
@@ -489,7 +489,7 @@ scripts/
      - ✅ フェーズ 13: GL 関連の関数の整理（GlManager、386 行）完了
      - ✅ フェーズ 14: 参加者 UI 関連の関数の整理（ParticipantUIManager、906 行）完了
      - ✅ フェーズ 15: スケジュール関連の関数の整理（ScheduleUtilityManager、252 行）完了
-     - ⏳ フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager、約 300-400 行）
+     - ✅ フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager、完了、約 349 行削減）
      - ⏳ フェーズ 17: その他のユーティリティ関数の整理（約 500-700 行）
 
 3. **`scripts/events/panels/gl-panel.js` が 3,249 行**
@@ -704,7 +704,8 @@ scripts/question-admin/
 - ✅ フェーズ 6: メール送信機能の分離（MailManager）完了
 - ✅ フェーズ 7: 認証・初期化機能の分離（AuthManager）完了
 - ✅ フェーズ 8: リロケーション機能の分離（RelocationManager）完了
-- ⏳ フェーズ 16-17: その他のユーティリティ関数の整理（未着手、詳細は `docs/utility-refactoring-plan.md` を参照）
+- ✅ フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager、完了、約 349 行削減）
+- ⏳ フェーズ 17: その他のユーティリティ関数の整理（未着手、詳細は `docs/utility-refactoring-plan.md` を参照）
 
 **手順**:
 
@@ -855,7 +856,7 @@ scripts/login/
        - 実績: 約 15 行の削減（`app.js` は 6,070 行）
 
 2. **`scripts/question-admin/app.js` のリファクタリング**（進行中）
-   - 期間: 3-4 週間（約 82% 完了、フェーズ 15 完了、全 17 フェーズ中 14 フェーズ完了）
+   - 期間: 3-4 週間（約 88% 完了、フェーズ 16 完了、全 17 フェーズ中 15 フェーズ完了）
    - 影響範囲: 質問管理画面全体
    - リスク: 高（大規模な変更）
    - **完了したフェーズ**:
@@ -993,8 +994,23 @@ scripts/login/
        - ✅ `populateScheduleLocationOptions` を `ScheduleUtilityManager` に移行完了（約 42 行削減、段階 2 完了）
        - ✅ `finalizeEventLoad` を `ScheduleUtilityManager` に移行完了（約 115 行削減、段階 3 完了）
        - 実績: 約 205 行の削減（`app.js` は 3,461 行、`schedule-utility-manager.js` は 252 行、段階 1-3 完了）
+     - ✅ **フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager）**（完了）
+       - ✅ `setActionButtonState` を `ButtonStateManager` に移行完了（約 11 行削減、段階 1 完了）
+       - ✅ `syncSaveButtonState` を `ButtonStateManager` に移行完了（約 16 行削減、段階 1 完了）
+       - ✅ `syncClearButtonState` を `ButtonStateManager` に移行完了（約 9 行削減、段階 1 完了）
+       - ✅ `syncTemplateButtons` を `ButtonStateManager` に移行完了（約 28 行削減、段階 1 完了）
+       - ✅ `syncAllPrintButtonStates` を `ButtonStateManager` に移行完了（約 4 行削減、段階 2 完了）
+       - ✅ `syncPrintViewButtonState` を `ButtonStateManager` に移行完了（約 65 行削減、段階 2 完了）
+       - ✅ `syncStaffPrintViewButtonState` を `ButtonStateManager` に移行完了（約 53 行削減、段階 2 完了）
+       - ✅ `setPrintButtonBusy` を `ButtonStateManager` に移行完了（約 10 行削減、段階 2 完了）
+       - ✅ `setStaffPrintButtonBusy` を `ButtonStateManager` に移行完了（約 10 行削減、段階 2 完了）
+       - ✅ `updateParticipantActionPanelState` を `ButtonStateManager` に移行完了（約 42 行削減、段階 3 完了）
+       - ✅ `setParticipantTab` を `ButtonStateManager` に移行完了（約 24 行削減、段階 4 完了）
+       - ✅ `focusParticipantTab` を `ButtonStateManager` に移行完了（約 8 行削減、段階 4 完了）
+       - ✅ `setupParticipantTabs` を `ButtonStateManager` に移行完了（約 36 行削減、段階 4 完了）
+       - ✅ `syncSelectedEventSummary` を `ButtonStateManager` に移行完了（約 33 行削減、段階 5 完了）
+       - 実績: 約 349 行の削減（`app.js` は 3,290 行、`button-state-manager.js` は 454 行、段階 1-5 完了）
    - **残りの機能**（詳細は `docs/utility-refactoring-plan.md` を参照）:
-     - ⏳ フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager、約 400-500 行）
      - ⏳ フェーズ 17: その他のユーティリティ関数の整理（約 870-1,070 行、`init()`と`window.questionAdminEmbed`を含む）
 
 ### フェーズ 2: 中程度の問題の解決（優先度: 中）
@@ -1062,7 +1078,7 @@ scripts/login/
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
 - ❌ `scripts/events/app.js` - 6,070 行、要改善（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-- ❌ `scripts/question-admin/app.js` - 3,461 行、要改善（リファクタリング進行中、元の 8,180 行から約 4,719 行削減）
+- ❌ `scripts/question-admin/app.js` - 3,290 行、要改善（リファクタリング進行中、元の 8,180 行から約 4,890 行削減）
 - ✅ `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
 - ✅ `scripts/question-admin/managers/ui-manager.js` - 188 行（新規作成、フェーズ 11 完了後）

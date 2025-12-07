@@ -201,36 +201,37 @@
 
 ---
 
-### フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager）
+### フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager）✅ 完了
 
 **対象関数**:
 
-- `syncSaveButtonState()` - 保存ボタン状態の同期
-- `syncClearButtonState()` - クリアボタン状態の同期
-- `syncTemplateButtons()` - テンプレートボタン状態の同期
-- `setActionButtonState()` - アクションボタン状態の設定
-- `syncAllPrintButtonStates()` - すべての印刷ボタン状態の同期
-- `syncPrintViewButtonState()` - 印刷ビューボタン状態の同期
-- `syncStaffPrintViewButtonState()` - スタッフ印刷ビューボタン状態の同期
-- `setPrintButtonBusy()` - 印刷ボタンのビジー状態設定
-- `setStaffPrintButtonBusy()` - スタッフ印刷ボタンのビジー状態設定
-- `openParticipantPrintView()` - 参加者印刷ビューのオープン（PrintManager に委譲されていない実装部分）
-- `openStaffPrintView()` - スタッフ印刷ビューのオープン（PrintManager に委譲されていない実装部分）
-- `syncMailActionState()` - メールアクション状態の同期
-- `updateParticipantActionPanelState()` - 参加者アクションパネル状態の更新
-- `setParticipantTab()` - 参加者タブの設定
-- `focusParticipantTab()` - 参加者タブへのフォーカス
-- `setupParticipantTabs()` - 参加者タブのセットアップ
-- `syncSelectedEventSummary()` - 選択イベントサマリーの同期
+- ✅ `syncSaveButtonState()` - 保存ボタン状態の同期（約 16 行削減、段階 1 完了）
+- ✅ `syncClearButtonState()` - クリアボタン状態の同期（約 9 行削減、段階 1 完了）
+- ✅ `syncTemplateButtons()` - テンプレートボタン状態の同期（約 28 行削減、段階 1 完了）
+- ✅ `setActionButtonState()` - アクションボタン状態の設定（約 11 行削減、段階 1 完了）
+- ✅ `syncAllPrintButtonStates()` - すべての印刷ボタン状態の同期（約 4 行削減、段階 2 完了）
+- ✅ `syncPrintViewButtonState()` - 印刷ビューボタン状態の同期（約 65 行削減、段階 2 完了）
+- ✅ `syncStaffPrintViewButtonState()` - スタッフ印刷ビューボタン状態の同期（約 53 行削減、段階 2 完了）
+- ✅ `setPrintButtonBusy()` - 印刷ボタンのビジー状態設定（約 10 行削減、段階 2 完了）
+- ✅ `setStaffPrintButtonBusy()` - スタッフ印刷ボタンのビジー状態設定（約 10 行削減、段階 2 完了）
+- ⚠️ `openParticipantPrintView()` - 参加者印刷ビューのオープン（PrintManager に委譲済みのため移行不要）
+- ⚠️ `openStaffPrintView()` - スタッフ印刷ビューのオープン（PrintManager に委譲済みのため移行不要）
+- ⚠️ `syncMailActionState()` - メールアクション状態の同期（MailManager に委譲済みのため移行不要）
+- ✅ `updateParticipantActionPanelState()` - 参加者アクションパネル状態の更新（約 42 行削減、段階 3 完了）
+- ✅ `setParticipantTab()` - 参加者タブの設定（約 24 行削減、段階 4 完了）
+- ✅ `focusParticipantTab()` - 参加者タブへのフォーカス（約 8 行削減、段階 4 完了）
+- ✅ `setupParticipantTabs()` - 参加者タブのセットアップ（約 36 行削減、段階 4 完了）
+- ✅ `syncSelectedEventSummary()` - 選択イベントサマリーの同期（約 33 行削減、段階 5 完了）
 
-**推定行数**: 約 300-400 行
+**実績行数**: 約 349 行削減（`app.js` は 3,290 行、`button-state-manager.js` は 454 行、段階 1-5 完了）
 
 **依存関係**:
 
 - `dom`, `state`
-- `hasUnsavedChanges`, `getPendingMailCount`, `resolveParticipantUid`, `renderSchedules`, `renderEvents`
-- `mailManager`, `printManager`
-- 注: `printActionButtonMissingLogged`, `staffPrintActionButtonMissingLogged` は変数として移行対象
+- `hasUnsavedChanges`, `resolveParticipantUid`, `renderSchedules`, `renderEvents`, `getScheduleLabel`
+- `getSelectedParticipantTarget`, `formatParticipantIdentifier`
+- `printManager`, `mailManager`（委譲経由）
+- 注: `printActionButtonMissingLogged`, `staffPrintActionButtonMissingLogged` は変数として移行完了
 
 ---
 

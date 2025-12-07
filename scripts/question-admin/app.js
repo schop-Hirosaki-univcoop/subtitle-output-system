@@ -83,6 +83,7 @@ import { PrintManager } from "./managers/print-manager.js";
 import { CsvManager } from "./managers/csv-manager.js";
 import { EventManager } from "./managers/event-manager.js";
 import { ScheduleUtilityManager } from "./managers/schedule-utility-manager.js";
+import { ButtonStateManager } from "./managers/button-state-manager.js";
 import { StateManager } from "./managers/state-manager.js";
 import { UIManager } from "./managers/ui-manager.js";
 import { ConfirmDialogManager } from "./managers/confirm-dialog-manager.js";
@@ -111,6 +112,7 @@ let uiManager = null;
 let confirmDialogManager = null;
 let glManager = null;
 let participantUIManager = null;
+let buttonStateManager = null;
 
 // glDataFetchCache は GlManager に移行されました
 
@@ -1470,45 +1472,11 @@ function renderParticipantChangePreview(diff, changeInfoByKey, participants = []
 }
 
 function syncSelectedEventSummary() {
-  const eventId = state.selectedEventId;
-  if (!eventId) return;
-
-  const selectedEvent = state.events.find(evt => evt.id === eventId);
-  if (!selectedEvent) return;
-
-  const schedules = Array.isArray(selectedEvent.schedules) ? selectedEvent.schedules : [];
-  const participantCount = Array.isArray(state.participants) ? state.participants.length : 0;
-  const scheduleId = state.selectedScheduleId;
-
-  let changed = false;
-
-  if (scheduleId && schedules.length) {
-    const schedule = schedules.find(item => item.id === scheduleId);
-    if (schedule && Number(schedule.participantCount || 0) !== participantCount) {
-      schedule.participantCount = participantCount;
-      changed = true;
-    }
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
   }
-
-  const totalParticipants = schedules.reduce(
-    (acc, schedule) => acc + Number(schedule?.participantCount || 0),
-    0
-  );
-
-  if (Number(selectedEvent.totalParticipants || 0) !== totalParticipants) {
-    selectedEvent.totalParticipants = totalParticipants;
-    changed = true;
-  }
-
-  if (Number(selectedEvent.scheduleCount || 0) !== schedules.length) {
-    selectedEvent.scheduleCount = schedules.length;
-    changed = true;
-  }
-
-  if (changed) {
-    renderSchedules();
-    renderEvents();
-  }
+  return buttonStateManager.syncSelectedEventSummary();
 }
 
 function renderEvents() {
@@ -1528,70 +1496,35 @@ function renderSchedules() {
 }
 
 function syncSaveButtonState() {
-  const unsaved = hasUnsavedChanges();
-  if (dom.saveButton) {
-    dom.saveButton.disabled = state.saving || !unsaved;
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
   }
-  if (dom.discardButton) {
-    const disabled = state.saving || !unsaved;
-    dom.discardButton.disabled = disabled;
-    if (disabled) {
-      dom.discardButton.setAttribute("aria-disabled", "true");
-    } else {
-      dom.discardButton.removeAttribute("aria-disabled");
-    }
-  }
-  updateParticipantActionPanelState();
+  return buttonStateManager.syncSaveButtonState();
 }
 
 function syncClearButtonState() {
-  if (!dom.clearParticipantsButton) return;
-  const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
-  const hasParticipants = hasSelection && state.participants.length > 0;
-  dom.clearParticipantsButton.disabled = !hasSelection || !hasParticipants || state.saving;
-  updateParticipantActionPanelState();
-  syncMailActionState();
-  syncAllPrintButtonStates();
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
+  }
+  return buttonStateManager.syncClearButtonState();
 }
 
 function syncTemplateButtons() {
-  const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
-  const hasParticipants = hasSelection && state.participants.some(entry => resolveParticipantUid(entry));
-
-  if (dom.downloadParticipantTemplateButton) {
-    dom.downloadParticipantTemplateButton.disabled = !hasSelection;
-    if (hasSelection) {
-      dom.downloadParticipantTemplateButton.removeAttribute("aria-disabled");
-    } else {
-      dom.downloadParticipantTemplateButton.setAttribute("aria-disabled", "true");
-    }
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
   }
-
-  if (dom.downloadTeamTemplateButton) {
-    dom.downloadTeamTemplateButton.disabled = !hasParticipants;
-    if (hasParticipants) {
-      dom.downloadTeamTemplateButton.removeAttribute("aria-disabled");
-      dom.downloadTeamTemplateButton.removeAttribute("title");
-    } else {
-      dom.downloadTeamTemplateButton.setAttribute("aria-disabled", "true");
-      dom.downloadTeamTemplateButton.setAttribute("title", "参加者リストを読み込むとダウンロードできます。");
-    }
-  }
-
-  syncMailActionState();
-  syncAllPrintButtonStates();
+  return buttonStateManager.syncTemplateButtons();
 }
 
 function setActionButtonState(button, disabled) {
-  if (!button) {
-    return;
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
   }
-  button.disabled = disabled;
-  if (disabled) {
-    button.setAttribute("aria-disabled", "true");
-  } else {
-    button.removeAttribute("aria-disabled");
-  }
+  return buttonStateManager.setActionButtonState(button, disabled);
 }
 
 function getPendingMailCount() {
@@ -1602,151 +1535,46 @@ function getPendingMailCount() {
   return mailManager.getPendingMailCount();
 }
 
-let printActionButtonMissingLogged = false;
-let staffPrintActionButtonMissingLogged = false;
+// printActionButtonMissingLogged, staffPrintActionButtonMissingLogged は ButtonStateManager に移行されました
 
 function syncAllPrintButtonStates() {
-  syncPrintViewButtonState();
-  syncStaffPrintViewButtonState();
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
+  }
+  return buttonStateManager.syncAllPrintButtonStates();
 }
 
 function syncPrintViewButtonState() {
-  logPrintDebug("syncPrintViewButtonState start");
-  const button = dom.openPrintViewButton;
-  if (!button) {
-    if (!printActionButtonMissingLogged) {
-      printActionButtonMissingLogged = true;
-      if (typeof console !== "undefined" && typeof console.warn === "function") {
-        console.warn("[Print] open-print-view-button が見つからないため、印刷アクションの状態を同期できませんでした。");
-      }
-    }
-    logPrintWarn("syncPrintViewButtonState aborted: missing button");
-    return;
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
   }
-
-  if (!button.dataset.defaultLabel) {
-    button.dataset.defaultLabel = button.textContent ? button.textContent.trim() : "印刷用リスト";
-  }
-
-  if (button.dataset.printing === "true") {
-    logPrintDebug("syncPrintViewButtonState printing state");
-    setActionButtonState(button, true);
-    const busyLabel = button.dataset.printingLabel || "印刷準備中…";
-    if (!button.dataset.printingLabel) {
-      button.dataset.printingLabel = busyLabel;
-    }
-    if (button.textContent !== busyLabel) {
-      button.textContent = busyLabel;
-    }
-    return;
-  }
-
-  if (button.dataset.printLocked === "true") {
-    logPrintDebug("syncPrintViewButtonState locked state");
-    setActionButtonState(button, true);
-    const defaultLabel = button.dataset.defaultLabel || "印刷用リスト";
-    if (button.textContent !== defaultLabel) {
-      button.textContent = defaultLabel;
-    }
-    return;
-  }
-
-  const participantList = Array.isArray(state.participants) ? state.participants : [];
-  const hasSelection = Boolean(state.selectedEventId && state.selectedScheduleId);
-  const hasParticipants = hasSelection && participantList.length > 0;
-  const disabled = !hasSelection || !hasParticipants;
-
-  logPrintDebug("syncPrintViewButtonState resolved", { hasSelection, hasParticipants, disabled });
-
-  setActionButtonState(button, disabled);
-
-  if (disabled) {
-    closeParticipantPrintPreview();
-  }
-
-  const baseLabel = button.dataset.defaultLabel || "印刷用リスト";
-  if (button.textContent !== baseLabel) {
-    button.textContent = baseLabel;
-  }
-
+  return buttonStateManager.syncPrintViewButtonState();
 }
 
 function syncStaffPrintViewButtonState() {
-  logPrintDebug("syncStaffPrintViewButtonState start");
-  const button = dom.openStaffPrintViewButton;
-  if (!button) {
-    if (!staffPrintActionButtonMissingLogged) {
-      staffPrintActionButtonMissingLogged = true;
-      if (typeof console !== "undefined" && typeof console.warn === "function") {
-        console.warn("[Print] open-staff-print-view-button が見つからないため、印刷アクションの状態を同期できませんでした。");
-      }
-    }
-    logPrintWarn("syncStaffPrintViewButtonState aborted: missing button");
-    return;
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
   }
-
-  if (!button.dataset.defaultLabel) {
-    button.dataset.defaultLabel = button.textContent ? button.textContent.trim() : "スタッフ印刷";
-  }
-
-  if (button.dataset.printing === "true") {
-    setActionButtonState(button, true);
-    const busyLabel = button.dataset.printingLabel || "印刷準備中…";
-    if (!button.dataset.printingLabel) {
-      button.dataset.printingLabel = busyLabel;
-    }
-    if (button.textContent !== busyLabel) {
-      button.textContent = busyLabel;
-    }
-    return;
-  }
-
-  if (button.dataset.printLocked === "true") {
-    setActionButtonState(button, true);
-    const defaultLabel = button.dataset.defaultLabel || "スタッフ印刷";
-    if (button.textContent !== defaultLabel) {
-      button.textContent = defaultLabel;
-    }
-    return;
-  }
-
-  const eventId = state.selectedEventId;
-  const scheduleId = state.selectedScheduleId;
-  const hasSelection = Boolean(eventId && scheduleId);
-  const staffGroups = hasSelection && printManager ? printManager.buildStaffPrintGroups({ eventId, scheduleId }) : [];
-  const totalStaff = staffGroups.reduce((sum, group) => sum + (group.members?.length || 0), 0);
-  const disabled = !hasSelection || totalStaff === 0;
-
-  setActionButtonState(button, disabled);
-
-  const baseLabel = button.dataset.defaultLabel || "スタッフ印刷";
-  if (button.textContent !== baseLabel) {
-    button.textContent = baseLabel;
-  }
+  return buttonStateManager.syncStaffPrintViewButtonState();
 }
 
 function setPrintButtonBusy(isBusy) {
-  const button = dom.openPrintViewButton;
-  if (!button) return;
-  logPrintDebug("setPrintButtonBusy", { isBusy });
-  if (isBusy) {
-    button.dataset.printing = "true";
-  } else {
-    delete button.dataset.printing;
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
   }
-  syncAllPrintButtonStates();
+  return buttonStateManager.setPrintButtonBusy(isBusy);
 }
 
 function setStaffPrintButtonBusy(isBusy) {
-  const button = dom.openStaffPrintViewButton;
-  if (!button) return;
-  logPrintDebug("setStaffPrintButtonBusy", { isBusy });
-  if (isBusy) {
-    button.dataset.printing = "true";
-  } else {
-    delete button.dataset.printing;
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
   }
-  syncAllPrintButtonStates();
+  return buttonStateManager.setStaffPrintButtonBusy(isBusy);
 }
 
 // logMailInfo, logMailWarn, logMailError, MAIL_LOG_ENABLED, MAIL_LOG_OUTPUT_ENABLED, MAIL_LOG_PREFIX, mailActionButtonMissingLogged, lastMailActionStateSignature は MailManager に移行されました
@@ -1760,118 +1588,35 @@ function syncMailActionState() {
 }
 
 function updateParticipantActionPanelState() {
-  const panel = dom.participantActionPanel;
-  const info = dom.participantActionInfo;
-  const editButton = dom.editSelectedParticipantButton;
-  const cancelButton = dom.cancelSelectedParticipantButton;
-  const relocateButton = dom.relocateSelectedParticipantButton;
-  const deleteButton = dom.deleteSelectedParticipantButton;
-
-  const target = getSelectedParticipantTarget();
-  const entry = target.entry;
-  const hasSelection = Boolean(entry);
-  const disableIndividual = state.saving || !hasSelection;
-
-  setActionButtonState(editButton, disableIndividual);
-  setActionButtonState(cancelButton, disableIndividual);
-  setActionButtonState(relocateButton, disableIndividual);
-  setActionButtonState(deleteButton, disableIndividual);
-
-  const actionable = Boolean(
-    (dom.saveButton && !dom.saveButton.disabled) ||
-    (dom.discardButton && !dom.discardButton.disabled) ||
-    (dom.clearParticipantsButton && !dom.clearParticipantsButton.disabled) ||
-    (editButton && !editButton.disabled) ||
-    (cancelButton && !cancelButton.disabled) ||
-    (relocateButton && !relocateButton.disabled) ||
-    (deleteButton && !deleteButton.disabled)
-  );
-
-  if (panel) {
-    panel.classList.toggle("is-idle", !actionable);
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
   }
-
-  if (info) {
-    if (entry) {
-      info.textContent = `${formatParticipantIdentifier(entry)}を選択中`;
-    } else if (actionable) {
-      info.textContent = "参加者を選択すると個別操作ができます。";
-    } else {
-      info.textContent = "操作可能なボタンはありません。";
-    }
-  }
+  return buttonStateManager.updateParticipantActionPanelState();
 }
 
 function setParticipantTab(tabKey = "manage") {
-  const target = tabKey === "csv" ? "csv" : "manage";
-  state.activeParticipantTab = target;
-  const entries = [
-    { key: "manage", tab: dom.participantManageTab, panel: dom.participantManagePanel },
-    { key: "csv", tab: dom.participantCsvTab, panel: dom.participantCsvPanel }
-  ];
-  entries.forEach(({ key, tab, panel }) => {
-    const isActive = key === target;
-    if (tab) {
-      tab.classList.toggle("is-active", isActive);
-      tab.setAttribute("aria-selected", isActive ? "true" : "false");
-      tab.setAttribute("tabindex", isActive ? "0" : "-1");
-    }
-    if (panel) {
-      panel.hidden = !isActive;
-      if (isActive) {
-        panel.removeAttribute("aria-hidden");
-      } else {
-        panel.setAttribute("aria-hidden", "true");
-      }
-    }
-  });
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
+  }
+  return buttonStateManager.setParticipantTab(tabKey);
 }
 
 function focusParticipantTab(tabKey) {
-  if (tabKey === "csv" && dom.participantCsvTab) {
-    dom.participantCsvTab.focus();
-    return;
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
   }
-  if (dom.participantManageTab) {
-    dom.participantManageTab.focus();
-  }
+  return buttonStateManager.focusParticipantTab(tabKey);
 }
 
 function setupParticipantTabs() {
-  const entries = [
-    { key: "manage", tab: dom.participantManageTab },
-    { key: "csv", tab: dom.participantCsvTab }
-  ].filter(entry => entry.tab instanceof HTMLElement);
-
-  if (!entries.length) {
-    return;
+  // ButtonStateManager に委譲
+  if (!buttonStateManager) {
+    throw new Error("ButtonStateManager is not initialized");
   }
-
-  entries.forEach(({ key, tab }, index) => {
-    tab.addEventListener("click", () => setParticipantTab(key));
-    tab.addEventListener("keydown", event => {
-      if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
-        event.preventDefault();
-        const direction = event.key === "ArrowRight" ? 1 : -1;
-        const nextIndex = (index + direction + entries.length) % entries.length;
-        const next = entries[nextIndex];
-        setParticipantTab(next.key);
-        focusParticipantTab(next.key);
-      } else if (event.key === "Home" || event.key === "PageUp") {
-        event.preventDefault();
-        const first = entries[0];
-        setParticipantTab(first.key);
-        focusParticipantTab(first.key);
-      } else if (event.key === "End" || event.key === "PageDown") {
-        event.preventDefault();
-        const last = entries[entries.length - 1];
-        setParticipantTab(last.key);
-        focusParticipantTab(last.key);
-      }
-    });
-  });
-
-  setParticipantTab(state.activeParticipantTab || "manage");
+  return buttonStateManager.setupParticipantTabs();
 }
 
 function updateParticipantContext(options = {}) {
@@ -3018,6 +2763,55 @@ function init() {
       scheduleManager.renderSchedules();
     },
     updateParticipantContext
+  });
+
+  // ButtonStateManager を初期化
+  buttonStateManager = new ButtonStateManager({
+    state,
+    dom,
+    // 依存関数
+    hasUnsavedChanges: () => {
+      if (!stateManager) {
+        throw new Error("StateManager is not initialized");
+      }
+      return stateManager.hasUnsavedChanges();
+    },
+    resolveParticipantUid,
+    syncMailActionState: () => {
+      if (!mailManager) return;
+      mailManager.syncMailActionState();
+    },
+    syncAllPrintButtonStates,
+    // 印刷関連の依存関数
+    logPrintDebug,
+    logPrintWarn,
+    closeParticipantPrintPreview: () => {
+      if (!printManager) {
+        throw new Error("PrintManager is not initialized");
+      }
+      printManager.closeParticipantPrintPreview();
+    },
+    printManager,
+    // 参加者アクションパネル関連の依存関数
+    getSelectedParticipantTarget: () => {
+      if (!participantUIManager) {
+        throw new Error("ParticipantUIManager is not initialized");
+      }
+      return participantUIManager.getSelectedParticipantTarget();
+    },
+    formatParticipantIdentifier: (entry) => {
+      if (!participantUIManager) {
+        throw new Error("ParticipantUIManager is not initialized");
+      }
+      return participantUIManager.formatParticipantIdentifier(entry);
+    },
+    // イベントサマリー関連の依存関数
+    getScheduleLabel,
+    renderSchedules: () => {
+      if (!scheduleManager) return;
+      scheduleManager.renderSchedules();
+    },
+    renderEvents
   });
 
   // GlManager を初期化
