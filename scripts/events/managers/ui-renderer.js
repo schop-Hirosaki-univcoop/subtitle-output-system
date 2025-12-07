@@ -6,6 +6,26 @@ import { formatScheduleRange } from "../../operator/utils.js";
 import { OPERATOR_MODE_SUPPORT } from "../../shared/operator-modes.js";
 import { normalizeScheduleId } from "../../shared/channel-paths.js";
 
+const SCHEDULE_CONSENSUS_TOAST_MS = 3_000;
+
+/**
+ * setTimeout/clearTimeout を持つホストオブジェクトを検出します。
+ * ブラウザ/Nodeの両環境で安全にタイマーを利用するためのフォールバックです。
+ * @returns {{ setTimeout: typeof setTimeout, clearTimeout: typeof clearTimeout }}
+ */
+function getTimerHost() {
+  if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+    return window;
+  }
+  if (typeof globalThis !== "undefined" && typeof globalThis.setTimeout === "function") {
+    return globalThis;
+  }
+  return {
+    setTimeout,
+    clearTimeout
+  };
+}
+
 /**
  * UI描画クラス
  * EventAdminApp からUI描画機能を分離したモジュール
@@ -793,6 +813,84 @@ export class EventUIRenderer {
       .finally(() => {
         this.app.setScheduleConflictSubmitting(false);
       });
+  }
+
+  /**
+   * スケジュール合意トーストを表示します。
+   * @param {object} options - オプション
+   * @param {string} options.label - スケジュールラベル
+   * @param {string} options.range - スケジュール範囲
+   * @param {string} options.byline - 確定情報
+   */
+  showScheduleConsensusToast({ label = "", range = "", byline = "" } = {}) {
+    const toast = this.app.dom.scheduleConsensusToast;
+    if (!toast) {
+      return;
+    }
+    const timerHost = getTimerHost();
+    this.hideScheduleConsensusToast();
+    if (this.app.scheduleConsensusHideTimer) {
+      timerHost.clearTimeout(this.app.scheduleConsensusHideTimer);
+      this.app.scheduleConsensusHideTimer = 0;
+    }
+    toast.innerHTML = "";
+    const title = document.createElement("div");
+    if (label) {
+      title.textContent = `テロップ操作は「${label}」で進行します`;
+    } else {
+      title.textContent = "テロップ操作の日程が確定しました";
+    }
+    toast.appendChild(title);
+    if (range) {
+      const rangeLine = document.createElement("div");
+      rangeLine.className = "flow-consensus-toast__range";
+      rangeLine.textContent = range;
+      toast.appendChild(rangeLine);
+    }
+    if (byline) {
+      const bylineLine = document.createElement("div");
+      bylineLine.className = "flow-consensus-toast__byline";
+      bylineLine.textContent = `確定: ${byline}`;
+      toast.appendChild(bylineLine);
+    }
+    toast.hidden = false;
+    // force reflow for transition
+    void toast.offsetWidth;
+    toast.classList.add("is-visible");
+    this.app.scheduleConsensusToastTimer = timerHost.setTimeout(() => {
+      this.app.scheduleConsensusToastTimer = 0;
+      this.hideScheduleConsensusToast();
+    }, SCHEDULE_CONSENSUS_TOAST_MS);
+  }
+
+  /**
+   * スケジュール合意トーストを非表示にします。
+   */
+  hideScheduleConsensusToast() {
+    const toast = this.app.dom.scheduleConsensusToast;
+    if (!toast) {
+      return;
+    }
+    const timerHost = getTimerHost();
+    if (this.app.scheduleConsensusToastTimer) {
+      timerHost.clearTimeout(this.app.scheduleConsensusToastTimer);
+      this.app.scheduleConsensusToastTimer = 0;
+    }
+    if (this.app.scheduleConsensusHideTimer) {
+      timerHost.clearTimeout(this.app.scheduleConsensusHideTimer);
+      this.app.scheduleConsensusHideTimer = 0;
+    }
+    if (toast.hidden) {
+      toast.textContent = "";
+      toast.classList.remove("is-visible");
+      return;
+    }
+    toast.classList.remove("is-visible");
+    this.app.scheduleConsensusHideTimer = timerHost.setTimeout(() => {
+      toast.hidden = true;
+      toast.textContent = "";
+      this.app.scheduleConsensusHideTimer = 0;
+    }, 220);
   }
 }
 

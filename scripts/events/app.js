@@ -73,7 +73,6 @@ import {
   createPrintPreviewController
 } from "../shared/print-preview.js";
 
-const SCHEDULE_CONSENSUS_TOAST_MS = 3_000;
 const PENDING_NAVIGATION_CLEAR_DELAY_MS = 5_000;
 const AUTH_RESUME_FALLBACK_DELAY_MS = 4_000;
 /**
@@ -3220,107 +3219,18 @@ export class EventAdminApp {
   }
 
   showScheduleConsensusToast({ label = "", range = "", byline = "" } = {}) {
-    const toast = this.dom.scheduleConsensusToast;
-    if (!toast) {
-      return;
-    }
-    const timerHost = getTimerHost();
-    this.hideScheduleConsensusToast();
-    if (this.scheduleConsensusHideTimer) {
-      timerHost.clearTimeout(this.scheduleConsensusHideTimer);
-      this.scheduleConsensusHideTimer = 0;
-    }
-    toast.innerHTML = "";
-    const title = document.createElement("div");
-    if (label) {
-      title.textContent = `テロップ操作は「${label}」で進行します`;
-    } else {
-      title.textContent = "テロップ操作の日程が確定しました";
-    }
-    toast.appendChild(title);
-    if (range) {
-      const rangeLine = document.createElement("div");
-      rangeLine.className = "flow-consensus-toast__range";
-      rangeLine.textContent = range;
-      toast.appendChild(rangeLine);
-    }
-    if (byline) {
-      const bylineLine = document.createElement("div");
-      bylineLine.className = "flow-consensus-toast__byline";
-      bylineLine.textContent = `確定: ${byline}`;
-      toast.appendChild(bylineLine);
-    }
-    toast.hidden = false;
-    // force reflow for transition
-    void toast.offsetWidth;
-    toast.classList.add("is-visible");
-    this.scheduleConsensusToastTimer = timerHost.setTimeout(() => {
-      this.scheduleConsensusToastTimer = 0;
-      this.hideScheduleConsensusToast();
-    }, SCHEDULE_CONSENSUS_TOAST_MS);
+    // EventUIRenderer に委譲
+    return this.uiRenderer.showScheduleConsensusToast({ label, range, byline });
   }
 
   hideScheduleConsensusToast() {
-    const toast = this.dom.scheduleConsensusToast;
-    if (!toast) {
-      return;
-    }
-    const timerHost = getTimerHost();
-    if (this.scheduleConsensusToastTimer) {
-      timerHost.clearTimeout(this.scheduleConsensusToastTimer);
-      this.scheduleConsensusToastTimer = 0;
-    }
-    if (this.scheduleConsensusHideTimer) {
-      timerHost.clearTimeout(this.scheduleConsensusHideTimer);
-      this.scheduleConsensusHideTimer = 0;
-    }
-    if (toast.hidden) {
-      toast.textContent = "";
-      toast.classList.remove("is-visible");
-      return;
-    }
-    toast.classList.remove("is-visible");
-    this.scheduleConsensusHideTimer = timerHost.setTimeout(() => {
-      toast.hidden = true;
-      toast.textContent = "";
-      this.scheduleConsensusHideTimer = 0;
-    }, 220);
+    // EventUIRenderer に委譲
+    return this.uiRenderer.hideScheduleConsensusToast();
   }
 
   maybeClearScheduleConsensus(context = null) {
-    const consensus = this.scheduleConsensusState;
-    if (!consensus || !consensus.conflictSignature) {
-      return;
-    }
-    const eventId = ensureString(this.selectedEventId);
-    if (!eventId) {
-      return;
-    }
-    if (context?.hasConflict) {
-      return;
-    }
-    try {
-      const ref = getOperatorScheduleConsensusRef(eventId);
-      const signature = consensus.conflictSignature;
-      this.scheduleConsensusState = null;
-      this.scheduleConsensusLastSignature = "";
-      this.scheduleConsensusLastKey = "";
-      this.scheduleConflictPromptSignature = "";
-      this.scheduleConflictLastPromptSignature = "";
-      remove(ref)
-        .then(() => {
-          this.logFlowState("スケジュール合意情報を削除しました", {
-            eventId,
-            conflictSignature: signature
-          });
-        })
-        .catch((error) => {
-          console.debug("Failed to clear schedule consensus:", error);
-        });
-      this.syncScheduleConflictPromptState(context);
-    } catch (error) {
-      console.debug("Failed to clear schedule consensus:", error);
-    }
+    // EventFirebaseManager に委譲
+    return this.firebaseManager.maybeClearScheduleConsensus(context);
   }
 
   setHostCommittedSchedule(
@@ -4249,111 +4159,6 @@ export class EventAdminApp {
       : 0;
     if (external > 0) {
       this.chatAcknowledged = false;
-    }
-  }
-
-
-  showScheduleConsensusToast({ label = "", range = "", byline = "" } = {}) {
-    const toast = this.dom.scheduleConsensusToast;
-    if (!toast) {
-      return;
-    }
-    const timerHost = getTimerHost();
-    this.hideScheduleConsensusToast();
-    if (this.scheduleConsensusHideTimer) {
-      timerHost.clearTimeout(this.scheduleConsensusHideTimer);
-      this.scheduleConsensusHideTimer = 0;
-    }
-    toast.innerHTML = "";
-    const title = document.createElement("div");
-    if (label) {
-      title.textContent = `テロップ操作は「${label}」で進行します`;
-    } else {
-      title.textContent = "テロップ操作の日程が確定しました";
-    }
-    toast.appendChild(title);
-    if (range) {
-      const rangeLine = document.createElement("div");
-      rangeLine.className = "flow-consensus-toast__range";
-      rangeLine.textContent = range;
-      toast.appendChild(rangeLine);
-    }
-    if (byline) {
-      const bylineLine = document.createElement("div");
-      bylineLine.className = "flow-consensus-toast__byline";
-      bylineLine.textContent = `確定: ${byline}`;
-      toast.appendChild(bylineLine);
-    }
-    toast.hidden = false;
-    // force reflow for transition
-    void toast.offsetWidth;
-    toast.classList.add("is-visible");
-    this.scheduleConsensusToastTimer = timerHost.setTimeout(() => {
-      this.scheduleConsensusToastTimer = 0;
-      this.hideScheduleConsensusToast();
-    }, SCHEDULE_CONSENSUS_TOAST_MS);
-  }
-
-  hideScheduleConsensusToast() {
-    const toast = this.dom.scheduleConsensusToast;
-    if (!toast) {
-      return;
-    }
-    const timerHost = getTimerHost();
-    if (this.scheduleConsensusToastTimer) {
-      timerHost.clearTimeout(this.scheduleConsensusToastTimer);
-      this.scheduleConsensusToastTimer = 0;
-    }
-    if (this.scheduleConsensusHideTimer) {
-      timerHost.clearTimeout(this.scheduleConsensusHideTimer);
-      this.scheduleConsensusHideTimer = 0;
-    }
-    if (toast.hidden) {
-      toast.textContent = "";
-      toast.classList.remove("is-visible");
-      return;
-    }
-    toast.classList.remove("is-visible");
-    this.scheduleConsensusHideTimer = timerHost.setTimeout(() => {
-      toast.hidden = true;
-      toast.textContent = "";
-      this.scheduleConsensusHideTimer = 0;
-    }, 220);
-  }
-
-  maybeClearScheduleConsensus(context = null) {
-    const consensus = this.scheduleConsensusState;
-    if (!consensus || !consensus.conflictSignature) {
-      return;
-    }
-    const eventId = ensureString(this.selectedEventId);
-    if (!eventId) {
-      return;
-    }
-    if (context?.hasConflict) {
-      return;
-    }
-    try {
-      const ref = getOperatorScheduleConsensusRef(eventId);
-      const signature = consensus.conflictSignature;
-      this.scheduleConsensusState = null;
-      this.scheduleConsensusLastSignature = "";
-      this.scheduleConsensusLastKey = "";
-      this.scheduleConflictPromptSignature = "";
-      this.scheduleConflictLastPromptSignature = "";
-      remove(ref)
-        .then(() => {
-          this.logFlowState("スケジュール合意情報を削除しました", {
-            eventId,
-            conflictSignature: signature
-          });
-        })
-        .catch((error) => {
-          console.debug("Failed to clear schedule consensus:", error);
-        });
-      this.syncScheduleConflictPromptState(context);
-    } catch (error) {
-      console.debug("Failed to clear schedule consensus:", error);
     }
   }
 

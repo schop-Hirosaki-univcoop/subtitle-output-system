@@ -1348,5 +1348,45 @@ export class EventFirebaseManager {
 
     this.reconcileHostPresenceSessions(eventId, uid, sessionId).catch(() => {});
   }
+
+  /**
+   * スケジュール合意情報をクリアする可能性を判定し、必要に応じてクリアします。
+   * @param {object|null} context - コンテキスト情報
+   */
+  maybeClearScheduleConsensus(context = null) {
+    const consensus = this.app.scheduleConsensusState;
+    if (!consensus || !consensus.conflictSignature) {
+      return;
+    }
+    const eventId = ensureString(this.app.selectedEventId);
+    if (!eventId) {
+      return;
+    }
+    if (context?.hasConflict) {
+      return;
+    }
+    try {
+      const ref = getOperatorScheduleConsensusRef(eventId);
+      const signature = consensus.conflictSignature;
+      this.app.scheduleConsensusState = null;
+      this.app.scheduleConsensusLastSignature = "";
+      this.app.scheduleConsensusLastKey = "";
+      this.app.scheduleConflictPromptSignature = "";
+      this.app.scheduleConflictLastPromptSignature = "";
+      remove(ref)
+        .then(() => {
+          this.app.logFlowState("スケジュール合意情報を削除しました", {
+            eventId,
+            conflictSignature: signature
+          });
+        })
+        .catch((error) => {
+          console.debug("Failed to clear schedule consensus:", error);
+        });
+      this.app.uiRenderer.syncScheduleConflictPromptState(context);
+    } catch (error) {
+      console.debug("Failed to clear schedule consensus:", error);
+    }
+  }
 }
 
