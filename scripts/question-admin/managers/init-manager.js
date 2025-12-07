@@ -324,6 +324,106 @@ export class InitManager {
       FORM_PAGE_PATH: this.FORM_PAGE_PATH
     });
     
+    // ParticipantContextManager を初期化
+    refs.participantContextManager = new ManagerClasses.ParticipantContextManager({
+      state: this.state,
+      dom: this.dom,
+      // 依存関数と定数
+      isPlaceholderUploadStatus: () => {
+        if (!refs.stateManager) {
+          throw new Error("StateManager is not initialized");
+        }
+        return refs.stateManager.isPlaceholderUploadStatus();
+      },
+      getMissingSelectionStatusMessage: () => {
+        if (!refs.stateManager) {
+          throw new Error("StateManager is not initialized");
+        }
+        return refs.stateManager.getMissingSelectionStatusMessage();
+      },
+      setUploadStatus: (message, variant) => {
+        if (!refs.stateManager) {
+          throw new Error("StateManager is not initialized");
+        }
+        return refs.stateManager.setUploadStatus(message, variant);
+      },
+      syncTemplateButtons: this.syncTemplateButtons,
+      syncClearButtonState: this.syncClearButtonState,
+      PARTICIPANT_DESCRIPTION_DEFAULT: this.PARTICIPANT_DESCRIPTION_DEFAULT,
+      FOCUS_TARGETS: this.FOCUS_TARGETS
+    });
+    
+    // ParticipantActionManager を初期化
+    refs.participantActionManager = new ManagerClasses.ParticipantActionManager({
+      state: this.state,
+      dom: this.dom,
+      // 依存関数
+      hasUnsavedChanges: () => {
+        if (!refs.stateManager) {
+          throw new Error("StateManager is not initialized");
+        }
+        return refs.stateManager.hasUnsavedChanges();
+      },
+      confirmAction: (options) => {
+        if (!refs.confirmDialogManager) {
+          throw new Error("ConfirmDialogManager is not initialized");
+        }
+        return refs.confirmDialogManager.confirmAction(options);
+      },
+      setUploadStatus: (message, variant) => {
+        if (!refs.stateManager) {
+          throw new Error("StateManager is not initialized");
+        }
+        return refs.stateManager.setUploadStatus(message, variant);
+      },
+      loadParticipants: this.loadParticipants,
+      cloneParticipantEntry: (entry) => {
+        if (!refs.stateManager) {
+          throw new Error("StateManager is not initialized");
+        }
+        return refs.stateManager.cloneParticipantEntry(entry);
+      },
+      captureParticipantBaseline: (entries, options) => {
+        if (!refs.stateManager) {
+          throw new Error("StateManager is not initialized");
+        }
+        return refs.stateManager.captureParticipantBaseline(entries, options);
+      },
+      renderParticipants: this.renderParticipants,
+      handleSave: this.handleSave,
+      updateDuplicateMatches: this.updateDuplicateMatches,
+      getSelectedParticipantTarget: () => {
+        if (!refs.participantUIManager) {
+          throw new Error("ParticipantUIManager is not initialized");
+        }
+        return refs.participantUIManager.getSelectedParticipantTarget();
+      },
+      getSelectionRequiredMessage: (prefix) => {
+        if (!refs.stateManager) {
+          throw new Error("StateManager is not initialized");
+        }
+        return refs.stateManager.getSelectionRequiredMessage(prefix);
+      },
+      handleQuickCancelAction: (participantId, rowIndex, rowKey) => {
+        if (!refs.participantUIManager) {
+          throw new Error("ParticipantUIManager is not initialized");
+        }
+        return refs.participantUIManager.handleQuickCancelAction(participantId, rowIndex, rowKey);
+      },
+      handleDeleteParticipant: (participantId, rowIndex, rowKey) => {
+        if (!refs.participantManager) {
+          throw new Error("ParticipantManager is not initialized");
+        }
+        return refs.participantManager.handleDeleteParticipant(participantId, rowIndex, rowKey);
+      },
+      openParticipantEditor: (participantId, rowKey) => {
+        if (!refs.participantManager) {
+          throw new Error("ParticipantManager is not initialized");
+        }
+        return refs.participantManager.openParticipantEditor(participantId, rowKey);
+      }
+    });
+    
     // ConfirmDialogManagerのセットアップ
     if (refs.confirmDialogManager) {
       refs.confirmDialogManager.setupConfirmDialog();

@@ -2230,111 +2230,11 @@ function init() {
   buttonStateManager = managerRefs.buttonStateManager;
   tokenApiManager = managerRefs.tokenApiManager;
   shareClipboardManager = managerRefs.shareClipboardManager;
+  participantContextManager = managerRefs.participantContextManager;
+  participantActionManager = managerRefs.participantActionManager;
   
   // 残りのManager初期化（段階的にInitManagerに移行予定）
   // 現在はapp.jsで初期化し、managerRefsにも代入
-
-  // ParticipantContextManager を初期化
-  participantContextManager = new ParticipantContextManager({
-    state,
-    dom,
-    // 依存関数と定数
-    isPlaceholderUploadStatus: () => {
-      if (!stateManager) {
-        throw new Error("StateManager is not initialized");
-      }
-      return stateManager.isPlaceholderUploadStatus();
-    },
-    getMissingSelectionStatusMessage: () => {
-      if (!stateManager) {
-        throw new Error("StateManager is not initialized");
-      }
-      return stateManager.getMissingSelectionStatusMessage();
-    },
-    setUploadStatus: (message, variant) => {
-      if (!stateManager) {
-        throw new Error("StateManager is not initialized");
-      }
-      return stateManager.setUploadStatus(message, variant);
-    },
-    syncTemplateButtons,
-    syncClearButtonState,
-    PARTICIPANT_DESCRIPTION_DEFAULT,
-    FOCUS_TARGETS
-  });
-  managerRefs.participantContextManager = participantContextManager;
-
-  // ParticipantActionManager を初期化
-  participantActionManager = new ParticipantActionManager({
-    state,
-    dom,
-    // 依存関数
-    hasUnsavedChanges: () => {
-      if (!stateManager) {
-        throw new Error("StateManager is not initialized");
-      }
-      return stateManager.hasUnsavedChanges();
-    },
-    confirmAction: (options) => {
-      if (!confirmDialogManager) {
-        throw new Error("ConfirmDialogManager is not initialized");
-      }
-      return confirmDialogManager.confirmAction(options);
-    },
-    setUploadStatus: (message, variant) => {
-      if (!stateManager) {
-        throw new Error("StateManager is not initialized");
-      }
-      return stateManager.setUploadStatus(message, variant);
-    },
-    loadParticipants,
-    cloneParticipantEntry: (entry) => {
-      if (!stateManager) {
-        throw new Error("StateManager is not initialized");
-      }
-      return stateManager.cloneParticipantEntry(entry);
-    },
-    captureParticipantBaseline: (entries, options) => {
-      if (!stateManager) {
-        throw new Error("StateManager is not initialized");
-      }
-      return stateManager.captureParticipantBaseline(entries, options);
-    },
-    renderParticipants,
-    handleSave,
-    updateDuplicateMatches,
-    getSelectedParticipantTarget: () => {
-      if (!participantUIManager) {
-        throw new Error("ParticipantUIManager is not initialized");
-      }
-      return participantUIManager.getSelectedParticipantTarget();
-    },
-    getSelectionRequiredMessage: (prefix) => {
-      if (!stateManager) {
-        throw new Error("StateManager is not initialized");
-      }
-      return stateManager.getSelectionRequiredMessage(prefix);
-    },
-    handleQuickCancelAction: (participantId, rowIndex, rowKey) => {
-      if (!participantUIManager) {
-        throw new Error("ParticipantUIManager is not initialized");
-      }
-      return participantUIManager.handleQuickCancelAction(participantId, rowIndex, rowKey);
-    },
-    handleDeleteParticipant: (participantId, rowIndex, rowKey) => {
-      if (!participantManager) {
-        throw new Error("ParticipantManager is not initialized");
-      }
-      return participantManager.handleDeleteParticipant(participantId, rowIndex, rowKey);
-    },
-    openParticipantEditor: (participantId, rowKey) => {
-      if (!participantManager) {
-        throw new Error("ParticipantManager is not initialized");
-      }
-      return participantManager.openParticipantEditor(participantId, rowKey);
-    }
-  });
-  managerRefs.participantActionManager = participantActionManager;
 
   // GlManager を初期化
   glManager = new GlManager({
@@ -2941,9 +2841,7 @@ function init() {
   scheduleManager.selectScheduleSelf = scheduleManager.selectSchedule.bind(scheduleManager);
   
   // すべてのManagerをグローバル変数に同期（managerRefsから）
-  // tokenApiManagerとshareClipboardManagerは既にInitManagerで初期化され、上で同期済み
-  participantContextManager = managerRefs.participantContextManager;
-  participantActionManager = managerRefs.participantActionManager;
+  // tokenApiManager, shareClipboardManager, participantContextManager, participantActionManagerは既にInitManagerで初期化され、上で同期済み
   glManager = managerRefs.glManager;
   participantUIManager = managerRefs.participantUIManager;
   csvManager = managerRefs.csvManager;
