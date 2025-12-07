@@ -42,7 +42,7 @@
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
 | `scripts/events/app.js`                       | 6,070 | ❌ 要改善（基準の約 4.0 倍、リファクタリング完了）   |
-| `scripts/question-admin/app.js`               | 4,347 | ❌ 要改善（基準の約 2.9 倍、リファクタリング進行中） |
+| `scripts/question-admin/app.js`               | 4,266 | ❌ 要改善（基準の約 2.8 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
 | `scripts/operator/questions.js`               | 1,734 | ⚠️ 許容範囲（やや大きい）                            |
@@ -61,11 +61,12 @@
 2. **巨大な単一ファイル**
 
    - `scripts/events/app.js` - 6,070 行（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-   - `scripts/question-admin/app.js` - 4,347 行（リファクタリング進行中、元の 8,180 行から約 3,833 行削減）
+   - `scripts/question-admin/app.js` - 4,266 行（リファクタリング進行中、元の 8,180 行から約 3,914 行削減）
    - `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
 - ✅ `scripts/question-admin/managers/ui-manager.js` - 188 行（新規作成、フェーズ 11 完了後）
+- ✅ `scripts/question-admin/managers/confirm-dialog-manager.js` - 128 行（新規作成、フェーズ 12 完了後）
 
 3. **中規模の単一ファイル**
 
@@ -852,7 +853,7 @@ scripts/login/
        - 実績: 約 15 行の削減（`app.js` は 6,070 行）
 
 2. **`scripts/question-admin/app.js` のリファクタリング**（進行中）
-   - 期間: 3-4 週間（約 59% 完了、フェーズ 11 完了、全 17 フェーズ中 10 フェーズ完了）
+   - 期間: 3-4 週間（約 65% 完了、フェーズ 12 完了、全 17 フェーズ中 11 フェーズ完了）
    - 影響範囲: 質問管理画面全体
    - リスク: 高（大規模な変更）
    - **完了したフェーズ**:
@@ -937,8 +938,14 @@ scripts/login/
        - ✅ `resolveFocusTargetElement` を `UIManager` に移行完了（約 16 行削減）
        - ✅ `maybeFocusInitialSection` を `UIManager` に移行完了（約 29 行削減）
        - 実績: 約 93 行の削減（`app.js` は 4,347 行、`ui-manager.js` は 188 行）
+     - ✅ フェーズ 12: 確認ダイアログ関連の関数の整理（ConfirmDialogManager、128 行）完了
+       - ✅ `confirmAction` を `ConfirmDialogManager` に移行完了（約 48 行削減）
+       - ✅ `setupConfirmDialog` を `ConfirmDialogManager` に移行完了（約 21 行削減）
+       - ✅ `cleanupConfirmState` を `ConfirmDialogManager` に移行完了（約 7 行削減）
+       - ✅ `finalizeConfirm` を `ConfirmDialogManager` に移行完了（約 10 行削減）
+       - ✅ `confirmState` を `ConfirmDialogManager` 内に統合完了（約 4 行削減）
+       - 実績: 約 94 行の削減（`app.js` は 4,266 行、`confirm-dialog-manager.js` は 128 行）
    - **残りの機能**（詳細は `docs/utility-refactoring-plan.md` を参照）:
-     - ⏳ フェーズ 12: 確認ダイアログ関連の関数の整理（ConfirmDialogManager、約 100 行）
      - ⏳ フェーズ 13: GL 関連の関数の整理（GlManager、約 250-300 行）
      - ⏳ フェーズ 14: 参加者 UI 関連の関数の整理（ParticipantUIManager、約 600-800 行）
      - ⏳ フェーズ 15: スケジュール関連の関数の整理（ScheduleUtilityManager、約 150-200 行）
@@ -1010,10 +1017,11 @@ scripts/login/
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
 - ❌ `scripts/events/app.js` - 6,070 行、要改善（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-- ❌ `scripts/question-admin/app.js` - 4,347 行、要改善（リファクタリング進行中、元の 8,180 行から約 3,833 行削減）
+- ❌ `scripts/question-admin/app.js` - 4,266 行、要改善（リファクタリング進行中、元の 8,180 行から約 3,914 行削減）
 - ✅ `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
 - ✅ `scripts/question-admin/managers/ui-manager.js` - 188 行（新規作成、フェーズ 11 完了後）
+- ✅ `scripts/question-admin/managers/confirm-dialog-manager.js` - 128 行（新規作成、フェーズ 12 完了後）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
 - ⚠️ `scripts/login.js` - 664 行、要検討

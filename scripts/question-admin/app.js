@@ -84,6 +84,7 @@ import { CsvManager } from "./managers/csv-manager.js";
 import { EventManager } from "./managers/event-manager.js";
 import { StateManager } from "./managers/state-manager.js";
 import { UIManager } from "./managers/ui-manager.js";
+import { ConfirmDialogManager } from "./managers/confirm-dialog-manager.js";
 import { ParticipantManager } from "./managers/participant-manager.js";
 import { ScheduleManager } from "./managers/schedule-manager.js";
 import { MailManager } from "./managers/mail-manager.js";
@@ -104,6 +105,7 @@ let relocationManager = null;
 let hostIntegrationManager = null;
 let stateManager = null;
 let uiManager = null;
+let confirmDialogManager = null;
 
 const glDataFetchCache = new Map();
 
@@ -1129,50 +1131,28 @@ function isPlaceholderUploadStatus() {
   return stateManager.isPlaceholderUploadStatus();
 }
 
-const confirmState = {
-  resolver: null,
-  keydownHandler: null
-};
-
 function cleanupConfirmState() {
-  if (confirmState.keydownHandler) {
-    document.removeEventListener("keydown", confirmState.keydownHandler, true);
-    confirmState.keydownHandler = null;
+  // ConfirmDialogManager に委譲
+  if (!confirmDialogManager) {
+    throw new Error("ConfirmDialogManager is not initialized");
   }
-  confirmState.resolver = null;
+  return confirmDialogManager.cleanupConfirmState();
 }
 
 function finalizeConfirm(result) {
-  const resolver = confirmState.resolver;
-  cleanupConfirmState();
-  if (dom.confirmDialog) {
-    closeDialog(dom.confirmDialog);
+  // ConfirmDialogManager に委譲
+  if (!confirmDialogManager) {
+    throw new Error("ConfirmDialogManager is not initialized");
   }
-  if (typeof resolver === "function") {
-    resolver(result);
-  }
+  return confirmDialogManager.finalizeConfirm(result);
 }
 
 function setupConfirmDialog() {
-  if (!dom.confirmDialog) return;
-  dom.confirmDialog.addEventListener("click", event => {
-    if (event.target instanceof HTMLElement && event.target.dataset.dialogDismiss) {
-      event.preventDefault();
-      finalizeConfirm(false);
-    }
-  });
-  if (dom.confirmCancelButton) {
-    dom.confirmCancelButton.addEventListener("click", event => {
-      event.preventDefault();
-      finalizeConfirm(false);
-    });
+  // ConfirmDialogManager に委譲
+  if (!confirmDialogManager) {
+    throw new Error("ConfirmDialogManager is not initialized");
   }
-  if (dom.confirmAcceptButton) {
-    dom.confirmAcceptButton.addEventListener("click", event => {
-      event.preventDefault();
-      finalizeConfirm(true);
-    });
-  }
+  return confirmDialogManager.setupConfirmDialog();
 }
 
 async function confirmAction({
@@ -1183,44 +1163,17 @@ async function confirmAction({
   tone = "danger",
   showCancel = true
 } = {}) {
-  if (!dom.confirmDialog) {
-    console.warn("Confirm dialog is unavailable; skipping confirmation.");
-    return false;
+  // ConfirmDialogManager に委譲
+  if (!confirmDialogManager) {
+    throw new Error("ConfirmDialogManager is not initialized");
   }
-
-  if (confirmState.resolver) {
-    finalizeConfirm(false);
-  }
-
-  if (dom.confirmDialogTitle) {
-    dom.confirmDialogTitle.textContent = title || "確認";
-  }
-  if (dom.confirmDialogMessage) {
-    dom.confirmDialogMessage.textContent = description || "";
-  }
-  if (dom.confirmAcceptButton) {
-    dom.confirmAcceptButton.textContent = confirmLabel || "実行する";
-    dom.confirmAcceptButton.classList.remove("btn-danger", "btn-primary");
-    dom.confirmAcceptButton.classList.add(tone === "danger" ? "btn-danger" : "btn-primary");
-  }
-  if (dom.confirmCancelButton) {
-    dom.confirmCancelButton.textContent = cancelLabel || "キャンセル";
-    dom.confirmCancelButton.hidden = !showCancel;
-  }
-
-  openDialog(dom.confirmDialog);
-
-  return await new Promise(resolve => {
-    confirmState.resolver = resolve;
-    confirmState.keydownHandler = event => {
-      // N で確認ダイアログをキャンセル（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
-      if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        finalizeConfirm(false);
-      }
-    };
-    document.addEventListener("keydown", confirmState.keydownHandler, true);
+  return await confirmDialogManager.confirmAction({
+    title,
+    description,
+    confirmLabel,
+    cancelLabel,
+    tone,
+    showCancel
   });
 }
 
@@ -3978,6 +3931,14 @@ function init() {
     isEmbeddedMode,
     updateParticipantActionPanelState,
     FOCUS_TARGETS
+  });
+
+  // ConfirmDialogManager を初期化
+  confirmDialogManager = new ConfirmDialogManager({
+    dom,
+    // 依存関数
+    openDialog,
+    closeDialog
   });
 
   // CsvManager を初期化
