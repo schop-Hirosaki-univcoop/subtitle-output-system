@@ -115,28 +115,28 @@
 
 ---
 
-### フェーズ 13: GL 関連の関数の整理（GlManager）
+### フェーズ 13: GL 関連の関数の整理（GlManager）✅ 完了
 
 **対象関数**:
 
-- `getEventGlRoster()` - イベント GL 名簿の取得
-- `getEventGlAssignmentsMap()` - イベント GL 割り当てマップの取得
-- `normalizeGlRoster()` - GL 名簿の正規化
-- `normalizeGlAssignmentEntry()` - GL 割り当てエントリの正規化
-- `normalizeGlAssignments()` - GL 割り当ての正規化
-- `resolveScheduleAssignment()` - スケジュール割り当ての解決
-- `collectGroupGlLeaders()` - グループ GL リーダーの収集
-- `renderGroupGlAssignments()` - グループ GL 割り当ての描画
-- `loadGlDataForEvent()` - イベント GL データの読み込み
+- ✅ `getEventGlRoster()` - イベント GL 名簿の取得（約 8 行削減）
+- ✅ `getEventGlAssignmentsMap()` - イベント GL 割り当てマップの取得（約 8 行削減）
+- ✅ `normalizeGlRoster()` - GL 名簿の正規化（約 20 行削減）
+- ✅ `normalizeGlAssignmentEntry()` - GL 割り当てエントリの正規化（約 30 行削減）
+- ✅ `normalizeGlAssignments()` - GL 割り当ての正規化（約 82 行削減）
+- ✅ `resolveScheduleAssignment()` - スケジュール割り当ての解決（約 10 行削減）
+- ✅ `collectGroupGlLeaders()` - グループ GL リーダーの収集（約 55 行削減）
+- ✅ `renderGroupGlAssignments()` - グループ GL 割り当ての描画（約 35 行削減）
+- ✅ `loadGlDataForEvent()` - イベント GL データの読み込み（約 59 行削減）
 
-**推定行数**: 約 250-300 行
+**実績行数**: 約 227 行削減（`app.js` は 4,092 行、`gl-manager.js` は 386 行）
 
 **依存関係**:
 
-- `state`, `dom`
-- `normalizeKey`, `fetchDbValue`, `renderParticipants`
-- `glDataFetchCache`, `CANCEL_LABEL`, `GL_STAFF_GROUP_KEY`, `GL_STAFF_LABEL`
-- 注: `glDataFetchCache` は変数として移行対象
+- ✅ `state`, `dom`
+- ✅ `normalizeKey`, `fetchDbValue`, `renderParticipants`
+- ✅ `CANCEL_LABEL`, `GL_STAFF_GROUP_KEY`, `GL_STAFF_LABEL`
+- ✅ `glDataFetchCache` は変数として移行完了
 
 ---
 

@@ -91,6 +91,7 @@ import { MailManager } from "./managers/mail-manager.js";
 import { AuthManager } from "./managers/auth-manager.js";
 import { RelocationManager } from "./managers/relocation-manager.js";
 import { HostIntegrationManager } from "./managers/host-integration-manager.js";
+import { GlManager } from "./managers/gl-manager.js";
 
 // redirectingToIndex は AuthManager と共有するため、参照オブジェクトとして管理
 const redirectingToIndexRef = { current: false };
@@ -106,8 +107,9 @@ let hostIntegrationManager = null;
 let stateManager = null;
 let uiManager = null;
 let confirmDialogManager = null;
+let glManager = null;
 
-const glDataFetchCache = new Map();
+// glDataFetchCache は GlManager に移行されました
 
 function getEmbedPrefix() {
   // HostIntegrationManager に委譲
@@ -1360,317 +1362,75 @@ function createParticipantGroupElements(groupKey) {
 }
 
 function getEventGlRoster(eventId) {
-  if (!(state.glRoster instanceof Map)) {
-    state.glRoster = new Map();
+  // GlManager に委譲
+  if (!glManager) {
+    throw new Error("GlManager is not initialized");
   }
-  const roster = state.glRoster.get(eventId);
-  return roster instanceof Map ? roster : null;
+  return glManager.getEventGlRoster(eventId);
 }
 
 function getEventGlAssignmentsMap(eventId) {
-  if (!(state.glAssignments instanceof Map)) {
-    state.glAssignments = new Map();
+  // GlManager に委譲
+  if (!glManager) {
+    throw new Error("GlManager is not initialized");
   }
-  const assignments = state.glAssignments.get(eventId);
-  return assignments instanceof Map ? assignments : null;
+  return glManager.getEventGlAssignmentsMap(eventId);
 }
 
 function normalizeGlRoster(raw) {
-  const map = new Map();
-  if (!raw || typeof raw !== "object") {
-    return map;
+  // GlManager に委譲
+  if (!glManager) {
+    throw new Error("GlManager is not initialized");
   }
-  Object.entries(raw).forEach(([glId, value]) => {
-    if (!glId || !value || typeof value !== "object") return;
-    map.set(String(glId), {
-      id: String(glId),
-      name: normalizeKey(value.name || value.fullName || ""),
-      phonetic: normalizeKey(value.phonetic || value.furigana || ""),
-      grade: normalizeKey(value.grade || ""),
-      faculty: normalizeKey(value.faculty || ""),
-      department: normalizeKey(value.department || ""),
-      email: normalizeKey(value.email || ""),
-      club: normalizeKey(value.club || ""),
-      sourceType: value.sourceType === "internal" ? "internal" : "external"
-    });
-  });
-  return map;
+  return glManager.normalizeGlRoster(raw);
 }
 
 function normalizeGlAssignmentEntry(raw) {
-  if (!raw || typeof raw !== "object") {
-    return null;
+  // GlManager に委譲
+  if (!glManager) {
+    throw new Error("GlManager is not initialized");
   }
-  const statusRaw = String(raw.status || "").trim().toLowerCase();
-  let status = "";
-  if (statusRaw === "absent" || statusRaw === "欠席") {
-    status = "absent";
-  } else if (statusRaw === "unavailable" || statusRaw === "参加不可") {
-    status = "unavailable";
-  } else if (statusRaw === "staff" || statusRaw === "運営" || statusRaw === "運営待機") {
-    status = "staff";
-  } else if (statusRaw === "team") {
-    status = "team";
-  }
-  const teamId = normalizeKey(raw.teamId || "");
-  if (!status && teamId) {
-    status = "team";
-  }
-  if (!status && !teamId) {
-    return null;
-  }
-  return {
-    status,
-    teamId,
-    updatedAt: Number(raw.updatedAt || 0) || 0,
-    updatedByName: normalizeKey(raw.updatedByName || ""),
-    updatedByUid: normalizeKey(raw.updatedByUid || "")
-  };
+  return glManager.normalizeGlAssignmentEntry(raw);
 }
 
 function normalizeGlAssignments(raw) {
-  const map = new Map();
-  if (!raw || typeof raw !== "object") {
-    return map;
+  // GlManager に委譲
+  if (!glManager) {
+    throw new Error("GlManager is not initialized");
   }
-
-  const ensureEntry = (glId) => {
-    const id = String(glId || "").trim();
-    if (!id) {
-      return null;
-    }
-    if (!map.has(id)) {
-      map.set(id, { fallback: null, schedules: new Map() });
-    }
-    return map.get(id) || null;
-  };
-
-  Object.entries(raw).forEach(([outerKey, outerValue]) => {
-    if (!outerValue || typeof outerValue !== "object") {
-      return;
-    }
-
-    const legacyAssignment = normalizeGlAssignmentEntry(outerValue);
-    if (legacyAssignment) {
-      const entry = ensureEntry(outerKey);
-      if (!entry) {
-        return;
-      }
-      entry.fallback = legacyAssignment;
-      const excludedKeys = new Set(["status", "teamId", "updatedAt", "updatedByUid", "updatedByName", "schedules"]);
-      Object.entries(outerValue).forEach(([scheduleId, scheduleValue]) => {
-        if (excludedKeys.has(scheduleId)) {
-          return;
-        }
-        const normalized = normalizeGlAssignmentEntry(scheduleValue);
-        if (!normalized) {
-          return;
-        }
-        const key = String(scheduleId || "").trim();
-        if (!key) {
-          return;
-        }
-        entry.schedules.set(key, normalized);
-      });
-      const scheduleOverrides = outerValue?.schedules && typeof outerValue.schedules === "object"
-        ? outerValue.schedules
-        : null;
-      if (scheduleOverrides) {
-        Object.entries(scheduleOverrides).forEach(([scheduleId, scheduleValue]) => {
-          const normalized = normalizeGlAssignmentEntry(scheduleValue);
-          if (!normalized) {
-            return;
-          }
-          const key = String(scheduleId || "").trim();
-          if (!key) {
-            return;
-          }
-          entry.schedules.set(key, normalized);
-        });
-      }
-      return;
-    }
-
-    const scheduleId = String(outerKey || "").trim();
-    if (!scheduleId) {
-      return;
-    }
-    Object.entries(outerValue).forEach(([glId, value]) => {
-      const normalized = normalizeGlAssignmentEntry(value);
-      if (!normalized) {
-        return;
-      }
-      const entry = ensureEntry(glId);
-      if (!entry) {
-        return;
-      }
-      entry.schedules.set(scheduleId, normalized);
-    });
-  });
-
-  return map;
+  return glManager.normalizeGlAssignments(raw);
 }
 
 function resolveScheduleAssignment(entry, scheduleId) {
-  if (!entry) {
-    return null;
+  // GlManager に委譲
+  if (!glManager) {
+    throw new Error("GlManager is not initialized");
   }
-  const key = String(scheduleId || "").trim();
-  if (key && entry.schedules instanceof Map && entry.schedules.has(key)) {
-    return entry.schedules.get(key) || null;
-  }
-  return entry.fallback || null;
+  return glManager.resolveScheduleAssignment(entry, scheduleId);
 }
 
 function collectGroupGlLeaders(groupKey, { eventId, rosterMap, assignmentsMap, scheduleId }) {
-  const assignments = assignmentsMap instanceof Map ? assignmentsMap : getEventGlAssignmentsMap(eventId);
-  const roster = rosterMap instanceof Map ? rosterMap : getEventGlRoster(eventId);
-  if (!(assignments instanceof Map) || !(roster instanceof Map)) {
-    return [];
+  // GlManager に委譲
+  if (!glManager) {
+    throw new Error("GlManager is not initialized");
   }
-
-  const rawGroupKey = String(groupKey || "").trim();
-  const normalizedGroupKey = normalizeKey(rawGroupKey);
-  const normalizedCancelLabel = normalizeKey(CANCEL_LABEL);
-  const normalizedStaffLabel = normalizeKey(GL_STAFF_LABEL);
-  const isCancelGroup = normalizedGroupKey === normalizedCancelLabel;
-  const isStaffGroup = rawGroupKey === GL_STAFF_GROUP_KEY || normalizedGroupKey === normalizedStaffLabel;
-
-  const leaders = [];
-  assignments.forEach((entry, glId) => {
-    const assignment = resolveScheduleAssignment(entry, scheduleId);
-    if (!assignment) return;
-    const status = assignment.status || "";
-    const teamId = normalizeKey(assignment.teamId || "");
-    if (status === "team") {
-      if (!teamId || isCancelGroup || isStaffGroup || teamId !== normalizedGroupKey) {
-        return;
-      }
-    } else if (status === "absent") {
-      if (!isCancelGroup) return;
-    } else if (status === "staff") {
-      if (!isStaffGroup) return;
-    } else {
-      return;
-    }
-
-    const profile = roster.get(String(glId)) || {};
-    const name = profile.name || String(glId);
-    const metaParts = [];
-    if (status === "absent") {
-      metaParts.push("欠席");
-    } else if (status === "staff") {
-      metaParts.push(GL_STAFF_LABEL);
-    }
-    if (profile.faculty) {
-      metaParts.push(profile.faculty);
-    }
-    if (profile.department && profile.department !== profile.faculty) {
-      metaParts.push(profile.department);
-    }
-    leaders.push({
-      name,
-      meta: metaParts.join(" / ")
-    });
-  });
-
-  leaders.sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true }));
-  return leaders;
+  return glManager.collectGroupGlLeaders(groupKey, { eventId, rosterMap, assignmentsMap, scheduleId });
 }
 
 function renderGroupGlAssignments(group, context) {
-  if (!group || !group.leadersContainer || !group.leadersList) {
-    return;
+  // GlManager に委譲
+  if (!glManager) {
+    throw new Error("GlManager is not initialized");
   }
-  const container = group.leadersContainer;
-  const list = group.leadersList;
-  list.innerHTML = "";
-  container.hidden = true;
-  container.dataset.count = "0";
-
-  const leaders = collectGroupGlLeaders(group.key, context);
-  if (!leaders.length) {
-    return;
-  }
-
-  leaders.forEach(leader => {
-    const item = document.createElement("span");
-    item.className = "participant-group-gl";
-    const nameEl = document.createElement("span");
-    nameEl.className = "participant-group-gl__name";
-    nameEl.textContent = leader.name;
-    item.appendChild(nameEl);
-    if (leader.meta) {
-      const metaEl = document.createElement("span");
-      metaEl.className = "participant-group-gl__meta";
-      metaEl.textContent = leader.meta;
-      item.appendChild(metaEl);
-    }
-    list.appendChild(item);
-  });
-
-  container.hidden = false;
-  container.dataset.count = String(leaders.length);
+  return glManager.renderGroupGlAssignments(group, context);
 }
 
 async function loadGlDataForEvent(eventId, { force = false } = {}) {
-  const key = normalizeKey(eventId || "");
-  if (!key) {
-    return;
+  // GlManager に委譲
+  if (!glManager) {
+    throw new Error("GlManager is not initialized");
   }
-  if (!force && glDataFetchCache.has(key)) {
-    try {
-      await glDataFetchCache.get(key);
-    } catch (error) {
-      // Swallow errors from prior attempts; a manual refresh will retry.
-    }
-    return;
-  }
-
-  const fetchPromise = (async () => {
-    try {
-      const [applicationsRaw, assignmentsRaw] = await Promise.all([
-        fetchDbValue(`glIntake/applications/${key}`),
-        fetchDbValue(`glAssignments/${key}`)
-      ]);
-      const rosterMap = normalizeGlRoster(applicationsRaw || {});
-      const assignmentsMap = normalizeGlAssignments(assignmentsRaw || {});
-      if (!(state.glRoster instanceof Map)) {
-        state.glRoster = new Map();
-      }
-      if (!(state.glAssignments instanceof Map)) {
-        state.glAssignments = new Map();
-      }
-      state.glRoster.set(key, rosterMap);
-      state.glAssignments.set(key, assignmentsMap);
-    } catch (error) {
-      console.error("Failed to load GL roster", error);
-      if (!(state.glRoster instanceof Map)) {
-        state.glRoster = new Map();
-      }
-      if (!(state.glAssignments instanceof Map)) {
-        state.glAssignments = new Map();
-      }
-      if (!state.glRoster.has(key)) {
-        state.glRoster.set(key, new Map());
-      }
-      if (!state.glAssignments.has(key)) {
-        state.glAssignments.set(key, new Map());
-      }
-      throw error;
-    } finally {
-      if (state.selectedEventId && normalizeKey(state.selectedEventId) === key) {
-        renderParticipants();
-      }
-    }
-  })();
-
-  glDataFetchCache.set(key, fetchPromise);
-  try {
-    await fetchPromise;
-  } finally {
-    glDataFetchCache.delete(key);
-  }
+  return await glManager.loadGlDataForEvent(eventId, { force });
 }
 
 function createParticipantBadge(label, value, { hideLabel = false } = {}) {
@@ -3939,6 +3699,19 @@ function init() {
     // 依存関数
     openDialog,
     closeDialog
+  });
+
+  // GlManager を初期化
+  glManager = new GlManager({
+    state,
+    // 依存関数
+    normalizeKey,
+    fetchDbValue,
+    renderParticipants,
+    // 定数
+    CANCEL_LABEL,
+    GL_STAFF_GROUP_KEY,
+    GL_STAFF_LABEL
   });
 
   // CsvManager を初期化
