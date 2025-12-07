@@ -1387,7 +1387,7 @@ export class EventAdminApp {
     if (changed) {
       this.eventSelectionCommitted = false;
       this.scheduleSelectionCommitted = false;
-      this.firebaseManager.clearHostPresence();
+      this.clearHostPresence();
     }
     if (changed) {
       this.logFlowState("イベント選択を更新しました", {
@@ -3275,6 +3275,24 @@ export class EventAdminApp {
     return this.firebaseManager.normalizeScheduleConsensus(raw);
   }
 
+  scheduleHostPresenceHeartbeat() {
+    // EventFirebaseManager に委譲
+    this.firebaseManager.scheduleHostPresenceHeartbeat();
+    // プロパティを同期
+    this.hostPresenceHeartbeat = this.firebaseManager.hostPresenceHeartbeat;
+  }
+
+  clearHostPresence() {
+    // EventFirebaseManager に委譲
+    this.firebaseManager.clearHostPresence();
+    // プロパティを同期
+    this.hostPresenceEntryKey = this.firebaseManager.hostPresenceEntryKey;
+    this.hostPresenceEntryRef = this.firebaseManager.hostPresenceEntryRef;
+    this.hostPresenceDisconnect = this.firebaseManager.hostPresenceDisconnect;
+    this.hostPresenceHeartbeat = this.firebaseManager.hostPresenceHeartbeat;
+    this.hostPresenceLastSignature = this.firebaseManager.hostPresenceLastSignature;
+  }
+
   handleScheduleConsensusUpdate(eventId, consensus) {
     if (!eventId || eventId !== ensureString(this.selectedEventId)) {
       if (!consensus) {
@@ -3906,20 +3924,20 @@ export class EventAdminApp {
     const user = this.currentUser || auth.currentUser || null;
     const uid = ensureString(user?.uid);
     if (!uid) {
-      this.firebaseManager.clearHostPresence();
+      this.clearHostPresence();
       this.logFlowState("在席情報をクリアしました (未ログイン)", { reason });
       return;
     }
 
     const eventId = ensureString(this.selectedEventId);
     if (!eventId) {
-      this.firebaseManager.clearHostPresence();
+      this.clearHostPresence();
       this.logFlowState("在席情報をクリアしました (イベント未選択)", { reason });
       return;
     }
 
     if (!this.eventSelectionCommitted) {
-      this.firebaseManager.clearHostPresence();
+      this.clearHostPresence();
       this.logFlowState("イベント未確定のため在席情報の更新を保留します", {
         reason,
         eventId
@@ -3973,7 +3991,7 @@ export class EventAdminApp {
     this.firebaseManager.persistHostPresenceSessionId(uid, eventId, sessionId);
     const nextKey = `${eventId}/${sessionId}`;
     if (this.hostPresenceEntryKey && this.hostPresenceEntryKey !== nextKey) {
-      this.firebaseManager.clearHostPresence();
+      this.clearHostPresence();
       this.hostPresenceSessionId = sessionId;
     }
 
@@ -4027,7 +4045,7 @@ export class EventAdminApp {
       committedScheduleLabel: ensureString(this.hostCommittedScheduleLabel)
     });
     if (reason !== "heartbeat" && signature === this.hostPresenceLastSignature) {
-      this.firebaseManager.scheduleHostPresenceHeartbeat();
+      this.scheduleHostPresenceHeartbeat();
       this.logFlowState("在席情報に変更はありません", {
         reason,
         eventId,
@@ -4090,7 +4108,7 @@ export class EventAdminApp {
       console.debug("Failed to register host presence cleanup:", error);
     }
 
-    this.firebaseManager.scheduleHostPresenceHeartbeat();
+    this.scheduleHostPresenceHeartbeat();
     this.logFlowState("在席情報を更新しました", {
       reason,
       eventId,
