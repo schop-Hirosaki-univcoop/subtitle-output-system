@@ -16,6 +16,20 @@ import { normalizeScheduleId } from "../../shared/channel-paths.js";
 import { generateShortId, normalizeKey } from "../../question-admin/utils.js";
 
 /**
+ * 日時文字列から時刻部分を抽出します。
+ * @param {unknown} value - 日時文字列
+ * @returns {string}
+ */
+function extractTimePart(value) {
+  const text = ensureString(value).trim();
+  if (!text) {
+    return "";
+  }
+  const match = text.match(/(\d{2}:\d{2})/);
+  return match ? match[1] : "";
+}
+
+/**
  * 日程管理パネルのマネージャークラス
  * EventAdminApp から日程管理機能を分離したモジュール
  */
@@ -177,7 +191,7 @@ export class SchedulePanelManager {
       throw new Error("イベントを選択してください。");
     }
 
-    const { label, location, date, startValue, endValue } = this.app.resolveScheduleFormValues(payload);
+    const { label, location, date, startValue, endValue } = this.resolveScheduleFormValues(payload);
     let scheduleId = generateShortId("sch_");
     const existingIds = new Set(this.schedules.map((schedule) => schedule.id));
     while (existingIds.has(scheduleId)) {
@@ -224,7 +238,7 @@ export class SchedulePanelManager {
       throw new Error("日程IDが不明です。");
     }
 
-    const { label, location, date, startValue, endValue } = this.app.resolveScheduleFormValues(payload);
+    const { label, location, date, startValue, endValue } = this.resolveScheduleFormValues(payload);
     const now = Date.now();
     this.app.beginScheduleLoading("日程を更新しています…");
     try {
@@ -321,6 +335,57 @@ export class SchedulePanelManager {
   getSelectedSchedule() {
     if (!this.selectedScheduleId) return null;
     return this.schedules.find((schedule) => schedule.id === this.selectedScheduleId) || null;
+  }
+
+  /**
+   * スケジュールフォームの値を解決します。
+   * @param {object} payload - フォームデータ
+   * @param {string} payload.label - 表示名
+   * @param {string} payload.location - 場所
+   * @param {string} payload.date - 日付
+   * @param {string} payload.start - 開始時刻
+   * @param {string} payload.end - 終了時刻
+   * @returns {object} 解決された値
+   */
+  resolveScheduleFormValues({ label, location, date, start, end }) {
+    const trimmedLabel = normalizeKey(label || "");
+    if (!trimmedLabel) {
+      throw new Error("日程の表示名を入力してください。");
+    }
+
+    const normalizedLocation = ensureString(location).trim();
+
+    const normalizedDate = normalizeDateInputValue(date);
+    if (!normalizedDate) {
+      throw new Error("日付を入力してください。");
+    }
+
+    const startTime = ensureString(start);
+    const endTime = ensureString(end);
+    if (!startTime || !endTime) {
+      throw new Error("開始と終了の時刻を入力してください。");
+    }
+
+    const startDate = new Date(`${normalizedDate}T${startTime}`);
+    const endDate = new Date(`${normalizedDate}T${endTime}`);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      throw new Error("開始・終了時刻の形式が正しくありません。");
+    }
+
+    if (endDate.getTime() <= startDate.getTime()) {
+      endDate.setTime(endDate.getTime() + 24 * 60 * 60 * 1000);
+    }
+
+    const startValue = formatDateTimeLocal(startDate);
+    const endValue = formatDateTimeLocal(endDate);
+
+    return {
+      label: trimmedLabel,
+      location: normalizedLocation,
+      date: normalizedDate,
+      startValue,
+      endValue
+    };
   }
 }
 

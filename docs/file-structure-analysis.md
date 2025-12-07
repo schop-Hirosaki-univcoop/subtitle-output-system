@@ -41,7 +41,7 @@
 
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
-| `scripts/events/app.js`                       | 6,121 | ❌ 要改善（基準の約 4.1 倍、リファクタリング進行中） |
+| `scripts/events/app.js`                       | 6,085 | ❌ 要改善（基準の約 4.1 倍、リファクタリング進行中） |
 | `scripts/question-admin/app.js`               | 5,752 | ❌ 要改善（基準の約 3.8 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
@@ -60,7 +60,7 @@
 
 2. **巨大な単一ファイル**
 
-   - `scripts/events/app.js` - 6,121 行（リファクタリング進行中、元の 10,180 行から約 4,059 行削減）
+   - `scripts/events/app.js` - 6,085 行（リファクタリング進行中、元の 10,180 行から約 4,095 行削減）
    - `scripts/question-admin/app.js` - 5,752 行（リファクタリング進行中、元の 8,180 行から約 2,428 行削減）
 
 3. **中規模の単一ファイル**
@@ -419,7 +419,7 @@ scripts/
 
 ### 重大な問題（優先度: 高）
 
-1. **`scripts/events/app.js` が 6,121 行（リファクタリング進行中）**
+1. **`scripts/events/app.js` が 6,085 行（リファクタリング進行中）**
 
    - 開発標準の約 4.3 倍（元の 10,180 行から約 3,734 行削減）
    - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
@@ -796,9 +796,11 @@ scripts/login/
        - ✅ `maybeClearScheduleConsensus` を `EventFirebaseManager` に移行完了（約 30 行削減）
        - ✅ 定数 `SCHEDULE_CONSENSUS_TOAST_MS` を `EventUIRenderer` に移行完了
        - 実績: 約 195 行の削減（`app.js` は 6,121 行、`ui-renderer.js` は 896 行、`firebase-manager.js` は 1,392 行）
-     - ⏳ フェーズ 1.12: ユーティリティ関数の整理（未着手）
-       - `getScheduleRecord`, `buildScheduleOptionLabel`, `resolveScheduleFormValues` などの整理
-       - 見積もり: 約 100-200 行の削減
+     - ✅ フェーズ 1.12: ユーティリティ関数の整理（完了）
+       - ✅ `resolveScheduleFormValues` を `schedule-panel.js` に移行完了（約 40 行削減）
+       - ✅ `extractTimePart` を `schedule-panel.js` に移行完了
+       - 注: `getScheduleRecord` と `buildScheduleOptionLabel` は `scripts/events/app.js` には存在せず、`scripts/question-admin/app.js` に存在する関数です（`question-admin`のリファクタリング対象）
+       - 実績: 約 40 行の削減（`app.js` は 6,085 行、`schedule-panel.js` は 391 行）
      - ⏳ フェーズ 1.13: 未使用コードの削除と最終クリーンアップ（未着手）
        - 未使用のインポート、関数、定数の削除
        - コメントの整理
@@ -884,7 +886,7 @@ scripts/login/
 - ✅ `scripts/operator/` - リファクタリング済み、良好
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
-- ❌ `scripts/events/app.js` - 6,121 行、要改善（リファクタリング進行中、元の 10,180 行から約 4,059 行削減）
+- ❌ `scripts/events/app.js` - 6,085 行、要改善（リファクタリング進行中、元の 10,180 行から約 4,095 行削減）
 - ❌ `scripts/question-admin/app.js` - 5,752 行、要改善（リファクタリング進行中、元の 8,180 行から約 2,428 行削減）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討

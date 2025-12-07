@@ -5305,44 +5305,8 @@ export class EventAdminApp {
   }
 
   resolveScheduleFormValues({ label, location, date, start, end }) {
-    const trimmedLabel = normalizeKey(label || "");
-    if (!trimmedLabel) {
-      throw new Error("日程の表示名を入力してください。");
-    }
-
-    const normalizedLocation = ensureString(location).trim();
-
-    const normalizedDate = normalizeDateInputValue(date);
-    if (!normalizedDate) {
-      throw new Error("日付を入力してください。");
-    }
-
-    const startTime = ensureString(start);
-    const endTime = ensureString(end);
-    if (!startTime || !endTime) {
-      throw new Error("開始と終了の時刻を入力してください。");
-    }
-
-    const startDate = new Date(`${normalizedDate}T${startTime}`);
-    const endDate = new Date(`${normalizedDate}T${endTime}`);
-    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-      throw new Error("開始・終了時刻の形式が正しくありません。");
-    }
-
-    if (endDate.getTime() <= startDate.getTime()) {
-      endDate.setTime(endDate.getTime() + 24 * 60 * 60 * 1000);
-    }
-
-    const startValue = formatDateTimeLocal(startDate);
-    const endValue = formatDateTimeLocal(endDate);
-
-    return {
-      label: trimmedLabel,
-      location: normalizedLocation,
-      date: normalizedDate,
-      startValue,
-      endValue
-    };
+    // schedulePanel に委譲
+    return this.schedulePanel.resolveScheduleFormValues({ label, location, date, start, end });
   }
 
   async createSchedule(payload) {
