@@ -770,5 +770,64 @@ export class EventFirebaseManager {
     this.clearOperatorPresenceState();
     this.clearScheduleConsensusState({ reason: "cleanup" });
   }
+
+  /**
+   * オペレータープレゼンスエントリを処理して、スケジュールコンフリクト用のエントリリストを構築します。
+   * @param {string} eventId - イベントID
+   * @param {Map<string, Object>} scheduleMap - スケジュールマップ
+   * @param {string} selfUid - 現在のユーザーのUID
+   * @returns {{ entries: Array, hasSelfPresence: boolean }} - 処理されたエントリと自己プレゼンスの有無
+   */
+  buildPresenceEntries(eventId = "", scheduleMap = null, selfUid = "") {
+    const normalizedEventId = ensureString(eventId);
+    const normalizedSelfUid = ensureString(selfUid);
+    const map = scheduleMap instanceof Map ? scheduleMap : new Map();
+    const entries = [];
+    let hasSelfPresence = false;
+
+    this.operatorPresenceEntries.forEach((entry) => {
+      const baseScheduleId = ensureString(entry.scheduleId);
+      const scheduleFromMap = baseScheduleId ? map.get(baseScheduleId) : null;
+      const derivedFromKey = this.extractScheduleIdFromKey(entry.scheduleKey, normalizedEventId);
+      const resolvedScheduleId = ensureString(scheduleFromMap?.id || baseScheduleId || derivedFromKey);
+      const schedule = resolvedScheduleId ? map.get(resolvedScheduleId) || scheduleFromMap : scheduleFromMap;
+      const normalizedMode = normalizeOperatorMode(entry.mode);
+      const skipTelop = entry.skipTelop === true || normalizedMode === OPERATOR_MODE_SUPPORT;
+      const isSelf = Boolean(entry.isSelf || (normalizedSelfUid && entry.uid && entry.uid === normalizedSelfUid));
+      
+      if (isSelf) {
+        hasSelfPresence = true;
+      }
+      
+      const scheduleLabel = schedule?.label || entry.scheduleLabel || resolvedScheduleId || "未選択";
+      const scheduleRange = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
+      const scheduleKey = ensureString(
+        entry.scheduleKey ||
+          (resolvedScheduleId
+            ? this.derivePresenceScheduleKey(
+                normalizedEventId,
+                { scheduleId: resolvedScheduleId, scheduleLabel },
+                ensureString(entry.entryId)
+              )
+            : "")
+      );
+      
+      entries.push({
+        entryId: entry.entryId,
+        uid: entry.uid,
+        displayName: entry.displayName || entry.uid || entry.entryId,
+        scheduleId: resolvedScheduleId,
+        scheduleKey,
+        scheduleLabel,
+        scheduleRange,
+        isSelf,
+        mode: normalizedMode,
+        skipTelop,
+        updatedAt: entry.updatedAt || 0
+      });
+    });
+
+    return { entries, hasSelfPresence };
+  }
 }
 

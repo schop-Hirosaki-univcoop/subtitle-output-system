@@ -3,6 +3,7 @@
 
 import { formatParticipantCount, ensureString } from "../helpers.js";
 import { formatScheduleRange } from "../../operator/utils.js";
+import { OPERATOR_MODE_SUPPORT } from "../../shared/operator-modes.js";
 
 /**
  * UI描画クラス
@@ -332,6 +333,310 @@ export class EventUIRenderer {
     }
     if (this.app.dom.scheduleList) {
       this.app.dom.scheduleList.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  /**
+   * スケジュールコンフリクトコンテキストを構築します。
+   * @returns {Object} スケジュールコンフリクトコンテキスト
+   */
+  buildScheduleConflictContext() {
+    const event = this.app.getSelectedEvent();
+    const eventId = event?.id || "";
+    const context = {
+      eventId,
+      entries: [],
+      options: [],
+      selectableOptions: [],
+      hasConflict: false,
+      hasOtherOperators: false,
+      hostScheduleId: "",
+      hostScheduleKey: "",
+      hostScheduleLabel: "",
+      defaultKey: "",
+      signature: ""
+    };
+    
+    if (!eventId) {
+      return context;
+    }
+
+    const scheduleMap = new Map(this.app.schedules.map((schedule) => [schedule.id, schedule]));
+    const selfUid = ensureString(this.app.currentUser?.uid);
+    const selfLabel = ensureString(this.app.currentUser?.displayName) || ensureString(this.app.currentUser?.email) || "あなた";
+    
+    // Firebase関連の処理をEventFirebaseManagerに委譲
+    const { entries, hasSelfPresence } = this.app.firebaseManager.buildPresenceEntries(
+      eventId,
+      scheduleMap,
+      selfUid
+    );
+    
+    const hostContext = this.app.firebaseManager.resolveHostScheduleContext(eventId, { scheduleMap });
+    const hostScheduleId = ensureString(hostContext.scheduleId);
+    const hostScheduleKey = ensureString(hostContext.scheduleKey);
+    const hostScheduleLabel = ensureString(hostContext.scheduleLabel);
+    const hostScheduleRange = ensureString(hostContext.scheduleRange);
+    const hostSchedule = hostContext.schedule || (hostScheduleId ? scheduleMap.get(hostScheduleId) || null : null);
+    const committedScheduleId = ensureString(this.app.hostCommittedScheduleId);
+    const committedSchedule = committedScheduleId ? scheduleMap.get(committedScheduleId) || null : null;
+    const committedScheduleLabel = ensureString(this.app.hostCommittedScheduleLabel) || committedSchedule?.label || committedScheduleId;
+    const committedScheduleRange = committedSchedule
+      ? formatScheduleRange(committedSchedule.startAt, committedSchedule.endAt)
+      : "";
+
+    // 自己エントリの更新
+    const selfEntry = entries.find((entry) => entry.isSelf);
+    if (selfEntry) {
+      selfEntry.scheduleId = hostScheduleId;
+      if (hostScheduleKey) {
+        selfEntry.scheduleKey = hostScheduleKey;
+      }
+      selfEntry.scheduleLabel = hostScheduleLabel || hostScheduleId || "未選択";
+      selfEntry.scheduleRange = hostScheduleRange || selfEntry.scheduleRange || "";
+      selfEntry.selectedScheduleId = ensureString(hostContext.selectedScheduleId);
+      selfEntry.selectedScheduleLabel = ensureString(hostContext.selectedScheduleLabel);
+    }
+
+    context.hostScheduleId = hostScheduleId;
+    context.hostScheduleKey = hostScheduleKey;
+    context.hostScheduleLabel = hostScheduleLabel;
+    context.hostScheduleRange = hostScheduleRange;
+    context.hostSelectedScheduleId = ensureString(hostContext.selectedScheduleId);
+    context.hostCommittedScheduleId = ensureString(hostContext.committedScheduleId);
+    context.telopScheduleId = committedScheduleId;
+    context.telopScheduleLabel = committedScheduleLabel;
+    context.telopScheduleRange = committedScheduleRange;
+
+    // 自己プレゼンスがない場合の追加
+    if (!hasSelfPresence && hostScheduleId) {
+      entries.push({
+        entryId: selfUid ? `self::${selfUid}` : "self",
+        uid: selfUid,
+        displayName: selfLabel,
+        scheduleId: hostScheduleId,
+        scheduleKey: hostScheduleKey || hostScheduleId,
+        scheduleLabel: hostScheduleLabel || hostScheduleId || "未選択",
+        scheduleRange: hostScheduleRange || formatScheduleRange(hostSchedule?.startAt, hostSchedule?.endAt),
+        isSelf: true,
+        mode: this.app.operatorMode,
+        skipTelop: this.app.operatorMode === OPERATOR_MODE_SUPPORT,
+        selectedScheduleId: ensureString(hostContext.selectedScheduleId),
+        selectedScheduleLabel: ensureString(hostContext.selectedScheduleLabel),
+        updatedAt: Date.now()
+      });
+    }
+
+    // エントリのソート
+    entries.sort((a, b) => {
+      if (a.isSelf && !b.isSelf) return -1;
+      if (!a.isSelf && b.isSelf) return 1;
+      return (a.displayName || "").localeCompare(b.displayName || "", "ja");
+    });
+
+    const telopEntries = entries.filter((entry) => ensureString(entry.scheduleId) && !entry.skipTelop);
+    context.entries = telopEntries;
+    context.allEntries = entries;
+
+    // グループ化とオプションの構築
+    const groups = new Map();
+    entries.forEach((entry) => {
+      const key = entry.scheduleKey || "";
+      const existing = groups.get(key) || {
+        key,
+        scheduleId: entry.scheduleId || "",
+        scheduleLabel: entry.scheduleLabel || "未選択",
+        scheduleRange: entry.scheduleRange || "",
+        members: [],
+        telopMembers: []
+      };
+      if (!groups.has(key)) {
+        groups.set(key, existing);
+      }
+      if (!existing.scheduleId && entry.scheduleId) {
+        existing.scheduleId = entry.scheduleId;
+      }
+      if (!existing.scheduleLabel && entry.scheduleLabel) {
+        existing.scheduleLabel = entry.scheduleLabel;
+      }
+      if (!existing.scheduleRange && entry.scheduleRange) {
+        existing.scheduleRange = entry.scheduleRange;
+      }
+      existing.members.push(entry);
+      if (!entry.skipTelop && ensureString(entry.scheduleId)) {
+        existing.telopMembers.push(entry);
+      }
+    });
+
+    const options = Array.from(groups.values())
+      .filter((group) => group.telopMembers && group.telopMembers.length > 0)
+      .map((group) => {
+        const derivedScheduleId = group.scheduleId || this.app.firebaseManager.extractScheduleIdFromKey(group.key, eventId) || "";
+        const schedule = derivedScheduleId ? scheduleMap.get(derivedScheduleId) : null;
+        const scheduleId = schedule?.id || derivedScheduleId || "";
+        const scheduleLabel = group.scheduleLabel || schedule?.label || scheduleId || "未選択";
+        const scheduleRange = group.scheduleRange || formatScheduleRange(schedule?.startAt, schedule?.endAt);
+        const containsSelf = group.telopMembers.some((member) => member.isSelf);
+        return {
+          key: group.key,
+          scheduleId,
+          scheduleLabel,
+          scheduleRange,
+          members: group.members,
+          containsSelf,
+          isSelectable: Boolean(scheduleId)
+        };
+      });
+
+    options.sort((a, b) => {
+      if (a.containsSelf && !b.containsSelf) return -1;
+      if (!a.containsSelf && b.containsSelf) return 1;
+      return (a.scheduleLabel || "").localeCompare(b.scheduleLabel || "", "ja");
+    });
+
+    const selectableOptions = options.filter((option) => option.scheduleId);
+    context.options = selectableOptions;
+    context.hasOtherOperators = telopEntries.some((entry) => !entry.isSelf);
+    context.selectableOptions = selectableOptions;
+
+    // コンフリクトの検出
+    const telopScheduleId = committedScheduleId;
+    const conflictingTelopEntries = telopEntries.filter((entry) => {
+      const entryScheduleId = ensureString(entry.scheduleId);
+      return Boolean(telopScheduleId && entryScheduleId && entryScheduleId !== telopScheduleId);
+    }));
+    context.hasConflict = Boolean(telopScheduleId) && conflictingTelopEntries.length > 0;
+
+    // デフォルトキーの設定
+    const preferredOption =
+      selectableOptions.find((option) => option.containsSelf) || selectableOptions[0] || null;
+    context.defaultKey = preferredOption?.key || "";
+
+    // シグネチャの生成
+    const signatureSource = telopEntries.length ? telopEntries : entries;
+    const signatureParts = signatureSource.map((entry) => {
+      const entryId = entry.uid || entry.entryId || "anon";
+      const scheduleKey = entry.scheduleKey || "none";
+      return `${entryId}::${scheduleKey}`;
+    });
+    signatureParts.sort();
+    const baseSignature = signatureParts.join("|") || "none";
+    context.signature = `${eventId || "event"}::${baseSignature}`;
+
+    return context;
+  }
+
+  /**
+   * スケジュールコンフリクトプロンプトの状態を同期します。
+   * @param {Object} context - スケジュールコンフリクトコンテキスト（オプション）
+   */
+  syncScheduleConflictPromptState(context = null) {
+    const button = this.app.dom.scheduleNextButton;
+    if (!button) {
+      return;
+    }
+    const resolvedContext = context || this.app.scheduleConflictContext || this.buildScheduleConflictContext();
+    const contextSignature = ensureString(resolvedContext?.signature);
+    const pendingSignature = ensureString(this.app.scheduleConflictPromptSignature);
+    const hasConflict = Boolean(resolvedContext?.hasConflict);
+    const hasResolvedKey = Boolean(this.app.scheduleConsensusLastKey);
+    const shouldIndicate =
+      hasConflict &&
+      pendingSignature &&
+      contextSignature &&
+      contextSignature === pendingSignature &&
+      !hasResolvedKey;
+    
+    if (shouldIndicate) {
+      if (!Object.prototype.hasOwnProperty.call(button.dataset, "conflictOriginalTitle")) {
+        button.dataset.conflictOriginalTitle = button.getAttribute("title") || "";
+      }
+      button.setAttribute("data-conflict-pending", "true");
+      button.setAttribute(
+        "title",
+        "他のオペレーターと日程の調整が必要です。「確定」で日程を確定してください。"
+      );
+    } else {
+      button.removeAttribute("data-conflict-pending");
+      if (Object.prototype.hasOwnProperty.call(button.dataset, "conflictOriginalTitle")) {
+        const original = button.dataset.conflictOriginalTitle || "";
+        if (original) {
+          button.setAttribute("title", original);
+        } else {
+          button.removeAttribute("title");
+        }
+        delete button.dataset.conflictOriginalTitle;
+      }
+    }
+  }
+
+  /**
+   * スケジュールコンフリクト状態を更新します。
+   */
+  updateScheduleConflictState() {
+    const context = this.buildScheduleConflictContext();
+    this.app.scheduleConflictContext = context;
+    if (this.app.isScheduleConflictDialogOpen()) {
+      this.app.renderScheduleConflictDialog(context);
+    }
+    this.enforceScheduleConflictState(context);
+    this.syncScheduleConflictPromptState(context);
+  }
+
+  /**
+   * スケジュールコンフリクト状態を強制適用します。
+   * @param {Object} context - スケジュールコンフリクトコンテキスト（オプション）
+   */
+  enforceScheduleConflictState(context = null) {
+    const hasConflict = Boolean(context?.hasConflict);
+    const suppressOnce = this.app.suppressScheduleConflictPromptOnce;
+    if (suppressOnce) {
+      this.app.suppressScheduleConflictPromptOnce = false;
+    }
+    if (!hasConflict) {
+      if (this.app.isScheduleConflictDialogOpen()) {
+        if (this.app.dom.scheduleConflictForm) {
+          this.app.dom.scheduleConflictForm.reset();
+        }
+        this.app.closeDialog(this.app.dom.scheduleConflictDialog);
+      }
+      this.app.scheduleConflictLastSignature = "";
+      this.app.scheduleConflictPromptSignature = "";
+      this.app.scheduleConflictLastPromptSignature = "";
+      this.app.maybeClearScheduleConsensus(context);
+      return;
+    }
+    const signature = ensureString(context?.signature);
+    this.app.scheduleConflictLastSignature = signature;
+    const hasSelection = Boolean(this.app.selectedScheduleId);
+    const shouldPromptDueToNavigation = Boolean(this.app.pendingNavigationTarget);
+    const shouldPromptDueToConflict =
+      !shouldPromptDueToNavigation &&
+      hasSelection &&
+      signature &&
+      signature !== this.app.scheduleConflictLastPromptSignature;
+    if (suppressOnce) {
+      if (signature) {
+        this.app.scheduleConflictLastPromptSignature = signature;
+      }
+      return;
+    }
+    if (!this.app.isScheduleConflictDialogOpen()) {
+      if (shouldPromptDueToNavigation && hasSelection) {
+        this.app.openScheduleConflictDialog(context, {
+          reason: "presence",
+          originPanel: this.app.activePanel,
+          target: this.app.pendingNavigationTarget || this.app.activePanel
+        });
+      } else if (shouldPromptDueToConflict) {
+        this.app.openScheduleConflictDialog(context, {
+          reason: "presence-auto",
+          originPanel: this.app.activePanel,
+          target: this.app.activePanel
+        });
+      }
+    } else if (shouldPromptDueToConflict && signature) {
+      this.app.scheduleConflictLastPromptSignature = signature;
     }
   }
 }
