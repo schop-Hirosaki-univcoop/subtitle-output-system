@@ -1188,7 +1188,7 @@ scripts/login/
 - ✅ `scripts/question-admin/managers/participant-context-manager.js` - 138 行（新規作成、フェーズ 17 段階 3 完了後）
 - ✅ `scripts/question-admin/managers/participant-action-manager.js` - 168 行（新規作成、フェーズ 17 段階 4 完了後）
 - ✅ `scripts/question-admin/managers/event-handlers-manager.js` - 506 行（新規作成、フェーズ 17 段階 6 完了後）
-- ⏳ `scripts/question-admin/managers/init-manager.js` - 418 行（新規作成、フェーズ 17 段階 7 進行中）
+- ⏳ `scripts/question-admin/managers/init-manager.js` - 435 行（新規作成、フェーズ 17 段階 7 進行中、8 個の Manager 初期化を移行済み）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
 - ⚠️ `scripts/login.js` - 664 行、要検討

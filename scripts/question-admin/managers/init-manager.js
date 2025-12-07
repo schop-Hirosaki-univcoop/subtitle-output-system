@@ -307,6 +307,23 @@ export class InitManager {
       renderEvents: this.renderEvents
     });
     
+    // TokenApiManager を初期化
+    refs.tokenApiManager = new ManagerClasses.TokenApiManager({
+      state: this.state,
+      // 依存関数と定数
+      ensureCrypto: this.ensureCrypto,
+      base64UrlFromBytes: this.base64UrlFromBytes,
+      fetchDbValue: this.fetchDbValue,
+      GAS_API_URL: this.GAS_API_URL
+    });
+    
+    // ShareClipboardManager を初期化
+    refs.shareClipboardManager = new ManagerClasses.ShareClipboardManager({
+      state: this.state,
+      // 依存関数と定数
+      FORM_PAGE_PATH: this.FORM_PAGE_PATH
+    });
+    
     // ConfirmDialogManagerのセットアップ
     if (refs.confirmDialogManager) {
       refs.confirmDialogManager.setupConfirmDialog();

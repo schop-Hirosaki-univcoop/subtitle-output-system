@@ -2228,27 +2228,11 @@ function init() {
   confirmDialogManager = managerRefs.confirmDialogManager;
   scheduleUtilityManager = managerRefs.scheduleUtilityManager;
   buttonStateManager = managerRefs.buttonStateManager;
+  tokenApiManager = managerRefs.tokenApiManager;
+  shareClipboardManager = managerRefs.shareClipboardManager;
   
   // 残りのManager初期化（段階的にInitManagerに移行予定）
   // 現在はapp.jsで初期化し、managerRefsにも代入
-  
-  // TokenApiManager を初期化
-  tokenApiManager = new TokenApiManager({
-    state,
-    // 依存関数と定数
-    ensureCrypto,
-    base64UrlFromBytes,
-    fetchDbValue,
-    GAS_API_URL
-  });
-
-  // ShareClipboardManager を初期化
-  shareClipboardManager = new ShareClipboardManager({
-    state,
-    // 依存関数と定数
-    FORM_PAGE_PATH
-  });
-  managerRefs.shareClipboardManager = shareClipboardManager;
 
   // ParticipantContextManager を初期化
   participantContextManager = new ParticipantContextManager({
@@ -2957,8 +2941,7 @@ function init() {
   scheduleManager.selectScheduleSelf = scheduleManager.selectSchedule.bind(scheduleManager);
   
   // すべてのManagerをグローバル変数に同期（managerRefsから）
-  tokenApiManager = managerRefs.tokenApiManager;
-  shareClipboardManager = managerRefs.shareClipboardManager;
+  // tokenApiManagerとshareClipboardManagerは既にInitManagerで初期化され、上で同期済み
   participantContextManager = managerRefs.participantContextManager;
   participantActionManager = managerRefs.participantActionManager;
   glManager = managerRefs.glManager;
