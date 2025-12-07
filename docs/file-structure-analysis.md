@@ -42,7 +42,7 @@
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
 | `scripts/events/app.js`                       | 6,070 | ❌ 要改善（基準の約 4.0 倍、リファクタリング完了）   |
-| `scripts/question-admin/app.js`               | 4,563 | ❌ 要改善（基準の約 3.0 倍、リファクタリング進行中） |
+| `scripts/question-admin/app.js`               | 4,476 | ❌ 要改善（基準の約 3.0 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
 | `scripts/operator/questions.js`               | 1,734 | ⚠️ 許容範囲（やや大きい）                            |
@@ -61,8 +61,8 @@
 2. **巨大な単一ファイル**
 
    - `scripts/events/app.js` - 6,070 行（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-   - `scripts/question-admin/app.js` - 4,563 行（リファクタリング進行中、元の 8,180 行から約 3,617 行削減）
-   - `scripts/question-admin/managers/host-integration-manager.js` - 271 行（新規作成、フェーズ 9 段階 3 完了後）
+   - `scripts/question-admin/app.js` - 4,476 行（リファクタリング進行中、元の 8,180 行から約 3,704 行削減）
+   - `scripts/question-admin/managers/host-integration-manager.js` - 389 行（新規作成、フェーズ 9 段階 5 完了後）
 
 3. **中規模の単一ファイル**
 
@@ -476,7 +476,7 @@ scripts/
        - ✅ リロケーション関連のユーティリティ関数を `RelocationManager` に移行完了（約 82 行削減）
        - 実績: 約 641 行の削減（`app.js` は 4,596 行、`relocation-manager.js` は 954 行）
    - **残りの機能**（詳細は `docs/utility-refactoring-plan.md` を参照）:
-     - ⏳ フェーズ 9: 埋め込みモード・ホスト統合機能の分離（EmbedManager / HostIntegrationManager、約 300-400 行）
+     - ⏳ フェーズ 9: 埋め込みモード・ホスト統合機能の分離（HostIntegrationManager、進行中、残り約 230-250 行）
      - ⏳ フェーズ 10: 状態管理・キャッシュ関連の関数の整理（StateManager / CacheManager、約 120-170 行）
      - ⏳ フェーズ 11: UI 関連の関数の整理（UIManager、約 150-200 行）
      - ⏳ フェーズ 12: 確認ダイアログ関連の関数の整理（ConfirmDialogManager、約 100 行）
@@ -849,7 +849,7 @@ scripts/login/
        - 実績: 約 15 行の削減（`app.js` は 6,070 行）
 
 2. **`scripts/question-admin/app.js` のリファクタリング**（進行中）
-   - 期間: 3-4 週間（約 47% 完了、フェーズ 9 段階 3 完了、全 17 フェーズ中 8 フェーズ完了）
+   - 期間: 3-4 週間（約 47% 完了、フェーズ 9 段階 5 完了、全 17 フェーズ中 8 フェーズ完了）
    - 影響範囲: 質問管理画面全体
    - リスク: 高（大規模な変更）
    - **完了したフェーズ**:
@@ -887,13 +887,26 @@ scripts/login/
        - ✅ `clearRelocationPreview` と `upsertRelocationPreview` を `RelocationManager` に移行完了（約 65 行削減）
        - ✅ リロケーション関連のユーティリティ関数を `RelocationManager` に移行完了（約 82 行削減）
        - 実績: 約 641 行の削減（`app.js` は 4,596 行、`relocation-manager.js` は 954 行）
-   - **フェーズ 9: 埋め込みモード・ホスト統合機能の分離（進行中）**:
-     - ✅ `HostIntegrationManager` クラスを作成（271 行）
-     - ✅ 基本関数を移行完了: `getEmbedPrefix`, `isEmbeddedMode`, `waitForEmbedReady`, `resolveEmbedReady`
-     - ✅ ホスト管理関数を移行完了: `attachHost`, `detachHost`, `isHostAttached`
-     - ✅ ホストイベント処理関数を移行完了: `cloneHostEvent`, `applyHostEvents`, `handleHostSelection`, `handleHostEventsUpdate`
-     - ⏳ 残りの関数: 選択ブロードキャスト、選択コンテキスト適用、ホスト選択ブリッジ（約 200-300 行）
-     - 現在の `app.js`: 4,563 行（段階 3 完了後）
+     - ✅ フェーズ 9: 埋め込みモード・ホスト統合機能の分離（HostIntegrationManager、389 行）進行中
+       - ✅ `getEmbedPrefix` を `HostIntegrationManager` に移行完了（約 20 行削減）
+       - ✅ `isEmbeddedMode` を `HostIntegrationManager` に移行完了（約 3 行削減）
+       - ✅ `waitForEmbedReady` を `HostIntegrationManager` に移行完了（約 15 行削減）
+       - ✅ `resolveEmbedReady` を `HostIntegrationManager` に移行完了（約 8 行削減）
+       - ✅ `attachHost` を `HostIntegrationManager` に移行完了（約 45 行削減）
+       - ✅ `detachHost` を `HostIntegrationManager` に移行完了（約 20 行削減）
+       - ✅ `isHostAttached` を `HostIntegrationManager` に移行完了（約 3 行削減）
+       - ✅ `cloneHostEvent` を `HostIntegrationManager` に移行完了（約 17 行削減）
+       - ✅ `applyHostEvents` を `HostIntegrationManager` に移行完了（約 23 行削減）
+       - ✅ `handleHostSelection` を `HostIntegrationManager` に移行完了（約 10 行削減）
+       - ✅ `handleHostEventsUpdate` を `HostIntegrationManager` に移行完了（約 3 行削減）
+       - ✅ `getSelectionBroadcastSource` を `HostIntegrationManager` に移行完了（約 3 行削減）
+       - ✅ `signatureForSelectionDetail` を `HostIntegrationManager` に移行完了（約 13 行削減）
+       - ✅ `buildSelectionDetail` を `HostIntegrationManager` に移行完了（約 22 行削減）
+       - ✅ `broadcastSelectionChange` を `HostIntegrationManager` に移行完了（約 35 行削減）
+       - ✅ `resetSelectionBroadcastSignature` を `HostIntegrationManager` に追加完了（約 3 行追加）
+       - ✅ `applySelectionContext` を `HostIntegrationManager` に移行完了（約 130 行削減）
+       - ⏳ 残りの関数: ホスト選択ブリッジ関数群（約 100-120 行）
+       - 実績: 約 370 行の削減（`app.js` は 4,476 行、`host-integration-manager.js` は 389 行、段階 5 完了後）
    - **残りの機能**（詳細は `docs/utility-refactoring-plan.md` を参照）:
      - ⏳ フェーズ 10: 状態管理・キャッシュ関連の関数の整理（StateManager / CacheManager、約 120-170 行）
      - ⏳ フェーズ 11: UI 関連の関数の整理（UIManager、約 150-200 行）
@@ -969,8 +982,8 @@ scripts/login/
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
 - ❌ `scripts/events/app.js` - 6,070 行、要改善（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-- ❌ `scripts/question-admin/app.js` - 4,563 行、要改善（リファクタリング進行中、元の 8,180 行から約 3,617 行削減）
-- ✅ `scripts/question-admin/managers/host-integration-manager.js` - 271 行（新規作成、フェーズ 9 段階 3 完了後）
+- ❌ `scripts/question-admin/app.js` - 4,476 行、要改善（リファクタリング進行中、元の 8,180 行から約 3,704 行削減）
+- ✅ `scripts/question-admin/managers/host-integration-manager.js` - 389 行（新規作成、フェーズ 9 段階 5 完了後）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
 - ⚠️ `scripts/login.js` - 664 行、要検討

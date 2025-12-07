@@ -21,7 +21,10 @@ export class HostIntegrationManager {
     this.HOST_SELECTION_ATTRIBUTE_KEYS = context.HOST_SELECTION_ATTRIBUTE_KEYS;
     
     // 一時的な依存関数（後で移行予定）
-    this.applySelectionContext = context.applySelectionContext;
+    this.selectSchedule = context.selectSchedule;
+    this.refreshScheduleLocationHistory = context.refreshScheduleLocationHistory;
+    this.populateScheduleLocationOptions = context.populateScheduleLocationOptions;
+    this.hostSelectionSignature = context.hostSelectionSignature;
     this.stopHostSelectionBridge = context.stopHostSelectionBridge;
     this.startHostSelectionBridge = context.startHostSelectionBridge;
     
@@ -38,6 +41,9 @@ export class HostIntegrationManager {
       selectionUnsubscribe: null,
       eventsUnsubscribe: null
     };
+    
+    // 選択ブロードキャスト関連の依存関数（後で移行予定）
+    // isEmbeddedMode は既にメソッドとして実装されているため、依存関数として受け取る必要はない
   }
 
   /**
@@ -150,7 +156,7 @@ export class HostIntegrationManager {
    * ホストのアタッチ
    * @param {Object} controller - ホストコントローラー
    */
-  attachHost(controller) {
+  async attachHost(controller) {
     this.detachHost();
     if (!controller || typeof controller !== "object") {
       return;
@@ -184,11 +190,10 @@ export class HostIntegrationManager {
       try {
         const selection = controller.getSelection();
         if (selection) {
-          const promise = this.applySelectionContext(selection);
-          if (promise && typeof promise.catch === "function") {
-            promise.catch((error) => {
-              console.error("Failed to apply initial host selection", error);
-            });
+          try {
+            await this.applySelectionContext(selection);
+          } catch (error) {
+            console.error("Failed to apply initial host selection", error);
           }
         }
       } catch (error) {
@@ -256,15 +261,14 @@ export class HostIntegrationManager {
    * ホスト選択の処理
    * @param {Object} detail - 選択詳細
    */
-  handleHostSelection(detail) {
+  async handleHostSelection(detail) {
     if (!detail || typeof detail !== "object") {
       return;
     }
-    const promise = this.applySelectionContext(detail);
-    if (promise && typeof promise.catch === "function") {
-      promise.catch((error) => {
-        console.error("Failed to apply selection from host", error);
-      });
+    try {
+      await this.applySelectionContext(detail);
+    } catch (error) {
+      console.error("Failed to apply selection from host", error);
     }
   }
 
@@ -274,6 +278,249 @@ export class HostIntegrationManager {
    */
   handleHostEventsUpdate(events) {
     this.applyHostEvents(events, { preserveSelection: true });
+  }
+
+  /**
+   * 選択ブロードキャストソースの取得
+   * @returns {string}
+   */
+  getSelectionBroadcastSource() {
+    return this.isEmbeddedMode() ? "participants" : "question-admin";
+  }
+
+  /**
+   * 選択詳細のシグネチャ生成
+   * @param {Object} detail - 選択詳細
+   * @returns {string}
+   */
+  signatureForSelectionDetail(detail) {
+    if (!detail || typeof detail !== "object") {
+      return "";
+    }
+    const {
+      eventId = "",
+      scheduleId = "",
+      eventName = "",
+      scheduleLabel = "",
+      startAt = "",
+      endAt = ""
+    } = detail;
+    return [eventId, scheduleId, eventName, scheduleLabel, startAt, endAt].join("::");
+  }
+
+  /**
+   * 選択詳細の構築
+   * @returns {Object}
+   */
+  buildSelectionDetail() {
+    const eventId = this.state.selectedEventId || "";
+    const scheduleId = this.state.selectedScheduleId || "";
+    const selectedEvent = Array.isArray(this.state.events)
+      ? this.state.events.find(evt => evt.id === eventId) || null
+      : null;
+    const schedules = selectedEvent?.schedules || [];
+    const schedule = scheduleId ? schedules.find(item => item.id === scheduleId) || null : null;
+    const overrideKey = `${eventId}::${scheduleId}`;
+    const override =
+      scheduleId && this.state.scheduleContextOverrides instanceof Map
+        ? this.state.scheduleContextOverrides.get(overrideKey) || null
+        : null;
+
+    return {
+      eventId,
+      scheduleId,
+      eventName: selectedEvent?.name || "",
+      scheduleLabel: schedule?.label || override?.scheduleLabel || "",
+      startAt: schedule?.startAt || override?.startAt || "",
+      endAt: schedule?.endAt || override?.endAt || ""
+    };
+  }
+
+  /**
+   * 選択変更のブロードキャスト
+   * @param {Object} options - オプション
+   * @param {string} options.source - ブロードキャストソース
+   */
+  broadcastSelectionChange(options = {}) {
+    const source = options.source || this.getSelectionBroadcastSource();
+    const detail = this.buildSelectionDetail();
+    const signature = this.signatureForSelectionDetail(detail);
+    const changed = signature !== this.lastSelectionBroadcastSignature;
+    this.lastSelectionBroadcastSignature = signature;
+    if (!changed || source === "host") {
+      return;
+    }
+    // ホストコントローラーに選択を伝播
+    if (this.isHostAttached()) {
+      const controller = this.getHostController();
+      if (controller && typeof controller.setSelection === "function") {
+        try {
+          controller.setSelection({ ...detail, source });
+        } catch (error) {
+          console.warn("Failed to propagate selection to host", error);
+        }
+      }
+    }
+    if (typeof document === "undefined") {
+      return;
+    }
+    try {
+      document.dispatchEvent(
+        new CustomEvent("qa:selection-changed", {
+          detail: {
+            ...detail,
+            source
+          }
+        })
+      );
+    } catch (error) {
+      console.warn("Failed to dispatch selection change event", error);
+    }
+  }
+
+  /**
+   * 選択ブロードキャストシグネチャのリセット
+   */
+  resetSelectionBroadcastSignature() {
+    this.lastSelectionBroadcastSignature = "";
+  }
+
+  /**
+   * 選択コンテキストの適用
+   * @param {Object} selection - 選択オブジェクト
+   * @returns {Promise}
+   */
+  async applySelectionContext(selection = {}) {
+    const {
+      eventId = "",
+      scheduleId = "",
+      eventName = "",
+      scheduleLabel = "",
+      location = "",
+      startAt = "",
+      endAt = ""
+    } = selection || {};
+    const trimmedEventId = this.normalizeKey(eventId);
+    const trimmedScheduleId = this.normalizeKey(scheduleId);
+    if (!trimmedEventId) {
+      this.hostSelectionBridge.lastSignature = "";
+      return;
+    }
+
+    try {
+      if (!(this.state.scheduleContextOverrides instanceof Map)) {
+        this.state.scheduleContextOverrides = new Map();
+      }
+      if (!this.state.user) {
+        this.state.initialSelection = {
+          eventId: trimmedEventId,
+          scheduleId: trimmedScheduleId || null,
+          scheduleLabel: scheduleLabel || null,
+          location: location || null,
+          eventLabel: eventName || null,
+          startAt: startAt || null,
+          endAt: endAt || null
+        };
+        this.state.initialSelectionApplied = false;
+        this.hostSelectionBridge.lastSignature = this.hostSelectionSignature({
+          eventId: trimmedEventId,
+          scheduleId: trimmedScheduleId,
+          eventName,
+          scheduleLabel,
+          location,
+          startAt,
+          endAt
+        });
+        return;
+      }
+
+      if (!Array.isArray(this.state.events) || !this.state.events.some(evt => evt.id === trimmedEventId)) {
+        await this.loadEvents({ preserveSelection: true });
+      }
+
+      const previousEventId = this.state.selectedEventId;
+      const previousScheduleId = this.state.selectedScheduleId;
+      const eventChanged = previousEventId !== trimmedEventId;
+      const shouldReloadSchedule = Boolean(trimmedScheduleId)
+        ? eventChanged || previousScheduleId !== trimmedScheduleId
+        : false;
+
+      if (eventChanged) {
+        this.selectEvent(trimmedEventId, {
+          nextScheduleId: trimmedScheduleId || null,
+          skipParticipantLoad: Boolean(trimmedScheduleId),
+          source: "host"
+        });
+      } else if (!trimmedScheduleId) {
+        this.selectEvent(trimmedEventId, { source: "host" });
+      }
+
+      const selectedEvent = this.state.events.find(evt => evt.id === trimmedEventId) || null;
+      if (selectedEvent && eventName) {
+        selectedEvent.name = eventName;
+      }
+
+      const effectiveEventName = selectedEvent?.name || eventName || trimmedEventId;
+      let effectiveScheduleLabel = scheduleLabel || (trimmedScheduleId ? trimmedScheduleId : "");
+      let effectiveLocation = location || "";
+      let effectiveStartAt = startAt || "";
+      let effectiveEndAt = endAt || "";
+
+      if (trimmedScheduleId) {
+        const schedule = selectedEvent?.schedules?.find(item => item.id === trimmedScheduleId) || null;
+        if (schedule) {
+          if (scheduleLabel) schedule.label = scheduleLabel;
+          if (location) schedule.location = location;
+          if (startAt) schedule.startAt = startAt;
+          if (endAt) schedule.endAt = endAt;
+          effectiveScheduleLabel = schedule.label || trimmedScheduleId;
+          effectiveLocation = schedule.location || "";
+          effectiveStartAt = schedule.startAt || "";
+          effectiveEndAt = schedule.endAt || "";
+          if (this.state.scheduleContextOverrides instanceof Map) {
+            this.state.scheduleContextOverrides.delete(`${trimmedEventId}::${trimmedScheduleId}`);
+          }
+        } else if (this.state.scheduleContextOverrides instanceof Map) {
+          const override = {
+            eventId: trimmedEventId,
+            eventName: effectiveEventName,
+            scheduleId: trimmedScheduleId,
+            scheduleLabel: scheduleLabel || trimmedScheduleId,
+            location: location || "",
+            startAt: startAt || "",
+            endAt: endAt || ""
+          };
+          this.state.scheduleContextOverrides.set(`${trimmedEventId}::${trimmedScheduleId}`, override);
+          effectiveScheduleLabel = override.scheduleLabel;
+          effectiveLocation = override.location || "";
+          effectiveStartAt = override.startAt;
+          effectiveEndAt = override.endAt;
+        }
+        this.selectSchedule(trimmedScheduleId, {
+          forceReload: shouldReloadSchedule,
+          preserveStatus: !shouldReloadSchedule,
+          source: "host"
+        });
+      } else {
+        this.updateParticipantContext({ preserveStatus: true });
+      }
+
+      this.refreshScheduleLocationHistory();
+      this.populateScheduleLocationOptions(this.dom.scheduleLocationInput?.value || "");
+
+      this.hostSelectionBridge.lastSignature = this.hostSelectionSignature({
+        eventId: trimmedEventId,
+        scheduleId: trimmedScheduleId,
+        eventName: effectiveEventName,
+        scheduleLabel: effectiveScheduleLabel,
+        location: effectiveLocation,
+        startAt: effectiveStartAt,
+        endAt: effectiveEndAt
+      });
+    } catch (error) {
+      console.error("questionAdminEmbed.setSelection failed", error);
+      throw error;
+    }
   }
 }
 

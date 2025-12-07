@@ -226,7 +226,12 @@ const hostIntegration = {
 }; // フォールバック処理用（段階4-6で削除予定）
 
 function getSelectionBroadcastSource() {
-  return isEmbeddedMode() ? "participants" : "question-admin";
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    return isEmbeddedMode() ? "participants" : "question-admin";
+  }
+  return hostIntegrationManager.getSelectionBroadcastSource();
 }
 
 function isHostAttached() {
@@ -474,79 +479,91 @@ function attachHost(controller) {
 }
 
 function signatureForSelectionDetail(detail) {
-  if (!detail || typeof detail !== "object") {
-    return "";
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    if (!detail || typeof detail !== "object") {
+      return "";
+    }
+    const {
+      eventId = "",
+      scheduleId = "",
+      eventName = "",
+      scheduleLabel = "",
+      startAt = "",
+      endAt = ""
+    } = detail;
+    return [eventId, scheduleId, eventName, scheduleLabel, startAt, endAt].join("::");
   }
-  const {
-    eventId = "",
-    scheduleId = "",
-    eventName = "",
-    scheduleLabel = "",
-    startAt = "",
-    endAt = ""
-  } = detail;
-  return [eventId, scheduleId, eventName, scheduleLabel, startAt, endAt].join("::");
+  return hostIntegrationManager.signatureForSelectionDetail(detail);
 }
 
 function buildSelectionDetail() {
-  const eventId = state.selectedEventId || "";
-  const scheduleId = state.selectedScheduleId || "";
-  const selectedEvent = Array.isArray(state.events)
-    ? state.events.find(evt => evt.id === eventId) || null
-    : null;
-  const schedules = selectedEvent?.schedules || [];
-  const schedule = scheduleId ? schedules.find(item => item.id === scheduleId) || null : null;
-  const overrideKey = `${eventId}::${scheduleId}`;
-  const override =
-    scheduleId && state.scheduleContextOverrides instanceof Map
-      ? state.scheduleContextOverrides.get(overrideKey) || null
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    const eventId = state.selectedEventId || "";
+    const scheduleId = state.selectedScheduleId || "";
+    const selectedEvent = Array.isArray(state.events)
+      ? state.events.find(evt => evt.id === eventId) || null
       : null;
+    const schedules = selectedEvent?.schedules || [];
+    const schedule = scheduleId ? schedules.find(item => item.id === scheduleId) || null : null;
+    const overrideKey = `${eventId}::${scheduleId}`;
+    const override =
+      scheduleId && state.scheduleContextOverrides instanceof Map
+        ? state.scheduleContextOverrides.get(overrideKey) || null
+        : null;
 
-  return {
-    eventId,
-    scheduleId,
-    eventName: selectedEvent?.name || "",
-    scheduleLabel: schedule?.label || override?.scheduleLabel || "",
-    startAt: schedule?.startAt || override?.startAt || "",
-    endAt: schedule?.endAt || override?.endAt || ""
-  };
+    return {
+      eventId,
+      scheduleId,
+      eventName: selectedEvent?.name || "",
+      scheduleLabel: schedule?.label || override?.scheduleLabel || "",
+      startAt: schedule?.startAt || override?.startAt || "",
+      endAt: schedule?.endAt || override?.endAt || ""
+    };
+  }
+  return hostIntegrationManager.buildSelectionDetail();
 }
 
 function broadcastSelectionChange(options = {}) {
-  const source = options.source || getSelectionBroadcastSource();
-  const detail = buildSelectionDetail();
-  const signature = signatureForSelectionDetail(detail);
-  const changed = signature !== lastSelectionBroadcastSignature;
-  lastSelectionBroadcastSignature = signature;
-  if (!changed || source === "host") {
-    return;
-  }
-  // HostIntegrationManager 経由でホストコントローラーにアクセス
-  if (hostIntegrationManager && hostIntegrationManager.isHostAttached()) {
-    const controller = hostIntegrationManager.getHostController();
-    if (controller && typeof controller.setSelection === "function") {
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    // フォールバック: Manager初期化前の呼び出しに対応
+    const source = options.source || getSelectionBroadcastSource();
+    const detail = buildSelectionDetail();
+    const signature = signatureForSelectionDetail(detail);
+    const changed = signature !== lastSelectionBroadcastSignature;
+    lastSelectionBroadcastSignature = signature;
+    if (!changed || source === "host") {
+      return;
+    }
+    if (hostIntegration && hostIntegration.controller && typeof hostIntegration.controller.setSelection === "function") {
       try {
-        controller.setSelection({ ...detail, source });
+        hostIntegration.controller.setSelection({ ...detail, source });
       } catch (error) {
         console.warn("Failed to propagate selection to host", error);
       }
     }
-  }
-  if (typeof document === "undefined") {
+    if (typeof document === "undefined") {
+      return;
+    }
+    try {
+      document.dispatchEvent(
+        new CustomEvent("qa:selection-changed", {
+          detail: {
+            ...detail,
+            source
+          }
+        })
+      );
+    } catch (error) {
+      console.warn("Failed to dispatch selection change event", error);
+    }
     return;
   }
-  try {
-    document.dispatchEvent(
-      new CustomEvent("qa:selection-changed", {
-        detail: {
-          ...detail,
-          source
-        }
-      })
-    );
-  } catch (error) {
-    console.warn("Failed to dispatch selection change event", error);
-  }
+  hostIntegrationManager.broadcastSelectionChange(options);
 }
 
 function waitForEmbedReady() {
@@ -3268,7 +3285,12 @@ function resetState() {
   state.selectedEventId = null;
   state.selectedScheduleId = null;
   state.mailSending = false;
-  lastSelectionBroadcastSignature = "";
+  // HostIntegrationManager に委譲
+  if (hostIntegrationManager) {
+    hostIntegrationManager.resetSelectionBroadcastSignature();
+  } else {
+    lastSelectionBroadcastSignature = "";
+  }
   state.participantTokenMap = new Map();
   state.duplicateMatches = new Map();
   state.duplicateGroups = new Map();
@@ -4051,136 +4073,11 @@ function stopHostSelectionBridge() {
 }
 
 async function applySelectionContext(selection = {}) {
-  const {
-    eventId = "",
-    scheduleId = "",
-    eventName = "",
-    scheduleLabel = "",
-    location = "",
-    startAt = "",
-    endAt = ""
-  } = selection || {};
-  const trimmedEventId = normalizeKey(eventId);
-  const trimmedScheduleId = normalizeKey(scheduleId);
-  if (!trimmedEventId) {
-    hostSelectionBridge.lastSignature = "";
-    return;
+  // HostIntegrationManager に委譲
+  if (!hostIntegrationManager) {
+    throw new Error("HostIntegrationManager is not initialized");
   }
-
-  try {
-    if (!(state.scheduleContextOverrides instanceof Map)) {
-      state.scheduleContextOverrides = new Map();
-    }
-    if (!state.user) {
-      state.initialSelection = {
-        eventId: trimmedEventId,
-        scheduleId: trimmedScheduleId || null,
-        scheduleLabel: scheduleLabel || null,
-        location: location || null,
-        eventLabel: eventName || null,
-        startAt: startAt || null,
-        endAt: endAt || null
-      };
-      state.initialSelectionApplied = false;
-      hostSelectionBridge.lastSignature = hostSelectionSignature({
-        eventId: trimmedEventId,
-        scheduleId: trimmedScheduleId,
-        eventName,
-        scheduleLabel,
-        location,
-        startAt,
-        endAt
-      });
-      return;
-    }
-
-    if (!Array.isArray(state.events) || !state.events.some(evt => evt.id === trimmedEventId)) {
-      await loadEvents({ preserveSelection: true });
-    }
-
-    const previousEventId = state.selectedEventId;
-    const previousScheduleId = state.selectedScheduleId;
-    const eventChanged = previousEventId !== trimmedEventId;
-    const shouldReloadSchedule = Boolean(trimmedScheduleId)
-      ? eventChanged || previousScheduleId !== trimmedScheduleId
-      : false;
-
-    if (eventChanged) {
-      selectEvent(trimmedEventId, {
-        nextScheduleId: trimmedScheduleId || null,
-        skipParticipantLoad: Boolean(trimmedScheduleId),
-        source: "host"
-      });
-    } else if (!trimmedScheduleId) {
-      selectEvent(trimmedEventId, { source: "host" });
-    }
-
-    const selectedEvent = state.events.find(evt => evt.id === trimmedEventId) || null;
-    if (selectedEvent && eventName) {
-      selectedEvent.name = eventName;
-    }
-
-    const effectiveEventName = selectedEvent?.name || eventName || trimmedEventId;
-    let effectiveScheduleLabel = scheduleLabel || (trimmedScheduleId ? trimmedScheduleId : "");
-    let effectiveLocation = location || "";
-    let effectiveStartAt = startAt || "";
-    let effectiveEndAt = endAt || "";
-
-    if (trimmedScheduleId) {
-      const schedule = selectedEvent?.schedules?.find(item => item.id === trimmedScheduleId) || null;
-      if (schedule) {
-        if (scheduleLabel) schedule.label = scheduleLabel;
-        if (location) schedule.location = location;
-        if (startAt) schedule.startAt = startAt;
-        if (endAt) schedule.endAt = endAt;
-        effectiveScheduleLabel = schedule.label || trimmedScheduleId;
-        effectiveLocation = schedule.location || "";
-        effectiveStartAt = schedule.startAt || "";
-        effectiveEndAt = schedule.endAt || "";
-        if (state.scheduleContextOverrides instanceof Map) {
-          state.scheduleContextOverrides.delete(`${trimmedEventId}::${trimmedScheduleId}`);
-        }
-      } else if (state.scheduleContextOverrides instanceof Map) {
-        const override = {
-          eventId: trimmedEventId,
-          eventName: effectiveEventName,
-          scheduleId: trimmedScheduleId,
-          scheduleLabel: scheduleLabel || trimmedScheduleId,
-          location: location || "",
-          startAt: startAt || "",
-          endAt: endAt || ""
-        };
-        state.scheduleContextOverrides.set(`${trimmedEventId}::${trimmedScheduleId}`, override);
-        effectiveScheduleLabel = override.scheduleLabel;
-        effectiveLocation = override.location || "";
-        effectiveStartAt = override.startAt;
-        effectiveEndAt = override.endAt;
-      }
-      selectSchedule(trimmedScheduleId, {
-        forceReload: shouldReloadSchedule,
-        preserveStatus: !shouldReloadSchedule,
-        source: "host"
-      });
-    } else {
-      updateParticipantContext({ preserveStatus: true });
-    }
-
-    refreshScheduleLocationHistory();
-    populateScheduleLocationOptions(dom.scheduleLocationInput?.value || "");
-
-    hostSelectionBridge.lastSignature = hostSelectionSignature({
-      eventId: trimmedEventId,
-      scheduleId: trimmedScheduleId,
-      eventName: effectiveEventName,
-      scheduleLabel: effectiveScheduleLabel,
-      location: effectiveLocation,
-      startAt: effectiveStartAt,
-      endAt: effectiveEndAt
-    });
-  } catch (error) {
-    console.error("questionAdminEmbed.setSelection failed", error);
-    throw error;
-  }
+  return hostIntegrationManager.applySelectionContext(selection);
 }
 
 function init() {
@@ -4445,7 +4342,13 @@ function init() {
     updateParticipantContext,
     HOST_SELECTION_ATTRIBUTE_KEYS,
     // 一時的な依存関数（後で移行予定）
-    applySelectionContext,
+    selectSchedule: (scheduleId, options) => {
+      if (!scheduleManager) return;
+      scheduleManager.selectSchedule(scheduleId, options);
+    },
+    refreshScheduleLocationHistory,
+    populateScheduleLocationOptions,
+    hostSelectionSignature,
     stopHostSelectionBridge,
     startHostSelectionBridge
   });
