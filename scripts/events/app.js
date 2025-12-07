@@ -225,14 +225,6 @@ export class EventAdminApp {
     this.eventPrintPreviewController = null;
     this.eventPrintPreviewCache = null;
     this.eventPrintPreviewMode = "events";
-    // EventFirebaseManager に移行（プロパティはfirebaseManagerの初期化後に同期済み）
-    // 後方互換性のため、app.jsでもプロパティを保持（firebaseManagerから同期）
-    this.hostPresenceEntryKey = this.firebaseManager.hostPresenceEntryKey;
-    this.hostPresenceEntryRef = this.firebaseManager.hostPresenceEntryRef;
-    this.hostPresenceDisconnect = this.firebaseManager.hostPresenceDisconnect;
-    this.hostPresenceHeartbeat = this.firebaseManager.hostPresenceHeartbeat;
-    // EventFirebaseManager に移行（後方互換性のため保持）
-    this.cachedHostPresenceStorage = undefined;
     this.hostCommittedScheduleId = "";
     this.hostCommittedScheduleLabel = "";
     this.eventSelectionCommitted = false;
