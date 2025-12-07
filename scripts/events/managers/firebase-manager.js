@@ -11,9 +11,11 @@ import {
   onDisconnect,
   getOperatorPresenceEventRef,
   getOperatorPresenceEntryRef,
-  getOperatorScheduleConsensusRef
+  getOperatorScheduleConsensusRef,
+  runTransaction,
+  auth
 } from "../../operator/firebase.js";
-import { ensureString } from "../helpers.js";
+import { ensureString, logError } from "../helpers.js";
 import { normalizeScheduleId } from "../../shared/channel-paths.js";
 import { derivePresenceScheduleKey as sharedDerivePresenceScheduleKey } from "../../shared/presence-keys.js";
 import { normalizeOperatorMode, OPERATOR_MODE_SUPPORT } from "../../shared/operator-modes.js";
@@ -828,6 +830,256 @@ export class EventFirebaseManager {
     });
 
     return { entries, hasSelfPresence };
+  }
+
+  /**
+   * スケジュール合意を確定します。
+   * @param {Object} selection - 選択情報（scheduleId, scheduleKey, option, context）
+   * @returns {Promise<boolean>} 確定が成功したかどうか
+   */
+  async confirmScheduleConsensus(selection) {
+    const eventId = ensureString(this.app.selectedEventId);
+    if (!eventId) {
+      this.app.setScheduleConflictError("イベントが選択されていません。イベントを選択し直してください。");
+      return false;
+    }
+    const context = selection?.context || this.app.scheduleConflictContext || this.app.buildScheduleConflictContext();
+    const signature = ensureString(context?.signature);
+    if (!signature) {
+      this.app.setScheduleConflictError("現在の選択状況を確認できませんでした。再度お試しください。");
+      return false;
+    }
+    let scheduleId = ensureString(selection?.scheduleId);
+    const scheduleKey = ensureString(selection?.scheduleKey);
+    if (!scheduleKey) {
+      this.app.setScheduleConflictError("日程情報を取得できませんでした。もう一度選択してください。");
+      return false;
+    }
+    if (!scheduleId) {
+      scheduleId = this.extractScheduleIdFromKey(scheduleKey, eventId);
+    }
+    if (!scheduleId) {
+      this.app.setScheduleConflictError("日程情報を取得できませんでした。もう一度選択してください。");
+      return false;
+    }
+    const scheduleMatch = this.app.schedules.find((schedule) => {
+      if (!schedule?.id) {
+        return false;
+      }
+      if (schedule.id === scheduleId) {
+        return true;
+      }
+      return normalizeScheduleId(schedule.id) === normalizeScheduleId(scheduleId);
+    });
+    if (!scheduleMatch) {
+      this.app.setScheduleConflictError("選択した日程が現在のイベントに存在しません。日程一覧を確認してください。");
+      return false;
+    }
+    scheduleId = scheduleMatch.id;
+    const user = this.app.currentUser || auth.currentUser || null;
+    const resolvedByUid = ensureString(user?.uid);
+    if (!resolvedByUid) {
+      this.app.setScheduleConflictError("ログイン状態を確認できませんでした。ページを再読み込みしてください。");
+      return false;
+    }
+    const resolvedByDisplayName =
+      ensureString(user?.displayName) || ensureString(user?.email) || resolvedByUid;
+    const resolvedBySessionId = ensureString(this.hostPresenceSessionId);
+    const option = selection?.option || null;
+    const fallbackSchedule = this.app.schedules.find((schedule) => schedule.id === scheduleId) || null;
+    const scheduleLabel =
+      ensureString(option?.scheduleLabel) || ensureString(fallbackSchedule?.label) || scheduleId;
+    let scheduleRange = ensureString(option?.scheduleRange);
+    if (!scheduleRange && fallbackSchedule) {
+      scheduleRange = formatScheduleRange(fallbackSchedule.startAt, fallbackSchedule.endAt);
+    }
+    const consensusRef = getOperatorScheduleConsensusRef(eventId);
+    try {
+      const result = await runTransaction(consensusRef, (current) => {
+        if (current && typeof current === "object") {
+          const currentSignature = ensureString(current.conflictSignature);
+          const currentKey = ensureString(current.scheduleKey);
+          if (currentSignature && currentSignature !== signature) {
+            return current;
+          }
+          if (currentSignature === signature && currentKey) {
+            return current;
+          }
+          const next = {
+            ...current,
+            conflictSignature: signature,
+            scheduleKey,
+            scheduleId,
+            scheduleLabel,
+            scheduleRange,
+            resolvedByUid,
+            resolvedByDisplayName,
+            resolvedBySessionId,
+            resolvedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            status: "resolved"
+          };
+          return next;
+        }
+        return {
+          conflictSignature: signature,
+          scheduleKey,
+          scheduleId,
+          scheduleLabel,
+          scheduleRange,
+          resolvedByUid,
+          resolvedByDisplayName,
+          resolvedBySessionId,
+          resolvedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          status: "resolved"
+        };
+      });
+      if (!result.committed) {
+        this.app.setScheduleConflictError("別のオペレーターが日程を確定しました。最新の状態に更新しています…");
+        return false;
+      }
+      this.app.clearScheduleConflictError();
+      this.app.logFlowState("スケジュール合意の書き込みが完了しました", {
+        eventId,
+        scheduleId,
+        scheduleKey,
+        conflictSignature: signature
+      });
+      const scheduleForCommit = fallbackSchedule || scheduleMatch || null;
+      this.app.setHostCommittedSchedule(scheduleId, {
+        schedule: scheduleForCommit,
+        reason: "consensus-submit",
+        sync: true,
+        updateContext: true,
+        force: true,
+        suppressConflictPrompt: true
+      });
+      this.app.scheduleSelectionCommitted = true;
+      if (typeof console !== "undefined" && typeof console.log === "function") {
+        console.log("[confirmScheduleConsensus] Set scheduleSelectionCommitted to true", {
+          scheduleId,
+          eventId,
+          hostCommittedScheduleId: ensureString(this.app.hostCommittedScheduleId) || "(empty)"
+        });
+      }
+      this.app.tools.prepareContextForSelection();
+      if (
+        this.app.tools.isPendingSync() ||
+        this.app.activePanel === "participants" ||
+        this.app.activePanel === "operator"
+      ) {
+        this.app.tools
+          .syncEmbeddedTools({ reason: "consensus-submit" })
+          .catch((error) => logError("Failed to sync tools after schedule consensus", error));
+      } else {
+        if (typeof console !== "undefined" && typeof console.log === "function") {
+          console.log("[confirmScheduleConsensus] About to sync operator context", {
+            eventId,
+            scheduleId,
+            scheduleSelectionCommitted: this.app.scheduleSelectionCommitted,
+            hostCommittedScheduleId: ensureString(this.app.hostCommittedScheduleId) || "(empty)",
+            activePanel: this.app.activePanel
+          });
+        }
+        this.app.tools
+          .syncOperatorContext({ force: true, reason: "consensus-submit" })
+          .catch((error) => logError("Failed to sync operator context after schedule consensus", error));
+      }
+      return true;
+    } catch (error) {
+      console.error("Failed to confirm schedule consensus:", error);
+      this.app.setScheduleConflictError("日程の確定に失敗しました。通信環境を確認して再度お試しください。");
+      return false;
+    }
+  }
+
+  /**
+   * スケジュールコンフリクトプロンプトを要求します。
+   * @param {Object} context - スケジュールコンフリクトコンテキスト（オプション）
+   * @returns {Promise<boolean>} 要求が成功したかどうか
+   */
+  async requestScheduleConflictPrompt(context = null) {
+    const eventId = ensureString(this.app.selectedEventId);
+    if (!eventId) {
+      return false;
+    }
+    const resolvedContext = context || this.app.scheduleConflictContext || this.app.buildScheduleConflictContext();
+    const signature = ensureString(resolvedContext?.signature);
+    if (!resolvedContext?.hasConflict || !signature) {
+      return false;
+    }
+    if (this.app.scheduleConflictPromptSignature === signature) {
+      return true;
+    }
+    const consensus = this.scheduleConsensusState;
+    if (consensus && ensureString(consensus.conflictSignature) === signature) {
+      const existingKey = ensureString(consensus.scheduleKey);
+      if (!existingKey) {
+        this.app.scheduleConflictPromptSignature = signature;
+      }
+      return true;
+    }
+    const user = this.app.currentUser || auth.currentUser || null;
+    const requestedByUid = ensureString(user?.uid);
+    if (!requestedByUid) {
+      return false;
+    }
+    const requestedByDisplayName =
+      ensureString(user?.displayName) || ensureString(user?.email) || requestedByUid;
+    const requestedBySessionId = ensureString(this.hostPresenceSessionId);
+    const consensusRef = getOperatorScheduleConsensusRef(eventId);
+    try {
+      const result = await runTransaction(consensusRef, (current) => {
+        if (current && typeof current === "object") {
+          const currentSignature = ensureString(current.conflictSignature);
+          const currentKey = ensureString(current.scheduleKey);
+          if (currentSignature === signature) {
+            if (!currentKey) {
+              return {
+                ...current,
+                requestedByUid: requestedByUid || current.requestedByUid || "",
+                requestedByDisplayName:
+                  requestedByDisplayName || current.requestedByDisplayName || "",
+                requestedBySessionId:
+                  requestedBySessionId || current.requestedBySessionId || "",
+                requestedAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+                status: ensureString(current.status) || "pending"
+              };
+            }
+            return current;
+          }
+        }
+        return {
+          conflictSignature: signature,
+          scheduleKey: "",
+          scheduleId: "",
+          scheduleLabel: "",
+          scheduleRange: "",
+          requestedByUid,
+          requestedByDisplayName,
+          requestedBySessionId,
+          requestedAt: serverTimestamp(),
+          status: "pending",
+          updatedAt: serverTimestamp()
+        };
+      });
+      if (result.committed) {
+        this.app.scheduleConflictPromptSignature = signature;
+        this.app.logFlowState("スケジュール合意の確認を要求しました", {
+          eventId,
+          conflictSignature: signature,
+          requestedByUid,
+          requestedBySessionId
+        });
+        this.app.uiRenderer.syncScheduleConflictPromptState(resolvedContext);
+      }
+      return result.committed;
+    } catch (error) {
+      console.debug("Failed to request schedule consensus prompt:", error);
+      return false;
+    }
   }
 }
 

@@ -4,6 +4,7 @@
 import { formatParticipantCount, ensureString } from "../helpers.js";
 import { formatScheduleRange } from "../../operator/utils.js";
 import { OPERATOR_MODE_SUPPORT } from "../../shared/operator-modes.js";
+import { normalizeScheduleId } from "../../shared/channel-paths.js";
 
 /**
  * UI描画クラス
@@ -638,6 +639,160 @@ export class EventUIRenderer {
     } else if (shouldPromptDueToConflict && signature) {
       this.app.scheduleConflictLastPromptSignature = signature;
     }
+  }
+
+  /**
+   * スケジュールコンフリクトダイアログを開きます。
+   * @param {Object} context - スケジュールコンフリクトコンテキスト（オプション）
+   * @param {Object} meta - メタ情報（reason, originPanel, targetなど）
+   */
+  openScheduleConflictDialog(context = null, meta = {}) {
+    if (!this.app.dom.scheduleConflictDialog) {
+      return;
+    }
+    if (!context) {
+      context = this.buildScheduleConflictContext();
+      this.app.scheduleConflictContext = context;
+    }
+    const { reason = "unspecified", originPanel = "", target = "" } = meta || {};
+    this.app.renderScheduleConflictDialog(context);
+    this.app.clearScheduleConflictError();
+    const signature = ensureString(context?.signature);
+    if (signature) {
+      this.app.scheduleConflictLastPromptSignature = signature;
+    }
+    const wasOpen = this.app.isScheduleConflictDialogOpen();
+    if (!wasOpen) {
+      this.app.openDialog(this.app.dom.scheduleConflictDialog);
+      this.app.logFlowState("スケジュール確認モーダルを表示します", {
+        reason,
+        target,
+        originPanel,
+        conflict: {
+          eventId: context?.eventId || "",
+          hasConflict: Boolean(context?.hasConflict),
+          optionCount: Array.isArray(context?.options) ? context.options.length : 0,
+          entryCount: Array.isArray(context?.entries) ? context.entries.length : 0
+        }
+      });
+    }
+    this.app.scheduleConflictLastSignature = context?.signature || this.app.scheduleConflictLastSignature;
+    this.syncScheduleConflictPromptState(context);
+  }
+
+  /**
+   * スケジュールコンフリクトフォームの送信を処理します。
+   * @param {Event} event - フォーム送信イベント
+   */
+  handleScheduleConflictSubmit(event) {
+    event.preventDefault();
+    const options = Array.from(
+      this.app.dom.scheduleConflictOptions?.querySelectorAll(`input[name="${this.app.scheduleConflictRadioName}"]`) || []
+    );
+    const selected = options.find((input) => input.checked);
+    if (!selected) {
+      this.app.setScheduleConflictError("日程を選択してください。");
+      return;
+    }
+    let scheduleId = ensureString(selected.dataset.scheduleId);
+    const scheduleKey = ensureString(selected.value);
+    if (!scheduleKey) {
+      this.app.setScheduleConflictError("この日程の情報を取得できませんでした。もう一度選択してください。");
+      return;
+    }
+    if (!scheduleId) {
+      const eventId = ensureString(this.app.selectedEventId);
+      scheduleId = this.app.extractScheduleIdFromKey(scheduleKey, eventId) || "";
+      if (scheduleId) {
+        selected.dataset.scheduleId = scheduleId;
+      }
+    }
+    if (!scheduleId) {
+      this.app.setScheduleConflictError("この日程の情報を取得できませんでした。もう一度選択してください。");
+      return;
+    }
+    const scheduleMatch = this.app.schedules.find((schedule) => {
+      if (!schedule?.id) {
+        return false;
+      }
+      if (schedule.id === scheduleId) {
+        return true;
+      }
+      return normalizeScheduleId(schedule.id) === normalizeScheduleId(scheduleId);
+    });
+    if (!scheduleMatch) {
+      this.app.setScheduleConflictError("選択した日程が現在のイベントに存在しません。日程一覧を確認してください。");
+      return;
+    }
+    scheduleId = scheduleMatch.id;
+    selected.dataset.scheduleId = scheduleId;
+    const context = this.app.scheduleConflictContext || this.buildScheduleConflictContext();
+    const optionsContext = Array.isArray(context?.selectableOptions) && context.selectableOptions.length
+      ? context.selectableOptions
+      : Array.isArray(context?.options)
+        ? context.options
+        : [];
+    const option = optionsContext.find((item) => item.key === scheduleKey || item.scheduleId === scheduleId) || null;
+    const resolvedScheduleId = scheduleId;
+    this.app.scheduleConflictContext = context;
+    this.app.clearScheduleConflictError();
+    this.app.setScheduleConflictSubmitting(true);
+    this.app.confirmScheduleConsensus({ scheduleId: resolvedScheduleId, scheduleKey, option, context })
+      .then((confirmed) => {
+        if (!confirmed) {
+          return;
+        }
+        if (
+          resolvedScheduleId &&
+          ensureString(this.app.selectedScheduleId) !== ensureString(resolvedScheduleId)
+        ) {
+          this.app.selectSchedule(resolvedScheduleId);
+        }
+        if (this.app.dom.scheduleConflictForm) {
+          this.app.dom.scheduleConflictForm.reset();
+        }
+        this.app.clearScheduleConflictError();
+        if (this.app.dom.scheduleConflictDialog) {
+          this.app.closeDialog(this.app.dom.scheduleConflictDialog);
+        }
+        const navMeta = this.app.pendingNavigationMeta;
+        const navTarget = this.app.pendingNavigationTarget || "";
+        this.app.pendingNavigationTarget = "";
+        this.app.navigationManager.pendingNavigationTarget = "";
+        this.app.pendingNavigationMeta = null;
+        this.app.navigationManager.pendingNavigationMeta = null;
+        this.app.awaitingScheduleConflictPrompt = false;
+        this.app.clearPendingNavigationTimer();
+        let resolvedTarget = navTarget;
+        let usedFallback = false;
+        const metaOrigin = navMeta?.originPanel || "";
+        const metaTarget = navMeta?.target || "";
+        const isFlowFromSchedules =
+          navMeta?.reason === "flow-navigation" && metaOrigin === "schedules";
+        if (!resolvedTarget && metaTarget) {
+          resolvedTarget = metaTarget;
+          usedFallback = resolvedTarget !== navTarget;
+        }
+        // 日程確定後は新しいモーダルを開く（参加者リストには移動しない）
+        if (isFlowFromSchedules) {
+          this.app.openScheduleCompletionDialog();
+        } else if (resolvedTarget) {
+          // 他のナビゲーションの場合は従来通り
+          this.app.showPanel(resolvedTarget);
+          this.app.logFlowState("スケジュール合意の確定後にナビゲーションを継続します", {
+            target: resolvedTarget,
+            scheduleId,
+            scheduleKey
+          });
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to resolve schedule conflict:", error);
+        this.app.setScheduleConflictError("日程の確定に失敗しました。ネットワーク接続を確認して再度お試しください。");
+      })
+      .finally(() => {
+        this.app.setScheduleConflictSubmitting(false);
+      });
   }
 }
 
