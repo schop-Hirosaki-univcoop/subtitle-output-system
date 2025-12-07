@@ -28,10 +28,7 @@ import {
 } from "./state.js";
 import { dom } from "./dom.js";
 import { goToLogin } from "../shared/routes.js";
-import {
-  loadAuthPreflightContext,
-  preflightContextMatchesUser
-} from "../shared/auth-preflight.js";
+// loadAuthPreflightContext, preflightContextMatchesUser は AuthManager に移行されました
 import { collectParticipantTokens } from "../shared/participant-tokens.js";
 import {
   sleep,
@@ -88,14 +85,17 @@ import { EventManager } from "./managers/event-manager.js";
 import { ParticipantManager } from "./managers/participant-manager.js";
 import { ScheduleManager } from "./managers/schedule-manager.js";
 import { MailManager } from "./managers/mail-manager.js";
+import { AuthManager } from "./managers/auth-manager.js";
 
-let redirectingToIndex = false;
+// redirectingToIndex は AuthManager と共有するため、参照オブジェクトとして管理
+const redirectingToIndexRef = { current: false };
 let printManager = null;
 let csvManager = null;
 let eventManager = null;
 let participantManager = null;
 let scheduleManager = null;
 let mailManager = null;
+let authManager = null;
 
 const glDataFetchCache = new Map();
 
@@ -180,11 +180,7 @@ const RELOCATE_LABEL = "別日";
 const GL_STAFF_GROUP_KEY = "__gl_staff__";
 const GL_STAFF_LABEL = "運営待機";
 const NO_TEAM_GROUP_KEY = "__no_team__";
-const AUTHORIZED_EMAIL_CACHE_MS = 5 * 60 * 1000;
-
-let cachedAuthorizedEmails = null;
-let cachedAuthorizedFetchedAt = 0;
-let authorizedEmailsPromise = null;
+// AUTHORIZED_EMAIL_CACHE_MS, cachedAuthorizedEmails, cachedAuthorizedFetchedAt, authorizedEmailsPromise は AuthManager に移行されました
 
 function getMissingSelectionStatusMessage() {
   return isEmbeddedMode()
@@ -758,36 +754,11 @@ async function ensureTokenSnapshot(force = false) {
 }
 
 async function fetchAuthorizedEmails() {
-  const cached = getCachedAuthorizedEmails();
-  if (cached) {
-    return cached;
+  // AuthManager に委譲
+  if (!authManager) {
+    throw new Error("AuthManager is not initialized");
   }
-
-  if (!authorizedEmailsPromise) {
-    authorizedEmailsPromise = (async () => {
-      const result = await api.apiPost({ action: "fetchSheet", sheet: "users" });
-      if (!result || !result.success || !Array.isArray(result.data)) {
-        throw new Error("ユーザー権限の確認に失敗しました。");
-      }
-      const emails = result.data
-        .map(entry =>
-          String(entry["メールアドレス"] || entry.email || "")
-            .trim()
-            .toLowerCase()
-        )
-        .filter(Boolean);
-      cachedAuthorizedEmails = emails;
-      cachedAuthorizedFetchedAt = Date.now();
-      return emails;
-    })();
-  }
-
-  try {
-    const emails = await authorizedEmailsPromise;
-    return emails;
-  } finally {
-    authorizedEmailsPromise = null;
-  }
+  return await authManager.fetchAuthorizedEmails();
 }
 
 function renderUserSummary(user) {
@@ -4183,194 +4154,31 @@ function saveParticipantEdits() {
 // 元の removeParticipantFromState 実装は ParticipantManager に移行されました
 
 function getCachedAuthorizedEmails() {
-  if (!cachedAuthorizedEmails || !cachedAuthorizedFetchedAt) {
+  // AuthManager に委譲
+  if (!authManager) {
     return null;
   }
-  if (Date.now() - cachedAuthorizedFetchedAt > AUTHORIZED_EMAIL_CACHE_MS) {
-    return null;
-  }
-  return cachedAuthorizedEmails;
+  return authManager.getCachedAuthorizedEmails();
 }
 
-function getFreshPreflightContext(user) {
-  if (!user) {
-    return null;
-  }
-  try {
-    const context = loadAuthPreflightContext();
-    if (!context) {
-      return null;
-    }
-    if (!preflightContextMatchesUser(context, user)) {
-      return null;
-    }
-    if (!context?.admin || !context.admin.ensuredAt) {
-      return null;
-    }
-    return context;
-  } catch (error) {
-    console.warn("Failed to load auth preflight context", error);
-    return null;
-  }
-}
+// getFreshPreflightContext は AuthManager に移行されました
 
 async function verifyEnrollment(user) {
-  if (!user) {
-    throw new Error("サインイン情報を確認できませんでした。");
+  // AuthManager に委譲
+  if (!authManager) {
+    throw new Error("AuthManager is not initialized");
   }
-
-  const preflight = getFreshPreflightContext(user);
-  if (preflight) {
-    return;
-  }
-
-  const email = String(user.email || "").trim().toLowerCase();
-  if (!email) {
-    throw new Error("メールアドレスを確認できませんでした。");
-  }
-
-  const cached = getCachedAuthorizedEmails();
-  if (cached && cached.includes(email)) {
-    return;
-  }
-
-  try {
-    const authorized = await fetchAuthorizedEmails();
-    if (authorized.includes(email)) {
-      return;
-    }
-  } catch (error) {
-    console.warn("Failed to fetch authorized emails", error);
-    throw new Error(error.message || "ユーザー権限の確認に失敗しました。");
-  }
-
-  throw new Error("あなたのアカウントはこのシステムへのアクセスが許可されていません。");
+  return await authManager.verifyEnrollment(user);
 }
 
-async function waitForQuestionIntakeAccess(options = {}) {
-  const {
-    attempts = 5,
-    initialDelay = 250,
-    backoffFactor = 1.8,
-    maxDelay = 2000
-  } = options || {};
-
-  const attemptCount = Number.isFinite(attempts) && attempts > 0 ? Math.ceil(attempts) : 1;
-  const sanitizedInitial = Number.isFinite(initialDelay) && initialDelay >= 0 ? initialDelay : 250;
-  const sanitizedBackoff = Number.isFinite(backoffFactor) && backoffFactor > 1 ? backoffFactor : 1.5;
-  const sanitizedMaxDelay = Number.isFinite(maxDelay) && maxDelay > 0 ? maxDelay : 4000;
-  const baseUrl = String(firebaseConfig.databaseURL || "").replace(/\/$/, "");
-
-  if (!baseUrl) {
-    throw new Error("リアルタイムデータベースのURLが設定されていません。");
-  }
-
-  let waitMs = sanitizedInitial || 250;
-  let lastError = null;
-
-  for (let attempt = 0; attempt < attemptCount; attempt++) {
-    try {
-      const token = await getAuthIdToken(attempt > 0);
-      const url =
-        `${baseUrl}/questionIntake/events.json?shallow=true&limitToFirst=1&auth=${encodeURIComponent(token)}`;
-      const response = await fetch(url, { method: "GET" });
-      if (response.ok) {
-        return true;
-      }
-
-      const bodyText = await response.text().catch(() => "");
-      const permissionIssue =
-        response.status === 401 ||
-        response.status === 403 ||
-        /permission\s*denied/i.test(bodyText);
-
-      if (!permissionIssue) {
-        const message = bodyText || `Realtime Database request failed (${response.status})`;
-        throw new Error(message);
-      }
-
-      lastError = new Error("管理者権限の反映に時間がかかっています。数秒後に再度お試しください。");
-    } catch (error) {
-      lastError = error;
-    }
-
-    if (attempt < attemptCount - 1) {
-      if (waitMs > 0) {
-        await sleep(waitMs);
-      }
-      const nextDelay = Math.max(waitMs * sanitizedBackoff, sanitizedInitial || 250);
-      waitMs = Math.min(sanitizedMaxDelay, Math.round(nextDelay));
-    }
-  }
-
-  throw lastError || new Error("管理者権限の確認がタイムアウトしました。");
-}
-
-async function probeQuestionIntakeAccess() {
-  const baseUrl = String(firebaseConfig.databaseURL || "").replace(/\/$/, "");
-  if (!baseUrl) {
-    throw new Error("リアルタイムデータベースのURLが設定されていません。");
-  }
-
-  const token = await getAuthIdToken(false);
-  const url = `${baseUrl}/questionIntake/events.json?shallow=true&limitToFirst=1&auth=${encodeURIComponent(
-    token
-  )}`;
-  const response = await fetch(url, { method: "GET" });
-  if (response.ok) {
-    return true;
-  }
-
-  const bodyText = await response.text().catch(() => "");
-  const permissionIssue =
-    response.status === 401 || response.status === 403 || /permission\s*denied/i.test(bodyText);
-  if (permissionIssue) {
-    return false;
-  }
-
-  const message = bodyText || `Realtime Database request failed (${response.status})`;
-  const error = new Error(message);
-  error.status = response.status;
-  throw error;
-}
-
-function isNotInUsersSheetError(error) {
-  if (!error) {
-    return false;
-  }
-  const message = String(error?.message || error || "");
-  return /not in users sheet/i.test(message) || /NOT_IN_USER_SHEET/i.test(message);
-}
+// waitForQuestionIntakeAccess, probeQuestionIntakeAccess, isNotInUsersSheetError は AuthManager に移行されました
 
 async function ensureAdminAccess() {
-  let ensureRequired = true;
-  try {
-    const hasAccess = await probeQuestionIntakeAccess();
-    if (hasAccess) {
-      ensureRequired = false;
-    }
-  } catch (error) {
-    console.warn("Failed to probe question intake access", error);
+  // AuthManager に委譲
+  if (!authManager) {
+    throw new Error("AuthManager is not initialized");
   }
-
-  if (!ensureRequired) {
-    return;
-  }
-
-  try {
-    await api.apiPost({ action: "ensureAdmin" });
-  } catch (error) {
-    if (isNotInUsersSheetError(error)) {
-      throw new Error("あなたのアカウントはこのシステムへのアクセスが許可されていません。");
-    }
-    throw new Error(error?.message || "管理者権限の確認に失敗しました。");
-  }
-
-  try {
-    await waitForQuestionIntakeAccess({ attempts: 6, initialDelay: 250 });
-  } catch (error) {
-    throw new Error(error?.message || "管理者権限の確認に失敗しました。");
-  }
+  return await authManager.ensureAdminAccess();
 }
 
 function attachEventHandlers() {
@@ -4794,67 +4602,73 @@ function attachEventHandlers() {
 }
 
 function initAuthWatcher() {
-  onAuthStateChanged(auth, async user => {
-    state.user = user;
-    const embedded = isEmbeddedMode();
-    if (!user) {
-      if (embedded) {
-        showLoader("利用状態を確認しています…");
-      } else {
-        hideLoader();
-        if (dom.loginButton) {
-          dom.loginButton.disabled = false;
-          dom.loginButton.classList.remove("is-busy");
+  // AuthManager に委譲
+  if (!authManager) {
+    // フォールバック（初期化前の場合）
+    onAuthStateChanged(auth, async user => {
+      state.user = user;
+      const embedded = isEmbeddedMode();
+      if (!user) {
+        if (embedded) {
+          showLoader("利用状態を確認しています…");
+        } else {
+          hideLoader();
+          if (dom.loginButton) {
+            dom.loginButton.disabled = false;
+            dom.loginButton.classList.remove("is-busy");
+          }
         }
+        setAuthUi(false);
+        resetState();
+        if (!redirectingToIndexRef.current && typeof window !== "undefined" && !embedded) {
+          redirectingToIndexRef.current = true;
+          goToLogin();
+        }
+        return;
       }
-      setAuthUi(false);
-      resetState();
-      if (!redirectingToIndex && typeof window !== "undefined" && !embedded) {
-        redirectingToIndex = true;
-        goToLogin();
-      }
-      return;
-    }
 
-    redirectingToIndex = false;
-    showLoader(embedded ? "利用準備を確認しています…" : "権限を確認しています…");
-    const loaderLabels = embedded ? [] : STEP_LABELS;
-    initLoaderSteps(loaderLabels);
+      redirectingToIndexRef.current = false;
+      showLoader(embedded ? "利用準備を確認しています…" : "権限を確認しています…");
+      const loaderLabels = embedded ? [] : STEP_LABELS;
+      initLoaderSteps(loaderLabels);
 
-    try {
-      setLoaderStep(0, embedded ? "利用状態を確認しています…" : "認証OK。ユーザー情報を確認中…");
-      setLoaderStep(1, embedded ? "利用条件を確認しています…" : "在籍状況を確認しています…");
-      await verifyEnrollment(user);
-      setLoaderStep(2, embedded ? "必要な権限を同期しています…" : "管理者権限を確認・同期しています…");
-      await ensureAdminAccess();
-      setLoaderStep(3, embedded ? "参加者データを準備しています…" : "初期データを取得しています…");
-      // --- FIX 3: Parallelize token and event loading ---
-      await Promise.all([
-        ensureTokenSnapshot(true),
-        loadEvents({ preserveSelection: false })
-      ]);
-      await loadParticipants();
-      if (state.initialSelectionNotice) {
-        setUploadStatus(state.initialSelectionNotice, "error");
-        state.initialSelectionNotice = null;
+      try {
+        setLoaderStep(0, embedded ? "利用状態を確認しています…" : "認証OK。ユーザー情報を確認中…");
+        setLoaderStep(1, embedded ? "利用条件を確認しています…" : "在籍状況を確認しています…");
+        await verifyEnrollment(user);
+        setLoaderStep(2, embedded ? "必要な権限を同期しています…" : "管理者権限を確認・同期しています…");
+        await ensureAdminAccess();
+        setLoaderStep(3, embedded ? "参加者データを準備しています…" : "初期データを取得しています…");
+        // --- FIX 3: Parallelize token and event loading ---
+        await Promise.all([
+          ensureTokenSnapshot(true),
+          loadEvents({ preserveSelection: false })
+        ]);
+        await loadParticipants();
+        if (state.initialSelectionNotice) {
+          setUploadStatus(state.initialSelectionNotice, "error");
+          state.initialSelectionNotice = null;
+        }
+        await drainQuestionQueue();
+        setLoaderStep(4, embedded ? "仕上げ処理を行っています…" : "初期データの取得が完了しました。仕上げ中…");
+        setAuthUi(true);
+        finishLoaderSteps("準備完了");
+        resolveEmbedReady();
+        if (state.initialFocusTarget) {
+          window.setTimeout(() => maybeFocusInitialSection(), 400);
+        }
+      } catch (error) {
+        console.error(error);
+        setLoginError(error.message || "権限の確認に失敗しました。");
+        await signOut(auth);
+        resetState();
+      } finally {
+        hideLoader();
       }
-      await drainQuestionQueue();
-      setLoaderStep(4, embedded ? "仕上げ処理を行っています…" : "初期データの取得が完了しました。仕上げ中…");
-      setAuthUi(true);
-      finishLoaderSteps("準備完了");
-      resolveEmbedReady();
-      if (state.initialFocusTarget) {
-        window.setTimeout(() => maybeFocusInitialSection(), 400);
-      }
-    } catch (error) {
-      console.error(error);
-      setLoginError(error.message || "権限の確認に失敗しました。");
-      await signOut(auth);
-      resetState();
-    } finally {
-      hideLoader();
-    }
-  });
+    });
+    return;
+  }
+  authManager.initAuthWatcher();
 }
 
 function hostSelectionSignature(selection = {}) {
@@ -5194,6 +5008,44 @@ function init() {
     confirmAction
   });
   
+  // AuthManager を初期化
+  authManager = new AuthManager({
+    dom,
+    state,
+    // 依存関数と定数
+    api,
+    auth,
+    getAuthIdToken,
+    firebaseConfig,
+    goToLogin,
+    setAuthUi,
+    setLoginError,
+    showLoader,
+    hideLoader,
+    initLoaderSteps,
+    setLoaderStep,
+    finishLoaderSteps,
+    resetState,
+    renderUserSummary,
+    isEmbeddedMode,
+    STEP_LABELS,
+    ensureTokenSnapshot,
+    loadEvents: (options) => {
+      if (!eventManager) return Promise.resolve();
+      return eventManager.loadEvents(options);
+    },
+    loadParticipants: (options) => {
+      if (!participantManager) return Promise.resolve();
+      return participantManager.loadParticipants(options);
+    },
+    drainQuestionQueue,
+    resolveEmbedReady,
+    maybeFocusInitialSection,
+    sleep,
+    setUploadStatus,
+    redirectingToIndexRef
+  });
+  
   // ParticipantManager を初期化
   participantManager = new ParticipantManager({
     dom,
@@ -5314,7 +5166,12 @@ function init() {
   }
   parseInitialSelectionFromUrl();
   startHostSelectionBridge();
-  initAuthWatcher();
+  if (authManager) {
+    authManager.initAuthWatcher();
+  } else {
+    // フォールバック（初期化前の場合）
+    initAuthWatcher();
+  }
 }
 
 init();
@@ -5341,7 +5198,7 @@ if (typeof window !== "undefined") {
     },
     reset() {
       try {
-        redirectingToIndex = false;
+        redirectingToIndexRef.current = false;
         state.user = null;
         hideLoader();
         setAuthUi(false);

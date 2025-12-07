@@ -42,7 +42,7 @@
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
 | `scripts/events/app.js`                       | 6,070 | ❌ 要改善（基準の約 4.0 倍、リファクタリング完了）   |
-| `scripts/question-admin/app.js`               | 5,380 | ❌ 要改善（基準の約 3.6 倍、リファクタリング進行中） |
+| `scripts/question-admin/app.js`               | 5,238 | ❌ 要改善（基準の約 3.5 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
 | `scripts/operator/questions.js`               | 1,734 | ⚠️ 許容範囲（やや大きい）                            |
@@ -61,7 +61,7 @@
 2. **巨大な単一ファイル**
 
    - `scripts/events/app.js` - 6,070 行（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-   - `scripts/question-admin/app.js` - 5,380 行（リファクタリング進行中、元の 8,180 行から約 2,800 行削減）
+   - `scripts/question-admin/app.js` - 5,238 行（リファクタリング進行中、元の 8,180 行から約 2,942 行削減）
 
 3. **中規模の単一ファイル**
 
@@ -200,16 +200,16 @@ scripts/events/
 
 **現状**:
 
-- `app.js` が 5,380 行（元の 8,180 行から約 2,800 行削減、リファクタリング進行中）
-- 印刷機能、CSV 処理、イベント管理、参加者管理機能を Manager クラスに分離済み
-- 日程管理、メール送信、認証・初期化、リロケーション機能が残っている
+- `app.js` が 5,238 行（元の 8,180 行から約 2,942 行削減、リファクタリング進行中）
+- 印刷機能、CSV 処理、イベント管理、参加者管理機能、日程管理、メール送信、認証・初期化機能を Manager クラスに分離済み
+- リロケーション機能が残っている
 
 **構造**:
 
 ```
 scripts/question-admin/
 ├── index.js              # エントリーポイント（2行）✅
-├── app.js                # メインアプリケーション（5,752行）❌ リファクタリング進行中
+├── app.js                # メインアプリケーション（5,238行）❌ リファクタリング進行中
 ├── managers/
 │   ├── print-manager.js      # 印刷機能（1,004行）✅
 │   ├── csv-manager.js        # CSV 処理（351行）✅
@@ -248,8 +248,8 @@ scripts/question-admin/
   - ✅ `EventManager` - イベント管理機能（405 行）完了
   - ✅ `ParticipantManager` - 参加者管理機能（1,155 行）完了
   - ✅ `ScheduleManager` - 日程管理機能（478 行）完了
-  - ⏳ `MailManager` - メール送信機能（未着手、約 400-500 行）
-  - ⏳ `AuthManager` - 認証・初期化機能（未着手、約 250-300 行）
+  - ✅ `MailManager` - メール送信機能（514 行）完了
+  - ✅ `AuthManager` - 認証・初期化機能（384 行）完了
   - ⏳ `RelocationManager` - リロケーション機能（未着手、約 200-300 行）
   - ⏳ その他のユーティリティ関数の整理（未着手、約 1,000-2,000 行）
 
@@ -427,9 +427,9 @@ scripts/
    - テストが困難（改善中）
    - 保守性が低い（改善中）
 
-2. **`scripts/question-admin/app.js` が 5,380 行（リファクタリング進行中）**
+2. **`scripts/question-admin/app.js` が 5,238 行（リファクタリング進行中）**
 
-   - 開発標準の約 3.6 倍（元の 8,180 行から約 2,800 行削減）
+   - 開発標準の約 3.5 倍（元の 8,180 行から約 2,942 行削減）
    - 単一責任の原則に違反（改善中）
    - テストが困難（改善中）
    - 保守性が低い（改善中）
@@ -455,8 +455,15 @@ scripts/
        - メールアクションボタンの状態同期（`syncMailActionState`）
        - 送信待ち参加者数の取得（`getPendingMailCount`）
        - ログ関数と定数
+     - ✅ フェーズ 7: AuthManager に認証・初期化機能を分離（384 行）完了
+       - 認証状態の監視（`initAuthWatcher`）
+       - 在籍確認（`verifyEnrollment`）
+       - 管理者権限の確認（`ensureAdminAccess`）
+       - 認証済みメールアドレスの取得（`fetchAuthorizedEmails`、`getCachedAuthorizedEmails`）
+       - 質問インテークアクセスの確認（`probeQuestionIntakeAccess`、`waitForQuestionIntakeAccess`）
+       - プリフライトコンテキストの取得（`getFreshPreflightContext`）
+       - 認証関連の定数と変数
      - ⏳ 残りの機能:
-       - 認証・初期化機能（`initAuthWatcher`, `verifyEnrollment`, `fetchAuthorizedEmails` など、約 250-300 行）
        - リロケーション機能（`queueRelocationPrompt`, `renderRelocationPrompt` など、約 200-300 行）
        - その他のユーティリティ関数（約 1,000-2,000 行）
 
@@ -647,7 +654,9 @@ scripts/question-admin/
 │   ├── csv-manager.js        # CSV 処理（351行）✅ 完了
 │   ├── event-manager.js      # イベント管理（405行）✅ 完了
 │   ├── participant-manager.js # 参加者管理（1,155行）✅ 完了
-│   └── schedule-manager.js   # 日程管理（478行）✅ 完了
+│   ├── schedule-manager.js   # 日程管理（478行）✅ 完了
+│   ├── mail-manager.js       # メール送信（514行）✅ 完了
+│   └── auth-manager.js       # 認証・初期化（384行）✅ 完了
 ├── participants.js           # 参加者関連ユーティリティ（1,169行）✅
 ├── calendar.js               # 既存
 ├── dialog.js                 # 既存
@@ -666,15 +675,15 @@ scripts/question-admin/
 - ✅ フェーズ 3: イベント管理機能の分離（EventManager）完了
 - ✅ フェーズ 4: 参加者管理機能の分離（ParticipantManager）完了
 - ✅ フェーズ 5: 日程管理機能の分離（ScheduleManager）完了
-- ⏳ フェーズ 6: メール送信機能の分離（MailManager）未着手
-- ⏳ フェーズ 7: 認証・初期化機能の分離（AuthManager）未着手
+- ✅ フェーズ 6: メール送信機能の分離（MailManager）完了
+- ✅ フェーズ 7: 認証・初期化機能の分離（AuthManager）完了
 - ⏳ フェーズ 8: リロケーション機能の分離（RelocationManager）未着手
 
 **手順**:
 
 1. ✅ `app.js` の機能を分析し、責務を特定（完了）
-2. ✅ 各 Manager クラスを作成（5 つ完了、残り 3 つ）
-3. ⏳ 段階的に機能を移行（5 フェーズ完了、残り 3 フェーズ）
+2. ✅ 各 Manager クラスを作成（7 つ完了、残り 1 つ）
+3. ⏳ 段階的に機能を移行（7 フェーズ完了、残り 1 フェーズ）
 4. ⏳ テストを実施（未着手）
 
 ### 3. `scripts/events/panels/gl-panel.js` のリファクタリング（優先度: 中）
@@ -819,7 +828,7 @@ scripts/login/
        - 実績: 約 15 行の削減（`app.js` は 6,070 行）
 
 2. **`scripts/question-admin/app.js` のリファクタリング**（進行中）
-   - 期間: 2-3 週間（約 75% 完了、フェーズ 6 完了、全 8 フェーズ中 6 フェーズ完了）
+   - 期間: 2-3 週間（約 87.5% 完了、フェーズ 7 完了、全 8 フェーズ中 7 フェーズ完了）
    - 影響範囲: 質問管理画面全体
    - リスク: 高（大規模な変更）
    - **完了したフェーズ**:
@@ -836,8 +845,16 @@ scripts/login/
        - ✅ `getPendingMailCount` を `MailManager` に移行完了（約 4 行削減）
        - ✅ ログ関数と定数を `MailManager` に移行完了（約 50 行削減）
        - 実績: 約 372 行の削減（`app.js` は 5,380 行、`mail-manager.js` は 514 行）
+     - ✅ フェーズ 7: 認証・初期化機能の分離（AuthManager、384 行）
+       - ✅ `initAuthWatcher` を `AuthManager` に移行完了（約 62 行削減）
+       - ✅ `ensureAdminAccess` を `AuthManager` に移行完了（約 30 行削減）
+       - ✅ `verifyEnrollment` を `AuthManager` に移行完了（約 28 行削減）
+       - ✅ `fetchAuthorizedEmails` と `getCachedAuthorizedEmails` を `AuthManager` に移行完了（約 35 行削減）
+       - ✅ `probeQuestionIntakeAccess`、`waitForQuestionIntakeAccess`、`isNotInUsersSheetError` を `AuthManager` に移行完了（約 90 行削減）
+       - ✅ `getFreshPreflightContext` を `AuthManager` に移行完了（約 20 行削減）
+       - ✅ 認証関連の定数と変数を `AuthManager` に移行完了（約 4 行削減）
+       - 実績: 約 142 行の削減（`app.js` は 5,238 行、`auth-manager.js` は 384 行）
    - **残りのフェーズ**:
-     - ⏳ 認証・初期化機能の分離（AuthManager）
      - ⏳ リロケーション機能の分離（RelocationManager）
      - ⏳ その他のユーティリティ関数の整理
 
@@ -906,7 +923,7 @@ scripts/login/
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
 - ❌ `scripts/events/app.js` - 6,070 行、要改善（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-- ❌ `scripts/question-admin/app.js` - 5,380 行、要改善（リファクタリング進行中、元の 8,180 行から約 2,800 行削減）
+- ❌ `scripts/question-admin/app.js` - 5,238 行、要改善（リファクタリング進行中、元の 8,180 行から約 2,942 行削減）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
 - ⚠️ `scripts/login.js` - 664 行、要検討
