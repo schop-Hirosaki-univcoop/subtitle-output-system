@@ -476,7 +476,7 @@ scripts/
        - 実績: 約 641 行の削減（`app.js` は 4,596 行、`relocation-manager.js` は 954 行）
    - **残りの機能**（詳細は `docs/utility-refactoring-plan.md` を参照）:
      - ⏳ フェーズ 9: 埋め込みモード・ホスト統合機能の分離（EmbedManager / HostIntegrationManager、約 300-400 行）
-     - ⏳ フェーズ 10: 状態管理・キャッシュ関連の関数の整理（StateManager / CacheManager、約 100-150 行）
+     - ⏳ フェーズ 10: 状態管理・キャッシュ関連の関数の整理（StateManager / CacheManager、約 120-170 行）
      - ⏳ フェーズ 11: UI 関連の関数の整理（UIManager、約 150-200 行）
      - ⏳ フェーズ 12: 確認ダイアログ関連の関数の整理（ConfirmDialogManager、約 100 行）
      - ⏳ フェーズ 13: GL 関連の関数の整理（GlManager、約 250-300 行）
@@ -888,7 +888,7 @@ scripts/login/
        - 実績: 約 641 行の削減（`app.js` は 4,596 行、`relocation-manager.js` は 954 行）
    - **残りの機能**（詳細は `docs/utility-refactoring-plan.md` を参照）:
      - ⏳ フェーズ 9: 埋め込みモード・ホスト統合機能の分離（EmbedManager / HostIntegrationManager、約 430-530 行）
-     - ⏳ フェーズ 10: 状態管理・キャッシュ関連の関数の整理（StateManager / CacheManager、約 100-150 行）
+     - ⏳ フェーズ 10: 状態管理・キャッシュ関連の関数の整理（StateManager / CacheManager、約 120-170 行）
      - ⏳ フェーズ 11: UI 関連の関数の整理（UIManager、約 150-200 行）
      - ⏳ フェーズ 12: 確認ダイアログ関連の関数の整理（ConfirmDialogManager、約 100 行）
      - ⏳ フェーズ 13: GL 関連の関数の整理（GlManager、約 250-300 行）

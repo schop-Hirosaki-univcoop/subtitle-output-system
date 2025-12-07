@@ -59,14 +59,16 @@
 - `isPlaceholderUploadStatus()` - プレースホルダーステータスの判定
 - `resetState()` - 状態のリセット
 - `cloneParticipantEntry()` - 参加者エントリのクローン
+- `getMissingSelectionStatusMessage()` - 選択不足ステータスメッセージの取得
+- `getSelectionRequiredMessage()` - 選択必須メッセージの取得
 
-**推定行数**: 約 100-150 行
+**推定行数**: 約 120-170 行
 
 **依存関係**:
 
 - `state`, `dom`
-- `signatureForEntries`, `snapshotParticipantList`, `normalizeKey`
-- `UPLOAD_STATUS_PLACEHOLDERS`, `getMissingSelectionStatusMessage`
+- `signatureForEntries`, `snapshotParticipantList`, `normalizeKey`, `isEmbeddedMode`
+- `UPLOAD_STATUS_PLACEHOLDERS`
 - 注: `UPLOAD_STATUS_PLACEHOLDERS` は定数として移行対象
 
 ---
