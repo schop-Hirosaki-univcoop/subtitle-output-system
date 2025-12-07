@@ -250,7 +250,7 @@ scripts/question-admin/
   - ✅ `MailManager` - メール送信機能（514 行）完了
   - ✅ `AuthManager` - 認証・初期化機能（384 行）完了
   - ✅ `RelocationManager` - リロケーション機能（954 行）完了
-  - ⏳ その他のユーティリティ関数の整理（未着手、約 1,000-2,000 行）
+  - ⏳ フェーズ 9-17: その他のユーティリティ関数の整理（未着手、詳細は `docs/utility-refactoring-plan.md` を参照、合計約 2,480-3,480 行）
 
 ---
 
@@ -474,8 +474,16 @@ scripts/
        - ✅ `clearRelocationPreview` と `upsertRelocationPreview` を `RelocationManager` に移行完了（約 65 行削減）
        - ✅ リロケーション関連のユーティリティ関数を `RelocationManager` に移行完了（約 82 行削減）
        - 実績: 約 641 行の削減（`app.js` は 4,596 行、`relocation-manager.js` は 954 行）
-   - **残りの機能**:
-     - ⏳ その他のユーティリティ関数の整理（約 1,000-2,000 行）
+   - **残りの機能**（詳細は `docs/utility-refactoring-plan.md` を参照）:
+     - ⏳ フェーズ 9: 埋め込みモード・ホスト統合機能の分離（EmbedManager / HostIntegrationManager、約 300-400 行）
+     - ⏳ フェーズ 10: 状態管理・キャッシュ関連の関数の整理（StateManager / CacheManager、約 100-150 行）
+     - ⏳ フェーズ 11: UI 関連の関数の整理（UIManager、約 150-200 行）
+     - ⏳ フェーズ 12: 確認ダイアログ関連の関数の整理（ConfirmDialogManager、約 100 行）
+     - ⏳ フェーズ 13: GL 関連の関数の整理（GlManager、約 250-300 行）
+     - ⏳ フェーズ 14: 参加者 UI 関連の関数の整理（ParticipantUIManager、約 600-800 行）
+     - ⏳ フェーズ 15: スケジュール関連の関数の整理（ScheduleUtilityManager、約 150-200 行）
+     - ⏳ フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager、約 300-400 行）
+     - ⏳ フェーズ 17: その他のユーティリティ関数の整理（約 500-700 行）
 
 3. **`scripts/events/panels/gl-panel.js` が 3,249 行**
    - 開発標準の約 2 倍
@@ -689,6 +697,7 @@ scripts/question-admin/
 - ✅ フェーズ 6: メール送信機能の分離（MailManager）完了
 - ✅ フェーズ 7: 認証・初期化機能の分離（AuthManager）完了
 - ✅ フェーズ 8: リロケーション機能の分離（RelocationManager）完了
+- ⏳ フェーズ 9-17: その他のユーティリティ関数の整理（未着手、詳細は `docs/utility-refactoring-plan.md` を参照）
 
 **手順**:
 
@@ -838,8 +847,8 @@ scripts/login/
        - ✅ フェーズ 1.13.5: 最終確認とドキュメント更新完了
        - 実績: 約 15 行の削減（`app.js` は 6,070 行）
 
-2. **`scripts/question-admin/app.js` のリファクタリング**（完了）
-   - 期間: 2-3 週間（100% 完了、フェーズ 8 完了、全 8 フェーズ完了）
+2. **`scripts/question-admin/app.js` のリファクタリング**（進行中）
+   - 期間: 3-4 週間（約 47% 完了、フェーズ 8 完了、全 17 フェーズ中 8 フェーズ完了）
    - 影響範囲: 質問管理画面全体
    - リスク: 高（大規模な変更）
    - **完了したフェーズ**:
@@ -877,8 +886,16 @@ scripts/login/
        - ✅ `clearRelocationPreview` と `upsertRelocationPreview` を `RelocationManager` に移行完了（約 65 行削減）
        - ✅ リロケーション関連のユーティリティ関数を `RelocationManager` に移行完了（約 82 行削減）
        - 実績: 約 641 行の削減（`app.js` は 4,596 行、`relocation-manager.js` は 954 行）
-   - **残りの機能**:
-     - ⏳ その他のユーティリティ関数の整理（約 1,000-2,000 行）
+   - **残りの機能**（詳細は `docs/utility-refactoring-plan.md` を参照）:
+     - ⏳ フェーズ 9: 埋め込みモード・ホスト統合機能の分離（EmbedManager / HostIntegrationManager、約 430-530 行）
+     - ⏳ フェーズ 10: 状態管理・キャッシュ関連の関数の整理（StateManager / CacheManager、約 100-150 行）
+     - ⏳ フェーズ 11: UI 関連の関数の整理（UIManager、約 150-200 行）
+     - ⏳ フェーズ 12: 確認ダイアログ関連の関数の整理（ConfirmDialogManager、約 100 行）
+     - ⏳ フェーズ 13: GL 関連の関数の整理（GlManager、約 250-300 行）
+     - ⏳ フェーズ 14: 参加者 UI 関連の関数の整理（ParticipantUIManager、約 600-800 行）
+     - ⏳ フェーズ 15: スケジュール関連の関数の整理（ScheduleUtilityManager、約 150-200 行）
+     - ⏳ フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager、約 400-500 行）
+     - ⏳ フェーズ 17: その他のユーティリティ関数の整理（約 870-1,070 行、`init()`と`window.questionAdminEmbed`を含む）
 
 ### フェーズ 2: 中程度の問題の解決（優先度: 中）
 
