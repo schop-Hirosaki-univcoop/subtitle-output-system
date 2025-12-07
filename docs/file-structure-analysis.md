@@ -207,21 +207,38 @@ scripts/events/
 
 **現状**:
 
-- `app.js` が 4,596 行（元の 8,180 行から約 3,584 行削減、リファクタリング完了）
-- 印刷機能、CSV 処理、イベント管理、参加者管理機能、日程管理、メール送信、認証・初期化機能、リロケーション機能を Manager クラスに分離済み
+- `app.js` が 2,949 行（元の 8,180 行から約 5,231 行削減、リファクタリング進行中、フェーズ 17 段階 7 進行中）
+- 印刷機能、CSV 処理、イベント管理、参加者管理機能、日程管理、メール送信、認証・初期化機能、リロケーション機能、その他のユーティリティ関数を Manager クラスに分離済み
 
 **構造**:
 
 ```
 scripts/question-admin/
 ├── index.js              # エントリーポイント（2行）✅
-├── app.js                # メインアプリケーション（5,238行）❌ リファクタリング進行中
+├── app.js                # メインアプリケーション（2,949行）❌ リファクタリング進行中
 ├── managers/
 │   ├── print-manager.js      # 印刷機能（1,004行）✅
 │   ├── csv-manager.js        # CSV 処理（351行）✅
 │   ├── event-manager.js      # イベント管理（405行）✅
 │   ├── participant-manager.js # 参加者管理（1,155行）✅
-│   └── schedule-manager.js   # 日程管理（478行）✅
+│   ├── schedule-manager.js   # 日程管理（478行）✅
+│   ├── mail-manager.js       # メール送信（514行）✅
+│   ├── auth-manager.js       # 認証・初期化（384行）✅
+│   ├── relocation-manager.js # リロケーション（954行）✅
+│   ├── host-integration-manager.js # 埋め込みモード・ホスト統合（671行）✅
+│   ├── state-manager.js      # 状態管理（165行）✅
+│   ├── ui-manager.js         # UI管理（188行）✅
+│   ├── confirm-dialog-manager.js # 確認ダイアログ（128行）✅
+│   ├── gl-manager.js         # GL管理（386行）✅
+│   ├── participant-ui-manager.js # 参加者UI（906行）✅
+│   ├── schedule-utility-manager.js # スケジュールユーティリティ（252行）✅
+│   ├── button-state-manager.js # ボタン状態管理（458行）✅
+│   ├── token-api-manager.js  # トークン・API（106行）✅
+│   ├── share-clipboard-manager.js # 共有・クリップボード（90行）✅
+│   ├── participant-context-manager.js # 参加者コンテキスト（138行）✅
+│   ├── participant-action-manager.js # 参加者操作（168行）✅
+│   ├── event-handlers-manager.js # イベントハンドラー（506行）✅
+│   └── init-manager.js       # 初期化（295行）⏳ 進行中
 ├── participants.js       # 参加者管理（1,169行）✅
 ├── calendar.js           # カレンダー機能
 ├── dialog.js             # ダイアログ機能
@@ -235,9 +252,9 @@ scripts/question-admin/
 
 **問題点**:
 
-1. **`app.js` が巨大（5,752 行、リファクタリング進行中）**
-   - 元の 8,180 行から約 2,428 行削減
-   - 印刷機能、CSV 処理、イベント管理、参加者管理機能、日程管理機能を Manager クラスに分離済み
+1. **`app.js` が巨大（2,949 行、リファクタリング進行中）**
+   - 元の 8,180 行から約 5,231 行削減
+   - 印刷機能、CSV 処理、イベント管理、参加者管理機能、日程管理機能、メール送信、認証・初期化、リロケーション、その他のユーティリティ関数を Manager クラスに分離済み
    - 単一責任の原則に違反（改善中）
 
 **評価**:
@@ -257,7 +274,16 @@ scripts/question-admin/
   - ✅ `MailManager` - メール送信機能（514 行）完了
   - ✅ `AuthManager` - 認証・初期化機能（384 行）完了
   - ✅ `RelocationManager` - リロケーション機能（954 行）完了
-  - ⏳ フェーズ 9-17: その他のユーティリティ関数の整理（未着手、詳細は `docs/utility-refactoring-plan.md` を参照、合計約 2,480-3,480 行）
+  - ⏳ フェーズ 9-17: その他のユーティリティ関数の整理（進行中、段階 7 進行中、詳細は `docs/utility-refactoring-plan.md` を参照）
+    - ✅ フェーズ 9: 埋め込みモード・ホスト統合機能の分離（HostIntegrationManager、671 行）完了
+    - ✅ フェーズ 10: 状態管理・キャッシュ関連の関数の整理（StateManager、165 行）完了
+    - ✅ フェーズ 11: UI 関連の関数の整理（UIManager、188 行）完了
+    - ✅ フェーズ 12: 確認ダイアログ関連の関数の整理（ConfirmDialogManager、128 行）完了
+    - ✅ フェーズ 13: GL 関連の関数の整理（GlManager、386 行）完了
+    - ✅ フェーズ 14: 参加者 UI 関連の関数の整理（ParticipantUIManager、906 行）完了
+    - ✅ フェーズ 15: スケジュール関連の関数の整理（ScheduleUtilityManager、252 行）完了
+    - ✅ フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager、458 行）完了
+    - ⏳ フェーズ 17: その他のユーティリティ関数の整理（進行中、段階 7 進行中）
 
 ---
 
@@ -686,7 +712,7 @@ scripts/events/
 ```
 scripts/question-admin/
 ├── index.js
-├── app.js                    # QuestionAdminApp（初期化とルーティング、4,596行、リファクタリング完了）
+├── app.js                    # QuestionAdminApp（初期化とルーティング、2,949行、リファクタリング進行中）
 ├── managers/
 │   ├── print-manager.js      # 印刷機能（1,004行）✅ 完了
 │   ├── csv-manager.js        # CSV 処理（351行）✅ 完了
@@ -1068,9 +1094,15 @@ scripts/login/
          - 実績: 約 45 行の削減（`app.js` は 3,096 行、`participant-ui-manager.js` は 951 行、段階 5 完了）
        - ✅ **段階 6: イベントハンドラーアタッチ関数の移行**（完了）
          - ✅ `attachEventHandlers` を `EventHandlersManager` に移行完了（約 419 行削減）
-         - 実績: 約 419 行の削減（`app.js` は 2,948 行、`event-handlers-manager.js` は 506 行、段階 6 完了）
-       - ⏳ **段階 7: 初期化関数の移行**（未着手）
-       - 実績（段階 1-6）: 約 814 行の削減（`app.js` は 2,948 行、`token-api-manager.js` は 106 行、`share-clipboard-manager.js` は 90 行、`participant-context-manager.js` は 138 行、`participant-action-manager.js` は 168 行、`participant-ui-manager.js` は 966 行、`event-handlers-manager.js` は 506 行）
+         - 実績: 約 419 行の削減（`app.js` は 2,949 行、`event-handlers-manager.js` は 506 行、段階 6 完了）
+       - ⏳ **段階 7: 初期化関数の移行**（進行中）
+         - ✅ InitManager クラスの基本構造作成完了（295 行）
+         - ✅ PrintManager の初期化を InitManager に移行完了
+         - ❌ 残り 19 個の Manager 初期化を InitManager に移行（未完了）
+         - ❌ app.js の init()関数を InitManager への委譲に変更（未完了）
+         - ❌ window.questionAdminEmbed の移行（未完了）
+         - ❌ initAuthWatcher()のフォールバック実装の整理（未完了）
+       - 実績（段階 1-6）: 約 814 行の削減（`app.js` は 2,949 行、`token-api-manager.js` は 106 行、`share-clipboard-manager.js` は 90 行、`participant-context-manager.js` は 138 行、`participant-action-manager.js` は 168 行、`participant-ui-manager.js` は 966 行、`event-handlers-manager.js` は 506 行）
 
 ### フェーズ 2: 中程度の問題の解決（優先度: 中）
 
