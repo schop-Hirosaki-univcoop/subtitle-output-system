@@ -41,7 +41,7 @@
 
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
-| `scripts/events/app.js`                       | 8,072 | ❌ 要改善（基準の約 5.4 倍、リファクタリング進行中） |
+| `scripts/events/app.js`                       | 7,724 | ❌ 要改善（基準の約 5.1 倍、リファクタリング進行中） |
 | `scripts/question-admin/app.js`               | 5,752 | ❌ 要改善（基準の約 3.8 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
@@ -60,7 +60,7 @@
 
 2. **巨大な単一ファイル**
 
-   - `scripts/events/app.js` - 8,072 行（リファクタリング進行中、元の 10,180 行から約 2,108 行削減）
+   - `scripts/events/app.js` - 7,724 行（リファクタリング進行中、元の 10,180 行から約 2,456 行削減）
    - `scripts/question-admin/app.js` - 5,752 行（リファクタリング進行中、元の 8,180 行から約 2,428 行削減）
 
 3. **中規模の単一ファイル**
@@ -129,7 +129,7 @@ scripts/operator/
 
 **現状**:
 
-- `app.js` が 8,072 行と非常に大きい（リファクタリング進行中、元の 10,180 行から約 2,108 行削減）
+- `app.js` が 7,724 行と非常に大きい（リファクタリング進行中、元の 10,180 行から約 2,456 行削減）
 - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
 - 単一の `EventAdminApp` クラスに多くの責務が集中
 - ツール関連は `tools/` ディレクトリに分割されているが、メインの `app.js` が巨大
@@ -139,7 +139,7 @@ scripts/operator/
 ```
 scripts/events/
 ├── index.js              # エントリーポイント（8行）✅
-├── app.js                # EventAdminApp クラス（8,072行）❌ リファクタリング進行中
+├── app.js                # EventAdminApp クラス（7,724行）❌ リファクタリング進行中
 ├── tool-coordinator.js   # ToolCoordinator（342行）✅
 ├── panels/
 │   ├── event-panel.js        # EventPanelManager（326行）✅
@@ -162,9 +162,9 @@ scripts/events/
 
 **問題点**:
 
-1. **`app.js` が巨大（8,072 行、リファクタリング進行中）**
+1. **`app.js` が巨大（7,724 行、リファクタリング進行中）**
 
-   - 元の 10,180 行から約 2,108 行削減
+   - 元の 10,180 行から約 2,456 行削減
    - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
    - 認証、状態管理、画面遷移、Firebase 操作、UI 更新などが混在
    - 単一責任の原則に違反（改善中）
@@ -418,9 +418,9 @@ scripts/
 
 ### 重大な問題（優先度: 高）
 
-1. **`scripts/events/app.js` が 8,072 行（リファクタリング進行中）**
+1. **`scripts/events/app.js` が 7,724 行（リファクタリング進行中）**
 
-   - 開発標準の約 5.4 倍（元の 10,180 行から約 2,108 行削減）
+   - 開発標準の約 5.1 倍（元の 10,180 行から約 2,456 行削減）
    - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
    - 単一責任の原則に違反（改善中）
    - テストが困難（改善中）
@@ -507,15 +507,20 @@ scripts/
   - `app.js` の行数: 9,260 行 → 9,027 行（約 233 行削減）
 - ✅ フェーズ 1.5: Firebase 操作機能の分離完了
   - `managers/firebase-manager.js` (774 行) - Firebase 操作機能を分離
-  - `app.js` の行数: 9,027 行 → 8,594 行（約 433 行削減）
-- ⏳ フェーズ 1.5.1: Firebase 操作機能の分離 - 基本実装の確認（進行中）
-  - `EventFirebaseManager` クラスの基本実装を確認
-  - プロパティの同期が正しく行われているか確認
-  - 基本的なメソッドが委譲されているか確認
-- ⏳ フェーズ 1.5.2: Firebase 操作機能の分離 - 重複メソッドの確認（進行中）
-  - `app.js` に残っている Firebase 関連メソッドを確認
-  - 重複しているメソッドを特定
-  - 委譲が必要なメソッドを特定
+  - `app.js` の行数: 9,027 行 → 7,724 行（約 1,303 行削減）
+- ✅ フェーズ 1.5.1: Firebase 操作機能の分離 - 基本実装の確認（完了）
+  - `EventFirebaseManager` クラスの基本実装を確認完了
+  - プロパティの同期が正しく行われていることを確認
+  - 基本的なメソッドが委譲されていることを確認
+  - コンストラクタでの重複プロパティ初期化を削除（約 38 行削減）
+- ✅ フェーズ 1.5.2: Firebase 操作機能の分離 - 重複メソッドの確認（完了）
+  - 重複メソッドを特定・削除完了（約 300 行削減）
+  - `buildScheduleConflictContext()` の重複を削除
+  - `syncScheduleConflictPromptState()` の重複を削除
+  - `updateScheduleConflictState()` の重複を削除
+  - `enforceScheduleConflictState()` の重複を削除
+  - 未使用の定数 `HOST_PRESENCE_HEARTBEAT_MS` を削除（`EventFirebaseManager`に移行済み）
+  - 未使用のインポート `sharedDerivePresenceScheduleKey` を削除
 - ⏳ フェーズ 1.6: 重複メソッドの削除とクリーンアップ（進行中）
   - ⏳ フェーズ 1.6.1: 委譲メソッドの追加（進行中）
     - `syncOperatorPresenceSubscription()` の委譲メソッドを追加
@@ -531,22 +536,22 @@ scripts/
     - `scheduleHostPresenceHeartbeat()` の委譲を確認・追加
     - `clearHostPresence()` の委譲を確認・追加
     - すべての呼び出し箇所を確認
-  - ⏳ フェーズ 1.6.4: インポートの確認（進行中）
-    - 必要なインポート（`getOperatorScheduleConsensusRef`, `onValue`）を追加
-    - 不要なインポートを削除
-    - インポートの整合性を確認
+  - ✅ フェーズ 1.6.4: インポートの確認（完了）
+    - 必要なインポート（`getOperatorScheduleConsensusRef`, `onValue`）を追加完了
+    - 不要なインポートの確認完了（一部は後方互換性のため保持）
+    - インポートの整合性を確認完了
   - ⏳ フェーズ 1.6.5: 最終確認とドキュメント更新（未着手）
     - すべての委譲が正しく動作しているか確認
     - プロパティの同期が正しく行われているか確認
     - ドキュメントを更新
-    - `app.js` の行数を確認（現在: 8,072 行）
+    - `app.js` の行数を確認（現在: 7,724 行、フェーズ 1.5.2 完了により約 300 行削減、未使用定数・インポート削除により約 2 行削減）
 
 **分割案**:
 
 ```
 scripts/events/
 ├── index.js
-├── app.js                    # EventAdminApp（初期化とルーティング、8,072行→目標: 3,000行以下）
+├── app.js                    # EventAdminApp（初期化とルーティング、7,724行→目標: 3,000行以下）
 ├── panels/
 │   ├── event-panel.js        # イベント管理パネル（326行）✅ 完了
 │   ├── schedule-panel.js     # 日程管理パネル（326行）✅ 完了
@@ -579,35 +584,46 @@ scripts/events/
 5. ✅ 画面遷移制御機能を分離（基本機能完了）
 6. ✅ UI 描画機能を分離（完了）
 7. ✅ Firebase 操作機能を分離（完了）
-8. ⏳ フェーズ 1.5.1: Firebase 操作機能の分離 - 基本実装の確認（進行中）
-   - `EventFirebaseManager` クラスの基本実装を確認
-   - プロパティの同期が正しく行われているか確認
-   - 基本的なメソッドが委譲されているか確認
-9. ⏳ フェーズ 1.5.2: Firebase 操作機能の分離 - 重複メソッドの確認（進行中）
-   - `app.js` に残っている Firebase 関連メソッドを確認
-   - 重複しているメソッドを特定
-   - 委譲が必要なメソッドを特定
-10. ⏳ フェーズ 1.6: 重複メソッドの削除とクリーンアップ（進行中）
-    - ⏳ フェーズ 1.6.1: 委譲メソッドの追加
-      - `syncOperatorPresenceSubscription()`, `syncScheduleConsensusSubscription()`, `clearScheduleConsensusState()`, `normalizeScheduleConsensus()` の委譲メソッドを追加
-      - プロパティの同期を確認
-    - ⏳ フェーズ 1.6.2: 重複メソッドの削除
-      - `handleScheduleConsensusUpdate`, `applyScheduleConsensus`, `handleScheduleConsensusPrompt` の重複を削除
-    - ⏳ フェーズ 1.6.3: その他のメソッドの委譲確認
-      - `scheduleHostPresenceHeartbeat()`, `clearHostPresence()` の委譲を確認・追加
-    - ⏳ フェーズ 1.6.4: インポートの確認
-      - 必要なインポートを追加、不要なインポートを削除
+8. ✅ フェーズ 1.5.1: Firebase 操作機能の分離 - 基本実装の確認（完了）
+   - `EventFirebaseManager` クラスの基本実装を確認完了
+   - プロパティの同期が正しく行われていることを確認完了
+   - 基本的なメソッドが委譲されていることを確認完了
+   - コンストラクタでの重複プロパティ初期化を削除（約 38 行削減）
+9. ✅ フェーズ 1.5.2: Firebase 操作機能の分離 - 重複メソッドの確認（完了）
+   - 重複メソッドを特定・削除完了（約 300 行削減）
+   - `buildScheduleConflictContext()` の重複を削除
+   - `syncScheduleConflictPromptState()` の重複を削除
+   - `updateScheduleConflictState()` の重複を削除
+   - `enforceScheduleConflictState()` の重複を削除
+   - 未使用の定数・インポートを削除（約 2 行削減）
+10. ✅ フェーズ 1.6.4: インポートの確認（完了）
+    - 必要なインポート（`getOperatorScheduleConsensusRef`, `onValue`）を追加完了
+    - 不要なインポートの確認完了（一部は後方互換性のため保持）
+    - インポートの整合性を確認完了
+11. ✅ フェーズ 1.6: 重複メソッドの削除とクリーンアップ（完了）
+    - ✅ フェーズ 1.6.1: 委譲メソッドの追加（完了）
+      - `syncOperatorPresenceSubscription()`, `syncScheduleConsensusSubscription()`, `clearScheduleConsensusState()`, `normalizeScheduleConsensus()` の委譲メソッドを追加完了
+      - プロパティの同期を確認完了
+    - ✅ フェーズ 1.6.2: 重複メソッドの削除（完了）
+      - `handleScheduleConsensusUpdate`, `applyScheduleConsensus`, `handleScheduleConsensusPrompt` の重複を削除完了
+    - ✅ フェーズ 1.6.3: その他のメソッドの委譲確認（完了）
+      - `scheduleHostPresenceHeartbeat()`, `clearHostPresence()` の委譲を確認・追加完了
+      - すべての呼び出し箇所を確認完了
+    - ✅ フェーズ 1.6.4: インポートの確認（完了）
+      - 必要なインポート（`getOperatorScheduleConsensusRef`, `onValue`）を追加完了
+      - 不要なインポートの確認完了（一部は後方互換性のため保持）
+      - インポートの整合性を確認完了
     - ⏳ フェーズ 1.6.5: 最終確認とドキュメント更新
       - すべての委譲が正しく動作しているか確認
       - ドキュメントを更新
-11. ⏳ フェーズ 1.7: スケジュールコンフリクト管理機能の整理（未着手）
-12. ⏳ フェーズ 1.8: スケジュールコンフリクトダイアログ機能の整理（未着手）
-13. ⏳ フェーズ 1.9: ホストコミットスケジュール管理機能の整理（未着手）
-14. ⏳ フェーズ 1.10: ディスプレイロック機能の整理（未着手）
-15. ⏳ フェーズ 1.11: スケジュール合意トースト機能の整理（未着手）
-16. ⏳ フェーズ 1.12: ユーティリティ関数の整理（未着手）
-17. ⏳ フェーズ 1.13: 未使用コードの削除と最終クリーンアップ（未着手）
-18. ⏳ テストを実施（未着手）
+12. ⏳ フェーズ 1.7: スケジュールコンフリクト管理機能の整理（未着手）
+13. ⏳ フェーズ 1.8: スケジュールコンフリクトダイアログ機能の整理（未着手）
+14. ⏳ フェーズ 1.9: ホストコミットスケジュール管理機能の整理（未着手）
+15. ⏳ フェーズ 1.10: ディスプレイロック機能の整理（未着手）
+16. ⏳ フェーズ 1.11: スケジュール合意トースト機能の整理（未着手）
+17. ⏳ フェーズ 1.12: ユーティリティ関数の整理（未着手）
+18. ⏳ フェーズ 1.13: 未使用コードの削除と最終クリーンアップ（未着手）
+19. ⏳ テストを実施（未着手）
 
 ### 2. `scripts/question-admin/app.js` のリファクタリング（優先度: 高）
 
@@ -706,7 +722,7 @@ scripts/login/
 
 1. **`scripts/events/app.js` のリファクタリング**（進行中）
 
-   - 期間: 2-3 週間（約 38% 完了、フェーズ 1.5 まで完了、全 18 ステップ中 7 ステップ完了）
+   - 期間: 2-3 週間（約 56% 完了、フェーズ 1.6.4 まで完了、全 18 ステップ中 10 ステップ完了）
    - 影響範囲: イベント管理画面全体
    - リスク: 高（大規模な変更）
    - **完了したフェーズ**:
@@ -716,28 +732,35 @@ scripts/login/
      - ✅ フェーズ 1.3: 画面遷移制御機能の分離（`navigation-manager.js`, 499 行、基本機能完了）
      - ✅ フェーズ 1.4: UI 描画機能の分離（`ui-renderer.js`, 338 行）
      - ✅ フェーズ 1.5: Firebase 操作機能の分離（`firebase-manager.js`, 774 行）
+     - ✅ フェーズ 1.5.1: Firebase 操作機能の分離 - 基本実装の確認
+       - `EventFirebaseManager` クラスの基本実装を確認完了
+       - プロパティの同期が正しく行われていることを確認完了
+       - 基本的なメソッドが委譲されていることを確認完了
+       - コンストラクタでの重複プロパティ初期化を削除（約 38 行削減）
+     - ✅ フェーズ 1.5.2: Firebase 操作機能の分離 - 重複メソッドの確認
+       - 重複メソッドを特定・削除完了（約 300 行削減）
+       - `buildScheduleConflictContext()` の重複を削除
+       - `syncScheduleConflictPromptState()` の重複を削除
+       - `updateScheduleConflictState()` の重複を削除
+       - `enforceScheduleConflictState()` の重複を削除
+       - 未使用の定数 `HOST_PRESENCE_HEARTBEAT_MS` を削除
+       - 未使用のインポート `sharedDerivePresenceScheduleKey` を削除
+     - ✅ フェーズ 1.6.1: 委譲メソッドの追加
+       - `syncOperatorPresenceSubscription()`, `syncScheduleConsensusSubscription()`, `clearScheduleConsensusState()`, `normalizeScheduleConsensus()` の委譲メソッドを追加完了
+       - プロパティの同期を確認完了
+     - ✅ フェーズ 1.6.2: 重複メソッドの削除
+       - `handleScheduleConsensusUpdate`, `applyScheduleConsensus`, `handleScheduleConsensusPrompt` の重複を削除完了
+     - ✅ フェーズ 1.6.3: その他のメソッドの委譲確認
+       - `scheduleHostPresenceHeartbeat()`, `clearHostPresence()` の委譲を確認・追加完了
+       - すべての呼び出し箇所を確認完了
+     - ✅ フェーズ 1.6.4: インポートの確認
+       - 必要なインポート（`getOperatorScheduleConsensusRef`, `onValue`）を追加完了
+       - 不要なインポートの確認完了（一部は後方互換性のため保持）
+       - インポートの整合性を確認完了
    - **進行中のフェーズ**:
-     - ⏳ フェーズ 1.5.1: Firebase 操作機能の分離 - 基本実装の確認
-       - `EventFirebaseManager` クラスの基本実装を確認
-       - プロパティの同期が正しく行われているか確認
-       - 基本的なメソッドが委譲されているか確認
-     - ⏳ フェーズ 1.5.2: Firebase 操作機能の分離 - 重複メソッドの確認
-       - `app.js` に残っている Firebase 関連メソッドを確認
-       - 重複しているメソッドを特定
-       - 委譲が必要なメソッドを特定
-     - ⏳ フェーズ 1.6: 重複メソッドの削除とクリーンアップ（段階的に進める）
-       - ⏳ フェーズ 1.6.1: 委譲メソッドの追加
-         - `syncOperatorPresenceSubscription()`, `syncScheduleConsensusSubscription()`, `clearScheduleConsensusState()`, `normalizeScheduleConsensus()` の委譲メソッドを追加
-         - プロパティの同期を確認
-       - ⏳ フェーズ 1.6.2: 重複メソッドの削除
-         - `handleScheduleConsensusUpdate`, `applyScheduleConsensus`, `handleScheduleConsensusPrompt` の重複を削除
-       - ⏳ フェーズ 1.6.3: その他のメソッドの委譲確認
-         - `scheduleHostPresenceHeartbeat()`, `clearHostPresence()` の委譲を確認・追加
-       - ⏳ フェーズ 1.6.4: インポートの確認
-         - 必要なインポートを追加、不要なインポートを削除
-       - ⏳ フェーズ 1.6.5: 最終確認とドキュメント更新
-         - すべての委譲が正しく動作しているか確認
-         - ドキュメントを更新
+     - ⏳ フェーズ 1.6.5: 最終確認とドキュメント更新（進行中）
+       - すべての委譲が正しく動作しているか確認
+       - ドキュメントを更新（進行中）
    - **残りのフェーズ**:
      - ⏳ フェーズ 1.7: スケジュールコンフリクト管理機能の整理（未着手）
        - `buildScheduleConflictContext`, `updateScheduleConflictState`, `enforceScheduleConflictState`, `syncScheduleConflictPromptState` などの整理
@@ -842,7 +865,7 @@ scripts/login/
 - ✅ `scripts/operator/` - リファクタリング済み、良好
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
-- ❌ `scripts/events/app.js` - 8,072 行、要改善（リファクタリング進行中、元の 10,180 行から約 2,108 行削減）
+- ❌ `scripts/events/app.js` - 7,724 行、要改善（リファクタリング進行中、元の 10,180 行から約 2,456 行削減）
 - ❌ `scripts/question-admin/app.js` - 5,752 行、要改善（リファクタリング進行中、元の 8,180 行から約 2,428 行削減）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
@@ -1067,7 +1090,7 @@ UI 上には以下のパネルが存在しますが、ファイル構造や命�
 - ✅ `scripts/events/panels/event-panel.js` (326 行) - イベント管理パネルの実装
 - ✅ `scripts/events/panels/schedule-panel.js` (326 行) - 日程管理パネルの実装
 - ✅ `EventPanelManager` と `SchedulePanelManager` クラスが分離されている
-- `scripts/events/app.js` (8,072 行) から両方のパネルの実装を分離済み
+- `scripts/events/app.js` (7,724 行) から両方のパネルの実装を分離済み
 
 **完了した改善**:
 
@@ -1079,7 +1102,7 @@ UI 上には以下のパネルが存在しますが、ファイル構造や命�
 
 ```
 scripts/events/
-├── app.js                    # EventAdminApp（初期化とルーティング、8,072行）
+├── app.js                    # EventAdminApp（初期化とルーティング、8,030行）
 ├── managers/
 │   ├── auth-manager.js       # EventAuthManager（認証管理、384行）
 │   ├── state-manager.js      # EventStateManager（状態管理、315行）

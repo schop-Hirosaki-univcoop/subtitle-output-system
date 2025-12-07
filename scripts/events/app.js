@@ -41,7 +41,6 @@ import {
   isTelopMode
 } from "../shared/operator-modes.js";
 import { normalizeScheduleId } from "../shared/channel-paths.js";
-import { derivePresenceScheduleKey as sharedDerivePresenceScheduleKey } from "../shared/presence-keys.js";
 import { goToLogin } from "../shared/routes.js";
 import {
   STAGE_SEQUENCE,
@@ -75,7 +74,6 @@ import {
   createPrintPreviewController
 } from "../shared/print-preview.js";
 
-const HOST_PRESENCE_HEARTBEAT_MS = 60_000;
 const SCHEDULE_CONSENSUS_TOAST_MS = 3_000;
 const PENDING_NAVIGATION_CLEAR_DELAY_MS = 5_000;
 const AUTH_RESUME_FALLBACK_DELAY_MS = 4_000;
@@ -227,16 +225,12 @@ export class EventAdminApp {
     this.eventPrintPreviewController = null;
     this.eventPrintPreviewCache = null;
     this.eventPrintPreviewMode = "events";
-    this.operatorPresenceEntries = [];
-    this.operatorPresenceEventId = "";
-    this.operatorPresenceUnsubscribe = null;
-    // EventFirebaseManager に移行（初期化はfirebaseManagerの初期化後に同期）
-    this.hostPresenceSessionId = "";
-    this.hostPresenceEntryKey = "";
-    this.hostPresenceEntryRef = null;
-    this.hostPresenceDisconnect = null;
-    this.hostPresenceHeartbeat = null;
-    this.hostPresenceLastSignature = "";
+    // EventFirebaseManager に移行（プロパティはfirebaseManagerの初期化後に同期済み）
+    // 後方互換性のため、app.jsでもプロパティを保持（firebaseManagerから同期）
+    this.hostPresenceEntryKey = this.firebaseManager.hostPresenceEntryKey;
+    this.hostPresenceEntryRef = this.firebaseManager.hostPresenceEntryRef;
+    this.hostPresenceDisconnect = this.firebaseManager.hostPresenceDisconnect;
+    this.hostPresenceHeartbeat = this.firebaseManager.hostPresenceHeartbeat;
     // EventFirebaseManager に移行（後方互換性のため保持）
     this.cachedHostPresenceStorage = undefined;
     this.hostCommittedScheduleId = "";
@@ -257,12 +251,8 @@ export class EventAdminApp {
     this.operatorModeRadioName = generateShortId("flow-operator-mode-radio-");
     this.flowDebugEnabled = false;
     this.operatorPresenceDebugEnabled = false;
-    // EventFirebaseManager に移行（後方互換性のため保持）
-    this.scheduleConsensusEventId = "";
-    this.scheduleConsensusUnsubscribe = null;
-    this.scheduleConsensusState = null;
-    this.scheduleConsensusLastSignature = "";
-    this.scheduleConsensusLastKey = "";
+    // EventFirebaseManager に移行（プロパティはfirebaseManagerの初期化後に同期済み）
+    // 後方互換性のため、app.jsでもプロパティを保持（firebaseManagerから同期）
     this.scheduleConsensusToastTimer = 0;
     this.scheduleConsensusHideTimer = 0;
     this.scheduleFallbackContext = null;
@@ -3948,9 +3938,9 @@ export class EventAdminApp {
     const presenceEntries = Array.isArray(this.operatorPresenceEntries)
       ? this.operatorPresenceEntries
       : [];
-    let hostEntries = this.collectLocalHostPresenceEntries(presenceEntries, uid);
+    let hostEntries = this.firebaseManager.collectLocalHostPresenceEntries(presenceEntries, uid);
     if (hostEntries.length === 0) {
-      const fetchedEntries = await this.fetchHostPresenceEntries(eventId, uid);
+      const fetchedEntries = await this.firebaseManager.fetchHostPresenceEntries(eventId, uid);
       hostEntries = Array.isArray(fetchedEntries) ? fetchedEntries : [];
     }
     hostEntries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -3961,7 +3951,7 @@ export class EventAdminApp {
     const entryKey = ensureString(this.hostPresenceEntryKey);
     const [entryKeyEventId = ""] = entryKey.split("/");
     const previousSessionId = entryKeyEventId === eventId ? ensureString(this.hostPresenceSessionId) : "";
-    const storedSessionId = ensureString(this.loadStoredHostPresenceSessionId(uid, eventId));
+    const storedSessionId = ensureString(this.firebaseManager.loadStoredHostPresenceSessionId(uid, eventId));
     const preferredEntry = hostEntries.length > 0 ? hostEntries[0] : null;
     const preferredSessionId = ensureString(preferredEntry?.sessionId || preferredEntry?.entryId);
     const baselineSessionId = previousSessionId || storedSessionId || "";
@@ -3983,12 +3973,12 @@ export class EventAdminApp {
     } else if (previousSessionId) {
       sessionId = previousSessionId;
     } else {
-      sessionId = this.generatePresenceSessionId();
+      sessionId = this.firebaseManager.generatePresenceSessionId();
     }
 
     this.hostPresenceSessionId = sessionId;
     this.firebaseManager.hostPresenceSessionId = sessionId;
-    this.persistHostPresenceSessionId(uid, eventId, sessionId);
+    this.firebaseManager.persistHostPresenceSessionId(uid, eventId, sessionId);
     const nextKey = `${eventId}/${sessionId}`;
     if (this.hostPresenceEntryKey && this.hostPresenceEntryKey !== nextKey) {
       this.firebaseManager.clearHostPresence();
@@ -5260,306 +5250,6 @@ export class EventAdminApp {
     }
   }
 
-  buildScheduleConflictContext() {
-    const event = this.getSelectedEvent();
-    const eventId = event?.id || "";
-    const context = {
-      eventId,
-      entries: [],
-      options: [],
-      selectableOptions: [],
-      hasConflict: false,
-      hasOtherOperators: false,
-      hostScheduleId: "",
-      hostScheduleKey: "",
-      hostScheduleLabel: "",
-      defaultKey: "",
-      signature: ""
-    };
-    if (!eventId) {
-      return context;
-    }
-    const scheduleMap = new Map(this.schedules.map((schedule) => [schedule.id, schedule]));
-    const entries = [];
-    const selfUid = ensureString(this.currentUser?.uid);
-    const selfLabel = ensureString(this.currentUser?.displayName) || ensureString(this.currentUser?.email) || "あなた";
-    let hasSelfPresence = false;
-    this.operatorPresenceEntries.forEach((entry) => {
-      const baseScheduleId = ensureString(entry.scheduleId);
-      const scheduleFromMap = baseScheduleId ? scheduleMap.get(baseScheduleId) : null;
-      const derivedFromKey = this.extractScheduleIdFromKey(entry.scheduleKey, eventId);
-      const resolvedScheduleId = ensureString(scheduleFromMap?.id || baseScheduleId || derivedFromKey);
-      const schedule = resolvedScheduleId ? scheduleMap.get(resolvedScheduleId) || scheduleFromMap : scheduleFromMap;
-      const normalizedMode = normalizeOperatorMode(entry.mode);
-      const skipTelop = entry.skipTelop === true || normalizedMode === OPERATOR_MODE_SUPPORT;
-      const isSelf = Boolean(entry.isSelf || (selfUid && entry.uid && entry.uid === selfUid));
-      if (isSelf) {
-        hasSelfPresence = true;
-      }
-      const scheduleLabel = schedule?.label || entry.scheduleLabel || resolvedScheduleId || "未選択";
-      const scheduleRange = schedule ? formatScheduleRange(schedule.startAt, schedule.endAt) : "";
-      const scheduleKey = ensureString(
-        entry.scheduleKey ||
-          (resolvedScheduleId
-            ? this.derivePresenceScheduleKey(
-                eventId,
-                { scheduleId: resolvedScheduleId, scheduleLabel },
-                ensureString(entry.entryId)
-              )
-            : "")
-      );
-      entries.push({
-        entryId: entry.entryId,
-        uid: entry.uid,
-        displayName: entry.displayName || entry.uid || entry.entryId,
-        scheduleId: resolvedScheduleId,
-        scheduleKey,
-        scheduleLabel,
-        scheduleRange,
-        isSelf,
-        mode: normalizedMode,
-        skipTelop,
-        updatedAt: entry.updatedAt || 0
-      });
-    });
-    const hostContext = this.resolveHostScheduleContext(eventId, { scheduleMap });
-    const hostScheduleId = ensureString(hostContext.scheduleId);
-    const hostScheduleKey = ensureString(hostContext.scheduleKey);
-    const hostScheduleLabel = ensureString(hostContext.scheduleLabel);
-    const hostScheduleRange = ensureString(hostContext.scheduleRange);
-    const hostSchedule = hostContext.schedule || (hostScheduleId ? scheduleMap.get(hostScheduleId) || null : null);
-    const committedScheduleId = ensureString(this.hostCommittedScheduleId);
-    const committedSchedule = committedScheduleId ? scheduleMap.get(committedScheduleId) || null : null;
-    const committedScheduleLabel = ensureString(this.hostCommittedScheduleLabel) || committedSchedule?.label || committedScheduleId;
-    const committedScheduleRange = committedSchedule
-      ? formatScheduleRange(committedSchedule.startAt, committedSchedule.endAt)
-      : "";
-
-    const selfEntry = entries.find((entry) => entry.isSelf);
-    if (selfEntry) {
-      selfEntry.scheduleId = hostScheduleId;
-      if (hostScheduleKey) {
-        selfEntry.scheduleKey = hostScheduleKey;
-      }
-      selfEntry.scheduleLabel = hostScheduleLabel || hostScheduleId || "未選択";
-      selfEntry.scheduleRange = hostScheduleRange || selfEntry.scheduleRange || "";
-    }
-
-    context.hostScheduleId = hostScheduleId;
-    context.hostScheduleKey = hostScheduleKey;
-    context.hostScheduleLabel = hostScheduleLabel;
-    context.hostScheduleRange = hostScheduleRange;
-    context.hostSelectedScheduleId = ensureString(hostContext.selectedScheduleId);
-    context.hostCommittedScheduleId = ensureString(hostContext.committedScheduleId);
-    context.telopScheduleId = committedScheduleId;
-    context.telopScheduleLabel = committedScheduleLabel;
-    context.telopScheduleRange = committedScheduleRange;
-
-    if (!hasSelfPresence && hostScheduleId) {
-      entries.push({
-        entryId: selfUid ? `self::${selfUid}` : "self",
-        uid: selfUid,
-        displayName: selfLabel,
-        scheduleId: hostScheduleId,
-        scheduleKey: hostScheduleKey || hostScheduleId,
-        scheduleLabel: hostScheduleLabel || hostScheduleId || "未選択",
-        scheduleRange: hostScheduleRange || formatScheduleRange(hostSchedule?.startAt, hostSchedule?.endAt),
-        isSelf: true,
-        mode: this.operatorMode,
-        skipTelop: this.operatorMode === OPERATOR_MODE_SUPPORT,
-        updatedAt: Date.now()
-      });
-      hasSelfPresence = true;
-    }
-    entries.sort((a, b) => {
-      if (a.isSelf && !b.isSelf) return -1;
-      if (!a.isSelf && b.isSelf) return 1;
-      return (a.displayName || "").localeCompare(b.displayName || "", "ja");
-    });
-    const committedEntries = entries.filter((entry) => ensureString(entry.scheduleId) && !entry.skipTelop);
-    context.entries = committedEntries;
-    context.allEntries = entries;
-    const groups = new Map();
-    entries.forEach((entry) => {
-      const key = entry.scheduleKey || "";
-      const existing = groups.get(key) || {
-        key,
-        scheduleId: entry.scheduleId || "",
-        scheduleLabel: entry.scheduleLabel || "未選択",
-        scheduleRange: entry.scheduleRange || "",
-        members: [],
-        telopMembers: []
-      };
-      if (!groups.has(key)) {
-        groups.set(key, existing);
-      }
-      if (!existing.scheduleId && entry.scheduleId) {
-        existing.scheduleId = entry.scheduleId;
-      }
-      if (!existing.scheduleLabel && entry.scheduleLabel) {
-        existing.scheduleLabel = entry.scheduleLabel;
-      }
-      if (!existing.scheduleRange && entry.scheduleRange) {
-        existing.scheduleRange = entry.scheduleRange;
-      }
-      existing.members.push(entry);
-      if (!entry.skipTelop && ensureString(entry.scheduleId)) {
-        existing.telopMembers.push(entry);
-      }
-    });
-    const options = Array.from(groups.values())
-      .filter((group) => group.telopMembers && group.telopMembers.length > 0)
-      .map((group) => {
-        const derivedScheduleId = group.scheduleId || this.extractScheduleIdFromKey(group.key, eventId) || "";
-        const schedule = derivedScheduleId ? scheduleMap.get(derivedScheduleId) : null;
-        const scheduleId = schedule?.id || derivedScheduleId || "";
-        const scheduleLabel = group.scheduleLabel || schedule?.label || scheduleId || "未選択";
-        const scheduleRange = group.scheduleRange || formatScheduleRange(schedule?.startAt, schedule?.endAt);
-        const containsSelf = group.telopMembers.some((member) => member.isSelf);
-        return {
-          key: group.key,
-          scheduleId,
-          scheduleLabel,
-          scheduleRange,
-          members: group.members,
-          containsSelf,
-          isSelectable: Boolean(scheduleId)
-        };
-      });
-    options.sort((a, b) => {
-      if (a.containsSelf && !b.containsSelf) return -1;
-      if (!a.containsSelf && b.containsSelf) return 1;
-      return (a.scheduleLabel || "").localeCompare(b.scheduleLabel || "", "ja");
-    });
-    const selectableOptions = options.filter((option) => option.scheduleId);
-    context.options = selectableOptions;
-    context.hasOtherOperators = committedEntries.some((entry) => !entry.isSelf);
-    context.selectableOptions = selectableOptions;
-    const uniqueSelectableKeys = new Set(
-      selectableOptions.map((option) => option.key || option.scheduleId || "")
-    );
-    const telopScheduleId = committedScheduleId;
-    const conflictingTelopEntries = committedEntries.filter((entry) => {
-      const entryScheduleId = ensureString(entry.scheduleId);
-      return Boolean(telopScheduleId && entryScheduleId && entryScheduleId !== telopScheduleId);
-    });
-    context.hasConflict = Boolean(telopScheduleId) && conflictingTelopEntries.length > 0;
-    const preferredOption =
-      selectableOptions.find((option) => option.containsSelf) || selectableOptions[0] || null;
-    context.defaultKey = preferredOption?.key || "";
-    const signatureSource = committedEntries.length ? committedEntries : entries;
-    const signatureParts = signatureSource.map((entry) => {
-      const entryId = entry.uid || entry.entryId || "anon";
-      const scheduleKey = entry.scheduleKey || "none";
-      return `${entryId}::${scheduleKey}`;
-    });
-    signatureParts.sort();
-    const baseSignature = signatureParts.join("|") || "none";
-    context.signature = `${eventId || "event"}::${baseSignature}`;
-    return context;
-  }
-
-  syncScheduleConflictPromptState(context = null) {
-    const button = this.dom.scheduleNextButton;
-    if (!button) {
-      return;
-    }
-    const resolvedContext = context || this.scheduleConflictContext || this.buildScheduleConflictContext();
-    const contextSignature = ensureString(resolvedContext?.signature);
-    const pendingSignature = ensureString(this.scheduleConflictPromptSignature);
-    const hasConflict = Boolean(resolvedContext?.hasConflict);
-    const hasResolvedKey = Boolean(this.scheduleConsensusLastKey);
-    const shouldIndicate =
-      hasConflict &&
-      pendingSignature &&
-      contextSignature &&
-      contextSignature === pendingSignature &&
-      !hasResolvedKey;
-    if (shouldIndicate) {
-      if (!Object.prototype.hasOwnProperty.call(button.dataset, "conflictOriginalTitle")) {
-        button.dataset.conflictOriginalTitle = button.getAttribute("title") || "";
-      }
-      button.setAttribute("data-conflict-pending", "true");
-      button.setAttribute(
-        "title",
-        "他のオペレーターと日程の調整が必要です。「確定」で日程を確定してください。"
-      );
-    } else {
-      button.removeAttribute("data-conflict-pending");
-      if (Object.prototype.hasOwnProperty.call(button.dataset, "conflictOriginalTitle")) {
-        const original = button.dataset.conflictOriginalTitle || "";
-        if (original) {
-          button.setAttribute("title", original);
-        } else {
-          button.removeAttribute("title");
-        }
-        delete button.dataset.conflictOriginalTitle;
-      }
-    }
-  }
-
-  updateScheduleConflictState() {
-    const context = this.buildScheduleConflictContext();
-    this.scheduleConflictContext = context;
-    if (this.isScheduleConflictDialogOpen()) {
-      this.renderScheduleConflictDialog(context);
-    }
-    this.enforceScheduleConflictState(context);
-    this.syncScheduleConflictPromptState(context);
-  }
-
-  enforceScheduleConflictState(context = null) {
-    const hasConflict = Boolean(context?.hasConflict);
-    const suppressOnce = this.suppressScheduleConflictPromptOnce;
-    if (suppressOnce) {
-      this.suppressScheduleConflictPromptOnce = false;
-    }
-    if (!hasConflict) {
-      if (this.isScheduleConflictDialogOpen()) {
-        if (this.dom.scheduleConflictForm) {
-          this.dom.scheduleConflictForm.reset();
-        }
-        this.closeDialog(this.dom.scheduleConflictDialog);
-      }
-      this.scheduleConflictLastSignature = "";
-      this.scheduleConflictPromptSignature = "";
-      this.scheduleConflictLastPromptSignature = "";
-      this.maybeClearScheduleConsensus(context);
-      return;
-    }
-    const signature = ensureString(context?.signature);
-    this.scheduleConflictLastSignature = signature;
-    const hasSelection = Boolean(this.selectedScheduleId);
-    const shouldPromptDueToNavigation = Boolean(this.pendingNavigationTarget);
-    const shouldPromptDueToConflict =
-      !shouldPromptDueToNavigation &&
-      hasSelection &&
-      signature &&
-      signature !== this.scheduleConflictLastPromptSignature;
-    if (suppressOnce) {
-      if (signature) {
-        this.scheduleConflictLastPromptSignature = signature;
-      }
-      return;
-    }
-    if (!this.isScheduleConflictDialogOpen()) {
-      if (shouldPromptDueToNavigation && hasSelection) {
-        this.openScheduleConflictDialog(context, {
-          reason: "presence",
-          originPanel: this.activePanel,
-          target: this.pendingNavigationTarget || this.activePanel
-        });
-      } else if (shouldPromptDueToConflict) {
-        this.openScheduleConflictDialog(context, {
-          reason: "presence-auto",
-          originPanel: this.activePanel,
-          target: this.activePanel
-        });
-      }
-    } else if (shouldPromptDueToConflict && signature) {
-      this.scheduleConflictLastPromptSignature = signature;
-    }
-  }
 
   showScheduleConsensusToast({ label = "", range = "", byline = "" } = {}) {
     const toast = this.dom.scheduleConsensusToast;
@@ -5777,44 +5467,6 @@ export class EventAdminApp {
         .catch((error) => logError("Failed to sync operator context after schedule commit", error));
     }
     return true;
-  }
-
-  clearOperatorPresenceState() {
-    // EventFirebaseManager に委譲
-    this.firebaseManager.clearOperatorPresenceState();
-    // プロパティを同期
-    this.operatorPresenceEventId = this.firebaseManager.operatorPresenceEventId;
-    this.operatorPresenceUnsubscribe = this.firebaseManager.operatorPresenceUnsubscribe;
-    this.operatorPresenceEntries = this.firebaseManager.operatorPresenceEntries;
-    // app固有のプロパティをクリア
-    this.hostCommittedScheduleId = "";
-    this.hostCommittedScheduleLabel = "";
-    this.eventSelectionCommitted = false;
-    this.scheduleSelectionCommitted = false;
-    this.scheduleConflictContext = null;
-    this.scheduleConflictLastSignature = "";
-    this.scheduleConflictPromptSignature = "";
-    this.scheduleConflictLastPromptSignature = "";
-    this.pendingNavigationTarget = "";
-    this.navigationManager.pendingNavigationTarget = "";
-    this.pendingNavigationMeta = null;
-    this.navigationManager.pendingNavigationMeta = null;
-    this.awaitingScheduleConflictPrompt = false;
-    this.clearPendingNavigationTimer();
-    this.setScheduleConflictSubmitting(false);
-    this.clearScheduleConflictError();
-    if (this.dom.scheduleConflictForm) {
-      this.dom.scheduleConflictForm.reset();
-    }
-    if (this.dom.scheduleConflictDialog) {
-      this.closeDialog(this.dom.scheduleConflictDialog);
-    }
-    this.scheduleFallbackContext = null;
-    this.clearScheduleConsensusState({ reason: "presence-reset" });
-    this.hideScheduleConsensusToast();
-    this.lastScheduleCommitChanged = false;
-    this.logFlowState("オペレーター選択状況をリセットしました");
-    this.updateScheduleConflictState();
   }
 
   setScheduleConflictSubmitting(isSubmitting) {
