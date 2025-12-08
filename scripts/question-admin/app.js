@@ -2232,126 +2232,13 @@ function init() {
   shareClipboardManager = managerRefs.shareClipboardManager;
   participantContextManager = managerRefs.participantContextManager;
   participantActionManager = managerRefs.participantActionManager;
+  glManager = managerRefs.glManager;
+  participantUIManager = managerRefs.participantUIManager;
+  csvManager = managerRefs.csvManager;
+  eventManager = managerRefs.eventManager;
   
   // 残りのManager初期化（段階的にInitManagerに移行予定）
   // 現在はapp.jsで初期化し、managerRefsにも代入
-
-  // GlManager を初期化
-  glManager = new GlManager({
-    state,
-    // 依存関数
-    normalizeKey,
-    fetchDbValue,
-    renderParticipants,
-    // 定数
-    CANCEL_LABEL,
-    GL_STAFF_GROUP_KEY,
-    GL_STAFF_LABEL
-  });
-  managerRefs.glManager = glManager;
-
-  // ParticipantUIManager を初期化
-  participantUIManager = new ParticipantUIManager({
-    state,
-    dom,
-    // 依存関数
-    normalizeGroupNumberValue,
-    getDisplayParticipantId,
-    resolveMailStatusInfo,
-    resolveParticipantUid,
-    resolveParticipantActionTarget,
-    updateParticipantActionPanelState,
-    applyParticipantNoText: (element, index) => {
-      if (!uiManager) {
-        throw new Error("UIManager is not initialized");
-      }
-      return uiManager.applyParticipantNoText(element, index);
-    },
-    createShareUrl,
-    copyShareLink: (token) => {
-      if (!shareClipboardManager) {
-        throw new Error("ShareClipboardManager is not initialized");
-      }
-      return shareClipboardManager.copyShareLink(token, setUploadStatus);
-    },
-    describeDuplicateMatch,
-    diffParticipantLists,
-    // 定数
-    CANCEL_LABEL,
-    RELOCATE_LABEL,
-    GL_STAFF_GROUP_KEY,
-    GL_STAFF_LABEL,
-    NO_TEAM_GROUP_KEY,
-    MAIL_STATUS_ICON_SVG,
-    CHANGE_ICON_SVG
-  });
-  managerRefs.participantUIManager = participantUIManager;
-
-  // CsvManager を初期化
-  csvManager = new CsvManager({
-    dom,
-    state,
-    // 依存関数と定数
-    getSelectionIdentifiers,
-    getSelectionRequiredMessage,
-    setUploadStatus,
-    PARTICIPANT_TEMPLATE_HEADERS,
-    TEAM_TEMPLATE_HEADERS,
-    sortParticipants,
-    resolveParticipantUid,
-    renderParticipants,
-    updateParticipantActionPanelState,
-    syncSaveButtonState,
-    queueRelocationPrompt,
-    captureParticipantBaseline
-  });
-  managerRefs.csvManager = csvManager;
-  
-  // EventManager を初期化
-  eventManager = new EventManager({
-    dom,
-    state,
-    // 依存関数と定数
-    isHostAttached: () => {
-      if (!hostIntegrationManager) return false;
-      return hostIntegrationManager.isHostAttached();
-    },
-    hostIntegration: null, // HostIntegrationManager に移行されたため、直接参照しない
-    getHostController: () => {
-      if (!hostIntegrationManager) return null;
-      return hostIntegrationManager.getHostController();
-    },
-    applyHostEvents: (events, options) => {
-      if (!hostIntegrationManager) {
-        throw new Error("HostIntegrationManager is not initialized");
-      }
-      return hostIntegrationManager.applyHostEvents(events, options);
-    },
-    finalizeEventLoad,
-    renderSchedules: () => {
-      if (!scheduleManager) return;
-      scheduleManager.renderSchedules();
-    },
-    renderParticipants,
-    updateParticipantContext,
-    loadGlDataForEvent,
-    loadParticipants,
-    broadcastSelectionChange,
-    selectSchedule,
-    setCalendarPickedDate,
-    captureParticipantBaseline,
-    syncTemplateButtons,
-    syncClearButtonState,
-    openDialog,
-    closeDialog,
-    setFormError,
-    confirmAction,
-    setUploadStatus,
-    refreshScheduleLocationHistory,
-    populateScheduleLocationOptions,
-    getSelectionBroadcastSource
-  });
-  managerRefs.eventManager = eventManager;
   
   // MailManager を初期化
   mailManager = new MailManager({
@@ -2841,11 +2728,7 @@ function init() {
   scheduleManager.selectScheduleSelf = scheduleManager.selectSchedule.bind(scheduleManager);
   
   // すべてのManagerをグローバル変数に同期（managerRefsから）
-  // tokenApiManager, shareClipboardManager, participantContextManager, participantActionManagerは既にInitManagerで初期化され、上で同期済み
-  glManager = managerRefs.glManager;
-  participantUIManager = managerRefs.participantUIManager;
-  csvManager = managerRefs.csvManager;
-  eventManager = managerRefs.eventManager;
+  // tokenApiManager, shareClipboardManager, participantContextManager, participantActionManager, glManager, participantUIManager, csvManager, eventManagerは既にInitManagerで初期化され、上で同期済み
   mailManager = managerRefs.mailManager;
   authManager = managerRefs.authManager;
   participantManager = managerRefs.participantManager;

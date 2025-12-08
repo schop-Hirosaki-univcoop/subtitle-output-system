@@ -1109,7 +1109,9 @@ scripts/login/
          - ⏳ 残り 15 個の Manager 初期化を InitManager に移行（進行中、段階的に移行中）
            - ✅ TokenApiManager, ShareClipboardManager の移行完了
            - ✅ ParticipantContextManager, ParticipantActionManager の移行完了
-           - ❌ 残り 11 個の Manager 初期化を移行（未完了）
+           - ✅ GlManager, ParticipantUIManager の移行完了
+           - ✅ CsvManager, EventManager の移行完了
+           - ❌ 残り 7 個の Manager 初期化を移行（未完了）
        - 実績（段階 1-6）: 約 814 行の削減（`app.js` は 2,949 行、`token-api-manager.js` は 106 行、`share-clipboard-manager.js` は 90 行、`participant-context-manager.js` は 138 行、`participant-action-manager.js` は 168 行、`participant-ui-manager.js` は 966 行、`event-handlers-manager.js` は 506 行）
 
 ### フェーズ 2: 中程度の問題の解決（優先度: 中）

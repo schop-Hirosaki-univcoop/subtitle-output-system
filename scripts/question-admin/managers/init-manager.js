@@ -424,6 +424,119 @@ export class InitManager {
       }
     });
     
+    // GlManager を初期化
+    refs.glManager = new ManagerClasses.GlManager({
+      state: this.state,
+      // 依存関数
+      normalizeKey: this.normalizeKey,
+      fetchDbValue: this.fetchDbValue,
+      renderParticipants: this.renderParticipants,
+      // 定数
+      CANCEL_LABEL: this.CANCEL_LABEL,
+      GL_STAFF_GROUP_KEY: this.GL_STAFF_GROUP_KEY,
+      GL_STAFF_LABEL: this.GL_STAFF_LABEL
+    });
+    
+    // ParticipantUIManager を初期化
+    refs.participantUIManager = new ManagerClasses.ParticipantUIManager({
+      state: this.state,
+      dom: this.dom,
+      // 依存関数
+      normalizeGroupNumberValue: this.normalizeGroupNumberValue,
+      getDisplayParticipantId: this.getDisplayParticipantId,
+      resolveMailStatusInfo: this.resolveMailStatusInfo,
+      resolveParticipantUid: this.resolveParticipantUid,
+      resolveParticipantActionTarget: this.resolveParticipantActionTarget,
+      updateParticipantActionPanelState: this.updateParticipantActionPanelState,
+      applyParticipantNoText: (element, index) => {
+        if (!refs.uiManager) {
+          throw new Error("UIManager is not initialized");
+        }
+        return refs.uiManager.applyParticipantNoText(element, index);
+      },
+      createShareUrl: this.createShareUrl,
+      copyShareLink: (token) => {
+        if (!refs.shareClipboardManager) {
+          throw new Error("ShareClipboardManager is not initialized");
+        }
+        return refs.shareClipboardManager.copyShareLink(token, this.setUploadStatus);
+      },
+      describeDuplicateMatch: this.describeDuplicateMatch,
+      diffParticipantLists: this.diffParticipantLists,
+      // 定数
+      CANCEL_LABEL: this.CANCEL_LABEL,
+      RELOCATE_LABEL: this.RELOCATE_LABEL,
+      GL_STAFF_GROUP_KEY: this.GL_STAFF_GROUP_KEY,
+      GL_STAFF_LABEL: this.GL_STAFF_LABEL,
+      NO_TEAM_GROUP_KEY: this.NO_TEAM_GROUP_KEY,
+      MAIL_STATUS_ICON_SVG: this.MAIL_STATUS_ICON_SVG,
+      CHANGE_ICON_SVG: this.CHANGE_ICON_SVG
+    });
+    
+    // CsvManager を初期化
+    refs.csvManager = new ManagerClasses.CsvManager({
+      dom: this.dom,
+      state: this.state,
+      // 依存関数と定数
+      getSelectionIdentifiers: this.getSelectionIdentifiers,
+      getSelectionRequiredMessage: this.getSelectionRequiredMessage,
+      setUploadStatus: this.setUploadStatus,
+      PARTICIPANT_TEMPLATE_HEADERS: this.PARTICIPANT_TEMPLATE_HEADERS,
+      TEAM_TEMPLATE_HEADERS: this.TEAM_TEMPLATE_HEADERS,
+      sortParticipants: this.sortParticipants,
+      resolveParticipantUid: this.resolveParticipantUid,
+      renderParticipants: this.renderParticipants,
+      updateParticipantActionPanelState: this.updateParticipantActionPanelState,
+      syncSaveButtonState: this.syncSaveButtonState,
+      queueRelocationPrompt: this.queueRelocationPrompt,
+      captureParticipantBaseline: this.captureParticipantBaseline
+    });
+    
+    // EventManager を初期化
+    refs.eventManager = new ManagerClasses.EventManager({
+      dom: this.dom,
+      state: this.state,
+      // 依存関数と定数
+      isHostAttached: () => {
+        if (!refs.hostIntegrationManager) return false;
+        return refs.hostIntegrationManager.isHostAttached();
+      },
+      hostIntegration: null, // HostIntegrationManager に移行されたため、直接参照しない
+      getHostController: () => {
+        if (!refs.hostIntegrationManager) return null;
+        return refs.hostIntegrationManager.getHostController();
+      },
+      applyHostEvents: (events, options) => {
+        if (!refs.hostIntegrationManager) {
+          throw new Error("HostIntegrationManager is not initialized");
+        }
+        return refs.hostIntegrationManager.applyHostEvents(events, options);
+      },
+      finalizeEventLoad: this.finalizeEventLoad,
+      renderSchedules: () => {
+        if (!refs.scheduleManager) return;
+        refs.scheduleManager.renderSchedules();
+      },
+      renderParticipants: this.renderParticipants,
+      updateParticipantContext: this.updateParticipantContext,
+      loadGlDataForEvent: this.loadGlDataForEvent,
+      loadParticipants: this.loadParticipants,
+      broadcastSelectionChange: this.broadcastSelectionChange,
+      selectSchedule: this.selectSchedule,
+      setCalendarPickedDate: this.setCalendarPickedDate,
+      captureParticipantBaseline: this.captureParticipantBaseline,
+      syncTemplateButtons: this.syncTemplateButtons,
+      syncClearButtonState: this.syncClearButtonState,
+      openDialog: this.openDialog,
+      closeDialog: this.closeDialog,
+      setFormError: this.setFormError,
+      confirmAction: this.confirmAction,
+      setUploadStatus: this.setUploadStatus,
+      refreshScheduleLocationHistory: this.refreshScheduleLocationHistory,
+      populateScheduleLocationOptions: this.populateScheduleLocationOptions,
+      getSelectionBroadcastSource: this.getSelectionBroadcastSource
+    });
+    
     // ConfirmDialogManagerのセットアップ
     if (refs.confirmDialogManager) {
       refs.confirmDialogManager.setupConfirmDialog();
