@@ -39,24 +39,22 @@
 
 ### ファイルサイズの統計
 
-| ファイル                                                 | 行数  | 評価                                                                 |
-| -------------------------------------------------------- | ----- | -------------------------------------------------------------------- |
-| ファイル                                                 | 行数  | 評価                                                                 |
-| ---------------------------------------------            | ----- | ---------------------------------------------------------------      |
-| `scripts/events/app.js`                                  | 6,070 | ❌ 要改善（基準の約 4.0 倍、リファクタリング完了）                   |
-| `scripts/events/panels/gl-panel.js`                      | 3,249 | ❌ 要改善（基準の約 2.2 倍）                                         |
-| `scripts/operator/app.js`                                | 2,463 | ⚠️ 許容範囲（やや大きい）                                            |
-| `scripts/question-admin/app.js`                          | 2,263 | ⚠️ 改善中（基準の約 2.0 倍、リファクタリング完了、フェーズ 17 完了） |
-| `scripts/operator/questions.js`                          | 1,734 | ⚠️ 許容範囲（やや大きい）                                            |
-| `scripts/events/managers/firebase-manager.js`            | 1,392 | ✅ 許容範囲                                                          |
-| `scripts/shared/print-utils.js`                          | 1,341 | ✅ 許容範囲                                                          |
-| `scripts/operator/channel-manager.js`                    | 1,314 | ✅ 許容範囲                                                          |
-| `scripts/question-admin/participants.js`                 | 1,169 | ✅ 許容範囲                                                          |
-| `scripts/question-admin/managers/participant-manager.js` | 1,155 | ✅ 許容範囲                                                          |
-| `scripts/question-admin/managers/init-manager.js`        | 1,131 | ✅ 許容範囲                                                          |
-| `scripts/operator/panels/pickup-panel.js`                | 1,124 | ✅ 許容範囲                                                          |
-| `scripts/operator/panels/dictionary-panel.js`            | 1,109 | ✅ 許容範囲                                                          |
-| `scripts/question-admin/managers/print-manager.js`       | 1,004 | ✅ 許容範囲                                                          |
+| ファイル                                                 | 行数  | 評価                                                                   |
+| -------------------------------------------------------- | ----- | ---------------------------------------------------------------------- |
+| `scripts/events/app.js`                                  | 6,070 | ❌ 要改善（基準の約 4.0 倍、リファクタリング完了）                     |
+| `scripts/events/panels/gl-panel.js`                      | 3,249 | ❌ 要改善（基準の約 2.2 倍）                                           |
+| `scripts/operator/app.js`                                | 2,463 | ⚠️ 許容範囲（やや大きい）                                              |
+| `scripts/question-admin/app.js`                          | 2,263 | ⚠️ 改善完了（基準の約 2.0 倍、リファクタリング完了、フェーズ 17 完了） |
+| `scripts/operator/questions.js`                          | 1,734 | ⚠️ 許容範囲（やや大きい）                                              |
+| `scripts/events/managers/firebase-manager.js`            | 1,392 | ✅ 許容範囲                                                            |
+| `scripts/shared/print-utils.js`                          | 1,341 | ✅ 許容範囲                                                            |
+| `scripts/operator/channel-manager.js`                    | 1,314 | ✅ 許容範囲                                                            |
+| `scripts/question-admin/participants.js`                 | 1,169 | ✅ 許容範囲                                                            |
+| `scripts/question-admin/managers/participant-manager.js` | 1,155 | ✅ 許容範囲                                                            |
+| `scripts/question-admin/managers/init-manager.js`        | 1,131 | ✅ 許容範囲                                                            |
+| `scripts/operator/panels/pickup-panel.js`                | 1,124 | ✅ 許容範囲                                                            |
+| `scripts/operator/panels/dictionary-panel.js`            | 1,109 | ✅ 許容範囲                                                            |
+| `scripts/question-admin/managers/print-manager.js`       | 1,004 | ✅ 許容範囲                                                            |
 
 ### 構造パターンの分類
 
@@ -154,9 +152,16 @@ scripts/events/
 ├── index.js              # エントリーポイント（8行）✅
 ├── app.js                # EventAdminApp クラス（6,070行）❌ リファクタリング完了
 ├── tool-coordinator.js   # ToolCoordinator（342行）✅
+├── managers/
+│   ├── auth-manager.js       # EventAuthManager（認証管理、384行）✅
+│   ├── state-manager.js      # EventStateManager（状態管理、315行）✅
+│   ├── navigation-manager.js # EventNavigationManager（画面遷移制御、499行）✅
+│   ├── ui-renderer.js        # EventUIRenderer（UI描画、896行）✅
+│   ├── firebase-manager.js   # EventFirebaseManager（Firebase操作、1,392行）✅
+│   └── display-lock-manager.js # DisplayLockManager（ディスプレイロック、255行）✅
 ├── panels/
 │   ├── event-panel.js        # EventPanelManager（326行）✅
-│   ├── schedule-panel.js     # SchedulePanelManager（326行）✅
+│   ├── schedule-panel.js     # SchedulePanelManager（391行）✅
 │   ├── chat-panel.js         # EventChat（926行）✅
 │   ├── participants-panel.js # ParticipantToolManager（729行）✅
 │   ├── gl-panel.js           # GlToolManager（3,249行）❌
@@ -179,9 +184,9 @@ scripts/events/
 
    - 元の 10,180 行から約 4,110 行削減
    - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
-   - 認証、状態管理、画面遷移、Firebase 操作、UI 更新などが混在
-   - 単一責任の原則に違反（改善中）
-   - テストが困難（改善中）
+   - 認証、状態管理、画面遷移、Firebase 操作、UI 更新などが Manager クラスに分離済み
+   - 単一責任の原則に準拠（改善完了）
+   - テスト容易性が向上（改善完了）
 
 2. **`panels/gl-panel.js` が大きい（3,249 行）**
    - GL ツールの機能が単一ファイルに集約
@@ -189,16 +194,16 @@ scripts/events/
 
 **評価**:
 
-- ❌ ファイルサイズが開発標準を大幅に超過（改善中）
-- ❌ 責務の分離が不十分（改善中）
+- ⚠️ ファイルサイズが開発標準を超過（6,070 行、基準の約 4.0 倍）だが、リファクタリング完了により大幅改善
+- ✅ 責務の分離が完了（6 個の Manager クラスに分割）
 - ✅ イベント管理パネルと日程管理パネルを分離済み
 - ✅ ツール関連は適切に分割されている
 
 **改善提案**:
 
-- `app.js` を `scripts/operator/` と同様に Manager パターンで分割（進行中）
+- `app.js` を `scripts/operator/` と同様に Manager パターンで分割（完了）
   - ✅ `EventPanelManager` - イベント管理パネル（326 行）完了
-  - ✅ `SchedulePanelManager` - 日程管理パネル（326 行）完了
+  - ✅ `SchedulePanelManager` - 日程管理パネル（391 行）完了
   - ✅ `EventAuthManager` - 認証管理（384 行）完了
   - ✅ `EventStateManager` - 状態管理（315 行）完了
   - ✅ `EventNavigationManager` - 画面遷移制御（499 行、完了）
@@ -209,11 +214,11 @@ scripts/events/
 
 ---
 
-### 3. `scripts/question-admin/` ❌ 要改善
+### 3. `scripts/question-admin/` ⚠️ 改善完了
 
 **現状**:
 
-- `app.js` が 2,263 行（元の 8,180 行から約 5,917 行削減、リファクタリング完了、フェーズ 17 段階 7 完了）
+- `app.js` が 2,263 行（元の 8,180 行から約 5,917 行削減、リファクタリング完了、フェーズ 17 完了）
 - 印刷機能、CSV 処理、イベント管理、参加者管理機能、日程管理、メール送信、認証・初期化機能、リロケーション機能、その他のユーティリティ関数を Manager クラスに分離済み
 
 **構造**:
@@ -266,13 +271,14 @@ scripts/question-admin/
 
 **評価**:
 
-- ❌ ファイルサイズが開発標準を大幅に超過
-- ❌ 責務の分離が不十分
+- ⚠️ ファイルサイズが開発標準を超過（2,263 行、基準の約 2.0 倍）だが、リファクタリング完了により大幅改善
+- ✅ 責務の分離が完了（21 個の Manager クラスに分割）
 - ✅ `participants.js` は適切に分離されている
+- ✅ Manager パターンが適切に適用されている
 
 **改善提案**:
 
-- `app.js` を機能別に分割（進行中）
+- `app.js` を機能別に分割（完了）
   - ✅ `PrintManager` - 印刷機能（1,004 行）完了
   - ✅ `CsvManager` - CSV 処理機能（351 行）完了
   - ✅ `EventManager` - イベント管理機能（405 行）完了
@@ -462,16 +468,16 @@ scripts/
 
    - 開発標準の約 4.0 倍（元の 10,180 行から約 4,110 行削減）
    - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
-   - 単一責任の原則に違反（改善中）
-   - テストが困難（改善中）
-   - 保守性が低い（改善中）
+   - 単一責任の原則に準拠（改善完了、6 個の Manager クラスに分割）
+   - テスト容易性が向上（改善完了）
+   - 保守性が向上（改善完了）
 
 2. **`scripts/question-admin/app.js` が 2,263 行（リファクタリング完了（フェーズ 17 完了））**
 
    - 開発標準の約 2.0 倍（元の 8,180 行から約 5,917 行削減）
-   - 単一責任の原則に違反（改善中）
-   - テストが困難（改善中）
-   - 保守性が低い（改善中）
+   - 単一責任の原則に準拠（改善完了、21 個の Manager クラスに分割）
+   - テスト容易性が向上（改善完了）
+   - 保守性が向上（改善完了）
    - **リファクタリング状況**:
      - ✅ フェーズ 1: PrintManager に印刷機能を分離（1,004 行）完了
      - ✅ フェーズ 2: CsvManager に CSV 処理機能を分離（351 行）完了
@@ -747,7 +753,7 @@ scripts/question-admin/
 - ✅ フェーズ 7: 認証・初期化機能の分離（AuthManager）完了
 - ✅ フェーズ 8: リロケーション機能の分離（RelocationManager）完了
   - ✅ フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager、完了、約 349 行削減）
-  - ⏳ フェーズ 17: その他のユーティリティ関数の整理（進行中、段階 7 進行中、詳細は `docs/utility-refactoring-plan.md` を参照）
+  - ✅ フェーズ 17: その他のユーティリティ関数の整理（完了、詳細は `docs/utility-refactoring-plan.md` を参照）
     - ✅ 段階 1: トークン・API 関連関数の移行（TokenApiManager、106 行）完了
     - ✅ 段階 2: 共有・クリップボード関連関数の移行（ShareClipboardManager、90 行）完了
     - ✅ 段階 3: 参加者コンテキスト・イベント関連関数の移行（ParticipantContextManager、138 行）完了
@@ -1070,7 +1076,7 @@ scripts/login/
        - ✅ `setupParticipantTabs` を `ButtonStateManager` に移行完了（約 36 行削減、段階 4 完了）
        - ✅ `syncSelectedEventSummary` を `ButtonStateManager` に移行完了（約 33 行削減、段階 5 完了）
        - 実績: 約 349 行の削減（`app.js` は 3,290 行、`button-state-manager.js` は 454 行、段階 1-5 完了）
-     - **フェーズ 17: その他のユーティリティ関数の整理**（進行中、88% 完了、15/17 フェーズ完了）:
+     - **フェーズ 17: その他のユーティリティ関数の整理**（完了）:
        - ✅ **段階 1: トークン・API 関連関数の移行**（完了）
          - ✅ `generateQuestionToken` を `TokenApiManager` に移行完了（約 24 行削減）
          - ✅ `ensureTokenSnapshot` を `TokenApiManager` に移行完了（約 9 行削減）
@@ -1435,8 +1441,9 @@ scripts/events/
 │   ├── auth-manager.js       # EventAuthManager（認証管理、384行）
 │   ├── state-manager.js      # EventStateManager（状態管理、315行）
 │   ├── navigation-manager.js # EventNavigationManager（画面遷移制御、499行）
-│   ├── ui-renderer.js        # EventUIRenderer（UI描画、643行）
-│   └── firebase-manager.js   # EventFirebaseManager（Firebase操作、833行）
+│   ├── ui-renderer.js        # EventUIRenderer（UI描画、896行）✅
+│   ├── firebase-manager.js   # EventFirebaseManager（Firebase操作、1,392行）✅
+│   └── display-lock-manager.js # DisplayLockManager（ディスプレイロック、255行）✅
 ├── panels/
 │   ├── event-panel.js       # イベント管理パネル（326行）✅
 │   └── schedule-panel.js    # 日程管理パネル（326行）✅
@@ -1574,5 +1581,5 @@ scripts/
 
 ---
 
-**最終更新**: 2025 年 12 月
-**バージョン**: 1.4.0
+**最終更新**: 2025 年 1 月
+**バージョン**: 1.5.0
