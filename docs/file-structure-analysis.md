@@ -69,7 +69,7 @@
    - `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
-- ✅ `scripts/question-admin/managers/ui-manager.js` - 188 行（新規作成、フェーズ 11 完了後）
+- ✅ `scripts/question-admin/managers/ui-manager.js` - 229 行（新規作成、フェーズ 11 完了後）
 - ✅ `scripts/question-admin/managers/confirm-dialog-manager.js` - 128 行（新規作成、フェーズ 12 完了後）
 - ✅ `scripts/question-admin/managers/gl-manager.js` - 386 行（新規作成、フェーズ 13 完了後）
 - ✅ `scripts/question-admin/managers/participant-ui-manager.js` - 966 行（新規作成、フェーズ 14 完了後）
@@ -230,15 +230,15 @@ scripts/question-admin/
 ├── managers/
 │   ├── print-manager.js      # 印刷機能（1,004行）✅
 │   ├── csv-manager.js        # CSV 処理（351行）✅
-│   ├── event-manager.js      # イベント管理（405行）✅
+│   ├── event-manager.js      # イベント管理（409行）✅
 │   ├── participant-manager.js # 参加者管理（1,155行）✅
 │   ├── schedule-manager.js   # 日程管理（478行）✅
 │   ├── mail-manager.js       # メール送信（514行）✅
-│   ├── auth-manager.js       # 認証・初期化（384行）✅
+│   ├── auth-manager.js       # 認証・初期化（402行）✅
 │   ├── relocation-manager.js # リロケーション（954行）✅
 │   ├── host-integration-manager.js # 埋め込みモード・ホスト統合（671行）✅
 │   ├── state-manager.js      # 状態管理（165行）✅
-│   ├── ui-manager.js         # UI管理（188行）✅
+│   ├── ui-manager.js         # UI管理（229行）✅
 │   ├── confirm-dialog-manager.js # 確認ダイアログ（128行）✅
 │   ├── gl-manager.js         # GL管理（386行）✅
 │   ├── participant-ui-manager.js # 参加者UI（966行）✅
@@ -281,11 +281,11 @@ scripts/question-admin/
 - `app.js` を機能別に分割（完了）
   - ✅ `PrintManager` - 印刷機能（1,004 行）完了
   - ✅ `CsvManager` - CSV 処理機能（351 行）完了
-  - ✅ `EventManager` - イベント管理機能（405 行）完了
+    - ✅ `EventManager` - イベント管理機能（409 行）完了
   - ✅ `ParticipantManager` - 参加者管理機能（1,155 行）完了
   - ✅ `ScheduleManager` - 日程管理機能（478 行）完了
   - ✅ `MailManager` - メール送信機能（514 行）完了
-  - ✅ `AuthManager` - 認証・初期化機能（384 行）完了
+    - ✅ `AuthManager` - 認証・初期化機能（402 行）完了
   - ✅ `RelocationManager` - リロケーション機能（954 行）完了
   - ✅ フェーズ 9-17: その他のユーティリティ関数の整理（完了、詳細は `docs/utility-refactoring-plan.md` を参照）
     - ✅ フェーズ 9: 埋め込みモード・ホスト統合機能の分離（HostIntegrationManager、671 行）完了
@@ -481,7 +481,7 @@ scripts/
    - **リファクタリング状況**:
      - ✅ フェーズ 1: PrintManager に印刷機能を分離（1,004 行）完了
      - ✅ フェーズ 2: CsvManager に CSV 処理機能を分離（351 行）完了
-     - ✅ フェーズ 3: EventManager にイベント管理機能を分離（405 行）完了
+     - ✅ フェーズ 3: EventManager にイベント管理機能を分離（409 行）完了
      - ✅ フェーズ 4: ParticipantManager に参加者管理機能を分離（1,155 行）完了
        - 参加者読み込み（`loadParticipants`）
        - 参加者描画（`renderParticipants`）
@@ -500,7 +500,7 @@ scripts/
        - メールアクションボタンの状態同期（`syncMailActionState`）
        - 送信待ち参加者数の取得（`getPendingMailCount`）
        - ログ関数と定数
-     - ✅ フェーズ 7: AuthManager に認証・初期化機能を分離（384 行）完了
+     - ✅ フェーズ 7: AuthManager に認証・初期化機能を分離（402 行）完了
        - 認証状態の監視（`initAuthWatcher`）
        - 在籍確認（`verifyEnrollment`）
        - 管理者権限の確認（`ensureAdminAccess`）
@@ -725,11 +725,11 @@ scripts/question-admin/
 ├── managers/
 │   ├── print-manager.js      # 印刷機能（1,004行）✅ 完了
 │   ├── csv-manager.js        # CSV 処理（351行）✅ 完了
-│   ├── event-manager.js      # イベント管理（405行）✅ 完了
+│   ├── event-manager.js      # イベント管理（409行）✅ 完了
 │   ├── participant-manager.js # 参加者管理（1,155行）✅ 完了
 │   ├── schedule-manager.js   # 日程管理（478行）✅ 完了
 │   ├── mail-manager.js       # メール送信（514行）✅ 完了
-│   ├── auth-manager.js       # 認証・初期化（384行）✅ 完了
+│   ├── auth-manager.js       # 認証・初期化（402行）✅ 完了
 │   └── relocation-manager.js # リロケーション（954行）✅ 完了
 ├── participants.js           # 参加者関連ユーティリティ（1,169行）✅
 ├── calendar.js               # 既存
@@ -939,7 +939,7 @@ scripts/login/
        - ✅ `getPendingMailCount` を `MailManager` に移行完了（約 4 行削減）
        - ✅ ログ関数と定数を `MailManager` に移行完了（約 50 行削減）
        - 実績: 約 372 行の削減（`app.js` は 5,380 行、`mail-manager.js` は 514 行）
-     - ✅ フェーズ 7: 認証・初期化機能の分離（AuthManager、384 行）
+     - ✅ フェーズ 7: 認証・初期化機能の分離（AuthManager、402 行）
        - ✅ `initAuthWatcher` を `AuthManager` に移行完了（約 62 行削減）
        - ✅ `ensureAdminAccess` を `AuthManager` に移行完了（約 30 行削減）
        - ✅ `verifyEnrollment` を `AuthManager` に移行完了（約 28 行削減）
@@ -947,7 +947,7 @@ scripts/login/
        - ✅ `probeQuestionIntakeAccess`、`waitForQuestionIntakeAccess`、`isNotInUsersSheetError` を `AuthManager` に移行完了（約 90 行削減）
        - ✅ `getFreshPreflightContext` を `AuthManager` に移行完了（約 20 行削減）
        - ✅ 認証関連の定数と変数を `AuthManager` に移行完了（約 4 行削減）
-       - 実績: 約 142 行の削減（`app.js` は 5,238 行、`auth-manager.js` は 384 行）
+       - 実績: 約 142 行の削減（`app.js` は 5,238 行、`auth-manager.js` は 402 行）
      - ✅ フェーズ 8: RelocationManager にリロケーション機能を分離（954 行）完了
        - ✅ `queueRelocationPrompt` を `RelocationManager` に移行完了（約 73 行削減）
        - ✅ `renderRelocationPrompt` を `RelocationManager` に移行完了（約 172 行削減）
@@ -1006,7 +1006,7 @@ scripts/login/
        - ✅ `applyParticipantNoText` を `UIManager` に移行完了（約 7 行削減）
        - ✅ `resolveFocusTargetElement` を `UIManager` に移行完了（約 16 行削減）
        - ✅ `maybeFocusInitialSection` を `UIManager` に移行完了（約 29 行削減）
-       - 実績: 約 93 行の削減（`app.js` は 4,347 行、`ui-manager.js` は 188 行）
+       - 実績: 約 93 行の削減（`app.js` は 4,347 行、`ui-manager.js` は 229 行）
      - ✅ フェーズ 12: 確認ダイアログ関連の関数の整理（ConfirmDialogManager、128 行）完了
        - ✅ `confirmAction` を `ConfirmDialogManager` に移行完了（約 48 行削減）
        - ✅ `setupConfirmDialog` を `ConfirmDialogManager` に移行完了（約 21 行削減）
@@ -1189,7 +1189,7 @@ scripts/login/
 - ⚠️ `scripts/question-admin/app.js` - 2,263 行、改善完了（リファクタリング完了、元の 8,180 行から約 5,917 行削減、フェーズ 17 完了）
 - ✅ `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
-- ✅ `scripts/question-admin/managers/ui-manager.js` - 188 行（新規作成、フェーズ 11 完了後）
+- ✅ `scripts/question-admin/managers/ui-manager.js` - 229 行（新規作成、フェーズ 11 完了後）
 - ✅ `scripts/question-admin/managers/confirm-dialog-manager.js` - 128 行（新規作成、フェーズ 12 完了後）
 - ✅ `scripts/question-admin/managers/gl-manager.js` - 386 行（新規作成、フェーズ 13 完了後）
 - ✅ `scripts/question-admin/managers/participant-ui-manager.js` - 966 行（新規作成、フェーズ 14 完了後）
@@ -1581,5 +1581,5 @@ scripts/
 
 ---
 
-**最終更新**: 2025 年 1 月
+**最終更新**: 2025 年 12 月 8 日
 **バージョン**: 1.5.0
