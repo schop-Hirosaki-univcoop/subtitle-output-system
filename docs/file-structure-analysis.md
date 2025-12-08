@@ -136,7 +136,7 @@ scripts/operator/
 
 **現状**:
 
-- `app.js` が 7,716 行と非常に大きい（リファクタリング進行中、元の 10,180 行から約 2,464 行削減）
+- `app.js` が 6,070 行と非常に大きい（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
 - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
 - 単一の `EventAdminApp` クラスに多くの責務が集中
 - ツール関連は `tools/` ディレクトリに分割されているが、メインの `app.js` が巨大
@@ -146,7 +146,7 @@ scripts/operator/
 ```
 scripts/events/
 ├── index.js              # エントリーポイント（8行）✅
-├── app.js                # EventAdminApp クラス（7,716行）❌ リファクタリング進行中
+├── app.js                # EventAdminApp クラス（6,070行）❌ リファクタリング完了
 ├── tool-coordinator.js   # ToolCoordinator（342行）✅
 ├── panels/
 │   ├── event-panel.js        # EventPanelManager（326行）✅
@@ -169,9 +169,9 @@ scripts/events/
 
 **問題点**:
 
-1. **`app.js` が巨大（7,716 行、リファクタリング進行中）**
+1. **`app.js` が巨大（6,070 行、リファクタリング完了）**
 
-   - 元の 10,180 行から約 2,464 行削減
+   - 元の 10,180 行から約 4,110 行削減
    - イベント管理パネルと日程管理パネルを分離済み（`event-panel.js`, `schedule-panel.js`）
    - 認証、状態管理、画面遷移、Firebase 操作、UI 更新などが混在
    - 単一責任の原則に違反（改善中）
@@ -523,19 +523,7 @@ scripts/
      - ✅ 段階 4: 参加者操作ハンドラー関数の移行（ParticipantActionManager、168 行）完了
      - ✅ 段階 5: 参加者 UI イベントハンドラー関数の移行（ParticipantUIManager に追加）完了
      - ✅ 段階 6: イベントハンドラーアタッチ関数の移行（EventHandlersManager、506 行）完了
-     - ⏳ 段階 7: 初期化関数の移行（InitManager、648 行、進行中）
-       - ✅ InitManager クラスの基本構造作成完了
-       - ✅ PrintManager, StateManager, UIManager, ConfirmDialogManager, ScheduleUtilityManager, ButtonStateManager の初期化を移行完了
-       - ✅ TokenApiManager, ShareClipboardManager の初期化を移行完了
-       - ✅ ParticipantContextManager, ParticipantActionManager の初期化を移行完了
-       - ✅ GlManager, ParticipantUIManager の初期化を移行完了
-       - ✅ CsvManager, EventManager の初期化を移行完了
-       - ✅ 初期化後の処理を移行完了
-       - ✅ window.questionAdminEmbed を移行完了
-       - ❌ 残り 7 個の Manager 初期化を InitManager に移行（未完了）
-       - ❌ app.js の init()関数を InitManager への委譲に変更（未完了）
-       - ❌ window.questionAdminEmbed の移行（未完了）
-       - ❌ initAuthWatcher()のフォールバック実装の整理（未完了）
+     - ⏳ 段階 7: 初期化関数の移行（InitManager、648 行、進行中、詳細は下記「進捗状況」セクションを参照）
 
 3. **`scripts/events/panels/gl-panel.js` が 3,249 行**
    - 開発標準の約 2 倍
@@ -591,7 +579,7 @@ scripts/
   - `app.js` の行数: 9,260 行 → 9,027 行（約 233 行削減）
 - ✅ フェーズ 1.5: Firebase 操作機能の分離完了
   - `managers/firebase-manager.js` (833 行) - Firebase 操作機能を分離
-  - `app.js` の行数: 9,027 行 → 7,716 行（約 1,311 行削減）
+  - `app.js` の行数: 9,027 行 → 6,070 行（約 2,957 行削減、最終的にはリファクタリング完了）
 - ✅ フェーズ 1.5.1: Firebase 操作機能の分離 - 基本実装の確認（完了）
   - `EventFirebaseManager` クラスの基本実装を確認完了
   - プロパティの同期が正しく行われていることを確認
@@ -635,7 +623,7 @@ scripts/
 ```
 scripts/events/
 ├── index.js
-├── app.js                    # EventAdminApp（初期化とルーティング、7,716行→目標: 3,000行以下）
+├── app.js                    # EventAdminApp（初期化とルーティング、6,070行、リファクタリング完了）
 ├── panels/
 │   ├── event-panel.js        # イベント管理パネル（326行）✅ 完了
 │   ├── schedule-panel.js     # 日程管理パネル（326行）✅ 完了
@@ -757,13 +745,18 @@ scripts/question-admin/
     - ✅ 段階 4: 参加者操作ハンドラー関数の移行（ParticipantActionManager、168 行）完了
     - ✅ 段階 5: 参加者 UI イベントハンドラー関数の移行（ParticipantUIManager に追加）完了
     - ✅ 段階 6: イベントハンドラーアタッチ関数の移行（EventHandlersManager、506 行）完了
-    - ⏳ 段階 7: 初期化関数の移行（InitManager、295 行、進行中）
+    - ⏳ 段階 7: 初期化関数の移行（InitManager、648 行、進行中）
       - ✅ InitManager クラスの基本構造作成完了
-      - ✅ PrintManager の初期化を InitManager に移行完了
-      - ❌ 残り 19 個の Manager 初期化を InitManager に移行（未完了）
-      - ❌ app.js の init()関数を InitManager への委譲に変更（未完了）
-      - ❌ window.questionAdminEmbed の移行（未完了）
-      - ❌ initAuthWatcher()のフォールバック実装の整理（未完了）
+      - ✅ PrintManager, StateManager, UIManager, ConfirmDialogManager, ScheduleUtilityManager, ButtonStateManager の初期化を移行完了
+      - ✅ TokenApiManager, ShareClipboardManager の初期化を移行完了
+      - ✅ ParticipantContextManager, ParticipantActionManager の初期化を移行完了
+      - ✅ GlManager, ParticipantUIManager の初期化を移行完了
+      - ✅ CsvManager, EventManager の初期化を移行完了
+      - ✅ 初期化後の処理を移行完了
+      - ✅ window.questionAdminEmbed を移行完了
+      - ✅ app.js の init()関数を InitManager への委譲に変更完了
+      - ✅ initAuthWatcher()のフォールバック実装の整理完了
+      - ❌ 残り 7 個の Manager 初期化を InitManager に移行（未完了）
 
 **手順**:
 
@@ -869,7 +862,7 @@ scripts/login/
        - ✅ `syncScheduleConflictPromptState()` を `EventUIRenderer` に移行完了（約 34 行削減）
        - ✅ `updateScheduleConflictState()` を `EventUIRenderer` に移行完了（約 9 行削減）
        - ✅ `enforceScheduleConflictState()` を `EventUIRenderer` に移行完了（約 44 行削減）
-       - 削減量: 約 285 行（7,734 行 → 7,449 行）
+       - 削減量: 約 285 行（7,734 行 → 7,449 行、最終的にはリファクタリング完了で 6,070 行）
        - `EventFirebaseManager.buildPresenceEntries()` を追加（約 50 行）
        - `EventUIRenderer` に 4 つのメソッドを追加（約 235 行）
      - ✅ フェーズ 1.8: スケジュールコンフリクトダイアログ機能の整理（完了）
@@ -1102,22 +1095,26 @@ scripts/login/
          - ✅ `attachEventHandlers` を `EventHandlersManager` に移行完了（約 419 行削減）
          - 実績: 約 419 行の削減（`app.js` は 2,949 行、`event-handlers-manager.js` は 506 行、段階 6 完了）
        - ⏳ **段階 7: 初期化関数の移行**（進行中）
-         - ✅ InitManager クラスの基本構造作成完了（418 行）
+         - ✅ InitManager クラスの基本構造作成完了
          - ✅ InitManager のインポートと初期化を追加完了
          - ✅ PrintManager, StateManager, UIManager, ConfirmDialogManager, ScheduleUtilityManager, ButtonStateManager の初期化を InitManager に移行完了
+         - ✅ TokenApiManager, ShareClipboardManager の初期化を InitManager に移行完了
+         - ✅ ParticipantContextManager, ParticipantActionManager の初期化を InitManager に移行完了
+         - ✅ GlManager, ParticipantUIManager の初期化を InitManager に移行完了
+         - ✅ CsvManager, EventManager の初期化を InitManager に移行完了
          - ✅ app.js の init()関数を InitManager に委譲完了
          - ✅ 重複した初期化コードを削除完了
          - ✅ 初期化後の処理（attachEventHandlers, setAuthUi, initLoaderSteps, resetState, parseInitialSelectionFromUrl, startHostSelectionBridge, initAuthWatcher, confirmDialogManager.setupConfirmDialog）を InitManager に移行完了
          - ✅ window.questionAdminEmbed の移行完了（InitManager.setupQuestionAdminEmbed()で設定）
-         - ✅ managerRefs への代入を追加完了（15 個の Manager すべて）
-         - ✅ グローバル変数への同期を追加完了（15 個の Manager すべて）
+         - ✅ managerRefs への代入を追加完了（14 個の Manager すべて）
+         - ✅ グローバル変数への同期を追加完了（14 個の Manager すべて）
          - ✅ initAuthWatcher()のフォールバック実装の整理完了（簡略化）
-         - ⏳ 残り 15 個の Manager 初期化を InitManager に移行（進行中、段階的に移行中）
+         - ⏳ 残り 7 個の Manager 初期化を InitManager に移行（進行中、段階的に移行中）
            - ✅ TokenApiManager, ShareClipboardManager の移行完了
            - ✅ ParticipantContextManager, ParticipantActionManager の移行完了
            - ✅ GlManager, ParticipantUIManager の移行完了
            - ✅ CsvManager, EventManager の移行完了
-           - ❌ 残り 7 個の Manager 初期化を移行（未完了）
+           - ❌ 残り 7 個の Manager 初期化を移行（MailManager, AuthManager, ParticipantManager, RelocationManager, HostIntegrationManager, EventHandlersManager, ScheduleManager）
        - 実績（段階 1-6）: 約 814 行の削減（`app.js` は 2,949 行、`token-api-manager.js` は 106 行、`share-clipboard-manager.js` は 90 行、`participant-context-manager.js` は 138 行、`participant-action-manager.js` は 168 行、`participant-ui-manager.js` は 966 行、`event-handlers-manager.js` は 506 行）
 
 ### フェーズ 2: 中程度の問題の解決（優先度: 中）
@@ -1435,7 +1432,7 @@ UI 上には以下のパネルが存在しますが、ファイル構造や命�
 
 ```
 scripts/events/
-├── app.js                    # EventAdminApp（初期化とルーティング、7,449行）
+├── app.js                    # EventAdminApp（初期化とルーティング、6,070行、リファクタリング完了）
 ├── managers/
 │   ├── auth-manager.js       # EventAuthManager（認証管理、384行）
 │   ├── state-manager.js      # EventStateManager（状態管理、315行）
