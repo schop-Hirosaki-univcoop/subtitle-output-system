@@ -1049,9 +1049,7 @@ export class InitManager {
     // window.questionAdminEmbedの設定
     this.setupQuestionAdminEmbed();
     
-    // 以降のManager初期化は次の段階で実装します
-    // このファイルは非常に大きくなるため、段階的に移行します
-    // TODO: 残りのManagerの初期化を段階的に移行
+    // すべてのManager初期化が完了しました
   }
 
   /**
