@@ -6,7 +6,7 @@
 
 ## 現状
 
-- `app.js`: 2,949 行（フェーズ 17 段階 7 進行中、元の 4,596 行から約 1,647 行削減）
+- `app.js`: 2,754 行（フェーズ 17 段階 7 進行中、元の 4,596 行から約 1,842 行削減）
 - 残っている関数: 約 20-30 個（委譲関数を除く、`init()` 関数と `window.questionAdminEmbed` を含む）
 - 実績削減行数: 約 1,647 行（フェーズ 17 段階 1-6 完了、段階 7 進行中）
 - 推定残り削減可能行数: 約 850-1,050 行（`init()` 関数と `window.questionAdminEmbed` の完全移行後）
@@ -275,7 +275,7 @@
 - 段階 4: 約 126 行削減（`app.js` は 2,940 行、`participant-action-manager.js` は 168 行）
 - 段階 5: 約 45 行削減（`app.js` は 2,895 行、`ParticipantUIManager` に追加）
 - 段階 6: 約 419 行削減（`app.js` は 2,949 行、`event-handlers-manager.js` は 506 行）
-- 段階 7: 進行中（`InitManager` は 435 行、8 個の Manager 初期化と初期化後の処理を移行済み、`app.js` は 2,973 行、managerRefs への代入とグローバル変数への同期を追加完了）
+- 段階 7: 進行中（`InitManager` は 648 行、14 個の Manager 初期化と初期化後の処理を移行済み、`app.js` は 2,754 行、managerRefs への代入とグローバル変数への同期を追加完了）
 
 **推定残り行数**: 約 850-1,050 行（`init()` 関数と `window.questionAdminEmbed` の完全移行後）
 

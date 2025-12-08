@@ -42,7 +42,7 @@
 | ファイル                                      | 行数  | 評価                                                 |
 | --------------------------------------------- | ----- | ---------------------------------------------------- |
 | `scripts/events/app.js`                       | 6,070 | ❌ 要改善（基準の約 4.0 倍、リファクタリング完了）   |
-| `scripts/question-admin/app.js`               | 3,010 | ❌ 要改善（基準の約 2.2 倍、リファクタリング進行中） |
+| `scripts/question-admin/app.js`               | 2,754 | ❌ 要改善（基準の約 2.0 倍、リファクタリング進行中） |
 | `scripts/events/panels/gl-panel.js`           | 3,249 | ❌ 要改善（基準の約 2 倍）                           |
 | `scripts/operator/app.js`                     | 2,463 | ⚠️ 許容範囲（やや大きい）                            |
 | `scripts/operator/questions.js`               | 1,734 | ⚠️ 許容範囲（やや大きい）                            |
@@ -61,7 +61,7 @@
 2. **巨大な単一ファイル**
 
    - `scripts/events/app.js` - 6,070 行（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-   - `scripts/question-admin/app.js` - 3,010 行（リファクタリング進行中、元の 8,180 行から約 5,170 行削減）
+   - `scripts/question-admin/app.js` - 2,754 行（リファクタリング進行中、元の 8,180 行から約 5,426 行削減）
    - `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
@@ -207,7 +207,7 @@ scripts/events/
 
 **現状**:
 
-- `app.js` が 2,949 行（元の 8,180 行から約 5,231 行削減、リファクタリング進行中、フェーズ 17 段階 7 進行中）
+- `app.js` が 2,754 行（元の 8,180 行から約 5,426 行削減、リファクタリング進行中、フェーズ 17 段階 7 進行中）
 - 印刷機能、CSV 処理、イベント管理、参加者管理機能、日程管理、メール送信、認証・初期化機能、リロケーション機能、その他のユーティリティ関数を Manager クラスに分離済み
 
 **構造**:
@@ -215,7 +215,7 @@ scripts/events/
 ```
 scripts/question-admin/
 ├── index.js              # エントリーポイント（2行）✅
-├── app.js                # メインアプリケーション（2,949行）❌ リファクタリング進行中
+├── app.js                # メインアプリケーション（2,754行）❌ リファクタリング進行中
 ├── managers/
 │   ├── print-manager.js      # 印刷機能（1,004行）✅
 │   ├── csv-manager.js        # CSV 処理（351行）✅
@@ -238,7 +238,7 @@ scripts/question-admin/
 │   ├── participant-context-manager.js # 参加者コンテキスト（138行）✅
 │   ├── participant-action-manager.js # 参加者操作（168行）✅
 │   ├── event-handlers-manager.js # イベントハンドラー（506行）✅
-│   └── init-manager.js       # 初期化（295行）⏳ 進行中
+│   └── init-manager.js       # 初期化（648行、14個のManager初期化を移行済み）⏳ 進行中
 ├── participants.js       # 参加者管理（1,169行）✅
 ├── calendar.js           # カレンダー機能
 ├── dialog.js             # ダイアログ機能
@@ -252,8 +252,8 @@ scripts/question-admin/
 
 **問題点**:
 
-1. **`app.js` が巨大（2,949 行、リファクタリング進行中）**
-   - 元の 8,180 行から約 5,231 行削減
+1. **`app.js` が巨大（2,754 行、リファクタリング進行中）**
+   - 元の 8,180 行から約 5,426 行削減
    - 印刷機能、CSV 処理、イベント管理、参加者管理機能、日程管理機能、メール送信、認証・初期化、リロケーション、その他のユーティリティ関数を Manager クラスに分離済み
    - 単一責任の原則に違反（改善中）
 
@@ -459,9 +459,9 @@ scripts/
    - テストが困難（改善中）
    - 保守性が低い（改善中）
 
-2. **`scripts/question-admin/app.js` が 3,010 行（リファクタリング進行中）**
+2. **`scripts/question-admin/app.js` が 2,754 行（リファクタリング進行中）**
 
-   - 開発標準の約 2.2 倍（元の 8,180 行から約 5,170 行削減）
+   - 開発標準の約 2.0 倍（元の 8,180 行から約 5,426 行削減）
    - 単一責任の原則に違反（改善中）
    - テストが困難（改善中）
    - 保守性が低い（改善中）
@@ -516,20 +516,26 @@ scripts/
      - ✅ フェーズ 14: 参加者 UI 関連の関数の整理（ParticipantUIManager、906 行）完了
      - ✅ フェーズ 15: スケジュール関連の関数の整理（ScheduleUtilityManager、252 行）完了
      - ✅ フェーズ 16: ボタン状態同期関連の関数の整理（ButtonStateManager、完了、約 349 行削減）
-     - ⏳ フェーズ 17: その他のユーティリティ関数の整理（進行中、段階 7 進行中）
-       - ✅ 段階 1: トークン・API 関連関数の移行（TokenApiManager、106 行）完了
-       - ✅ 段階 2: 共有・クリップボード関連関数の移行（ShareClipboardManager、90 行）完了
-       - ✅ 段階 3: 参加者コンテキスト・イベント関連関数の移行（ParticipantContextManager、138 行）完了
-       - ✅ 段階 4: 参加者操作ハンドラー関数の移行（ParticipantActionManager、168 行）完了
-       - ✅ 段階 5: 参加者 UI イベントハンドラー関数の移行（ParticipantUIManager に追加）完了
-       - ✅ 段階 6: イベントハンドラーアタッチ関数の移行（EventHandlersManager、506 行）完了
-       - ⏳ 段階 7: 初期化関数の移行（InitManager、295 行、進行中）
-         - ✅ InitManager クラスの基本構造作成完了
-         - ✅ PrintManager の初期化を InitManager に移行完了
-         - ❌ 残り 19 個の Manager 初期化を InitManager に移行（未完了）
-         - ❌ app.js の init()関数を InitManager への委譲に変更（未完了）
-         - ❌ window.questionAdminEmbed の移行（未完了）
-         - ❌ initAuthWatcher()のフォールバック実装の整理（未完了）
+   - ⏳ フェーズ 17: その他のユーティリティ関数の整理（進行中、段階 7 進行中）
+     - ✅ 段階 1: トークン・API 関連関数の移行（TokenApiManager、106 行）完了
+     - ✅ 段階 2: 共有・クリップボード関連関数の移行（ShareClipboardManager、90 行）完了
+     - ✅ 段階 3: 参加者コンテキスト・イベント関連関数の移行（ParticipantContextManager、138 行）完了
+     - ✅ 段階 4: 参加者操作ハンドラー関数の移行（ParticipantActionManager、168 行）完了
+     - ✅ 段階 5: 参加者 UI イベントハンドラー関数の移行（ParticipantUIManager に追加）完了
+     - ✅ 段階 6: イベントハンドラーアタッチ関数の移行（EventHandlersManager、506 行）完了
+     - ⏳ 段階 7: 初期化関数の移行（InitManager、648 行、進行中）
+       - ✅ InitManager クラスの基本構造作成完了
+       - ✅ PrintManager, StateManager, UIManager, ConfirmDialogManager, ScheduleUtilityManager, ButtonStateManager の初期化を移行完了
+       - ✅ TokenApiManager, ShareClipboardManager の初期化を移行完了
+       - ✅ ParticipantContextManager, ParticipantActionManager の初期化を移行完了
+       - ✅ GlManager, ParticipantUIManager の初期化を移行完了
+       - ✅ CsvManager, EventManager の初期化を移行完了
+       - ✅ 初期化後の処理を移行完了
+       - ✅ window.questionAdminEmbed を移行完了
+       - ❌ 残り 7 個の Manager 初期化を InitManager に移行（未完了）
+       - ❌ app.js の init()関数を InitManager への委譲に変更（未完了）
+       - ❌ window.questionAdminEmbed の移行（未完了）
+       - ❌ initAuthWatcher()のフォールバック実装の整理（未完了）
 
 3. **`scripts/events/panels/gl-panel.js` が 3,249 行**
    - 開発標準の約 2 倍
@@ -712,7 +718,7 @@ scripts/events/
 ```
 scripts/question-admin/
 ├── index.js
-├── app.js                    # QuestionAdminApp（初期化とルーティング、2,949行、リファクタリング進行中）
+├── app.js                    # QuestionAdminApp（初期化とルーティング、2,754行、リファクタリング進行中）
 ├── managers/
 │   ├── print-manager.js      # 印刷機能（1,004行）✅ 完了
 │   ├── csv-manager.js        # CSV 処理（351行）✅ 完了
@@ -1179,7 +1185,7 @@ scripts/login/
 - ✅ `scripts/question-form/` - 適切に分割されている
 - ✅ `scripts/shared/` - 適切に分割されている
 - ❌ `scripts/events/app.js` - 6,070 行、要改善（リファクタリング完了、元の 10,180 行から約 4,110 行削減）
-- ❌ `scripts/question-admin/app.js` - 3,039 行、要改善（リファクタリング進行中、元の 8,180 行から約 5,141 行削減、フェーズ 17 段階 7 進行中）
+- ❌ `scripts/question-admin/app.js` - 2,754 行、要改善（リファクタリング進行中、元の 8,180 行から約 5,426 行削減、フェーズ 17 段階 7 進行中）
 - ✅ `scripts/question-admin/managers/host-integration-manager.js` - 671 行（新規作成、フェーズ 9 段階 6 完了後）
 - ✅ `scripts/question-admin/managers/state-manager.js` - 165 行（新規作成、フェーズ 10 完了後）
 - ✅ `scripts/question-admin/managers/ui-manager.js` - 188 行（新規作成、フェーズ 11 完了後）
@@ -1193,7 +1199,7 @@ scripts/login/
 - ✅ `scripts/question-admin/managers/participant-context-manager.js` - 138 行（新規作成、フェーズ 17 段階 3 完了後）
 - ✅ `scripts/question-admin/managers/participant-action-manager.js` - 168 行（新規作成、フェーズ 17 段階 4 完了後）
 - ✅ `scripts/question-admin/managers/event-handlers-manager.js` - 506 行（新規作成、フェーズ 17 段階 6 完了後）
-- ⏳ `scripts/question-admin/managers/init-manager.js` - 435 行（新規作成、フェーズ 17 段階 7 進行中、8 個の Manager 初期化を移行済み）
+- ⏳ `scripts/question-admin/managers/init-manager.js` - 648 行（新規作成、フェーズ 17 段階 7 進行中、14 個の Manager 初期化を移行済み）
 - ⚠️ `scripts/events/panels/gl-panel.js` - 3,249 行、要改善
 - ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
 - ⚠️ `scripts/login.js` - 664 行、要検討
