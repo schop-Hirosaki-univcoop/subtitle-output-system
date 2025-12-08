@@ -505,6 +505,261 @@ export class InitManager {
       findParticipantForSnapshot: this.findParticipantForSnapshot
     });
     
+    // HostIntegrationManager を初期化
+    refs.hostIntegrationManager = new ManagerClasses.HostIntegrationManager({
+      dom: this.dom,
+      state: this.state,
+      // 依存関数と定数
+      normalizeKey: this.normalizeKey,
+      selectEvent: this.selectEvent,
+      loadEvents: this.loadEvents,
+      finalizeEventLoad: this.finalizeEventLoad,
+      updateParticipantContext: this.updateParticipantContext,
+      HOST_SELECTION_ATTRIBUTE_KEYS: this.HOST_SELECTION_ATTRIBUTE_KEYS,
+      // 一時的な依存関数（後で移行予定）
+      selectSchedule: (scheduleId, options) => {
+        if (!refs.scheduleManager) return;
+        return refs.scheduleManager.selectSchedule(scheduleId, options);
+      },
+      refreshScheduleLocationHistory: this.refreshScheduleLocationHistory,
+      populateScheduleLocationOptions: this.populateScheduleLocationOptions,
+      hostSelectionSignature: this.hostSelectionSignature,
+      stopHostSelectionBridge: this.stopHostSelectionBridge,
+      startHostSelectionBridge: this.startHostSelectionBridge
+    });
+    
+    // EventHandlersManager を初期化
+    refs.eventHandlersManager = new ManagerClasses.EventHandlersManager({
+      state: this.state,
+      dom: this.dom,
+      // Managerインスタンス
+      csvManager: refs.csvManager,
+      printManager: refs.printManager,
+      confirmDialogManager: refs.confirmDialogManager,
+      // 依存関数
+      setupParticipantTabs: () => {
+        if (!refs.buttonStateManager) {
+          throw new Error("ButtonStateManager is not initialized");
+        }
+        return refs.buttonStateManager.setupParticipantTabs();
+      },
+      updateParticipantActionPanelState: () => {
+        if (!refs.buttonStateManager) {
+          throw new Error("ButtonStateManager is not initialized");
+        }
+        return refs.buttonStateManager.updateParticipantActionPanelState();
+      },
+      setLoginError: (message) => {
+        if (!refs.uiManager) {
+          throw new Error("UIManager is not initialized");
+        }
+        return refs.uiManager.setLoginError(message);
+      },
+      signInWithPopup: this.signInWithPopup,
+      signOut: this.signOut,
+      auth: this.auth,
+      provider: this.provider,
+      loadEvents: (options) => {
+        if (!refs.eventManager) return Promise.resolve();
+        return refs.eventManager.loadEvents(options);
+      },
+      loadParticipants: (options) => {
+        if (!refs.participantManager) return Promise.resolve();
+        return refs.participantManager.loadParticipants(options);
+      },
+      syncAllPrintButtonStates: () => {
+        if (!refs.buttonStateManager) {
+          throw new Error("ButtonStateManager is not initialized");
+        }
+        return refs.buttonStateManager.syncAllPrintButtonStates();
+      },
+      openStaffPrintView: () => {
+        if (!refs.printManager) {
+          throw new Error("PrintManager is not initialized");
+        }
+        return refs.printManager.openStaffPrintView();
+      },
+      openParticipantPrintView: () => {
+        if (!refs.printManager) {
+          throw new Error("PrintManager is not initialized");
+        }
+        return refs.printManager.openParticipantPrintView();
+      },
+      closeParticipantPrintPreview: () => {
+        if (!refs.printManager) {
+          throw new Error("PrintManager is not initialized");
+        }
+        return refs.printManager.closeParticipantPrintPreview();
+      },
+      printParticipantPreview: (options) => {
+        if (!refs.printManager) {
+          throw new Error("PrintManager is not initialized");
+        }
+        return refs.printManager.printParticipantPreview(options);
+      },
+      getPendingMailCount: () => {
+        if (!refs.mailManager) return 0;
+        return refs.mailManager.getPendingMailCount();
+      },
+      handleSendParticipantMail: () => {
+        if (!refs.mailManager) {
+          throw new Error("MailManager is not initialized");
+        }
+        return refs.mailManager.handleSendParticipantMail();
+      },
+      bindDialogDismiss: this.bindDialogDismiss,
+      setupPrintSettingsDialog: this.setupPrintSettingsDialog,
+      handleRelocationDialogClose: (event) => {
+        if (!refs.relocationManager) return;
+        return refs.relocationManager.handleRelocationDialogClose(event);
+      },
+      resetPrintPreview: (options) => {
+        if (!refs.printManager) {
+          throw new Error("PrintManager is not initialized");
+        }
+        return refs.printManager.resetPrintPreview(options);
+      },
+      openEventForm: ({ mode, event }) => {
+        if (!refs.eventManager) return;
+        return refs.eventManager.openEventForm({ mode, event });
+      },
+      handleUpdateEvent: async (eventId, name) => {
+        if (!refs.eventManager) {
+          throw new Error("EventManager is not initialized");
+        }
+        return await refs.eventManager.handleUpdateEvent(eventId, name);
+      },
+      handleAddEvent: async (name) => {
+        if (!refs.eventManager) {
+          throw new Error("EventManager is not initialized");
+        }
+        return await refs.eventManager.handleAddEvent(name);
+      },
+      closeDialog: this.closeDialog,
+      setFormError: this.setFormError,
+      openScheduleForm: ({ mode, schedule }) => {
+        if (!refs.scheduleManager) return;
+        return refs.scheduleManager.openScheduleForm({ mode, schedule });
+      },
+      handleUpdateSchedule: async (scheduleId, payload) => {
+        if (!refs.scheduleManager) {
+          throw new Error("ScheduleManager is not initialized");
+        }
+        return await refs.scheduleManager.handleUpdateSchedule(scheduleId, payload);
+      },
+      handleAddSchedule: async (payload) => {
+        if (!refs.scheduleManager) {
+          throw new Error("ScheduleManager is not initialized");
+        }
+        return await refs.scheduleManager.handleAddSchedule(payload);
+      },
+      syncScheduleEndMin: this.syncScheduleEndMin,
+      setCalendarPickedDate: this.setCalendarPickedDate,
+      shiftScheduleDialogCalendarMonth: this.shiftScheduleDialogCalendarMonth,
+      saveParticipantEdits: () => {
+        if (!refs.participantManager) {
+          throw new Error("ParticipantManager is not initialized");
+        }
+        return refs.participantManager.saveParticipantEdits();
+      },
+      handleRelocationFormSubmit: (event) => {
+        if (!refs.relocationManager) return;
+        return refs.relocationManager.handleRelocationFormSubmit(event);
+      },
+      handleSave: async (options) => {
+        if (!refs.participantManager) {
+          throw new Error("ParticipantManager is not initialized");
+        }
+        return await refs.participantManager.handleSave(options);
+      },
+      handleRevertParticipants: () => {
+        if (!refs.participantActionManager) {
+          throw new Error("ParticipantActionManager is not initialized");
+        }
+        return refs.participantActionManager.handleRevertParticipants();
+      },
+      handleParticipantCardListClick: (event) => {
+        if (!refs.participantUIManager) {
+          throw new Error("ParticipantUIManager is not initialized");
+        }
+        return refs.participantUIManager.handleParticipantCardListClick(event);
+      },
+      handleParticipantCardListKeydown: (event) => {
+        if (!refs.participantUIManager) {
+          throw new Error("ParticipantUIManager is not initialized");
+        }
+        return refs.participantUIManager.handleParticipantCardListKeydown(event);
+      },
+      handleParticipantListFocus: (event) => {
+        if (!refs.participantUIManager) {
+          throw new Error("ParticipantUIManager is not initialized");
+        }
+        return refs.participantUIManager.handleParticipantListFocus(event);
+      },
+      handleEditSelectedParticipant: () => {
+        if (!refs.participantActionManager) {
+          throw new Error("ParticipantActionManager is not initialized");
+        }
+        return refs.participantActionManager.handleEditSelectedParticipant();
+      },
+      handleCancelSelectedParticipant: () => {
+        if (!refs.participantActionManager) {
+          throw new Error("ParticipantActionManager is not initialized");
+        }
+        return refs.participantActionManager.handleCancelSelectedParticipant();
+      },
+      handleRelocateSelectedParticipant: () => {
+        if (!refs.relocationManager) return;
+        return refs.relocationManager.handleRelocateSelectedParticipant();
+      },
+      handleDeleteSelectedParticipant: () => {
+        if (!refs.participantActionManager) {
+          throw new Error("ParticipantActionManager is not initialized");
+        }
+        return refs.participantActionManager.handleDeleteSelectedParticipant();
+      },
+      handleClearParticipants: () => {
+        if (!refs.participantActionManager) {
+          throw new Error("ParticipantActionManager is not initialized");
+        }
+        return refs.participantActionManager.handleClearParticipants();
+      },
+      getMissingSelectionStatusMessage: () => {
+        if (!refs.stateManager) {
+          throw new Error("StateManager is not initialized");
+        }
+        return refs.stateManager.getMissingSelectionStatusMessage();
+      },
+      getSelectionRequiredMessage: (prefix) => {
+        if (!refs.stateManager) {
+          throw new Error("StateManager is not initialized");
+        }
+        return refs.stateManager.getSelectionRequiredMessage(prefix);
+      },
+      setUploadStatus: (message, variant) => {
+        if (!refs.stateManager) {
+          throw new Error("StateManager is not initialized");
+        }
+        return refs.stateManager.setUploadStatus(message, variant);
+      },
+      confirmAction: (options) => {
+        if (!refs.confirmDialogManager) {
+          throw new Error("ConfirmDialogManager is not initialized");
+        }
+        return refs.confirmDialogManager.confirmAction(options);
+      },
+      setupConfirmDialog: () => {
+        if (!refs.confirmDialogManager) {
+          throw new Error("ConfirmDialogManager is not initialized");
+        }
+        return refs.confirmDialogManager.setupConfirmDialog();
+      },
+      // ログ関数
+      logPrintInfo: this.logPrintInfo,
+      logPrintWarn: this.logPrintWarn,
+      logPrintError: this.logPrintError
+    });
+    
     // ParticipantContextManager を初期化
     refs.participantContextManager = new ManagerClasses.ParticipantContextManager({
       state: this.state,
