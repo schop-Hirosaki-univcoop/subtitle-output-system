@@ -2242,64 +2242,9 @@ function init() {
   relocationManager = managerRefs.relocationManager;
   hostIntegrationManager = managerRefs.hostIntegrationManager;
   eventHandlersManager = managerRefs.eventHandlersManager;
-  
-  // 残りのManager初期化（段階的にInitManagerに移行予定）
-  // 現在はapp.jsで初期化し、managerRefsにも代入
-  // MailManager, AuthManager, ParticipantManager, RelocationManager, HostIntegrationManager, EventHandlersManagerはInitManagerに移行済み
-
-  // ScheduleManager を初期化
-  scheduleManager = new ScheduleManager({
-    dom,
-    state,
-    calendarState,
-    // 依存関数と定数
-    loadEvents: () => {
-      if (!eventManager) return Promise.resolve();
-      return eventManager.loadEvents();
-    },
-    selectEvent: (eventId) => {
-      if (!eventManager) return;
-      eventManager.selectEvent(eventId);
-    },
-    selectSchedule: (scheduleId, options) => {
-      // 循環参照を避けるため、ここで直接実装を呼び出す
-      if (!scheduleManager) return;
-      scheduleManager.selectSchedule(scheduleId, options);
-    },
-    setCalendarPickedDate,
-    renderParticipants: () => {
-      if (!participantManager) return;
-      participantManager.renderParticipants();
-    },
-    updateParticipantContext,
-    captureParticipantBaseline,
-    syncSaveButtonState,
-    queueRelocationPrompt,
-    getSelectionBroadcastSource,
-    populateScheduleLocationOptions,
-    prepareScheduleDialogCalendar,
-    syncScheduleEndMin,
-    openDialog,
-    closeDialog,
-    setFormError,
-    confirmAction,
-    setUploadStatus,
-    getScheduleRecord,
-    loadParticipants: (options) => {
-      if (!participantManager) return Promise.resolve();
-      return participantManager.loadParticipants(options);
-    },
-    broadcastSelectionChange,
-    selectScheduleSelf: null // 後で設定
-  });
-  managerRefs.scheduleManager = scheduleManager;
-  
-  // 循環参照を避けるため、selectScheduleSelf を設定
-  scheduleManager.selectScheduleSelf = scheduleManager.selectSchedule.bind(scheduleManager);
-  
-  // すべてのManagerをグローバル変数に同期（managerRefsから）
-  // tokenApiManager, shareClipboardManager, participantContextManager, participantActionManager, glManager, participantUIManager, csvManager, eventManager, mailManager, authManager, participantManager, relocationManager, hostIntegrationManager, eventHandlersManagerは既にInitManagerで初期化され、上で同期済み
   scheduleManager = managerRefs.scheduleManager;
+  
+  // すべてのManagerはInitManagerに移行済み
   
   // 初期化後の処理はInitManagerのinit()メソッドで実行される
   // 以下の処理はInitManagerに移行済み:

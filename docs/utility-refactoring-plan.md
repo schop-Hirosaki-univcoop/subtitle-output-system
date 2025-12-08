@@ -281,10 +281,10 @@
 
 **現在の進捗**:
 
-- `app.js`: 2,316 行（InitManager 初期化コード追加により一時的に増加、移行完了後に削減予定）
-- `init-manager.js`: 1,084 行（基本構造 + 20 個の Manager 初期化 + 初期化後の処理）
-- 完了: PrintManager, StateManager, UIManager, ConfirmDialogManager, ScheduleUtilityManager, ButtonStateManager, TokenApiManager, ShareClipboardManager, ParticipantContextManager, ParticipantActionManager, GlManager, ParticipantUIManager, CsvManager, EventManager, MailManager, AuthManager, ParticipantManager, RelocationManager, HostIntegrationManager, EventHandlersManager の初期化を移行、初期化後の処理を移行、window.questionAdminEmbed を移行、api オブジェクトの設定を実装、managerRefs への代入を追加、グローバル変数への同期を追加、initAuthWatcher()のフォールバック実装を整理
-- 残り: 1 個の Manager 初期化を InitManager に移行（現在は app.js で初期化し managerRefs に代入）
+- `app.js`: 2,263 行（すべての Manager 初期化を InitManager に移行完了）
+- `init-manager.js`: 1,133 行（基本構造 + 21 個の Manager 初期化 + 初期化後の処理）
+- 完了: PrintManager, StateManager, UIManager, ConfirmDialogManager, ScheduleUtilityManager, ButtonStateManager, TokenApiManager, ShareClipboardManager, ParticipantContextManager, ParticipantActionManager, GlManager, ParticipantUIManager, CsvManager, EventManager, MailManager, AuthManager, ParticipantManager, RelocationManager, HostIntegrationManager, EventHandlersManager, ScheduleManager の初期化を移行、初期化後の処理を移行、window.questionAdminEmbed を移行、api オブジェクトの設定を実装、循環参照の処理（selectScheduleSelf）を実装、managerRefs への代入を追加、グローバル変数への同期を追加、initAuthWatcher()のフォールバック実装を整理
+- 完了: すべての Manager 初期化を InitManager に移行完了
 
 **依存関係**:
 

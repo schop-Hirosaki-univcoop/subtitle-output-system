@@ -973,6 +973,55 @@ export class InitManager {
       getSelectionBroadcastSource: this.getSelectionBroadcastSource
     });
     
+    // ScheduleManager を初期化
+    refs.scheduleManager = new ManagerClasses.ScheduleManager({
+      dom: this.dom,
+      state: this.state,
+      calendarState: this.calendarState,
+      // 依存関数と定数
+      loadEvents: () => {
+        if (!refs.eventManager) return Promise.resolve();
+        return refs.eventManager.loadEvents();
+      },
+      selectEvent: (eventId) => {
+        if (!refs.eventManager) return;
+        refs.eventManager.selectEvent(eventId);
+      },
+      selectSchedule: (scheduleId, options) => {
+        // 循環参照を避けるため、ここで直接実装を呼び出す
+        if (!refs.scheduleManager) return;
+        return refs.scheduleManager.selectSchedule(scheduleId, options);
+      },
+      setCalendarPickedDate: this.setCalendarPickedDate,
+      renderParticipants: () => {
+        if (!refs.participantManager) return;
+        return refs.participantManager.renderParticipants();
+      },
+      updateParticipantContext: this.updateParticipantContext,
+      captureParticipantBaseline: this.captureParticipantBaseline,
+      syncSaveButtonState: this.syncSaveButtonState,
+      queueRelocationPrompt: this.queueRelocationPrompt,
+      getSelectionBroadcastSource: this.getSelectionBroadcastSource,
+      populateScheduleLocationOptions: this.populateScheduleLocationOptions,
+      prepareScheduleDialogCalendar: this.prepareScheduleDialogCalendar,
+      syncScheduleEndMin: this.syncScheduleEndMin,
+      openDialog: this.openDialog,
+      closeDialog: this.closeDialog,
+      setFormError: this.setFormError,
+      confirmAction: this.confirmAction,
+      setUploadStatus: this.setUploadStatus,
+      getScheduleRecord: this.getScheduleRecord,
+      loadParticipants: (options) => {
+        if (!refs.participantManager) return Promise.resolve();
+        return refs.participantManager.loadParticipants(options);
+      },
+      broadcastSelectionChange: this.broadcastSelectionChange,
+      selectScheduleSelf: null // 後で設定
+    });
+    
+    // 循環参照を避けるため、selectScheduleSelf を設定
+    refs.scheduleManager.selectScheduleSelf = refs.scheduleManager.selectSchedule.bind(refs.scheduleManager);
+    
     // ConfirmDialogManagerのセットアップ
     if (refs.confirmDialogManager) {
       refs.confirmDialogManager.setupConfirmDialog();
