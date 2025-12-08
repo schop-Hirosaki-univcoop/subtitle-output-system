@@ -16,6 +16,8 @@ import { ensureString, formatDateTimeLocal, logError } from "../helpers.js";
 import { normalizeFacultyList } from "../tools/gl-faculty-utils.js";
 import { buildGlShiftTablePrintHtml, logPrintWarn } from "../../shared/print-utils.js";
 // ユーティリティ関数と定数を gl-utils.js からインポート（フェーズ2 段階1）
+// UI描画機能を gl-renderer.js からインポート（フェーズ2 段階2）
+import { GlRenderer } from "./gl-renderer.js";
 import {
   ASSIGNMENT_VALUE_ABSENT,
   ASSIGNMENT_VALUE_STAFF,
@@ -100,6 +102,31 @@ export class GlToolManager {
     this.activeTab = "config";
     this.selectionUnsubscribe = this.app.addSelectionListener((detail) => this.handleSelection(detail));
     this.eventsUnsubscribe = this.app.addEventListener((events) => this.handleEvents(events));
+    
+    // GlRendererのインスタンスを作成（フェーズ2 段階2）
+    this.renderer = new GlRenderer({
+      dom: this.dom,
+      getState: () => ({
+        currentEventId: this.currentEventId,
+        currentEventName: this.currentEventName,
+        currentSchedules: this.currentSchedules,
+        config: this.config,
+        applications: this.applications,
+        assignments: this.assignments,
+        filter: this.filter,
+        applicantSourceFilter: this.applicantSourceFilter,
+        applicantRoleFilter: this.applicantRoleFilter,
+        applicationView: this.applicationView,
+        loading: this.loading
+      }),
+      onInternalAcademicLevelChange: (select) => this.handleInternalAcademicLevelChange(select),
+      getInternalFaculties: () => this.getInternalFaculties(),
+      getAssignmentForSchedule: (glId, scheduleId) => this.getAssignmentForSchedule(glId, scheduleId),
+      resolveAssignmentBucket: (value, available) => this.resolveAssignmentBucket(value, available),
+      createBucketMatcher: () => this.createBucketMatcher(),
+      updateScheduleTeamNote: (element, scheduleId) => this.updateScheduleTeamNote(element, scheduleId)
+    });
+    
     this.bindDom();
     this.updateConfigVisibility();
     this.resetInternalForm();
@@ -155,28 +182,8 @@ export class GlToolManager {
   }
 
   renderInternalGradeOptions() {
-    const select = this.dom.glInternalGradeInput;
-    if (!(select instanceof HTMLSelectElement)) {
-      return;
-    }
-    const current = select.value;
-    select.innerHTML = "";
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = "学年を選択してください";
-    placeholder.disabled = true;
-    placeholder.selected = true;
-    placeholder.dataset.placeholder = "true";
-    select.append(placeholder);
-    INTERNAL_GRADE_OPTIONS.forEach((value) => {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = value;
-      select.append(option);
-    });
-    if (INTERNAL_GRADE_OPTIONS.includes(current)) {
-      select.value = current;
-    }
+    // GlRendererに委譲（フェーズ2 段階2）
+    this.renderer.renderInternalGradeOptions();
   }
 
   getInternalFaculties() {
@@ -186,35 +193,8 @@ export class GlToolManager {
   }
 
   renderInternalFaculties() {
-    const select = this.dom.glInternalFacultyInput;
-    if (!(select instanceof HTMLSelectElement)) {
-      return;
-    }
-    const faculties = this.getInternalFaculties();
-    const current = select.value;
-    select.innerHTML = "";
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = "学部を選択してください";
-    placeholder.disabled = true;
-    placeholder.selected = true;
-    placeholder.dataset.placeholder = "true";
-    select.append(placeholder);
-    faculties.forEach((entry) => {
-      const faculty = ensureString(entry.faculty);
-      if (!faculty) return;
-      const option = document.createElement("option");
-      option.value = faculty;
-      option.textContent = faculty;
-      select.append(option);
-    });
-    const customOption = document.createElement("option");
-    customOption.value = INTERNAL_CUSTOM_OPTION_VALUE;
-    customOption.textContent = "その他";
-    select.append(customOption);
-    if (faculties.some((entry) => ensureString(entry.faculty) === current)) {
-      select.value = current;
-    }
+    // GlRendererに委譲（フェーズ2 段階2）
+    this.renderer.renderInternalFaculties();
   }
 
   clearInternalAcademicFields() {
@@ -260,53 +240,10 @@ export class GlToolManager {
   }
 
   renderInternalAcademicLevel(level, depth) {
-    if (!this.dom.glInternalAcademicFields || !this.dom.glInternalAcademicSelectTemplate) return;
-    const fragment = this.dom.glInternalAcademicSelectTemplate.content.cloneNode(true);
-    const field = fragment.querySelector(".gl-academic-field");
-    const labelEl = field?.querySelector(".gl-academic-label");
-    const select = field?.querySelector(".gl-academic-select");
-    if (!(field instanceof HTMLElement) || !(select instanceof HTMLSelectElement)) return;
-    field.dataset.depth = String(depth);
-    const selectId = `gl-internal-academic-select-${depth}`;
-    select.id = selectId;
-    select.dataset.depth = String(depth);
-    select.dataset.levelLabel = level.label;
-    if (labelEl instanceof HTMLLabelElement) {
-      labelEl.setAttribute("for", selectId);
-      labelEl.textContent = level.label;
-    }
-    select.innerHTML = "";
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.disabled = true;
-    placeholder.selected = true;
-    placeholder.dataset.placeholder = "true";
-    placeholder.textContent = level.placeholder || `${level.label}を選択してください`;
-    select.append(placeholder);
-    level.options.forEach((option, index) => {
-      const opt = document.createElement("option");
-      opt.value = option.value;
-      opt.textContent = option.label;
-      opt.dataset.optionIndex = String(index);
-      if (option.children) {
-        opt.dataset.hasChildren = "true";
-      }
-      select.append(opt);
+    // GlRendererに委譲（フェーズ2 段階2）
+    this.renderer.renderInternalAcademicLevel(level, depth, this.internalUnitLevelMap, (select) => {
+      this.handleInternalAcademicLevelChange(select);
     });
-    if (level.allowCustom !== false) {
-      const customOption = document.createElement("option");
-      customOption.value = INTERNAL_CUSTOM_OPTION_VALUE;
-      customOption.textContent = "その他";
-      customOption.dataset.isCustom = "true";
-      select.append(customOption);
-    }
-    this.internalUnitLevelMap.set(select, level);
-    select.addEventListener("change", (event) => {
-      if (event.target instanceof HTMLSelectElement) {
-        this.handleInternalAcademicLevelChange(event.target);
-      }
-    });
-    this.dom.glInternalAcademicFields.append(field);
   }
 
   handleInternalAcademicLevelChange(select) {
@@ -799,108 +736,17 @@ export class GlToolManager {
   }
 
   createScheduleTeamRowElement() {
-    const template = this.dom.glScheduleTeamTemplate;
-    if (template?.content?.firstElementChild) {
-      return template.content.firstElementChild.cloneNode(true);
-    }
-    const wrapper = document.createElement("div");
-    wrapper.className = "gl-schedule-team";
-    const header = document.createElement("div");
-    header.className = "gl-schedule-team__header";
-    const title = document.createElement("div");
-    title.className = "gl-schedule-team__title";
-    const label = document.createElement("span");
-    label.className = "gl-schedule-team__label";
-    label.dataset.role = "schedule-label";
-    const date = document.createElement("span");
-    date.className = "gl-schedule-team__date";
-    date.dataset.role = "schedule-date";
-    title.append(label, date);
-    const field = document.createElement("label");
-    field.className = "gl-schedule-team__field";
-    const fieldLabel = document.createElement("span");
-    fieldLabel.className = "gl-schedule-team__field-label";
-    fieldLabel.textContent = "班の数";
-    const input = document.createElement("input");
-    input.className = "input input--dense gl-schedule-team__input";
-    input.type = "number";
-    input.min = "0";
-    input.max = String(MAX_TEAM_COUNT);
-    input.step = "1";
-    input.inputMode = "numeric";
-    input.dataset.scheduleTeamInput = "true";
-    field.append(fieldLabel, input);
-    header.append(title, field);
-    const note = document.createElement("p");
-    note.className = "gl-schedule-team__note";
-    note.dataset.role = "schedule-note";
-    wrapper.append(header, note);
-    return wrapper;
+    // GlRendererに委譲（フェーズ2 段階2）
+    return this.renderer.createScheduleTeamRowElement();
   }
 
   renderScheduleTeamControls() {
-    const container = this.dom.glScheduleTeamsList;
-    const empty = this.dom.glScheduleTeamsEmpty;
-    if (!container) {
-      return;
-    }
-    container.innerHTML = "";
-    const schedules = buildRenderableSchedules(
+    // GlRendererに委譲（フェーズ2 段階2）
+    this.renderer.renderScheduleTeamControls(
       this.currentSchedules,
-      this.config?.schedules || [],
-      this.applications
+      this.applications,
+      this.config
     );
-    if (!schedules.length) {
-      container.hidden = true;
-      if (empty) {
-        empty.hidden = false;
-      }
-      return;
-    }
-    container.hidden = false;
-    if (empty) {
-      empty.hidden = true;
-    }
-    const fragment = document.createDocumentFragment();
-    const scheduleTeams = this.config?.scheduleTeams && typeof this.config.scheduleTeams === "object"
-      ? this.config.scheduleTeams
-      : {};
-    schedules.forEach((schedule) => {
-      const element = this.createScheduleTeamRowElement();
-      element.dataset.scheduleId = ensureString(schedule.id);
-      const labelEl = element.querySelector('[data-role="schedule-label"]');
-      if (labelEl) {
-        labelEl.textContent = ensureString(schedule.label) || ensureString(schedule.date) || schedule.id || "日程";
-      }
-      const dateEl = element.querySelector('[data-role="schedule-date"]');
-      if (dateEl) {
-        const dateText = ensureString(schedule.date);
-        dateEl.textContent = dateText;
-        dateEl.hidden = !dateText;
-      }
-      const input = element.querySelector('[data-schedule-team-input]');
-      if (input instanceof HTMLInputElement) {
-        input.value = "";
-        input.dataset.previousValue = "";
-        const hasOverride = Object.prototype.hasOwnProperty.call(scheduleTeams, schedule.id);
-        const entry = hasOverride ? scheduleTeams[schedule.id] : null;
-        let overrideCount = null;
-        if (entry) {
-          if (Number.isFinite(entry?.teamCount)) {
-            overrideCount = Math.max(0, Math.min(MAX_TEAM_COUNT, Math.floor(Number(entry.teamCount))));
-          } else if (Array.isArray(entry?.teams)) {
-            overrideCount = deriveTeamCountFromConfig(entry.teams);
-          }
-        }
-        if (Number.isFinite(overrideCount)) {
-          input.value = String(overrideCount);
-          input.dataset.previousValue = String(overrideCount);
-        }
-      }
-      fragment.append(element);
-      this.updateScheduleTeamNote(element, schedule.id);
-    });
-    container.append(fragment);
   }
 
   collectScheduleTeamSettings(defaultTeams = []) {
@@ -1373,50 +1219,14 @@ export class GlToolManager {
   }
 
   renderInternalShiftList(shiftsOverride = null) {
-    const container = this.dom.glInternalShiftList;
-    if (!container) {
-      return;
-    }
-    container.innerHTML = "";
+    // GlRendererに委譲（フェーズ2 段階2）
     const schedules = Array.isArray(this.currentSchedules) ? this.currentSchedules : [];
     const shiftMap = shiftsOverride && typeof shiftsOverride === "object"
       ? { __default__: true, ...shiftsOverride }
       : this.internalEditingShifts && typeof this.internalEditingShifts === "object"
         ? { __default__: true, ...this.internalEditingShifts }
         : this.buildInternalDefaultShifts();
-    if (!schedules.length) {
-      const note = document.createElement("p");
-      note.className = "gl-internal-shifts__empty";
-      note.textContent = "日程がまだありません。募集設定から日程を追加してください。";
-      container.append(note);
-      return;
-    }
-    schedules.forEach((schedule) => {
-      const wrapper = document.createElement("label");
-      wrapper.className = "gl-internal-shifts__item";
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "gl-internal-shifts__checkbox";
-      checkbox.dataset.scheduleId = ensureString(schedule.id);
-      const key = ensureString(schedule.id);
-      const fallback = Object.prototype.hasOwnProperty.call(shiftMap, "__default__")
-        ? Boolean(shiftMap.__default__)
-        : true;
-      const value = Object.prototype.hasOwnProperty.call(shiftMap, key) ? Boolean(shiftMap[key]) : fallback;
-      checkbox.checked = value;
-      const label = document.createElement("span");
-      label.className = "gl-internal-shifts__label";
-      label.textContent = ensureString(schedule.label) || ensureString(schedule.date) || key || "日程";
-      const date = ensureString(schedule.date);
-      if (date) {
-        const meta = document.createElement("span");
-        meta.className = "gl-internal-shifts__meta";
-        meta.textContent = date;
-        label.append(document.createElement("br"), meta);
-      }
-      wrapper.append(checkbox, label);
-      container.append(wrapper);
-    });
+    this.renderer.renderInternalShiftList(schedules, shiftMap);
   }
 
   collectInternalShifts() {
@@ -1710,42 +1520,8 @@ export class GlToolManager {
   }
 
   renderInternalList() {
-    const list = this.dom.glInternalList;
-    if (!list) {
-      return;
-    }
-    list.innerHTML = "";
-    if (!this.currentEventId) {
-      const note = document.createElement("li");
-      note.className = "gl-internal-list__empty";
-      note.textContent = "イベントを選択してください。";
-      list.append(note);
-      return;
-    }
-    const entries = this.applications
-      .filter((application) => application && application.sourceType === "internal")
-      .sort((a, b) => b.createdAt - a.createdAt || a.name.localeCompare(b.name, "ja", { numeric: true }));
-    if (!entries.length) {
-      const empty = document.createElement("li");
-      empty.className = "gl-internal-list__empty";
-      empty.textContent = "内部スタッフはまだ登録されていません。";
-      list.append(empty);
-      return;
-    }
-    entries.forEach((entry) => {
-      const item = document.createElement("li");
-      item.className = "gl-internal-list__item";
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "gl-internal-list__button";
-      button.dataset.internalId = ensureString(entry.id);
-      const name = document.createElement("span");
-      name.className = "gl-internal-list__name";
-      name.textContent = ensureString(entry.name) || "名前未設定";
-      button.append(name);
-      item.append(button);
-      list.append(item);
-    });
+    // GlRendererに委譲（フェーズ2 段階2）
+    this.renderer.renderInternalList(this.applications, this.currentEventId);
   }
 
   renderApplications() {
