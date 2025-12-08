@@ -324,6 +324,187 @@ export class InitManager {
       FORM_PAGE_PATH: this.FORM_PAGE_PATH
     });
     
+    // apiオブジェクトを設定（tokenApiManager初期化後に設定）
+    if (!this.api && refs.tokenApiManager) {
+      this.api = refs.tokenApiManager.createApiClient(this.getAuthIdToken);
+    }
+    
+    // MailManager を初期化
+    refs.mailManager = new ManagerClasses.MailManager({
+      dom: this.dom,
+      state: this.state,
+      // 依存関数と定数
+      api: this.api,
+      setUploadStatus: this.setUploadStatus,
+      getSelectionRequiredMessage: this.getSelectionRequiredMessage,
+      renderParticipants: this.renderParticipants,
+      hasUnsavedChanges: this.hasUnsavedChanges,
+      captureParticipantBaseline: this.captureParticipantBaseline,
+      setActionButtonState: this.setActionButtonState,
+      confirmAction: this.confirmAction
+    });
+    
+    // AuthManager を初期化
+    refs.authManager = new ManagerClasses.AuthManager({
+      dom: this.dom,
+      state: this.state,
+      // 依存関数と定数
+      api: this.api,
+      auth: this.auth,
+      getAuthIdToken: this.getAuthIdToken,
+      firebaseConfig: this.firebaseConfig,
+      goToLogin: this.goToLogin,
+      setAuthUi: this.setAuthUi,
+      setLoginError: this.setLoginError,
+      showLoader: this.showLoader,
+      hideLoader: this.hideLoader,
+      initLoaderSteps: this.initLoaderSteps,
+      setLoaderStep: this.setLoaderStep,
+      finishLoaderSteps: this.finishLoaderSteps,
+      resetState: this.resetState,
+      renderUserSummary: this.renderUserSummary,
+      isEmbeddedMode: this.isEmbeddedMode,
+      STEP_LABELS: this.STEP_LABELS,
+      ensureTokenSnapshot: this.ensureTokenSnapshot,
+      loadEvents: (options) => {
+        if (!refs.eventManager) return Promise.resolve();
+        return refs.eventManager.loadEvents(options);
+      },
+      loadParticipants: (options) => {
+        if (!refs.participantManager) return Promise.resolve();
+        return refs.participantManager.loadParticipants(options);
+      },
+      drainQuestionQueue: this.drainQuestionQueue,
+      resolveEmbedReady: this.resolveEmbedReady,
+      maybeFocusInitialSection: this.maybeFocusInitialSection,
+      sleep: this.sleep,
+      setUploadStatus: this.setUploadStatus,
+      redirectingToIndexRef: this.redirectingToIndexRef
+    });
+    
+    // ParticipantManager を初期化
+    refs.participantManager = new ManagerClasses.ParticipantManager({
+      dom: this.dom,
+      state: this.state,
+      // 依存関数と定数
+      readHostSelectionDataset: this.readHostSelectionDataset,
+      getHostSelectionElement: this.getHostSelectionElement,
+      loadGlDataForEvent: this.loadGlDataForEvent,
+      renderEvents: this.renderEvents,
+      renderSchedules: () => {
+        if (!refs.scheduleManager) return;
+        return refs.scheduleManager.renderSchedules();
+      },
+      updateParticipantContext: this.updateParticipantContext,
+      captureParticipantBaseline: this.captureParticipantBaseline,
+      syncSaveButtonState: this.syncSaveButtonState,
+      syncMailActionState: () => {
+        if (!refs.mailManager) return;
+        return refs.mailManager.syncMailActionState();
+      },
+      syncAllPrintButtonStates: this.syncAllPrintButtonStates,
+      syncClearButtonState: this.syncClearButtonState,
+      syncTemplateButtons: this.syncTemplateButtons,
+      syncSelectedEventSummary: this.syncSelectedEventSummary,
+      renderParticipantChangePreview: (diff, changeInfoByKey, participants) => {
+        if (!refs.participantUIManager) {
+          throw new Error("ParticipantUIManager is not initialized");
+        }
+        return refs.participantUIManager.renderParticipantChangePreview(diff, changeInfoByKey, participants);
+      },
+      renderRelocationPrompt: () => {
+        if (!refs.relocationManager) return;
+        return refs.relocationManager.renderRelocationPrompt();
+      },
+      applyParticipantSelectionStyles: this.applyParticipantSelectionStyles,
+      updateParticipantActionPanelState: this.updateParticipantActionPanelState,
+      emitParticipantSyncEvent: this.emitParticipantSyncEvent,
+      describeScheduleRange: this.describeScheduleRange,
+      ensureTokenSnapshot: this.ensureTokenSnapshot,
+      generateQuestionToken: this.generateQuestionToken,
+      setUploadStatus: this.setUploadStatus,
+      // renderParticipants に必要な依存関係
+      buildParticipantCard: (entry, index, options) => {
+        if (!refs.participantUIManager) {
+          throw new Error("ParticipantUIManager is not initialized");
+        }
+        return refs.participantUIManager.buildParticipantCard(entry, index, options);
+      },
+      getParticipantGroupKey: this.getParticipantGroupKey,
+      createParticipantGroupElements: this.createParticipantGroupElements,
+      getEventGlRoster: this.getEventGlRoster,
+      getEventGlAssignmentsMap: this.getEventGlAssignmentsMap,
+      resolveScheduleAssignment: this.resolveScheduleAssignment,
+      renderGroupGlAssignments: this.renderGroupGlAssignments,
+      clearParticipantSelection: this.clearParticipantSelection,
+      participantChangeKey: this.participantChangeKey,
+      CANCEL_LABEL: this.CANCEL_LABEL,
+      GL_STAFF_GROUP_KEY: this.GL_STAFF_GROUP_KEY,
+      // CRUD機能に必要な依存関係
+      getDisplayParticipantId: this.getDisplayParticipantId,
+      ensurePendingRelocationMap: () => {
+        if (!refs.relocationManager) return new Map();
+        return refs.relocationManager.ensurePendingRelocationMap();
+      },
+      applyRelocationDraft: (entry, destinationScheduleId, destinationTeamNumber) => {
+        if (!refs.relocationManager) return;
+        return refs.relocationManager.applyRelocationDraft(entry, destinationScheduleId, destinationTeamNumber);
+      },
+      ensureTeamAssignmentMap: this.ensureTeamAssignmentMap,
+      applyAssignmentsToEventCache: this.applyAssignmentsToEventCache,
+      hasUnsavedChanges: this.hasUnsavedChanges,
+      confirmAction: this.confirmAction,
+      setFormError: this.setFormError,
+      openDialog: this.openDialog,
+      closeDialog: this.closeDialog,
+      RELOCATE_LABEL: this.RELOCATE_LABEL,
+      // handleSave に必要な依存関係
+      getScheduleRecord: this.getScheduleRecord,
+      loadEvents: this.loadEvents
+    });
+    
+    // RelocationManager を初期化
+    refs.relocationManager = new ManagerClasses.RelocationManager({
+      dom: this.dom,
+      state: this.state,
+      // 依存関数と定数
+      RELOCATE_LABEL: this.RELOCATE_LABEL,
+      resolveParticipantActionTarget: (options) => {
+        if (!refs.participantUIManager) {
+          throw new Error("ParticipantUIManager is not initialized");
+        }
+        return refs.participantUIManager.resolveParticipantActionTarget(options);
+      },
+      resolveParticipantUid: this.resolveParticipantUid,
+      resolveParticipantStatus: this.resolveParticipantStatus,
+      getScheduleLabel: this.getScheduleLabel,
+      buildScheduleOptionLabel: this.buildScheduleOptionLabel,
+      normalizeGroupNumberValue: this.normalizeGroupNumberValue,
+      sortParticipants: this.sortParticipants,
+      syncCurrentScheduleCache: this.syncCurrentScheduleCache,
+      updateDuplicateMatches: this.updateDuplicateMatches,
+      renderParticipants: () => {
+        if (!refs.participantManager) return;
+        return refs.participantManager.renderParticipants();
+      },
+      syncSaveButtonState: this.syncSaveButtonState,
+      setUploadStatus: this.setUploadStatus,
+      openDialog: this.openDialog,
+      closeDialog: this.closeDialog,
+      setFormError: this.setFormError,
+      formatParticipantIdentifier: this.formatParticipantIdentifier,
+      commitParticipantQuickEdit: (index, updated, options) => {
+        if (!refs.participantUIManager) {
+          throw new Error("ParticipantUIManager is not initialized");
+        }
+        return refs.participantUIManager.commitParticipantQuickEdit(index, updated, options);
+      },
+      getScheduleRecord: this.getScheduleRecord,
+      ensureRowKey: this.ensureRowKey,
+      ensureTeamAssignmentMap: this.ensureTeamAssignmentMap,
+      findParticipantForSnapshot: this.findParticipantForSnapshot
+    });
+    
     // ParticipantContextManager を初期化
     refs.participantContextManager = new ManagerClasses.ParticipantContextManager({
       state: this.state,

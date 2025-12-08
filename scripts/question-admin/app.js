@@ -2236,189 +2236,14 @@ function init() {
   participantUIManager = managerRefs.participantUIManager;
   csvManager = managerRefs.csvManager;
   eventManager = managerRefs.eventManager;
+  mailManager = managerRefs.mailManager;
+  authManager = managerRefs.authManager;
+  participantManager = managerRefs.participantManager;
+  relocationManager = managerRefs.relocationManager;
   
   // 残りのManager初期化（段階的にInitManagerに移行予定）
   // 現在はapp.jsで初期化し、managerRefsにも代入
-  
-  // MailManager を初期化
-  mailManager = new MailManager({
-    dom,
-    state,
-    // 依存関数と定数
-    api,
-    setUploadStatus,
-    getSelectionRequiredMessage,
-    renderParticipants,
-    hasUnsavedChanges,
-    captureParticipantBaseline,
-    setActionButtonState,
-    confirmAction
-  });
-  managerRefs.mailManager = mailManager;
-  
-  // AuthManager を初期化
-  authManager = new AuthManager({
-    dom,
-    state,
-    // 依存関数と定数
-    api,
-    auth,
-    getAuthIdToken,
-    firebaseConfig,
-    goToLogin,
-    setAuthUi,
-    setLoginError,
-    showLoader,
-    hideLoader,
-    initLoaderSteps,
-    setLoaderStep,
-    finishLoaderSteps,
-    resetState,
-    renderUserSummary,
-    isEmbeddedMode,
-    STEP_LABELS,
-    ensureTokenSnapshot,
-    loadEvents: (options) => {
-      if (!eventManager) return Promise.resolve();
-      return eventManager.loadEvents(options);
-    },
-    loadParticipants: (options) => {
-      if (!participantManager) return Promise.resolve();
-      return participantManager.loadParticipants(options);
-    },
-    drainQuestionQueue,
-    resolveEmbedReady,
-    maybeFocusInitialSection,
-    sleep,
-    setUploadStatus,
-    redirectingToIndexRef
-  });
-  managerRefs.authManager = authManager;
-  
-  // ParticipantManager を初期化
-  participantManager = new ParticipantManager({
-    dom,
-    state,
-    // 依存関数と定数
-    readHostSelectionDataset,
-    getHostSelectionElement,
-    loadGlDataForEvent,
-    renderEvents,
-    renderSchedules: () => {
-      if (!scheduleManager) return;
-      scheduleManager.renderSchedules();
-    },
-    updateParticipantContext,
-    captureParticipantBaseline,
-    syncSaveButtonState,
-    syncMailActionState: () => {
-      if (!mailManager) return;
-      mailManager.syncMailActionState();
-    },
-    syncAllPrintButtonStates,
-    syncClearButtonState,
-    syncTemplateButtons,
-    syncSelectedEventSummary,
-    renderParticipantChangePreview: (diff, changeInfoByKey, participants) => {
-      if (!participantUIManager) {
-        throw new Error("ParticipantUIManager is not initialized");
-      }
-      return participantUIManager.renderParticipantChangePreview(diff, changeInfoByKey, participants);
-    },
-    renderRelocationPrompt: () => {
-      if (!relocationManager) return;
-      relocationManager.renderRelocationPrompt();
-    },
-    applyParticipantSelectionStyles,
-    updateParticipantActionPanelState,
-    emitParticipantSyncEvent,
-    describeScheduleRange,
-    ensureTokenSnapshot,
-    generateQuestionToken,
-    setUploadStatus,
-    // renderParticipants に必要な依存関係
-    buildParticipantCard: (entry, index, options) => {
-      if (!participantUIManager) {
-        throw new Error("ParticipantUIManager is not initialized");
-      }
-      return participantUIManager.buildParticipantCard(entry, index, options);
-    },
-    getParticipantGroupKey,
-    createParticipantGroupElements,
-    getEventGlRoster,
-    getEventGlAssignmentsMap,
-    resolveScheduleAssignment,
-    renderGroupGlAssignments,
-    clearParticipantSelection,
-    participantChangeKey,
-    CANCEL_LABEL,
-    GL_STAFF_GROUP_KEY,
-    // CRUD機能に必要な依存関係
-    getDisplayParticipantId,
-    ensurePendingRelocationMap: () => {
-      if (!relocationManager) return new Map();
-      return relocationManager.ensurePendingRelocationMap();
-    },
-    applyRelocationDraft: (entry, destinationScheduleId, destinationTeamNumber) => {
-      if (!relocationManager) return;
-      relocationManager.applyRelocationDraft(entry, destinationScheduleId, destinationTeamNumber);
-    },
-    ensureTeamAssignmentMap,
-    applyAssignmentsToEventCache,
-    hasUnsavedChanges,
-    confirmAction,
-    setFormError,
-    openDialog,
-    closeDialog,
-    RELOCATE_LABEL,
-    // handleSave に必要な依存関係
-    getScheduleRecord,
-    loadEvents
-  });
-  managerRefs.participantManager = participantManager;
-  
-  // RelocationManager を初期化
-  relocationManager = new RelocationManager({
-    dom,
-    state,
-    // 依存関数と定数
-    RELOCATE_LABEL,
-    resolveParticipantActionTarget: (options) => {
-      if (!participantUIManager) {
-        throw new Error("ParticipantUIManager is not initialized");
-      }
-      return participantUIManager.resolveParticipantActionTarget(options);
-    },
-    resolveParticipantUid,
-    resolveParticipantStatus,
-    getScheduleLabel,
-    buildScheduleOptionLabel,
-    normalizeGroupNumberValue,
-    sortParticipants,
-    syncCurrentScheduleCache,
-    updateDuplicateMatches,
-    renderParticipants: () => {
-      if (!participantManager) return;
-      participantManager.renderParticipants();
-    },
-    syncSaveButtonState,
-    setUploadStatus,
-    openDialog,
-    closeDialog,
-    setFormError,
-    formatParticipantIdentifier,
-    commitParticipantQuickEdit: (index, updated, options) => {
-      if (!participantUIManager) {
-        throw new Error("ParticipantUIManager is not initialized");
-      }
-      return participantUIManager.commitParticipantQuickEdit(index, updated, options);
-    },
-    getScheduleRecord,
-    ensureRowKey,
-    ensureTeamAssignmentMap,
-    findParticipantForSnapshot
-  });
-  managerRefs.relocationManager = relocationManager;
+  // MailManager, AuthManager, ParticipantManager, RelocationManagerはInitManagerに移行済み
   
   // HostIntegrationManager を初期化
   hostIntegrationManager = new HostIntegrationManager({
@@ -2728,11 +2553,7 @@ function init() {
   scheduleManager.selectScheduleSelf = scheduleManager.selectSchedule.bind(scheduleManager);
   
   // すべてのManagerをグローバル変数に同期（managerRefsから）
-  // tokenApiManager, shareClipboardManager, participantContextManager, participantActionManager, glManager, participantUIManager, csvManager, eventManagerは既にInitManagerで初期化され、上で同期済み
-  mailManager = managerRefs.mailManager;
-  authManager = managerRefs.authManager;
-  participantManager = managerRefs.participantManager;
-  relocationManager = managerRefs.relocationManager;
+  // tokenApiManager, shareClipboardManager, participantContextManager, participantActionManager, glManager, participantUIManager, csvManager, eventManager, mailManager, authManager, participantManager, relocationManagerは既にInitManagerで初期化され、上で同期済み
   hostIntegrationManager = managerRefs.hostIntegrationManager;
   eventHandlersManager = managerRefs.eventHandlersManager;
   scheduleManager = managerRefs.scheduleManager;
