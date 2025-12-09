@@ -7,7 +7,6 @@ import {
   push,
   serverTimestamp,
   getGlEventConfigRef,
-  getGlApplicationsRef,
   getGlAssignmentsRef,
   get,
   glIntakeFacultyCatalogRef
@@ -17,7 +16,9 @@ import { normalizeFacultyList } from "../tools/gl-faculty-utils.js";
 import { buildGlShiftTablePrintHtml, logPrintWarn } from "../../shared/print-utils.js";
 // ユーティリティ関数と定数を gl-utils.js からインポート（フェーズ2 段階1）
 // UI描画機能を gl-renderer.js からインポート（フェーズ2 段階2）
+// 応募管理機能を gl-application-manager.js からインポート（フェーズ2 段階3）
 import { GlRenderer } from "./gl-renderer.js";
+import { GlApplicationManager } from "./gl-application-manager.js";
 import {
   ASSIGNMENT_VALUE_ABSENT,
   ASSIGNMENT_VALUE_STAFF,
@@ -87,7 +88,7 @@ export class GlToolManager {
     this.loading = false;
     this.scheduleSyncPending = false;
     this.configUnsubscribe = null;
-    this.applicationsUnsubscribe = null;
+    // applicationsUnsubscribeはGlApplicationManagerに移行（フェーズ2 段階3）
     this.assignmentsUnsubscribe = null;
     this.sharedFaculties = [];
     this.sharedSignature = "";
@@ -125,6 +126,18 @@ export class GlToolManager {
       resolveAssignmentBucket: (value, available) => this.resolveAssignmentBucket(value, available),
       createBucketMatcher: () => this.createBucketMatcher(),
       updateScheduleTeamNote: (element, scheduleId) => this.updateScheduleTeamNote(element, scheduleId)
+    });
+    
+    // GlApplicationManagerのインスタンスを作成（フェーズ2 段階3）
+    this.applicationManager = new GlApplicationManager({
+      onApplicationsLoaded: (applications) => {
+        this.loading = false;
+        this.applications = applications;
+        this.renderApplications();
+      },
+      getCurrentEventId: () => this.currentEventId,
+      getConfig: () => this.config,
+      getDefaultSlug: () => this.getDefaultSlug()
     });
     
     this.bindDom();
@@ -884,10 +897,8 @@ export class GlToolManager {
       this.configUnsubscribe();
       this.configUnsubscribe = null;
     }
-    if (typeof this.applicationsUnsubscribe === "function") {
-      this.applicationsUnsubscribe();
-      this.applicationsUnsubscribe = null;
-    }
+    // GlApplicationManagerに委譲（フェーズ2 段階3）
+    this.applicationManager.unsubscribeApplications();
     if (typeof this.assignmentsUnsubscribe === "function") {
       this.assignmentsUnsubscribe();
       this.assignmentsUnsubscribe = null;
@@ -909,11 +920,9 @@ export class GlToolManager {
     this.configUnsubscribe = onValue(getGlEventConfigRef(this.currentEventId), (snapshot) => {
       this.applyConfig(snapshot.val() || {});
     });
-    this.applicationsUnsubscribe = onValue(getGlApplicationsRef(this.currentEventId), (snapshot) => {
-      this.loading = false;
-      this.applications = normalizeApplications(snapshot.val() || {});
-      this.renderApplications();
-    });
+    // GlApplicationManagerに委譲（フェーズ2 段階3）
+    this.loading = true;
+    this.applicationManager.subscribeApplications(this.currentEventId);
     this.assignmentsUnsubscribe = onValue(getGlAssignmentsRef(this.currentEventId), (snapshot) => {
       this.assignments = normalizeAssignmentSnapshot(snapshot.val() || {});
       this.renderApplications();
@@ -1445,52 +1454,8 @@ export class GlToolManager {
       return;
     }
     const existing = this.applications.find((entry) => ensureString(entry.id) === ensureString(this.internalEditingId));
-    const slug = ensureString(this.config?.slug) || this.getDefaultSlug();
-    const basePath = `glIntake/applications/${this.currentEventId}`;
-    const targetRef = existing
-      ? ref(database, `${basePath}/${existing.id}`)
-      : push(ref(database, basePath));
-    // 完全正規化: eventNameは削除（eventIdから取得可能）
-    const payload = {
-      name: data.name,
-      phonetic: data.phonetic,
-      email: data.email,
-      grade: data.grade,
-      faculty: data.faculty,
-      department: data.department,
-      academicPath: Array.isArray(data.academicPath) ? data.academicPath : [],
-      club: data.club,
-      studentId: data.studentId,
-      note: data.note,
-      shifts: data.shifts,
-      sourceType: "internal",
-      eventId: this.currentEventId,
-      slug,
-      createdAt: existing?.raw?.createdAt ?? serverTimestamp(),
-      updatedAt: serverTimestamp()
-    };
-    if (!payload.note) {
-      delete payload.note;
-    }
-    if (!payload.club) {
-      delete payload.club;
-    }
-    if (!payload.studentId) {
-      delete payload.studentId;
-    }
-    if (!payload.phonetic) {
-      delete payload.phonetic;
-    }
-    if (!payload.grade) {
-      delete payload.grade;
-    }
-    if (!payload.department) {
-      delete payload.department;
-    }
-    if (!Array.isArray(payload.academicPath) || !payload.academicPath.length) {
-      delete payload.academicPath;
-    }
-    await set(targetRef, payload);
+    // GlApplicationManagerに委譲（フェーズ2 段階3）
+    await this.applicationManager.saveInternalApplication(data, this.internalEditingId, this.applications);
     this.resetInternalForm();
     this.setInternalStatus(existing ? "内部スタッフを更新しました。" : "内部スタッフを追加しました。", "success");
     this.renderApplications();
@@ -1500,20 +1465,8 @@ export class GlToolManager {
     if (!this.currentEventId || !this.internalEditingId) {
       return;
     }
-    const updates = {};
-    updates[`glIntake/applications/${this.currentEventId}/${this.internalEditingId}`] = null;
-    const assignmentEntry = this.assignments.get(this.internalEditingId);
-    if (assignmentEntry) {
-      if (assignmentEntry.schedules instanceof Map) {
-        assignmentEntry.schedules.forEach((_, scheduleId) => {
-          updates[`glAssignments/${this.currentEventId}/${scheduleId}/${this.internalEditingId}`] = null;
-        });
-      }
-      if (assignmentEntry.fallback) {
-        updates[`glAssignments/${this.currentEventId}/${this.internalEditingId}`] = null;
-      }
-    }
-    await update(ref(database), updates);
+    // GlApplicationManagerに委譲（フェーズ2 段階3）
+    await this.applicationManager.deleteInternalApplication(this.internalEditingId, this.assignments);
     this.resetInternalForm();
     this.setInternalStatus("内部スタッフを削除しました。", "success");
     this.renderApplications();
