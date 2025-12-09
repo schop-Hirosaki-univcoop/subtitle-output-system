@@ -6,8 +6,6 @@ import {
   set,
   push,
   serverTimestamp,
-  getGlEventConfigRef,
-  getGlAssignmentsRef,
   get,
   glIntakeFacultyCatalogRef
 } from "../../operator/firebase.js";
@@ -17,8 +15,12 @@ import { buildGlShiftTablePrintHtml, logPrintWarn } from "../../shared/print-uti
 // ユーティリティ関数と定数を gl-utils.js からインポート（フェーズ2 段階1）
 // UI描画機能を gl-renderer.js からインポート（フェーズ2 段階2）
 // 応募管理機能を gl-application-manager.js からインポート（フェーズ2 段階3）
+// 割り当て管理機能を gl-assignment-manager.js からインポート（フェーズ2 段階4）
+// 設定管理機能を gl-config-manager.js からインポート（フェーズ2 段階5）
 import { GlRenderer } from "./gl-renderer.js";
 import { GlApplicationManager } from "./gl-application-manager.js";
+import { GlAssignmentManager } from "./gl-assignment-manager.js";
+import { GlConfigManager } from "./gl-config-manager.js";
 import {
   ASSIGNMENT_VALUE_ABSENT,
   ASSIGNMENT_VALUE_STAFF,
@@ -55,7 +57,6 @@ import {
   scheduleSummaryMapsEqual,
   createSignature,
   normalizeAssignmentEntry,
-  normalizeAssignmentSnapshot,
   normalizeApplications,
   formatTeamOptionLabel,
   buildAssignmentOptions,
@@ -63,7 +64,6 @@ import {
   buildAssignmentOptionsForApplication,
   resolveAssignmentValue,
   resolveEffectiveAssignmentValue,
-  resolveAssignmentStatus,
   formatAssignmentTimestamp,
   formatAssignmentUpdatedLabel,
   buildAcademicPathText
@@ -87,9 +87,9 @@ export class GlToolManager {
     this.applicationView = "schedule";
     this.loading = false;
     this.scheduleSyncPending = false;
-    this.configUnsubscribe = null;
+    // configUnsubscribeはGlConfigManagerに移行（フェーズ2 段階5）
     // applicationsUnsubscribeはGlApplicationManagerに移行（フェーズ2 段階3）
-    this.assignmentsUnsubscribe = null;
+    // assignmentsUnsubscribeはGlAssignmentManagerに移行（フェーズ2 段階4）
     this.sharedFaculties = [];
     this.sharedSignature = "";
     this.sharedMeta = { updatedAt: 0, updatedByUid: "", updatedByName: "" };
@@ -138,6 +138,43 @@ export class GlToolManager {
       getCurrentEventId: () => this.currentEventId,
       getConfig: () => this.config,
       getDefaultSlug: () => this.getDefaultSlug()
+    });
+    
+    // GlAssignmentManagerのインスタンスを作成（フェーズ2 段階4）
+    this.assignmentManager = new GlAssignmentManager({
+      onAssignmentsLoaded: (assignments) => {
+        this.assignments = assignments;
+        this.renderApplications();
+      },
+      getCurrentEventId: () => this.currentEventId,
+      getCurrentUser: () => this.app?.currentUser || null
+    });
+    
+    // GlConfigManagerのインスタンスを作成（フェーズ2 段階5）
+    this.configManager = new GlConfigManager({
+      onConfigLoaded: (config) => {
+        this.config = config;
+        if (this.dom.glPeriodStartInput && config) {
+          this.dom.glPeriodStartInput.value = toDateTimeLocalString(config.startAt);
+        }
+        if (this.dom.glPeriodEndInput && config) {
+          this.dom.glPeriodEndInput.value = toDateTimeLocalString(config.endAt);
+        }
+        if (this.dom.glTeamCountInput && config) {
+          const teamCount = deriveTeamCountFromConfig(config.defaultTeams);
+          this.dom.glTeamCountInput.value = teamCount > 0 ? String(teamCount) : "";
+        }
+        this.updateSlugPreview();
+        this.refreshSchedules();
+        this.syncInternalAcademicInputs();
+        this.renderApplications();
+      },
+      getCurrentEventId: () => this.currentEventId,
+      getDefaultSlug: () => this.getDefaultSlug(),
+      getAvailableSchedules: (options) => this.getAvailableSchedules(options),
+      collectScheduleTeamSettings: (teams) => this.collectScheduleTeamSettings(teams),
+      setStatus: (message, variant) => this.setStatus(message, variant),
+      getConfig: () => this.config
     });
     
     this.bindDom();
@@ -893,16 +930,12 @@ export class GlToolManager {
   }
 
   detachListeners() {
-    if (typeof this.configUnsubscribe === "function") {
-      this.configUnsubscribe();
-      this.configUnsubscribe = null;
-    }
+    // GlConfigManagerに委譲（フェーズ2 段階5）
+    this.configManager.unsubscribeConfig();
     // GlApplicationManagerに委譲（フェーズ2 段階3）
     this.applicationManager.unsubscribeApplications();
-    if (typeof this.assignmentsUnsubscribe === "function") {
-      this.assignmentsUnsubscribe();
-      this.assignmentsUnsubscribe = null;
-    }
+    // GlAssignmentManagerに委譲（フェーズ2 段階4）
+    this.assignmentManager.unsubscribeAssignments();
   }
 
   attachListeners() {
@@ -917,44 +950,27 @@ export class GlToolManager {
     }
     this.loading = true;
     this.renderApplications();
-    this.configUnsubscribe = onValue(getGlEventConfigRef(this.currentEventId), (snapshot) => {
-      this.applyConfig(snapshot.val() || {});
-    });
+    // GlConfigManagerに委譲（フェーズ2 段階5）
+    this.configManager.subscribeConfig(this.currentEventId);
     // GlApplicationManagerに委譲（フェーズ2 段階3）
     this.loading = true;
     this.applicationManager.subscribeApplications(this.currentEventId);
-    this.assignmentsUnsubscribe = onValue(getGlAssignmentsRef(this.currentEventId), (snapshot) => {
-      this.assignments = normalizeAssignmentSnapshot(snapshot.val() || {});
-      this.renderApplications();
-    });
+    // GlAssignmentManagerに委譲（フェーズ2 段階4）
+    this.assignmentManager.subscribeAssignments(this.currentEventId);
   }
 
   applyConfig(raw) {
-    const config = raw && typeof raw === "object" ? raw : {};
-    const schedules = normalizeScheduleConfig(config.schedules);
-    const defaultTeams = sanitizeTeamList(config.defaultTeams || config.teams || []);
-    const scheduleTeams = normalizeScheduleTeamConfig(config.scheduleTeams || {}, defaultTeams);
-    this.config = {
-      slug: ensureString(config.slug),
-      faculties: normalizeFacultyList(config.faculties || []),
-      teams: defaultTeams,
-      defaultTeams,
-      scheduleTeams,
-      schedules,
-      startAt: config.startAt || "",
-      endAt: config.endAt || "",
-      guidance: ensureString(config.guidance),
-      updatedAt: Number(config.updatedAt) || 0,
-      createdAt: Number(config.createdAt) || 0
-    };
-    if (this.dom.glPeriodStartInput) {
-      this.dom.glPeriodStartInput.value = toDateTimeLocalString(this.config.startAt);
+    // GlConfigManagerに委譲（フェーズ2 段階5）
+    const config = this.configManager.normalizeConfig(raw);
+    this.config = config;
+    if (this.dom.glPeriodStartInput && config) {
+      this.dom.glPeriodStartInput.value = toDateTimeLocalString(config.startAt);
     }
-    if (this.dom.glPeriodEndInput) {
-      this.dom.glPeriodEndInput.value = toDateTimeLocalString(this.config.endAt);
+    if (this.dom.glPeriodEndInput && config) {
+      this.dom.glPeriodEndInput.value = toDateTimeLocalString(config.endAt);
     }
-    if (this.dom.glTeamCountInput) {
-      const teamCount = deriveTeamCountFromConfig(this.config.defaultTeams);
+    if (this.dom.glTeamCountInput && config) {
+      const teamCount = deriveTeamCountFromConfig(config.defaultTeams);
       this.dom.glTeamCountInput.value = teamCount > 0 ? String(teamCount) : "";
     }
     this.updateSlugPreview();
@@ -964,15 +980,11 @@ export class GlToolManager {
   }
 
   applySharedCatalog(raw) {
-    const faculties = normalizeFacultyList(raw);
-    const meta = raw && typeof raw === "object" ? raw : {};
-    this.sharedFaculties = faculties;
-    this.sharedSignature = createSignature(faculties);
-    this.sharedMeta = {
-      updatedAt: Number(meta.updatedAt) || 0,
-      updatedByUid: ensureString(meta.updatedByUid),
-      updatedByName: ensureString(meta.updatedByName)
-    };
+    // GlConfigManagerに委譲（フェーズ2 段階5）
+    const catalog = this.configManager.applySharedCatalog(raw);
+    this.sharedFaculties = catalog.faculties;
+    this.sharedSignature = catalog.signature;
+    this.sharedMeta = catalog.meta;
     this.syncInternalAcademicInputs();
     this.updateConfigVisibility();
   }
@@ -1079,7 +1091,6 @@ export class GlToolManager {
       this.setStatus("イベントを選択してください。", "warning");
       return;
     }
-    const slug = this.getDefaultSlug();
     const startAt = toTimestamp(this.dom.glPeriodStartInput?.value || "");
     const endAt = toTimestamp(this.dom.glPeriodEndInput?.value || "");
     const faculties = normalizeFacultyList(this.config?.faculties || []);
@@ -1091,112 +1102,47 @@ export class GlToolManager {
       }
       return;
     }
-    const teams = buildSequentialTeams(teamCount);
-    const previousSlug = ensureString(this.config?.slug);
-    if (slug) {
-      const slugSnapshot = await get(ref(database, `glIntake/slugIndex/${slug}`));
-      const ownerEventId = ensureString(slugSnapshot.val());
-      if (ownerEventId && ownerEventId !== this.currentEventId) {
-        this.setStatus("同じイベントIDが別のGLフォームに割り当てられています。イベント設定を確認してください。", "error");
+    // GlConfigManagerに委譲（フェーズ2 段階5）
+    try {
+      await this.configManager.saveConfig(
+        { startAt, endAt, faculties, teamCount },
+        this.config
+      );
+      // 設定を更新
+      if (!this.config || typeof this.config !== "object") {
+        this.config = {};
+      }
+      const teams = buildSequentialTeams(teamCount);
+      this.config.faculties = faculties;
+      this.config.defaultTeams = teams;
+      this.config.teams = teams;
+      const scheduleTeams = this.collectScheduleTeamSettings(teams);
+      if (scheduleTeams === null) {
         return;
       }
+      this.config.scheduleTeams = scheduleTeams;
+      this.setStatus("募集設定を保存しました。", "success");
+    } catch (error) {
+      this.setStatus(error.message || "募集設定の保存に失敗しました。", "error");
+      if (error.message.includes("班数") && this.dom.glTeamCountInput) {
+        this.dom.glTeamCountInput.focus();
+      }
     }
-    const scheduleSummaryList = sanitizeScheduleEntries(
-      this.getAvailableSchedules({ includeConfigFallback: true })
-    );
-    const scheduleSummary = buildScheduleConfigMap(scheduleSummaryList);
-    if (!this.config || typeof this.config !== "object") {
-      this.config = {};
-    }
-    this.config.faculties = faculties;
-    this.config.defaultTeams = teams;
-    this.config.teams = teams;
-    const scheduleTeams = this.collectScheduleTeamSettings(teams);
-    if (scheduleTeams === null) {
-      return;
-    }
-    this.config.scheduleTeams = scheduleTeams;
-    // 完全正規化: eventNameは削除（eventIdから取得可能）
-    const configPayload = {
-      slug,
-      startAt,
-      endAt,
-      faculties,
-      teams,
-      defaultTeams: teams,
-      scheduleTeams,
-      schedules: scheduleSummary,
-      guidance: ensureString(this.config?.guidance),
-      updatedAt: serverTimestamp(),
-      eventId: this.currentEventId
-    };
-    if (this.config?.createdAt) {
-      configPayload.createdAt = this.config.createdAt;
-    } else {
-      configPayload.createdAt = serverTimestamp();
-    }
-    const updates = {};
-    updates[`glIntake/events/${this.currentEventId}`] = configPayload;
-    if (slug) {
-      updates[`glIntake/slugIndex/${slug}`] = this.currentEventId;
-    }
-    if (previousSlug && previousSlug !== slug) {
-      updates[`glIntake/slugIndex/${previousSlug}`] = null;
-    }
-    await update(ref(database), updates);
-    this.setStatus("募集設定を保存しました。", "success");
   }
 
   async copyFormUrl() {
-    if (!this.currentEventId) {
-      this.setStatus("イベントを選択してください。", "warning");
-      return;
-    }
-    const slug = this.getDefaultSlug();
-    if (!slug) {
-      this.setStatus("イベントIDを取得できませんでした。", "error");
-      return;
-    }
-    let url = `${window.location.origin}${window.location.pathname}`;
+    // GlConfigManagerに委譲（フェーズ2 段階5）
     try {
-      const currentUrl = new URL(window.location.href);
-      const basePath = currentUrl.pathname.replace(/[^/]*$/, "");
-      const formUrl = new URL("gl-form.html", `${currentUrl.origin}${basePath}`);
-      formUrl.searchParams.set("evt", slug);
-      url = formUrl.toString();
+      const url = await this.configManager.copyFormUrl();
+      this.setStatus("応募URLをコピーしました。", "success");
+      if (this.dom.glConfigCopyStatus) {
+        this.dom.glConfigCopyStatus.textContent = "GL応募フォームのURLをコピーしました。";
+      }
     } catch (error) {
-      // fallback to relative path
-      url = `gl-form.html?evt=${encodeURIComponent(slug)}`;
-    }
-    let success = false;
-    if (navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(url);
-        success = true;
-      } catch (error) {
-        success = false;
+      this.setStatus(error.message || "応募URLのコピーに失敗しました。", "error");
+      if (this.dom.glConfigCopyStatus) {
+        this.dom.glConfigCopyStatus.textContent = "GL応募フォームのURLをコピーできませんでした。";
       }
-    }
-    if (!success) {
-      const textarea = document.createElement("textarea");
-      textarea.value = url;
-      textarea.setAttribute("readonly", "true");
-      textarea.style.position = "absolute";
-      textarea.style.left = "-9999px";
-      document.body.appendChild(textarea);
-      textarea.select();
-      try {
-        success = document.execCommand("copy");
-      } catch (error) {
-        success = false;
-      }
-      document.body.removeChild(textarea);
-    }
-    this.setStatus(success ? "応募URLをコピーしました。" : "応募URLのコピーに失敗しました。", success ? "success" : "error");
-    if (this.dom.glConfigCopyStatus) {
-      this.dom.glConfigCopyStatus.textContent = success
-        ? "GL応募フォームのURLをコピーしました。"
-        : "GL応募フォームのURLをコピーできませんでした。";
     }
   }
 
@@ -1686,54 +1632,19 @@ export class GlToolManager {
   }
 
   createBucketMatcher() {
+    // GlAssignmentManagerに委譲（フェーズ2 段階4）
     const filter = this.filter || "all";
-    if (filter === "unassigned") {
-      return (bucket) => bucket === ASSIGNMENT_BUCKET_UNASSIGNED;
-    }
-    if (filter === "assigned") {
-      return (bucket) => bucket.startsWith("team:");
-    }
-    if (filter === "absent") {
-      return (bucket) => bucket === ASSIGNMENT_BUCKET_ABSENT;
-    }
-    if (filter === "staff") {
-      return (bucket) => bucket === ASSIGNMENT_BUCKET_STAFF;
-    }
-    return () => true;
+    return this.assignmentManager.createBucketMatcher(filter);
   }
 
   getAssignmentForSchedule(glId, scheduleId) {
-    if (!glId) {
-      return null;
-    }
-    const entry = this.assignments.get(glId) || null;
-    if (!entry) {
-      return null;
-    }
-    const scheduleKey = ensureString(scheduleId);
-    if (scheduleKey && entry.schedules instanceof Map && entry.schedules.has(scheduleKey)) {
-      return entry.schedules.get(scheduleKey) || null;
-    }
-    return entry.fallback || null;
+    // GlAssignmentManagerに委譲（フェーズ2 段階4）
+    return this.assignmentManager.getAssignmentForSchedule(this.assignments, glId, scheduleId);
   }
 
   resolveAssignmentBucket(value, available) {
-    if (value === ASSIGNMENT_VALUE_ABSENT) {
-      return ASSIGNMENT_BUCKET_ABSENT;
-    }
-    if (value === ASSIGNMENT_VALUE_STAFF) {
-      return ASSIGNMENT_BUCKET_STAFF;
-    }
-    if (value === ASSIGNMENT_VALUE_UNAVAILABLE) {
-      return ASSIGNMENT_BUCKET_UNAVAILABLE;
-    }
-    if (value) {
-      return `team:${value}`;
-    }
-    if (!available) {
-      return ASSIGNMENT_BUCKET_UNAVAILABLE;
-    }
-    return ASSIGNMENT_BUCKET_UNASSIGNED;
+    // GlAssignmentManagerに委譲（フェーズ2 段階4）
+    return this.assignmentManager.resolveAssignmentBucket(value, available);
   }
 
   buildScheduleSection(schedule, applications, matchesFilter) {
@@ -1742,27 +1653,7 @@ export class GlToolManager {
   }
 
   async applyAssignment(glId, scheduleId, value) {
-    if (!this.currentEventId || !glId || !scheduleId) {
-      return;
-    }
-    const { status, teamId } = resolveAssignmentStatus(value);
-    const basePath = `glAssignments/${this.currentEventId}/${scheduleId}/${glId}`;
-    if (!status && !teamId) {
-      await update(ref(database), {
-        [basePath]: null
-      });
-      return;
-    }
-    const user = this.app?.currentUser || null;
-    const payload = {
-      status,
-      teamId,
-      updatedAt: serverTimestamp(),
-      updatedByUid: ensureString(user?.uid),
-      updatedByName: ensureString(user?.displayName) || ensureString(user?.email)
-    };
-    await update(ref(database), {
-      [basePath]: payload
-    });
+    // GlAssignmentManagerに委譲（フェーズ2 段階4）
+    await this.assignmentManager.applyAssignment(glId, scheduleId, value);
   }
 }
