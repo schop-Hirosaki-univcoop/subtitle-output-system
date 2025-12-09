@@ -1594,8 +1594,8 @@ export class GlToolManager {
         return matchesFilter(bucketKey);
       });
     });
-    const scheduleResult = this.renderScheduleBoard(schedules, filteredApplications, matchesFilter);
-    const applicantResult = this.renderApplicantList(schedules, filteredApplications, matchesFilter);
+    const scheduleResult = this.renderer.renderScheduleBoard(schedules, filteredApplications, matchesFilter);
+    const applicantResult = this.renderer.renderApplicantList(schedules, filteredApplications, matchesFilter);
     if (viewsContainer) {
       viewsContainer.hidden = false;
     }
@@ -1611,6 +1611,9 @@ export class GlToolManager {
   }
 
   renderScheduleBoard(schedules, applications, matchesFilter) {
+    // GlRendererに委譲（フェーズ2 段階2）
+    // 注意: buildScheduleSection()がまだgl-panel.jsにあるため、一時的にgl-panel.jsのメソッドを呼び出す
+    // 後でbuildScheduleSection()も移行する予定
     const board = this.dom.glApplicationBoard;
     if (!board) {
       return { visibleCount: 0 };
@@ -1631,6 +1634,9 @@ export class GlToolManager {
   }
 
   renderApplicantList(schedules, applications, matchesFilter) {
+    // GlRendererに委譲（フェーズ2 段階2）
+    // 注意: createApplicantMatrixRow()がまだgl-panel.jsにあるため、一時的にgl-panel.jsのメソッドを呼び出す
+    // 後でcreateApplicantMatrixRow()も移行する予定
     const list = this.dom.glApplicationList;
     if (!list) {
       return { visibleCount: 0 };

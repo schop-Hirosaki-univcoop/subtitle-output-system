@@ -381,5 +381,138 @@ export class GlRenderer {
     });
     container.append(fragment);
   }
+
+  // ============================================
+  // 応募者・スケジュール関連の描画メソッド
+  // ============================================
+
+  /**
+   * スケジュールボードを描画
+   * @param {Array} schedules - スケジュール配列
+   * @param {Array} applications - 応募者配列
+   * @param {Function} matchesFilter - フィルタマッチ関数
+   * @returns {Object} 描画結果（visibleCount）
+   */
+  renderScheduleBoard(schedules, applications, matchesFilter) {
+    const board = this.dom.glApplicationBoard;
+    if (!board) {
+      return { visibleCount: 0 };
+    }
+    board.innerHTML = "";
+    const fragment = document.createDocumentFragment();
+    let totalVisibleEntries = 0;
+    schedules.forEach((schedule) => {
+      const section = this.buildScheduleSection(schedule, applications, matchesFilter);
+      if (!section) {
+        return;
+      }
+      fragment.append(section.element);
+      totalVisibleEntries += section.visibleCount;
+    });
+    board.append(fragment);
+    return { visibleCount: totalVisibleEntries };
+  }
+
+  /**
+   * 応募者リストを描画
+   * @param {Array} schedules - スケジュール配列
+   * @param {Array} applications - 応募者配列
+   * @param {Function} matchesFilter - フィルタマッチ関数
+   * @returns {Object} 描画結果（visibleCount）
+   */
+  renderApplicantList(schedules, applications, matchesFilter) {
+    const list = this.dom.glApplicationList;
+    if (!list) {
+      return { visibleCount: 0 };
+    }
+    list.innerHTML = "";
+    const scheduleEntries = Array.isArray(schedules) ? schedules : [];
+    if (!scheduleEntries.length) {
+      const empty = document.createElement("p");
+      empty.className = "gl-applicant-matrix__empty";
+      empty.textContent = "日程がまだ設定されていません。";
+      list.append(empty);
+      return { visibleCount: 0 };
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "gl-applicant-matrix-wrapper";
+    const scroll = document.createElement("div");
+    scroll.className = "gl-applicant-matrix-scroll";
+    const table = document.createElement("table");
+    table.className = "gl-applicant-matrix";
+
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    const applicantHeader = document.createElement("th");
+    applicantHeader.className = "gl-applicant-matrix__header gl-applicant-matrix__header--applicant";
+    applicantHeader.scope = "col";
+    applicantHeader.textContent = "応募者";
+    headerRow.append(applicantHeader);
+
+    scheduleEntries.forEach((schedule) => {
+      const th = document.createElement("th");
+      th.className = "gl-applicant-matrix__header gl-applicant-matrix__header--schedule";
+      th.scope = "col";
+      th.dataset.scheduleId = ensureString(schedule.id);
+      const title = document.createElement("div");
+      title.className = "gl-applicant-matrix__schedule";
+      const label = document.createElement("span");
+      label.className = "gl-applicant-matrix__schedule-label";
+      label.textContent = ensureString(schedule.label) || ensureString(schedule.date) || schedule.id || "日程";
+      title.append(label);
+      if (schedule.date) {
+        const date = document.createElement("span");
+        date.className = "gl-applicant-matrix__schedule-date";
+        date.textContent = schedule.date;
+        title.append(date);
+      }
+      th.append(title);
+      headerRow.append(th);
+    });
+    thead.append(headerRow);
+    table.append(thead);
+
+    const tbody = document.createElement("tbody");
+    let visibleRows = 0;
+    applications.forEach((application) => {
+      const row = this.createApplicantMatrixRow({ application, schedules: scheduleEntries, matchesFilter });
+      if (!row) {
+        return;
+      }
+      tbody.append(row);
+      visibleRows += 1;
+    });
+    table.append(tbody);
+
+    scroll.append(table);
+    wrapper.append(scroll);
+    list.append(wrapper);
+    return { visibleCount: visibleRows };
+  }
+
+  /**
+   * スケジュールセクションを構築（仮実装、後で完全移行）
+   * @param {Object} schedule - スケジュールオブジェクト
+   * @param {Array} applications - 応募者配列
+   * @param {Function} matchesFilter - フィルタマッチ関数
+   * @returns {Object|null} セクション要素とvisibleCount
+   */
+  buildScheduleSection(schedule, applications, matchesFilter) {
+    // このメソッドは後で完全に移行します
+    // 現時点では、gl-panel.jsの実装を呼び出す必要があります
+    return null;
+  }
+
+  /**
+   * 応募者マトリックス行を作成（仮実装、後で完全移行）
+   * @param {Object} params - パラメータ
+   * @returns {HTMLElement|null} 行要素
+   */
+  createApplicantMatrixRow({ application, schedules, matchesFilter }) {
+    // このメソッドは後で完全に移行します
+    // 現時点では、gl-panel.jsの実装を呼び出す必要があります
+    return null;
+  }
 }
 
