@@ -492,27 +492,491 @@ export class GlRenderer {
   }
 
   /**
-   * スケジュールセクションを構築（仮実装、後で完全移行）
+   * シフト列を作成
+   * @param {Object} column - 列オブジェクト
+   * @param {Array} entries - エントリー要素の配列
+   * @returns {HTMLElement} 列要素
+   */
+  createShiftColumn(column, entries) {
+    const columnEl = document.createElement("section");
+    columnEl.className = "gl-shift-column";
+    columnEl.dataset.variant = column.type;
+    if (column.type === "team" && column.teamId) {
+      columnEl.dataset.teamId = column.teamId;
+    }
+    const header = document.createElement("header");
+    header.className = "gl-shift-column__header";
+    const title = document.createElement("h5");
+    title.className = "gl-shift-column__title";
+    title.textContent = column.type === "team" ? column.label : column.label;
+    header.append(title);
+    const count = document.createElement("span");
+    count.className = "gl-shift-column__count";
+    count.textContent = `${entries.length}名`;
+    header.append(count);
+    columnEl.append(header);
+
+    const body = document.createElement("div");
+    body.className = "gl-shift-column__body";
+    if (!entries.length) {
+      const empty = document.createElement("p");
+      empty.className = "gl-shift-column__empty";
+      empty.textContent = "該当なし";
+      body.append(empty);
+    } else {
+      entries.forEach((entry) => body.append(entry));
+    }
+    columnEl.append(body);
+    return columnEl;
+  }
+
+  /**
+   * シフトエントリーを作成
+   * @param {Object} params - パラメータ
+   * @param {Object} params.application - 応募者オブジェクト
+   * @param {Object} params.schedule - スケジュールオブジェクト
+   * @param {Object} params.assignment - 割り当てオブジェクト
+   * @param {string} params.assignmentValue - 割り当て値
+   * @param {boolean} params.available - 利用可能かどうか
+   * @param {Array} params.teams - 班配列
+   * @param {string} params.bucketKey - バケットキー
+   * @returns {HTMLElement} エントリー要素
+   */
+  createShiftEntry({ application, schedule, assignment, assignmentValue, available, teams, bucketKey }) {
+    const item = document.createElement("article");
+    item.className = "gl-shift-entry";
+    item.dataset.glId = ensureString(application.id);
+    item.dataset.scheduleId = ensureString(schedule.id);
+    item.dataset.bucket = bucketKey;
+    item.dataset.sourceType = application.sourceType === "internal" ? "internal" : "external";
+    if (assignmentValue === ASSIGNMENT_VALUE_ABSENT) {
+      item.dataset.assignmentStatus = "absent";
+    } else if (assignmentValue === ASSIGNMENT_VALUE_STAFF) {
+      item.dataset.assignmentStatus = "staff";
+    } else if (assignmentValue === ASSIGNMENT_VALUE_UNAVAILABLE) {
+      item.dataset.assignmentStatus = "unavailable";
+    } else if (assignmentValue) {
+      item.dataset.assignmentStatus = "team";
+      item.dataset.teamId = assignmentValue;
+    } else if (!available) {
+      item.dataset.assignmentStatus = "unavailable";
+    } else {
+      item.dataset.assignmentStatus = "pending";
+    }
+
+    const header = document.createElement("header");
+    header.className = "gl-shift-entry__header";
+    const identity = document.createElement("div");
+    identity.className = "gl-shift-entry__identity";
+    const nameEl = document.createElement("span");
+    nameEl.className = "gl-shift-entry__name";
+    nameEl.textContent = ensureString(application.name) || "(無記入)";
+    identity.append(nameEl);
+    if (application.phonetic) {
+      const phoneticEl = document.createElement("span");
+      phoneticEl.className = "gl-shift-entry__phonetic";
+      phoneticEl.textContent = application.phonetic;
+      identity.append(phoneticEl);
+    }
+    header.append(identity);
+    if (application.grade) {
+      const gradeEl = document.createElement("span");
+      gradeEl.className = "gl-shift-entry__grade";
+      applyGradeBadge(gradeEl, application.grade);
+      header.append(gradeEl);
+    }
+    item.append(header);
+
+    const infoList = document.createElement("ul");
+    infoList.className = "gl-shift-entry__info";
+    const addInfo = (label, value) => {
+      if (!value) {
+        return;
+      }
+      const li = document.createElement("li");
+      li.className = "gl-shift-entry__info-item";
+      const labelEl = document.createElement("span");
+      labelEl.className = "gl-shift-entry__info-label";
+      labelEl.textContent = label;
+      const valueEl = document.createElement("span");
+      valueEl.className = "gl-shift-entry__info-value";
+      valueEl.textContent = value;
+      li.append(labelEl, valueEl);
+      infoList.append(li);
+    };
+    const academicPathText = buildAcademicPathText(application);
+    if (academicPathText) {
+      addInfo("所属", academicPathText);
+    }
+    addInfo("役割", ensureString(application.role));
+    addInfo("サークル", ensureString(application.club));
+    if (infoList.children.length) {
+      item.append(infoList);
+    }
+
+    if (application.note) {
+      const note = document.createElement("p");
+      note.className = "gl-shift-entry__note";
+      note.textContent = application.note;
+      item.append(note);
+    }
+
+    const controls = document.createElement("div");
+    controls.className = "gl-shift-entry__controls";
+    const assignmentLabel = document.createElement("label");
+    assignmentLabel.className = "gl-shift-entry__assignment";
+    const assignmentText = document.createElement("span");
+    assignmentText.className = "gl-shift-entry__assignment-text";
+    assignmentText.textContent = "班割当";
+    const select = document.createElement("select");
+    select.className = "input input--dense";
+    select.dataset.glAssignment = "true";
+    select.dataset.scheduleId = ensureString(schedule.id);
+    const options = buildAssignmentOptionsForApplication(application, teams);
+    options.forEach((option) => {
+      const opt = document.createElement("option");
+      opt.value = option.value;
+      opt.textContent = option.label;
+      if (option.value === assignmentValue) {
+        opt.selected = true;
+      }
+      select.append(opt);
+    });
+    assignmentLabel.append(assignmentText, select);
+    controls.append(assignmentLabel);
+
+    const updatedLabel = formatAssignmentUpdatedLabel(assignment);
+    if (updatedLabel) {
+      const updated = document.createElement("span");
+      updated.className = "gl-shift-entry__updated";
+      updated.textContent = updatedLabel;
+      controls.append(updated);
+    }
+    item.append(controls);
+    return item;
+  }
+
+  /**
+   * スケジュールセクションを構築
    * @param {Object} schedule - スケジュールオブジェクト
    * @param {Array} applications - 応募者配列
    * @param {Function} matchesFilter - フィルタマッチ関数
    * @returns {Object|null} セクション要素とvisibleCount
    */
   buildScheduleSection(schedule, applications, matchesFilter) {
-    // このメソッドは後で完全に移行します
-    // 現時点では、gl-panel.jsの実装を呼び出す必要があります
-    return null;
+    if (!schedule) {
+      return null;
+    }
+    const state = this.getState();
+    const config = state.config || {};
+    
+    const section = document.createElement("section");
+    section.className = "gl-shift-section";
+    section.dataset.scheduleId = ensureString(schedule.id);
+
+    const header = document.createElement("header");
+    header.className = "gl-shift-section__header";
+    const title = document.createElement("h4");
+    title.className = "gl-shift-section__title";
+    title.textContent = ensureString(schedule.label) || ensureString(schedule.date) || schedule.id || "日程";
+    header.append(title);
+    if (schedule.date) {
+      const meta = document.createElement("p");
+      meta.className = "gl-shift-section__meta";
+      meta.textContent = schedule.date;
+      header.append(meta);
+    }
+    const countEl = document.createElement("span");
+    countEl.className = "gl-shift-section__count";
+    countEl.textContent = "0名";
+    header.append(countEl);
+    section.append(header);
+
+    const teams = getScheduleTeams(config, schedule.id);
+    const columns = buildScheduleBuckets(teams);
+    const columnOrder = [];
+    const columnMap = new Map();
+    columns.forEach((column) => {
+      columnOrder.push(column.key);
+      columnMap.set(column.key, { column, entries: [] });
+    });
+    const ensureTeamColumn = (key) => {
+      if (!key.startsWith("team:")) {
+        return null;
+      }
+      const teamId = key.replace(/^team:/, "");
+      const column = { key, label: teamId || "班", type: "team", teamId };
+      columnOrder.push(key);
+      const data = { column, entries: [] };
+      columnMap.set(key, data);
+      return data;
+    };
+
+    let visibleCount = 0;
+    applications.forEach((application) => {
+      const assignment = this.getAssignmentForSchedule(application.id, schedule.id);
+      const value = resolveEffectiveAssignmentValue(application, assignment);
+      const available = isApplicantAvailableForSchedule(application, schedule.id);
+      const bucketKey = this.resolveAssignmentBucket(value, available);
+      if (!matchesFilter(bucketKey)) {
+        return;
+      }
+      const columnData = columnMap.get(bucketKey) || ensureTeamColumn(bucketKey);
+      if (!columnData) {
+        return;
+      }
+      const entryEl = this.createShiftEntry({
+        application,
+        schedule,
+        assignment,
+        assignmentValue: value,
+        available,
+        teams,
+        bucketKey
+      });
+      columnData.entries.push(entryEl);
+      visibleCount += 1;
+    });
+
+    const orderedKeys = [
+      ...columnOrder,
+      ...Array.from(columnMap.keys()).filter((key) => !columnOrder.includes(key))
+    ];
+    const columnsContainer = document.createElement("div");
+    columnsContainer.className = "gl-shift-columns";
+    orderedKeys.forEach((key) => {
+      const data = columnMap.get(key);
+      if (!data) {
+        return;
+      }
+      const columnEl = this.createShiftColumn(data.column, data.entries);
+      columnsContainer.append(columnEl);
+    });
+
+    const table = document.createElement("div");
+    table.className = "gl-shift-table";
+    table.append(columnsContainer);
+    section.append(table);
+
+    countEl.textContent = `${visibleCount}名`;
+    section.dataset.totalEntries = String(visibleCount);
+    return { element: section, visibleCount };
   }
 
   /**
-   * 応募者マトリックス行を作成（仮実装、後で完全移行）
+   * 応募者マトリックス行を作成
    * @param {Object} params - パラメータ
+   * @param {Object} params.application - 応募者オブジェクト
+   * @param {Array} params.schedules - スケジュール配列
+   * @param {Function} params.matchesFilter - フィルタマッチ関数
    * @returns {HTMLElement|null} 行要素
    */
   createApplicantMatrixRow({ application, schedules, matchesFilter }) {
-    // このメソッドは後で完全に移行します
-    // 現時点では、gl-panel.jsの実装を呼び出す必要があります
-    return null;
+    if (!application) {
+      return null;
+    }
+    const state = this.getState();
+    const config = state.config || {};
+    
+    const row = document.createElement("tr");
+    row.className = "gl-applicant-matrix__row";
+    row.dataset.glId = ensureString(application.id);
+
+    const applicantCell = document.createElement("th");
+    applicantCell.scope = "row";
+    applicantCell.className = "gl-applicant-matrix__applicant";
+    applicantCell.dataset.glId = ensureString(application.id);
+
+    const badgeRow = document.createElement("div");
+    badgeRow.className = "gl-applicant-matrix__badges";
+    const sourceBadge = document.createElement("span");
+    sourceBadge.className = "gl-badge gl-badge--source";
+    const sourceType = application.sourceType === "internal" ? "internal" : "external";
+    sourceBadge.dataset.sourceType = sourceType;
+    sourceBadge.textContent = sourceType === "internal" ? "内部" : "外部";
+    badgeRow.append(sourceBadge);
+    if (application.role) {
+      const roleBadge = document.createElement("span");
+      roleBadge.className = "gl-badge gl-badge--role";
+      roleBadge.textContent = application.role;
+      badgeRow.append(roleBadge);
+    }
+
+    const identity = document.createElement("div");
+    identity.className = "gl-applicant-matrix__identity";
+    const nameEl = document.createElement("span");
+    nameEl.className = "gl-applicant-matrix__name";
+    nameEl.textContent = ensureString(application.name) || "(無記入)";
+    identity.append(nameEl);
+    if (application.phonetic) {
+      const phoneticEl = document.createElement("span");
+      phoneticEl.className = "gl-applicant-matrix__phonetic";
+      phoneticEl.textContent = application.phonetic;
+      identity.append(phoneticEl);
+    }
+    const identityHeader = document.createElement("div");
+    identityHeader.className = "gl-applicant-matrix__identity-header";
+    identityHeader.append(identity);
+
+    if (application.grade) {
+      const gradeEl = document.createElement("span");
+      gradeEl.className = "gl-applicant-matrix__grade";
+      applyGradeBadge(gradeEl, application.grade);
+      identityHeader.append(gradeEl);
+    }
+
+    applicantCell.append(badgeRow);
+    applicantCell.append(identityHeader);
+
+    const metaList = document.createElement("dl");
+    metaList.className = "gl-applicant-matrix__meta";
+    const addMeta = (label, value) => {
+      if (!value) {
+        return;
+      }
+      const dt = document.createElement("dt");
+      dt.className = "gl-applicant-matrix__meta-label";
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.className = "gl-applicant-matrix__meta-value";
+      dd.textContent = value;
+      metaList.append(dt, dd);
+    };
+
+    const academicPathText = buildAcademicPathText(application);
+    addMeta("所属", academicPathText);
+    addMeta("役割", ensureString(application.role));
+    addMeta("メール", ensureString(application.email));
+    addMeta("サークル", ensureString(application.club));
+    addMeta("学籍番号", ensureString(application.studentId));
+
+    if (metaList.children.length) {
+      applicantCell.append(metaList);
+    }
+
+    if (application.note) {
+      const note = document.createElement("p");
+      note.className = "gl-applicant-matrix__note";
+      note.textContent = application.note;
+      applicantCell.append(note);
+    }
+
+    row.append(applicantCell);
+
+    schedules.forEach((schedule) => {
+      const assignment = this.getAssignmentForSchedule(application.id, schedule.id);
+      const assignmentValue = resolveEffectiveAssignmentValue(application, assignment);
+      const available = isApplicantAvailableForSchedule(application, schedule.id);
+      const teams = getScheduleTeams(config, schedule.id);
+      const cell = this.createApplicantMatrixCell({
+        application,
+        schedule,
+        assignment,
+        assignmentValue,
+        available,
+        teams,
+        matchesFilter
+      });
+      row.append(cell);
+    });
+
+    return row;
+  }
+
+  /**
+   * 応募者マトリックスセルを作成
+   * @param {Object} params - パラメータ
+   * @param {Object} params.application - 応募者オブジェクト
+   * @param {Object} params.schedule - スケジュールオブジェクト
+   * @param {Object} params.assignment - 割り当てオブジェクト
+   * @param {string} params.assignmentValue - 割り当て値
+   * @param {boolean} params.available - 利用可能かどうか
+   * @param {Array} params.teams - 班配列
+   * @param {Function} params.matchesFilter - フィルタマッチ関数
+   * @returns {HTMLElement} セル要素
+   */
+  createApplicantMatrixCell({
+    application,
+    schedule,
+    assignment,
+    assignmentValue,
+    available,
+    teams,
+    matchesFilter
+  }) {
+    const cell = document.createElement("td");
+    cell.className = "gl-applicant-matrix__cell";
+    cell.dataset.glId = ensureString(application.id);
+    cell.dataset.scheduleId = ensureString(schedule.id);
+    cell.dataset.sourceType = application.sourceType === "internal" ? "internal" : "external";
+    const bucketKey = this.resolveAssignmentBucket(assignmentValue, available);
+    const matches = matchesFilter(bucketKey);
+    cell.dataset.bucket = bucketKey;
+    cell.dataset.matchesFilter = matches ? "true" : "false";
+    if (assignmentValue === ASSIGNMENT_VALUE_ABSENT) {
+      cell.dataset.assignmentStatus = "absent";
+    } else if (assignmentValue === ASSIGNMENT_VALUE_STAFF) {
+      cell.dataset.assignmentStatus = "staff";
+    } else if (assignmentValue === ASSIGNMENT_VALUE_UNAVAILABLE) {
+      cell.dataset.assignmentStatus = "unavailable";
+    } else if (assignmentValue) {
+      cell.dataset.assignmentStatus = "team";
+      cell.dataset.teamId = assignmentValue;
+    } else if (!available) {
+      cell.dataset.assignmentStatus = "unavailable";
+    } else {
+      cell.dataset.assignmentStatus = "pending";
+    }
+
+    const content = document.createElement("div");
+    content.className = "gl-applicant-matrix__cell-content";
+
+    const statusRow = document.createElement("div");
+    statusRow.className = "gl-applicant-matrix__cell-header";
+    const responseDescriptor = resolveScheduleResponseValue(application, schedule.id);
+    const responseBadge = document.createElement("span");
+    responseBadge.className = "gl-applicant-matrix__response-badge";
+    const responseVariant = determineScheduleResponseVariant(responseDescriptor.raw, responseDescriptor.text);
+    if (responseVariant) {
+      responseBadge.classList.add(`gl-applicant-matrix__response-badge--${responseVariant}`);
+    }
+    responseBadge.textContent = responseDescriptor.text || "未回答";
+    statusRow.append(responseBadge);
+    content.append(statusRow);
+
+    const control = document.createElement("div");
+    control.className = "gl-applicant-matrix__assignment";
+    const select = document.createElement("select");
+    select.className = "input input--dense gl-applicant-matrix__select";
+    select.dataset.glAssignment = "true";
+    select.dataset.scheduleId = ensureString(schedule.id);
+    select.setAttribute(
+      "aria-label",
+      `${ensureString(schedule.label) || ensureString(schedule.date) || schedule.id || "日程"}の班割当`
+    );
+    const options = buildAssignmentOptionsForApplication(application, teams);
+    options.forEach((option) => {
+      const opt = document.createElement("option");
+      opt.value = option.value;
+      opt.textContent = option.label;
+      if (option.value === assignmentValue) {
+        opt.selected = true;
+      }
+      select.append(opt);
+    });
+    control.append(select);
+
+    const updatedLabel = formatAssignmentUpdatedLabel(assignment);
+    if (updatedLabel) {
+      const updated = document.createElement("span");
+      updated.className = "gl-applicant-matrix__updated";
+      updated.textContent = updatedLabel;
+      control.append(updated);
+    }
+
+    content.append(control);
+    cell.append(content);
+    return cell;
   }
 }
 
