@@ -1109,18 +1109,18 @@ export class GlToolManager {
         this.config
       );
       // 設定を更新
-      if (!this.config || typeof this.config !== "object") {
-        this.config = {};
-      }
+    if (!this.config || typeof this.config !== "object") {
+      this.config = {};
+    }
       const teams = buildSequentialTeams(teamCount);
-      this.config.faculties = faculties;
-      this.config.defaultTeams = teams;
-      this.config.teams = teams;
-      const scheduleTeams = this.collectScheduleTeamSettings(teams);
-      if (scheduleTeams === null) {
-        return;
-      }
-      this.config.scheduleTeams = scheduleTeams;
+    this.config.faculties = faculties;
+    this.config.defaultTeams = teams;
+    this.config.teams = teams;
+    const scheduleTeams = this.collectScheduleTeamSettings(teams);
+    if (scheduleTeams === null) {
+      return;
+    }
+    this.config.scheduleTeams = scheduleTeams;
       this.setStatus("募集設定を保存しました。", "success");
     } catch (error) {
       this.setStatus(error.message || "募集設定の保存に失敗しました。", "error");
@@ -1138,9 +1138,9 @@ export class GlToolManager {
       if (this.dom.glConfigCopyStatus) {
         this.dom.glConfigCopyStatus.textContent = "GL応募フォームのURLをコピーしました。";
       }
-    } catch (error) {
+      } catch (error) {
       this.setStatus(error.message || "応募URLのコピーに失敗しました。", "error");
-      if (this.dom.glConfigCopyStatus) {
+    if (this.dom.glConfigCopyStatus) {
         this.dom.glConfigCopyStatus.textContent = "GL応募フォームのURLをコピーできませんでした。";
       }
     }
@@ -1522,9 +1522,19 @@ export class GlToolManager {
   createApplicantMatrixRow({ application, schedules, matchesFilter }) {
     // GlRendererに委譲（フェーズ2 段階2）
     return this.renderer.createApplicantMatrixRow({ application, schedules, matchesFilter });
-  }
+    }
 
   createApplicantMatrixCell({
+        application,
+        schedule,
+        assignment,
+        assignmentValue,
+        available,
+        teams,
+        matchesFilter
+  }) {
+    // GlRendererに委譲（フェーズ2 段階2）
+    return this.renderer.createApplicantMatrixCell({
     application,
     schedule,
     assignment,
@@ -1532,16 +1542,6 @@ export class GlToolManager {
     available,
     teams,
     matchesFilter
-  }) {
-    // GlRendererに委譲（フェーズ2 段階2）
-    return this.renderer.createApplicantMatrixCell({
-      application,
-      schedule,
-      assignment,
-      assignmentValue,
-      available,
-      teams,
-      matchesFilter
     });
   }
 
