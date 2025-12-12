@@ -831,7 +831,6 @@ export class RelocationManager {
     const rowKey = target.entry.rowKey != null ? String(target.entry.rowKey) : "";
     this.handleQuickRelocateAction(participantId, null, rowKey);
   }
-}
 
   /**
    * 保留中のリロケーションマップを確保
