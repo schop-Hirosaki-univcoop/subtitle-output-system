@@ -525,7 +525,7 @@ export class EventUIRenderer {
     const conflictingTelopEntries = telopEntries.filter((entry) => {
       const entryScheduleId = ensureString(entry.scheduleId);
       return Boolean(telopScheduleId && entryScheduleId && entryScheduleId !== telopScheduleId);
-    }));
+    });
     context.hasConflict = Boolean(telopScheduleId) && conflictingTelopEntries.length > 0;
 
     // デフォルトキーの設定
