@@ -264,7 +264,8 @@ export class EventPanelManager {
    */
   async deleteEvent(event) {
     const eventId = event?.id;
-    if (!eventId) {
+    // イベントIDが空文字列でないことを確認（空文字列だとルートパスへの更新となり権限エラーになる）
+    if (!eventId || String(eventId).trim() === "") {
       throw new Error("イベントIDが不明です。");
     }
     const label = event?.name || eventId;
@@ -290,8 +291,12 @@ export class EventPanelManager {
         [`questionIntake/schedules/${eventId}`]: null,
         [`questionIntake/participants/${eventId}`]: null
       };
+      // 空文字列のトークンを除外して、不正なパスが生成されるのを防ぐ
       tokensToRemove.forEach((token) => {
-        updates[`questionIntake/tokens/${token}`] = null;
+        const trimmedToken = String(token || "").trim();
+        if (trimmedToken) {
+          updates[`questionIntake/tokens/${trimmedToken}`] = null;
+        }
       });
 
       await update(ref(database), updates);

@@ -15,8 +15,10 @@ export function collectParticipantTokens(branch) {
     if (!scheduleBranch || typeof scheduleBranch !== "object") return;
     Object.values(scheduleBranch).forEach((participant) => {
       const token = participant?.token;
-      if (token) {
-        tokens.add(String(token));
+      // 空文字列や空白のみのトークンを除外
+      const trimmedToken = String(token || "").trim();
+      if (trimmedToken) {
+        tokens.add(trimmedToken);
       }
     });
   });
