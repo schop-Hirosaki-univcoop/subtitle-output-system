@@ -10,7 +10,8 @@ import {
   update,
   serverTimestamp
 } from "../../operator/firebase.js";
-import { ensureString, logError, formatParticipantCount, collectParticipantTokens, normalizeDateInputValue, formatDateTimeLocal } from "../helpers.js";
+import { ensureString, logError, formatParticipantCount, collectParticipantTokens, formatDateTimeLocal } from "../helpers.js";
+import { normalizeDateInputValue } from "../schedule-calendar.js";
 import { formatScheduleRange } from "../../operator/utils.js";
 import { normalizeScheduleId } from "../../shared/channel-paths.js";
 import { generateShortId, normalizeKey } from "../../question-admin/utils.js";
