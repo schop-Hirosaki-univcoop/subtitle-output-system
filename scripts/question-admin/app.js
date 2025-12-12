@@ -28,7 +28,7 @@ import {
 } from "./state.js";
 import { dom } from "./dom.js";
 import { goToLogin } from "../shared/routes.js";
-import { openDialog, closeDialog, bindDialogDismiss } from "./dialog.js";
+import { openDialog, closeDialog, bindDialogDismiss, setFormError } from "./dialog.js";
 import { showLoader, hideLoader, initLoaderSteps, setLoaderStep, finishLoaderSteps } from "./loader.js";
 // loadAuthPreflightContext, preflightContextMatchesUser は AuthManager に移行されました
 import { collectParticipantTokens } from "../shared/participant-tokens.js";
@@ -480,12 +480,6 @@ function getElementById(id) {
   }
   return uiManager.getElementById(id);
 }
-import {
-  openDialog,
-  closeDialog,
-  bindDialogDismiss,
-  setFormError
-} from "./dialog.js";
 // combineDateAndTime などの時間結合ヘルパーは calendar.js に集約しており、
 // 印刷ビューでも同じロジックを共有するため utils.js からは import しない。
 import {
