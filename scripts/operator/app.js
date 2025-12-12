@@ -399,17 +399,17 @@ export class OperatorApp {
     this.state = createInitialState(autoScroll);
     this.api = createApiClient(auth, onAuthStateChanged);
     
+    // 認証管理の初期化
+    this.authManager = new AuthManager(this);
+    
+    // プレゼンス管理の初期化（contextManager.applyContextToStateで必要）
+    this.presenceManager = new PresenceManager(this);
+    
     // コンテキスト管理の初期化
     this.contextManager = new ContextManager(this);
     this.pageContext = this.contextManager.extractPageContext();
     this.initialPageContext = { ...(this.pageContext || {}) };
     this.contextManager.applyContextToState();
-    
-    // 認証管理の初期化
-    this.authManager = new AuthManager(this);
-    
-    // プレゼンス管理の初期化
-    this.presenceManager = new PresenceManager(this);
     
     // チャンネル管理の初期化
     this.channelManager = new ChannelManager(this);
