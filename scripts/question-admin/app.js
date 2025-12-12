@@ -546,13 +546,12 @@ function createApiClient(getIdToken) {
   return tokenApiManager.createApiClient(getIdToken);
 }
 
-const api = createApiClient(getAuthIdToken);
-
 async function drainQuestionQueue() {
   // TokenApiManager に委譲
   if (!tokenApiManager) {
     throw new Error("TokenApiManager is not initialized");
   }
+  const api = createApiClient(getAuthIdToken);
   return await tokenApiManager.drainQuestionQueue(api);
 }
 
