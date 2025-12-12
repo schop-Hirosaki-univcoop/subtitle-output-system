@@ -1966,16 +1966,6 @@ async function applySelectionContext(selection = {}) {
   return hostIntegrationManager.applySelectionContext(selection);
 }
 
-// setFormError関数の定義を確認
-function setFormError(element, message = "") {
-  if (!element) return;
-  const errorElement = element.querySelector(".form-error, [data-form-error]");
-  if (errorElement) {
-    errorElement.textContent = message;
-    errorElement.style.display = message ? "block" : "none";
-  }
-}
-
 // Manager変数の参照オブジェクト
 const managerRefs = {
   printManager: null,
