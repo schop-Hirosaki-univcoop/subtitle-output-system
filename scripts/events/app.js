@@ -156,7 +156,6 @@ export class EventAdminApp {
     this.cleanup = this.cleanup.bind(this);
     this.eventCountNote = "";
     this.stageNote = "";
-    this.applyMetaNote();
     this.chat = new EventChat(this);
     this.operatorMode = OPERATOR_MODE_TELOP;
     // 認証管理を初期化
@@ -167,6 +166,8 @@ export class EventAdminApp {
     this.navigationManager = new EventNavigationManager(this);
     // UI描画を初期化
     this.uiRenderer = new EventUIRenderer(this);
+    // メタノートを適用（uiRenderer初期化後）
+    this.applyMetaNote();
     // Firebase操作を初期化
     this.firebaseManager = new EventFirebaseManager(this);
     // ディスプレイロック機能を初期化
