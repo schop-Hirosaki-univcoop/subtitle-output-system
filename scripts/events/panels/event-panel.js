@@ -282,15 +282,43 @@ export class EventPanelManager {
 
     try {
       this.app.beginEventsLoading(`イベント「${label}」を削除しています…`);
-      const participantSnapshot = await get(ref(database, `questionIntake/participants/${eventId}`));
+      
+      // スケジュールと参加者のデータを取得
+      const [schedulesSnapshot, participantSnapshot] = await Promise.all([
+        get(ref(database, `questionIntake/schedules/${eventId}`)),
+        get(ref(database, `questionIntake/participants/${eventId}`))
+      ]);
+      
+      const schedulesBranch = schedulesSnapshot.exists() ? schedulesSnapshot.val() : {};
       const participantBranch = participantSnapshot.exists() ? participantSnapshot.val() : {};
       const tokensToRemove = collectParticipantTokens(participantBranch);
 
       const updates = {
-        [`questionIntake/events/${eventId}`]: null,
-        [`questionIntake/schedules/${eventId}`]: null,
-        [`questionIntake/participants/${eventId}`]: null
+        [`questionIntake/events/${eventId}`]: null
       };
+      
+      // 各スケジュールを個別に削除（セキュリティルールに準拠）
+      if (schedulesBranch && typeof schedulesBranch === "object") {
+        const scheduleIds = Object.keys(schedulesBranch);
+        scheduleIds.forEach((scheduleId) => {
+          const trimmedScheduleId = String(scheduleId || "").trim();
+          if (trimmedScheduleId) {
+            updates[`questionIntake/schedules/${eventId}/${trimmedScheduleId}`] = null;
+          }
+        });
+      }
+      
+      // 各スケジュール配下の参加者を個別に削除（セキュリティルールに準拠）
+      if (participantBranch && typeof participantBranch === "object") {
+        const scheduleIds = Object.keys(participantBranch);
+        scheduleIds.forEach((scheduleId) => {
+          const trimmedScheduleId = String(scheduleId || "").trim();
+          if (trimmedScheduleId) {
+            updates[`questionIntake/participants/${eventId}/${trimmedScheduleId}`] = null;
+          }
+        });
+      }
+      
       // 空文字列のトークンを除外して、不正なパスが生成されるのを防ぐ
       tokensToRemove.forEach((token) => {
         const trimmedToken = String(token || "").trim();
