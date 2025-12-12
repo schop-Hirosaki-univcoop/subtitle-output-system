@@ -268,7 +268,8 @@ export class EventPanelManager {
     if (!eventId || String(eventId).trim() === "") {
       throw new Error("イベントIDが不明です。");
     }
-    const label = event?.name || eventId;
+    const trimmedEventId = String(eventId).trim();
+    const label = event?.name || trimmedEventId;
     const confirmed = await this.app.confirm({
       title: "イベントの削除",
       description: `イベント「${label}」と、その日程・参加者・発行済みリンクをすべて削除します。よろしいですか？`,
@@ -285,8 +286,8 @@ export class EventPanelManager {
       
       // スケジュールと参加者のデータを取得
       const [schedulesSnapshot, participantSnapshot] = await Promise.all([
-        get(ref(database, `questionIntake/schedules/${eventId}`)),
-        get(ref(database, `questionIntake/participants/${eventId}`))
+        get(ref(database, `questionIntake/schedules/${trimmedEventId}`)),
+        get(ref(database, `questionIntake/participants/${trimmedEventId}`))
       ]);
       
       const schedulesBranch = schedulesSnapshot.exists() ? schedulesSnapshot.val() : {};
@@ -294,7 +295,7 @@ export class EventPanelManager {
       const tokensToRemove = collectParticipantTokens(participantBranch);
 
       const updates = {
-        [`questionIntake/events/${eventId}`]: null
+        [`questionIntake/events/${trimmedEventId}`]: null
       };
       
       // 各スケジュールを個別に削除（セキュリティルールに準拠）
@@ -303,7 +304,7 @@ export class EventPanelManager {
         scheduleIds.forEach((scheduleId) => {
           const trimmedScheduleId = String(scheduleId || "").trim();
           if (trimmedScheduleId) {
-            updates[`questionIntake/schedules/${eventId}/${trimmedScheduleId}`] = null;
+            updates[`questionIntake/schedules/${trimmedEventId}/${trimmedScheduleId}`] = null;
           }
         });
       }
@@ -314,7 +315,7 @@ export class EventPanelManager {
         scheduleIds.forEach((scheduleId) => {
           const trimmedScheduleId = String(scheduleId || "").trim();
           if (trimmedScheduleId) {
-            updates[`questionIntake/participants/${eventId}/${trimmedScheduleId}`] = null;
+            updates[`questionIntake/participants/${trimmedEventId}/${trimmedScheduleId}`] = null;
           }
         });
       }

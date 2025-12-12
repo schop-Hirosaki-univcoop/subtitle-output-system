@@ -1119,9 +1119,12 @@ export class ParticipantManager {
         updates[`questionIntake/tokens/${token}`] = record;
       });
 
+      // 空文字列のトークンを除外して、不正なパスが生成されるのを防ぐ
       tokensToRemove.forEach(token => {
-        if (!token) return;
-        updates[`questionIntake/tokens/${token}`] = null;
+        const trimmedToken = String(token || "").trim();
+        if (trimmedToken) {
+          updates[`questionIntake/tokens/${trimmedToken}`] = null;
+        }
       });
 
       await update(rootDbRef(), updates);

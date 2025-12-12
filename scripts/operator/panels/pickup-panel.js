@@ -549,6 +549,29 @@ function setupPickupAddDialog(app) {
     closePickupAddDialog(app);
   });
   dialog.addEventListener("keydown", (event) => {
+    // 入力欄に入力中はESC以外の単キーボードショートカット（修飾キーを使わないもの、Shiftを使うもの）は反応しないようにする
+    const activeElement = document.activeElement;
+    const isInputFocused = activeElement && (
+      activeElement.tagName === "INPUT" ||
+      activeElement.tagName === "TEXTAREA" ||
+      activeElement.isContentEditable
+    );
+    
+    // ESCキーは常に有効（フルスクリーン解除などで使用されるため）
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (app.pickupAddState?.submitting) {
+        return;
+      }
+      closePickupAddDialog(app);
+      return;
+    }
+    
+    // 入力欄にフォーカスがある場合は、単キーボードショートカットを無効化
+    if (isInputFocused && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      return;
+    }
+    
     // N でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
     if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       event.preventDefault();
@@ -617,6 +640,26 @@ function setupPickupEditDialog(app) {
     element.addEventListener("click", () => closePickupEditDialog(app));
   });
   dialog.addEventListener("keydown", (event) => {
+    // 入力欄に入力中はESC以外の単キーボードショートカット（修飾キーを使わないもの、Shiftを使うもの）は反応しないようにする
+    const activeElement = document.activeElement;
+    const isInputFocused = activeElement && (
+      activeElement.tagName === "INPUT" ||
+      activeElement.tagName === "TEXTAREA" ||
+      activeElement.isContentEditable
+    );
+    
+    // ESCキーは常に有効（フルスクリーン解除などで使用されるため）
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closePickupEditDialog(app);
+      return;
+    }
+    
+    // 入力欄にフォーカスがある場合は、単キーボードショートカットを無効化
+    if (isInputFocused && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      return;
+    }
+    
     // N でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
     if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       event.preventDefault();
@@ -638,6 +681,26 @@ function setupPickupConfirmDialog(app) {
     element.addEventListener("click", () => closePickupConfirmDialog(app));
   });
   dialog.addEventListener("keydown", (event) => {
+    // 入力欄に入力中はESC以外の単キーボードショートカット（修飾キーを使わないもの、Shiftを使うもの）は反応しないようにする
+    const activeElement = document.activeElement;
+    const isInputFocused = activeElement && (
+      activeElement.tagName === "INPUT" ||
+      activeElement.tagName === "TEXTAREA" ||
+      activeElement.isContentEditable
+    );
+    
+    // ESCキーは常に有効（フルスクリーン解除などで使用されるため）
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closePickupConfirmDialog(app);
+      return;
+    }
+    
+    // 入力欄にフォーカスがある場合は、単キーボードショートカットを無効化
+    if (isInputFocused && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      return;
+    }
+    
     // N でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
     if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       event.preventDefault();
@@ -1095,14 +1158,19 @@ export async function handlePickupDelete(app) {
   try {
     const eventIdRaw = app.state?.activeEventId;
     const eventId = eventIdRaw ? String(eventIdRaw).trim() : "";
+    // uidが空文字列でないことを確認（空文字列だとルートパスへの更新となり権限エラーになる）
+    const trimmedUid = String(state.uid || "").trim();
+    if (!trimmedUid) {
+      throw new Error("UIDが不明です。");
+    }
     const updates = {
-      [`questions/pickup/${state.uid}`]: null
+      [`questions/pickup/${trimmedUid}`]: null
     };
     // questionStatusへの削除はeventIdが存在する場合のみ
     // eventIdが空文字列やnull/undefinedの場合はスキップ
     if (eventId && eventId.length > 0) {
       const statusRef = getQuestionStatusRef(eventId, false);
-      updates[`${statusRef.key}/${state.uid}`] = null;
+      updates[`${statusRef.key}/${trimmedUid}`] = null;
     }
     await update(ref(database), updates);
     app.api?.logAction?.("PICKUP_DELETE", buildPickupLogDetails(state.uid, state.question, state.genre));

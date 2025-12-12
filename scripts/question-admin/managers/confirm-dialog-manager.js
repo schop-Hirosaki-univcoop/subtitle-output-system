@@ -114,6 +114,27 @@ export class ConfirmDialogManager {
     return await new Promise(resolve => {
       this.confirmState.resolver = resolve;
       this.confirmState.keydownHandler = event => {
+        // 入力欄に入力中はESC以外の単キーボードショートカット（修飾キーを使わないもの、Shiftを使うもの）は反応しないようにする
+        const activeElement = document.activeElement;
+        const isInputFocused = activeElement && (
+          activeElement.tagName === "INPUT" ||
+          activeElement.tagName === "TEXTAREA" ||
+          activeElement.isContentEditable
+        );
+        
+        // ESCキーは常に有効（フルスクリーン解除などで使用されるため）
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          this.finalizeConfirm(false);
+          return;
+        }
+        
+        // 入力欄にフォーカスがある場合は、単キーボードショートカットを無効化
+        if (isInputFocused && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          return;
+        }
+        
         // N で確認ダイアログをキャンセル（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
         if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
           event.preventDefault();

@@ -401,7 +401,11 @@ export class ScheduleManager {
    */
   async deleteSchedule(scheduleId, scheduleLabel) {
     const eventId = this.state.selectedEventId;
-    if (!eventId) return;
+    // イベントIDが空文字列でないことを確認（空文字列だとルートパスへの更新となり権限エラーになる）
+    if (!eventId || String(eventId).trim() === "") {
+      throw new Error("イベントを選択してください。");
+    }
+    const trimmedEventId = String(eventId).trim();
     const label = scheduleLabel || scheduleId;
     const confirmed = await this.confirmAction({
       title: "日程の削除",
@@ -416,7 +420,7 @@ export class ScheduleManager {
     }
 
     try {
-      const participantBranch = await fetchDbValue(`questionIntake/participants/${eventId}/${scheduleId}`);
+      const participantBranch = await fetchDbValue(`questionIntake/participants/${trimmedEventId}/${scheduleId}`);
       const tokensToRemove = new Set();
       if (participantBranch && typeof participantBranch === "object") {
         Object.values(participantBranch).forEach(entry => {
@@ -425,17 +429,27 @@ export class ScheduleManager {
         });
       }
 
+      // スケジュールIDが空文字列でないことを確認（空文字列だとルートパスへの更新となり権限エラーになる）
+      const trimmedScheduleId = String(scheduleId || "").trim();
+      if (!trimmedScheduleId) {
+        throw new Error("日程IDが不明です。");
+      }
+      
       const now = Date.now();
       const updates = {
-        [`questionIntake/schedules/${eventId}/${scheduleId}`]: null,
-        [`questionIntake/participants/${eventId}/${scheduleId}`]: null,
-        [`questionIntake/events/${eventId}/updatedAt`]: now
+        [`questionIntake/schedules/${trimmedEventId}/${trimmedScheduleId}`]: null,
+        [`questionIntake/participants/${trimmedEventId}/${trimmedScheduleId}`]: null,
+        [`questionIntake/events/${trimmedEventId}/updatedAt`]: now
       };
 
+      // 空文字列のトークンを除外して、不正なパスが生成されるのを防ぐ
       tokensToRemove.forEach(token => {
-        updates[`questionIntake/tokens/${token}`] = null;
-        this.state.knownTokens.delete(token);
-        delete this.state.tokenRecords[token];
+        const trimmedToken = String(token || "").trim();
+        if (trimmedToken) {
+          updates[`questionIntake/tokens/${trimmedToken}`] = null;
+          this.state.knownTokens.delete(token);
+          delete this.state.tokenRecords[token];
+        }
       });
 
       await update(rootDbRef(), updates);

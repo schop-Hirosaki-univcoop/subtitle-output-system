@@ -266,9 +266,11 @@ export class SchedulePanelManager {
    */
   async deleteSchedule(schedule) {
     const eventId = this.app.selectedEventId;
-    if (!eventId) {
+    // イベントIDが空文字列でないことを確認（空文字列だとルートパスへの更新となり権限エラーになる）
+    if (!eventId || String(eventId).trim() === "") {
       throw new Error("イベントを選択してください。");
     }
+    const trimmedEventId = String(eventId).trim();
     const scheduleId = schedule?.id;
     if (!scheduleId) {
       throw new Error("日程IDが不明です。");
@@ -289,7 +291,14 @@ export class SchedulePanelManager {
 
     try {
       this.app.beginScheduleLoading(`日程「${label}」を削除しています…`);
-      const participantSnapshot = await get(ref(database, `questionIntake/participants/${eventId}/${scheduleId}`));
+      
+      // スケジュールIDが空文字列でないことを確認（空文字列だとルートパスへの更新となり権限エラーになる）
+      const trimmedScheduleId = String(scheduleId || "").trim();
+      if (!trimmedScheduleId) {
+        throw new Error("日程IDが不明です。");
+      }
+      
+      const participantSnapshot = await get(ref(database, `questionIntake/participants/${trimmedEventId}/${trimmedScheduleId}`));
       const participantBranch = participantSnapshot.exists() ? participantSnapshot.val() : {};
       const tokens = new Set();
       if (participantBranch && typeof participantBranch === "object") {
@@ -301,12 +310,17 @@ export class SchedulePanelManager {
 
       const now = Date.now();
       const updates = {
-        [`questionIntake/schedules/${eventId}/${scheduleId}`]: null,
-        [`questionIntake/participants/${eventId}/${scheduleId}`]: null,
-        [`questionIntake/events/${eventId}/updatedAt`]: now
+        [`questionIntake/schedules/${trimmedEventId}/${trimmedScheduleId}`]: null,
+        [`questionIntake/participants/${trimmedEventId}/${trimmedScheduleId}`]: null,
+        [`questionIntake/events/${trimmedEventId}/updatedAt`]: now
       };
+      
+      // 空文字列のトークンを除外して、不正なパスが生成されるのを防ぐ
       tokens.forEach((token) => {
-        updates[`questionIntake/tokens/${token}`] = null;
+        const trimmedToken = String(token || "").trim();
+        if (trimmedToken) {
+          updates[`questionIntake/tokens/${trimmedToken}`] = null;
+        }
       });
 
       await update(ref(database), updates);

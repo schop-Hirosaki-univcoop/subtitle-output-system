@@ -133,21 +133,32 @@ export class GlApplicationManager {
    */
   async deleteInternalApplication(applicationId, assignments) {
     const eventId = this.getCurrentEventId();
-    if (!eventId || !applicationId) {
-      throw new Error("イベントまたは応募IDが無効です。");
+    // イベントIDが空文字列でないことを確認（空文字列だとルートパスへの更新となり権限エラーになる）
+    if (!eventId || String(eventId).trim() === "") {
+      throw new Error("イベントIDが無効です。");
     }
+    // 応募IDが空文字列でないことを確認（空文字列だとルートパスへの更新となり権限エラーになる）
+    if (!applicationId || String(applicationId).trim() === "") {
+      throw new Error("応募IDが無効です。");
+    }
+    const trimmedEventId = String(eventId).trim();
+    const trimmedApplicationId = String(applicationId).trim();
     const updates = {};
-    updates[`glIntake/applications/${eventId}/${applicationId}`] = null;
+    updates[`glIntake/applications/${trimmedEventId}/${trimmedApplicationId}`] = null;
     
     const assignmentEntry = assignments.get(applicationId);
     if (assignmentEntry) {
       if (assignmentEntry.schedules instanceof Map) {
         assignmentEntry.schedules.forEach((_, scheduleId) => {
-          updates[`glAssignments/${eventId}/${scheduleId}/${applicationId}`] = null;
+          // 空文字列のスケジュールIDを除外して、不正なパスが生成されるのを防ぐ
+          const trimmedScheduleId = String(scheduleId || "").trim();
+          if (trimmedScheduleId) {
+            updates[`glAssignments/${trimmedEventId}/${trimmedScheduleId}/${trimmedApplicationId}`] = null;
+          }
         });
       }
       if (assignmentEntry.fallback) {
-        updates[`glAssignments/${eventId}/${applicationId}`] = null;
+        updates[`glAssignments/${trimmedEventId}/${trimmedApplicationId}`] = null;
       }
     }
     

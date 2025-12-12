@@ -156,6 +156,34 @@ export function closeEditDialog(app) {
  * @param {KeyboardEvent} event - キーボードイベント
  */
 export function handleDialogKeydown(app, event) {
+  // 入力欄に入力中はESC以外の単キーボードショートカット（修飾キーを使わないもの、Shiftを使うもの）は反応しないようにする
+  const activeElement = document.activeElement;
+  const isInputFocused = activeElement && (
+    activeElement.tagName === "INPUT" ||
+    activeElement.tagName === "TEXTAREA" ||
+    activeElement.isContentEditable
+  );
+  
+  // ESCキーは常に有効（フルスクリーン解除などで使用されるため）
+  if (event.key === "Escape") {
+    if (app.activeDialog) {
+      event.preventDefault();
+      if (app.activeDialog === app.dom.editDialog) {
+        closeEditDialog(app);
+      } else if (typeof app.closeActiveDialog === "function") {
+        app.closeActiveDialog();
+      } else {
+        closeDialog(app, app.activeDialog);
+      }
+    }
+    return;
+  }
+  
+  // 入力欄にフォーカスがある場合は、単キーボードショートカットを無効化
+  if (isInputFocused && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    return;
+  }
+  
   // N でダイアログを閉じる（ESCはフルスクリーン解除で使用されるため、Chromeのショートカットと競合しないようにNを使用）
   if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && app.activeDialog) {
     event.preventDefault();

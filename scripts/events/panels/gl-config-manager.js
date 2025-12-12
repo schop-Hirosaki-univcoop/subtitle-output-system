@@ -158,7 +158,11 @@ export class GlConfigManager {
       updates[`glIntake/slugIndex/${slug}`] = eventId;
     }
     if (previousSlug && previousSlug !== slug) {
-      updates[`glIntake/slugIndex/${previousSlug}`] = null;
+      // 空文字列のslugを除外して、不正なパスが生成されるのを防ぐ
+      const trimmedPreviousSlug = String(previousSlug || "").trim();
+      if (trimmedPreviousSlug) {
+        updates[`glIntake/slugIndex/${trimmedPreviousSlug}`] = null;
+      }
     }
     
     await update(ref(database), updates);

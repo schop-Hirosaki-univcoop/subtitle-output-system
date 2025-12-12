@@ -347,7 +347,12 @@ export class EventManager {
    * @param {string} eventName - イベント名
    */
   async deleteEvent(eventId, eventName) {
-    const label = eventName || eventId;
+    // イベントIDが空文字列でないことを確認（空文字列だとルートパスへの更新となり権限エラーになる）
+    if (!eventId || String(eventId).trim() === "") {
+      throw new Error("イベントIDが不明です。");
+    }
+    const trimmedEventId = String(eventId).trim();
+    const label = eventName || trimmedEventId;
     const confirmed = await this.confirmAction({
       title: "イベントの削除",
       description: `イベント「${label}」と、その日程・参加者・発行済みリンクをすべて削除します。よろしいですか？`,
@@ -361,18 +366,20 @@ export class EventManager {
     }
 
     try {
-      const participantBranch = await fetchDbValue(`questionIntake/participants/${eventId}`);
+      const participantBranch = await fetchDbValue(`questionIntake/participants/${trimmedEventId}`);
       const tokensToRemove = collectParticipantTokens(participantBranch);
 
       const updates = {
-        [`questionIntake/events/${eventId}`]: null,
-        [`questionIntake/schedules/${eventId}`]: null,
-        [`questionIntake/participants/${eventId}`]: null
+        [`questionIntake/events/${trimmedEventId}`]: null,
+        [`questionIntake/schedules/${trimmedEventId}`]: null,
+        [`questionIntake/participants/${trimmedEventId}`]: null
       };
 
+      // 空文字列のトークンを除外して、不正なパスが生成されるのを防ぐ
       tokensToRemove.forEach(token => {
-        updates[`questionIntake/tokens/${token}`] = null;
-        if (token) {
+        const trimmedToken = String(token || "").trim();
+        if (trimmedToken) {
+          updates[`questionIntake/tokens/${trimmedToken}`] = null;
           this.state.knownTokens.delete(token);
           delete this.state.tokenRecords[token];
         }
@@ -380,7 +387,7 @@ export class EventManager {
 
       await update(rootDbRef(), updates);
 
-      if (this.state.selectedEventId === eventId) {
+      if (this.state.selectedEventId === trimmedEventId) {
         this.state.selectedEventId = null;
         this.state.selectedScheduleId = null;
         this.state.participants = [];
