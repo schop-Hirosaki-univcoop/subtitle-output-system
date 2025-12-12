@@ -1028,7 +1028,12 @@ export class InitManager {
     }
     
     // 初期化後の処理
-    this.attachEventHandlers();
+    if (refs.eventHandlersManager) {
+      refs.eventHandlersManager.attachEventHandlers();
+    } else {
+      // フォールバック: グローバル関数を使用（通常は実行されない）
+      this.attachEventHandlers();
+    }
     this.setAuthUi(Boolean(this.state.user));
     this.initLoaderSteps(this.isEmbeddedMode() ? [] : this.STEP_LABELS);
     this.resetState();
