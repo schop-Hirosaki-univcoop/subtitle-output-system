@@ -162,7 +162,6 @@ export class ButtonStateManager {
       }
     }
   }
-}
 
   /**
    * アクションボタン状態の設定
