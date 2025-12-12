@@ -29,9 +29,22 @@ import {
 import { dom } from "./dom.js";
 import { goToLogin } from "../shared/routes.js";
 import { openDialog, closeDialog, bindDialogDismiss, setFormError } from "./dialog.js";
-import { showLoader, hideLoader, initLoaderSteps, setLoaderStep, finishLoaderSteps } from "./loader.js";
+import { showLoader, hideLoader, updateLoaderText, initLoaderSteps, setLoaderStep, finishLoaderSteps } from "./loader.js";
 // loadAuthPreflightContext, preflightContextMatchesUser は AuthManager に移行されました
 import { collectParticipantTokens } from "../shared/participant-tokens.js";
+import {
+  formatDatePart,
+  normalizeDateInputValue,
+  formatDateTimeLocal,
+  combineDateAndTime,
+  setCalendarPickedDate,
+  shiftScheduleDialogCalendarMonth,
+  prepareScheduleDialogCalendar,
+  getSchedulePrimaryDate,
+  describeScheduleRange,
+  syncScheduleEndMin,
+  MS_PER_DAY
+} from "./calendar.js";
 import {
   sleep,
   toMillis,
@@ -482,27 +495,6 @@ function getElementById(id) {
 }
 // combineDateAndTime などの時間結合ヘルパーは calendar.js に集約しており、
 // 印刷ビューでも同じロジックを共有するため utils.js からは import しない。
-import {
-  formatDatePart,
-  normalizeDateInputValue,
-  formatDateTimeLocal,
-  combineDateAndTime,
-  setCalendarPickedDate,
-  shiftScheduleDialogCalendarMonth,
-  prepareScheduleDialogCalendar,
-  getSchedulePrimaryDate,
-  describeScheduleRange,
-  syncScheduleEndMin,
-  MS_PER_DAY
-} from "./calendar.js";
-import {
-  showLoader,
-  hideLoader,
-  updateLoaderText,
-  initLoaderSteps,
-  setLoaderStep,
-  finishLoaderSteps
-} from "./loader.js";
 
 const FOCUS_TARGETS = new Set(["participants", "schedules", "events"]);
 
