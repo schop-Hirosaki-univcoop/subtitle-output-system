@@ -81,7 +81,7 @@
 
 3. **中規模の単一ファイル**
 
-   - `scripts/gl-form/index.js` - 860 行
+   - `scripts/gl-form/index.js` - 177 行（リファクタリング進行中、段階 1-3 完了）
    - `scripts/login.js` - 664 行
    - `scripts/participant-mail-view/index.js` - 310 行
 
@@ -557,7 +557,7 @@ scripts/
 
 ### 中程度の問題（優先度: 中）
 
-4. **`scripts/gl-form/index.js` が 860 行**
+4. **`scripts/gl-form/index.js` が 177 行（リファクタリング進行中、段階 1-3 完了）**
 
    - 許容範囲内だが、分割を検討すべき
    - 責務の分離が不十分
@@ -1188,10 +1188,28 @@ scripts/login/
        - 実績: 約 1,590 行の削減（`gl-panel.js` は 1,659 行、`gl-config-manager.js` は 240 行、段階 5 完了）
        - 累計削減: 元の 3,249 行から約 49% 削減（約 1,590 行削減）
 
-4. **`scripts/gl-form/index.js` のリファクタリング**
+4. **`scripts/gl-form/index.js` のリファクタリング**（進行中）
    - 期間: 3-5 日
    - 影響範囲: GL フォーム画面
    - リスク: 低
+   - **進捗状況**:
+     - ✅ 段階 1: ユーティリティ関数を `gl-form-utils.js` に移行完了（約 224 行削減）
+       - `gl-form/index.js`: 860 行 → 636 行（約 224 行削減、約 26% 削減）
+       - `gl-form-utils.js`: 310 行（新規作成、ユーティリティ関数 10 個と定数 1 個を実装）
+       - 移行完了: `ensureString`, `parseTimestamp`, `formatPeriod`, `createUnitTreeFromArray`, `parseUnitOption`, `parseUnitLevel`, `formatScheduleRange`, `formatScheduleOption`, `parseFaculties`, `parseSchedules`, `CUSTOM_OPTION_VALUE`
+       - 実績: 約 224 行の削減（`gl-form/index.js` は 636 行、`gl-form-utils.js` は 310 行、段階 1 完了）
+     - ✅ 段階 2: フォーム管理機能を `gl-form-manager.js` に移行完了（約 224 行削減）
+       - `gl-form/index.js`: 636 行 → 412 行（約 224 行削減、約 35% 削減）
+       - `gl-form-manager.js`: 380 行（新規作成、フォーム管理機能 13 個を実装）
+       - 移行完了: `showGuard`, `hideGuard`, `renderFaculties`, `clearAcademicFields`, `removeAcademicFieldsAfter`, `updateAcademicCustomField`, `renderAcademicLevel`, `handleAcademicLevelChange`, `renderAcademicTreeForFaculty`, `collectAcademicPathState`, `renderShifts`, `populateContext`
+       - 実績: 約 448 行の削減（`gl-form/index.js` は 412 行、`gl-form-utils.js` は 310 行、`gl-form-manager.js` は 380 行、段階 2 完了）
+       - 累計削減: 元の 860 行から約 52% 削減（約 448 行削減）
+     - ✅ 段階 3: データ取得・送信機能を `gl-form-data-manager.js` に移行完了（約 235 行削減）
+       - `gl-form/index.js`: 412 行 → 177 行（約 235 行削減、約 57% 削減、未使用インポート削除により追加削減）
+       - `gl-form-data-manager.js`: 287 行（新規作成、データ取得・送信機能 3 個を実装）
+       - 移行完了: `prepareForm`, `collectShifts`, `handleSubmit`
+       - 実績: 約 683 行の削減（`gl-form/index.js` は 177 行、`gl-form-utils.js` は 310 行、`gl-form-manager.js` は 380 行、`gl-form-data-manager.js` は 287 行、段階 3 完了）
+       - 累計削減: 元の 860 行から約 79% 削減（約 683 行削減）
 
 ### フェーズ 3: 軽微な問題の解決（優先度: 低）
 
@@ -1265,7 +1283,10 @@ scripts/login/
 - ✅ `scripts/events/panels/gl-config-manager.js` - 240 行（新規作成、フェーズ 2 段階 5 完了、設定データの読み込み・正規化・保存・URL コピー・共通カタログ適用機能を実装）
 - ✅ `scripts/events/panels/gl-utils.js` - 789 行（新規作成、フェーズ 2 段階 1 完了）
 - ✅ `scripts/events/panels/gl-renderer.js` - 982 行（新規作成、フェーズ 2 段階 2 完了、内部スタッフ関連 5 個 + スケジュール班関連 2 個 + 応募者・スケジュール関連 2 個 + 依存メソッド 5 個を実装）
-- ⚠️ `scripts/gl-form/index.js` - 860 行、要検討
+- ⚠️ `scripts/gl-form/index.js` - 177 行、要検討（リファクタリング進行中、段階 1-3 完了、元の 860 行から約 683 行削減、約 79% 削減）
+- ✅ `scripts/gl-form/gl-form-utils.js` - 310 行（新規作成、フェーズ 2 段階 1 完了、ユーティリティ関数 10 個と定数 1 個を実装）
+- ✅ `scripts/gl-form/gl-form-manager.js` - 380 行（新規作成、フェーズ 2 段階 2 完了、フォーム管理機能 13 個を実装）
+- ✅ `scripts/gl-form/gl-form-data-manager.js` - 287 行（新規作成、フェーズ 2 段階 3 完了、データ取得・送信機能 3 個を実装）
 - ⚠️ `scripts/login.js` - 664 行、要検討
 
 ### 推奨アクション
