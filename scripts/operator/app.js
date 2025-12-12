@@ -605,7 +605,14 @@ export class OperatorApp {
    * @returns {string}
    */
   derivePresenceScheduleKey(eventId, payload = {}, entryId = "") {
-    return this.presenceManager.derivePresenceScheduleKey(eventId, payload, entryId);
+    if (
+      this.presenceManager &&
+      typeof this.presenceManager.derivePresenceScheduleKey === "function"
+    ) {
+      return this.presenceManager.derivePresenceScheduleKey(eventId, payload, entryId);
+    }
+
+    return sharedDerivePresenceScheduleKey(eventId, payload, entryId);
   }
 
   /**
