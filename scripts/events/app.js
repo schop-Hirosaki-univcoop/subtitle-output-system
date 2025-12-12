@@ -1716,9 +1716,9 @@ export class EventAdminApp {
 
   getParticipantHostInterface() {
     // EventStateManager に委譲
-    const interface = this.stateManager.getParticipantHostInterface();
-    this.participantHostInterface = interface;
-    return interface;
+    const hostInterface = this.stateManager.getParticipantHostInterface();
+    this.participantHostInterface = hostInterface;
+    return hostInterface;
   }
 
   selectSchedule(scheduleId) {
