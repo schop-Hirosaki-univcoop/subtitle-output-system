@@ -10,7 +10,7 @@ import {
   limitToLast,
   remove,
   child
-} from "../operator/firebase.js";
+} from "../../operator/firebase.js";
 
 const MESSAGE_LIMIT = 200;
 const SCROLL_THRESHOLD = 48;

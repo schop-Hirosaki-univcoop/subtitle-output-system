@@ -8,7 +8,7 @@ import {
   PANEL_STAGE_INFO,
   FOCUSABLE_SELECTOR
 } from "../config.js";
-import { OPERATOR_MODE_TELOP } from "../shared/operator-modes.js";
+import { OPERATOR_MODE_TELOP } from "../../shared/operator-modes.js";
 import { buildContextDescription } from "../helpers.js";
 import { logError } from "../helpers.js";
 
