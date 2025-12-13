@@ -196,7 +196,13 @@ export class InitManager {
       getEventGlRoster: this.getEventGlRoster,
       getEventGlAssignmentsMap: this.getEventGlAssignmentsMap,
       resolveScheduleAssignment: this.resolveScheduleAssignment,
-      loadGlDataForEvent: this.loadGlDataForEvent,
+      loadGlDataForEvent: async (eventId, options) => {
+        if (refs.glManager) {
+          return await refs.glManager.loadGlDataForEvent(eventId, options);
+        } else {
+          return await this.loadGlDataForEvent(eventId, options);
+        }
+      },
       normalizeKey: this.normalizeKey,
       normalizeGroupNumberValue: this.normalizeGroupNumberValue,
       NO_TEAM_GROUP_KEY: this.NO_TEAM_GROUP_KEY,
@@ -204,9 +210,27 @@ export class InitManager {
       RELOCATE_LABEL: this.RELOCATE_LABEL,
       GL_STAFF_GROUP_KEY: this.GL_STAFF_GROUP_KEY,
       // ボタン状態管理関数
-      syncAllPrintButtonStates: this.syncAllPrintButtonStates,
-      setPrintButtonBusy: this.setPrintButtonBusy,
-      setStaffPrintButtonBusy: this.setStaffPrintButtonBusy
+      syncAllPrintButtonStates: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncAllPrintButtonStates();
+        } else {
+          return this.syncAllPrintButtonStates();
+        }
+      },
+      setPrintButtonBusy: (isBusy) => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.setPrintButtonBusy(isBusy);
+        } else {
+          return this.setPrintButtonBusy(isBusy);
+        }
+      },
+      setStaffPrintButtonBusy: (isBusy) => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.setStaffPrintButtonBusy(isBusy);
+        } else {
+          return this.setStaffPrintButtonBusy(isBusy);
+        }
+      }
     });
     
     refs.printManager.hydrateSettingsFromStorage();
@@ -219,7 +243,13 @@ export class InitManager {
       signatureForEntries: this.signatureForEntries,
       snapshotParticipantList: this.snapshotParticipantList,
       normalizeKey: this.normalizeKey,
-      isEmbeddedMode: this.isEmbeddedMode,
+      isEmbeddedMode: () => {
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.isEmbeddedMode();
+        } else {
+          return this.isEmbeddedMode();
+        }
+      },
       UPLOAD_STATUS_PLACEHOLDERS: this.UPLOAD_STATUS_PLACEHOLDERS
     });
 
@@ -228,9 +258,29 @@ export class InitManager {
       state: this.state,
       dom: this.dom,
       // 依存関数と定数
-      getEmbedPrefix: this.getEmbedPrefix,
-      isEmbeddedMode: this.isEmbeddedMode,
-      updateParticipantActionPanelState: this.updateParticipantActionPanelState,
+      getEmbedPrefix: () => {
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.getEmbedPrefix();
+        } else {
+          return this.getEmbedPrefix();
+        }
+      },
+      isEmbeddedMode: () => {
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.isEmbeddedMode();
+        } else {
+          return this.isEmbeddedMode();
+        }
+      },
+      updateParticipantActionPanelState: () => {
+        // ButtonStateManager が初期化された後に呼び出されるため、refs を使用
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.updateParticipantActionPanelState();
+        } else {
+          // フォールバック: グローバル関数を使用（通常は実行されない）
+          return this.updateParticipantActionPanelState();
+        }
+      },
       FOCUS_TARGETS: this.FOCUS_TARGETS
     });
 
@@ -250,12 +300,24 @@ export class InitManager {
       describeScheduleRange: this.describeScheduleRange,
       getScheduleLabel: this.getScheduleLabel,
       normalizeKey: this.normalizeKey,
-      renderEvents: this.renderEvents,
+      renderEvents: () => {
+        if (refs.eventManager) {
+          return refs.eventManager.renderEvents();
+        } else {
+          return this.renderEvents();
+        }
+      },
       renderSchedules: () => {
         if (!refs.scheduleManager) return;
         return refs.scheduleManager.renderSchedules();
       },
-      updateParticipantContext: this.updateParticipantContext
+      updateParticipantContext: (options) => {
+        if (refs.participantContextManager) {
+          return refs.participantContextManager.updateParticipantContext(options);
+        } else {
+          return this.updateParticipantContext(options);
+        }
+      }
     });
 
     // ButtonStateManager を初期化
@@ -274,7 +336,12 @@ export class InitManager {
         if (!refs.mailManager) return;
         return refs.mailManager.syncMailActionState();
       },
-      syncAllPrintButtonStates: this.syncAllPrintButtonStates,
+      syncAllPrintButtonStates: () => {
+        // ButtonStateManager 自身のメソッドを呼び出すため、直接呼び出しは不要
+        // この関数は PrintManager などから呼び出されるが、ButtonStateManager の初期化後なので問題ない
+        // ただし、循環参照を避けるため、ここではフォールバックのみ
+        return this.syncAllPrintButtonStates();
+      },
       // 印刷関連の依存関数
       logPrintDebug: this.logPrintDebug,
       logPrintWarn: this.logPrintWarn,
@@ -335,13 +402,55 @@ export class InitManager {
       state: this.state,
       // 依存関数と定数
       api: this.api,
-      setUploadStatus: this.setUploadStatus,
-      getSelectionRequiredMessage: this.getSelectionRequiredMessage,
-      renderParticipants: this.renderParticipants,
-      hasUnsavedChanges: this.hasUnsavedChanges,
-      captureParticipantBaseline: this.captureParticipantBaseline,
-      setActionButtonState: this.setActionButtonState,
-      confirmAction: this.confirmAction
+      setUploadStatus: () => {
+        if (refs.stateManager) {
+          return refs.stateManager.setUploadStatus(...arguments);
+        } else {
+          return this.setUploadStatus(...arguments);
+        }
+      },
+      getSelectionRequiredMessage: (prefix) => {
+        if (refs.stateManager) {
+          return refs.stateManager.getSelectionRequiredMessage(prefix);
+        } else {
+          return this.getSelectionRequiredMessage(prefix);
+        }
+      },
+      renderParticipants: () => {
+        if (refs.participantManager) {
+          return refs.participantManager.renderParticipants();
+        } else {
+          return this.renderParticipants();
+        }
+      },
+      hasUnsavedChanges: () => {
+        if (refs.stateManager) {
+          return refs.stateManager.hasUnsavedChanges();
+        } else {
+          return this.hasUnsavedChanges();
+        }
+      },
+      captureParticipantBaseline: (entries, options) => {
+        if (refs.stateManager) {
+          return refs.stateManager.captureParticipantBaseline(entries, options);
+        } else {
+          return this.captureParticipantBaseline(entries, options);
+        }
+      },
+      setActionButtonState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.setActionButtonState(...arguments);
+        } else {
+          return this.setActionButtonState(...arguments);
+        }
+      },
+      confirmAction: async (options) => {
+        if (refs.confirmDialogManager) {
+          return await refs.confirmDialogManager.confirmAction(options);
+        } else {
+          return await this.confirmAction(options);
+        }
+      }
     });
     
     // AuthManager を初期化
@@ -354,16 +463,44 @@ export class InitManager {
       getAuthIdToken: this.getAuthIdToken,
       firebaseConfig: this.firebaseConfig,
       goToLogin: this.goToLogin,
-      setAuthUi: this.setAuthUi,
-      setLoginError: this.setLoginError,
+      setAuthUi: () => {
+        if (refs.uiManager) {
+          return refs.uiManager.setAuthUi(...arguments);
+        } else {
+          return this.setAuthUi(...arguments);
+        }
+      },
+      setLoginError: (message) => {
+        if (refs.uiManager) {
+          return refs.uiManager.setLoginError(message);
+        } else {
+          return this.setLoginError(message);
+        }
+      },
       showLoader: this.showLoader,
       hideLoader: this.hideLoader,
       initLoaderSteps: this.initLoaderSteps,
       setLoaderStep: this.setLoaderStep,
       finishLoaderSteps: this.finishLoaderSteps,
-      resetState: this.resetState,
-      renderUserSummary: this.renderUserSummary,
-      isEmbeddedMode: this.isEmbeddedMode,
+      resetState: () => {
+        // resetState は複雑な処理を含むため、refs を使用する実装は resetState 内で行う
+        // ここではフォールバックとしてグローバル関数を使用
+        return this.resetState(...arguments);
+      },
+      renderUserSummary: (user) => {
+        if (refs.uiManager) {
+          return refs.uiManager.renderUserSummary(user);
+        } else {
+          return this.renderUserSummary(user);
+        }
+      },
+      isEmbeddedMode: () => {
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.isEmbeddedMode();
+        } else {
+          return this.isEmbeddedMode();
+        }
+      },
       STEP_LABELS: this.STEP_LABELS,
       ensureTokenSnapshot: this.ensureTokenSnapshot,
       loadEvents: (options) => {
@@ -374,11 +511,35 @@ export class InitManager {
         if (!refs.participantManager) return Promise.resolve();
         return refs.participantManager.loadParticipants(options);
       },
-      drainQuestionQueue: this.drainQuestionQueue,
-      resolveEmbedReady: this.resolveEmbedReady,
-      maybeFocusInitialSection: this.maybeFocusInitialSection,
+      drainQuestionQueue: async () => {
+        if (refs.tokenApiManager) {
+          return await refs.tokenApiManager.drainQuestionQueue(this.api);
+        } else {
+          return await this.drainQuestionQueue();
+        }
+      },
+      resolveEmbedReady: () => {
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.resolveEmbedReady();
+        } else {
+          return this.resolveEmbedReady();
+        }
+      },
+      maybeFocusInitialSection: () => {
+        if (refs.uiManager) {
+          return refs.uiManager.maybeFocusInitialSection();
+        } else {
+          return this.maybeFocusInitialSection();
+        }
+      },
       sleep: this.sleep,
-      setUploadStatus: this.setUploadStatus,
+      setUploadStatus: () => {
+        if (refs.stateManager) {
+          return refs.stateManager.setUploadStatus(...arguments);
+        } else {
+          return this.setUploadStatus(...arguments);
+        }
+      },
       redirectingToIndexRef: this.redirectingToIndexRef
     });
     
@@ -387,25 +548,91 @@ export class InitManager {
       dom: this.dom,
       state: this.state,
       // 依存関数と定数
-      readHostSelectionDataset: this.readHostSelectionDataset,
-      getHostSelectionElement: this.getHostSelectionElement,
-      loadGlDataForEvent: this.loadGlDataForEvent,
-      renderEvents: this.renderEvents,
+      readHostSelectionDataset: (target) => {
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.readHostSelectionDataset(target);
+        } else {
+          return this.readHostSelectionDataset(target);
+        }
+      },
+      getHostSelectionElement: () => {
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.getHostSelectionElement();
+        } else {
+          return this.getHostSelectionElement();
+        }
+      },
+      loadGlDataForEvent: async (eventId, options) => {
+        if (refs.glManager) {
+          return await refs.glManager.loadGlDataForEvent(eventId, options);
+        } else {
+          return await this.loadGlDataForEvent(eventId, options);
+        }
+      },
+      renderEvents: () => {
+        if (refs.eventManager) {
+          return refs.eventManager.renderEvents();
+        } else {
+          return this.renderEvents();
+        }
+      },
       renderSchedules: () => {
         if (!refs.scheduleManager) return;
         return refs.scheduleManager.renderSchedules();
       },
-      updateParticipantContext: this.updateParticipantContext,
-      captureParticipantBaseline: this.captureParticipantBaseline,
-      syncSaveButtonState: this.syncSaveButtonState,
+      updateParticipantContext: (options) => {
+        if (refs.participantContextManager) {
+          return refs.participantContextManager.updateParticipantContext(options);
+        } else {
+          return this.updateParticipantContext(options);
+        }
+      },
+      captureParticipantBaseline: (entries, options) => {
+        if (refs.stateManager) {
+          return refs.stateManager.captureParticipantBaseline(entries, options);
+        } else {
+          return this.captureParticipantBaseline(entries, options);
+        }
+      },
+      syncSaveButtonState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncSaveButtonState();
+        } else {
+          return this.syncSaveButtonState();
+        }
+      },
       syncMailActionState: () => {
         if (!refs.mailManager) return;
         return refs.mailManager.syncMailActionState();
       },
-      syncAllPrintButtonStates: this.syncAllPrintButtonStates,
-      syncClearButtonState: this.syncClearButtonState,
-      syncTemplateButtons: this.syncTemplateButtons,
-      syncSelectedEventSummary: this.syncSelectedEventSummary,
+      syncAllPrintButtonStates: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncAllPrintButtonStates();
+        } else {
+          return this.syncAllPrintButtonStates();
+        }
+      },
+      syncClearButtonState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncClearButtonState();
+        } else {
+          return this.syncClearButtonState();
+        }
+      },
+      syncTemplateButtons: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncTemplateButtons();
+        } else {
+          return this.syncTemplateButtons();
+        }
+      },
+      syncSelectedEventSummary: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncSelectedEventSummary();
+        } else {
+          return this.syncSelectedEventSummary();
+        }
+      },
       renderParticipantChangePreview: (diff, changeInfoByKey, participants) => {
         if (!refs.participantUIManager) {
           throw new Error("ParticipantUIManager is not initialized");
@@ -416,13 +643,49 @@ export class InitManager {
         if (!refs.relocationManager) return;
         return refs.relocationManager.renderRelocationPrompt();
       },
-      applyParticipantSelectionStyles: this.applyParticipantSelectionStyles,
-      updateParticipantActionPanelState: this.updateParticipantActionPanelState,
-      emitParticipantSyncEvent: this.emitParticipantSyncEvent,
+      applyParticipantSelectionStyles: (options) => {
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.applyParticipantSelectionStyles(options);
+        } else {
+          return this.applyParticipantSelectionStyles(options);
+        }
+      },
+      updateParticipantActionPanelState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.updateParticipantActionPanelState();
+        } else {
+          return this.updateParticipantActionPanelState();
+        }
+      },
+      emitParticipantSyncEvent: (detail) => {
+        if (refs.participantContextManager) {
+          return refs.participantContextManager.emitParticipantSyncEvent(detail);
+        } else {
+          return this.emitParticipantSyncEvent(detail);
+        }
+      },
       describeScheduleRange: this.describeScheduleRange,
-      ensureTokenSnapshot: this.ensureTokenSnapshot,
-      generateQuestionToken: this.generateQuestionToken,
-      setUploadStatus: this.setUploadStatus,
+      ensureTokenSnapshot: async (force) => {
+        if (refs.tokenApiManager) {
+          return await refs.tokenApiManager.ensureTokenSnapshot(force);
+        } else {
+          return await this.ensureTokenSnapshot(force);
+        }
+      },
+      generateQuestionToken: (existingTokens) => {
+        if (refs.tokenApiManager) {
+          return refs.tokenApiManager.generateQuestionToken(existingTokens);
+        } else {
+          return this.generateQuestionToken(existingTokens);
+        }
+      },
+      setUploadStatus: () => {
+        if (refs.stateManager) {
+          return refs.stateManager.setUploadStatus(...arguments);
+        } else {
+          return this.setUploadStatus(...arguments);
+        }
+      },
       // renderParticipants に必要な依存関係
       buildParticipantCard: (entry, index, options) => {
         if (!refs.participantUIManager) {
@@ -452,15 +715,33 @@ export class InitManager {
       },
       ensureTeamAssignmentMap: this.ensureTeamAssignmentMap,
       applyAssignmentsToEventCache: this.applyAssignmentsToEventCache,
-      hasUnsavedChanges: this.hasUnsavedChanges,
-      confirmAction: this.confirmAction,
+      hasUnsavedChanges: () => {
+        if (refs.stateManager) {
+          return refs.stateManager.hasUnsavedChanges();
+        } else {
+          return this.hasUnsavedChanges();
+        }
+      },
+      confirmAction: async (options) => {
+        if (refs.confirmDialogManager) {
+          return await refs.confirmDialogManager.confirmAction(options);
+        } else {
+          return await this.confirmAction(options);
+        }
+      },
       setFormError: this.setFormError,
       openDialog: this.openDialog,
       closeDialog: this.closeDialog,
       RELOCATE_LABEL: this.RELOCATE_LABEL,
       // handleSave に必要な依存関係
       getScheduleRecord: this.getScheduleRecord,
-      loadEvents: this.loadEvents
+      loadEvents: (options) => {
+        if (refs.eventManager) {
+          return refs.eventManager.loadEvents(options);
+        } else {
+          return this.loadEvents(options);
+        }
+      }
     });
     
     // RelocationManager を初期化
@@ -487,8 +768,20 @@ export class InitManager {
         if (!refs.participantManager) return;
         return refs.participantManager.renderParticipants();
       },
-      syncSaveButtonState: this.syncSaveButtonState,
-      setUploadStatus: this.setUploadStatus,
+      syncSaveButtonState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncSaveButtonState();
+        } else {
+          return this.syncSaveButtonState();
+        }
+      },
+      setUploadStatus: () => {
+        if (refs.stateManager) {
+          return refs.stateManager.setUploadStatus(...arguments);
+        } else {
+          return this.setUploadStatus(...arguments);
+        }
+      },
       openDialog: this.openDialog,
       closeDialog: this.closeDialog,
       setFormError: this.setFormError,
@@ -511,21 +804,73 @@ export class InitManager {
       state: this.state,
       // 依存関数と定数
       normalizeKey: this.normalizeKey,
-      selectEvent: this.selectEvent,
-      loadEvents: this.loadEvents,
-      finalizeEventLoad: this.finalizeEventLoad,
-      updateParticipantContext: this.updateParticipantContext,
+      selectEvent: (eventId, options) => {
+        if (refs.eventManager) {
+          return refs.eventManager.selectEvent(eventId, options);
+        } else {
+          return this.selectEvent(eventId, options);
+        }
+      },
+      loadEvents: (options) => {
+        if (refs.eventManager) {
+          return refs.eventManager.loadEvents(options);
+        } else {
+          return this.loadEvents(options);
+        }
+      },
+      finalizeEventLoad: (options) => {
+        if (refs.scheduleUtilityManager) {
+          return refs.scheduleUtilityManager.finalizeEventLoad(options);
+        } else {
+          return this.finalizeEventLoad(options);
+        }
+      },
+      updateParticipantContext: (options) => {
+        if (refs.participantContextManager) {
+          return refs.participantContextManager.updateParticipantContext(options);
+        } else {
+          return this.updateParticipantContext(options);
+        }
+      },
       HOST_SELECTION_ATTRIBUTE_KEYS: this.HOST_SELECTION_ATTRIBUTE_KEYS,
       // 一時的な依存関数（後で移行予定）
       selectSchedule: (scheduleId, options) => {
         if (!refs.scheduleManager) return;
         return refs.scheduleManager.selectSchedule(scheduleId, options);
       },
-      refreshScheduleLocationHistory: this.refreshScheduleLocationHistory,
-      populateScheduleLocationOptions: this.populateScheduleLocationOptions,
-      hostSelectionSignature: this.hostSelectionSignature,
-      stopHostSelectionBridge: this.stopHostSelectionBridge,
-      startHostSelectionBridge: this.startHostSelectionBridge
+      refreshScheduleLocationHistory: () => {
+        if (refs.scheduleUtilityManager) {
+          return refs.scheduleUtilityManager.refreshScheduleLocationHistory();
+        } else {
+          return this.refreshScheduleLocationHistory();
+        }
+      },
+      populateScheduleLocationOptions: (preferred) => {
+        if (refs.scheduleUtilityManager) {
+          return refs.scheduleUtilityManager.populateScheduleLocationOptions(preferred);
+        } else {
+          return this.populateScheduleLocationOptions(preferred);
+        }
+      },
+      hostSelectionSignature: (selection) => {
+        // HostIntegrationManager 自身のメソッドを呼び出すため、直接呼び出しは不要
+        // この関数は HostIntegrationManager の初期化時に渡されるが、循環参照を避けるため、フォールバックのみ
+        return this.hostSelectionSignature(selection);
+      },
+      stopHostSelectionBridge: () => {
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.stopHostSelectionBridge();
+        } else {
+          return this.stopHostSelectionBridge();
+        }
+      },
+      startHostSelectionBridge: () => {
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.startHostSelectionBridge();
+        } else {
+          return this.startHostSelectionBridge();
+        }
+      }
     });
     
     // EventHandlersManager を初期化
@@ -783,8 +1128,20 @@ export class InitManager {
         }
         return refs.stateManager.setUploadStatus(message, variant);
       },
-      syncTemplateButtons: this.syncTemplateButtons,
-      syncClearButtonState: this.syncClearButtonState,
+      syncTemplateButtons: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncTemplateButtons();
+        } else {
+          return this.syncTemplateButtons();
+        }
+      },
+      syncClearButtonState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncClearButtonState();
+        } else {
+          return this.syncClearButtonState();
+        }
+      },
       PARTICIPANT_DESCRIPTION_DEFAULT: this.PARTICIPANT_DESCRIPTION_DEFAULT,
       FOCUS_TARGETS: this.FOCUS_TARGETS
     });
@@ -812,7 +1169,13 @@ export class InitManager {
         }
         return refs.stateManager.setUploadStatus(message, variant);
       },
-      loadParticipants: this.loadParticipants,
+      loadParticipants: (options) => {
+        if (refs.participantManager) {
+          return refs.participantManager.loadParticipants(options);
+        } else {
+          return this.loadParticipants(options);
+        }
+      },
       cloneParticipantEntry: (entry) => {
         if (!refs.stateManager) {
           throw new Error("StateManager is not initialized");
@@ -825,8 +1188,20 @@ export class InitManager {
         }
         return refs.stateManager.captureParticipantBaseline(entries, options);
       },
-      renderParticipants: this.renderParticipants,
-      handleSave: this.handleSave,
+      renderParticipants: () => {
+        if (refs.participantManager) {
+          return refs.participantManager.renderParticipants();
+        } else {
+          return this.renderParticipants();
+        }
+      },
+      handleSave: async (options) => {
+        if (refs.participantManager) {
+          return await refs.participantManager.handleSave(options);
+        } else {
+          return await this.handleSave(options);
+        }
+      },
       updateDuplicateMatches: this.updateDuplicateMatches,
       getSelectedParticipantTarget: () => {
         if (!refs.participantUIManager) {
@@ -866,7 +1241,13 @@ export class InitManager {
       // 依存関数
       normalizeKey: this.normalizeKey,
       fetchDbValue: this.fetchDbValue,
-      renderParticipants: this.renderParticipants,
+      renderParticipants: () => {
+        if (refs.participantManager) {
+          return refs.participantManager.renderParticipants();
+        } else {
+          return this.renderParticipants();
+        }
+      },
       // 定数
       CANCEL_LABEL: this.CANCEL_LABEL,
       GL_STAFF_GROUP_KEY: this.GL_STAFF_GROUP_KEY,
@@ -883,7 +1264,13 @@ export class InitManager {
       resolveMailStatusInfo: this.resolveMailStatusInfo,
       resolveParticipantUid: this.resolveParticipantUid,
       resolveParticipantActionTarget: this.resolveParticipantActionTarget,
-      updateParticipantActionPanelState: this.updateParticipantActionPanelState,
+      updateParticipantActionPanelState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.updateParticipantActionPanelState();
+        } else {
+          return this.updateParticipantActionPanelState();
+        }
+      },
       applyParticipantNoText: (element, index) => {
         if (!refs.uiManager) {
           throw new Error("UIManager is not initialized");
@@ -915,17 +1302,59 @@ export class InitManager {
       state: this.state,
       // 依存関数と定数
       getSelectionIdentifiers: this.getSelectionIdentifiers,
-      getSelectionRequiredMessage: this.getSelectionRequiredMessage,
-      setUploadStatus: this.setUploadStatus,
+      getSelectionRequiredMessage: (prefix) => {
+        if (refs.stateManager) {
+          return refs.stateManager.getSelectionRequiredMessage(prefix);
+        } else {
+          return this.getSelectionRequiredMessage(prefix);
+        }
+      },
+      setUploadStatus: () => {
+        if (refs.stateManager) {
+          return refs.stateManager.setUploadStatus(...arguments);
+        } else {
+          return this.setUploadStatus(...arguments);
+        }
+      },
       PARTICIPANT_TEMPLATE_HEADERS: this.PARTICIPANT_TEMPLATE_HEADERS,
       TEAM_TEMPLATE_HEADERS: this.TEAM_TEMPLATE_HEADERS,
       sortParticipants: this.sortParticipants,
       resolveParticipantUid: this.resolveParticipantUid,
-      renderParticipants: this.renderParticipants,
-      updateParticipantActionPanelState: this.updateParticipantActionPanelState,
-      syncSaveButtonState: this.syncSaveButtonState,
-      queueRelocationPrompt: this.queueRelocationPrompt,
-      captureParticipantBaseline: this.captureParticipantBaseline
+      renderParticipants: () => {
+        if (refs.participantManager) {
+          return refs.participantManager.renderParticipants();
+        } else {
+          return this.renderParticipants();
+        }
+      },
+      updateParticipantActionPanelState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.updateParticipantActionPanelState();
+        } else {
+          return this.updateParticipantActionPanelState();
+        }
+      },
+      syncSaveButtonState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncSaveButtonState();
+        } else {
+          return this.syncSaveButtonState();
+        }
+      },
+      queueRelocationPrompt: (targets, options) => {
+        if (refs.relocationManager) {
+          return refs.relocationManager.queueRelocationPrompt(targets, options);
+        } else {
+          return this.queueRelocationPrompt(targets, options);
+        }
+      },
+      captureParticipantBaseline: (entries, options) => {
+        if (refs.stateManager) {
+          return refs.stateManager.captureParticipantBaseline(entries, options);
+        } else {
+          return this.captureParticipantBaseline(entries, options);
+        }
+      }
     });
     
     // EventManager を初期化
@@ -948,29 +1377,119 @@ export class InitManager {
         }
         return refs.hostIntegrationManager.applyHostEvents(events, options);
       },
-      finalizeEventLoad: this.finalizeEventLoad,
+      finalizeEventLoad: (options) => {
+        if (refs.scheduleUtilityManager) {
+          return refs.scheduleUtilityManager.finalizeEventLoad(options);
+        } else {
+          return this.finalizeEventLoad(options);
+        }
+      },
       renderSchedules: () => {
         if (!refs.scheduleManager) return;
         refs.scheduleManager.renderSchedules();
       },
-      renderParticipants: this.renderParticipants,
-      updateParticipantContext: this.updateParticipantContext,
-      loadGlDataForEvent: this.loadGlDataForEvent,
-      loadParticipants: this.loadParticipants,
-      broadcastSelectionChange: this.broadcastSelectionChange,
-      selectSchedule: this.selectSchedule,
+      renderParticipants: () => {
+        if (refs.participantManager) {
+          return refs.participantManager.renderParticipants();
+        } else {
+          return this.renderParticipants();
+        }
+      },
+      updateParticipantContext: (options) => {
+        if (refs.participantContextManager) {
+          return refs.participantContextManager.updateParticipantContext(options);
+        } else {
+          return this.updateParticipantContext(options);
+        }
+      },
+      loadGlDataForEvent: async (eventId, options) => {
+        if (refs.glManager) {
+          return await refs.glManager.loadGlDataForEvent(eventId, options);
+        } else {
+          return await this.loadGlDataForEvent(eventId, options);
+        }
+      },
+      loadParticipants: (options) => {
+        if (refs.participantManager) {
+          return refs.participantManager.loadParticipants(options);
+        } else {
+          return this.loadParticipants(options);
+        }
+      },
+      broadcastSelectionChange: (options) => {
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.broadcastSelectionChange(options);
+        } else {
+          return this.broadcastSelectionChange(options);
+        }
+      },
+      selectSchedule: (scheduleId, options) => {
+        if (refs.scheduleManager) {
+          return refs.scheduleManager.selectSchedule(scheduleId, options);
+        } else {
+          return this.selectSchedule(scheduleId, options);
+        }
+      },
       setCalendarPickedDate: this.setCalendarPickedDate,
-      captureParticipantBaseline: this.captureParticipantBaseline,
-      syncTemplateButtons: this.syncTemplateButtons,
-      syncClearButtonState: this.syncClearButtonState,
+      captureParticipantBaseline: (entries, options) => {
+        if (refs.stateManager) {
+          return refs.stateManager.captureParticipantBaseline(entries, options);
+        } else {
+          return this.captureParticipantBaseline(entries, options);
+        }
+      },
+      syncTemplateButtons: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncTemplateButtons();
+        } else {
+          return this.syncTemplateButtons();
+        }
+      },
+      syncClearButtonState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncClearButtonState();
+        } else {
+          return this.syncClearButtonState();
+        }
+      },
       openDialog: this.openDialog,
       closeDialog: this.closeDialog,
       setFormError: this.setFormError,
-      confirmAction: this.confirmAction,
-      setUploadStatus: this.setUploadStatus,
-      refreshScheduleLocationHistory: this.refreshScheduleLocationHistory,
-      populateScheduleLocationOptions: this.populateScheduleLocationOptions,
-      getSelectionBroadcastSource: this.getSelectionBroadcastSource
+      confirmAction: async (options) => {
+        if (refs.confirmDialogManager) {
+          return await refs.confirmDialogManager.confirmAction(options);
+        } else {
+          return await this.confirmAction(options);
+        }
+      },
+      setUploadStatus: () => {
+        if (refs.stateManager) {
+          return refs.stateManager.setUploadStatus(...arguments);
+        } else {
+          return this.setUploadStatus(...arguments);
+        }
+      },
+      refreshScheduleLocationHistory: () => {
+        if (refs.scheduleUtilityManager) {
+          return refs.scheduleUtilityManager.refreshScheduleLocationHistory();
+        } else {
+          return this.refreshScheduleLocationHistory();
+        }
+      },
+      populateScheduleLocationOptions: (preferred) => {
+        if (refs.scheduleUtilityManager) {
+          return refs.scheduleUtilityManager.populateScheduleLocationOptions(preferred);
+        } else {
+          return this.populateScheduleLocationOptions(preferred);
+        }
+      },
+      getSelectionBroadcastSource: () => {
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.getSelectionBroadcastSource();
+        } else {
+          return this.getSelectionBroadcastSource();
+        }
+      }
     });
     
     // ScheduleManager を初期化
@@ -997,25 +1516,79 @@ export class InitManager {
         if (!refs.participantManager) return;
         return refs.participantManager.renderParticipants();
       },
-      updateParticipantContext: this.updateParticipantContext,
-      captureParticipantBaseline: this.captureParticipantBaseline,
-      syncSaveButtonState: this.syncSaveButtonState,
-      queueRelocationPrompt: this.queueRelocationPrompt,
-      getSelectionBroadcastSource: this.getSelectionBroadcastSource,
-      populateScheduleLocationOptions: this.populateScheduleLocationOptions,
+      updateParticipantContext: (options) => {
+        if (refs.participantContextManager) {
+          return refs.participantContextManager.updateParticipantContext(options);
+        } else {
+          return this.updateParticipantContext(options);
+        }
+      },
+      captureParticipantBaseline: (entries, options) => {
+        if (refs.stateManager) {
+          return refs.stateManager.captureParticipantBaseline(entries, options);
+        } else {
+          return this.captureParticipantBaseline(entries, options);
+        }
+      },
+      syncSaveButtonState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncSaveButtonState();
+        } else {
+          return this.syncSaveButtonState();
+        }
+      },
+      queueRelocationPrompt: (targets, options) => {
+        if (refs.relocationManager) {
+          return refs.relocationManager.queueRelocationPrompt(targets, options);
+        } else {
+          return this.queueRelocationPrompt(targets, options);
+        }
+      },
+      getSelectionBroadcastSource: () => {
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.getSelectionBroadcastSource();
+        } else {
+          return this.getSelectionBroadcastSource();
+        }
+      },
+      populateScheduleLocationOptions: (preferred) => {
+        if (refs.scheduleUtilityManager) {
+          return refs.scheduleUtilityManager.populateScheduleLocationOptions(preferred);
+        } else {
+          return this.populateScheduleLocationOptions(preferred);
+        }
+      },
       prepareScheduleDialogCalendar: this.prepareScheduleDialogCalendar,
       syncScheduleEndMin: this.syncScheduleEndMin,
       openDialog: this.openDialog,
       closeDialog: this.closeDialog,
       setFormError: this.setFormError,
-      confirmAction: this.confirmAction,
-      setUploadStatus: this.setUploadStatus,
+      confirmAction: async (options) => {
+        if (refs.confirmDialogManager) {
+          return await refs.confirmDialogManager.confirmAction(options);
+        } else {
+          return await this.confirmAction(options);
+        }
+      },
+      setUploadStatus: () => {
+        if (refs.stateManager) {
+          return refs.stateManager.setUploadStatus(...arguments);
+        } else {
+          return this.setUploadStatus(...arguments);
+        }
+      },
       getScheduleRecord: this.getScheduleRecord,
       loadParticipants: (options) => {
         if (!refs.participantManager) return Promise.resolve();
         return refs.participantManager.loadParticipants(options);
       },
-      broadcastSelectionChange: this.broadcastSelectionChange,
+      broadcastSelectionChange: (options) => {
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.broadcastSelectionChange(options);
+        } else {
+          return this.broadcastSelectionChange(options);
+        }
+      },
       selectScheduleSelf: null // 後で設定
     });
     
