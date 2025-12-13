@@ -889,6 +889,11 @@ export class InitManager {
       findParticipantForSnapshot: this.findParticipantForSnapshot
     });
     
+    // RelocationManager 初期化後に ParticipantUIManager の relocationManager を更新
+    if (refs.participantUIManager && refs.relocationManager) {
+      refs.participantUIManager.relocationManager = refs.relocationManager;
+    }
+    
     // HostIntegrationManager を初期化
     refs.hostIntegrationManager = new ManagerClasses.HostIntegrationManager({
       dom: this.dom,
@@ -1387,8 +1392,44 @@ export class InitManager {
         }
         return refs.shareClipboardManager.copyShareLink(token, this.setUploadStatus);
       },
+      hasUnsavedChanges: () => {
+        if (refs.stateManager) {
+          return refs.stateManager.hasUnsavedChanges();
+        } else {
+          return this.hasUnsavedChanges();
+        }
+      },
+      relocationManager: refs.relocationManager || null,
       describeDuplicateMatch: this.describeDuplicateMatch,
       diffParticipantLists: this.diffParticipantLists,
+      sortParticipants: this.sortParticipants,
+      ensureRowKey: this.ensureRowKey,
+      resolveParticipantStatus: this.resolveParticipantStatus,
+      ensureTeamAssignmentMap: this.ensureTeamAssignmentMap,
+      applyAssignmentsToEventCache: this.applyAssignmentsToEventCache,
+      syncCurrentScheduleCache: this.syncCurrentScheduleCache,
+      updateDuplicateMatches: this.updateDuplicateMatches,
+      renderParticipants: () => {
+        if (refs.participantManager) {
+          return refs.participantManager.renderParticipants();
+        } else {
+          return this.renderParticipants();
+        }
+      },
+      syncSaveButtonState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncSaveButtonState();
+        } else {
+          return this.syncSaveButtonState();
+        }
+      },
+      setUploadStatus: () => {
+        if (refs.stateManager) {
+          return refs.stateManager.setUploadStatus(...arguments);
+        } else {
+          return this.setUploadStatus(...arguments);
+        }
+      },
       // 定数
       CANCEL_LABEL: this.CANCEL_LABEL,
       RELOCATE_LABEL: this.RELOCATE_LABEL,
