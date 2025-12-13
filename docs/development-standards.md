@@ -665,6 +665,20 @@ export class QuestionFormApp {
     // 処理
   }
 }
+
+// static メソッド/プロパティの使用
+export class OperatorApp {
+  /**
+   * 埋め込みモード時に使用されるURLプレフィックスを取得します。
+   * @returns {string}
+   */
+  static get embedPrefix() {
+    if (typeof document === "undefined") {
+      return "";
+    }
+    return document.documentElement?.dataset?.operatorEmbedPrefix || "";
+  }
+}
 ```
 
 ### 関数定義
@@ -695,6 +709,27 @@ export async function fetchData(url) {
 constructor() {
   this.handleClick = this.handleClick.bind(this);
 }
+
+// ✅ Object.defineProperty を使用したメソッドバインディング
+function bindModuleMethods(app) {
+  MODULE_METHOD_GROUPS.forEach(({ module, methods }) => {
+    methods.forEach((methodName) => {
+      const implementation = module?.[methodName];
+      if (typeof implementation !== "function") {
+        throw new Error(`Missing method "${methodName}" on module.`);
+      }
+      Object.defineProperty(app, methodName, {
+        configurable: true,
+        enumerable: false,
+        writable: true,
+        value: (...args) => implementation(app, ...args)
+      });
+    });
+  });
+}
+
+// ✅ .call() を使用したコンテキストの明示的な指定
+target.addEventListener("click", (event) => method.call(app, event));
 ```
 
 ### Promise と async/await
@@ -702,6 +737,8 @@ constructor() {
 - **非同期処理**: `async/await` を優先的に使用
 - **エラーハンドリング**: `try-catch` で適切にエラーを処理
 - **Promise の作成**: 必要に応じて `new Promise()` を使用（例: イベントリスナーの待機）
+- **並列処理**: `Promise.all()` で複数の非同期処理を並列実行
+- **部分成功**: `Promise.allSettled()` で一部が失敗しても全ての結果を取得
 - **タイマー管理**: `setTimeout`/`clearTimeout`、`setInterval`/`clearInterval` は適切にクリーンアップする
 - **ポーリング処理**: 条件を満たすまで繰り返しチェックする場合はタイムアウトを設定する
 
@@ -886,6 +923,45 @@ const controller = createSubmissionController();
 const promise = submitData(controller);
 // 必要に応じて中断
 controller.abort();
+```
+
+**並列処理のパターン**:
+
+```javascript
+// Promise.all: 全て成功する必要がある場合
+const [user, events, schedules] = await Promise.all([
+  fetchUser(userId),
+  fetchEvents(),
+  fetchSchedules(eventId),
+]);
+
+// Promise.allSettled: 一部が失敗しても全ての結果を取得
+const results = await Promise.allSettled([
+  fetchUser(userId),
+  fetchEvents(),
+  fetchSchedules(eventId),
+]);
+
+results.forEach((result, index) => {
+  if (result.status === "fulfilled") {
+    console.log(`Task ${index} succeeded:`, result.value);
+  } else {
+    console.error(`Task ${index} failed:`, result.reason);
+  }
+});
+
+// エラーハンドリング付き Promise.all
+try {
+  const results = await Promise.all([
+    fetchUser(userId),
+    fetchEvents(),
+    fetchSchedules(eventId),
+  ]);
+  // 全て成功した場合の処理
+} catch (error) {
+  // いずれかが失敗した場合の処理
+  console.error("One or more requests failed", error);
+}
 ```
 
 ### Factory 関数パターン
@@ -1086,6 +1162,43 @@ if (Array.isArray(items)) {
 if (value == null) {
   // null または undefined の場合
 }
+
+// 数値の検証
+if (typeof value === "number") {
+  if (Number.isFinite(value)) {
+    // 有限の数値の場合
+  }
+  if (Number.isNaN(value)) {
+    // NaN の場合
+  }
+}
+
+// 数値への変換と検証
+const numericValue = Number(value);
+if (Number.isFinite(numericValue)) {
+  // 有効な数値として使用
+} else {
+  // 無効な数値の場合のフォールバック
+}
+
+// 型変換の使用
+const stringValue = String(value || ""); // 安全な文字列変換
+const numberValue = Number(value); // 数値変換（NaN の可能性あり）
+const booleanValue = Boolean(value); // 真偽値変換
+
+// 型変換と検証の組み合わせ
+const normalized =
+  typeof value === "string" ? value.trim() : String(value).trim();
+const parsed = typeof value === "number" ? value : Number(value);
+if (!Number.isFinite(parsed)) {
+  // 無効な数値の場合の処理
+}
+
+// タイムスタンプの検証
+const timestampCandidate = Number(now());
+const timestamp = Number.isFinite(timestampCandidate)
+  ? timestampCandidate
+  : Date.now();
 ```
 
 ### null 安全とオプショナルチェーン
@@ -1268,6 +1381,29 @@ export function goToLogin() {
 // URL パラメータの解析
 const urlSearchParams = new URL(location.href).searchParams;
 const eventId = urlSearchParams.get("eventId");
+
+// 複数のキーを試行するパターン
+export function extractToken(
+  search = window.location.search,
+  tokenKeys = TOKEN_PARAM_KEYS
+) {
+  const params = new URLSearchParams(search);
+  for (const key of tokenKeys) {
+    const value = params.get(key);
+    if (!value) continue;
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    if (/^[A-Za-z0-9_-]{12,128}$/.test(trimmed)) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+// URLSearchParams の型チェック
+if (!(searchParams instanceof URLSearchParams)) {
+  return { eventId: "", scheduleId: "" };
+}
 ```
 
 ### 日付・時刻の処理
@@ -1320,6 +1456,45 @@ function parseCsv(text) {
   // パース処理
   return rows;
 }
+```
+
+### イベント処理
+
+- **イベントの伝播制御**: `preventDefault()`, `stopPropagation()`, `stopImmediatePropagation()` を使用
+- **イベントターゲット**: `event.target` と `event.currentTarget` を適切に使い分け
+- **イベント委譲**: 親要素でイベントを処理し、`event.target` で実際の要素を判定
+
+**イベント処理のパターン**:
+
+```javascript
+// preventDefault: デフォルト動作を防止
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  // カスタム処理
+});
+
+// stopPropagation: イベントの伝播を停止
+button.addEventListener("click", (event) => {
+  event.stopPropagation();
+  // 親要素への伝播を防ぐ
+});
+
+// event.target と event.currentTarget の使い分け
+container.addEventListener("click", (event) => {
+  // event.currentTarget: イベントリスナーが登録された要素（container）
+  // event.target: 実際にクリックされた要素（子要素の可能性）
+  if (event.target.classList.contains("item")) {
+    // 子要素がクリックされた場合の処理
+  }
+});
+
+// イベント委譲パターン
+list.addEventListener("click", (event) => {
+  const item = event.target.closest(".list-item");
+  if (item) {
+    // リストアイテムがクリックされた場合の処理
+  }
+});
 ```
 
 ### キーボードショートカット
@@ -1377,6 +1552,317 @@ try {
 // フォールバック処理
 if (!success) {
   // 代替方法を実装
+}
+```
+
+### フォームバリデーション
+
+- **HTML5 バリデーション API**: `reportValidity()`, `setCustomValidity()`, `checkValidity()` を使用
+- **カスタムバリデーション**: 独自のバリデーションロジックと組み合わせる
+- **エラー表示**: バリデーションエラーは適切にユーザーに表示
+
+**フォームバリデーションのパターン**:
+
+```javascript
+// HTML5 バリデーション API の使用
+if (!this.view.reportValidity()) {
+  this.view.setFeedback("未入力の項目があります。確認してください。", "error");
+  return;
+}
+
+// カスタムバリデーションメッセージの設定
+const input = this.view.radioNameInput;
+if (input && typeof input.setCustomValidity === "function") {
+  input.setCustomValidity("ラジオネームを入力してください。");
+  input.reportValidity();
+  input.setCustomValidity(""); // メッセージをクリア
+}
+
+// カスタムエラーと組み合わせたバリデーション
+try {
+  formData = this.getSanitizedFormData();
+} catch (error) {
+  if (error instanceof FormValidationError) {
+    error.invokeFocus(); // フォーカス移動
+    this.view.setFeedback(error.message, "error");
+    return;
+  }
+  throw error;
+}
+```
+
+### ページ離脱警告
+
+- **beforeunload イベント**: 未保存の変更がある場合にページ離脱を警告
+- **条件付き**: 実際に未保存の変更がある場合のみ警告を表示
+
+**ページ離脱警告のパターン**:
+
+```javascript
+// beforeunload イベントの登録
+bindBeforeUnload(handler) {
+  if (typeof window === "undefined") return;
+  window.addEventListener("beforeunload", handler);
+}
+
+// ハンドラの実装
+handleBeforeUnload(event) {
+  if (this.hasUnsavedChanges()) {
+    event.preventDefault();
+    event.returnValue = ""; // ブラウザのデフォルトメッセージを表示
+  }
+}
+```
+
+### ダイアログ管理とフォーカス管理
+
+- **アクティブダイアログ**: 現在開いているダイアログを追跡
+- **フォーカス管理**: ダイアログを開く際にフォーカスを保存し、閉じる際に復元
+- **フォーカストラップ**: ダイアログ内でフォーカスを閉じ込める
+- **ESC キー**: ESC キーでダイアログを閉じる
+
+**ダイアログ管理のパターン**:
+
+```javascript
+const dialogState = {
+  active: null,
+  lastFocused: null,
+};
+
+// ダイアログを開く
+function openDialog(element) {
+  if (!element) return;
+  if (dialogState.active && dialogState.active !== element) {
+    closeDialog(dialogState.active);
+  }
+  dialogState.active = element;
+  dialogState.lastFocused =
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+  element.removeAttribute("hidden");
+  document.body.classList.add("modal-open");
+
+  // フォーカスをダイアログ内の要素に移動
+  const focusTarget =
+    element.querySelector("[data-autofocus]") ||
+    element.querySelector("input, select, textarea, button");
+  if (focusTarget instanceof HTMLElement) {
+    requestAnimationFrame(() => focusTarget.focus());
+  }
+}
+
+// ダイアログを閉じる
+function closeDialog(element, options = {}) {
+  if (!element) return;
+  element.setAttribute("hidden", "");
+  document.body.classList.remove("modal-open");
+
+  // フォーカスを元の要素に復元
+  if (dialogState.lastFocused && dialogState.lastFocused.focus) {
+    requestAnimationFrame(() => dialogState.lastFocused.focus());
+  }
+  dialogState.active = null;
+  dialogState.lastFocused = null;
+}
+
+// ESC キーでダイアログを閉じる
+function handleDialogKeydown(event) {
+  if (event.key === "Escape" && dialogState.active) {
+    event.preventDefault();
+    closeDialog(dialogState.active);
+  }
+}
+```
+
+### ブラウザ API の使用
+
+#### requestAnimationFrame
+
+- **用途**: DOM 更新の視覚的な反映を待つ場合に使用
+- **フォールバック**: `requestAnimationFrame` が利用できない場合は `setTimeout` を使用
+
+**requestAnimationFrame のパターン**:
+
+```javascript
+// DOM更新の視覚的な反映を待つ
+async function waitForVisualUpdate({ minimumDelay = 0 } = {}) {
+  await new Promise((resolve) => {
+    const raf =
+      typeof window !== "undefined" &&
+      typeof window.requestAnimationFrame === "function"
+        ? window.requestAnimationFrame.bind(window)
+        : null;
+    if (raf) {
+      raf(() => resolve());
+    } else {
+      setTimeout(resolve, 16);
+    }
+  });
+  if (minimumDelay > 0) {
+    await new Promise((resolve) => setTimeout(resolve, minimumDelay));
+  }
+}
+```
+
+#### Crypto API
+
+- **用途**: UUID 生成やランダム値生成に使用
+- **フォールバック**: Crypto API が利用できない場合は `Math.random()` を使用
+
+**Crypto API のパターン**:
+
+```javascript
+// Crypto API の解決
+function resolveCrypto(scopes = []) {
+  for (const scope of scopes) {
+    if (scope?.crypto) {
+      return scope.crypto;
+    }
+  }
+  return null;
+}
+
+// UUID生成（Crypto API 優先、フォールバック付き）
+function generateQuestionUid({
+  crypto: cryptoOverride,
+  random = Math.random,
+  now = Date.now,
+} = {}) {
+  const cryptoObj = cryptoOverride ?? resolveCrypto([globalThis, window, self]);
+
+  if (cryptoObj) {
+    if (typeof cryptoObj.randomUUID === "function") {
+      return cryptoObj.randomUUID();
+    }
+    if (typeof cryptoObj.getRandomValues === "function") {
+      const bytes = new Uint8Array(16);
+      cryptoObj.getRandomValues(bytes);
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      return formatUuidFromBytes(bytes);
+    }
+  }
+
+  // フォールバック: Math.random() を使用
+  const timestamp = Number.isFinite(Number(now())) ? Number(now()) : Date.now();
+  const timestampPart = timestamp.toString(36);
+  const randomSuffix = Math.random().toString(36).slice(2, 10);
+  return `${timestampPart}_${randomSuffix}`;
+}
+```
+
+#### TreeWalker API
+
+- **用途**: DOM ツリーを効率的に走査する場合に使用
+- **パターン**: `document.createTreeWalker()` を使用してテキストノードを収集
+
+**TreeWalker API のパターン**:
+
+```javascript
+// TreeWalker を使用してテキストノードを収集
+const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+const textNodes = [];
+while (walker.nextNode()) {
+  textNodes.push(walker.currentNode);
+}
+
+// 収集したテキストノードを処理
+for (const node of textNodes) {
+  const value = node.nodeValue;
+  if (!value) continue;
+  // 処理
+}
+```
+
+#### バイナリデータ処理
+
+- **Uint8Array**: バイト配列の操作に使用
+- **ArrayBuffer**: バイナリデータのバッファとして使用
+- **TextDecoder**: バイナリデータをテキストに変換
+- **文字エンコーディング**: UTF-8, Shift_JIS などの複数エンコーディングに対応
+- **BOM の除去**: UTF-8 BOM（`\uFEFF`）を適切に処理
+
+**バイナリデータ処理のパターン**:
+
+```javascript
+// ファイルをバイナリとして読み込み、テキストに変換
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    if (typeof TextDecoder === "undefined") {
+      // フォールバック: FileReader を使用
+      const reader = new FileReader();
+      reader.onload = () => {
+        resolve(stripBom(String(reader.result || "")));
+      };
+      reader.onerror = () => {
+        reject(new Error("ファイルの読み込みに失敗しました。"));
+      };
+      reader.readAsText(file, "utf-8");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const result = reader.result;
+        const buffer =
+          result instanceof ArrayBuffer
+            ? result
+            : result?.buffer instanceof ArrayBuffer
+            ? result.buffer
+            : null;
+
+        if (!buffer) {
+          resolve(stripBom(String(result || "")));
+          return;
+        }
+
+        const bytes = new Uint8Array(buffer);
+        resolve(decodeCsvBytes(bytes));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.onerror = () => {
+      reject(new Error("ファイルの読み込みに失敗しました。"));
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// 複数のエンコーディングを試行
+function decodeCsvBytes(bytes) {
+  if (!(bytes instanceof Uint8Array)) {
+    return "";
+  }
+
+  const attempts = [
+    () => new TextDecoder("utf-8", { fatal: true }),
+    () => new TextDecoder("utf-8"),
+    () => new TextDecoder("shift_jis"),
+    () => new TextDecoder("windows-31j"),
+    () => new TextDecoder("ms932"),
+  ];
+
+  for (const createDecoder of attempts) {
+    try {
+      const decoder = createDecoder();
+      const text = decoder.decode(bytes);
+      if (typeof text === "string") {
+        return stripBom(text);
+      }
+    } catch (error) {
+      // 次のデコーダーを試行
+    }
+  }
+
+  throw new Error("CSV ファイルの文字エンコーディングを判定できませんでした。");
+}
+
+// BOM の除去
+function stripBom(text) {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 ```
 
@@ -1454,6 +1940,62 @@ const submission = {
 - **状態の場所**: アプリケーションの状態は適切な場所に集約
 - **状態の更新**: 直接変更を避け、メソッド経由で更新
 - **イミュータブル**: 可能な限り新しいオブジェクトを作成して更新
+- **ローディング状態**: 複数の非同期処理を束ねてローディング状態を管理
+
+**ローディング状態管理のパターン**:
+
+```javascript
+// LoadingTracker: 複数の非同期処理を束ねて読込状態を監視
+export class LoadingTracker {
+  constructor({ onChange } = {}) {
+    this.depth = 0;
+    this.message = "";
+    this.onChange = typeof onChange === "function" ? onChange : () => {};
+  }
+
+  begin(message = "") {
+    this.depth += 1;
+    if (message || !this.message) {
+      this.message = message;
+    }
+    this.onChange(this.getState());
+  }
+
+  end() {
+    this.depth = Math.max(0, this.depth - 1);
+    if (this.depth === 0) {
+      this.message = "";
+    }
+    this.onChange(this.getState());
+  }
+
+  isActive() {
+    return this.depth > 0;
+  }
+
+  getState() {
+    return { active: this.isActive(), message: this.message };
+  }
+}
+
+// 使用例
+const tracker = new LoadingTracker({
+  onChange: (state) => {
+    if (state.active) {
+      showLoader(state.message);
+    } else {
+      hideLoader();
+    }
+  },
+});
+
+tracker.begin("データを読み込んでいます...");
+try {
+  await fetchData();
+} finally {
+  tracker.end();
+}
+```
 
 ### データ構造の選択
 
@@ -1487,6 +2029,9 @@ const printSettings = {
 - **reduce**: 配列を 1 つの値に集約
 - **forEach**: 副作用を伴う処理（新しい配列を作らない）
 - **for...of**: 通常のループ処理
+- **Array.from**: 配列風オブジェクトやイテレータを配列に変換
+- **Array.isArray**: 配列かどうかを判定
+- **Array.of**: 引数から配列を作成
 
 **配列操作のパターン**:
 
@@ -1522,6 +2067,22 @@ for (const item of items) {
   if (item.isComplete) break; // ループを終了
   processItem(item);
 }
+
+// ✅ Array.from（配列風オブジェクトやイテレータを配列に変換）
+const nodeList = document.querySelectorAll(".item");
+const items = Array.from(nodeList);
+// または文字列を文字配列として処理
+for (const char of Array.from(value)) {
+  // 処理
+}
+
+// ✅ Array.isArray（配列判定）
+if (Array.isArray(items)) {
+  // 配列の場合の処理
+}
+
+// ✅ Array.of（引数から配列を作成）
+const numbers = Array.of(1, 2, 3); // [1, 2, 3]
 ```
 
 ### ジェネレータ関数
@@ -1584,6 +2145,30 @@ const merged = Object.assign({}, defaults, overrides);
 
 // ✅ スプレッド演算子（推奨）
 const merged = { ...defaults, ...overrides };
+
+// ✅ Object.create(null)（プロトタイプチェーンを持たない純粋なオブジェクトの作成）
+const evaluationState = Object.assign(
+  Object.create(null), // null プロトタイプで純粋なオブジェクトを作成
+  state && typeof state === "object" ? state : {}
+);
+
+// テンプレート評価での使用例
+const cleanObject = Object.create(null);
+cleanObject.key = "value";
+
+// ✅ Object.defineProperty（プロパティディスクリプタを指定してプロパティを定義）
+Object.defineProperty(app, methodName, {
+  configurable: true,
+  enumerable: false,
+  writable: true,
+  value: (...args) => implementation(app, ...args),
+});
+
+// ✅ Object.freeze（オブジェクトの凍結）
+export const FIREBASE_CONFIG = Object.freeze({
+  apiKey: "...",
+  // ...
+});
 ```
 
 ### DOM 操作
@@ -1619,6 +2204,184 @@ export function queryDom() {
 - 埋め込みモードでは `data-*-embed-prefix` 属性からプレフィックスを取得
 - プレフィックス付き ID と通常の ID の両方を試行して要素を取得
 - フォールバック処理を実装して、プレフィックスが外れている環境でも動作するようにする
+
+### DOM 要素の作成と操作
+
+- **要素の作成**: `document.createElement()` を使用
+- **テンプレート要素のクローン**: `<template>` 要素の `content.cloneNode(true)` を使用
+- **DocumentFragment**: 複数の要素を一度に追加する場合は `document.createDocumentFragment()` を使用
+- **classList 操作**: `classList.add()`, `classList.remove()`, `classList.toggle()`, `classList.contains()` を使用
+- **dataset 操作**: `dataset.*` プロパティを使用して data 属性にアクセス
+- **属性操作**: `setAttribute()`, `getAttribute()`, `removeAttribute()` を使用
+
+**DOM 要素の作成と操作のパターン**:
+
+```javascript
+// 要素の作成
+const card = document.createElement("article");
+card.className = "q-card";
+
+// テンプレート要素のクローン
+const fragment = this.facultyTemplate.content.cloneNode(true);
+const card = fragment.querySelector("[data-faculty-card]");
+
+// DocumentFragment の使用（複数要素を一度に追加）
+const frag = document.createDocumentFragment();
+while (condition) {
+  const element = document.createElement("div");
+  frag.appendChild(element);
+}
+container.appendChild(frag);
+
+// classList 操作
+card.classList.add("is-answered");
+card.classList.remove("is-loading");
+card.classList.toggle("is-active", condition);
+if (card.classList.contains("is-selecting")) {
+  // 処理
+}
+
+// dataset 操作
+element.dataset.uid = uid;
+element.dataset.initialized = "true";
+if (element.dataset.prepared === "true") {
+  // 処理
+}
+
+// 属性操作
+element.setAttribute("aria-label", label);
+const value = element.getAttribute("data-value");
+element.removeAttribute("hidden");
+```
+
+### ストレージ操作（localStorage/sessionStorage）
+
+- **安全な取得**: ストレージが利用できない場合（プライベートブラウジングなど）を考慮
+- **エラーハンドリング**: `try-catch` でストレージ操作をラップ
+- **JSON のシリアライズ**: オブジェクトを保存する場合は `JSON.stringify()` を使用
+- **JSON のパース**: 取得時は `JSON.parse()` を使用し、エラーハンドリングを実装
+
+**ストレージ操作のパターン**:
+
+```javascript
+// 安全なストレージ取得
+function safeGetStorage(kind) {
+  try {
+    if (typeof window === "undefined") return null;
+    if (kind === "session") {
+      return window.sessionStorage || null;
+    }
+    if (kind === "local") {
+      return window.localStorage || null;
+    }
+  } catch (error) {
+    console.warn(`Storage (${kind}) unavailable`, error);
+  }
+  return null;
+}
+
+// ストレージへの保存
+function saveToStorage(key, value) {
+  const storage = safeGetStorage("local");
+  if (!storage) return false;
+  try {
+    const serialized = JSON.stringify(value);
+    storage.setItem(key, serialized);
+    return true;
+  } catch (error) {
+    console.warn("Failed to save to storage", error);
+    return false;
+  }
+}
+
+// ストレージからの取得
+function loadFromStorage(key) {
+  const storage = safeGetStorage("local");
+  if (!storage) return null;
+  try {
+    const serialized = storage.getItem(key);
+    if (serialized === null) return null;
+    return JSON.parse(serialized);
+  } catch (error) {
+    console.warn("Failed to load from storage", error);
+    return null;
+  }
+}
+
+// ストレージからの削除
+function removeFromStorage(key) {
+  const storage = safeGetStorage("local");
+  if (!storage) return false;
+  try {
+    storage.removeItem(key);
+    return true;
+  } catch (error) {
+    console.warn("Failed to remove from storage", error);
+    return false;
+  }
+}
+```
+
+### JSON 処理
+
+- **JSON.stringify**: オブジェクトを文字列に変換（循環参照に注意）
+- **JSON.parse**: 文字列をオブジェクトに変換（エラーハンドリングを実装）
+- **エラーハンドリング**: `try-catch` で JSON 操作をラップ
+- **安全な文字列化**: 循環参照や巨大オブジェクトを考慮した文字列化関数を使用
+
+**JSON 処理のパターン**:
+
+```javascript
+// 基本的な JSON 処理
+const serialized = JSON.stringify(data);
+const parsed = JSON.parse(serialized);
+
+// エラーハンドリング付き JSON パース
+function safeJsonParse(value, fallback = null) {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+  try {
+    return JSON.parse(String(value));
+  } catch (error) {
+    console.warn("JSON parse failed", error);
+    return fallback;
+  }
+}
+
+// 循環参照を考慮した JSON 文字列化（ログ出力用）
+function stringifyLogPayload(payload) {
+  const seen = [];
+  return JSON.stringify(payload, function (key, value) {
+    if (typeof value === "bigint") {
+      return value.toString();
+    }
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    if (value instanceof Error) {
+      return {
+        name: value.name || "Error",
+        message: value.message || String(value),
+        stack: value.stack || "",
+      };
+    }
+    if (typeof value === "function") {
+      return `<Function ${value.name || "anonymous"}>`;
+    }
+    if (typeof value === "symbol") {
+      return value.toString();
+    }
+    if (value && typeof value === "object") {
+      if (seen.indexOf(value) !== -1) {
+        return "<Circular>";
+      }
+      seen.push(value);
+    }
+    return value;
+  });
+}
+```
 
 ---
 
@@ -1707,6 +2470,39 @@ function getAllowedDomains_() {
 - **try-catch**: 適切なエラーハンドリングを実装
 - **ログ出力**: 重要なエラーはログに記録
 - **ユーザー通知**: ユーザーに影響があるエラーは通知を返す
+- **リトライロジック**: 一時的なエラー（認証エラーなど）に対してリトライを実装
+
+**リトライロジックのパターン**:
+
+```javascript
+// 認証エラー時の1回限りのリトライ
+async function apiPost(payload, retryOnAuthError = true) {
+  const idToken = await getIdTokenSafe();
+  const res = await fetch(GAS_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({ ...payload, idToken }),
+  });
+  let json;
+  try {
+    json = await res.json();
+  } catch (error) {
+    throw new Error("Bad JSON response");
+  }
+  if (!json.success) {
+    const message = String(json.error || "");
+    // 認証エラーの場合、1回だけリトライ
+    if (retryOnAuthError && /Auth/.test(message)) {
+      await getIdTokenSafe(true); // トークンを強制更新
+      return await apiPost(payload, false); // リトライ（再帰呼び出しを1回のみ許可）
+    }
+    throw new Error(
+      `${message}${json.errorId ? " [" + json.errorId + "]" : ""}`
+    );
+  }
+  return json;
+}
+```
 
 ---
 
@@ -1926,6 +2722,7 @@ import { funcA } from "./module-a.js"; // 循環依存
 2. **エラーログ**: 重要なエラーはログに記録
 3. **ユーザー通知**: ユーザーに影響があるエラーは通知を表示
 4. **エラー無視**: 意図的にエラーを無視する場合はコメントで理由を記述
+5. **ロールバック処理**: 複数の操作を行う場合は、エラー発生時に既存の操作をロールバックする
 
 ### try-catch の使用
 
@@ -1954,6 +2751,168 @@ async lockDisplayToSchedule(eventId, scheduleId, scheduleLabel, options = {}) {
 ```javascript
 this.app.toast("ログインに失敗しました。", "error");
 console.error("[AuthManager] login failed", { error, user });
+```
+
+### リトライロジック
+
+- **用途**: 一時的なエラー（認証エラーなど）に対してリトライを実装
+- **パターン**: 条件付きリトライ、最大リトライ回数の制限、無限ループの防止
+
+**リトライロジックのパターン**:
+
+```javascript
+// 認証エラー時の1回限りのリトライ
+async function apiPost(payload, retryOnAuthError = true) {
+  const idToken = await getIdTokenSafe();
+  const res = await fetch(GAS_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({ ...payload, idToken }),
+  });
+  let json;
+  try {
+    json = await res.json();
+  } catch (error) {
+    throw new Error("Bad JSON response");
+  }
+  if (!json.success) {
+    const message = String(json.error || "");
+    // 認証エラーの場合、1回だけリトライ
+    if (retryOnAuthError && /Auth/.test(message)) {
+      await getIdTokenSafe(true); // トークンを強制更新
+      return await apiPost(payload, false); // リトライ（再帰呼び出しを1回のみ許可）
+    }
+    throw new Error(
+      `${message}${json.errorId ? " [" + json.errorId + "]" : ""}`
+    );
+  }
+  return json;
+}
+```
+
+### リトライロジック
+
+- **用途**: 一時的なエラー（認証エラーなど）に対してリトライを実装
+- **パターン**: 条件付きリトライ、最大リトライ回数の制限、無限ループの防止
+- **注意**: 再帰呼び出しによるリトライは、フラグで制御して無限ループを防ぐ
+
+**リトライロジックのパターン**:
+
+```javascript
+// 認証エラー時の1回限りのリトライ
+async function apiPost(payload, retryOnAuthError = true) {
+  const idToken = await getIdTokenSafe();
+  const res = await fetch(GAS_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({ ...payload, idToken }),
+  });
+  let json;
+  try {
+    json = await res.json();
+  } catch (error) {
+    throw new Error("Bad JSON response");
+  }
+  if (!json.success) {
+    const message = String(json.error || "");
+    // 認証エラーの場合、1回だけリトライ
+    if (retryOnAuthError && /Auth/.test(message)) {
+      await getIdTokenSafe(true); // トークンを強制更新
+      return await apiPost(payload, false); // リトライ（再帰呼び出しを1回のみ許可）
+    }
+    throw new Error(
+      `${message}${json.errorId ? " [" + json.errorId + "]" : ""}`
+    );
+  }
+  return json;
+}
+```
+
+### ロールバック処理
+
+- **用途**: 複数の操作を行う場合、エラー発生時に既存の操作をロールバックする
+- **パターン**: 操作の成功状態をフラグで管理し、エラー時にクリーンアップを実行
+- **エラーハンドリング**: ロールバック処理自体のエラーも適切に処理する
+
+**ロールバック処理のパターン**:
+
+```javascript
+// 複数の操作を順次実行し、エラー時にロールバック
+let intakeCreated = false;
+let questionCreated = false;
+
+try {
+  await set(intakeRef, intakePayload);
+  intakeCreated = true;
+
+  await set(ref(database, `questions/normal/${questionUid}`), questionRecord);
+  questionCreated = true;
+
+  await set(ref(database, questionStatusPath), statusRecord);
+} catch (error) {
+  // ロールバック処理
+  try {
+    if (questionCreated) {
+      await remove(ref(database, `questions/normal/${questionUid}`));
+    }
+    if (intakeCreated) {
+      await remove(intakeRef);
+    }
+  } catch (cleanupError) {
+    console.warn("Failed to roll back after error", cleanupError);
+  }
+
+  // エラーを再スローまたは適切に処理
+  const clientError = new Error("送信に失敗しました");
+  clientError.cause = error;
+  throw clientError;
+}
+```
+
+### エラーチェーン（error.cause）
+
+- **用途**: エラーの原因を保持し、エラーチェーンを構築する
+- **パターン**: `error.cause` プロパティを使用して元のエラーを保持
+- **再帰的チェック**: エラーチェーンを再帰的にチェックして原因を特定
+
+**エラーチェーンのパターン**:
+
+```javascript
+// エラーチェーンの構築
+export class AuthPreflightError extends Error {
+  constructor(message, code, cause) {
+    super(message);
+    this.name = "AuthPreflightError";
+    this.code = code || "UNKNOWN_PREFLIGHT_ERROR";
+    if (cause) {
+      this.cause = cause;
+    }
+  }
+}
+
+// エラーチェーンの再帰的チェック
+function isNotInUsersSheetError(error) {
+  if (!error) return false;
+  const message =
+    typeof error.message === "string" ? error.message : String(error || "");
+  if (/not in users sheet/i.test(message)) {
+    return true;
+  }
+  // 原因エラーを再帰的にチェック
+  if (error.cause) {
+    return isNotInUsersSheetError(error.cause);
+  }
+  return false;
+}
+
+// エラーのラップ
+try {
+  // 処理
+} catch (error) {
+  const clientError = new Error("ユーザー向けエラーメッセージ");
+  clientError.cause = error;
+  throw clientError;
+}
 ```
 
 ---
@@ -2252,6 +3211,39 @@ test("collectParticipantTokens gathers unique tokens across schedules", () => {
 - [ ] リソース（タイマー、イベントリスナー、購読）は適切にクリーンアップされているか？
 - [ ] Factory 関数（`create*`）を使用してオブジェクトを作成しているか？
 - [ ] 環境検出（`typeof window !== "undefined"` など）を適切に行っているか？
+- [ ] 数値の検証には `Number.isFinite()` や `Number.isNaN()` を使用しているか？
+- [ ] 複数の操作を行う場合は、エラー発生時にロールバック処理を実装しているか？
+- [ ] テンプレート要素のクローンには `template.content.cloneNode(true)` を使用しているか？
+- [ ] 複数の要素を一度に追加する場合は `DocumentFragment` を使用しているか？
+- [ ] `classList` 操作（`add`, `remove`, `toggle`, `contains`）を適切に使用しているか？
+- [ ] `dataset` プロパティを使用して data 属性にアクセスしているか？
+- [ ] ストレージ操作（localStorage/sessionStorage）は安全に取得・エラーハンドリングを実装しているか？
+- [ ] JSON 処理（`JSON.parse`, `JSON.stringify`）はエラーハンドリングを実装しているか？
+- [ ] 複数の非同期処理を並列実行する場合は `Promise.all()` や `Promise.allSettled()` を使用しているか？
+- [ ] イベント処理で `preventDefault()` や `stopPropagation()` を適切に使用しているか？
+- [ ] `event.target` と `event.currentTarget` を適切に使い分けているか？
+- [ ] 配列風オブジェクトを配列に変換する場合は `Array.from()` を使用しているか？
+- [ ] `Object.create(null)` を使用して純粋なオブジェクトを作成しているか？
+- [ ] 複数の非同期処理のローディング状態を管理する場合は `LoadingTracker` のようなパターンを使用しているか？
+- [ ] 複数の非同期処理を並列実行する場合は `Promise.all()` や `Promise.allSettled()` を使用しているか？
+- [ ] イベント処理で `preventDefault()` や `stopPropagation()` を適切に使用しているか？
+- [ ] `event.target` と `event.currentTarget` を適切に使い分けているか？
+- [ ] 配列風オブジェクトを配列に変換する場合は `Array.from()` を使用しているか？
+- [ ] `Object.create(null)` を使用して純粋なオブジェクトを作成しているか？
+- [ ] DOM 更新の視覚的な反映を待つ場合は `requestAnimationFrame` を使用しているか？
+- [ ] UUID 生成やランダム値生成には Crypto API を優先的に使用し、フォールバックを実装しているか？
+- [ ] DOM ツリーを効率的に走査する場合は `TreeWalker` API を使用しているか？
+- [ ] フォームバリデーションには HTML5 バリデーション API（`reportValidity()`, `setCustomValidity()`）を使用しているか？
+- [ ] 未保存の変更がある場合は `beforeunload` イベントでページ離脱を警告しているか？
+- [ ] ダイアログを開く際にフォーカスを保存し、閉じる際に復元しているか？
+- [ ] ダイアログ内でフォーカストラップを実装しているか？
+- [ ] エラーチェーン（`error.cause`）を適切に使用しているか？
+- [ ] バイナリデータ処理（`Uint8Array`, `ArrayBuffer`, `TextDecoder`）を適切に使用しているか？
+- [ ] 型変換（`String()`, `Number()`, `Boolean()`）を明示的に行っているか？
+- [ ] オブジェクトをキーとして使用する場合は `WeakMap`/`WeakSet` を検討しているか？
+- [ ] メソッドバインディングには `.bind()`, `.call()`, `Object.defineProperty` を適切に使用しているか？
+- [ ] プロトタイプチェーンを避ける必要がある場合は `Object.create(null)` を使用しているか？
+- [ ] 一時的なエラーに対してリトライロジックを実装しているか？（無限ループを防ぐ）
 
 ### Google Apps Script
 
