@@ -2034,6 +2034,7 @@ initManager = new InitManager({
   setLoaderStep,
   finishLoaderSteps,
   resetState,
+  resetTokenState,
   renderUserSummary,
   isEmbeddedMode,
   getEmbedPrefix,

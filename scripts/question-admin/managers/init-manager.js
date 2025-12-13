@@ -23,6 +23,7 @@ export class InitManager {
     this.setLoaderStep = context.setLoaderStep;
     this.finishLoaderSteps = context.finishLoaderSteps;
     this.resetState = context.resetState;
+    this.resetTokenState = context.resetTokenState;
     this.renderUserSummary = context.renderUserSummary;
     this.isEmbeddedMode = context.isEmbeddedMode;
     this.getEmbedPrefix = context.getEmbedPrefix;
