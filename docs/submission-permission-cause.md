@@ -1,11 +1,39 @@
-# Question intake submission issue – root cause
+# 質問フォーム送信エラーの原因
 
-Question form submissions were blocked in two cases:
+質問フォームの送信がブロックされる問題の根本原因を説明します。
 
-1. **Signed-in non-admin clients:** The prior Realtime Database rule for `questionIntake/submissions/{token}` allowed token-based writes only when `auth == null` or when the caller was an admin. Authenticated non-admin users therefore failed with `PERMISSION_DENIED` even when the token was valid.
-2. **Numeric token fields:** Even after loosening the auth requirement, submissions were still rejected when the token's `eventId`, `scheduleId`, or `participantId` were stored as numbers in RTDB. The validation compared these values strictly as strings, so `"123"` from the form did not match a numeric `123` on the token record, triggering `PERMISSION_DENIED` despite a valid token.
+## 問題の概要
 
-Fixes applied:
+質問フォームの送信が以下の 2 つのケースでブロックされていました：
 
-- Removed the `auth == null` restriction so any valid, non-revoked, non-expired token can create a submission regardless of auth state (admins remain allowed).
-- Updated validation to accept either string or numeric token values for `eventId`, `scheduleId`, and `participantId`, preventing type-mismatch false negatives.
+## 原因 1: 認証済み非管理者クライアント
+
+**問題**: `questionIntake/submissions/{token}` の Realtime Database ルールが、`auth == null` の場合、または呼び出し元が管理者の場合のみトークンベースの書き込みを許可していました。そのため、有効なトークンを持っていても、認証済みの非管理者ユーザーは `PERMISSION_DENIED` エラーで失敗していました。
+
+**修正内容**: `auth == null` の制限を削除し、有効で取り消されていない、期限切れでないトークンであれば、認証状態に関わらず送信を作成できるようにしました（管理者は引き続き許可されています）。
+
+## 原因 2: 数値型のトークンフィールド
+
+**問題**: 認証要件を緩和した後も、トークンの `eventId`, `scheduleId`, `participantId` が RTDB で数値として保存されている場合、送信が拒否されていました。バリデーションがこれらの値を厳密に文字列として比較していたため、フォームから送信された `"123"` がトークンレコードの数値 `123` と一致せず、有効なトークンにもかかわらず `PERMISSION_DENIED` が発生していました。
+
+**修正内容**: `eventId`, `scheduleId`, `participantId` のバリデーションを更新し、文字列または数値のいずれも受け入れるようにしました。これにより、型の不一致による誤検出を防止しました。
+
+## 修正の詳細
+
+### Firebase ルールの変更
+
+`firebase.rules.json` の `questionIntake/submissions/{token}/{submissionId}` ルールを以下のように修正：
+
+1. **認証要件の緩和**: `auth == null` の条件を削除し、有効なトークンがあれば認証状態に関わらず書き込みを許可
+2. **型の柔軟性**: `eventId`, `scheduleId`, `participantId` のバリデーションで、文字列と数値の両方を許可
+
+### 影響範囲
+
+- 質問フォーム（`scripts/question-form/submission-service.js`）: 送信処理が正常に動作するようになりました
+- Firebase セキュリティルール（`firebase.rules.json`）: ルールが更新され、より柔軟な認証と型チェックを実現
+
+## 関連ドキュメント
+
+- `firebase.rules.json`: Firebase セキュリティルールの定義
+- `scripts/question-form/submission-service.js`: 質問フォームの送信処理
+- `docs/firebase-data-structure.md`: Firebase データ構造の詳細

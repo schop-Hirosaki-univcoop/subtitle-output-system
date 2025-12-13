@@ -1,47 +1,142 @@
-# Operator API Client Overview
+# Operator API Client 概要
 
-This document summarizes the current API client implementation used by the operator- and event-admin-facing surfaces, along with credential handling conventions.
+このドキュメントは、オペレーター画面およびイベント管理画面で使用される API クライアントの実装と使用方法を説明します。
 
-## Definition and Responsibilities
-- The API client is defined in `scripts/operator/api-client.js`.
-- It coordinates Firebase authentication token retrieval and exposes three helpers to consumer modules:
-  - `apiPost`
-  - `fireAndForgetApi`
-  - `logAction`
+## 定義と責務
 
-## Instantiation Sites
-- `OperatorApp` creates an instance inside its constructor and assigns it to `this.api` for downstream modules.
-- `EventAdminApp` follows the same pattern during its DOM initialization routine, also storing the instance on `this.api`.
-- Downstream modules interact with the client exclusively through the owning app’s `api` property. Notable call sites include:
-  - Permission checks, initial synchronization, and schedule locking flows.
-  - Dictionary CRUD tooling.
-  - Pickup tooling.
-  - Dialog and question workflows, including log submission utilities.
-  - Log retrieval utilities.
-  - Event administration features such as administrator detection, schedule locking, and sheet synchronization.
+- API クライアントは `scripts/operator/api-client.js` で定義されています。
+- Firebase 認証トークンの取得を調整し、以下の 3 つのヘルパー関数を提供します：
+  - `apiPost`: Apps Script API への POST リクエスト送信
+  - `fireAndForgetApi`: レスポンスを待たない API 呼び出し
+  - `logAction`: オペレーター操作のログ記録
 
-## Initialization Strategy Comparison
-| Aspect | Preflight-Layer Initialization | Per-Screen Initialization (Current Baseline) |
-| --- | --- | --- |
-| Configuration sharing | Centralizes setup but requires additional plumbing to distribute the client to each screen. | Each screen owns its client through `OperatorApp` / `EventAdminApp`, matching existing expectations. |
-| Dependency alignment | Shared initialization must manage handoffs between surfaces. | Each class encapsulates its own dependencies via `this.api`. |
-| Lifecycle compatibility | Establishing the client before authentication is finalized complicates auth-transfer recovery and embed detection. | Works with `handleAuthState` style flows that manage login transitions and retries. |
-| Fault isolation | A failure in the shared initializer affects all screens. | Failures surface per screen, allowing localized error handling and toasts. |
+## インスタンス化
 
-**Current baseline:** We still instantiate the client per screen so the existing flows keep working, while the preflight cache lets each surface skip redundant permission checks when a fresh context is available.【F:scripts/events/app.js†L109-L216】【F:scripts/events/app.js†L860-L881】【F:scripts/operator/app.js†L2372-L2448】
+- `OperatorApp` はコンストラクタ内でインスタンスを作成し、`this.api` に割り当てます。
+- `EventAdminApp` も同様に DOM 初期化時にインスタンスを作成し、`this.api` に保存します。
+- 下流のモジュールは、所有するアプリの `api` プロパティを通じてのみクライアントと対話します。
 
-**Preflight integration:** `runAuthPreflight` runs immediately after login, warms an API client once, and persists the resulting credential, admin, and mirror metadata for later screens. Event and operator surfaces read this context first and fall back to their local constructors only when no cached data is present.【F:scripts/shared/auth-preflight.js†L161-L289】【F:scripts/events/app.js†L883-L1059】【F:scripts/operator/app.js†L2372-L2448】
+主な使用箇所：
 
-## Credential Storage and Retrieval (Per-Screen Strategy)
-1. **Storage format**
-   - Use `sessionStorage` under the key `sos:operatorAuthTransfer`.
-   - Persist a JSON payload containing `providerId`, `signInMethod`, `idToken`, `accessToken`, and `timestamp` immediately after successful Google authentication.
-2. **Storage timing**
-   - Capture the credentials right after login succeeds and before redirecting away from the login surface. Invalid credentials are removed immediately.
-3. **Retrieval timing**
-   - When `onAuthStateChanged` reports a signed-out state on the event management screen, call `tryResumeAuth` once. It invokes `consumeAuthTransfer`, attempts to sign in with the recovered credential, and clears the storage entry regardless of success.
-4. **API request behavior**
-   - The per-screen `this.api` instance obtains fresh ID tokens from Firebase Auth for each request. On 401-style responses, it triggers one forced refresh before giving up, so no additional local persistence is required.
-5. **Failure handling**
-   - If `sessionStorage` is unavailable or the expected payload is missing, the flow abandons auth-transfer recovery and falls back to the standard login path.
+- 権限チェック、初期同期、スケジュールロック処理
+- 辞書の CRUD 操作
+- ピックアップ機能
+- ダイアログと質問ワークフロー、ログ送信ユーティリティ
+- ログ取得ユーティリティ
+- イベント管理機能（管理者検出、スケジュールロック、シート同期など）
 
+## 初期化戦略
+
+### 現在の実装（画面ごとの初期化）
+
+各画面が `OperatorApp` / `EventAdminApp` を通じて独自のクライアントを所有します。
+
+**メリット**:
+
+- 各クラスが `this.api` を通じて依存関係をカプセル化
+- `handleAuthState` スタイルのフローと互換性がある
+- 画面ごとにエラーハンドリングとトーストを実装可能
+
+**実装箇所**:
+
+```400:400:scripts/operator/app.js
+    this.api = createApiClient(auth, onAuthStateChanged);
+```
+
+### プリフライト統合
+
+`runAuthPreflight` はログイン直後に実行され、API クライアントを一度ウォームアップし、結果の認証情報、管理者情報、ミラー情報を後続の画面で使用できるように保存します。イベント画面とオペレーター画面は、まずこのコンテキストを読み取り、キャッシュされたデータが存在しない場合のみローカルコンストラクタにフォールバックします。
+
+## 認証情報の保存と取得
+
+### 保存形式
+
+- `sessionStorage` のキー `sos:operatorAuthTransfer` を使用
+- Google 認証成功直後に、`providerId`, `signInMethod`, `idToken`, `accessToken`, `timestamp` を含む JSON ペイロードを保存
+
+### 保存タイミング
+
+- ログイン成功後、ログイン画面から遷移する前に資格情報をキャプチャ
+- 無効な資格情報は即座に削除
+
+### 取得タイミング
+
+- イベント管理画面で `onAuthStateChanged` がサインアウト状態を報告した場合、`tryResumeAuth` を一度呼び出します
+- `consumeAuthTransfer` を呼び出し、復元した資格情報でサインインを試み、成功・失敗に関わらずストレージエントリをクリア
+
+### API リクエストの動作
+
+- 画面ごとの `this.api` インスタンスは、各リクエストで Firebase Auth から新しい ID トークンを取得します
+- 401 形式のレスポンスの場合、1 回だけ強制リフレッシュを試みてから諦めるため、追加のローカル永続化は不要です
+
+### 失敗処理
+
+- `sessionStorage` が利用できない場合、または期待されるペイロードが欠落している場合、認証転送の復元を放棄し、標準のログインパスにフォールバックします
+
+## API 関数の詳細
+
+### `apiPost(payload, retryOnAuthError = true)`
+
+Apps Script API に POST リクエストを送信し、共通のエラーハンドリングを行います。
+
+**パラメータ**:
+
+- `payload`: GAS 側に送信するリクエストボディ（`Record<string, unknown>`）
+- `retryOnAuthError`: 認証エラー時にリトライを試みるか（デフォルト: `true`）
+
+**戻り値**: `Promise<any>`
+
+**動作**:
+
+1. Firebase Auth から ID トークンを取得
+2. `GAS_API_URL` に POST リクエストを送信
+3. レスポンスが成功でない場合、エラーメッセージを確認
+4. 認証エラーの場合、トークンを強制リフレッシュして 1 回だけ再試行
+5. それでも失敗する場合、エラーをスロー
+
+### `fireAndForgetApi(payload)`
+
+レスポンスを待たずに API を呼び出し、失敗はコンソールに記録します。即時性を重視するログ送信などで利用します。
+
+**パラメータ**:
+
+- `payload`: GAS 側に送信するリクエストボディ（`Record<string, unknown>`）
+
+**戻り値**: `void`
+
+### `logAction(actionName, details = "")`
+
+オペレーター操作を GAS バックエンドへ記録します。失敗しても UI には影響させず、コンソールロギングのみに留めます。
+
+**パラメータ**:
+
+- `actionName`: 操作の種類（`string`）
+- `details`: 追加情報（`string`、デフォルト: `""`）
+
+**戻り値**: `Promise<void>`
+
+## 使用例
+
+```javascript
+// OperatorApp 内での使用例
+const result = await this.api.apiPost({
+  action: "ensureAdmin",
+  eventId: this.state.activeEventId
+});
+
+// ログ送信（非同期、エラーを無視）
+this.api.fireAndForgetApi({
+  action: "logAction",
+  action_type: "question_sent",
+  details: `Question UID: ${uid}`
+});
+
+// 操作ログの記録
+await this.api.logAction("schedule_locked", `Schedule: ${scheduleId}`);
+```
+
+## 関連ドキュメント
+
+- `scripts/operator/api-client.js`: API クライアントの実装
+- `scripts/shared/auth-preflight.js`: 認証プリフライトの実装
+- `docs/login-to-loader-flow.md`: ログインからローダー起動までのフロー
