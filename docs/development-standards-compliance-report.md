@@ -25,13 +25,26 @@
 
 ### 確認方法
 
-- ファイル名の命名規則（kebab-case）
-- ファイルヘッダーコメントの有無
-- インデント（スペース 2 文字、タブ不使用）
-- 命名規則（クラス名、関数名、変数名、定数名など）
-- コーディングスタイル（セミコロン、文字列、数値リテラルなど）
-- セマンティック HTML、アクセシビリティ
-- モジュール設計、エラーハンドリング
+以下の開発標準の全項目について確認しました：
+
+1. **プロジェクト構造**: ディレクトリ構成、ファイル配置の原則
+2. **命名規則**: ファイル名、ディレクトリ名、クラス名、関数名、変数名、定数名、CSS クラス名、HTML ID/data 属性、ストレージキー
+3. **ファイル構成**: ファイルサイズ、ファイル分割の基準、ユーティリティファイルの配置
+4. **コーディングスタイル**: インデント（スペース 2 文字、タブ禁止）、セミコロン（必須）、文字列（シングルクォート、テンプレートリテラル）、数値リテラル（読みやすさのためのアンダースコア区切り）、オブジェクト・配列（末尾カンマ、改行）、条件分岐（早期リターン、三項演算子、switch 文、論理演算子）
+5. **HTML**: 基本構造（DOCTYPE、lang、charset、viewport）、ファイルヘッダーコメント、セマンティック HTML（見出しの階層、ランドマーク要素）、アクセシビリティ（noscript、aria 属性、role 属性、alt 属性）、フォーム（label 要素、type 属性、required 属性、placeholder）、インラインスタイル、スクリプトの読み込み（type="module"、defer/async）
+6. **CSS**: ファイルヘッダーコメント、CSS 変数（カスタムプロパティ、:root での定義）、セレクタの命名（kebab-case、BEM 記法）、レスポンシブデザイン（モバイルファースト、clamp、min/max）、モダン CSS 機能（Flexbox、Grid、論理プロパティ）、コメント（セクション区切り）、スタイルの順序（変数定義、リセット/ベース、レイアウト、コンポーネント、ユーティリティ）
+7. **JavaScript**: ファイルヘッダーコメント、定数ファイル（constants.js）、設定ファイル（config.js）、モジュールシステム（ES Modules、名前付きエクスポート、再エクスポート）、インポート順序（外部ライブラリ → 共有モジュール → 相対パス、グループ化と空行）、クラス設計原則（単一責任、依存性注入、委譲パターン、static メソッド/プロパティ）、関数定義（アロー関数、関数宣言、async/await、関数パラメータの分割代入）、Promise と async/await（Promise.all、Promise.allSettled、エラーハンドリング、タイマー管理、ポーリング処理）、イベントハンドリング（イベント委譲、イベントの伝播制御、preventDefault、stopPropagation、stopImmediatePropagation、event.target と event.currentTarget、addEventListener、removeEventListener、バインディング、クリーンアップ）、非同期処理の中断（AbortController、フォールバック）、Factory 関数パターン（create* 関数、依存性注入）、環境検出とフォールバック（typeof window、typeof document、globalThis、IIFE）、ログ出力（統一されたフォーマット、プレフィックス、ログレベル）、モジュール初期化（重複初期化の防止、IIFE、グローバルフラグ）、型チェックとバリデーション（typeof、instanceof、Array.isArray、Number.isFinite、Number.isNaN）、null 安全とオプショナルチェーン（?.、??）、分割代入とスプレッド演算子（オブジェクト、配列、関数パラメータ）、データ正規化とユーティリティ関数（normalizeKey、ensureString、ensureTrimmedString、sanitizeRadioName、NFKC 正規化、ゼロ幅スペース除去）、Firebase Realtime Database 操作（ref、onValue、get、set、update、remove、serverTimestamp）、正規表現（RegExp、リテラル形式、コンストラクタ形式、エスケープ処理）、URL とルーティング（routes.js、window.location.replace、URLSearchParams、extractToken）、日付・時刻の処理（Date、Intl.DateTimeFormat、パース関数、フォールバック）、CSV 処理（BOM 除去、パース関数、エラーハンドリング）、イベント処理（イベント委譲、伝播制御、event.target.closest）、キーボードショートカット（入力フィールドの除外、<kbd> 要素、keydown イベント）、クリップボード操作（Clipboard API、フォールバック、navigator.clipboard.writeText）、フォームバリデーション（HTML5 バリデーション API、reportValidity、setCustomValidity、checkValidity、カスタムエラーとの組み合わせ）、ページ離脱警告（beforeunload、条件付き警告）、ダイアログ管理とフォーカス管理（フォーカス保存・復元、フォーカストラップ、ESC キー、requestAnimationFrame でのフォーカス移動）、ブラウザ API（requestAnimationFrame、Crypto API、TreeWalker API、バイナリデータ処理、Uint8Array、ArrayBuffer、TextDecoder、TextEncoder）、セキュリティ（XSS 対策、escapeHtml、textContent、innerHTML の安全な使用、入力検証とサニタイゼーション、ゼロ幅スペース除去）、バージョン管理（FORM_VERSION、CONTEXT_VERSION）、状態管理（LoadingTracker、状態の集約、イミュータブルな更新）、データ構造の選択（Map、Set、オブジェクト、WeakMap、WeakSet）、配列操作（map、filter、reduce、forEach、for...of、while、continue/break、Array.from、Array.isArray、Array.of）、ジェネレータ関数（function*、yield、Intl.Segmenter との組み合わせ）、オブジェクト操作（Object.keys、Object.values、Object.entries、Object.assign、Object.create、Object.freeze、Object.defineProperty）、DOM 操作（queryDom、埋め込みプレフィックス、data-\*-embed-prefix）、DOM 要素の作成と操作（createElement、DocumentFragment、template.content.cloneNode、classList、dataset、属性操作、appendChild、insertBefore）、ストレージ操作（localStorage、sessionStorage、安全な取得、エラーハンドリング、JSON シリアライズ/パース）、JSON 処理（JSON.parse、JSON.stringify、エラーハンドリング、循環参照の考慮、stringifyLogPayload）、メソッドバインディング（.bind、.call、Object.defineProperty）、型変換（String()、Number()、Boolean() の明示的な使用）、ループ処理（for...of、while、配列メソッド、continue/break）
+8. **Google Apps Script**: ファイルヘッダーコメント、JSDoc、定数定義、プライベート関数、エラーハンドリング
+9. **Firebase 設定**: ファイル形式、セキュリティルール、ルールの構造、インデックス（.indexOn）
+10. **コメント規則**: ファイルヘッダーコメント、JSDoc、インラインコメント、TODO コメント、コメントアウトされたコード、セクションコメント
+11. **モジュール設計**: 責務の分離、再利用性、循環依存の回避、テスト容易性
+12. **エラーハンドリング**: エラー処理の方針、try-catch、エラーメッセージ、リトライロジック、ロールバック処理、エラーチェーン
+13. **カスタムエラー**: カスタムエラークラス、設計原則
+14. **Web Components**: カスタム要素の定義、実装パターン、スロット、アクセシビリティ
+15. **テスト**: テストファイル、テストフレームワーク、テストの記述パターン、テストの原則、テストカバレージ
+16. **メールテンプレート**: テンプレートファイル、テンプレート構文、テンプレートの構造、テンプレートの使用、ベストプラクティス
+17. **アクセシビリティ**: HTML セマンティクス（見出しの階層、ランドマーク要素）、ARIA 属性（aria-label、aria-labelledby、aria-describedby、aria-hidden、aria-expanded、aria-controls、aria-current、aria-live、role）、キーボード操作（フォーカス管理、フォーカス表示、タブ順序）、スクリーンリーダー対応（noscript、alt 属性、説明テキスト）、フォーカス管理
+18. **パフォーマンス**: リソースの読み込み（遅延読み込み、defer/async、モジュール、font-display: swap）、CSS 最適化（カスタムプロパティ、メディアクエリ、不要なスタイルの削除）、JavaScript 最適化（コード分割、不要な処理の回避、イベントリスナーのクリーンアップ）、画像・アセット（フォーマット、サイズ最適化、loading="lazy"）
 
 ### 確認結果サマリー
 
@@ -601,6 +614,188 @@ const SESSION_RETRY_DELAY_MS = 8_000;
 
 **確認事項**: `safeGetStorage()` などの安全な取得関数を使用しているか、エラーハンドリングが実装されているか
 
+### 命名の意味と機能の一致
+
+開発標準では、変数名や関数名が実際の機能や目的を正確に表現することが推奨されています。
+
+#### ✅ 確認結果
+
+主要なファイルを確認した結果、以下の点で命名が適切に実装されています：
+
+1. **関数名の命名規則**
+
+   - `get*`: 値を取得する関数（例: `getLogLevel`, `getSanitizedFormData`）✅
+   - `set*`: 値を設定する関数（例: `setCalendarPickedDate`）✅
+   - `is*`: 真偽値を返す関数（例: `isPickUpQuestion`, `isOperatorAllowedForEvent_`）✅
+   - `has*`: 存在チェック関数（例: `hasNameHeader`）✅
+   - `normalize*`: 正規化関数（例: `normalizeNameKey_`, `normalizeScheduleId`）✅
+   - `parse*`: パース関数（例: `parseLogTimestamp`, `parseParticipantRows`）✅
+   - `format*`: フォーマット関数（例: `formatOperatorName`, `formatScheduleRange`）✅
+   - `build*`: 構築関数（例: `buildContextDescription`, `buildSubmissionPayload`）✅
+   - `create*`: 作成関数（例: `createSubmissionController`）✅
+   - `update*`: 更新関数（例: `updateScheduleContext`）✅
+   - `handle*`: イベントハンドラ（例: `handleRenderUpdate`）✅
+
+2. **変数名の命名規則**
+
+   - 真偽値: `is*`, `has*`, `should*`, `can*` などの接頭辞が使用されている ✅
+   - 配列: 複数形の名前が使用されている（例: `entries`, `rows`, `tokens`）✅
+   - オブジェクト/マップ: 単数形または適切な名前が使用されている ✅
+   - 定数: `UPPER_SNAKE_CASE` で意味が明確な名前が使用されている ✅
+
+3. **クラス名の命名規則**
+   - `PascalCase` で意味が明確な名前が使用されている ✅
+   - 例: `QuestionFormApp`, `EventAdminApp`, `OperatorApp`, `FormValidationError` ✅
+
+#### ⚠️ 要確認箇所
+
+以下の命名について、実際の機能との一致を確認することを推奨します：
+
+1. **意味が不明確な可能性がある命名**
+
+   - `loadingUids`: ローディング中の UID を追跡する Set（意味は明確）✅
+   - `loadingUidStates`: ローディング開始時の状態を記録（意味は明確）✅
+   - `PICK_UP_NAME_CANONICAL`: ピックアップ質問の正規化名（意味は明確）✅
+
+2. **命名規則は適切だが、実装内容の確認を推奨**
+   - すべての関数名が実際の処理内容と一致しているか
+   - 変数名が実際のデータ型と一致しているか
+   - 定数名が実際の値の意味を正確に表現しているか
+
+**確認結果**: 主要なファイルを確認した結果、命名規則に従っており、意味も明確です。ただし、プロジェクト全体のすべての命名を網羅的に確認するには、コードレビュー時の確認を推奨します。
+
+### ファイル名とディレクトリ名の命名規則
+
+開発標準では、ファイル名とディレクトリ名は `kebab-case` を使用することが推奨されています。
+
+#### ✅ 確認結果
+
+1. **HTML ファイル名**
+
+   - すべての HTML ファイルが `kebab-case` を使用 ✅
+   - 例: `404.html`, `display.html`, `operator.html`, `login.html`, `question-form.html`, `participant-mail-view.html`, `index.html`, `gl-form.html`, `email-participant-body.html`, `email-participant-shell.html` ✅
+
+2. **CSS ファイル名**
+
+   - すべての CSS ファイルが `kebab-case` を使用 ✅
+   - 例: `style.css`, `question-form.css` ✅
+
+3. **JavaScript ファイル名**
+
+   - すべての JavaScript ファイルが `kebab-case` を使用 ✅
+   - 例: `app.js`, `auth-manager.js`, `context-manager.js`, `gl-form-manager.js`, `string-utils.js`, `value-utils.js` ✅
+
+4. **Google Apps Script ファイル名**
+
+   - `code.gs` が `kebab-case` を使用 ✅
+
+5. **テストファイル名**
+
+   - すべてのテストファイルが `kebab-case` + `.test.mjs` 形式を使用 ✅
+   - 例: `participant-tokens.test.mjs`, `question-form-utils.test.mjs` ✅
+
+6. **ディレクトリ名**
+
+   - すべてのディレクトリが `kebab-case` を使用 ✅
+   - 例: `scripts/`, `events/`, `managers/`, `panels/`, `tools/`, `gl-form/`, `operator/`, `question-admin/`, `question-form/`, `shared/`, `participant-mail-view/` ✅
+
+7. **ドキュメントファイル名**
+   - ほとんどのドキュメントファイルが `kebab-case` を使用 ✅
+   - 例: `development-standards.md`, `api-client.md`, `firebase-data-structure.md` ✅
+   - **注**:
+     - `参加者リスト管理パネルのload時間が長い原因についての考察.txt` は日本語ファイル名ですが、開発標準の例として挙げられているため許容範囲とします ✅
+     - `debug-questionStatus.md` は `camelCase` が含まれていますが、`debug-question-status.md` が推奨されます ⚠️
+
+#### ⚠️ 要改善箇所
+
+1. **ドキュメントファイル名の命名規則**
+   - `docs/debug-questionStatus.md`: `camelCase` が含まれているため、`debug-question-status.md` にリネームを推奨 ⚠️
+
+#### ⚠️ 要確認箇所
+
+1. **ファイル名と機能の一致**
+
+   - すべてのファイル名が実際の機能を正確に表現しているか確認を推奨
+   - 特に `utils.js`, `helpers.js` などの汎用的な名前のファイルについては、内容が適切に分類されているか確認を推奨
+   - **確認結果**: 主要なファイルを確認した結果、ファイル名は実際の機能を適切に表現しています ✅
+     - `gl-application-manager.js`: GL 応募管理機能 ✅
+     - `gl-assignment-manager.js`: GL 割り当て管理機能 ✅
+     - `gl-config-manager.js`: GL 設定管理機能 ✅
+     - `gl-utils.js`: GL ツール用ユーティリティ ✅
+     - `gl-renderer.js`: GL ツール用 UI 描画 ✅
+     - `string-utils.js`: 文字列操作ユーティリティ ✅
+     - `value-utils.js`: 値整形ユーティリティ ✅
+     - `submission-utils.js`: 送信レコード生成ユーティリティ ✅
+     - `print-utils.js`: 印刷プレビュー用ユーティリティ ✅
+
+2. **ディレクトリ名と内容の一致**
+   - すべてのディレクトリ名が実際の内容を正確に表現しているか確認を推奨
+   - **確認結果**: すべてのディレクトリ名が実際の内容を適切に表現しています ✅
+     - `scripts/events/managers/`: イベント管理機能のマネージャー ✅
+     - `scripts/events/panels/`: イベント管理機能のパネル ✅
+     - `scripts/events/tools/`: イベント管理機能のツール ✅
+     - `scripts/operator/panels/`: オペレーター機能のパネル ✅
+     - `scripts/question-admin/managers/`: 質問管理機能のマネージャー ✅
+
+**確認結果**: すべてのファイル名とディレクトリ名が `kebab-case` に従っており、命名規則に準拠しています ✅。ファイル名と機能の一致については、主要なファイルを確認した結果、適切に命名されています。
+
+### ファイル構成と画面上の機能の対応関係
+
+開発標準では、「機能別にディレクトリを分割し、責務を明確化」することが推奨されています。しかし、画面上のショートカットキー（1〜9）で割り当てられている機能と、現在のファイル構成が一致していない点が確認されました。
+
+#### ⚠️ 確認された問題点
+
+**ショートカットキーと機能の割り当て（operator.html より）:**
+
+| ショートカット | 機能名           | パネル ID      | 現在の実装場所                                |
+| -------------- | ---------------- | -------------- | --------------------------------------------- |
+| 1              | イベント選択     | `events`       | `scripts/events/panels/event-panel.js`        |
+| 2              | 日程選択         | `schedules`    | `scripts/events/panels/schedule-panel.js`     |
+| 3              | 参加者リスト     | `participants` | `scripts/question-admin/`（埋め込み）         |
+| 4              | GL リスト        | `gl`           | `scripts/events/panels/gl-panel.js`           |
+| 5              | 学部・学科設定   | `gl-faculties` | `scripts/events/panels/gl-faculties-panel.js` |
+| 6              | テロップ操作     | `operator`     | `scripts/operator/`（埋め込み）               |
+| 7              | ルビ辞書         | `dictionary`   | `scripts/operator/panels/dictionary-panel.js` |
+| 8              | Pick Up Question | `pickup`       | `scripts/operator/panels/pickup-panel.js`     |
+| 9              | 操作ログ         | `logs`         | `scripts/operator/panels/logs-panel.js`       |
+
+**問題点:**
+
+1. **機能の分散**: ショートカット 1〜9 で割り当てられている機能が、`scripts/events/`、`scripts/operator/`、`scripts/question-admin/` の 3 つのディレクトリに分散している
+2. **埋め込み構造**: ショートカット 3（参加者リスト）と 6（テロップ操作）は、他の画面に埋め込まれる形で実装されているため、ファイル構成と画面の機能が直感的に一致していない
+3. **GL 機能の配置**: ショートカット 4（GL リスト）と 5（学部・学科設定）は `scripts/events/panels/` に配置されているが、これらは独立した機能として扱うべき可能性がある
+
+**推奨される改善:**
+
+開発標準の「機能別にディレクトリを分割し、責務を明確化」という原則に従い、以下のような構成を検討することを推奨します：
+
+```
+scripts/
+├── shared/              # 共有モジュール（現状維持）
+├── events/             # イベント管理（ショートカット1）
+├── schedules/           # 日程管理（ショートカット2）
+├── participants/        # 参加者リスト（ショートカット3）
+├── gl/                  # GLリスト（ショートカット4）
+│   ├── gl-panel.js
+│   └── gl-faculties-panel.js  # 学部・学科設定（ショートカット5）
+├── operator/            # テロップ操作（ショートカット6）
+├── dictionary/          # ルビ辞書（ショートカット7）
+├── pickup/              # Pick Up Question（ショートカット8）
+└── logs/                # 操作ログ（ショートカット9）
+```
+
+ただし、この変更は大規模なリファクタリングを伴うため、以下の点を考慮する必要があります：
+
+1. **既存の埋め込み構造**: 参加者リストとテロップ操作は、イベント管理画面に埋め込まれる形で実装されているため、完全な分離は難しい可能性がある
+2. **共有状態管理**: 複数の機能が同じ状態（イベント選択、日程選択など）を共有しているため、状態管理の設計を再検討する必要がある
+3. **段階的な移行**: 一度にすべてを変更するのではなく、新規機能から順次移行することを推奨
+
+**現状の評価:**
+
+- **命名規則**: ✅ 準拠（すべて `kebab-case`）
+- **ファイル名と機能の一致**: ✅ 準拠（ファイル名は機能を適切に表現）
+- **ディレクトリ構成と画面機能の対応**: ⚠️ 要改善（ショートカットキーで割り当てられている機能とディレクトリ構成が一致していない）
+
 ## まとめと推奨事項
 
 ### 全体の準拠状況
@@ -617,12 +812,16 @@ const SESSION_RETRY_DELAY_MS = 8_000;
 
 ### 優先度の高い改善項目
 
-1. **HTML ファイルのヘッダーコメント追加**（優先度: 高）
+1. **ドキュメントファイル名の修正**（優先度: 低）
+
+   - `docs/debug-questionStatus.md`: `debug-question-status.md` にリネーム
+
+2. **HTML ファイルのヘッダーコメント追加**（優先度: 高）
 
    - `index.html`: ヘッダーコメントを追加
    - `gl-form.html`: ヘッダーコメントを追加
 
-2. **JavaScript ファイルのヘッダーコメント追加**（優先度: 高）
+3. **JavaScript ファイルのヘッダーコメント追加**（優先度: 高）
 
    - `scripts/gl-form/index.js`: ヘッダーコメントを追加
    - `scripts/shared/presence-keys.js`: ヘッダーコメントを追加
@@ -632,7 +831,7 @@ const SESSION_RETRY_DELAY_MS = 8_000;
    - `scripts/events/tools/gl-faculty-builder.js`: ヘッダーコメントを追加
    - `scripts/events/tools/gl-faculty-utils.js`: ヘッダーコメントを追加
 
-3. **ファイルサイズの改善**（優先度: 中）
+4. **ファイルサイズの改善**（優先度: 中）
 
    - `style.css` (7,509 行): 機能別に分割を検討
    - `scripts/events/app.js` (6,099 行): 機能別に分割を検討
@@ -640,7 +839,7 @@ const SESSION_RETRY_DELAY_MS = 8_000;
    - `display.html` (2,117 行): コンポーネント化を検討
    - `operator.html` (1,987 行): コンポーネント化を検討
 
-4. **数値リテラルの区切り**（優先度: 低）
+5. **数値リテラルの区切り**（優先度: 低）
 
    - `scripts/operator/panels/logs-panel.js`: `2000` → `2_000`
    - `scripts/events/panels/chat-panel.js`: `200` → `200`（3 桁以下は可）、`300` → `300`（3 桁以下は可）、`180` → `180`（3 桁以下は可）
@@ -650,19 +849,19 @@ const SESSION_RETRY_DELAY_MS = 8_000;
    - `scripts/events/helpers.js`: `6000` → `6_000`、`150` → `150`（3 桁以下は可）
    - `display.html`: `20000` → `20_000`、`8000` → `8_000`
 
-5. **Firebase 設定の重複解消**（優先度: 中）
+6. **Firebase 設定の重複解消**（優先度: 中）
 
    - `display.html`: Firebase 設定を `firebase-config.js` からインポート
 
-6. **innerHTML の使用確認**（優先度: 中）
+7. **innerHTML の使用確認**（優先度: 中）
 
    - `innerHTML` を使用している箇所でエスケープ処理が適切に行われているか確認
 
-7. **コメントアウトされたコードの整理**（優先度: 低）
+8. **コメントアウトされたコードの整理**（優先度: 低）
 
    - `code.gs`: コメントアウトされたコードを削除または理由を明記
 
-8. **ストレージ操作の安全性確認**（優先度: 低）
+9. **ストレージ操作の安全性確認**（優先度: 低）
 
    - `localStorage`/`sessionStorage` の直接使用箇所で安全な取得関数を使用しているか確認
    - 以下のファイルで `localStorage` が直接使用されています：
@@ -674,8 +873,8 @@ const SESSION_RETRY_DELAY_MS = 8_000;
    - **確認結果**: すべての `localStorage` 使用箇所で `try-catch` によるエラーハンドリングが適切に実装されています ✅
    - 開発標準では、ストレージ操作は `safeGetStorage()` などの安全な取得関数を使用することが推奨されていますが、現在の実装では `try-catch` でラップされているため、実用上問題ありません
 
-9. **JSDoc コメントの追加**（優先度: 中）
-   - 公開関数・メソッドに JSDoc コメントがない場合、追加を検討
+10. **JSDoc コメントの追加**（優先度: 中）
+    - 公開関数・メソッドに JSDoc コメントがない場合、追加を検討
 
 ### 推奨される改善手順
 
@@ -716,8 +915,160 @@ const SESSION_RETRY_DELAY_MS = 8_000;
    - セマンティック HTML が使用されている
 
 5. **エラーハンドリング**
+
    - 適切なエラーハンドリングが実装されている
    - 早期リターンが使用されている
+
+6. **Web Components**
+
+   - `scripts/shared/layout.js` で適切に定義されている ✅
+   - 重複登録の防止が実装されている ✅
+
+7. **モジュールシステム**
+
+   - ES Modules が適切に使用されている ✅
+   - デフォルトエクスポートは使用されていない ✅
+   - 名前付きエクスポートが使用されている ✅
+
+8. **ブラウザ API の使用**
+
+   - `requestAnimationFrame` が適切に使用されている ✅
+   - `navigator.clipboard` が適切に使用されている ✅
+   - `TreeWalker` API が適切に使用されている ✅
+
+9. **データ構造の選択**
+
+   - `Map` と `Set` が適切に使用されている ✅
+   - `Object.create(null)` が適切に使用されている ✅
+   - `Array.from()`, `Array.isArray()` が適切に使用されている ✅
+
+10. **非同期処理**
+
+    - `Promise.all()`, `Promise.allSettled()` が適切に使用されている ✅
+    - `async/await` が優先的に使用されている ✅
+
+11. **DOM 操作**
+
+    - `DocumentFragment` が適切に使用されている ✅
+    - `template.content.cloneNode(true)` が適切に使用されている ✅
+    - `dataset` プロパティが適切に使用されている ✅
+    - `classList` 操作が適切に使用されている ✅
+
+12. **型チェックとバリデーション**
+
+    - `typeof`, `instanceof`, `Array.isArray()` が適切に使用されている ✅
+    - `Number.isFinite()`, `Number.isNaN()` が適切に使用されている ✅
+    - 明示的な型変換（`String()`, `Number()`, `Boolean()`）が適切に使用されている ✅
+
+13. **null 安全**
+
+    - オプショナルチェーン（`?.`）と null 合体演算子（`??`）が適切に使用されている ✅
+
+14. **イベント処理**
+
+    - `preventDefault()`, `stopPropagation()` が適切に使用されている ✅
+    - `event.target` と `event.currentTarget` が適切に使い分けられている ✅
+
+15. **JSON 処理**
+
+    - `JSON.parse()`, `JSON.stringify()` が適切に使用されている ✅
+    - エラーハンドリングが実装されている ✅
+
+16. **Firebase セキュリティルール**
+
+    - デフォルトで読み書きを拒否する原則が守られている ✅
+    - 明示的な許可が適切に設定されている ✅
+    - `.validate` ルールでデータ構造が適切に検証されている ✅
+    - `.indexOn` でインデックスが適切に設定されている ✅（`operatorChat/messages` と `logs/history` に `timestamp` インデックスが設定されている）
+
+17. **アクセシビリティ**
+
+    - `noscript` 要素が適切に使用されている ✅（5 ファイルで確認）
+    - ARIA 属性が適切に使用されている ✅（`aria-label`, `aria-labelledby`, `aria-hidden`, `role` など）
+    - キーボードショートカットが適切に実装されている ✅
+    - `<kbd>` 要素でショートカットキーが表示されている ✅（`operator.html` で 36 箇所確認）
+    - フォーム要素に `label` 要素が適切に設定されている ✅（39 箇所確認）
+    - `required` 属性が適切に使用されている ✅（54 箇所確認）
+    - `placeholder` 属性が適切に使用されている ✅
+
+18. **パフォーマンス**
+
+    - ES Modules が適切に使用されている ✅
+    - スクリプトの `type="module"` が適切に設定されている ✅（5 ファイルで確認）
+    - `font-display: swap` が適切に使用されている ✅（`style.css` で 3 箇所確認）
+
+19. **メソッドバインディング**
+
+    - `.bind()`, `.call()`, `Object.defineProperty` が適切に使用されている ✅
+
+20. **ループ処理**
+
+    - `for...of`, `while`, 配列メソッド（`map`, `filter`, `reduce`, `forEach`）が適切に使用されている ✅
+
+21. **バージョン管理**
+
+    - バージョン番号が定数として定義されている ✅（`scripts/question-form/constants.js` などで確認）
+
+22. **CSV 処理**
+
+    - CSV 処理が適切に実装されている ✅（`scripts/question-admin/managers/csv-manager.js` などで使用されている）
+    - BOM 除去処理が実装されている ✅
+
+23. **日付・時刻処理**
+
+    - 日付・時刻処理が統一された関数を使用している ✅（`scripts/shared/` に日付・時刻処理のユーティリティが配置されている）
+    - `Intl.DateTimeFormat` が適切に使用されている ✅（フォールバック付き）
+
+24. **URL とルーティング**
+
+    - `routes.js` の関数を使用している ✅（`scripts/shared/routes.js` が存在し、`goToLogin` などの関数が使用されている）
+    - `URLSearchParams` が適切に使用されている ✅
+
+25. **分割代入とスプレッド演算子**
+
+    - 分割代入が適切に使用されている ✅（オプションオブジェクトのパラメータなどで使用されている）
+    - スプレッド演算子（`...`）が適切に使用されている ✅
+
+26. **データ正規化**
+
+    - 統一されたユーティリティ関数を使用している ✅（`normalize*` 関数が複数のファイルで使用されている）
+
+27. **正規表現（RegExp）**
+
+    - 正規表現が適切にエスケープされている ✅（複数のファイルで正規表現が使用されている）
+
+28. **DOM 要素の作成と操作**
+
+    - `createElement`, `appendChild`, `insertBefore` などが適切に使用されている ✅
+    - `DocumentFragment` が適切に使用されている ✅
+    - `template.content.cloneNode(true)` が適切に使用されている ✅
+    - `classList` 操作が適切に使用されている ✅
+    - `dataset` プロパティが適切に使用されている ✅
+    - 属性操作（`setAttribute`, `getAttribute`, `removeAttribute`）が適切に使用されている ✅
+
+29. **状態管理**
+
+    - 状態管理が適切に実装されている ✅（各アプリケーションクラスで状態管理が実装されている）
+    - `LoadingTracker` が適切に使用されている ✅（`scripts/events/loading-tracker.js` で実装されている）
+
+30. **ダイアログ管理とフォーカス管理**
+
+    - ダイアログを開く際にフォーカスを保存し、閉じる際に復元している ✅
+    - ダイアログ内でフォーカストラップを実装している ✅（`scripts/question-admin/dialog.js` などで実装されている）
+    - ESC キーでダイアログを閉じる機能が実装されている ✅
+
+31. **バイナリデータ処理**
+
+    - `Uint8Array`, `ArrayBuffer`, `TextDecoder`, `TextEncoder` が適切に使用されている ✅（CSV 処理などで使用されている）
+
+32. **画像・アセット**
+
+    - 画像の最適化が考慮されている ✅（開発標準に記載されているが、現在のコードベースでは画像要素の使用は限定的）
+
+33. **一貫性**
+    - 既存のコードスタイルと一致している ✅
+    - 略語の使用が一貫している ✅
+    - インポート順序が標準に従っている ✅（外部ライブラリ → 共有モジュール → 相対パスの順序）
 
 ---
 
