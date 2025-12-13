@@ -191,12 +191,48 @@ export class InitManager {
       closeDialog: this.closeDialog,
       // 依存関数と定数
       sortParticipants: this.sortParticipants,
-      getParticipantGroupKey: this.getParticipantGroupKey,
-      describeParticipantGroup: this.describeParticipantGroup,
-      collectGroupGlLeaders: this.collectGroupGlLeaders,
-      getEventGlRoster: this.getEventGlRoster,
-      getEventGlAssignmentsMap: this.getEventGlAssignmentsMap,
-      resolveScheduleAssignment: this.resolveScheduleAssignment,
+      getParticipantGroupKey: (entry) => {
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.getParticipantGroupKey(entry);
+        } else {
+          return this.getParticipantGroupKey(entry);
+        }
+      },
+      describeParticipantGroup: (groupKey) => {
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.describeParticipantGroup(groupKey);
+        } else {
+          return this.describeParticipantGroup(groupKey);
+        }
+      },
+      collectGroupGlLeaders: (groupKey, options) => {
+        if (refs.glManager) {
+          return refs.glManager.collectGroupGlLeaders(groupKey, options);
+        } else {
+          return this.collectGroupGlLeaders(groupKey, options);
+        }
+      },
+      getEventGlRoster: (eventId) => {
+        if (refs.glManager) {
+          return refs.glManager.getEventGlRoster(eventId);
+        } else {
+          return this.getEventGlRoster(eventId);
+        }
+      },
+      getEventGlAssignmentsMap: (eventId) => {
+        if (refs.glManager) {
+          return refs.glManager.getEventGlAssignmentsMap(eventId);
+        } else {
+          return this.getEventGlAssignmentsMap(eventId);
+        }
+      },
+      resolveScheduleAssignment: (entry, scheduleId) => {
+        if (refs.glManager) {
+          return refs.glManager.resolveScheduleAssignment(entry, scheduleId);
+        } else {
+          return this.resolveScheduleAssignment(entry, scheduleId);
+        }
+      },
       loadGlDataForEvent: async (eventId, options) => {
         if (refs.glManager) {
           return await refs.glManager.loadGlDataForEvent(eventId, options);
@@ -694,14 +730,62 @@ export class InitManager {
         }
         return refs.participantUIManager.buildParticipantCard(entry, index, options);
       },
-      getParticipantGroupKey: this.getParticipantGroupKey,
-      createParticipantGroupElements: this.createParticipantGroupElements,
-      getEventGlRoster: this.getEventGlRoster,
-      getEventGlAssignmentsMap: this.getEventGlAssignmentsMap,
-      resolveScheduleAssignment: this.resolveScheduleAssignment,
-      renderGroupGlAssignments: this.renderGroupGlAssignments,
-      clearParticipantSelection: this.clearParticipantSelection,
-      participantChangeKey: this.participantChangeKey,
+      getParticipantGroupKey: (entry) => {
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.getParticipantGroupKey(entry);
+        } else {
+          return this.getParticipantGroupKey(entry);
+        }
+      },
+      createParticipantGroupElements: (groupKey) => {
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.createParticipantGroupElements(groupKey);
+        } else {
+          return this.createParticipantGroupElements(groupKey);
+        }
+      },
+      getEventGlRoster: (eventId) => {
+        if (refs.glManager) {
+          return refs.glManager.getEventGlRoster(eventId);
+        } else {
+          return this.getEventGlRoster(eventId);
+        }
+      },
+      getEventGlAssignmentsMap: (eventId) => {
+        if (refs.glManager) {
+          return refs.glManager.getEventGlAssignmentsMap(eventId);
+        } else {
+          return this.getEventGlAssignmentsMap(eventId);
+        }
+      },
+      resolveScheduleAssignment: (entry, scheduleId) => {
+        if (refs.glManager) {
+          return refs.glManager.resolveScheduleAssignment(entry, scheduleId);
+        } else {
+          return this.resolveScheduleAssignment(entry, scheduleId);
+        }
+      },
+      renderGroupGlAssignments: (group, context) => {
+        if (refs.glManager) {
+          return refs.glManager.renderGroupGlAssignments(group, context);
+        } else {
+          return this.renderGroupGlAssignments(group, context);
+        }
+      },
+      clearParticipantSelection: (options) => {
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.clearParticipantSelection(options);
+        } else {
+          return this.clearParticipantSelection(options);
+        }
+      },
+      participantChangeKey: (entry, fallbackIndex) => {
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.participantChangeKey(entry, fallbackIndex);
+        } else {
+          return this.participantChangeKey(entry, fallbackIndex);
+        }
+      },
       CANCEL_LABEL: this.CANCEL_LABEL,
       GL_STAFF_GROUP_KEY: this.GL_STAFF_GROUP_KEY,
       // CRUD機能に必要な依存関係
@@ -786,7 +870,13 @@ export class InitManager {
       openDialog: this.openDialog,
       closeDialog: this.closeDialog,
       setFormError: this.setFormError,
-      formatParticipantIdentifier: this.formatParticipantIdentifier,
+      formatParticipantIdentifier: (entry) => {
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.formatParticipantIdentifier(entry);
+        } else {
+          return this.formatParticipantIdentifier(entry);
+        }
+      },
       commitParticipantQuickEdit: (index, updated, options) => {
         if (!refs.participantUIManager) {
           throw new Error("ParticipantUIManager is not initialized");
@@ -1264,7 +1354,13 @@ export class InitManager {
       getDisplayParticipantId: this.getDisplayParticipantId,
       resolveMailStatusInfo: this.resolveMailStatusInfo,
       resolveParticipantUid: this.resolveParticipantUid,
-      resolveParticipantActionTarget: this.resolveParticipantActionTarget,
+      resolveParticipantActionTarget: (options) => {
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.resolveParticipantActionTarget(options);
+        } else {
+          return this.resolveParticipantActionTarget(options);
+        }
+      },
       updateParticipantActionPanelState: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.updateParticipantActionPanelState();
@@ -1278,7 +1374,13 @@ export class InitManager {
         }
         return refs.uiManager.applyParticipantNoText(element, index);
       },
-      createShareUrl: this.createShareUrl,
+      createShareUrl: (token) => {
+        if (refs.shareClipboardManager) {
+          return refs.shareClipboardManager.createShareUrl(token);
+        } else {
+          return this.createShareUrl(token);
+        }
+      },
       copyShareLink: (token) => {
         if (!refs.shareClipboardManager) {
           throw new Error("ShareClipboardManager is not initialized");
@@ -1302,7 +1404,13 @@ export class InitManager {
       dom: this.dom,
       state: this.state,
       // 依存関数と定数
-      getSelectionIdentifiers: this.getSelectionIdentifiers,
+      getSelectionIdentifiers: () => {
+        if (refs.shareClipboardManager) {
+          return refs.shareClipboardManager.getSelectionIdentifiers();
+        } else {
+          return this.getSelectionIdentifiers();
+        }
+      },
       getSelectionRequiredMessage: (prefix) => {
         if (refs.stateManager) {
           return refs.stateManager.getSelectionRequiredMessage(prefix);
