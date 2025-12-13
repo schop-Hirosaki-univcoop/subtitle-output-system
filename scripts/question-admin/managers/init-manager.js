@@ -1034,14 +1034,78 @@ export class InitManager {
       // フォールバック: グローバル関数を使用（通常は実行されない）
       this.attachEventHandlers();
     }
-    this.setAuthUi(Boolean(this.state.user));
-    this.initLoaderSteps(this.isEmbeddedMode() ? [] : this.STEP_LABELS);
-    this.resetState();
-    if (this.isEmbeddedMode()) {
+    if (refs.uiManager) {
+      refs.uiManager.setAuthUi(Boolean(this.state.user));
+    } else {
+      // フォールバック: グローバル関数を使用（通常は実行されない）
+      this.setAuthUi(Boolean(this.state.user));
+    }
+    const isEmbeddedForLoader = refs.hostIntegrationManager
+      ? refs.hostIntegrationManager.isEmbeddedMode()
+      : this.isEmbeddedMode();
+    this.initLoaderSteps(isEmbeddedForLoader ? [] : this.STEP_LABELS);
+    if (refs.stateManager) {
+      refs.stateManager.resetState();
+      if (refs.hostIntegrationManager) {
+        refs.hostIntegrationManager.resetSelectionBroadcastSignature();
+      }
+      // UI更新とその他のリセット処理
+      this.resetTokenState();
+      if (refs.eventManager) {
+        refs.eventManager.renderEvents();
+      }
+      if (refs.scheduleManager) {
+        refs.scheduleManager.renderSchedules();
+      }
+      if (refs.participantManager) {
+        refs.participantManager.renderParticipants();
+      }
+      if (refs.participantContextManager) {
+        refs.participantContextManager.updateParticipantContext();
+      }
+      // その他のリセット処理
+      if (refs.stateManager) {
+        const statusMessage = refs.stateManager.getMissingSelectionStatusMessage();
+        refs.stateManager.setUploadStatus(statusMessage);
+      }
+      if (refs.scheduleUtilityManager) {
+        refs.scheduleUtilityManager.populateScheduleLocationOptions();
+      }
+      if (this.dom.fileLabel) this.dom.fileLabel.textContent = "参加者CSVをアップロード";
+      if (this.dom.teamCsvInput) this.dom.teamCsvInput.value = "";
+      if (this.dom.csvInput) this.dom.csvInput.value = "";
+      if (refs.uiManager) {
+        refs.uiManager.renderUserSummary(null);
+      }
+      if (refs.buttonStateManager) {
+        refs.buttonStateManager.syncTemplateButtons();
+        refs.buttonStateManager.syncSaveButtonState();
+      }
+      if (refs.mailManager) {
+        refs.mailManager.syncMailActionState();
+      }
+    } else {
+      // フォールバック: グローバル関数を使用（通常は実行されない）
+      this.resetState();
+    }
+    const isEmbedded = refs.hostIntegrationManager
+      ? refs.hostIntegrationManager.isEmbeddedMode()
+      : this.isEmbeddedMode();
+    if (isEmbedded) {
       this.showLoader("利用状態を確認しています…");
     }
-    this.parseInitialSelectionFromUrl();
-    this.startHostSelectionBridge();
+    if (refs.participantContextManager) {
+      refs.participantContextManager.parseInitialSelectionFromUrl();
+    } else {
+      // フォールバック: グローバル関数を使用（通常は実行されない）
+      this.parseInitialSelectionFromUrl();
+    }
+    if (refs.hostIntegrationManager) {
+      refs.hostIntegrationManager.startHostSelectionBridge();
+    } else {
+      // フォールバック: グローバル関数を使用（通常は実行されない）
+      this.startHostSelectionBridge();
+    }
     
     // 認証ウォッチャーの初期化
     if (refs.authManager) {
@@ -1066,51 +1130,107 @@ export class InitManager {
     }
     
     const refs = this.managerRefs;
+    const self = this;
     
     window.questionAdminEmbed = {
       setSelection(selection = {}) {
-        return this.applySelectionContext(selection);
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.applySelectionContext(selection);
+        } else {
+          return self.applySelectionContext(selection);
+        }
       },
       refreshParticipants(options) {
-        return this.loadParticipants(options);
+        if (refs.participantManager) {
+          return refs.participantManager.loadParticipants(options);
+        } else {
+          return self.loadParticipants(options);
+        }
       },
       refreshEvents(options) {
-        return this.loadEvents(options);
+        if (refs.eventManager) {
+          return refs.eventManager.loadEvents(options);
+        } else {
+          return self.loadEvents(options);
+        }
       },
       getState() {
         return {
-          eventId: this.state.selectedEventId,
-          scheduleId: this.state.selectedScheduleId
+          eventId: self.state.selectedEventId,
+          scheduleId: self.state.selectedScheduleId
         };
       },
       waitUntilReady() {
-        return this.waitForEmbedReady();
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.waitForEmbedReady();
+        } else {
+          return self.waitForEmbedReady();
+        }
       },
       reset() {
         try {
-          this.redirectingToIndexRef.current = false;
-          this.state.user = null;
-          this.hideLoader();
-          this.setAuthUi(false);
-          this.resetState();
-          this.detachHost();
+          self.redirectingToIndexRef.current = false;
+          self.state.user = null;
+          self.hideLoader();
+          if (refs.uiManager) {
+            refs.uiManager.setAuthUi(false);
+          } else {
+            self.setAuthUi(false);
+          }
+          if (refs.stateManager) {
+            refs.stateManager.resetState();
+            if (refs.hostIntegrationManager) {
+              refs.hostIntegrationManager.resetSelectionBroadcastSignature();
+            }
+            // UI更新とその他のリセット処理
+            self.resetTokenState();
+            if (refs.eventManager) {
+              refs.eventManager.renderEvents();
+            }
+            if (refs.scheduleManager) {
+              refs.scheduleManager.renderSchedules();
+            }
+            if (refs.participantManager) {
+              refs.participantManager.renderParticipants();
+            }
+            if (refs.participantContextManager) {
+              refs.participantContextManager.updateParticipantContext();
+            }
+            if (refs.stateManager) {
+              const statusMessage = refs.stateManager.getMissingSelectionStatusMessage();
+              refs.stateManager.setUploadStatus(statusMessage);
+            }
+            if (refs.scheduleUtilityManager) {
+              refs.scheduleUtilityManager.populateScheduleLocationOptions();
+            }
+            if (self.dom.fileLabel) self.dom.fileLabel.textContent = "参加者CSVをアップロード";
+            if (self.dom.teamCsvInput) self.dom.teamCsvInput.value = "";
+            if (self.dom.csvInput) self.dom.csvInput.value = "";
+            if (refs.uiManager) {
+              refs.uiManager.renderUserSummary(null);
+            }
+            if (refs.buttonStateManager) {
+              refs.buttonStateManager.syncTemplateButtons();
+              refs.buttonStateManager.syncSaveButtonState();
+            }
+            if (refs.mailManager) {
+              refs.mailManager.syncMailActionState();
+            }
+          } else {
+            self.resetState();
+          }
           if (refs.hostIntegrationManager) {
+            refs.hostIntegrationManager.detachHost();
             refs.hostIntegrationManager.resetHostSelectionBridge();
-            this.applyHostSelectionFromDataset();
+            refs.hostIntegrationManager.applyHostSelectionFromDataset();
             refs.hostIntegrationManager.resetEmbedReady();
           } else {
-            // フォールバック（初期化前の場合）
-            // hostSelectionBridge.lastSignature = "";
-            // hostSelectionBridge.pendingSignature = "";
-            this.applyHostSelectionFromDataset();
-            // if (embedReadyDeferred?.resolve) {
-            //   embedReadyDeferred.resolve();
-            // }
-            // embedReadyDeferred = null;
+            self.detachHost();
+            self.applyHostSelectionFromDataset();
           }
-          if (this.dom.loginButton) {
-            this.dom.loginButton.disabled = false;
-            this.dom.loginButton.classList.remove("is-busy");
+          if (self.dom.loginButton) {
+            self.dom.loginButton.disabled = false;
+            self.dom.loginButton.classList.remove("is-busy");
           }
         } catch (error) {
           console.error("questionAdminEmbed.reset failed", error);
@@ -1118,14 +1238,22 @@ export class InitManager {
       },
       attachHost(controller) {
         try {
-          this.attachHost(controller);
+          if (refs.hostIntegrationManager) {
+            refs.hostIntegrationManager.attachHost(controller);
+          } else {
+            self.attachHost(controller);
+          }
         } catch (error) {
           console.error("questionAdminEmbed.attachHost failed", error);
         }
       },
       detachHost() {
         try {
-          this.detachHost();
+          if (refs.hostIntegrationManager) {
+            refs.hostIntegrationManager.detachHost();
+          } else {
+            self.detachHost();
+          }
         } catch (error) {
           console.error("questionAdminEmbed.detachHost failed", error);
         }
