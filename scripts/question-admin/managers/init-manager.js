@@ -194,51 +194,51 @@ export class InitManager {
       getParticipantGroupKey: (entry) => {
         if (refs.participantUIManager) {
           return refs.participantUIManager.getParticipantGroupKey(entry);
-        } else {
-          return this.getParticipantGroupKey(entry);
         }
+        // ParticipantUIManager が初期化されていない場合は NO_TEAM_GROUP_KEY を返す
+        return this.NO_TEAM_GROUP_KEY;
       },
       describeParticipantGroup: (groupKey) => {
         if (refs.participantUIManager) {
           return refs.participantUIManager.describeParticipantGroup(groupKey);
-        } else {
-          return this.describeParticipantGroup(groupKey);
         }
+        // ParticipantUIManager が初期化されていない場合はデフォルト値を返す
+        return { label: "班番号", value: "未設定" };
       },
       collectGroupGlLeaders: (groupKey, options) => {
         if (refs.glManager) {
           return refs.glManager.collectGroupGlLeaders(groupKey, options);
-        } else {
-          return this.collectGroupGlLeaders(groupKey, options);
         }
+        // GlManager が初期化されていない場合は空配列を返す
+        return [];
       },
       getEventGlRoster: (eventId) => {
         if (refs.glManager) {
           return refs.glManager.getEventGlRoster(eventId);
-        } else {
-          return this.getEventGlRoster(eventId);
         }
+        // GlManager が初期化されていない場合は空の Map を返す
+        return new Map();
       },
       getEventGlAssignmentsMap: (eventId) => {
         if (refs.glManager) {
           return refs.glManager.getEventGlAssignmentsMap(eventId);
-        } else {
-          return this.getEventGlAssignmentsMap(eventId);
         }
+        // GlManager が初期化されていない場合は空の Map を返す
+        return new Map();
       },
       resolveScheduleAssignment: (entry, scheduleId) => {
         if (refs.glManager) {
           return refs.glManager.resolveScheduleAssignment(entry, scheduleId);
-        } else {
-          return this.resolveScheduleAssignment(entry, scheduleId);
         }
+        // GlManager が初期化されていない場合は null を返す
+        return null;
       },
       loadGlDataForEvent: async (eventId, options) => {
         if (refs.glManager) {
           return await refs.glManager.loadGlDataForEvent(eventId, options);
-        } else {
-          return await this.loadGlDataForEvent(eventId, options);
         }
+        // GlManager が初期化されていない場合は Promise.resolve() を返す
+        return Promise.resolve();
       },
       normalizeKey: this.normalizeKey,
       normalizeGroupNumberValue: this.normalizeGroupNumberValue,
@@ -250,23 +250,21 @@ export class InitManager {
       syncAllPrintButtonStates: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncAllPrintButtonStates();
-        } else {
-          return this.syncAllPrintButtonStates();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
+        // PrintManager の初期化中に呼び出される可能性は低いが、安全のため
       },
       setPrintButtonBusy: (isBusy) => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.setPrintButtonBusy(isBusy);
-        } else {
-          return this.setPrintButtonBusy(isBusy);
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       setStaffPrintButtonBusy: (isBusy) => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.setStaffPrintButtonBusy(isBusy);
-        } else {
-          return this.setStaffPrintButtonBusy(isBusy);
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       }
     });
     
@@ -283,9 +281,9 @@ export class InitManager {
       isEmbeddedMode: () => {
         if (refs.hostIntegrationManager) {
           return refs.hostIntegrationManager.isEmbeddedMode();
-        } else {
-          return this.isEmbeddedMode();
         }
+        // HostIntegrationManager が初期化されていない場合は false を返す
+        return false;
       },
       UPLOAD_STATUS_PLACEHOLDERS: this.UPLOAD_STATUS_PLACEHOLDERS
     });
@@ -298,25 +296,23 @@ export class InitManager {
       getEmbedPrefix: () => {
         if (refs.hostIntegrationManager) {
           return refs.hostIntegrationManager.getEmbedPrefix();
-        } else {
-          return this.getEmbedPrefix();
         }
+        // HostIntegrationManager が初期化されていない場合は空文字列を返す
+        return "";
       },
       isEmbeddedMode: () => {
         if (refs.hostIntegrationManager) {
           return refs.hostIntegrationManager.isEmbeddedMode();
-        } else {
-          return this.isEmbeddedMode();
         }
+        // HostIntegrationManager が初期化されていない場合は false を返す
+        return false;
       },
       updateParticipantActionPanelState: () => {
         // ButtonStateManager が初期化された後に呼び出されるため、refs を使用
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.updateParticipantActionPanelState();
-        } else {
-          // フォールバック: グローバル関数を使用（通常は実行されない）
-          return this.updateParticipantActionPanelState();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       FOCUS_TARGETS: this.FOCUS_TARGETS
     });
@@ -340,9 +336,8 @@ export class InitManager {
       renderEvents: () => {
         if (refs.eventManager) {
           return refs.eventManager.renderEvents();
-        } else {
-          return this.renderEvents();
         }
+        // EventManager が初期化されていない場合は何もしない
       },
       renderSchedules: () => {
         if (!refs.scheduleManager) return;
@@ -351,9 +346,8 @@ export class InitManager {
       updateParticipantContext: (options) => {
         if (refs.participantContextManager) {
           return refs.participantContextManager.updateParticipantContext(options);
-        } else {
-          return this.updateParticipantContext(options);
         }
+        // ParticipantContextManager が初期化されていない場合は何もしない
       }
     });
 
@@ -374,10 +368,13 @@ export class InitManager {
         return refs.mailManager.syncMailActionState();
       },
       syncAllPrintButtonStates: () => {
-        // ButtonStateManager 自身のメソッドを呼び出すため、直接呼び出しは不要
-        // この関数は PrintManager などから呼び出されるが、ButtonStateManager の初期化後なので問題ない
-        // ただし、循環参照を避けるため、ここではフォールバックのみ
-        return this.syncAllPrintButtonStates();
+        // ButtonStateManager 自身のメソッドを呼び出す
+        // 初期化中に呼び出される可能性があるため、refs.buttonStateManager が存在する場合はそれを呼び出す
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncAllPrintButtonStates();
+        }
+        // 初期化前の場合は何もしない（初期化後に _syncAllPrintButtonStates が更新される）
+        // これにより、初期化中に呼び出されてもエラーが発生しない
       },
       // 印刷関連の依存関数
       logPrintDebug: this.logPrintDebug,
@@ -391,16 +388,20 @@ export class InitManager {
       printManager: refs.printManager,
       // 参加者アクションパネル関連の依存関数
       getSelectedParticipantTarget: () => {
-        if (!refs.participantUIManager) {
-          throw new Error("ParticipantUIManager is not initialized");
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.getSelectedParticipantTarget();
         }
-        return refs.participantUIManager.getSelectedParticipantTarget();
+        // ParticipantUIManager が初期化されていない場合は null を返す
+        // ButtonStateManager の初期化時点では ParticipantUIManager はまだ初期化されていないため
+        return null;
       },
       formatParticipantIdentifier: (entry) => {
-        if (!refs.participantUIManager) {
-          throw new Error("ParticipantUIManager is not initialized");
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.formatParticipantIdentifier(entry);
         }
-        return refs.participantUIManager.formatParticipantIdentifier(entry);
+        // ParticipantUIManager が初期化されていない場合は空文字列を返す
+        // ButtonStateManager の初期化時点では ParticipantUIManager はまだ初期化されていないため
+        return "";
       },
       // イベントサマリー関連の依存関数
       getScheduleLabel: this.getScheduleLabel,
@@ -410,6 +411,13 @@ export class InitManager {
       },
       renderEvents: this.renderEvents
     });
+    
+    // ButtonStateManager 初期化後に _syncAllPrintButtonStates を更新
+    if (refs.buttonStateManager) {
+      refs.buttonStateManager._syncAllPrintButtonStates = () => {
+        return refs.buttonStateManager.syncAllPrintButtonStates();
+      };
+    }
     
     // TokenApiManager を初期化
     refs.tokenApiManager = new ManagerClasses.TokenApiManager({
@@ -442,51 +450,47 @@ export class InitManager {
       setUploadStatus: () => {
         if (refs.stateManager) {
           return refs.stateManager.setUploadStatus(...arguments);
-        } else {
-          return this.setUploadStatus(...arguments);
         }
+        // StateManager が初期化されていない場合は何もしない
       },
       getSelectionRequiredMessage: (prefix) => {
         if (refs.stateManager) {
           return refs.stateManager.getSelectionRequiredMessage(prefix);
-        } else {
-          return this.getSelectionRequiredMessage(prefix);
         }
+        // StateManager が初期化されていない場合は空文字列を返す
+        return "";
       },
       renderParticipants: () => {
         if (refs.participantManager) {
           return refs.participantManager.renderParticipants();
-        } else {
-          return this.renderParticipants();
         }
+        // ParticipantManager が初期化されていない場合は何もしない
       },
       hasUnsavedChanges: () => {
         if (refs.stateManager) {
           return refs.stateManager.hasUnsavedChanges();
-        } else {
-          return this.hasUnsavedChanges();
         }
+        // StateManager が初期化されていない場合は false を返す
+        return false;
       },
       captureParticipantBaseline: (entries, options) => {
         if (refs.stateManager) {
           return refs.stateManager.captureParticipantBaseline(entries, options);
-        } else {
-          return this.captureParticipantBaseline(entries, options);
         }
+        // StateManager が初期化されていない場合は何もしない
       },
       setActionButtonState: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.setActionButtonState(...arguments);
-        } else {
-          return this.setActionButtonState(...arguments);
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       confirmAction: async (options) => {
         if (refs.confirmDialogManager) {
           return await refs.confirmDialogManager.confirmAction(options);
-        } else {
-          return await this.confirmAction(options);
         }
+        // ConfirmDialogManager が初期化されていない場合は false を返す
+        return false;
       }
     });
     
@@ -503,16 +507,14 @@ export class InitManager {
       setAuthUi: () => {
         if (refs.uiManager) {
           return refs.uiManager.setAuthUi(...arguments);
-        } else {
-          return this.setAuthUi(...arguments);
         }
+        // UIManager が初期化されていない場合は何もしない
       },
       setLoginError: (message) => {
         if (refs.uiManager) {
           return refs.uiManager.setLoginError(message);
-        } else {
-          return this.setLoginError(message);
         }
+        // UIManager が初期化されていない場合は何もしない
       },
       showLoader: this.showLoader,
       hideLoader: this.hideLoader,
@@ -527,16 +529,15 @@ export class InitManager {
       renderUserSummary: (user) => {
         if (refs.uiManager) {
           return refs.uiManager.renderUserSummary(user);
-        } else {
-          return this.renderUserSummary(user);
         }
+        // UIManager が初期化されていない場合は何もしない
       },
       isEmbeddedMode: () => {
         if (refs.hostIntegrationManager) {
           return refs.hostIntegrationManager.isEmbeddedMode();
-        } else {
-          return this.isEmbeddedMode();
         }
+        // HostIntegrationManager が初期化されていない場合は false を返す
+        return false;
       },
       STEP_LABELS: this.STEP_LABELS,
       ensureTokenSnapshot: this.ensureTokenSnapshot,
@@ -551,31 +552,28 @@ export class InitManager {
       drainQuestionQueue: async () => {
         if (refs.tokenApiManager) {
           return await refs.tokenApiManager.drainQuestionQueue(this.api);
-        } else {
-          return await this.drainQuestionQueue();
         }
+        // TokenApiManager が初期化されていない場合は Promise.resolve() を返す
+        return Promise.resolve();
       },
       resolveEmbedReady: () => {
         if (refs.hostIntegrationManager) {
           return refs.hostIntegrationManager.resolveEmbedReady();
-        } else {
-          return this.resolveEmbedReady();
         }
+        // HostIntegrationManager が初期化されていない場合は何もしない
       },
       maybeFocusInitialSection: () => {
         if (refs.uiManager) {
           return refs.uiManager.maybeFocusInitialSection();
-        } else {
-          return this.maybeFocusInitialSection();
         }
+        // UIManager が初期化されていない場合は何もしない
       },
       sleep: this.sleep,
       setUploadStatus: () => {
         if (refs.stateManager) {
           return refs.stateManager.setUploadStatus(...arguments);
-        } else {
-          return this.setUploadStatus(...arguments);
         }
+        // StateManager が初期化されていない場合は何もしない
       },
       redirectingToIndexRef: this.redirectingToIndexRef
     });
@@ -588,30 +586,29 @@ export class InitManager {
       readHostSelectionDataset: (target) => {
         if (refs.hostIntegrationManager) {
           return refs.hostIntegrationManager.readHostSelectionDataset(target);
-        } else {
-          return this.readHostSelectionDataset(target);
         }
+        // HostIntegrationManager が初期化されていない場合は null を返す
+        return null;
       },
       getHostSelectionElement: () => {
         if (refs.hostIntegrationManager) {
           return refs.hostIntegrationManager.getHostSelectionElement();
-        } else {
-          return this.getHostSelectionElement();
         }
+        // HostIntegrationManager が初期化されていない場合は null を返す
+        return null;
       },
       loadGlDataForEvent: async (eventId, options) => {
         if (refs.glManager) {
           return await refs.glManager.loadGlDataForEvent(eventId, options);
-        } else {
-          return await this.loadGlDataForEvent(eventId, options);
         }
+        // GlManager が初期化されていない場合は Promise.resolve() を返す
+        return Promise.resolve();
       },
       renderEvents: () => {
         if (refs.eventManager) {
           return refs.eventManager.renderEvents();
-        } else {
-          return this.renderEvents();
         }
+        // EventManager が初期化されていない場合は何もしない
       },
       renderSchedules: () => {
         if (!refs.scheduleManager) return;
@@ -620,23 +617,20 @@ export class InitManager {
       updateParticipantContext: (options) => {
         if (refs.participantContextManager) {
           return refs.participantContextManager.updateParticipantContext(options);
-        } else {
-          return this.updateParticipantContext(options);
         }
+        // ParticipantContextManager が初期化されていない場合は何もしない
       },
       captureParticipantBaseline: (entries, options) => {
         if (refs.stateManager) {
           return refs.stateManager.captureParticipantBaseline(entries, options);
-        } else {
-          return this.captureParticipantBaseline(entries, options);
         }
+        // StateManager が初期化されていない場合は何もしない
       },
       syncSaveButtonState: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncSaveButtonState();
-        } else {
-          return this.syncSaveButtonState();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       syncMailActionState: () => {
         if (!refs.mailManager) return;
@@ -645,36 +639,33 @@ export class InitManager {
       syncAllPrintButtonStates: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncAllPrintButtonStates();
-        } else {
-          return this.syncAllPrintButtonStates();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       syncClearButtonState: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncClearButtonState();
-        } else {
-          return this.syncClearButtonState();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       syncTemplateButtons: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncTemplateButtons();
-        } else {
-          return this.syncTemplateButtons();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       syncSelectedEventSummary: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncSelectedEventSummary();
-        } else {
-          return this.syncSelectedEventSummary();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       renderParticipantChangePreview: (diff, changeInfoByKey, participants) => {
-        if (!refs.participantUIManager) {
-          throw new Error("ParticipantUIManager is not initialized");
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.renderParticipantChangePreview(diff, changeInfoByKey, participants);
         }
-        return refs.participantUIManager.renderParticipantChangePreview(diff, changeInfoByKey, participants);
+        // ParticipantUIManager が初期化されていない場合は何もしない
+        // MailManager の初期化時点では ParticipantUIManager はまだ初期化されていないため
       },
       renderRelocationPrompt: () => {
         if (!refs.relocationManager) return;
@@ -683,108 +674,104 @@ export class InitManager {
       applyParticipantSelectionStyles: (options) => {
         if (refs.participantUIManager) {
           return refs.participantUIManager.applyParticipantSelectionStyles(options);
-        } else {
-          return this.applyParticipantSelectionStyles(options);
         }
+        // ParticipantUIManager が初期化されていない場合は何もしない
       },
       updateParticipantActionPanelState: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.updateParticipantActionPanelState();
-        } else {
-          return this.updateParticipantActionPanelState();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       emitParticipantSyncEvent: (detail) => {
         if (refs.participantContextManager) {
           return refs.participantContextManager.emitParticipantSyncEvent(detail);
-        } else {
-          return this.emitParticipantSyncEvent(detail);
         }
+        // ParticipantContextManager が初期化されていない場合は何もしない
       },
       describeScheduleRange: this.describeScheduleRange,
       ensureTokenSnapshot: async (force) => {
         if (refs.tokenApiManager) {
           return await refs.tokenApiManager.ensureTokenSnapshot(force);
-        } else {
-          return await this.ensureTokenSnapshot(force);
         }
+        // TokenApiManager が初期化されていない場合は Promise.resolve() を返す
+        return Promise.resolve();
       },
       generateQuestionToken: (existingTokens) => {
         if (refs.tokenApiManager) {
           return refs.tokenApiManager.generateQuestionToken(existingTokens);
-        } else {
-          return this.generateQuestionToken(existingTokens);
         }
+        // TokenApiManager が初期化されていない場合は null を返す
+        return null;
       },
       setUploadStatus: () => {
         if (refs.stateManager) {
           return refs.stateManager.setUploadStatus(...arguments);
-        } else {
-          return this.setUploadStatus(...arguments);
         }
+        // StateManager が初期化されていない場合は何もしない
       },
       // renderParticipants に必要な依存関係
       buildParticipantCard: (entry, index, options) => {
-        if (!refs.participantUIManager) {
-          throw new Error("ParticipantUIManager is not initialized");
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.buildParticipantCard(entry, index, options);
         }
-        return refs.participantUIManager.buildParticipantCard(entry, index, options);
+        // ParticipantUIManager が初期化されていない場合は null を返す
+        // ParticipantManager の初期化時点では ParticipantUIManager はまだ初期化されていないため
+        return null;
       },
       getParticipantGroupKey: (entry) => {
         if (refs.participantUIManager) {
           return refs.participantUIManager.getParticipantGroupKey(entry);
-        } else {
-          return this.getParticipantGroupKey(entry);
         }
+        // ParticipantUIManager が初期化されていない場合は NO_TEAM_GROUP_KEY を返す
+        return this.NO_TEAM_GROUP_KEY;
       },
       createParticipantGroupElements: (groupKey) => {
         if (refs.participantUIManager) {
           return refs.participantUIManager.createParticipantGroupElements(groupKey);
-        } else {
-          return this.createParticipantGroupElements(groupKey);
         }
+        // ParticipantUIManager が初期化されていない場合は null を返す
+        return null;
       },
       getEventGlRoster: (eventId) => {
         if (refs.glManager) {
           return refs.glManager.getEventGlRoster(eventId);
-        } else {
-          return this.getEventGlRoster(eventId);
         }
+        // GlManager が初期化されていない場合は空の Map を返す
+        return new Map();
       },
       getEventGlAssignmentsMap: (eventId) => {
         if (refs.glManager) {
           return refs.glManager.getEventGlAssignmentsMap(eventId);
-        } else {
-          return this.getEventGlAssignmentsMap(eventId);
         }
+        // GlManager が初期化されていない場合は空の Map を返す
+        return new Map();
       },
       resolveScheduleAssignment: (entry, scheduleId) => {
         if (refs.glManager) {
           return refs.glManager.resolveScheduleAssignment(entry, scheduleId);
-        } else {
-          return this.resolveScheduleAssignment(entry, scheduleId);
         }
+        // GlManager が初期化されていない場合は null を返す
+        return null;
       },
       renderGroupGlAssignments: (group, context) => {
         if (refs.glManager) {
           return refs.glManager.renderGroupGlAssignments(group, context);
-        } else {
-          return this.renderGroupGlAssignments(group, context);
         }
+        // GlManager が初期化されていない場合は何もしない
       },
       clearParticipantSelection: (options) => {
         if (refs.participantUIManager) {
           return refs.participantUIManager.clearParticipantSelection(options);
-        } else {
-          return this.clearParticipantSelection(options);
         }
+        // ParticipantUIManager が初期化されていない場合は何もしない
       },
       participantChangeKey: (entry, fallbackIndex) => {
         if (refs.participantUIManager) {
           return refs.participantUIManager.participantChangeKey(entry, fallbackIndex);
-        } else {
-          return this.participantChangeKey(entry, fallbackIndex);
         }
+        // ParticipantUIManager が初期化されていない場合は fallbackIndex を返す
+        return fallbackIndex != null ? String(fallbackIndex) : "";
       },
       CANCEL_LABEL: this.CANCEL_LABEL,
       GL_STAFF_GROUP_KEY: this.GL_STAFF_GROUP_KEY,
@@ -803,16 +790,16 @@ export class InitManager {
       hasUnsavedChanges: () => {
         if (refs.stateManager) {
           return refs.stateManager.hasUnsavedChanges();
-        } else {
-          return this.hasUnsavedChanges();
         }
+        // StateManager が初期化されていない場合は false を返す
+        return false;
       },
       confirmAction: async (options) => {
         if (refs.confirmDialogManager) {
           return await refs.confirmDialogManager.confirmAction(options);
-        } else {
-          return await this.confirmAction(options);
         }
+        // ConfirmDialogManager が初期化されていない場合は false を返す
+        return false;
       },
       setFormError: this.setFormError,
       openDialog: this.openDialog,
@@ -823,9 +810,9 @@ export class InitManager {
       loadEvents: (options) => {
         if (refs.eventManager) {
           return refs.eventManager.loadEvents(options);
-        } else {
-          return this.loadEvents(options);
         }
+        // EventManager が初期化されていない場合は Promise.resolve() を返す
+        return Promise.resolve();
       }
     });
     
@@ -836,10 +823,12 @@ export class InitManager {
       // 依存関数と定数
       RELOCATE_LABEL: this.RELOCATE_LABEL,
       resolveParticipantActionTarget: (options) => {
-        if (!refs.participantUIManager) {
-          throw new Error("ParticipantUIManager is not initialized");
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.resolveParticipantActionTarget(options);
         }
-        return refs.participantUIManager.resolveParticipantActionTarget(options);
+        // ParticipantUIManager が初期化されていない場合は null を返す
+        // RelocationManager の初期化時点では ParticipantUIManager はまだ初期化されていないため
+        return null;
       },
       resolveParticipantUid: this.resolveParticipantUid,
       resolveParticipantStatus: this.resolveParticipantStatus,
@@ -856,16 +845,14 @@ export class InitManager {
       syncSaveButtonState: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncSaveButtonState();
-        } else {
-          return this.syncSaveButtonState();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       setUploadStatus: () => {
         if (refs.stateManager) {
           return refs.stateManager.setUploadStatus(...arguments);
-        } else {
-          return this.setUploadStatus(...arguments);
         }
+        // StateManager が初期化されていない場合は何もしない
       },
       openDialog: this.openDialog,
       closeDialog: this.closeDialog,
@@ -873,15 +860,17 @@ export class InitManager {
       formatParticipantIdentifier: (entry) => {
         if (refs.participantUIManager) {
           return refs.participantUIManager.formatParticipantIdentifier(entry);
-        } else {
-          return this.formatParticipantIdentifier(entry);
         }
+        // ParticipantUIManager が初期化されていない場合は空文字列を返す
+        return "";
       },
       commitParticipantQuickEdit: (index, updated, options) => {
-        if (!refs.participantUIManager) {
-          throw new Error("ParticipantUIManager is not initialized");
+        if (refs.participantUIManager) {
+          return refs.participantUIManager.commitParticipantQuickEdit(index, updated, options);
         }
-        return refs.participantUIManager.commitParticipantQuickEdit(index, updated, options);
+        // ParticipantUIManager が初期化されていない場合は Promise.resolve() を返す
+        // RelocationManager の初期化時点では ParticipantUIManager はまだ初期化されていないため
+        return Promise.resolve();
       },
       getScheduleRecord: this.getScheduleRecord,
       ensureRowKey: this.ensureRowKey,
@@ -903,30 +892,27 @@ export class InitManager {
       selectEvent: (eventId, options) => {
         if (refs.eventManager) {
           return refs.eventManager.selectEvent(eventId, options);
-        } else {
-          return this.selectEvent(eventId, options);
         }
+        // EventManager が初期化されていない場合は何もしない
       },
       loadEvents: (options) => {
         if (refs.eventManager) {
           return refs.eventManager.loadEvents(options);
-        } else {
-          return this.loadEvents(options);
         }
+        // EventManager が初期化されていない場合は Promise.resolve() を返す
+        return Promise.resolve();
       },
       finalizeEventLoad: (options) => {
         if (refs.scheduleUtilityManager) {
           return refs.scheduleUtilityManager.finalizeEventLoad(options);
-        } else {
-          return this.finalizeEventLoad(options);
         }
+        // ScheduleUtilityManager が初期化されていない場合は何もしない
       },
       updateParticipantContext: (options) => {
         if (refs.participantContextManager) {
           return refs.participantContextManager.updateParticipantContext(options);
-        } else {
-          return this.updateParticipantContext(options);
         }
+        // ParticipantContextManager が初期化されていない場合は何もしない
       },
       HOST_SELECTION_ATTRIBUTE_KEYS: this.HOST_SELECTION_ATTRIBUTE_KEYS,
       // 一時的な依存関数（後で移行予定）
@@ -937,35 +923,34 @@ export class InitManager {
       refreshScheduleLocationHistory: () => {
         if (refs.scheduleUtilityManager) {
           return refs.scheduleUtilityManager.refreshScheduleLocationHistory();
-        } else {
-          return this.refreshScheduleLocationHistory();
         }
+        // ScheduleUtilityManager が初期化されていない場合は何もしない
       },
       populateScheduleLocationOptions: (preferred) => {
         if (refs.scheduleUtilityManager) {
           return refs.scheduleUtilityManager.populateScheduleLocationOptions(preferred);
-        } else {
-          return this.populateScheduleLocationOptions(preferred);
         }
+        // ScheduleUtilityManager が初期化されていない場合は何もしない
       },
       hostSelectionSignature: (selection) => {
-        // HostIntegrationManager 自身のメソッドを呼び出すため、直接呼び出しは不要
-        // この関数は HostIntegrationManager の初期化時に渡されるが、循環参照を避けるため、フォールバックのみ
-        return this.hostSelectionSignature(selection);
+        // HostIntegrationManager 自身のメソッドを呼び出す
+        // 初期化中に呼び出される可能性があるため、refs.hostIntegrationManager が存在する場合はそれを呼び出す
+        if (refs.hostIntegrationManager) {
+          return refs.hostIntegrationManager.hostSelectionSignature(selection);
+        }
+        // 初期化前の場合は何もしない（初期化後に更新される）
       },
       stopHostSelectionBridge: () => {
         if (refs.hostIntegrationManager) {
           return refs.hostIntegrationManager.stopHostSelectionBridge();
-        } else {
-          return this.stopHostSelectionBridge();
         }
+        // HostIntegrationManager が初期化されていない場合は何もしない
       },
       startHostSelectionBridge: () => {
         if (refs.hostIntegrationManager) {
           return refs.hostIntegrationManager.startHostSelectionBridge();
-        } else {
-          return this.startHostSelectionBridge();
         }
+        // HostIntegrationManager が初期化されていない場合は何もしない
       }
     });
     
@@ -1227,16 +1212,14 @@ export class InitManager {
       syncTemplateButtons: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncTemplateButtons();
-        } else {
-          return this.syncTemplateButtons();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       syncClearButtonState: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncClearButtonState();
-        } else {
-          return this.syncClearButtonState();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       PARTICIPANT_DESCRIPTION_DEFAULT: this.PARTICIPANT_DESCRIPTION_DEFAULT,
       FOCUS_TARGETS: this.FOCUS_TARGETS
@@ -1268,9 +1251,9 @@ export class InitManager {
       loadParticipants: (options) => {
         if (refs.participantManager) {
           return refs.participantManager.loadParticipants(options);
-        } else {
-          return this.loadParticipants(options);
         }
+        // ParticipantManager が初期化されていない場合は Promise.resolve() を返す
+        return Promise.resolve();
       },
       cloneParticipantEntry: (entry) => {
         if (!refs.stateManager) {
@@ -1287,16 +1270,16 @@ export class InitManager {
       renderParticipants: () => {
         if (refs.participantManager) {
           return refs.participantManager.renderParticipants();
-        } else {
-          return this.renderParticipants();
         }
+        // ParticipantManager が初期化されていない場合は何もしない
       },
       handleSave: async (options) => {
         if (refs.participantManager) {
           return await refs.participantManager.handleSave(options);
-        } else {
-          return await this.handleSave(options);
         }
+        // ParticipantManager が初期化されていない場合は Promise.resolve() を返す
+        // ParticipantUIManager の初期化時点では ParticipantManager は既に初期化されているため、通常は実行されない
+        return Promise.resolve();
       },
       updateDuplicateMatches: this.updateDuplicateMatches,
       getSelectedParticipantTarget: () => {
@@ -1340,9 +1323,8 @@ export class InitManager {
       renderParticipants: () => {
         if (refs.participantManager) {
           return refs.participantManager.renderParticipants();
-        } else {
-          return this.renderParticipants();
         }
+        // ParticipantManager が初期化されていない場合は何もしない
       },
       // 定数
       CANCEL_LABEL: this.CANCEL_LABEL,
@@ -1362,16 +1344,15 @@ export class InitManager {
       resolveParticipantActionTarget: (options) => {
         if (refs.participantUIManager) {
           return refs.participantUIManager.resolveParticipantActionTarget(options);
-        } else {
-          return this.resolveParticipantActionTarget(options);
         }
+        // ParticipantUIManager が初期化されていない場合は null を返す
+        return null;
       },
       updateParticipantActionPanelState: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.updateParticipantActionPanelState();
-        } else {
-          return this.updateParticipantActionPanelState();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       applyParticipantNoText: (element, index) => {
         if (!refs.uiManager) {
@@ -1382,9 +1363,9 @@ export class InitManager {
       createShareUrl: (token) => {
         if (refs.shareClipboardManager) {
           return refs.shareClipboardManager.createShareUrl(token);
-        } else {
-          return this.createShareUrl(token);
         }
+        // ShareClipboardManager が初期化されていない場合は空文字列を返す
+        return "";
       },
       copyShareLink: (token) => {
         if (!refs.shareClipboardManager) {
@@ -1395,9 +1376,9 @@ export class InitManager {
       hasUnsavedChanges: () => {
         if (refs.stateManager) {
           return refs.stateManager.hasUnsavedChanges();
-        } else {
-          return this.hasUnsavedChanges();
         }
+        // StateManager が初期化されていない場合は false を返す
+        return false;
       },
       relocationManager: refs.relocationManager || null,
       describeDuplicateMatch: this.describeDuplicateMatch,
@@ -1412,23 +1393,20 @@ export class InitManager {
       renderParticipants: () => {
         if (refs.participantManager) {
           return refs.participantManager.renderParticipants();
-        } else {
-          return this.renderParticipants();
         }
+        // ParticipantManager が初期化されていない場合は何もしない
       },
       syncSaveButtonState: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncSaveButtonState();
-        } else {
-          return this.syncSaveButtonState();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       setUploadStatus: () => {
         if (refs.stateManager) {
           return refs.stateManager.setUploadStatus(...arguments);
-        } else {
-          return this.setUploadStatus(...arguments);
         }
+        // StateManager が初期化されていない場合は何もしない
       },
       // 定数
       CANCEL_LABEL: this.CANCEL_LABEL,
@@ -1448,23 +1426,22 @@ export class InitManager {
       getSelectionIdentifiers: () => {
         if (refs.shareClipboardManager) {
           return refs.shareClipboardManager.getSelectionIdentifiers();
-        } else {
-          return this.getSelectionIdentifiers();
         }
+        // ShareClipboardManager が初期化されていない場合は空のオブジェクトを返す
+        return { eventId: "", scheduleId: "" };
       },
       getSelectionRequiredMessage: (prefix) => {
         if (refs.stateManager) {
           return refs.stateManager.getSelectionRequiredMessage(prefix);
-        } else {
-          return this.getSelectionRequiredMessage(prefix);
         }
+        // StateManager が初期化されていない場合は空文字列を返す
+        return "";
       },
       setUploadStatus: () => {
         if (refs.stateManager) {
           return refs.stateManager.setUploadStatus(...arguments);
-        } else {
-          return this.setUploadStatus(...arguments);
         }
+        // StateManager が初期化されていない場合は何もしない
       },
       PARTICIPANT_TEMPLATE_HEADERS: this.PARTICIPANT_TEMPLATE_HEADERS,
       TEAM_TEMPLATE_HEADERS: this.TEAM_TEMPLATE_HEADERS,
@@ -1473,37 +1450,32 @@ export class InitManager {
       renderParticipants: () => {
         if (refs.participantManager) {
           return refs.participantManager.renderParticipants();
-        } else {
-          return this.renderParticipants();
         }
+        // ParticipantManager が初期化されていない場合は何もしない
       },
       updateParticipantActionPanelState: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.updateParticipantActionPanelState();
-        } else {
-          return this.updateParticipantActionPanelState();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       syncSaveButtonState: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncSaveButtonState();
-        } else {
-          return this.syncSaveButtonState();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       queueRelocationPrompt: (targets, options) => {
         if (refs.relocationManager) {
           return refs.relocationManager.queueRelocationPrompt(targets, options);
-        } else {
-          return this.queueRelocationPrompt(targets, options);
         }
+        // RelocationManager が初期化されていない場合は何もしない
       },
       captureParticipantBaseline: (entries, options) => {
         if (refs.stateManager) {
           return refs.stateManager.captureParticipantBaseline(entries, options);
-        } else {
-          return this.captureParticipantBaseline(entries, options);
         }
+        // StateManager が初期化されていない場合は何もしない
       }
     });
     
@@ -1530,9 +1502,8 @@ export class InitManager {
       finalizeEventLoad: (options) => {
         if (refs.scheduleUtilityManager) {
           return refs.scheduleUtilityManager.finalizeEventLoad(options);
-        } else {
-          return this.finalizeEventLoad(options);
         }
+        // ScheduleUtilityManager が初期化されていない場合は何もしない
       },
       renderSchedules: () => {
         if (!refs.scheduleManager) return;
@@ -1541,66 +1512,60 @@ export class InitManager {
       renderParticipants: () => {
         if (refs.participantManager) {
           return refs.participantManager.renderParticipants();
-        } else {
-          return this.renderParticipants();
         }
+        // ParticipantManager が初期化されていない場合は何もしない
       },
       updateParticipantContext: (options) => {
         if (refs.participantContextManager) {
           return refs.participantContextManager.updateParticipantContext(options);
-        } else {
-          return this.updateParticipantContext(options);
         }
+        // ParticipantContextManager が初期化されていない場合は何もしない
       },
       loadGlDataForEvent: async (eventId, options) => {
         if (refs.glManager) {
           return await refs.glManager.loadGlDataForEvent(eventId, options);
-        } else {
-          return await this.loadGlDataForEvent(eventId, options);
         }
+        // GlManager が初期化されていない場合は Promise.resolve() を返す
+        // EventManager の初期化時点では GlManager は既に初期化されているため、通常は実行されない
+        return Promise.resolve();
       },
       loadParticipants: (options) => {
         if (refs.participantManager) {
           return refs.participantManager.loadParticipants(options);
-        } else {
-          return this.loadParticipants(options);
         }
+        // ParticipantManager が初期化されていない場合は Promise.resolve() を返す
+        return Promise.resolve();
       },
       broadcastSelectionChange: (options) => {
         if (refs.hostIntegrationManager) {
           return refs.hostIntegrationManager.broadcastSelectionChange(options);
-        } else {
-          return this.broadcastSelectionChange(options);
         }
+        // HostIntegrationManager が初期化されていない場合は何もしない
       },
       selectSchedule: (scheduleId, options) => {
         if (refs.scheduleManager) {
           return refs.scheduleManager.selectSchedule(scheduleId, options);
-        } else {
-          return this.selectSchedule(scheduleId, options);
         }
+        // ScheduleManager が初期化されていない場合は何もしない
       },
       setCalendarPickedDate: this.setCalendarPickedDate,
       captureParticipantBaseline: (entries, options) => {
         if (refs.stateManager) {
           return refs.stateManager.captureParticipantBaseline(entries, options);
-        } else {
-          return this.captureParticipantBaseline(entries, options);
         }
+        // StateManager が初期化されていない場合は何もしない
       },
       syncTemplateButtons: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncTemplateButtons();
-        } else {
-          return this.syncTemplateButtons();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       syncClearButtonState: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncClearButtonState();
-        } else {
-          return this.syncClearButtonState();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       openDialog: this.openDialog,
       closeDialog: this.closeDialog,
@@ -1608,37 +1573,34 @@ export class InitManager {
       confirmAction: async (options) => {
         if (refs.confirmDialogManager) {
           return await refs.confirmDialogManager.confirmAction(options);
-        } else {
-          return await this.confirmAction(options);
         }
+        // ConfirmDialogManager が初期化されていない場合は false を返す
+        return false;
       },
       setUploadStatus: () => {
         if (refs.stateManager) {
           return refs.stateManager.setUploadStatus(...arguments);
-        } else {
-          return this.setUploadStatus(...arguments);
         }
+        // StateManager が初期化されていない場合は何もしない
       },
       refreshScheduleLocationHistory: () => {
         if (refs.scheduleUtilityManager) {
           return refs.scheduleUtilityManager.refreshScheduleLocationHistory();
-        } else {
-          return this.refreshScheduleLocationHistory();
         }
+        // ScheduleUtilityManager が初期化されていない場合は何もしない
       },
       populateScheduleLocationOptions: (preferred) => {
         if (refs.scheduleUtilityManager) {
           return refs.scheduleUtilityManager.populateScheduleLocationOptions(preferred);
-        } else {
-          return this.populateScheduleLocationOptions(preferred);
         }
+        // ScheduleUtilityManager が初期化されていない場合は何もしない
       },
       getSelectionBroadcastSource: () => {
         if (refs.hostIntegrationManager) {
           return refs.hostIntegrationManager.getSelectionBroadcastSource();
-        } else {
-          return this.getSelectionBroadcastSource();
         }
+        // HostIntegrationManager が初期化されていない場合は null を返す
+        return null;
       }
     });
     
@@ -1669,44 +1631,39 @@ export class InitManager {
       updateParticipantContext: (options) => {
         if (refs.participantContextManager) {
           return refs.participantContextManager.updateParticipantContext(options);
-        } else {
-          return this.updateParticipantContext(options);
         }
+        // ParticipantContextManager が初期化されていない場合は何もしない
       },
       captureParticipantBaseline: (entries, options) => {
         if (refs.stateManager) {
           return refs.stateManager.captureParticipantBaseline(entries, options);
-        } else {
-          return this.captureParticipantBaseline(entries, options);
         }
+        // StateManager が初期化されていない場合は何もしない
       },
       syncSaveButtonState: () => {
         if (refs.buttonStateManager) {
           return refs.buttonStateManager.syncSaveButtonState();
-        } else {
-          return this.syncSaveButtonState();
         }
+        // ButtonStateManager が初期化されていない場合は何もしない
       },
       queueRelocationPrompt: (targets, options) => {
         if (refs.relocationManager) {
           return refs.relocationManager.queueRelocationPrompt(targets, options);
-        } else {
-          return this.queueRelocationPrompt(targets, options);
         }
+        // RelocationManager が初期化されていない場合は何もしない
       },
       getSelectionBroadcastSource: () => {
         if (refs.hostIntegrationManager) {
           return refs.hostIntegrationManager.getSelectionBroadcastSource();
-        } else {
-          return this.getSelectionBroadcastSource();
         }
+        // HostIntegrationManager が初期化されていない場合は null を返す
+        return null;
       },
       populateScheduleLocationOptions: (preferred) => {
         if (refs.scheduleUtilityManager) {
           return refs.scheduleUtilityManager.populateScheduleLocationOptions(preferred);
-        } else {
-          return this.populateScheduleLocationOptions(preferred);
         }
+        // ScheduleUtilityManager が初期化されていない場合は何もしない
       },
       prepareScheduleDialogCalendar: this.prepareScheduleDialogCalendar,
       syncScheduleEndMin: this.syncScheduleEndMin,
@@ -1716,16 +1673,15 @@ export class InitManager {
       confirmAction: async (options) => {
         if (refs.confirmDialogManager) {
           return await refs.confirmDialogManager.confirmAction(options);
-        } else {
-          return await this.confirmAction(options);
         }
+        // ConfirmDialogManager が初期化されていない場合は false を返す
+        return false;
       },
       setUploadStatus: () => {
         if (refs.stateManager) {
           return refs.stateManager.setUploadStatus(...arguments);
-        } else {
-          return this.setUploadStatus(...arguments);
         }
+        // StateManager が初期化されていない場合は何もしない
       },
       getScheduleRecord: this.getScheduleRecord,
       loadParticipants: (options) => {
@@ -1735,9 +1691,8 @@ export class InitManager {
       broadcastSelectionChange: (options) => {
         if (refs.hostIntegrationManager) {
           return refs.hostIntegrationManager.broadcastSelectionChange(options);
-        } else {
-          return this.broadcastSelectionChange(options);
         }
+        // HostIntegrationManager が初期化されていない場合は何もしない
       },
       selectScheduleSelf: null // 後で設定
     });
