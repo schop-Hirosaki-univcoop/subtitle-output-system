@@ -31,7 +31,8 @@ import {
 import { normalizeScheduleId } from "../shared/channel-paths.js";
 import { goToLogin } from "../shared/routes.js";
 import {
-  PANEL_CONFIG
+  PANEL_CONFIG,
+  SHORTCUT_KEY_TO_PANEL
 } from "./config.js";
 import { ToolCoordinator } from "./tool-coordinator.js";
 import { EventChat } from "./panels/chat-panel.js";
@@ -5660,13 +5661,21 @@ export class EventAdminApp {
       const key = typeof event.key === "string" ? event.key : "";
       const numKey = parseInt(key, 10);
       if (numKey >= 1 && numKey <= 9) {
-        const sidebarButtons = this.dom.sidebarPanelButtons || [];
-        const buttonIndex = numKey - 1;
-        if (buttonIndex < sidebarButtons.length) {
-          const button = sidebarButtons[buttonIndex];
-          if (button && !button.disabled && !button.hidden) {
+        // SHORTCUT_KEY_TO_PANEL を使用してパネルIDを取得（配列インデックス依存を解消）
+        const panelId = SHORTCUT_KEY_TO_PANEL[numKey];
+        if (panelId) {
+          // data-panel-target 属性でパネルIDに一致するボタンを検索
+          const sidebarButtons = this.dom.sidebarPanelButtons || [];
+          const targetButton = sidebarButtons.find(
+            (button) =>
+              button &&
+              button.dataset.panelTarget === panelId &&
+              !button.disabled &&
+              !button.hidden
+          );
+          if (targetButton) {
             event.preventDefault();
-            button.click();
+            targetButton.click();
             return;
           }
         }

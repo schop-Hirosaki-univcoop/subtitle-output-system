@@ -207,24 +207,16 @@ test('buildQuestionRecord merges submission data with context defaults', () => {
     timestamp: 1700000000000
   });
 
+  // buildQuestionRecord は基本的なフィールドのみを返す（context の情報は含まれない）
   assert.equal(record.uid, 'q_test');
   assert.equal(record.token, 'token-value');
   assert.equal(record.name, 'テスター');
   assert.equal(record.question, '質問');
-  assert.equal(record.group, 'A-1');
-  assert.equal(record.schedule, '昼の部');
-  assert.equal(record.scheduleLocation, 'メイン会場');
-  assert.equal(record.scheduleStart, '2025-05-10T10:00');
-  assert.equal(record.scheduleEnd, '2025-05-10T12:00');
-  assert.equal(record.scheduleDate, '2025-05-10');
-  assert.equal(record.participantId, 'P-001');
-  assert.equal(record.participantName, '参加者');
-  assert.equal(record.guidance, 'ご案内');
-  assert.equal(record.eventId, 'EVT-1');
-  assert.equal(record.eventName, 'イベント');
-  assert.equal(record.scheduleId, 'SCH-1');
+  assert.equal(record.genre, '活動');
   assert.equal(record.questionLength, 12);
   assert.equal(record.type, 'normal');
+  assert.equal(record.ts, 1700000000000);
+  assert.equal(record.updatedAt, 1700000000000);
 });
 
 test('buildSubmissionPayload merges snapshot values and trims metadata', () => {

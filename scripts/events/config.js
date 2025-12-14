@@ -25,6 +25,22 @@ export const PANEL_CONFIG = {
   logs: { stage: "tabs", requireEvent: false, requireSchedule: false, logs: true }
 };
 
+/**
+ * ショートカットキー（1-9）とパネルIDの対応を定義します。
+ * このマッピングにより、配列インデックスに依存せずにショートカットキーを処理できます。
+ */
+export const SHORTCUT_KEY_TO_PANEL = {
+  1: "events",
+  2: "schedules",
+  3: "participants",
+  4: "gl",
+  5: "gl-faculties",
+  6: "operator",
+  7: "dictionary",
+  8: "pickup",
+  9: "logs"
+};
+
 export const PANEL_STAGE_INFO = {
   events: STAGE_INFO.events,
   schedules: STAGE_INFO.schedules,
