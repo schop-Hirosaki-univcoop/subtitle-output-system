@@ -109,6 +109,7 @@ export function queryDom() {
     scheduleDateInput: document.getElementById("flow-schedule-date-input"),
     scheduleStartInput: document.getElementById("flow-schedule-start-input"),
     scheduleEndInput: document.getElementById("flow-schedule-end-input"),
+    scheduleRecruitGlInput: document.getElementById("flow-schedule-recruit-gl-input"),
     scheduleDialogCalendar: document.getElementById("flow-schedule-dialog-calendar"),
     scheduleDialogCalendarTitle: document.getElementById("flow-schedule-dialog-calendar-title"),
     scheduleDialogCalendarGrid: document.getElementById("flow-schedule-dialog-calendar-grid"),

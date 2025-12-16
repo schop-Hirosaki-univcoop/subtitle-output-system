@@ -192,7 +192,7 @@ export class SchedulePanelManager {
       throw new Error("イベントを選択してください。");
     }
 
-    const { label, location, date, startValue, endValue } = this.resolveScheduleFormValues(payload);
+    const { label, location, date, startValue, endValue, recruitGl } = this.resolveScheduleFormValues(payload);
     let scheduleId = generateShortId("sch_");
     const existingIds = new Set(this.schedules.map((schedule) => schedule.id));
     while (existingIds.has(scheduleId)) {
@@ -209,6 +209,7 @@ export class SchedulePanelManager {
         startAt: startValue,
         endAt: endValue,
         participantCount: 0,
+        recruitGl,
         createdAt: now,
         updatedAt: now
       });
@@ -239,7 +240,7 @@ export class SchedulePanelManager {
       throw new Error("日程IDが不明です。");
     }
 
-    const { label, location, date, startValue, endValue } = this.resolveScheduleFormValues(payload);
+    const { label, location, date, startValue, endValue, recruitGl } = this.resolveScheduleFormValues(payload);
     const now = Date.now();
     this.app.beginScheduleLoading("日程を更新しています…");
     try {
@@ -249,6 +250,7 @@ export class SchedulePanelManager {
         [`questionIntake/schedules/${eventId}/${scheduleId}/date`]: date,
         [`questionIntake/schedules/${eventId}/${scheduleId}/startAt`]: startValue,
         [`questionIntake/schedules/${eventId}/${scheduleId}/endAt`]: endValue,
+        [`questionIntake/schedules/${eventId}/${scheduleId}/recruitGl`]: recruitGl,
         [`questionIntake/schedules/${eventId}/${scheduleId}/updatedAt`]: now,
         [`questionIntake/events/${eventId}/updatedAt`]: now
       });
@@ -360,9 +362,10 @@ export class SchedulePanelManager {
    * @param {string} payload.date - 日付
    * @param {string} payload.start - 開始時刻
    * @param {string} payload.end - 終了時刻
+   * @param {boolean} [payload.recruitGl] - GL募集を行うかどうか（デフォルト: true）
    * @returns {object} 解決された値
    */
-  resolveScheduleFormValues({ label, location, date, start, end }) {
+  resolveScheduleFormValues({ label, location, date, start, end, recruitGl = true }) {
     const trimmedLabel = normalizeKey(label || "");
     if (!trimmedLabel) {
       throw new Error("日程の表示名を入力してください。");
@@ -394,12 +397,15 @@ export class SchedulePanelManager {
     const startValue = formatDateTimeLocal(startDate);
     const endValue = formatDateTimeLocal(endDate);
 
+    const normalizedRecruitGl = Boolean(recruitGl);
+
     return {
       label: trimmedLabel,
       location: normalizedLocation,
       date: normalizedDate,
       startValue,
-      endValue
+      endValue,
+      recruitGl: normalizedRecruitGl
     };
   }
 }

@@ -5168,6 +5168,9 @@ export class EventAdminApp {
       if (this.dom.scheduleEndInput) {
         this.dom.scheduleEndInput.value = extractTimePart(schedule.endAt);
       }
+      if (this.dom.scheduleRecruitGlInput) {
+        this.dom.scheduleRecruitGlInput.checked = schedule.recruitGl !== false;
+      }
     } else {
       let normalizedLastPicked = normalizeDateInputValue(lastPickedDate);
       if (!normalizedLastPicked) {
@@ -5249,12 +5252,14 @@ export class EventAdminApp {
       const mode = this.dom.scheduleForm.dataset.mode || "create";
       const scheduleId = this.dom.scheduleForm.dataset.scheduleId || "";
       const locationValue = ensureString(this.dom.scheduleLocationInput?.value).trim();
+      const recruitGl = this.dom.scheduleRecruitGlInput?.checked ?? true;
       const payload = {
         label: this.dom.scheduleLabelInput?.value,
         location: locationValue,
         date: this.dom.scheduleDateInput?.value,
         start: this.dom.scheduleStartInput?.value,
-        end: this.dom.scheduleEndInput?.value
+        end: this.dom.scheduleEndInput?.value,
+        recruitGl
       };
       if (mode === "edit") {
         await this.updateSchedule(scheduleId, payload);

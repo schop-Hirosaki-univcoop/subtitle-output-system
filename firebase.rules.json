@@ -530,6 +530,7 @@
             "startAt": { ".validate": "newData.isString() || !newData.exists()" },
             "endAt": { ".validate": "newData.isString() || !newData.exists()" },
             "participantCount": { ".validate": "newData.isNumber() || !newData.exists()" },
+            "recruitGl": { ".validate": "newData.isBoolean() || !newData.exists()" },
             "createdAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
             "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
             "glTeamCount": { ".validate": "newData.isNumber() || !newData.exists()" },
