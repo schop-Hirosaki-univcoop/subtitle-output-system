@@ -56,6 +56,7 @@ export class EventPanelManager {
         startAt: ensureString(scheduleValue?.startAt || scheduleValue?.date),
         endAt: ensureString(scheduleValue?.endAt || ""),
         participantCount: Number(scheduleValue?.participantCount || 0),
+        recruitGl: scheduleValue?.recruitGl !== false,
         createdAt: scheduleValue?.createdAt || 0
       }));
 

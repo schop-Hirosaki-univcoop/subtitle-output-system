@@ -99,6 +99,28 @@ export class GlFormDataManager {
         break;
       }
     }
+    // questionIntake/schedules から recruitGl 情報を取得して補完
+    if (parsedSchedules.length > 0) {
+      try {
+        const schedulesRef = ref(this.database, `questionIntake/schedules/${eventId}`);
+        const schedulesSnap = await get(schedulesRef);
+        if (schedulesSnap.exists()) {
+          const schedulesData = schedulesSnap.val() || {};
+          parsedSchedules = parsedSchedules.map((schedule) => {
+            const scheduleData = schedulesData[schedule.id];
+            if (scheduleData && typeof scheduleData === "object") {
+              return {
+                ...schedule,
+                recruitGl: scheduleData.recruitGl !== false
+              };
+            }
+            return schedule;
+          });
+        }
+      } catch (error) {
+        console.warn("Failed to fetch schedule recruitGl info, using defaults", error);
+      }
+    }
     state.schedules = parsedSchedules;
     // 完全正規化: eventNameはquestionIntake/events/{eventId}/nameから取得
     let eventName = eventId;

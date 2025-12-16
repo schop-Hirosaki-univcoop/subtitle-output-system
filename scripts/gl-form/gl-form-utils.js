@@ -287,7 +287,8 @@ export function parseSchedules(raw) {
         label: ensureString(schedule?.label || schedule?.date || schedule?.id),
         date: ensureString(schedule?.date),
         startAt: parseTimestamp(schedule?.startAt),
-        endAt: parseTimestamp(schedule?.endAt)
+        endAt: parseTimestamp(schedule?.endAt),
+        recruitGl: schedule?.recruitGl !== false
       }))
       .filter((entry) => entry.id);
   }
@@ -300,7 +301,8 @@ export function parseSchedules(raw) {
           label: ensureString(schedule?.label || schedule?.date || scheduleId || id),
           date: ensureString(schedule?.date || schedule?.startAt || ""),
           startAt: parseTimestamp(schedule?.startAt),
-          endAt: parseTimestamp(schedule?.endAt)
+          endAt: parseTimestamp(schedule?.endAt),
+          recruitGl: schedule?.recruitGl !== false
         };
       })
       .filter((entry) => entry.id);

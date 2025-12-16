@@ -336,10 +336,22 @@ export class GlFormManager {
       }
       return;
     }
+    // recruitGl が false の日程を除外（練習用日程など）
+    const availableSchedules = schedules.filter((schedule) => schedule.recruitGl !== false);
+    if (!availableSchedules.length) {
+      const note = document.createElement("p");
+      note.className = "form-meta-line";
+      note.textContent = "現在登録されている日程はありません。";
+      this.elements.shiftList.append(note);
+      if (this.elements.shiftFieldset) {
+        this.elements.shiftFieldset.hidden = true;
+      }
+      return;
+    }
     if (this.elements.shiftFieldset) {
       this.elements.shiftFieldset.hidden = false;
     }
-    schedules.forEach((schedule) => {
+    availableSchedules.forEach((schedule) => {
       const wrapper = document.createElement("label");
       wrapper.className = "gl-shift-option";
       const checkbox = document.createElement("input");
