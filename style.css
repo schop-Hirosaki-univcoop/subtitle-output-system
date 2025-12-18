@@ -2523,6 +2523,7 @@ label kbd{
 .radio-label input[type="radio"]{
   width:1.1rem;
   height:1.1rem;
+  accent-color:var(--accent);
   cursor:pointer;
 }
 
