@@ -1812,7 +1812,15 @@ function saveParticipantEdits() {
     throw new Error("ParticipantManager is not initialized");
   }
   participantManager.saveParticipantEdits();
-    }
+}
+
+function addParticipant(formData) {
+  // ParticipantManager に委譲
+  if (!participantManager) {
+    throw new Error("ParticipantManager is not initialized");
+  }
+  participantManager.addParticipant(formData);
+}
 
 // 元の removeParticipantFromState 実装は ParticipantManager に移行されました
 
@@ -2152,6 +2160,7 @@ initManager = new InitManager({
   openEventForm,
   openScheduleForm,
   saveParticipantEdits,
+  addParticipant,
   handleDeleteParticipant,
   openParticipantEditor,
   handleQuickCancelAction,

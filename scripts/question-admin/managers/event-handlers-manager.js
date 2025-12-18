@@ -34,6 +34,7 @@ export class EventHandlersManager {
     this.handleUpdateEvent = context.handleUpdateEvent;
     this.handleAddEvent = context.handleAddEvent;
     this.closeDialog = context.closeDialog;
+    this.openDialog = context.openDialog;
     this.setFormError = context.setFormError;
     this.openScheduleForm = context.openScheduleForm;
     this.handleUpdateSchedule = context.handleUpdateSchedule;
@@ -42,6 +43,7 @@ export class EventHandlersManager {
     this.setCalendarPickedDate = context.setCalendarPickedDate;
     this.shiftScheduleDialogCalendarMonth = context.shiftScheduleDialogCalendarMonth;
     this.saveParticipantEdits = context.saveParticipantEdits;
+    this.addParticipant = context.addParticipant;
     this.handleRelocationFormSubmit = context.handleRelocationFormSubmit;
     this.handleSave = context.handleSave;
     this.handleRevertParticipants = context.handleRevertParticipants;
@@ -380,14 +382,15 @@ export class EventHandlersManager {
     }
 
     // CSV入力
+    // 既存のCSVアップロードUIは削除され、参加者追加モーダル内に統合されたため、イベントハンドラーは不要
+    // ただし、DOM要素が存在する可能性があるため、非表示にする
     if (this.dom.csvInput) {
-      this.dom.csvInput.addEventListener("change", (event) => {
-        if (!this.csvManager) {
-          throw new Error("CsvManager is not initialized");
-        }
-        this.csvManager.handleCsvChange(event);
-      });
       this.dom.csvInput.disabled = true;
+      this.dom.csvInput.hidden = true;
+    }
+    if (this.dom.downloadParticipantTemplateButton) {
+      // テンプレートダウンロードボタンは参加者追加モーダル内に移動したため、非表示にする
+      this.dom.downloadParticipantTemplateButton.hidden = true;
     }
 
     if (this.dom.teamCsvInput) {
@@ -485,6 +488,9 @@ export class EventHandlersManager {
       this.updateParticipantActionPanelState();
     }
 
+    // 参加者追加モーダル
+    this.setupAddParticipantDialog();
+
     // UI初期化
     if (this.dom.eventEmpty) this.dom.eventEmpty.hidden = true;
     if (this.dom.scheduleEmpty) this.dom.scheduleEmpty.hidden = true;
@@ -501,6 +507,233 @@ export class EventHandlersManager {
     }
 
     this.setupConfirmDialog();
+  }
+
+  /**
+   * 参加者追加モーダルのセットアップ
+   */
+  setupAddParticipantDialog() {
+    // モーダルを開くボタン
+    if (this.dom.addParticipantButton) {
+      this.dom.addParticipantButton.addEventListener("click", () => {
+        if (!this.state.selectedEventId || !this.state.selectedScheduleId) {
+          this.setUploadStatus("イベントと日程を選択してください。", "error");
+          return;
+        }
+        this.openAddParticipantDialog();
+      });
+    }
+
+    // タブ切り替え
+    if (this.dom.addParticipantTabManual && this.dom.addParticipantTabCsv) {
+      this.dom.addParticipantTabManual.addEventListener("click", () => {
+        this.switchAddParticipantTab("manual");
+      });
+      this.dom.addParticipantTabCsv.addEventListener("click", () => {
+        this.switchAddParticipantTab("csv");
+      });
+    }
+
+    // 手動追加フォーム
+    if (this.dom.addParticipantForm) {
+      this.dom.addParticipantForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        this.handleAddParticipantManual();
+      });
+    }
+
+    // CSVインポート（ファイル選択時は処理せず、追加ボタンで処理）
+    // ファイル選択時はラベルのみ更新
+    if (this.dom.addParticipantCsvInput) {
+      this.dom.addParticipantCsvInput.addEventListener("change", (event) => {
+        const files = event.target.files;
+        if (files && files.length > 0) {
+          const file = files[0];
+          if (this.dom.addParticipantFileLabel) {
+            this.dom.addParticipantFileLabel.textContent = file.name;
+          }
+          // エラーをクリア
+          if (this.dom.addParticipantCsvError) {
+            this.dom.addParticipantCsvError.hidden = true;
+            this.dom.addParticipantCsvError.textContent = "";
+          }
+        } else {
+          if (this.dom.addParticipantFileLabel) {
+            this.dom.addParticipantFileLabel.textContent = "参加者CSVをアップロード";
+          }
+        }
+      });
+    }
+
+    // テンプレートダウンロード
+    if (this.dom.addParticipantDownloadTemplate) {
+      this.dom.addParticipantDownloadTemplate.addEventListener("click", () => {
+        if (!this.csvManager) {
+          throw new Error("CsvManager is not initialized");
+        }
+        this.csvManager.downloadParticipantTemplate();
+      });
+    }
+
+    // 追加ボタン（モーダルフッター）
+    if (this.dom.addParticipantSubmitButton) {
+      this.dom.addParticipantSubmitButton.addEventListener("click", () => {
+        const activeTab = this.dom.addParticipantTabManual?.getAttribute("aria-selected") === "true" ? "manual" : "csv";
+        if (activeTab === "manual") {
+          if (this.dom.addParticipantForm) {
+            this.dom.addParticipantForm.requestSubmit();
+          }
+        } else {
+          // CSVタブの場合は、ファイルが選択されているか確認
+          if (!this.dom.addParticipantCsvInput?.files?.length) {
+            this.setFormError(this.dom.addParticipantCsvError, "CSVファイルを選択してください。");
+            return;
+          }
+          // CSVインポート処理を実行
+          this.handleAddParticipantCsv({ target: this.dom.addParticipantCsvInput });
+        }
+      });
+    }
+
+    // モーダルの閉じる処理
+    if (this.dom.addParticipantDialog) {
+      this.bindDialogDismiss(this.dom.addParticipantDialog);
+      // モーダルが閉じられた時にフォームをリセット
+      this.dom.addParticipantDialog.addEventListener("dialog:close", () => {
+        this.resetAddParticipantForm();
+      });
+    }
+  }
+
+  /**
+   * 参加者追加モーダルを開く
+   */
+  openAddParticipantDialog() {
+    if (!this.dom.addParticipantDialog) return;
+    this.switchAddParticipantTab("manual");
+    this.resetAddParticipantForm();
+    this.openDialog(this.dom.addParticipantDialog);
+  }
+
+  /**
+   * 参加者追加モーダルのタブを切り替え
+   * @param {string} tab - "manual" または "csv"
+   */
+  switchAddParticipantTab(tab) {
+    const isManual = tab === "manual";
+    if (this.dom.addParticipantTabManual) {
+      this.dom.addParticipantTabManual.classList.toggle("is-active", isManual);
+      this.dom.addParticipantTabManual.setAttribute("aria-selected", String(isManual));
+      this.dom.addParticipantTabManual.tabIndex = isManual ? 0 : -1;
+    }
+    if (this.dom.addParticipantTabCsv) {
+      this.dom.addParticipantTabCsv.classList.toggle("is-active", !isManual);
+      this.dom.addParticipantTabCsv.setAttribute("aria-selected", String(!isManual));
+      this.dom.addParticipantTabCsv.tabIndex = !isManual ? 0 : -1;
+    }
+    if (this.dom.addParticipantTabpanelManual) {
+      this.dom.addParticipantTabpanelManual.hidden = !isManual;
+      this.dom.addParticipantTabpanelManual.setAttribute("aria-hidden", String(!isManual));
+    }
+    if (this.dom.addParticipantTabpanelCsv) {
+      this.dom.addParticipantTabpanelCsv.hidden = isManual;
+      this.dom.addParticipantTabpanelCsv.setAttribute("aria-hidden", String(isManual));
+    }
+  }
+
+  /**
+   * 参加者追加フォームをリセット
+   */
+  resetAddParticipantForm() {
+    if (this.dom.addParticipantNameInput) this.dom.addParticipantNameInput.value = "";
+    if (this.dom.addParticipantPhoneticInput) this.dom.addParticipantPhoneticInput.value = "";
+    if (this.dom.addParticipantGenderInput) this.dom.addParticipantGenderInput.value = "";
+    if (this.dom.addParticipantDepartmentInput) this.dom.addParticipantDepartmentInput.value = "";
+    if (this.dom.addParticipantTeamInput) this.dom.addParticipantTeamInput.value = "";
+    if (this.dom.addParticipantPhoneInput) this.dom.addParticipantPhoneInput.value = "";
+    if (this.dom.addParticipantEmailInput) this.dom.addParticipantEmailInput.value = "";
+    if (this.dom.addParticipantError) {
+      this.dom.addParticipantError.hidden = true;
+      this.dom.addParticipantError.textContent = "";
+    }
+    if (this.dom.addParticipantCsvInput) this.dom.addParticipantCsvInput.value = "";
+    if (this.dom.addParticipantFileLabel) this.dom.addParticipantFileLabel.textContent = "参加者CSVをアップロード";
+    if (this.dom.addParticipantCsvError) {
+      this.dom.addParticipantCsvError.hidden = true;
+      this.dom.addParticipantCsvError.textContent = "";
+    }
+  }
+
+  /**
+   * 手動追加フォームの送信処理
+   */
+  handleAddParticipantManual() {
+    const submitButton = this.dom.addParticipantSubmitButton;
+    if (submitButton) submitButton.disabled = true;
+    try {
+      this.setFormError(this.dom.addParticipantError);
+      const formData = {
+        name: this.dom.addParticipantNameInput?.value || "",
+        phonetic: this.dom.addParticipantPhoneticInput?.value || "",
+        gender: this.dom.addParticipantGenderInput?.value || "",
+        department: this.dom.addParticipantDepartmentInput?.value || "",
+        team: this.dom.addParticipantTeamInput?.value || "",
+        phone: this.dom.addParticipantPhoneInput?.value || "",
+        email: this.dom.addParticipantEmailInput?.value || ""
+      };
+      this.addParticipant(formData);
+      this.closeDialog(this.dom.addParticipantDialog);
+      this.setUploadStatus("参加者を追加しました。適用または取消を選択してください。", "success");
+    } catch (error) {
+      console.error(error);
+      this.setFormError(this.dom.addParticipantError, error.message || "参加者の追加に失敗しました。");
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
+  }
+
+  /**
+   * CSVインポート処理
+   * @param {Event} event - ファイル入力イベント
+   */
+  async handleAddParticipantCsv(event) {
+    const files = event.target.files;
+    if (!files || !files.length) {
+      return;
+    }
+
+    const file = files[0];
+      const eventId = this.state.selectedEventId;
+      const scheduleId = this.state.selectedScheduleId;
+
+    try {
+      if (!eventId || !scheduleId) {
+        throw new Error(this.getSelectionRequiredMessage());
+      }
+
+      // インポート方法を取得（追記 or 置き換え）
+      const modeInput = this.dom.addParticipantCsvForm?.querySelector('input[name="qa-add-participant-csv-mode"]:checked');
+      const mode = modeInput?.value || "append";
+
+      // CSV処理はCsvManagerに委譲
+      if (!this.csvManager) {
+        throw new Error("CsvManager is not initialized");
+      }
+
+      // 既存のhandleCsvChangeを呼び出すが、追記モードの場合は既存参加者を保持
+      await this.csvManager.handleCsvChange(event, { mode });
+
+      this.closeDialog(this.dom.addParticipantDialog);
+      const modeText = mode === "append" ? "追記" : "置き換え";
+      this.setUploadStatus(`CSVインポート（${modeText}）が完了しました。適用または取消を選択してください。`, "success");
+    } catch (error) {
+      console.error(error);
+      this.setFormError(this.dom.addParticipantCsvError, error.message || "CSVの読み込みに失敗しました。");
+    } finally {
+      if (this.dom.addParticipantCsvInput) {
+        this.dom.addParticipantCsvInput.value = "";
+      }
+    }
   }
 }
 

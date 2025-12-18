@@ -1088,6 +1088,12 @@ export class InitManager {
         }
         return refs.participantManager.saveParticipantEdits();
       },
+      addParticipant: (formData) => {
+        if (!refs.participantManager) {
+          throw new Error("ParticipantManager is not initialized");
+        }
+        return refs.participantManager.addParticipant(formData);
+      },
       handleRelocationFormSubmit: (event) => {
         if (!refs.relocationManager) return;
         return refs.relocationManager.handleRelocationFormSubmit(event);

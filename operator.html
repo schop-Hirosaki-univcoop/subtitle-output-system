@@ -321,11 +321,7 @@
                                 <div class="qa-participant-card__body">
                                   <div class="admin-controls">
                                     <div class="admin-controls__row admin-controls__row--imports">
-                                      <button id="qa-download-participant-template" class="btn btn-ghost btn-sm" type="button">参加者CSVテンプレのDL</button>
-                                      <label class="btn btn-ghost file-input" for="qa-csv-input">
-                                        <span id="qa-file-label">参加者CSVをアップロード</span>
-                                        <input id="qa-csv-input" type="file" accept=".csv,text/csv">
-                                      </label>
+                                      <button id="qa-add-participant-button" class="btn btn-primary btn-sm" type="button">参加者を追加</button>
                                       <button id="qa-download-team-template" class="btn btn-ghost btn-sm" type="button" disabled>班番号CSVテンプレのDL</button>
                                       <label class="btn btn-ghost file-input" for="qa-team-csv-input">
                                         <span id="qa-team-file-label">班番号CSVをアップロード</span>
@@ -442,6 +438,95 @@
                       </form>
                   </div>
                 </div>
+
+                  <div id="qa-add-participant-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="qa-add-participant-dialog-title" hidden>
+                    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+                    <div class="modal-panel">
+                      <div class="modal-header">
+                        <h2 id="qa-add-participant-dialog-title">参加者を追加</h2>
+                      </div>
+                      <div class="modal-body">
+                        <div class="qa-participant-card-tabs">
+                          <div id="qa-add-participant-tablist" class="qa-participant-card-tabs__buttons" role="tablist" aria-label="追加方法を選択">
+                            <button id="qa-add-participant-tab-manual" class="qa-participant-card-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="qa-add-participant-tabpanel-manual" tabindex="0">
+                              <span class="qa-participant-card-tab__label">手動追加</span>
+                            </button>
+                            <button id="qa-add-participant-tab-csv" class="qa-participant-card-tab" type="button" role="tab" aria-selected="false" aria-controls="qa-add-participant-tabpanel-csv" tabindex="-1">
+                              <span class="qa-participant-card-tab__label">CSVインポート</span>
+                            </button>
+                          </div>
+                        </div>
+                        <div class="qa-participant-tabpanels">
+                          <section id="qa-add-participant-tabpanel-manual" class="qa-participant-tabpanel" role="tabpanel" aria-labelledby="qa-add-participant-tab-manual">
+                            <form id="qa-add-participant-form">
+                              <div class="modal-field">
+                                <label for="qa-add-participant-name-input">氏名 / ラジオネーム <span class="field-tag field-tag--required">必須</span></label>
+                                <input id="qa-add-participant-name-input" name="add-participant-name" class="input" type="text" autocomplete="off" required>
+                              </div>
+                              <div class="modal-field">
+                                <label for="qa-add-participant-phonetic-input">フリガナ</label>
+                                <input id="qa-add-participant-phonetic-input" name="add-participant-phonetic" class="input" type="text" autocomplete="off">
+                              </div>
+                              <div class="modal-field">
+                                <label for="qa-add-participant-gender-input">性別</label>
+                                <input id="qa-add-participant-gender-input" name="add-participant-gender" class="input" type="text" autocomplete="off">
+                              </div>
+                              <div class="modal-field">
+                                <label for="qa-add-participant-department-input">学部学科</label>
+                                <input id="qa-add-participant-department-input" name="add-participant-department" class="input" type="text" autocomplete="off">
+                              </div>
+                              <div class="modal-field">
+                                <label for="qa-add-participant-team-input">班番号</label>
+                                <input id="qa-add-participant-team-input" name="add-participant-team" class="input" type="text" autocomplete="off" placeholder="例: A-1 / キャンセル / 別日など">
+                              </div>
+                              <div class="modal-field">
+                                <label for="qa-add-participant-phone-input">携帯電話</label>
+                                <input id="qa-add-participant-phone-input" name="add-participant-phone" class="input" type="tel" autocomplete="tel">
+                              </div>
+                              <div class="modal-field">
+                                <label for="qa-add-participant-email-input">メールアドレス</label>
+                                <input id="qa-add-participant-email-input" name="add-participant-email" class="input" type="email" autocomplete="email">
+                              </div>
+                              <p id="qa-add-participant-error" class="form-error" role="alert" hidden></p>
+                            </form>
+                          </section>
+                          <section id="qa-add-participant-tabpanel-csv" class="qa-participant-tabpanel" role="tabpanel" aria-labelledby="qa-add-participant-tab-csv" hidden aria-hidden="true">
+                            <form id="qa-add-participant-csv-form">
+                              <div class="modal-field">
+                                <label for="qa-add-participant-csv-input" class="btn btn-ghost file-input">
+                                  <span id="qa-add-participant-file-label">参加者CSVをアップロード</span>
+                                  <input id="qa-add-participant-csv-input" type="file" accept=".csv,text/csv">
+                                </label>
+                                <p class="modal-helper">ファイル名は「イベントID_日程ID_participants.csv」を使用してください。</p>
+                              </div>
+                              <div class="modal-field">
+                                <span class="modal-label">インポート方法</span>
+                                <div class="radio-group">
+                                  <label class="radio-label">
+                                    <input type="radio" name="qa-add-participant-csv-mode" value="append" checked>
+                                    <span>追記（既存の参加者に追加）</span>
+                                  </label>
+                                  <label class="radio-label">
+                                    <input type="radio" name="qa-add-participant-csv-mode" value="replace">
+                                    <span>置き換え（既存の参加者を削除して置き換え）</span>
+                                  </label>
+                                </div>
+                                <p class="modal-helper">追記を選択した場合、既存の参加者情報は保持され、CSVの参加者が追加されます。置き換えを選択した場合、既存の参加者情報は削除され、CSVの参加者のみが残ります。</p>
+                              </div>
+                              <div class="modal-field">
+                                <button id="qa-add-participant-download-template" class="btn btn-ghost btn-sm" type="button">参加者CSVテンプレのDL</button>
+                              </div>
+                              <p id="qa-add-participant-csv-error" class="form-error" role="alert" hidden></p>
+                            </form>
+                          </section>
+                        </div>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-ghost" data-dialog-dismiss="true">キャンセル</button>
+                        <button id="qa-add-participant-submit-button" type="button" class="btn btn-primary">追加</button>
+                      </div>
+                    </div>
+                  </div>
 
                   <div id="qa-relocation-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="qa-relocation-dialog-title" hidden>
                     <div class="modal-backdrop" data-dialog-dismiss="true"></div>

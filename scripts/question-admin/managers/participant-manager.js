@@ -17,7 +17,9 @@ import {
   getScheduleLabel,
   resolveParticipantStatus,
   normalizeGroupNumberValue,
-  resolveMailStatusInfo
+  resolveMailStatusInfo,
+  assignParticipantIds,
+  ensureRowKey
 } from "../participants.js";
 import { normalizeKey } from "../utils.js";
 
@@ -672,6 +674,89 @@ export class ParticipantManager {
 
     this.state.editingParticipantId = null;
     this.state.editingRowKey = null;
+  }
+
+  /**
+   * 参加者を追加する
+   * @param {Object} formData - フォームデータ
+   * @returns {void}
+   */
+  addParticipant(formData) {
+    const eventId = this.state.selectedEventId;
+    const scheduleId = this.state.selectedScheduleId;
+    if (!eventId || !scheduleId) {
+      throw new Error("イベントと日程を選択してください。");
+    }
+
+    const name = String(formData.name || "").trim();
+    if (!name) {
+      throw new Error("氏名を入力してください。");
+    }
+
+    const phonetic = String(formData.phonetic || "").trim();
+    const gender = String(formData.gender || "").trim();
+    const department = String(formData.department || "").trim();
+    const groupNumber = normalizeGroupNumberValue(formData.team || "");
+    const phone = String(formData.phone || "").trim();
+    const email = String(formData.email || "").trim();
+
+    // 新しい参加者エントリを作成
+    const newEntry = {
+      name,
+      phonetic,
+      furigana: phonetic,
+      gender,
+      department,
+      groupNumber,
+      phone,
+      email
+    };
+
+    // assignParticipantIds を使用してIDを割り当て
+    const entries = assignParticipantIds([newEntry], this.state.participants, {
+      eventId,
+      scheduleId
+    });
+    const assignedEntry = entries[0];
+    if (!assignedEntry) {
+      throw new Error("参加者の追加に失敗しました。");
+    }
+
+    // rowKeyを生成
+    ensureRowKey(assignedEntry, "add");
+
+    // ステータスとメール情報を設定
+    const status = resolveParticipantStatus(assignedEntry, groupNumber);
+    assignedEntry.status = status;
+    assignedEntry.isCancelled = status === "cancelled";
+    assignedEntry.isRelocated = status === "relocated";
+    assignedEntry.mailStatus = email ? "pending" : "missing";
+    assignedEntry.mailSentAt = 0;
+    assignedEntry.mailError = "";
+    assignedEntry.mailLastAttemptAt = 0;
+
+    // 既存の参加者リストに追加
+    this.state.participants.push(assignedEntry);
+    this.state.participants = sortParticipants(this.state.participants);
+
+    // 班番号の割り当て
+    const uid = resolveParticipantUid(assignedEntry);
+    if (eventId && uid) {
+      const assignmentMap = this.ensureTeamAssignmentMap(eventId);
+      if (assignmentMap && groupNumber) {
+        assignmentMap.set(uid, groupNumber);
+      }
+      if (groupNumber) {
+        const singleMap = new Map([[uid, groupNumber]]);
+        this.applyAssignmentsToEventCache(eventId, singleMap);
+      }
+    }
+
+    syncCurrentScheduleCache();
+    updateDuplicateMatches();
+    this.renderParticipants();
+    this.syncSaveButtonState();
+    this.updateParticipantActionPanelState();
   }
 
   /**

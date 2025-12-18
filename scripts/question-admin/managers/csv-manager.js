@@ -13,12 +13,11 @@ import {
   assignParticipantIds,
   resolveParticipantUid,
   resolveParticipantStatus,
-  sortParticipants
-} from "../participants.js";
-import {
+  sortParticipants,
   syncCurrentScheduleCache,
   updateDuplicateMatches,
-  signatureForEntries
+  signatureForEntries,
+  ensureRowKey
 } from "../participants.js";
 
 /**
@@ -172,8 +171,11 @@ export class CsvManager {
   /**
    * 参加者CSVの変更を処理する
    * @param {Event} event - ファイル入力イベント
+   * @param {Object} options - オプション
+   * @param {string} [options.mode="replace"] - インポートモード ("append" または "replace")
    */
-  async handleCsvChange(event) {
+  async handleCsvChange(event, options = {}) {
+    const { mode = "replace" } = options;
     const files = event.target.files;
     if (!files || !files.length) {
       return;
@@ -211,47 +213,89 @@ export class CsvManager {
         this.state.participants,
         { eventId: this.state.selectedEventId, scheduleId: this.state.selectedScheduleId }
       );
+      // 追記モードの場合は既存の参加者を保持
+      const existingParticipants = mode === "append" ? [...this.state.participants] : [];
       const existingMap = new Map(
-        this.state.participants
+        existingParticipants
           .map(entry => {
             const key = resolveParticipantUid(entry) || entry.participantId || entry.id;
             return key ? [key, entry] : null;
           })
           .filter(Boolean)
       );
-      this.state.participants = sortParticipants(
-        entries.map(entry => {
+      
+      // 新しい参加者エントリを作成
+      const newEntries = entries.map(entry => {
+        const uid = resolveParticipantUid(entry) || entry.participantId;
+        const entryKey = uid;
+        const existing = entryKey ? existingMap.get(entryKey) || {} : {};
+        const department = entry.department || existing.department || "";
+        const groupNumber = entry.groupNumber || existing.groupNumber || "";
+        const phonetic = entry.phonetic || entry.furigana || existing.phonetic || existing.furigana || "";
+        const status = resolveParticipantStatus({ ...existing, ...entry, groupNumber }, groupNumber) || existing.status || "active";
+        const legacyParticipantId = existing.legacyParticipantId || (existing.participantId && existing.participantId !== uid ? existing.participantId : "");
+        const newEntry = {
+          participantId: uid,
+          uid,
+          legacyParticipantId,
+          name: entry.name || existing.name || "",
+          phonetic,
+          furigana: phonetic,
+          gender: entry.gender || existing.gender || "",
+          department,
+          groupNumber,
+          phone: entry.phone || existing.phone || "",
+          email: entry.email || existing.email || "",
+          token: existing.token || "",
+          guidance: existing.guidance || "",
+          status,
+          isCancelled: status === "cancelled",
+          isRelocated: status === "relocated"
+        };
+        // メール情報を設定（既存の参加者の場合は既存の値を保持、新しい参加者の場合は初期値を設定）
+        if (existing.mailStatus !== undefined) {
+          newEntry.mailStatus = existing.mailStatus;
+          newEntry.mailSentAt = existing.mailSentAt !== undefined ? existing.mailSentAt : 0;
+          newEntry.mailError = existing.mailError || "";
+          newEntry.mailLastAttemptAt = existing.mailLastAttemptAt !== undefined ? existing.mailLastAttemptAt : 0;
+        } else {
+          const participantEmail = newEntry.email || "";
+          newEntry.mailStatus = participantEmail ? "pending" : "missing";
+          newEntry.mailSentAt = 0;
+          newEntry.mailError = "";
+          newEntry.mailLastAttemptAt = 0;
+        }
+        // rowKeyを生成（既存の参加者の場合は既存のrowKeyを使用）
+        if (existing.rowKey) {
+          newEntry.rowKey = existing.rowKey;
+        } else {
+          ensureRowKey(newEntry, mode === "append" ? "csv-append" : "csv-replace");
+        }
+        return newEntry;
+      });
+
+      // 追記モードの場合は、既存の参加者と新しい参加者をマージ
+      // 置き換えモードの場合は、新しい参加者のみを使用
+      if (mode === "append") {
+        // 既存の参加者で、CSVに含まれていないものを保持
+        const newUids = new Set(newEntries.map(e => resolveParticipantUid(e) || e.participantId).filter(Boolean));
+        const preservedEntries = existingParticipants.filter(entry => {
           const uid = resolveParticipantUid(entry) || entry.participantId;
-          const entryKey = uid;
-          const existing = entryKey ? existingMap.get(entryKey) || {} : {};
-          const department = entry.department || existing.department || "";
-          const groupNumber = entry.groupNumber || existing.groupNumber || "";
-          const phonetic = entry.phonetic || entry.furigana || existing.phonetic || existing.furigana || "";
-          const status = resolveParticipantStatus({ ...existing, ...entry, groupNumber }, groupNumber) || existing.status || "active";
-          const legacyParticipantId = existing.legacyParticipantId || (existing.participantId && existing.participantId !== uid ? existing.participantId : "");
-          return {
-            participantId: uid,
-            uid,
-            legacyParticipantId,
-            name: entry.name || existing.name || "",
-            phonetic,
-            furigana: phonetic,
-            gender: entry.gender || existing.gender || "",
-            department,
-            groupNumber,
-            phone: entry.phone || existing.phone || "",
-            email: entry.email || existing.email || "",
-            token: existing.token || "",
-            guidance: existing.guidance || "",
-            status,
-            isCancelled: status === "cancelled",
-            isRelocated: status === "relocated"
-          };
-        })
-      );
+          return uid && !newUids.has(uid);
+        });
+        this.state.participants = sortParticipants([...preservedEntries, ...newEntries]);
+      } else {
+        this.state.participants = sortParticipants(newEntries);
+      }
       syncCurrentScheduleCache();
       updateDuplicateMatches();
-      if (this.dom.fileLabel) this.dom.fileLabel.textContent = file.name;
+      // ファイルラベルの更新（既存のUIまたは新しいモーダル内のラベル）
+      if (this.dom.fileLabel) {
+        this.dom.fileLabel.textContent = file.name;
+      }
+      if (this.dom.addParticipantFileLabel) {
+        this.dom.addParticipantFileLabel.textContent = file.name;
+      }
       this.renderParticipants();
       const relocationCandidates = this.state.participants
         .filter(entry => {
