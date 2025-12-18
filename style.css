@@ -2464,18 +2464,59 @@ label kbd{
   margin:0;
 }
 
+.modal-field .file-input{
+  width:100%;
+  padding:clamp(.55rem, 1.2vw, .68rem) clamp(.8rem, 2vw, 1rem);
+  border-radius:clamp(.7rem, 1.2vw, .85rem);
+  border:1px solid rgba(70,94,128,.6);
+  background:rgba(12,18,32,.85);
+  color:var(--text);
+  font-size:0.95rem;
+  transition:border-color .18s ease, box-shadow .18s ease;
+  position:relative;
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  text-align:center;
+}
+
+.modal-field .file-input:hover{
+  border-color:rgba(30,200,255,.75);
+  box-shadow:0 0 0 3px rgba(30,200,255,.2);
+}
+
+.modal-field .file-input:focus-within{
+  border-color:rgba(30,200,255,.75);
+  box-shadow:0 0 0 3px rgba(30,200,255,.2);
+}
+
+.modal-field .file-input input[type="file"]{
+  position:absolute;
+  inset:0;
+  opacity:0;
+  cursor:pointer;
+  width:100%;
+  height:100%;
+}
+
 .radio-group{
   display:flex;
   flex-direction:column;
   gap:.5rem;
+  padding:clamp(.55rem, 1.2vw, .68rem) clamp(.8rem, 2vw, 1rem);
+  border-radius:clamp(.7rem, 1.2vw, .85rem);
+  border:1px solid rgba(70,94,128,.6);
+  background:rgba(12,18,32,.85);
 }
 
 .radio-label{
   display:flex;
   align-items:center;
   gap:.5rem;
-  font-size:.9rem;
-  color:rgba(230,242,255,.9);
+  font-size:0.95rem;
+  color:var(--text);
   cursor:pointer;
 }
 
