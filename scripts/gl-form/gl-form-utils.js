@@ -213,7 +213,17 @@ export function formatScheduleRange(startAt, endAt, fallbackDate) {
   const parsed = Date.parse(rawDateText);
   if (!Number.isNaN(parsed)) {
     const date = new Date(parsed);
-    return `${shiftDateFormatter.format(date)} ${scheduleTimeFormatter.format(date)}`;
+    // 日付のみの場合は時刻を表示しない（時間情報がない場合）
+    // ISO形式の日付文字列（YYYY-MM-DD）の場合は時刻部分を表示しない
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawDateText)) {
+      return shiftDateFormatter.format(date);
+    }
+    // 時刻情報がある場合のみ時刻を表示
+    const hasTimeInfo = date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0 || date.getMilliseconds() !== 0;
+    if (hasTimeInfo) {
+      return `${shiftDateFormatter.format(date)} ${scheduleTimeFormatter.format(date)}`;
+    }
+    return shiftDateFormatter.format(date);
   }
   return rawDateText;
 }

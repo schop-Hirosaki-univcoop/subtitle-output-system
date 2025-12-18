@@ -191,7 +191,13 @@ export class GlRenderer {
       container.append(note);
       return;
     }
-    schedules.forEach((schedule) => {
+    // 日付順にソート（startAtまたはdateでソート）
+    const sortedSchedules = [...schedules].sort((a, b) => {
+      const aTime = a.startAt || (a.date ? Date.parse(a.date) : 0) || 0;
+      const bTime = b.startAt || (b.date ? Date.parse(b.date) : 0) || 0;
+      return aTime - bTime;
+    });
+    sortedSchedules.forEach((schedule) => {
       const wrapper = document.createElement("label");
       wrapper.className = "gl-internal-shifts__item";
       const checkbox = document.createElement("input");

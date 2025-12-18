@@ -86,8 +86,14 @@ export class SchedulePanelManager {
     list.setAttribute("role", "listbox");
     list.setAttribute("aria-label", "日程一覧");
     list.setAttribute("aria-orientation", "vertical");
+    // 日付順にソート（startAtまたはdateでソート）
+    const sortedSchedules = [...this.schedules].sort((a, b) => {
+      const aTime = a.startAt || (a.date ? Date.parse(a.date) : 0) || 0;
+      const bTime = b.startAt || (b.date ? Date.parse(b.date) : 0) || 0;
+      return aTime - bTime;
+    });
     const fragment = document.createDocumentFragment();
-    this.schedules.forEach((schedule) => {
+    sortedSchedules.forEach((schedule) => {
       const item = document.createElement("li");
       item.className = "entity-item";
       item.dataset.scheduleId = schedule.id;

@@ -348,6 +348,12 @@ export class GlFormManager {
       }
       return;
     }
+    // 日付順にソート（startAtまたはdateでソート）
+    availableSchedules.sort((a, b) => {
+      const aTime = a.startAt || (a.date ? Date.parse(a.date) : 0) || 0;
+      const bTime = b.startAt || (b.date ? Date.parse(b.date) : 0) || 0;
+      return aTime - bTime;
+    });
     if (this.elements.shiftFieldset) {
       this.elements.shiftFieldset.hidden = false;
     }
