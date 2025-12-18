@@ -1120,6 +1120,7 @@ function buildGlShiftTablePrintHtml({
     const lines = [
       `<span class="gl-shift-print__name">${nameText}</span>`,
       entry?.department ? `<span class="gl-shift-print__meta">${escapeHtml(entry.department)}</span>` : "",
+      entry?.gender ? `<span class="gl-shift-print__meta">${escapeHtml(entry.gender)}</span>` : "",
       entry?.email ? `<span class="gl-shift-print__meta">${escapeHtml(entry.email)}</span>` : ""
     ].filter(Boolean);
     return `<td class="gl-shift-print__identity" colspan="2">${lines.join("")}</td>`;

@@ -250,6 +250,7 @@ export class GlFormDataManager {
       name: ensureString(this.elements.nameInput?.value),
       phonetic: ensureString(this.elements.phoneticInput?.value),
       grade: ensureString(this.elements.gradeInput?.value),
+      gender: ensureString(this.elements.genderInput?.value),
       faculty: facultyValue,
       department,
       academicPath,
@@ -268,6 +269,9 @@ export class GlFormDataManager {
     }
     if (!payload.note) {
       delete payload.note;
+    }
+    if (!payload.gender) {
+      delete payload.gender;
     }
     if (!payload.name) {
       this.elements.feedback.textContent = "氏名を入力してください。";

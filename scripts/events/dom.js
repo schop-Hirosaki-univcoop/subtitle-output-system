@@ -226,6 +226,7 @@ export function queryDom() {
     glInternalPhoneticInput: document.getElementById("gl-internal-phonetic"),
     glInternalEmailInput: document.getElementById("gl-internal-email"),
     glInternalGradeInput: document.getElementById("gl-internal-grade"),
+    glInternalGenderInput: document.getElementById("gl-internal-gender"),
     glInternalFacultyInput: document.getElementById("gl-internal-faculty"),
     glInternalAcademicFields: document.getElementById("gl-internal-academic-fields"),
     glInternalAcademicSelectTemplate: document.getElementById("gl-internal-academic-select-template"),

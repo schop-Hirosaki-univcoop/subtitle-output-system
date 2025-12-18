@@ -1271,6 +1271,7 @@ export class GlToolManager {
       phonetic: ensureString(this.dom.glInternalPhoneticInput?.value),
       email,
       grade: ensureString(this.dom.glInternalGradeInput?.value),
+      gender: ensureString(this.dom.glInternalGenderInput?.value),
       faculty,
       department,
       academicPath,
@@ -1300,6 +1301,9 @@ export class GlToolManager {
     }
     if (this.dom.glInternalGradeInput) {
       this.dom.glInternalGradeInput.value = ensureString(application.grade);
+    }
+    if (this.dom.glInternalGenderInput) {
+      this.dom.glInternalGenderInput.value = ensureString(application.gender);
     }
     const facultyValue = ensureString(application.faculty);
     if (this.dom.glInternalFacultyInput) {
@@ -1582,6 +1586,7 @@ export class GlToolManager {
         name: ensureString(application.name) || "(無記入)",
         phonetic: ensureString(application.phonetic),
         grade: ensureString(application.grade),
+        gender: ensureString(application.gender),
         department: buildAcademicPathText(application),
         email: ensureString(application.email),
         sourceType: application.sourceType === "internal" ? "internal" : "external",

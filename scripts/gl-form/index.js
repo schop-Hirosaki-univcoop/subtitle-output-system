@@ -26,6 +26,7 @@ import { GlFormDataManager } from "./gl-form-data-manager.js";
     nameInput: document.getElementById("gl-name"),
     phoneticInput: document.getElementById("gl-phonetic"),
     gradeInput: document.getElementById("gl-grade"),
+    genderInput: document.getElementById("gl-gender"),
     facultySelect: document.getElementById("gl-faculty"),
     academicFields: document.getElementById("gl-academic-fields"),
     academicSelectTemplate: document.getElementById("gl-academic-select-template"),

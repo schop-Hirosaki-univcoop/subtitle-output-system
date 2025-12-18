@@ -615,6 +615,7 @@ export function normalizeApplications(snapshot = {}) {
         phonetic: ensureString(value.phonetic),
         email: ensureString(value.email),
         grade: ensureString(value.grade),
+        gender: ensureString(value.gender),
         faculty: ensureString(value.faculty),
         department: ensureString(value.department),
         academicPath: Array.isArray(value.academicPath) ? value.academicPath : [],

@@ -85,6 +85,7 @@ export class GlApplicationManager {
       phonetic: data.phonetic,
       email: data.email,
       grade: data.grade,
+      gender: data.gender,
       faculty: data.faculty,
       department: data.department,
       academicPath: Array.isArray(data.academicPath) ? data.academicPath : [],
@@ -114,6 +115,9 @@ export class GlApplicationManager {
     }
     if (!payload.grade) {
       delete payload.grade;
+    }
+    if (!payload.gender) {
+      delete payload.gender;
     }
     if (!payload.department) {
       delete payload.department;

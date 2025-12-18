@@ -356,6 +356,7 @@ GL 応募情報を管理。
 - `faculty` (string, 必須): 学部
 - `department` (string, 必須): 学科
 - `grade` (string, 任意): 学年
+- `gender` (string, 任意): 性別
 - `phonetic` (string, 任意): ふりがな
 - `club` (string, 任意): 部活動
 - `studentId` (string, 任意): 学生 ID

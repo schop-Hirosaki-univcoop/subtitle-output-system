@@ -614,6 +614,7 @@ export class GlRenderer {
     if (academicPathText) {
       addInfo("所属", academicPathText);
     }
+    addInfo("性別", ensureString(application.gender));
     addInfo("役割", ensureString(application.role));
     addInfo("サークル", ensureString(application.club));
     if (infoList.children.length) {
@@ -851,6 +852,7 @@ export class GlRenderer {
 
     const academicPathText = buildAcademicPathText(application);
     addMeta("所属", academicPathText);
+    addMeta("性別", ensureString(application.gender));
     addMeta("役割", ensureString(application.role));
     addMeta("メール", ensureString(application.email));
     addMeta("サークル", ensureString(application.club));
