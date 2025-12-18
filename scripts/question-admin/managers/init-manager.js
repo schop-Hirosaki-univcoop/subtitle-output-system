@@ -955,6 +955,67 @@ export class InitManager {
       }
     });
     
+    // CsvManager を初期化（EventHandlersManagerより前に必要）
+    refs.csvManager = new ManagerClasses.CsvManager({
+      dom: this.dom,
+      state: this.state,
+      // 依存関数と定数
+      getSelectionIdentifiers: () => {
+        if (refs.shareClipboardManager) {
+          return refs.shareClipboardManager.getSelectionIdentifiers();
+        }
+        // ShareClipboardManager が初期化されていない場合は空のオブジェクトを返す
+        return { eventId: "", scheduleId: "" };
+      },
+      getSelectionRequiredMessage: (prefix) => {
+        if (refs.stateManager) {
+          return refs.stateManager.getSelectionRequiredMessage(prefix);
+        }
+        // StateManager が初期化されていない場合は空文字列を返す
+        return "";
+      },
+      setUploadStatus: () => {
+        if (refs.stateManager) {
+          return refs.stateManager.setUploadStatus(...arguments);
+        }
+        // StateManager が初期化されていない場合は何もしない
+      },
+      PARTICIPANT_TEMPLATE_HEADERS: this.PARTICIPANT_TEMPLATE_HEADERS,
+      TEAM_TEMPLATE_HEADERS: this.TEAM_TEMPLATE_HEADERS,
+      sortParticipants: this.sortParticipants,
+      resolveParticipantUid: this.resolveParticipantUid,
+      renderParticipants: () => {
+        if (refs.participantManager) {
+          return refs.participantManager.renderParticipants();
+        }
+        // ParticipantManager が初期化されていない場合は何もしない
+      },
+      updateParticipantActionPanelState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.updateParticipantActionPanelState();
+        }
+        // ButtonStateManager が初期化されていない場合は何もしない
+      },
+      syncSaveButtonState: () => {
+        if (refs.buttonStateManager) {
+          return refs.buttonStateManager.syncSaveButtonState();
+        }
+        // ButtonStateManager が初期化されていない場合は何もしない
+      },
+      queueRelocationPrompt: (targets, options) => {
+        if (refs.relocationManager) {
+          return refs.relocationManager.queueRelocationPrompt(targets, options);
+        }
+        // RelocationManager が初期化されていない場合は何もしない
+      },
+      captureParticipantBaseline: (entries, options) => {
+        if (refs.stateManager) {
+          return refs.stateManager.captureParticipantBaseline(entries, options);
+        }
+        // StateManager が初期化されていない場合は何もしない
+      }
+    });
+    
     // EventHandlersManager を初期化
     refs.eventHandlersManager = new ManagerClasses.EventHandlersManager({
       state: this.state,
@@ -1430,67 +1491,6 @@ export class InitManager {
       NO_TEAM_GROUP_KEY: this.NO_TEAM_GROUP_KEY,
       MAIL_STATUS_ICON_SVG: this.MAIL_STATUS_ICON_SVG,
       CHANGE_ICON_SVG: this.CHANGE_ICON_SVG
-    });
-    
-    // CsvManager を初期化
-    refs.csvManager = new ManagerClasses.CsvManager({
-      dom: this.dom,
-      state: this.state,
-      // 依存関数と定数
-      getSelectionIdentifiers: () => {
-        if (refs.shareClipboardManager) {
-          return refs.shareClipboardManager.getSelectionIdentifiers();
-        }
-        // ShareClipboardManager が初期化されていない場合は空のオブジェクトを返す
-        return { eventId: "", scheduleId: "" };
-      },
-      getSelectionRequiredMessage: (prefix) => {
-        if (refs.stateManager) {
-          return refs.stateManager.getSelectionRequiredMessage(prefix);
-        }
-        // StateManager が初期化されていない場合は空文字列を返す
-        return "";
-      },
-      setUploadStatus: () => {
-        if (refs.stateManager) {
-          return refs.stateManager.setUploadStatus(...arguments);
-        }
-        // StateManager が初期化されていない場合は何もしない
-      },
-      PARTICIPANT_TEMPLATE_HEADERS: this.PARTICIPANT_TEMPLATE_HEADERS,
-      TEAM_TEMPLATE_HEADERS: this.TEAM_TEMPLATE_HEADERS,
-      sortParticipants: this.sortParticipants,
-      resolveParticipantUid: this.resolveParticipantUid,
-      renderParticipants: () => {
-        if (refs.participantManager) {
-          return refs.participantManager.renderParticipants();
-        }
-        // ParticipantManager が初期化されていない場合は何もしない
-      },
-      updateParticipantActionPanelState: () => {
-        if (refs.buttonStateManager) {
-          return refs.buttonStateManager.updateParticipantActionPanelState();
-        }
-        // ButtonStateManager が初期化されていない場合は何もしない
-      },
-      syncSaveButtonState: () => {
-        if (refs.buttonStateManager) {
-          return refs.buttonStateManager.syncSaveButtonState();
-        }
-        // ButtonStateManager が初期化されていない場合は何もしない
-      },
-      queueRelocationPrompt: (targets, options) => {
-        if (refs.relocationManager) {
-          return refs.relocationManager.queueRelocationPrompt(targets, options);
-        }
-        // RelocationManager が初期化されていない場合は何もしない
-      },
-      captureParticipantBaseline: (entries, options) => {
-        if (refs.stateManager) {
-          return refs.stateManager.captureParticipantBaseline(entries, options);
-        }
-        // StateManager が初期化されていない場合は何もしない
-      }
     });
     
     // EventManager を初期化
