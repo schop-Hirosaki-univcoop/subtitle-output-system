@@ -2140,6 +2140,7 @@ initManager = new InitManager({
   base64UrlFromBytes,
   fetchDbValue,
   logPrintDebug,
+  logPrintInfo,
   logPrintWarn,
   logPrintError,
   maybeFocusInitialSection,

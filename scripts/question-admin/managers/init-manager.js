@@ -124,6 +124,7 @@ export class InitManager {
     this.base64UrlFromBytes = context.base64UrlFromBytes;
     this.fetchDbValue = context.fetchDbValue;
     this.logPrintDebug = context.logPrintDebug;
+    this.logPrintInfo = context.logPrintInfo;
     this.logPrintWarn = context.logPrintWarn;
     this.logPrintError = context.logPrintError;
     this.maybeFocusInitialSection = context.maybeFocusInitialSection;
@@ -1062,6 +1063,7 @@ export class InitManager {
         return await refs.eventManager.handleAddEvent(name);
       },
       closeDialog: this.closeDialog,
+      openDialog: this.openDialog,
       setFormError: this.setFormError,
       openScheduleForm: ({ mode, schedule }) => {
         if (!refs.scheduleManager) return;
@@ -1142,7 +1144,13 @@ export class InitManager {
       },
       handleRelocateSelectedParticipant: () => {
         if (!refs.relocationManager) return;
-        return refs.relocationManager.handleRelocateSelectedParticipant();
+        const getSelectedParticipantTarget = () => {
+          if (!refs.participantUIManager) {
+            throw new Error("ParticipantUIManager is not initialized");
+          }
+          return refs.participantUIManager.getSelectedParticipantTarget();
+        };
+        return refs.relocationManager.handleRelocateSelectedParticipant(getSelectedParticipantTarget);
       },
       handleDeleteSelectedParticipant: () => {
         if (!refs.participantActionManager) {
