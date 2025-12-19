@@ -61,13 +61,12 @@ export class GlRenderer {
       return;
     }
     const current = select.value;
-    // まず空にして、プレースホルダーを選択状態にする
     select.innerHTML = "";
-    select.value = "";
     const placeholder = document.createElement("option");
     placeholder.value = "";
     placeholder.textContent = "学年を選択してください";
     placeholder.disabled = true;
+    placeholder.selected = true;
     placeholder.dataset.placeholder = "true";
     select.append(placeholder);
     INTERNAL_GRADE_OPTIONS.forEach((value) => {
@@ -76,9 +75,12 @@ export class GlRenderer {
       option.textContent = value;
       select.append(option);
     });
-    // 既存の値が有効な場合のみ設定（無効な場合は空のまま）
+    // 既存の値が有効な場合のみ設定
     if (INTERNAL_GRADE_OPTIONS.includes(current)) {
       select.value = current;
+    } else {
+      // プレースホルダーを選択（selectedIndex = 0でdisabledオプションも選択可能）
+      select.selectedIndex = 0;
     }
   }
 
@@ -92,13 +94,12 @@ export class GlRenderer {
     }
     const faculties = this.getInternalFaculties();
     const current = select.value;
-    // まず空にして、プレースホルダーを選択状態にする
     select.innerHTML = "";
-    select.value = "";
     const placeholder = document.createElement("option");
     placeholder.value = "";
     placeholder.textContent = "学部を選択してください";
     placeholder.disabled = true;
+    placeholder.selected = true;
     placeholder.dataset.placeholder = "true";
     select.append(placeholder);
     faculties.forEach((entry) => {
@@ -113,9 +114,12 @@ export class GlRenderer {
     customOption.value = INTERNAL_CUSTOM_OPTION_VALUE;
     customOption.textContent = "その他";
     select.append(customOption);
-    // 既存の値が有効な場合のみ設定（無効な場合は空のまま）
+    // 既存の値が有効な場合のみ設定
     if (faculties.some((entry) => ensureString(entry.faculty) === current)) {
       select.value = current;
+    } else {
+      // プレースホルダーを選択（selectedIndex = 0でdisabledオプションも選択可能）
+      select.selectedIndex = 0;
     }
   }
 
