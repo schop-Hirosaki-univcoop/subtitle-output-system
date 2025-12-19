@@ -2,6 +2,7 @@
 // Firebase認証、認証状態の監視、認証再開、管理者権限チェックを管理します。
 
 import { auth, signOut, signInWithCredential, onAuthStateChanged, GoogleAuthProvider } from "../../operator/firebase.js";
+import { get, glIntakeEventsRef, getGlApplicationsRef } from "../../operator/firebase.js";
 import { consumeAuthTransfer } from "../../shared/auth-transfer.js";
 import {
   loadAuthPreflightContext,
@@ -371,6 +372,62 @@ export class EventAuthManager {
     if (code.includes("PERMISSION")) return true;
     const message = error instanceof Error ? error.message : String(error || "");
     return /permission/i.test(message) || message.includes("権限");
+  }
+
+  /**
+   * 現在のユーザーが指定されたイベントの内部スタッフに登録されているかチェックし、未登録の場合はモーダルを表示します。
+   * @param {import("firebase/auth").User} user
+   * @param {string} eventId - チェック対象のイベントID
+   */
+  async checkInternalStaffRegistration(user, eventId) {
+    try {
+      const userEmail = String(user?.email || "").trim().toLowerCase();
+      if (!userEmail) {
+        return;
+      }
+
+      if (!eventId || !String(eventId).trim()) {
+        // イベントIDが指定されていない場合はスキップ
+        return;
+      }
+
+      // 指定されたイベントの内部スタッフリストをチェック
+      try {
+        const applicationsRef = getGlApplicationsRef(eventId);
+        const applicationsSnapshot = await get(applicationsRef);
+        const applications = applicationsSnapshot.val() || {};
+        
+        // 内部スタッフ（sourceType: "internal"）でメールアドレスが一致するものを探す
+        const isRegistered = Object.values(applications).some((app) => {
+          if (!app || typeof app !== "object") return false;
+          const appEmail = String(app.email || "").trim().toLowerCase();
+          const sourceType = String(app.sourceType || "").trim();
+          return sourceType === "internal" && appEmail === userEmail;
+        });
+
+        // 未登録の場合はモーダルを表示
+        if (!isRegistered) {
+          // EventAdminAppにアクセス
+          const eventAdminApp = this.app;
+          if (eventAdminApp && typeof eventAdminApp.showInternalStaffRegistrationModal === "function") {
+            // 次のイベントループで実行して、DOMの準備が完了してから実行
+            requestAnimationFrame(() => {
+              if (eventAdminApp && typeof eventAdminApp.showInternalStaffRegistrationModal === "function") {
+                eventAdminApp.showInternalStaffRegistrationModal(user, [eventId]).catch((error) => {
+                  console.warn("Failed to show internal staff registration modal:", error);
+                });
+              }
+            });
+          }
+        }
+      } catch (error) {
+        // イベントチェックでエラーが発生しても続行
+        console.warn(`Failed to check internal staff for event ${eventId}:`, error);
+      }
+    } catch (error) {
+      // 内部スタッフ登録チェックでエラーが発生してもログイン処理は続行
+      console.warn("Failed to check internal staff registration:", error);
+    }
   }
 
   /**

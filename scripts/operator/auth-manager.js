@@ -200,9 +200,6 @@ export class AuthManager {
       this.app.toast(`ようこそ、${user.displayName || ""}さん`, "success");
       this.app.startLogsUpdateMonitor();
       this.app.resolveEmbedReady();
-      
-      // 内部スタッフ登録チェック
-      await this.checkInternalStaffRegistration(user);
     } catch (error) {
       this.app.toast("ユーザー権限の確認中にエラーが発生しました。", "error");
       await this.logout();

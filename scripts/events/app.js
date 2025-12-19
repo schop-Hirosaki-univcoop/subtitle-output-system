@@ -231,6 +231,8 @@ export class EventAdminApp {
     this.operatorModeChoiceContext = null;
     this.operatorModeChoiceResolver = null;
     this.suppressScheduleConflictPromptOnce = false;
+    this._internalStaffRegistrationSubmitHandler = null;
+    this._internalStaffRegistrationCancelHandler = null;
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.updateChatLayoutMetrics = this.updateChatLayoutMetrics.bind(this);
     this.chatLayoutResizeObserver = null;
@@ -3520,6 +3522,17 @@ export class EventAdminApp {
       resolver(normalized);
     }
     this.operatorModeChoiceContext = null;
+    
+    // イベント選択確定後に内部スタッフ登録チェック（キャンセル時はスキップ）
+    if (normalized !== null) {
+      const selectedEventId = this.selectedEventId;
+      const user = this.currentUser;
+      if (selectedEventId && user && this.authManager) {
+        this.authManager.checkInternalStaffRegistration(user, selectedEventId).catch((error) => {
+          console.warn("Failed to check internal staff registration:", error);
+        });
+      }
+    }
   }
 
   handleOperatorModeSubmit(event) {
@@ -6186,6 +6199,10 @@ export class EventAdminApp {
           option.textContent = eventName;
           eventSelect.appendChild(option);
         });
+        // イベントが1つの場合はデフォルトで選択
+        if (eventIds.length === 1) {
+          eventSelect.value = eventIds[0];
+        }
       }
     }
 
