@@ -77,6 +77,9 @@ export class GlRenderer {
     });
     if (INTERNAL_GRADE_OPTIONS.includes(current)) {
       select.value = current;
+    } else {
+      // 既存の値が有効でない場合、プレースホルダーを選択
+      select.selectedIndex = 0;
     }
   }
 
@@ -112,6 +115,9 @@ export class GlRenderer {
     select.append(customOption);
     if (faculties.some((entry) => ensureString(entry.faculty) === current)) {
       select.value = current;
+    } else {
+      // 既存の値が有効でない場合、プレースホルダーを選択
+      select.selectedIndex = 0;
     }
   }
 

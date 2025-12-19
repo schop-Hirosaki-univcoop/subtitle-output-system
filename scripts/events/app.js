@@ -6524,6 +6524,9 @@ export class EventAdminApp {
       });
       if (INTERNAL_GRADE_OPTIONS.includes(current)) {
         gradeSelect.value = current;
+      } else {
+        // 既存の値が有効でない場合、プレースホルダーを選択
+        gradeSelect.selectedIndex = 0;
       }
     }
 
@@ -6554,6 +6557,9 @@ export class EventAdminApp {
       facultySelect.append(customOption);
       if (faculties.some((entry) => ensureString(entry.faculty) === current)) {
         facultySelect.value = current;
+      } else {
+        // 既存の値が有効でない場合、プレースホルダーを選択
+        facultySelect.selectedIndex = 0;
       }
     }
   }
