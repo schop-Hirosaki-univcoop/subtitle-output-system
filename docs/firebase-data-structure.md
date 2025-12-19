@@ -716,10 +716,12 @@ GL の割り当て情報を管理。
 - `participantUid` (string, 任意): 参加者のユーザー ID（participantId と同じ値）
 - `groupNumber` (string, 必須): グループ番号
 - `guidance` (string, 任意): ガイダンス
-- `expiresAt` (number, 任意): 有効期限（タイムスタンプ）
+- `expiresAt` (number, 任意): 有効期限（タイムスタンプ）。存在しない場合はプロパティ自体が設定されない（`undefined` は許可されない）
 - `updatedAt` (number, 任意): 更新時刻（タイムスタンプ、または`now`）
 - `createdAt` (number, 任意): 作成時刻（タイムスタンプ、または`now`）
 - `revoked` (boolean, 任意): 取り消し済みかどうか
+
+**注意:** Firebase Realtime Database は `undefined` 値を許可しないため、`expiresAt` が存在しない場合はプロパティ自体を設定しません。更新時にはすべての `undefined` 値が自動的に除外されます。
 
 **注意:** 完全正規化により、以下のフィールドは削除されました（正規化された場所から取得）:
 

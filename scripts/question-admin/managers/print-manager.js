@@ -1000,5 +1000,69 @@ export class PrintManager {
       }
     }
   }
+
+  /**
+   * 参加者印刷ビューを開く
+   * @returns {Promise<void>}
+   */
+  async openParticipantPrintView() {
+    logPrintInfo("openParticipantPrintView start");
+    const eventId = this.state.selectedEventId;
+    const scheduleId = this.state.selectedScheduleId;
+    if (!eventId || !scheduleId) {
+      window.alert("印刷するにはイベントと日程を選択してください。");
+      logPrintWarn("openParticipantPrintView missing selection");
+      return;
+    }
+
+    if (!Array.isArray(this.state.participants) || this.state.participants.length === 0) {
+      window.alert("印刷できる参加者がまだ登録されていません。");
+      logPrintWarn("openParticipantPrintView no participants");
+      return;
+    }
+
+    if (this.participantPrintInProgress) {
+      logPrintWarn("openParticipantPrintView skipped: print in progress");
+      return;
+    }
+
+    this.setPrintPreviewVisibility(true);
+    this.applySettingsToForm(this.state.printSettings);
+    logPrintInfo("openParticipantPrintView updating preview");
+    await this.updateParticipantPrintPreview({ autoPrint: false, forceReveal: true });
+  }
+
+  /**
+   * スタッフ印刷ビューを開く
+   * @returns {Promise<void>}
+   */
+  async openStaffPrintView() {
+    logPrintInfo("openStaffPrintView start");
+    const eventId = this.state.selectedEventId;
+    const scheduleId = this.state.selectedScheduleId;
+    if (!eventId || !scheduleId) {
+      window.alert("印刷するにはイベントと日程を選択してください。");
+      logPrintWarn("openStaffPrintView missing selection");
+      return;
+    }
+
+    const staffGroups = this.buildStaffPrintGroups({ eventId, scheduleId });
+    const totalStaff = staffGroups.reduce((sum, group) => sum + (group.members?.length || 0), 0);
+    if (!totalStaff) {
+      window.alert("印刷できるスタッフがまだ登録されていません。");
+      logPrintWarn("openStaffPrintView no staff");
+      return;
+    }
+
+    if (this.staffPrintInProgress) {
+      logPrintWarn("openStaffPrintView skipped: print in progress");
+      return;
+    }
+
+    this.setPrintPreviewVisibility(true);
+    this.applySettingsToForm(this.state.printSettings);
+    logPrintInfo("openStaffPrintView updating preview");
+    await this.updateStaffPrintPreview({ autoPrint: false, forceReveal: true });
+  }
 }
 

@@ -1014,7 +1014,7 @@ export class ParticipantManager {
 
         const existingTokenRecord = tokenRecords[token] || {};
         // 完全正規化: IDのみを保存し、名前やラベルなどの情報は正規化された場所から取得
-        tokenRecords[token] = {
+        const newRecord = {
           eventId,
           scheduleId,
           participantId,
@@ -1022,10 +1022,14 @@ export class ParticipantManager {
           groupNumber,
           guidance: guidance || existingTokenRecord.guidance || "",
           revoked: false,
-          expiresAt: existingTokenRecord.expiresAt,
           createdAt: existingTokenRecord.createdAt || now,
           updatedAt: now
         };
+        // expiresAtが存在する場合のみ追加（undefinedの場合はプロパティを設定しない）
+        if (existingTokenRecord.expiresAt !== undefined) {
+          newRecord.expiresAt = existingTokenRecord.expiresAt;
+        }
+        tokenRecords[token] = newRecord;
       });
 
       const relocationMap = this.ensurePendingRelocationMap();
@@ -1139,7 +1143,7 @@ export class ParticipantManager {
         if (token) {
           const existingTokenRecord = this.state.tokenRecords[token] || {};
           // 完全正規化: IDのみを保存し、名前やラベルなどの情報は正規化された場所から取得
-          this.state.tokenRecords[token] = {
+          const newRecord = {
             eventId,
             scheduleId: destinationScheduleId,
             participantId: uid,
@@ -1147,10 +1151,14 @@ export class ParticipantManager {
             groupNumber: destinationTeam,
             guidance: guidanceText || existingTokenRecord.guidance || "",
             revoked: false,
-            expiresAt: existingTokenRecord.expiresAt,
             createdAt: existingTokenRecord.createdAt || now,
             updatedAt: now
           };
+          // expiresAtが存在する場合のみ追加（undefinedの場合はプロパティを設定しない）
+          if (existingTokenRecord.expiresAt !== undefined) {
+            newRecord.expiresAt = existingTokenRecord.expiresAt;
+          }
+          this.state.tokenRecords[token] = newRecord;
         }
 
         const questionEntries = questionsByParticipant.get(uid) || [];
@@ -1200,8 +1208,26 @@ export class ParticipantManager {
         updates[path] = value;
       });
 
+      // undefined値を除外してFirebaseに送信する
+      const removeUndefinedValues = (obj) => {
+        if (obj === null || typeof obj !== "object") {
+          return obj;
+        }
+        if (Array.isArray(obj)) {
+          return obj.map(removeUndefinedValues).filter(item => item !== undefined);
+        }
+        const cleaned = {};
+        Object.entries(obj).forEach(([key, value]) => {
+          if (value !== undefined) {
+            cleaned[key] = removeUndefinedValues(value);
+          }
+        });
+        return cleaned;
+      };
+
       Object.entries(this.state.tokenRecords).forEach(([token, record]) => {
-        updates[`questionIntake/tokens/${token}`] = record;
+        const cleanedRecord = removeUndefinedValues(record);
+        updates[`questionIntake/tokens/${token}`] = cleanedRecord;
       });
 
       // 空文字列のトークンを除外して、不正なパスが生成されるのを防ぐ
@@ -1212,7 +1238,16 @@ export class ParticipantManager {
         }
       });
 
-      await update(rootDbRef(), updates);
+      // すべての更新データからundefined値を除外してからFirebaseに送信
+      const cleanedUpdates = {};
+      Object.entries(updates).forEach(([path, value]) => {
+        const cleanedValue = removeUndefinedValues(value);
+        if (cleanedValue !== undefined) {
+          cleanedUpdates[path] = cleanedValue;
+        }
+      });
+
+      await update(rootDbRef(), cleanedUpdates);
 
       if (processedRelocations.length) {
         const relocationState = this.ensurePendingRelocationMap();
