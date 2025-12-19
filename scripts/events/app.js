@@ -6182,6 +6182,14 @@ export class EventAdminApp {
       return;
     }
 
+    // 学年と学部の値を明示的に空にする（form.reset()の前に実行）
+    if (this.dom.internalStaffRegistrationGradeInput instanceof HTMLSelectElement) {
+      this.dom.internalStaffRegistrationGradeInput.value = "";
+    }
+    if (this.dom.internalStaffRegistrationFacultyInput instanceof HTMLSelectElement) {
+      this.dom.internalStaffRegistrationFacultyInput.value = "";
+    }
+
     // フォームをリセット
     const form = this.dom.internalStaffRegistrationForm;
     if (form) {
@@ -6523,6 +6531,8 @@ export class EventAdminApp {
     if (gradeSelect instanceof HTMLSelectElement) {
       const current = gradeSelect.value;
       gradeSelect.innerHTML = "";
+      // まずvalueを空にしてからプレースホルダーを追加
+      gradeSelect.value = "";
       const placeholder = document.createElement("option");
       placeholder.value = "";
       placeholder.textContent = "学年を選択してください";
@@ -6540,10 +6550,7 @@ export class EventAdminApp {
       if (INTERNAL_GRADE_OPTIONS.includes(current)) {
         gradeSelect.value = current;
       } else {
-        // プレースホルダーを選択
-        // disabledオプションでもselectedIndexで選択可能（ブラウザによっては不可のため、selected属性も設定済み）
-        gradeSelect.selectedIndex = 0;
-        // 念のため、value = ""も設定（disabledオプションでもvalueで選択可能）
+        // プレースホルダーを選択（value = ""で確実に選択）
         gradeSelect.value = "";
       }
     }
@@ -6554,6 +6561,8 @@ export class EventAdminApp {
       const faculties = this.getInternalStaffRegistrationFaculties();
       const current = facultySelect.value;
       facultySelect.innerHTML = "";
+      // まずvalueを空にしてからプレースホルダーを追加
+      facultySelect.value = "";
       const placeholder = document.createElement("option");
       placeholder.value = "";
       placeholder.textContent = "学部を選択してください";
@@ -6577,10 +6586,7 @@ export class EventAdminApp {
       if (faculties.some((entry) => ensureString(entry.faculty) === current)) {
         facultySelect.value = current;
       } else {
-        // プレースホルダーを選択
-        // disabledオプションでもselectedIndexで選択可能（ブラウザによっては不可のため、selected属性も設定済み）
-        facultySelect.selectedIndex = 0;
-        // 念のため、value = ""も設定（disabledオプションでもvalueで選択可能）
+        // プレースホルダーを選択（value = ""で確実に選択）
         facultySelect.value = "";
       }
     }
