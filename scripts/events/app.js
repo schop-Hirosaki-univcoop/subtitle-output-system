@@ -6508,12 +6508,13 @@ export class EventAdminApp {
     const gradeSelect = this.dom.internalStaffRegistrationGradeInput;
     if (gradeSelect instanceof HTMLSelectElement) {
       const current = gradeSelect.value;
+      // まず空にして、プレースホルダーを選択状態にする
       gradeSelect.innerHTML = "";
+      gradeSelect.value = "";
       const placeholder = document.createElement("option");
       placeholder.value = "";
       placeholder.textContent = "学年を選択してください";
       placeholder.disabled = true;
-      placeholder.selected = true;
       placeholder.dataset.placeholder = "true";
       gradeSelect.append(placeholder);
       INTERNAL_GRADE_OPTIONS.forEach((value) => {
@@ -6522,12 +6523,9 @@ export class EventAdminApp {
         option.textContent = value;
         gradeSelect.append(option);
       });
+      // 既存の値が有効な場合のみ設定（無効な場合は空のまま）
       if (INTERNAL_GRADE_OPTIONS.includes(current)) {
         gradeSelect.value = current;
-      } else {
-        // 既存の値が有効でない場合、プレースホルダーを選択
-        // disabled属性がついているオプションはselectedIndexでは選択できないため、value = ""を設定
-        gradeSelect.value = "";
       }
     }
 
@@ -6536,12 +6534,13 @@ export class EventAdminApp {
     if (facultySelect instanceof HTMLSelectElement) {
       const faculties = this.getInternalStaffRegistrationFaculties();
       const current = facultySelect.value;
+      // まず空にして、プレースホルダーを選択状態にする
       facultySelect.innerHTML = "";
+      facultySelect.value = "";
       const placeholder = document.createElement("option");
       placeholder.value = "";
       placeholder.textContent = "学部を選択してください";
       placeholder.disabled = true;
-      placeholder.selected = true;
       placeholder.dataset.placeholder = "true";
       facultySelect.append(placeholder);
       faculties.forEach((entry) => {
@@ -6556,12 +6555,9 @@ export class EventAdminApp {
       customOption.value = INTERNAL_CUSTOM_OPTION_VALUE;
       customOption.textContent = "その他";
       facultySelect.append(customOption);
+      // 既存の値が有効な場合のみ設定（無効な場合は空のまま）
       if (faculties.some((entry) => ensureString(entry.faculty) === current)) {
         facultySelect.value = current;
-      } else {
-        // 既存の値が有効でない場合、プレースホルダーを選択
-        // disabled属性がついているオプションはselectedIndexでは選択できないため、value = ""を設定
-        facultySelect.value = "";
       }
     }
   }
