@@ -6526,7 +6526,8 @@ export class EventAdminApp {
         gradeSelect.value = current;
       } else {
         // 既存の値が有効でない場合、プレースホルダーを選択
-        gradeSelect.selectedIndex = 0;
+        // disabled属性がついているオプションはselectedIndexでは選択できないため、value = ""を設定
+        gradeSelect.value = "";
       }
     }
 
@@ -6559,7 +6560,8 @@ export class EventAdminApp {
         facultySelect.value = current;
       } else {
         // 既存の値が有効でない場合、プレースホルダーを選択
-        facultySelect.selectedIndex = 0;
+        // disabled属性がついているオプションはselectedIndexでは選択できないため、value = ""を設定
+        facultySelect.value = "";
       }
     }
   }

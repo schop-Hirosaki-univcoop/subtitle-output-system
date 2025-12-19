@@ -79,7 +79,8 @@ export class GlRenderer {
       select.value = current;
     } else {
       // 既存の値が有効でない場合、プレースホルダーを選択
-      select.selectedIndex = 0;
+      // disabled属性がついているオプションはselectedIndexでは選択できないため、value = ""を設定
+      select.value = "";
     }
   }
 
@@ -117,7 +118,8 @@ export class GlRenderer {
       select.value = current;
     } else {
       // 既存の値が有効でない場合、プレースホルダーを選択
-      select.selectedIndex = 0;
+      // disabled属性がついているオプションはselectedIndexでは選択できないため、value = ""を設定
+      select.value = "";
     }
   }
 
