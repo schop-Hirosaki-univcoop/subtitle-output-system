@@ -2082,6 +2082,71 @@
     </div>
   </div>
 
+  <div id="flow-internal-staff-registration-dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="flow-internal-staff-registration-dialog-title" hidden>
+    <div class="modal-backdrop" data-dialog-dismiss="true"></div>
+    <div class="modal-panel modal-panel--large">
+      <div class="modal-header">
+        <h2 id="flow-internal-staff-registration-dialog-title">内部スタッフ登録</h2>
+      </div>
+      <div class="modal-body">
+        <p class="modal-helper">GLリスト管理パネルの内部スタッフとして登録されていません。登録を完了してください。</p>
+        <form id="flow-internal-staff-registration-form">
+          <div class="modal-field">
+            <label for="flow-internal-staff-event-select">イベント <span class="required">必須</span></label>
+            <select id="flow-internal-staff-event-select" name="event" class="input" required data-autofocus>
+              <option value="">イベントを選択してください</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label for="flow-internal-staff-name">氏名 <span class="required">必須</span></label>
+            <input id="flow-internal-staff-name" name="name" type="text" class="input" required>
+          </div>
+          <div class="modal-field">
+            <label for="flow-internal-staff-email">メールアドレス <span class="required">必須</span></label>
+            <input id="flow-internal-staff-email" name="email" type="email" class="input" required>
+          </div>
+          <div class="modal-field">
+            <label for="flow-internal-staff-phonetic">フリガナ</label>
+            <input id="flow-internal-staff-phonetic" name="phonetic" type="text" class="input">
+          </div>
+          <div class="modal-field">
+            <label for="flow-internal-staff-grade">学年</label>
+            <select id="flow-internal-staff-grade" name="grade" class="input">
+              <option value="">選択してください</option>
+              <option value="1年">1年</option>
+              <option value="2年">2年</option>
+              <option value="3年">3年</option>
+              <option value="4年">4年</option>
+              <option value="5年">5年</option>
+              <option value="6年">6年</option>
+              <option value="大学院1年">大学院1年</option>
+              <option value="大学院2年">大学院2年</option>
+              <option value="大学院3年">大学院3年</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label for="flow-internal-staff-faculty">学部 <span class="required">必須</span></label>
+            <input id="flow-internal-staff-faculty" name="faculty" type="text" class="input" required placeholder="例: 人文学部">
+          </div>
+          <div class="modal-field">
+            <label for="flow-internal-staff-department">所属 <span class="required">必須</span></label>
+            <input id="flow-internal-staff-department" name="department" type="text" class="input" required placeholder="例: 心理・社会学科">
+          </div>
+          <div class="modal-field">
+            <label for="flow-internal-staff-note">備考</label>
+            <textarea id="flow-internal-staff-note" name="note" class="input" rows="3"></textarea>
+          </div>
+          <p id="flow-internal-staff-registration-error" class="form-error" role="alert" hidden></p>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" id="flow-internal-staff-registration-cancel-button" data-dialog-dismiss="true">後で登録</button>
+        <button type="submit" form="flow-internal-staff-registration-form" class="btn btn-primary" id="flow-internal-staff-registration-submit-button">登録する</button>
+      </div>
+    </div>
+  </div>
+
   <telop-footer year="2025"></telop-footer>
 
   <script type="module" src="./scripts/events/index.js"></script>

@@ -1,6 +1,6 @@
 // auth-manager.js: 認証管理とユーザー権限チェックを担当します。
 import { auth, provider, signInWithPopup, signOut, onAuthStateChanged } from "./firebase.js";
-import { questionsRef, questionIntakeEventsRef, questionIntakeSchedulesRef, get } from "./firebase.js";
+import { questionsRef, questionIntakeEventsRef, questionIntakeSchedulesRef, get, glIntakeEventsRef, getGlApplicationsRef } from "./firebase.js";
 import { OPERATOR_MODE_TELOP } from "../shared/operator-modes.js";
 import { goToLogin } from "../shared/routes.js";
 import {
@@ -200,10 +200,82 @@ export class AuthManager {
       this.app.toast(`ようこそ、${user.displayName || ""}さん`, "success");
       this.app.startLogsUpdateMonitor();
       this.app.resolveEmbedReady();
+      
+      // 内部スタッフ登録チェック
+      await this.checkInternalStaffRegistration(user);
     } catch (error) {
       this.app.toast("ユーザー権限の確認中にエラーが発生しました。", "error");
       await this.logout();
       this.app.hideLoader();
+    }
+  }
+
+  /**
+   * 現在のユーザーが内部スタッフに登録されているかチェックし、未登録の場合はモーダルを表示します。
+   * @param {import("firebase/auth").User} user
+   */
+  async checkInternalStaffRegistration(user) {
+    try {
+      const userEmail = String(user?.email || "").trim().toLowerCase();
+      if (!userEmail) {
+        return;
+      }
+
+      // すべてのイベントを取得
+      const eventsSnapshot = await get(glIntakeEventsRef);
+      const events = eventsSnapshot.val() || {};
+      const eventIds = Object.keys(events).filter((id) => id && String(id).trim());
+
+      if (eventIds.length === 0) {
+        // イベントが存在しない場合はスキップ
+        return;
+      }
+
+      // 各イベントの内部スタッフリストをチェック
+      let isRegistered = false;
+      for (const eventId of eventIds) {
+        try {
+          const applicationsRef = getGlApplicationsRef(eventId);
+          const applicationsSnapshot = await get(applicationsRef);
+          const applications = applicationsSnapshot.val() || {};
+          
+          // 内部スタッフ（sourceType: "internal"）でメールアドレスが一致するものを探す
+          const found = Object.values(applications).some((app) => {
+            if (!app || typeof app !== "object") return false;
+            const appEmail = String(app.email || "").trim().toLowerCase();
+            const sourceType = String(app.sourceType || "").trim();
+            return sourceType === "internal" && appEmail === userEmail;
+          });
+
+          if (found) {
+            isRegistered = true;
+            break;
+          }
+        } catch (error) {
+          // 個別のイベントチェックでエラーが発生しても続行
+          console.warn(`Failed to check internal staff for event ${eventId}:`, error);
+        }
+      }
+
+      // 未登録の場合はモーダルを表示
+      if (!isRegistered) {
+        // EventAdminAppにアクセス（operator.htmlはeventsページに埋め込まれている）
+        const eventAdminApp = typeof window !== "undefined" ? window.eventAdminApp : null;
+        if (eventAdminApp && typeof eventAdminApp.showInternalStaffRegistrationModal === "function") {
+          // 次のイベントループで実行して、EventAdminAppの初期化が完了していることを確認
+          // requestAnimationFrameを使用してDOMの準備が完了してから実行
+          requestAnimationFrame(() => {
+            if (eventAdminApp && typeof eventAdminApp.showInternalStaffRegistrationModal === "function") {
+              eventAdminApp.showInternalStaffRegistrationModal(user, eventIds).catch((error) => {
+                console.warn("Failed to show internal staff registration modal:", error);
+              });
+            }
+          });
+        }
+      }
+    } catch (error) {
+      // 内部スタッフ登録チェックでエラーが発生してもログイン処理は続行
+      console.warn("Failed to check internal staff registration:", error);
     }
   }
 

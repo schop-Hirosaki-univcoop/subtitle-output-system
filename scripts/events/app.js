@@ -5,11 +5,15 @@ import {
   database,
   ref,
   set,
+  push,
   auth,
   signOut,
   onAuthStateChanged,
   serverTimestamp,
-  onValue
+  onValue,
+  get,
+  getGlApplicationsRef,
+  glIntakeEventsRef
 } from "../operator/firebase.js";
 import { createApiClient } from "../operator/api-client.js";
 import { generateShortId, normalizeKey } from "../question-admin/utils.js";
@@ -727,6 +731,7 @@ export class EventAdminApp {
     this.bindDialogDismiss(this.dom.operatorModeDialog);
     this.bindDialogDismiss(this.dom.fullscreenPromptDialog);
     this.bindDialogDismiss(this.dom.scheduleCompletionDialog);
+    this.bindDialogDismiss(this.dom.internalStaffRegistrationDialog);
     
     if (this.dom.scheduleCompletionCloseButton) {
       this.dom.scheduleCompletionCloseButton.addEventListener("click", () => {
@@ -5497,7 +5502,21 @@ export class EventAdminApp {
       this.pendingNavigationMeta = null;
       this.navigationManager.pendingNavigationMeta = null;
       this.awaitingScheduleConflictPrompt = false;
-      this.clearPendingNavigationTimer();
+    }
+    if (element === this.dom.internalStaffRegistrationDialog) {
+      if (this.dom.internalStaffRegistrationForm) {
+        this.dom.internalStaffRegistrationForm.reset();
+      }
+      this.setFormError(this.dom.internalStaffRegistrationError, "");
+      // イベントハンドラをクリーンアップ
+      if (this._internalStaffRegistrationSubmitHandler && this.dom.internalStaffRegistrationForm) {
+        this.dom.internalStaffRegistrationForm.removeEventListener("submit", this._internalStaffRegistrationSubmitHandler);
+        this._internalStaffRegistrationSubmitHandler = null;
+      }
+      if (this._internalStaffRegistrationCancelHandler && this.dom.internalStaffRegistrationCancelButton) {
+        this.dom.internalStaffRegistrationCancelButton.removeEventListener("click", this._internalStaffRegistrationCancelHandler);
+        this._internalStaffRegistrationCancelHandler = null;
+      }
     }
     if (element === this.dom.scheduleFallbackDialog) {
       if (this.dom.scheduleFallbackForm) {
@@ -6108,6 +6127,228 @@ export class EventAdminApp {
     } else {
       element.hidden = true;
       element.textContent = "";
+    }
+  }
+
+  /**
+   * 内部スタッフ登録モーダルを表示します。
+   * @param {import("firebase/auth").User} user
+   * @param {string[]} eventIds
+   */
+  async showInternalStaffRegistrationModal(user, eventIds = []) {
+    const dialog = this.dom.internalStaffRegistrationDialog;
+    if (!dialog) {
+      return;
+    }
+
+    // フォームをリセット
+    const form = this.dom.internalStaffRegistrationForm;
+    if (form) {
+      form.reset();
+    }
+
+    // エラーメッセージをクリア
+    this.setFormError(this.dom.internalStaffRegistrationError, "");
+
+    // GLイベントリストを取得
+    let glEvents = {};
+    try {
+      const glEventsSnapshot = await get(glIntakeEventsRef);
+      glEvents = glEventsSnapshot.val() || {};
+    } catch (error) {
+      logError("Failed to load GL events for registration modal", error);
+    }
+
+    // イベント選択肢を更新
+    const eventSelect = this.dom.internalStaffRegistrationEventSelect;
+    if (eventSelect) {
+      eventSelect.innerHTML = '<option value="">イベントを選択してください</option>';
+      if (eventIds.length === 0) {
+        const emptyOption = document.createElement("option");
+        emptyOption.value = "";
+        emptyOption.textContent = "登録可能なイベントがありません";
+        emptyOption.disabled = true;
+        eventSelect.appendChild(emptyOption);
+      } else {
+        eventIds.forEach((eventId) => {
+          const glEvent = glEvents[eventId];
+          let eventName = eventId;
+          if (glEvent && typeof glEvent === "object" && glEvent.name) {
+            eventName = ensureString(glEvent.name);
+          } else {
+            const foundEvent = this.events.find((e) => ensureString(e.id) === eventId);
+            if (foundEvent) {
+              eventName = ensureString(foundEvent.name);
+            }
+          }
+          const option = document.createElement("option");
+          option.value = eventId;
+          option.textContent = eventName;
+          eventSelect.appendChild(option);
+        });
+      }
+    }
+
+    // フォームにユーザー情報を設定
+    if (this.dom.internalStaffRegistrationNameInput && user.displayName) {
+      this.dom.internalStaffRegistrationNameInput.value = String(user.displayName || "").trim();
+    }
+    if (this.dom.internalStaffRegistrationEmailInput && user.email) {
+      this.dom.internalStaffRegistrationEmailInput.value = String(user.email || "").trim();
+    }
+
+    // フォーム送信ハンドラを設定
+    if (form) {
+      const handleSubmit = async (event) => {
+        event.preventDefault();
+        await this.handleInternalStaffRegistrationSubmit(user);
+      };
+      form.removeEventListener("submit", this._internalStaffRegistrationSubmitHandler);
+      this._internalStaffRegistrationSubmitHandler = handleSubmit;
+      form.addEventListener("submit", handleSubmit);
+    }
+
+    // キャンセルボタンのハンドラを設定
+    const cancelButton = this.dom.internalStaffRegistrationCancelButton;
+    if (cancelButton) {
+      const handleCancel = () => {
+        this.closeDialog(dialog);
+      };
+      cancelButton.removeEventListener("click", this._internalStaffRegistrationCancelHandler);
+      this._internalStaffRegistrationCancelHandler = handleCancel;
+      cancelButton.addEventListener("click", handleCancel);
+    }
+
+    // モーダルを表示
+    this.openDialog(dialog);
+  }
+
+  /**
+   * 内部スタッフ登録フォームの送信を処理します。
+   * @param {import("firebase/auth").User} user
+   */
+  async handleInternalStaffRegistrationSubmit(user) {
+    const errorElement = this.dom.internalStaffRegistrationError;
+    const form = this.dom.internalStaffRegistrationForm;
+    const submitButton = this.dom.internalStaffRegistrationSubmitButton;
+    if (!form) {
+      return;
+    }
+
+    // 送信ボタンを無効化
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.classList.add("is-busy");
+    }
+
+    try {
+      this.setFormError(errorElement, "");
+
+      const eventId = ensureString(this.dom.internalStaffRegistrationEventSelect?.value);
+      if (!eventId) {
+        this.setFormError(errorElement, "イベントを選択してください。");
+        this.dom.internalStaffRegistrationEventSelect?.focus();
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.classList.remove("is-busy");
+        }
+        return;
+      }
+
+      const name = ensureString(this.dom.internalStaffRegistrationNameInput?.value).trim();
+      if (!name) {
+        this.setFormError(errorElement, "氏名を入力してください。");
+        this.dom.internalStaffRegistrationNameInput?.focus();
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.classList.remove("is-busy");
+        }
+        return;
+      }
+
+      const email = ensureString(this.dom.internalStaffRegistrationEmailInput?.value).trim();
+      if (!email) {
+        this.setFormError(errorElement, "メールアドレスを入力してください。");
+        this.dom.internalStaffRegistrationEmailInput?.focus();
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.classList.remove("is-busy");
+        }
+        return;
+      }
+      // メールアドレスの形式チェック
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailPattern.test(email)) {
+        this.setFormError(errorElement, "有効なメールアドレスを入力してください。");
+        this.dom.internalStaffRegistrationEmailInput?.focus();
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.classList.remove("is-busy");
+        }
+        return;
+      }
+
+      const faculty = ensureString(this.dom.internalStaffRegistrationFacultyInput?.value).trim();
+      if (!faculty) {
+        this.setFormError(errorElement, "学部を入力してください。");
+        this.dom.internalStaffRegistrationFacultyInput?.focus();
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.classList.remove("is-busy");
+        }
+        return;
+      }
+
+      const department = ensureString(this.dom.internalStaffRegistrationDepartmentInput?.value).trim();
+      if (!department) {
+        this.setFormError(errorElement, "所属を入力してください。");
+        this.dom.internalStaffRegistrationDepartmentInput?.focus();
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.classList.remove("is-busy");
+        }
+        return;
+      }
+
+      // 内部スタッフとして登録
+      const applicationsRef = getGlApplicationsRef(eventId);
+      const newApplicationRef = push(applicationsRef);
+
+      const payload = {
+        name,
+        email,
+        phonetic: ensureString(this.dom.internalStaffRegistrationPhoneticInput?.value).trim(),
+        grade: ensureString(this.dom.internalStaffRegistrationGradeInput?.value).trim(),
+        faculty,
+        department,
+        note: ensureString(this.dom.internalStaffRegistrationNoteInput?.value).trim(),
+        shifts: { __default__: true },
+        sourceType: "internal",
+        eventId,
+        slug: eventId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      // 空のフィールドを削除
+      if (!payload.phonetic) delete payload.phonetic;
+      if (!payload.grade) delete payload.grade;
+      if (!payload.note) delete payload.note;
+
+      await set(newApplicationRef, payload);
+
+      // モーダルを閉じる
+      this.closeDialog(this.dom.internalStaffRegistrationDialog);
+      this.showAlert("内部スタッフとして登録しました。");
+    } catch (error) {
+      logError("Failed to register internal staff", error);
+      this.setFormError(errorElement, error?.message || "内部スタッフの登録に失敗しました。");
+    } finally {
+      // 送信ボタンを再有効化
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.classList.remove("is-busy");
+      }
     }
   }
 }
