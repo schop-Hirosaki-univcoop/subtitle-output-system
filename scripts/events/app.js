@@ -6182,14 +6182,6 @@ export class EventAdminApp {
       return;
     }
 
-    // 学年と学部の値を明示的に空にする（form.reset()の前に実行）
-    if (this.dom.internalStaffRegistrationGradeInput instanceof HTMLSelectElement) {
-      this.dom.internalStaffRegistrationGradeInput.value = "";
-    }
-    if (this.dom.internalStaffRegistrationFacultyInput instanceof HTMLSelectElement) {
-      this.dom.internalStaffRegistrationFacultyInput.value = "";
-    }
-
     // フォームをリセット
     const form = this.dom.internalStaffRegistrationForm;
     if (form) {
@@ -6264,19 +6256,15 @@ export class EventAdminApp {
       this.dom.internalStaffRegistrationEmailInput.value = String(user.email || "").trim();
     }
 
-    // 学年と学部のオプションを初期化（form.reset()とユーザー情報設定の後に実行）
-    // requestAnimationFrameで次のフレームで実行し、form.reset()の影響を回避
-    requestAnimationFrame(() => {
-      this.syncInternalStaffRegistrationAcademicInputs();
-      // 学部が既に選択されている場合（通常は空のはずだが、念のため）は学術ツリーを描画
-      const facultySelect = this.dom.internalStaffRegistrationFacultyInput;
-      if (facultySelect instanceof HTMLSelectElement) {
-        const facultyValue = ensureString(facultySelect.value);
-        if (facultyValue && facultyValue !== INTERNAL_CUSTOM_OPTION_VALUE) {
-          this.renderInternalStaffRegistrationAcademicTreeForFaculty(facultyValue);
-        }
-      }
-    });
+    // 学年と学部のオプションを初期化（GLパネルと同様に、form.reset()の直後に実行）
+    // form.reset()の後に学年と学部の値を空にしてから同期（GLパネルのresetInternalForm()と同じパターン）
+    if (this.dom.internalStaffRegistrationGradeInput instanceof HTMLSelectElement) {
+      this.dom.internalStaffRegistrationGradeInput.value = "";
+    }
+    if (this.dom.internalStaffRegistrationFacultyInput instanceof HTMLSelectElement) {
+      this.dom.internalStaffRegistrationFacultyInput.value = "";
+    }
+    this.syncInternalStaffRegistrationAcademicInputs();
 
     // 学部変更ハンドラを設定
     const facultySelect = this.dom.internalStaffRegistrationFacultyInput;
@@ -6526,13 +6514,11 @@ export class EventAdminApp {
    * 学年と学部のオプションを同期
    */
   syncInternalStaffRegistrationAcademicInputs() {
-    // 学年オプションを描画
+    // 学年オプションを描画（GLフォームのrenderFacultiesと同じパターン）
     const gradeSelect = this.dom.internalStaffRegistrationGradeInput;
     if (gradeSelect instanceof HTMLSelectElement) {
       const current = gradeSelect.value;
       gradeSelect.innerHTML = "";
-      // まずvalueを空にしてからプレースホルダーを追加
-      gradeSelect.value = "";
       const placeholder = document.createElement("option");
       placeholder.value = "";
       placeholder.textContent = "学年を選択してください";
@@ -6546,23 +6532,19 @@ export class EventAdminApp {
         option.textContent = value;
         gradeSelect.append(option);
       });
-      // 既存の値が有効な場合のみ設定
+      // 既存の値が有効な場合のみ設定（GLフォームと同じパターン）
       if (INTERNAL_GRADE_OPTIONS.includes(current)) {
         gradeSelect.value = current;
-      } else {
-        // プレースホルダーを選択（value = ""で確実に選択）
-        gradeSelect.value = "";
       }
+      // そうでない場合は何もしない（プレースホルダーが選択されたまま）
     }
 
-    // 学部オプションを描画
+    // 学部オプションを描画（GLフォームのrenderFacultiesと同じパターン）
     const facultySelect = this.dom.internalStaffRegistrationFacultyInput;
     if (facultySelect instanceof HTMLSelectElement) {
       const faculties = this.getInternalStaffRegistrationFaculties();
       const current = facultySelect.value;
       facultySelect.innerHTML = "";
-      // まずvalueを空にしてからプレースホルダーを追加
-      facultySelect.value = "";
       const placeholder = document.createElement("option");
       placeholder.value = "";
       placeholder.textContent = "学部を選択してください";
@@ -6582,13 +6564,11 @@ export class EventAdminApp {
       customOption.value = INTERNAL_CUSTOM_OPTION_VALUE;
       customOption.textContent = "その他";
       facultySelect.append(customOption);
-      // 既存の値が有効な場合のみ設定
+      // 既存の値が有効な場合のみ設定（GLフォームと同じパターン）
       if (faculties.some((entry) => ensureString(entry.faculty) === current)) {
         facultySelect.value = current;
-      } else {
-        // プレースホルダーを選択（value = ""で確実に選択）
-        facultySelect.value = "";
       }
+      // そうでない場合は何もしない（プレースホルダーが選択されたまま）
     }
   }
 
