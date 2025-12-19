@@ -11,6 +11,7 @@ import {
 } from "../../operator/firebase.js";
 import { ensureString, formatDateTimeLocal, logError } from "../helpers.js";
 import { normalizeFacultyList } from "../tools/gl-faculty-utils.js";
+import { collectAcademicState, parseAcademicLevelChange } from "../tools/gl-academic-utils.js";
 import { buildGlShiftTablePrintHtml, logPrintWarn } from "../../shared/print-utils.js";
 // ユーティリティ関数と定数を gl-utils.js からインポート（フェーズ2 段階1）
 // UI描画機能を gl-renderer.js からインポート（フェーズ2 段階2）
@@ -297,32 +298,26 @@ export class GlToolManager {
   }
 
   handleInternalAcademicLevelChange(select) {
-    const depth = Number(select.dataset.depth ?? "0");
-    this.removeInternalAcademicFieldsAfter(depth);
-    const level = this.internalUnitLevelMap.get(select);
-    const value = ensureString(select.value);
-    if (!level || !value) {
+    const parsed = parseAcademicLevelChange(select, this.internalUnitLevelMap);
+    if (!parsed) {
       this.updateInternalAcademicCustomField();
       return;
     }
-    if (value === INTERNAL_CUSTOM_OPTION_VALUE) {
-      this.internalAcademicState.unitSelections[depth] = { label: level.label, value: "", isCustom: true };
-      this.updateInternalAcademicCustomField(level.label);
+    this.removeInternalAcademicFieldsAfter(parsed.depth);
+    if (parsed.isCustom) {
+      this.internalAcademicState.unitSelections[parsed.depth] = { label: parsed.level.label, value: "", isCustom: true };
+      this.updateInternalAcademicCustomField(parsed.level.label);
       return;
     }
-    const selectedOption = select.selectedOptions[0];
-    const optionIndex = selectedOption ? Number(selectedOption.dataset.optionIndex ?? "-1") : -1;
-    const option = optionIndex >= 0 ? level.options[optionIndex] : null;
-    const displayLabel = ensureString(option?.label ?? selectedOption?.textContent ?? value);
-    this.internalAcademicState.unitSelections[depth] = {
-      label: level.label,
-      value: option ? option.value : value,
-      displayLabel,
+    this.internalAcademicState.unitSelections[parsed.depth] = {
+      label: parsed.level.label,
+      value: parsed.value,
+      displayLabel: parsed.displayLabel,
       isCustom: false
     };
     this.updateInternalAcademicCustomField();
-    if (option?.children) {
-      this.renderInternalAcademicLevel(option.children, depth + 1);
+    if (parsed.option?.children) {
+      this.renderInternalAcademicLevel(parsed.option.children, parsed.depth + 1);
     }
   }
 
@@ -343,59 +338,12 @@ export class GlToolManager {
   }
 
   collectInternalAcademicState() {
-    const selects = Array.from(this.dom.glInternalAcademicFields?.querySelectorAll(".gl-academic-select") ?? []);
-    const path = [];
-    let requiresCustom = false;
-    let customLabel = "";
-    let firstSelect = null;
-    let pendingSelect = null;
-    selects.forEach((select) => {
-      if (!(select instanceof HTMLSelectElement)) return;
-      if (!firstSelect) {
-        firstSelect = select;
-      }
-      const level = this.internalUnitLevelMap.get(select);
-      const levelLabel = level?.label ?? "";
-      const value = ensureString(select.value);
-      if (!value && !pendingSelect) {
-        pendingSelect = select;
-      }
-      if (!value) return;
-      if (value === INTERNAL_CUSTOM_OPTION_VALUE) {
-        requiresCustom = true;
-        customLabel = levelLabel || customLabel;
-        path.push({
-          label: levelLabel,
-          value: ensureString(this.dom.glInternalAcademicCustomInput?.value),
-          isCustom: true,
-          element: this.dom.glInternalAcademicCustomInput ?? null
-        });
-        return;
-      }
-      const selectedOption = select.selectedOptions[0];
-      const optionIndex = selectedOption ? Number(selectedOption.dataset.optionIndex ?? "-1") : -1;
-      const option = optionIndex >= 0 && level ? level.options[optionIndex] : null;
-      const storedValue = option ? option.value : value;
-      path.push({
-        label: levelLabel,
-        value: storedValue,
-        displayLabel: option ? option.label : ensureString(selectedOption?.textContent ?? storedValue),
-        isCustom: false,
-        element: select
-      });
-    });
-    if (!selects.length && this.internalAcademicState.currentCustomLabel) {
-      requiresCustom = true;
-      customLabel = this.internalAcademicState.currentCustomLabel;
-      path.push({
-        label: this.internalAcademicState.currentCustomLabel,
-        value: ensureString(this.dom.glInternalAcademicCustomInput?.value),
-        isCustom: true,
-        element: this.dom.glInternalAcademicCustomInput ?? null
-      });
-    }
-    const customValue = ensureString(this.dom.glInternalAcademicCustomInput?.value);
-    return { path, requiresCustom, customLabel, customValue, firstSelect, pendingSelect };
+    return collectAcademicState(
+      this.dom.glInternalAcademicFields,
+      this.internalUnitLevelMap,
+      this.dom.glInternalAcademicCustomInput,
+      this.internalAcademicState
+    );
   }
 
   syncInternalAcademicInputs() {

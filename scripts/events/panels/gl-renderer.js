@@ -25,6 +25,7 @@ import {
   deriveTeamCountFromConfig
 } from "./gl-utils.js";
 import { buildGlShiftTablePrintHtml, logPrintWarn } from "../../shared/print-utils.js";
+import { renderAcademicLevel } from "../tools/gl-academic-utils.js";
 
 /**
  * GlRenderer: GLツールのUI描画を担当するクラス
@@ -123,54 +124,15 @@ export class GlRenderer {
    */
   renderInternalAcademicLevel(level, depth, unitLevelMap, onLevelChange) {
     if (!this.dom.glInternalAcademicFields || !this.dom.glInternalAcademicSelectTemplate) return;
-    const fragment = this.dom.glInternalAcademicSelectTemplate.content.cloneNode(true);
-    const field = fragment.querySelector(".gl-academic-field");
-    const labelEl = field?.querySelector(".gl-academic-label");
-    const select = field?.querySelector(".gl-academic-select");
-    if (!(field instanceof HTMLElement) || !(select instanceof HTMLSelectElement)) return;
-    field.dataset.depth = String(depth);
-    const selectId = `gl-internal-academic-select-${depth}`;
-    select.id = selectId;
-    select.dataset.depth = String(depth);
-    select.dataset.levelLabel = level.label;
-    if (labelEl instanceof HTMLLabelElement) {
-      labelEl.setAttribute("for", selectId);
-      labelEl.textContent = level.label;
-    }
-    select.innerHTML = "";
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.disabled = true;
-    placeholder.selected = true;
-    placeholder.dataset.placeholder = "true";
-    placeholder.textContent = level.placeholder || `${level.label}を選択してください`;
-    select.append(placeholder);
-    level.options.forEach((option, index) => {
-      const opt = document.createElement("option");
-      opt.value = option.value;
-      opt.textContent = option.label;
-      opt.dataset.optionIndex = String(index);
-      if (option.children) {
-        opt.dataset.hasChildren = "true";
-      }
-      select.append(opt);
-    });
-    if (level.allowCustom !== false) {
-      const customOption = document.createElement("option");
-      customOption.value = INTERNAL_CUSTOM_OPTION_VALUE;
-      customOption.textContent = "その他";
-      customOption.dataset.isCustom = "true";
-      select.append(customOption);
-    }
-    if (unitLevelMap) {
-      unitLevelMap.set(select, level);
-    }
-    select.addEventListener("change", (event) => {
-      if (event.target instanceof HTMLSelectElement) {
-        onLevelChange(event.target);
-      }
-    });
-    this.dom.glInternalAcademicFields.append(field);
+    renderAcademicLevel(
+      level,
+      depth,
+      this.dom.glInternalAcademicFields,
+      this.dom.glInternalAcademicSelectTemplate,
+      unitLevelMap,
+      onLevelChange,
+      "gl-internal-academic-select"
+    );
   }
 
   /**

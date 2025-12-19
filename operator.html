@@ -2112,26 +2112,54 @@
           <div class="modal-field">
             <label for="flow-internal-staff-grade">学年</label>
             <select id="flow-internal-staff-grade" name="grade" class="input">
-              <option value="">選択してください</option>
-              <option value="1年">1年</option>
-              <option value="2年">2年</option>
-              <option value="3年">3年</option>
-              <option value="4年">4年</option>
-              <option value="5年">5年</option>
-              <option value="6年">6年</option>
-              <option value="大学院1年">大学院1年</option>
-              <option value="大学院2年">大学院2年</option>
-              <option value="大学院3年">大学院3年</option>
+              <option value="" data-placeholder="true" disabled selected>学年を選択してください</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label for="flow-internal-staff-gender">性別</label>
+            <select id="flow-internal-staff-gender" name="gender" class="input">
+              <option value="" data-placeholder="true" disabled selected>性別を選択してください</option>
+              <option value="男性">男性</option>
+              <option value="女性">女性</option>
               <option value="その他">その他</option>
+              <option value="回答しない">回答しない</option>
             </select>
           </div>
           <div class="modal-field">
             <label for="flow-internal-staff-faculty">学部 <span class="required">必須</span></label>
-            <input id="flow-internal-staff-faculty" name="faculty" type="text" class="input" required placeholder="例: 人文学部">
+            <select id="flow-internal-staff-faculty" name="faculty" class="input" required>
+              <option value="" data-placeholder="true" disabled selected>学部を選択してください</option>
+            </select>
           </div>
           <div class="modal-field">
-            <label for="flow-internal-staff-department">所属 <span class="required">必須</span></label>
-            <input id="flow-internal-staff-department" name="department" type="text" class="input" required placeholder="例: 心理・社会学科">
+            <span class="modal-label">学部以下の所属</span>
+            <div id="flow-internal-staff-academic-fields" class="gl-internal-academic-fields"></div>
+            <template id="flow-internal-staff-academic-select-template">
+              <div class="gl-academic-field">
+                <label class="gl-academic-label"></label>
+                <select class="input gl-academic-select"></select>
+              </div>
+            </template>
+            <div id="flow-internal-staff-academic-custom-field" class="gl-academic-custom" hidden>
+              <label for="flow-internal-staff-academic-custom" id="flow-internal-staff-academic-custom-label" class="gl-input__label">
+                所属（その他入力）
+              </label>
+              <input
+                id="flow-internal-staff-academic-custom"
+                class="input"
+                type="text"
+                autocomplete="off"
+                placeholder="所属名を入力してください"
+              >
+            </div>
+          </div>
+          <div class="modal-field">
+            <label for="flow-internal-staff-club">サークル / 所属</label>
+            <input id="flow-internal-staff-club" name="club" type="text" class="input">
+          </div>
+          <div class="modal-field">
+            <label for="flow-internal-staff-student-id">学籍番号</label>
+            <input id="flow-internal-staff-student-id" name="student-id" type="text" class="input">
           </div>
           <div class="modal-field">
             <label for="flow-internal-staff-note">備考</label>

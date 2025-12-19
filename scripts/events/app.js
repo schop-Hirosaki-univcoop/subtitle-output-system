@@ -13,7 +13,8 @@ import {
   onValue,
   get,
   getGlApplicationsRef,
-  glIntakeEventsRef
+  getGlEventConfigRef,
+  glIntakeFacultyCatalogRef
 } from "../operator/firebase.js";
 import { createApiClient } from "../operator/api-client.js";
 import { generateShortId, normalizeKey } from "../question-admin/utils.js";
@@ -23,6 +24,9 @@ import {
   ensureString,
   logError
 } from "./helpers.js";
+import { INTERNAL_GRADE_OPTIONS, INTERNAL_CUSTOM_OPTION_VALUE } from "./panels/gl-utils.js";
+import { normalizeFacultyList } from "./tools/gl-faculty-utils.js";
+import { renderAcademicLevel, collectAcademicState, parseAcademicLevelChange } from "./tools/gl-academic-utils.js";
 import {
   createScheduleDialogCalendarController,
   normalizeDateInputValue
@@ -233,6 +237,12 @@ export class EventAdminApp {
     this.suppressScheduleConflictPromptOnce = false;
     this._internalStaffRegistrationSubmitHandler = null;
     this._internalStaffRegistrationCancelHandler = null;
+    this._internalStaffRegistrationFacultyChangeHandler = null;
+    this._internalStaffRegistrationAcademicChangeHandlers = new Map();
+    this.internalStaffRegistrationSharedFaculties = [];
+    this.internalStaffRegistrationAcademicState = { currentCustomLabel: "", unitSelections: [] };
+    this.internalStaffRegistrationUnitLevelMap = new WeakMap();
+    this.internalStaffRegistrationCatalogUnsubscribe = null;
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.updateChatLayoutMetrics = this.updateChatLayoutMetrics.bind(this);
     this.chatLayoutResizeObserver = null;
@@ -291,6 +301,9 @@ export class EventAdminApp {
     this.pendingNavigationTarget = this.navigationManager.pendingNavigationTarget;
     this.pendingNavigationMeta = this.navigationManager.pendingNavigationMeta;
     this.pendingNavigationClearTimer = this.navigationManager.pendingNavigationClearTimer;
+    
+    // 内部スタッフ登録モーダル用の学部カタログを初期化
+    this.initInternalStaffRegistrationCatalog();
     
     appendAuthDebugLog("events:app-constructed", {
       hasCurrentUser: Boolean(this.currentUser)
@@ -1415,6 +1428,15 @@ export class EventAdminApp {
       this.logFlowState("イベント選択は既に確定済みです", { eventId, reason });
     }
     this.syncHostPresence(reason);
+    
+    // イベント選択確定後に内部スタッフ登録チェック
+    const user = this.currentUser;
+    if (user && this.authManager) {
+      this.authManager.checkInternalStaffRegistration(user, eventId).catch((error) => {
+        console.warn("Failed to check internal staff registration:", error);
+      });
+    }
+    
     return true;
   }
 
@@ -3522,17 +3544,6 @@ export class EventAdminApp {
       resolver(normalized);
     }
     this.operatorModeChoiceContext = null;
-    
-    // イベント選択確定後に内部スタッフ登録チェック（キャンセル時はスキップ）
-    if (normalized !== null) {
-      const selectedEventId = this.selectedEventId;
-      const user = this.currentUser;
-      if (selectedEventId && user && this.authManager) {
-        this.authManager.checkInternalStaffRegistration(user, selectedEventId).catch((error) => {
-          console.warn("Failed to check internal staff registration:", error);
-        });
-      }
-    }
   }
 
   handleOperatorModeSubmit(event) {
@@ -3962,6 +3973,11 @@ export class EventAdminApp {
   }
 
   cleanup() {
+    // 内部スタッフ登録モーダル用のカタログ購読をクリーンアップ
+    if (this.internalStaffRegistrationCatalogUnsubscribe) {
+      this.internalStaffRegistrationCatalogUnsubscribe();
+      this.internalStaffRegistrationCatalogUnsubscribe = null;
+    }
     // EventAuthManager のクリーンアップ
     if (this.authManager) {
       this.authManager.cleanup();
@@ -5521,6 +5537,7 @@ export class EventAdminApp {
         this.dom.internalStaffRegistrationForm.reset();
       }
       this.setFormError(this.dom.internalStaffRegistrationError, "");
+      this.clearInternalStaffRegistrationAcademicFields();
       // イベントハンドラをクリーンアップ
       if (this._internalStaffRegistrationSubmitHandler && this.dom.internalStaffRegistrationForm) {
         this.dom.internalStaffRegistrationForm.removeEventListener("submit", this._internalStaffRegistrationSubmitHandler);
@@ -5530,6 +5547,17 @@ export class EventAdminApp {
         this.dom.internalStaffRegistrationCancelButton.removeEventListener("click", this._internalStaffRegistrationCancelHandler);
         this._internalStaffRegistrationCancelHandler = null;
       }
+      if (this._internalStaffRegistrationFacultyChangeHandler && this.dom.internalStaffRegistrationFacultyInput) {
+        this.dom.internalStaffRegistrationFacultyInput.removeEventListener("change", this._internalStaffRegistrationFacultyChangeHandler);
+        this._internalStaffRegistrationFacultyChangeHandler = null;
+      }
+      // 学術レベル変更ハンドラをクリーンアップ
+      this._internalStaffRegistrationAcademicChangeHandlers.forEach((handler, select) => {
+        if (select instanceof HTMLSelectElement) {
+          select.removeEventListener("change", handler);
+        }
+      });
+      this._internalStaffRegistrationAcademicChangeHandlers.clear();
     }
     if (element === this.dom.scheduleFallbackDialog) {
       if (this.dom.scheduleFallbackForm) {
@@ -6163,15 +6191,6 @@ export class EventAdminApp {
     // エラーメッセージをクリア
     this.setFormError(this.dom.internalStaffRegistrationError, "");
 
-    // GLイベントリストを取得
-    let glEvents = {};
-    try {
-      const glEventsSnapshot = await get(glIntakeEventsRef);
-      glEvents = glEventsSnapshot.val() || {};
-    } catch (error) {
-      logError("Failed to load GL events for registration modal", error);
-    }
-
     // イベント選択肢を更新
     const eventSelect = this.dom.internalStaffRegistrationEventSelect;
     if (eventSelect) {
@@ -6183,22 +6202,42 @@ export class EventAdminApp {
         emptyOption.disabled = true;
         eventSelect.appendChild(emptyOption);
       } else {
-        eventIds.forEach((eventId) => {
-          const glEvent = glEvents[eventId];
+        // 各イベントの情報を取得（エラーが発生しても続行）
+        const eventPromises = eventIds.map(async (eventId) => {
           let eventName = eventId;
-          if (glEvent && typeof glEvent === "object" && glEvent.name) {
-            eventName = ensureString(glEvent.name);
-          } else {
+          try {
+            // まず、通常のイベントリストから名前を取得
             const foundEvent = this.events.find((e) => ensureString(e.id) === eventId);
             if (foundEvent) {
               eventName = ensureString(foundEvent.name);
+            } else {
+              // GLイベントから個別に取得を試みる（権限がある場合のみ）
+              try {
+                const glEventRef = getGlEventConfigRef(eventId);
+                const glEventSnapshot = await get(glEventRef);
+                const glEvent = glEventSnapshot.val();
+                if (glEvent && typeof glEvent === "object" && glEvent.name) {
+                  eventName = ensureString(glEvent.name);
+                }
+              } catch (error) {
+                // GLイベントの取得に失敗しても、イベントIDを表示する
+                // エラーは無視
+              }
             }
+          } catch (error) {
+            // エラーが発生しても、イベントIDを表示する
           }
+          return { eventId, eventName };
+        });
+        
+        const eventInfos = await Promise.all(eventPromises);
+        eventInfos.forEach(({ eventId, eventName }) => {
           const option = document.createElement("option");
           option.value = eventId;
           option.textContent = eventName;
           eventSelect.appendChild(option);
         });
+        
         // イベントが1つの場合はデフォルトで選択
         if (eventIds.length === 1) {
           eventSelect.value = eventIds[0];
@@ -6212,6 +6251,21 @@ export class EventAdminApp {
     }
     if (this.dom.internalStaffRegistrationEmailInput && user.email) {
       this.dom.internalStaffRegistrationEmailInput.value = String(user.email || "").trim();
+    }
+
+    // 学年と学部のオプションを初期化
+    this.syncInternalStaffRegistrationAcademicInputs();
+
+    // 学部変更ハンドラを設定
+    const facultySelect = this.dom.internalStaffRegistrationFacultyInput;
+    if (facultySelect) {
+      const handleFacultyChange = () => {
+        const facultyValue = ensureString(facultySelect.value);
+        this.renderInternalStaffRegistrationAcademicTreeForFaculty(facultyValue);
+      };
+      facultySelect.removeEventListener("change", this._internalStaffRegistrationFacultyChangeHandler);
+      this._internalStaffRegistrationFacultyChangeHandler = handleFacultyChange;
+      facultySelect.addEventListener("change", handleFacultyChange);
     }
 
     // フォーム送信ハンドラを設定
@@ -6306,8 +6360,8 @@ export class EventAdminApp {
       }
 
       const faculty = ensureString(this.dom.internalStaffRegistrationFacultyInput?.value).trim();
-      if (!faculty) {
-        this.setFormError(errorElement, "学部を入力してください。");
+      if (!faculty || faculty === INTERNAL_CUSTOM_OPTION_VALUE) {
+        this.setFormError(errorElement, "学部を選択してください。");
         this.dom.internalStaffRegistrationFacultyInput?.focus();
         if (submitButton) {
           submitButton.disabled = false;
@@ -6316,16 +6370,62 @@ export class EventAdminApp {
         return;
       }
 
-      const department = ensureString(this.dom.internalStaffRegistrationDepartmentInput?.value).trim();
-      if (!department) {
-        this.setFormError(errorElement, "所属を入力してください。");
-        this.dom.internalStaffRegistrationDepartmentInput?.focus();
+      // 学術状態を収集
+      const academic = this.collectInternalStaffRegistrationAcademicState();
+      if (academic.pendingSelect instanceof HTMLSelectElement) {
+        const label = ensureString(academic.pendingSelect.dataset.levelLabel) || "所属";
+        this.setFormError(errorElement, `${label}を選択してください。`);
+        academic.pendingSelect.focus();
         if (submitButton) {
           submitButton.disabled = false;
           submitButton.classList.remove("is-busy");
         }
         return;
       }
+      if (!academic.path.length) {
+        const label = this.internalStaffRegistrationAcademicState.currentCustomLabel || "所属情報";
+        this.setFormError(errorElement, `${label}を選択してください。`);
+        if (academic.firstSelect instanceof HTMLSelectElement) {
+          academic.firstSelect.focus();
+        }
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.classList.remove("is-busy");
+        }
+        return;
+      }
+      if (academic.requiresCustom && !academic.customValue) {
+        const label = academic.customLabel || this.internalStaffRegistrationAcademicState.currentCustomLabel || "所属";
+        this.setFormError(errorElement, `${label}を入力してください。`);
+        this.dom.internalStaffRegistrationAcademicCustomInput?.focus();
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.classList.remove("is-busy");
+        }
+        return;
+      }
+      const departmentSegment = academic.path[academic.path.length - 1];
+      const department = ensureString(departmentSegment?.value);
+      if (!department) {
+        const label = ensureString(departmentSegment?.label) || "所属";
+        this.setFormError(errorElement, `${label}を入力してください。`);
+        if (departmentSegment?.element instanceof HTMLElement) {
+          departmentSegment.element.focus();
+        }
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.classList.remove("is-busy");
+        }
+        return;
+      }
+      const academicPath = academic.path
+        .map((segment) => ({
+          label: ensureString(segment.label),
+          value: ensureString(segment.value),
+          display: ensureString(segment.displayLabel ?? segment.value),
+          isCustom: Boolean(segment.isCustom)
+        }))
+        .filter((segment) => segment.value);
 
       // 内部スタッフとして登録
       const applicationsRef = getGlApplicationsRef(eventId);
@@ -6336,8 +6436,12 @@ export class EventAdminApp {
         email,
         phonetic: ensureString(this.dom.internalStaffRegistrationPhoneticInput?.value).trim(),
         grade: ensureString(this.dom.internalStaffRegistrationGradeInput?.value).trim(),
+        gender: ensureString(this.dom.internalStaffRegistrationGenderInput?.value).trim(),
         faculty,
         department,
+        academicPath: Array.isArray(academicPath) && academicPath.length > 0 ? academicPath : [],
+        club: ensureString(this.dom.internalStaffRegistrationClubInput?.value).trim(),
+        studentId: ensureString(this.dom.internalStaffRegistrationStudentIdInput?.value).trim(),
         note: ensureString(this.dom.internalStaffRegistrationNoteInput?.value).trim(),
         shifts: { __default__: true },
         sourceType: "internal",
@@ -6350,7 +6454,13 @@ export class EventAdminApp {
       // 空のフィールドを削除
       if (!payload.phonetic) delete payload.phonetic;
       if (!payload.grade) delete payload.grade;
+      if (!payload.gender) delete payload.gender;
+      if (!payload.club) delete payload.club;
+      if (!payload.studentId) delete payload.studentId;
       if (!payload.note) delete payload.note;
+      if (!Array.isArray(payload.academicPath) || !payload.academicPath.length) {
+        delete payload.academicPath;
+      }
 
       await set(newApplicationRef, payload);
 
@@ -6367,5 +6477,231 @@ export class EventAdminApp {
         submitButton.classList.remove("is-busy");
       }
     }
+  }
+
+  // ============================================
+  // 内部スタッフ登録モーダル用のヘルパーメソッド
+  // ============================================
+  // 注意: 学術レベル（学部以下の所属）の描画と処理は共通ユーティリティ（gl-academic-utils.js）を使用しています。
+  // 関連: scripts/events/tools/gl-academic-utils.js, scripts/events/panels/gl-panel.js, scripts/events/panels/gl-renderer.js
+
+  /**
+   * 学部カタログを初期化
+   */
+  initInternalStaffRegistrationCatalog() {
+    if (this.internalStaffRegistrationCatalogUnsubscribe) {
+      this.internalStaffRegistrationCatalogUnsubscribe();
+    }
+    this.internalStaffRegistrationCatalogUnsubscribe = onValue(glIntakeFacultyCatalogRef, (snapshot) => {
+      const raw = snapshot.val() || {};
+      const catalog = normalizeFacultyList(raw);
+      this.internalStaffRegistrationSharedFaculties = catalog;
+      this.syncInternalStaffRegistrationAcademicInputs();
+    });
+  }
+
+  /**
+   * 学年と学部のオプションを同期
+   */
+  syncInternalStaffRegistrationAcademicInputs() {
+    // 学年オプションを描画
+    const gradeSelect = this.dom.internalStaffRegistrationGradeInput;
+    if (gradeSelect instanceof HTMLSelectElement) {
+      const current = gradeSelect.value;
+      gradeSelect.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "学年を選択してください";
+      placeholder.disabled = true;
+      placeholder.selected = true;
+      placeholder.dataset.placeholder = "true";
+      gradeSelect.append(placeholder);
+      INTERNAL_GRADE_OPTIONS.forEach((value) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        gradeSelect.append(option);
+      });
+      if (INTERNAL_GRADE_OPTIONS.includes(current)) {
+        gradeSelect.value = current;
+      }
+    }
+
+    // 学部オプションを描画
+    const facultySelect = this.dom.internalStaffRegistrationFacultyInput;
+    if (facultySelect instanceof HTMLSelectElement) {
+      const faculties = this.getInternalStaffRegistrationFaculties();
+      const current = facultySelect.value;
+      facultySelect.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "学部を選択してください";
+      placeholder.disabled = true;
+      placeholder.selected = true;
+      placeholder.dataset.placeholder = "true";
+      facultySelect.append(placeholder);
+      faculties.forEach((entry) => {
+        const faculty = ensureString(entry.faculty);
+        if (!faculty) return;
+        const option = document.createElement("option");
+        option.value = faculty;
+        option.textContent = faculty;
+        facultySelect.append(option);
+      });
+      const customOption = document.createElement("option");
+      customOption.value = INTERNAL_CUSTOM_OPTION_VALUE;
+      customOption.textContent = "その他";
+      facultySelect.append(customOption);
+      if (faculties.some((entry) => ensureString(entry.faculty) === current)) {
+        facultySelect.value = current;
+      }
+    }
+  }
+
+  /**
+   * 利用可能な学部リストを取得
+   * @returns {Array} 学部リスト
+   * @note GLパネル（gl-panel.js）の `getInternalFaculties()` と同様のロジック
+   */
+  getInternalStaffRegistrationFaculties() {
+    const catalog = Array.isArray(this.internalStaffRegistrationSharedFaculties) ? this.internalStaffRegistrationSharedFaculties : [];
+    // TODO: イベント固有の学部設定も取得できるようにする（GLパネルと同様）
+    return catalog;
+  }
+
+  /**
+   * 学術フィールドをクリア
+   */
+  clearInternalStaffRegistrationAcademicFields() {
+    this.internalStaffRegistrationAcademicState.unitSelections = [];
+    const fields = this.dom.internalStaffRegistrationAcademicFields;
+    if (fields) {
+      fields.innerHTML = "";
+    }
+    this.updateInternalStaffRegistrationAcademicCustomField();
+  }
+
+  /**
+   * 学術カスタムフィールドを更新
+   */
+  updateInternalStaffRegistrationAcademicCustomField(label) {
+    const field = this.dom.internalStaffRegistrationAcademicCustomField;
+    const labelEl = this.dom.internalStaffRegistrationAcademicCustomLabel;
+    const input = this.dom.internalStaffRegistrationAcademicCustomInput;
+    if (!field || !labelEl || !input) {
+      return;
+    }
+    if (label) {
+      this.internalStaffRegistrationAcademicState.currentCustomLabel = label;
+      field.hidden = false;
+      labelEl.textContent = `${label}（その他入力）`;
+      input.placeholder = `${label}名を入力してください`;
+      input.required = true;
+    } else {
+      this.internalStaffRegistrationAcademicState.currentCustomLabel = "";
+      field.hidden = true;
+      input.placeholder = "所属名を入力してください";
+      input.required = false;
+      input.value = "";
+    }
+  }
+
+  /**
+   * 指定された深さ以降の学術フィールドを削除
+   */
+  removeInternalStaffRegistrationAcademicFieldsAfter(depth) {
+    const fields = Array.from(this.dom.internalStaffRegistrationAcademicFields?.querySelectorAll(".gl-academic-field") ?? []);
+    fields.forEach((field) => {
+      const fieldDepth = Number(field.dataset.depth ?? "0");
+      if (fieldDepth > depth) {
+        field.remove();
+      }
+    });
+    this.internalStaffRegistrationAcademicState.unitSelections = this.internalStaffRegistrationAcademicState.unitSelections.filter((_, index) => index <= depth);
+  }
+
+  /**
+   * 学術レベルを描画
+   */
+  renderInternalStaffRegistrationAcademicLevel(level, depth) {
+    const fields = this.dom.internalStaffRegistrationAcademicFields;
+    const template = this.dom.internalStaffRegistrationAcademicSelectTemplate;
+    if (!fields || !template) return;
+    const select = renderAcademicLevel(
+      level,
+      depth,
+      fields,
+      template,
+      this.internalStaffRegistrationUnitLevelMap,
+      null, // イベントリスナーはここで追加する
+      "flow-internal-staff-academic-select"
+    );
+    if (select) {
+      const handleChange = (event) => {
+        if (event.target instanceof HTMLSelectElement) {
+          this.handleInternalStaffRegistrationAcademicLevelChange(event.target);
+        }
+      };
+      select.addEventListener("change", handleChange);
+      this._internalStaffRegistrationAcademicChangeHandlers.set(select, handleChange);
+    }
+  }
+
+  /**
+   * 学術レベル変更を処理
+   */
+  handleInternalStaffRegistrationAcademicLevelChange(select) {
+    const parsed = parseAcademicLevelChange(select, this.internalStaffRegistrationUnitLevelMap);
+    if (!parsed) {
+      this.updateInternalStaffRegistrationAcademicCustomField();
+      return;
+    }
+    this.removeInternalStaffRegistrationAcademicFieldsAfter(parsed.depth);
+    if (parsed.isCustom) {
+      this.internalStaffRegistrationAcademicState.unitSelections[parsed.depth] = { label: parsed.level.label, value: "", isCustom: true };
+      this.updateInternalStaffRegistrationAcademicCustomField(parsed.level.label);
+      return;
+    }
+    this.internalStaffRegistrationAcademicState.unitSelections[parsed.depth] = {
+      label: parsed.level.label,
+      value: parsed.value,
+      displayLabel: parsed.displayLabel,
+      isCustom: false
+    };
+    this.updateInternalStaffRegistrationAcademicCustomField();
+    if (parsed.option?.children) {
+      this.renderInternalStaffRegistrationAcademicLevel(parsed.option.children, parsed.depth + 1);
+    }
+  }
+
+  /**
+   * 学部に基づいて学術ツリーを描画
+   */
+  renderInternalStaffRegistrationAcademicTreeForFaculty(facultyName) {
+    this.clearInternalStaffRegistrationAcademicFields();
+    const name = ensureString(facultyName);
+    if (!name || name === INTERNAL_CUSTOM_OPTION_VALUE) {
+      return;
+    }
+    const entry = this.getInternalStaffRegistrationFaculties().find((item) => ensureString(item.faculty) === name);
+    if (entry?.unitTree) {
+      this.renderInternalStaffRegistrationAcademicLevel(entry.unitTree, 0);
+    } else if (entry?.fallbackLabel) {
+      this.updateInternalStaffRegistrationAcademicCustomField(entry.fallbackLabel);
+    } else {
+      this.updateInternalStaffRegistrationAcademicCustomField("所属");
+    }
+  }
+
+  /**
+   * 学術状態を収集
+   */
+  collectInternalStaffRegistrationAcademicState() {
+    return collectAcademicState(
+      this.dom.internalStaffRegistrationAcademicFields,
+      this.internalStaffRegistrationUnitLevelMap,
+      this.dom.internalStaffRegistrationAcademicCustomInput,
+      this.internalStaffRegistrationAcademicState
+    );
   }
 }
