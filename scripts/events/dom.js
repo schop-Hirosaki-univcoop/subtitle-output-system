@@ -160,7 +160,6 @@ export function queryDom() {
     internalStaffRegistrationStudentIdInput: document.getElementById("flow-internal-staff-student-id"),
     internalStaffRegistrationNoteInput: document.getElementById("flow-internal-staff-note"),
     internalStaffRegistrationError: document.getElementById("flow-internal-staff-registration-error"),
-    internalStaffRegistrationCancelButton: document.getElementById("flow-internal-staff-registration-cancel-button"),
     internalStaffRegistrationSubmitButton: document.getElementById("flow-internal-staff-registration-submit-button"),
     participantsPanel: document.getElementById("flow-panel-participants"),
     glPanel: document.getElementById("flow-panel-gl"),

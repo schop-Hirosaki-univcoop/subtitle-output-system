@@ -2419,6 +2419,25 @@ label kbd{
   display:flex;
   flex-direction:column;
   gap:.9rem;
+  overflow-y:auto;
+  scrollbar-gutter:stable;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(108,132,168,.6) rgba(18,24,38,.7);
+}
+.modal-body::-webkit-scrollbar{
+  width:10px;
+}
+.modal-body::-webkit-scrollbar-track{
+  background:rgba(10,16,26,.7);
+  border-radius:999px;
+}
+.modal-body::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg, rgba(46,141,255,.5), rgba(30,200,255,.35));
+  border-radius:999px;
+  border:2px solid rgba(9,14,24,.9);
+}
+.modal-body::-webkit-scrollbar-thumb:hover{
+  background:linear-gradient(180deg, rgba(46,141,255,.7), rgba(30,200,255,.5));
 }
 
 #qa-confirm-dialog-message{

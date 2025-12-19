@@ -746,7 +746,8 @@ export class EventAdminApp {
     this.bindDialogDismiss(this.dom.operatorModeDialog);
     this.bindDialogDismiss(this.dom.fullscreenPromptDialog);
     this.bindDialogDismiss(this.dom.scheduleCompletionDialog);
-    this.bindDialogDismiss(this.dom.internalStaffRegistrationDialog);
+    // 内部スタッフ登録モーダルは必須登録のため、バックドロップクリックで閉じない
+    // this.bindDialogDismiss(this.dom.internalStaffRegistrationDialog);
     
     if (this.dom.scheduleCompletionCloseButton) {
       this.dom.scheduleCompletionCloseButton.addEventListener("click", () => {
@@ -5543,10 +5544,6 @@ export class EventAdminApp {
         this.dom.internalStaffRegistrationForm.removeEventListener("submit", this._internalStaffRegistrationSubmitHandler);
         this._internalStaffRegistrationSubmitHandler = null;
       }
-      if (this._internalStaffRegistrationCancelHandler && this.dom.internalStaffRegistrationCancelButton) {
-        this.dom.internalStaffRegistrationCancelButton.removeEventListener("click", this._internalStaffRegistrationCancelHandler);
-        this._internalStaffRegistrationCancelHandler = null;
-      }
       if (this._internalStaffRegistrationFacultyChangeHandler && this.dom.internalStaffRegistrationFacultyInput) {
         this.dom.internalStaffRegistrationFacultyInput.removeEventListener("change", this._internalStaffRegistrationFacultyChangeHandler);
         this._internalStaffRegistrationFacultyChangeHandler = null;
@@ -6290,16 +6287,6 @@ export class EventAdminApp {
     }
 
     // キャンセルボタンのハンドラを設定
-    const cancelButton = this.dom.internalStaffRegistrationCancelButton;
-    if (cancelButton) {
-      const handleCancel = () => {
-        this.closeDialog(dialog);
-      };
-      cancelButton.removeEventListener("click", this._internalStaffRegistrationCancelHandler);
-      this._internalStaffRegistrationCancelHandler = handleCancel;
-      cancelButton.addEventListener("click", handleCancel);
-    }
-
     // モーダルを表示
     this.openDialog(dialog);
   }
