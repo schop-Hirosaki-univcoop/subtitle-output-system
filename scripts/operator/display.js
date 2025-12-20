@@ -18,8 +18,7 @@ export function handleRenderUpdate(app, snapshot) {
   // phase が hidden でも nowShowing 自体は最新値を参照し、送出クリア（nowShowing: null）を
   // 受け取ったタイミングだけでカード強調やステータスをリセットする。
   const now = snapshotData.nowShowing || null;
-  renderNowShowingSummary(app, now, phase);
-
+  
   const updatedAt = normalizeUpdatedAt(snapshotData.updatedAt) || 0;
   const previous = app.lastUpdatedAt || 0;
   app.lastUpdatedAt = updatedAt;
@@ -42,6 +41,8 @@ export function handleRenderUpdate(app, snapshot) {
 
   const previousNow = app.state.renderState?.nowShowing || null;
   const normalizedNow = normalizeNowShowing(now, app);
+  // 正規化後のnowShowingを使ってstatus-barを更新
+  renderNowShowingSummary(app, normalizedNow, phase);
   logDisplayLinkInfo("Render state updated", {
     phase,
     nowShowing: normalizedNow,
