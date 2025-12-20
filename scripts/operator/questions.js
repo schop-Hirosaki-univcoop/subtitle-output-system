@@ -1417,12 +1417,14 @@ export async function clearNowShowing(app) {
         const group = updatesByPath.get(pathKey);
         group.updates[`${prevUid}/answered`] = true;
         group.updates[`${prevUid}/updatedAt`] = serverTimestamp();
+        // PUQの場合はscheduleIdが必須
+        // scheduleIdが空文字列や__default_schedule__の場合は、undefinedを渡さない（空文字列でも有効な値として扱う）
         app.api.fireAndForgetApi({ 
           action: "updateStatus", 
           uid: prevUid, 
           status: true, 
           eventId,
-          scheduleId: isPickup ? scheduleId : undefined
+          scheduleId: isPickup ? (scheduleId || undefined) : undefined
         });
       }
     }

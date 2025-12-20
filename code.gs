@@ -5225,6 +5225,7 @@ function updateAnswerStatus(uid, status, eventId, scheduleId) {
     const normalizedScheduleId = String(scheduleId || "").trim();
     if (!normalizedScheduleId) {
       // scheduleIdが取得できない場合は、tokenから取得を試みる
+      // ただし、PUQにはtokenがない場合があるため、エラーを投げる前に確認
       const questionToken = String(record.token || "").trim();
       if (questionToken) {
         const tokenRecord =
@@ -5234,12 +5235,13 @@ function updateAnswerStatus(uid, status, eventId, scheduleId) {
           statusPath = `questionStatus/${resolvedEventId}/${tokenScheduleId}/${normalizedUid}`;
         } else {
           throw new Error(
-            `UID: ${normalizedUid} has no scheduleId for pickup question.`
+            `UID: ${normalizedUid} has no scheduleId for pickup question. scheduleId parameter is required.`
           );
         }
       } else {
+        // PUQにはtokenがない場合があるため、scheduleIdパラメータが必須
         throw new Error(
-          `UID: ${normalizedUid} has no scheduleId for pickup question.`
+          `UID: ${normalizedUid} has no scheduleId for pickup question. scheduleId parameter is required when token is not available.`
         );
       }
     } else {
