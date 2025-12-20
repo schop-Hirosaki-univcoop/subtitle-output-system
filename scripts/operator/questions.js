@@ -928,7 +928,32 @@ export async function handleDisplay(app) {
       scheduleId,
       uid: app.state.selectedRowData.uid
     });
-    app.api.fireAndForgetApi({ action: "updateSelectingStatus", uid: app.state.selectedRowData.uid });
+    // updateSelectingStatusはtokenが必要なため、tokenがある場合のみ呼び出す
+    const currentQuestionRecord = app.state.questionsByUid instanceof Map
+      ? app.state.questionsByUid.get(app.state.selectedRowData.uid)
+      : null;
+    const hasToken = currentQuestionRecord && typeof currentQuestionRecord.token === "string" && currentQuestionRecord.token.trim();
+    if (hasToken) {
+      app.api.fireAndForgetApi({ action: "updateSelectingStatus", uid: app.state.selectedRowData.uid });
+    } else {
+      // tokenがない場合でも、同じイベント内の他の質問のselecting状態をクリアする
+      // updateSelectingStatusの代替処理として、同じイベント内の他の質問をselecting: falseにする
+      const sameEventQuestions = app.state.allQuestions.filter((q) => {
+        const qEventId = String(q["イベントID"] ?? "").trim();
+        return qEventId === eventId && String(q.UID) !== app.state.selectedRowData.uid;
+      });
+      if (sameEventQuestions.length > 0) {
+        const clearingUpdates = {};
+        sameEventQuestions.forEach((q) => {
+          const qUid = String(q.UID);
+          clearingUpdates[`${qUid}/selecting`] = false;
+          clearingUpdates[`${qUid}/updatedAt`] = serverTimestamp();
+        });
+        if (Object.keys(clearingUpdates).length > 0) {
+          await update(statusRef, clearingUpdates);
+        }
+      }
+    }
     if (previousUid) {
       app.api.fireAndForgetApi({ action: "updateStatus", uid: previousUid, status: true, eventId });
     } else if (previousNowShowing) {
