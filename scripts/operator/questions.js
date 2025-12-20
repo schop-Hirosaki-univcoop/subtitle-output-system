@@ -1133,7 +1133,6 @@ export async function handleBatchUnanswer(app) {
   });
   if (!confirmed) return;
   const uidsToUpdate = checkedBoxes.map((checkbox) => checkbox.dataset.uid);
-  const eventId = String(app.state.activeEventId || "").trim();
   
   // ローディング状態を開始（更新前の状態を記録）
   uidsToUpdate.forEach((uid) => {
@@ -1164,8 +1163,18 @@ export async function handleBatchUnanswer(app) {
   const updatesByPath = new Map();
   for (const uid of uidsToUpdate) {
     const item = app.state.allQuestions.find((q) => String(q.UID) === uid);
-    const isPickup = item ? item.ピックアップ === true : false;
-    const statusRef = getQuestionStatusRef(eventId, isPickup);
+    if (!item) {
+      console.warn(`[handleBatchUnanswer] Question not found for UID: ${uid}`);
+      continue;
+    }
+    const isPickup = item.ピックアップ === true;
+    // 各質問のイベントIDを取得
+    const questionEventId = String(item["イベントID"] ?? "").trim();
+    if (!questionEventId) {
+      console.warn(`[handleBatchUnanswer] EventId not found for UID: ${uid}`);
+      continue;
+    }
+    const statusRef = getQuestionStatusRef(questionEventId, isPickup);
     const pathKey = statusRef.key;
     if (!updatesByPath.has(pathKey)) {
       updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
@@ -1173,6 +1182,18 @@ export async function handleBatchUnanswer(app) {
     const group = updatesByPath.get(pathKey);
     group.updates[`${uid}/answered`] = false;
     group.updates[`${uid}/updatedAt`] = serverTimestamp();
+  }
+  
+  if (updatesByPath.size === 0) {
+    // 更新対象がない場合はエラーを表示
+    app.toast("更新対象の質問が見つかりませんでした。", "error");
+    // ローディング状態を解除
+    uidsToUpdate.forEach((uid) => {
+      loadingUids.delete(uid);
+      loadingUidStates.delete(uid);
+    });
+    renderQuestions(app);
+    return;
   }
   
   try {
