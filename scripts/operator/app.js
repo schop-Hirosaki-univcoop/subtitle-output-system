@@ -8,6 +8,7 @@ import {
   onValue,
   get,
   questionsRef,
+  pickupQuestionsRef,
   getQuestionStatusRef,
   questionIntakeEventsRef,
   questionIntakeSchedulesRef,
@@ -25,7 +26,7 @@ import {
   ref,
   database
 } from "./firebase.js";
-import { getRenderStatePath, parseChannelParams, normalizeScheduleId } from "../shared/channel-paths.js";
+import { getRenderStatePath, parseChannelParams, normalizeScheduleId, normalizeEventId, getQuestionStatusPath } from "../shared/channel-paths.js";
 import { derivePresenceScheduleKey as sharedDerivePresenceScheduleKey } from "../shared/presence-keys.js";
 import { OPERATOR_MODE_TELOP, normalizeOperatorMode, isTelopMode } from "../shared/operator-modes.js";
 import { goToLogin } from "../shared/routes.js";
@@ -1755,6 +1756,72 @@ export class OperatorApp {
   }
 
   /**
+   * 全ての日程の全てのPUQのquestionStatusを初期化します。
+   * 日程選択時に一度だけ実行されます。
+   */
+  async initializePickupQuestionStatuses() {
+    const eventId = String(this.state?.activeEventId || "").trim();
+    if (!eventId) {
+      return;
+    }
+
+    try {
+      // 全てのPUQを取得
+      const pickupSnapshot = await get(pickupQuestionsRef);
+      const pickupQuestions = pickupSnapshot.val() || {};
+      if (Object.keys(pickupQuestions).length === 0) {
+        return;
+      }
+
+      // 全ての日程を取得
+      const schedulesRef = ref(database, `questionIntake/schedules/${eventId}`);
+      const schedulesSnapshot = await get(schedulesRef);
+      const schedules = schedulesSnapshot.val() || {};
+      if (Object.keys(schedules).length === 0) {
+        return;
+      }
+
+      const now = Date.now();
+      const updates = {};
+      const normalizedEventId = normalizeEventId(eventId);
+
+      // 既存のquestionStatusを取得して、存在しないもののみ初期化
+      const eventStatusRef = ref(database, `questionStatus/${normalizedEventId}`);
+      const eventStatusSnapshot = await get(eventStatusRef);
+      const existingStatuses = eventStatusSnapshot.val() || {};
+
+      // 各日程×各PUQの組み合わせで初期化
+      Object.keys(schedules).forEach((scheduleId) => {
+        const normalizedScheduleId = normalizeScheduleId(scheduleId);
+        Object.keys(pickupQuestions).forEach((uid) => {
+          const statusPath = getQuestionStatusPath(normalizedEventId, true, normalizedScheduleId);
+          const statusKey = `${statusPath}/${uid}`;
+          // 既存のstatusが存在するか確認（存在しない場合のみ初期化）
+          const existingScheduleStatus = existingStatuses[normalizedScheduleId];
+          const existingUidStatus = existingScheduleStatus && existingScheduleStatus[uid];
+          if (!existingUidStatus) {
+            // 既存のstatusが存在しない場合のみ初期化
+            updates[statusKey] = {
+              answered: false,
+              selecting: false,
+              pickup: true,
+              updatedAt: now
+            };
+          }
+        });
+      });
+
+      if (Object.keys(updates).length > 0) {
+        await update(ref(database), updates);
+        console.log(`[initializePickupQuestionStatuses] Initialized ${Object.keys(updates).length} pickup question statuses for ${Object.keys(schedules).length} schedules`);
+      }
+    } catch (error) {
+      console.error("[initializePickupQuestionStatuses] Failed to initialize pickup question statuses:", error);
+      // エラーが発生しても処理を続行（初期化は非同期で実行されるため）
+    }
+  }
+
+  /**
    * 質問状態ノードの購読を開始し、ステータスの変化を反映します。
    * 現在のイベントIDのquestionStatusを監視します（通常質問もPick Up Questionも同じパス）。
    */
@@ -1766,6 +1833,11 @@ export class OperatorApp {
       this.questionStatusUnsubscribe = null;
       return;
     }
+
+    // 日程選択時に全ての日程の全てのPUQを初期化（非同期で実行）
+    this.initializePickupQuestionStatuses().catch((error) => {
+      console.error("[startQuestionStatusStream] Failed to initialize pickup question statuses:", error);
+    });
 
     const { scheduleId = "" } = this.getActiveChannel() || {};
     const normalizedScheduleId = scheduleId ? normalizeScheduleId(scheduleId) : "";
