@@ -2,7 +2,7 @@
 import { GENRE_OPTIONS, GENRE_ALL_VALUE } from "../constants.js";
 import { pickupQuestionsRef, database, ref, update, onValue, get, getQuestionStatusRef } from "../firebase.js";
 import { escapeHtml, resolveGenreLabel, formatRelative } from "../utils.js";
-import { normalizeEventId } from "../../shared/channel-paths.js";
+import { normalizeEventId, getQuestionStatusPath } from "../../shared/channel-paths.js";
 
 const ALL_FILTER_VALUE = GENRE_ALL_VALUE;
 
@@ -906,27 +906,19 @@ export async function handlePickupFormSubmit(app, event) {
     const record = createPickupRecord(uid, question, genre, null, now);
     const eventIdRaw = app.state?.activeEventId;
     const eventId = eventIdRaw ? String(eventIdRaw).trim() : "";
-    const { scheduleId = "" } = app.getActiveChannel?.() || {};
+    const activeChannel = typeof app.getActiveChannel === "function" ? app.getActiveChannel() : null;
+    const scheduleId = activeChannel ? String(activeChannel.scheduleId || "").trim() : "";
     // questionStatusへの書き込みはeventIdとscheduleIdが存在する場合のみ
     // eventIdが空文字列やnull/undefinedの場合はスキップ
-    // pickupquestionの場合はscheduleIdが必須
-    if (eventId && eventId.length > 0) {
-      if (!scheduleId || scheduleId.length === 0) {
-        app.toast("日程が選択されていないため、Pick Up Questionを作成できません。", "error");
-        return;
-      }
-      const statusRef = getQuestionStatusRef(eventId, true, scheduleId);
-      const updates = {
-        [`questions/pickup/${uid}`]: record,
-        [`${statusRef.key}/${uid}`]: { answered: false, selecting: false, pickup: true, updatedAt: now }
-      };
-      await update(ref(database), updates);
-    } else {
-      const updates = {
-        [`questions/pickup/${uid}`]: record
-      };
-      await update(ref(database), updates);
+    // pickupquestionの場合はscheduleIdが必須だが、eventIdがない場合はquestionStatusへの書き込みをスキップ
+    const updates = {
+      [`questions/pickup/${uid}`]: record
+    };
+    if (eventId && eventId.length > 0 && scheduleId && scheduleId.length > 0) {
+      const statusPath = getQuestionStatusPath(eventId, true, scheduleId);
+      updates[`${statusPath}/${uid}`] = { answered: false, selecting: false, pickup: true, updatedAt: now };
     }
+    await update(ref(database), updates);
     app.api?.logAction?.("PICKUP_ADD", buildPickupLogDetails(uid, question, genre));
     if (questionInput) {
       questionInput.value = "";
@@ -1039,7 +1031,8 @@ export async function handlePickupEditSubmit(app, event) {
     const record = createPickupRecord(state.uid, question, genre, existing?.raw || null, now);
     const eventIdRaw = app.state?.activeEventId;
     const eventId = eventIdRaw ? String(eventIdRaw).trim() : "";
-    const { scheduleId = "" } = app.getActiveChannel?.() || {};
+    const activeChannel = typeof app.getActiveChannel === "function" ? app.getActiveChannel() : null;
+    const scheduleId = activeChannel ? String(activeChannel.scheduleId || "").trim() : "";
     const updates = {
       [`questions/pickup/${state.uid}`]: record
     };
@@ -1047,14 +1040,14 @@ export async function handlePickupEditSubmit(app, event) {
     // eventIdが空文字列やnull/undefinedの場合はスキップ
     // pickupquestionの更新時は現在のscheduleIdに対応するquestionStatusのみを更新
     if (eventId && eventId.length > 0 && scheduleId && scheduleId.length > 0) {
-      const statusRef = getQuestionStatusRef(eventId, true, scheduleId);
+      const statusPath = getQuestionStatusPath(eventId, true, scheduleId);
       const statusMap = app.state?.questionStatusByUid;
       const statusEntry = statusMap instanceof Map ? statusMap.get(state.uid) : null;
       if (statusEntry) {
-        updates[`${statusRef.key}/${state.uid}/updatedAt`] = now;
-        updates[`${statusRef.key}/${state.uid}/pickup`] = true;
+        updates[`${statusPath}/${state.uid}/updatedAt`] = now;
+        updates[`${statusPath}/${state.uid}/pickup`] = true;
       } else {
-        updates[`${statusRef.key}/${state.uid}`] = {
+        updates[`${statusPath}/${state.uid}`] = {
           answered: false,
           selecting: false,
           pickup: true,

@@ -2,7 +2,7 @@
 import { QUESTIONS_SUBTAB_KEY, GENRE_ALL_VALUE } from "./constants.js";
 import { database, ref, update, get, getNowShowingRef, serverTimestamp, getQuestionStatusRef } from "./firebase.js";
 import { info as logDisplayLinkInfo, warn as logDisplayLinkWarn, error as logDisplayLinkError } from "../shared/display-link-logger.js";
-import { normalizeScheduleId } from "../shared/channel-paths.js";
+import { normalizeScheduleId, getQuestionStatusPath } from "../shared/channel-paths.js";
 import { escapeHtml, formatOperatorName, resolveGenreLabel, formatScheduleRange } from "./utils.js";
 
 const SUB_TAB_OPTIONS = new Set(["all", "normal", "puq"]);
@@ -1102,7 +1102,8 @@ export async function handleUnanswer(app) {
   try {
     const statusRef = getQuestionStatusRef(eventId, isPickup, scheduleId);
     const unanswerPayload = { answered: false, updatedAt: serverTimestamp() };
-    console.log("[未回答にする] questionStatus更新用JSON:", JSON.stringify({ [`${statusRef.key}/${uid}`]: unanswerPayload }, null, 2));
+    const statusPath = getQuestionStatusPath(eventId, isPickup, scheduleId);
+    console.log("[未回答にする] questionStatus更新用JSON:", JSON.stringify({ [`${statusPath}/${uid}`]: unanswerPayload }, null, 2));
     await update(statusRef, { [`${uid}`]: unanswerPayload });
     app.api.fireAndForgetApi({
       action: "updateStatus",
@@ -1243,7 +1244,7 @@ export async function handleBatchUnanswer(app) {
     }
     // pickupquestionの場合は現在のscheduleIdを使用
     const statusRef = getQuestionStatusRef(questionEventId, isPickup, isPickup ? scheduleId : "");
-    const pathKey = statusRef.key;
+    const pathKey = getQuestionStatusPath(questionEventId, isPickup, isPickup ? scheduleId : "");
     if (!updatesByPath.has(pathKey)) {
       updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
     }
@@ -1372,7 +1373,7 @@ export async function clearNowShowing(app) {
       const isPickup = item.ピックアップ === true;
       // pickupquestionの場合は現在のscheduleIdを使用
       const statusRef = getQuestionStatusRef(eventId, isPickup, isPickup ? scheduleId : "");
-      const pathKey = statusRef.key;
+      const pathKey = getQuestionStatusPath(eventId, isPickup, isPickup ? scheduleId : "");
       if (!updatesByPath.has(pathKey)) {
         updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
       }
@@ -1402,7 +1403,7 @@ export async function clearNowShowing(app) {
       if (prevUid) {
         // pickupquestionの場合は現在のscheduleIdを使用
         const statusRef = getQuestionStatusRef(eventId, isPickup, isPickup ? scheduleId : "");
-        const pathKey = statusRef.key;
+        const pathKey = getQuestionStatusPath(eventId, isPickup, isPickup ? scheduleId : "");
         if (!updatesByPath.has(pathKey)) {
           updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
         }
