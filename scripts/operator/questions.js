@@ -1409,8 +1409,23 @@ export async function clearNowShowing(app) {
         if (prevItem) {
           // prevItemが見つかった場合は、prevItemのピックアップフラグを優先
           isPickup = prevItem.ピックアップ === true;
+        } else {
+          // prevItemが見つからない場合、Firebaseから直接確認してpickup questionかどうかを判定
+          // バックエンド側と同じ方法で判定するため、questions/pickup/{uid}の存在を確認
+          try {
+            const pickupQuestionRef = ref(database, `questions/pickup/${prevUid}`);
+            const pickupQuestionSnap = await get(pickupQuestionRef);
+            if (pickupQuestionSnap.exists()) {
+              isPickup = true;
+            } else {
+              // previousNowShowing.pickupがtrueならisPickupをtrueのまま維持
+              // バックエンド側でpickup questionと判定される可能性があるため
+            }
+          } catch (error) {
+            // エラーが発生した場合は、previousNowShowing.pickupを信頼する
+            console.warn(`[clearNowShowing] Failed to check pickup question for UID: ${prevUid}`, error);
+          }
         }
-        // prevItemが見つからない場合でも、previousNowShowing.pickupがtrueならisPickupをtrueのまま維持
       }
 
       if (prevUid) {
@@ -1430,8 +1445,8 @@ export async function clearNowShowing(app) {
             pickupScheduleId = prevScheduleId;
           }
         }
-        // prevItemが見つからなくても、previousNowShowing.pickupがtrueの場合はpickup questionとして扱う
-        // この場合、現在のチャンネルのscheduleIdを使用（バックエンド側でpickup questionと判定される可能性があるため）
+        // prevItemが見つからなくても、isPickupがtrueの場合はpickup questionとして扱う
+        // この場合、現在のチャンネルのscheduleIdを使用（PUQを送出する際に使用したscheduleIdである可能性が高い）
         if (isPickup && !pickupScheduleId) {
           // 現在のチャンネルのscheduleIdをフォールバックとして使用
           pickupScheduleId = scheduleId ? String(scheduleId).trim() : "";
