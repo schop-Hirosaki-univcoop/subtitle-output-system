@@ -1368,11 +1368,14 @@ export class EventFirebaseManager {
     try {
       const ref = getOperatorScheduleConsensusRef(eventId);
       const signature = consensus.conflictSignature;
+      // ローカル状態を先にクリア（Firebase削除が失敗しても状態は保持される）
       this.app.scheduleConsensusState = null;
       this.app.scheduleConsensusLastSignature = "";
       this.app.scheduleConsensusLastKey = "";
       this.app.scheduleConflictPromptSignature = "";
       this.app.scheduleConflictLastPromptSignature = "";
+      
+      // Firebaseから削除を試みる（トランザクション競合の可能性があるため、エラーハンドリングを追加）
       remove(ref)
         .then(() => {
           this.app.logFlowState("スケジュール合意情報を削除しました", {
@@ -1381,11 +1384,23 @@ export class EventFirebaseManager {
           });
         })
         .catch((error) => {
-          console.debug("Failed to clear schedule consensus:", error);
+          // トランザクション競合などのエラーが発生した場合
+          // ローカル状態は既にクリアされているが、Firebase側の削除は失敗している
+          // エラーをログに記録し、次回の読み込み時に自動的にクリアされることを期待
+          logError("Failed to remove schedule consensus from Firebase (local state already cleared)", error);
+          // デバッグ用: エラーの詳細を記録
+          if (typeof console !== "undefined" && typeof console.warn === "function") {
+            console.warn("[maybeClearScheduleConsensus] Firebase削除に失敗しましたが、ローカル状態は既にクリア済みです。", {
+              eventId,
+              conflictSignature: signature,
+              error: error.message || String(error)
+            });
+          }
         });
       this.app.uiRenderer.syncScheduleConflictPromptState(context);
     } catch (error) {
-      console.debug("Failed to clear schedule consensus:", error);
+      // 同期エラー（参照の取得など）が発生した場合
+      logError("Failed to clear schedule consensus", error);
     }
   }
 }
