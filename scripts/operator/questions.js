@@ -1416,21 +1416,22 @@ export async function clearNowShowing(app) {
       if (prevUid) {
         // pickupquestionの場合は、prevItemからscheduleIdを取得するか、現在のscheduleIdを使用
         // prevItemが見つかった場合は、そのscheduleIdを優先
-        let pickupScheduleId = scheduleId;
+        let pickupScheduleId = scheduleId ? String(scheduleId).trim() : "";
         if (isPickup && prevItem) {
           const itemScheduleId = String(prevItem["日程ID"] || "").trim();
           if (itemScheduleId) {
-            pickupScheduleId = normalizeScheduleId(itemScheduleId);
+            pickupScheduleId = itemScheduleId;
           }
         }
         // previousNowShowingからもscheduleIdを取得を試みる
-        if (isPickup && (!pickupScheduleId || pickupScheduleId.trim() === "")) {
+        if (isPickup && !pickupScheduleId) {
           const prevScheduleId = String(previousNowShowing.scheduleId || "").trim();
           if (prevScheduleId) {
-            pickupScheduleId = normalizeScheduleId(prevScheduleId);
+            pickupScheduleId = prevScheduleId;
           }
         }
         
+        // Firebaseのパス計算にはnormalizeScheduleIdを使用（空の場合は__default_schedule__になる）
         const finalScheduleId = isPickup ? pickupScheduleId : "";
         const statusRef = getQuestionStatusRef(eventId, isPickup, finalScheduleId);
         const pathKey = getQuestionStatusPath(eventId, isPickup, finalScheduleId);
@@ -1441,10 +1442,11 @@ export async function clearNowShowing(app) {
         group.updates[`${prevUid}/answered`] = true;
         group.updates[`${prevUid}/updatedAt`] = serverTimestamp();
         // PUQの場合はscheduleIdが必須
-        // scheduleIdが空文字列や__default_schedule__の場合でも、有効な値として渡す
+        // API呼び出しには、空でない有効なscheduleIdのみを渡す
         if (isPickup) {
           // scheduleIdが空の場合はAPI呼び出しをスキップ
-          const normalizedScheduleId = (finalScheduleId && typeof finalScheduleId === "string") ? finalScheduleId.trim() : "";
+          // normalizeScheduleIdは空の場合__default_schedule__を返すため、直接チェックする
+          const normalizedScheduleId = pickupScheduleId ? String(pickupScheduleId).trim() : "";
           if (!normalizedScheduleId) {
             console.warn(`[clearNowShowing] scheduleId is required for pickup question UID: ${prevUid}, but scheduleId is empty or invalid. Skipping API call.`);
             // API呼び出しをスキップ（ただし、Firebaseのansweredフラグは既に設定済み）
