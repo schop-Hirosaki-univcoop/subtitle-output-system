@@ -1031,7 +1031,7 @@ export async function handleUnanswer(app) {
       const question = app.state.allQuestions.find((q) => String(q.UID) === uid);
       const loadingState = loadingUidStates.get(uid);
       // 更新が反映されたか確認（answeredがfalseになった）
-      if (item && !item["回答済"] && loadingState && loadingState.previousAnswered === true) {
+      if (question && !question["回答済"] && loadingState && loadingState.previousAnswered === true) {
         // 更新が反映された
         loadingUids.delete(uid);
         loadingUidStates.delete(uid);
@@ -1179,7 +1179,7 @@ export async function handleBatchUnanswer(app) {
         const question = app.state.allQuestions.find((q) => String(q.UID) === uid);
         const loadingState = loadingUidStates.get(uid);
         // 更新が反映されたか確認（answeredがfalseになった）
-        if (item && !item["回答済"] && loadingState && loadingState.previousAnswered === true) {
+        if (question && !question["回答済"] && loadingState && loadingState.previousAnswered === true) {
           // 更新が反映された
           loadingUids.delete(uid);
           loadingUidStates.delete(uid);
