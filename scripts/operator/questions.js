@@ -1462,6 +1462,13 @@ export async function clearNowShowing(app) {
         const group = updatesByPath.get(pathKey);
         group.updates[`${prevUid}/answered`] = true;
         group.updates[`${prevUid}/updatedAt`] = serverTimestamp();
+
+        const apiScheduleId = String(
+          pickupScheduleId ||
+          scheduleId ||
+          previousNowShowing.scheduleId ||
+          ""
+        ).trim();
         // PUQの場合はscheduleIdが必須
         // バックエンド側でpickup questionと判定される可能性があるため、
         // previousNowShowing.pickupがtrueの場合は常にscheduleIdを送る
@@ -1469,7 +1476,7 @@ export async function clearNowShowing(app) {
         if (isPickup) {
           // scheduleIdが空の場合はAPI呼び出しをスキップ
           // normalizeScheduleIdは空の場合__default_schedule__を返すため、直接チェックする
-          const normalizedScheduleId = pickupScheduleId ? String(pickupScheduleId).trim() : "";
+          const normalizedScheduleId = apiScheduleId;
           if (!normalizedScheduleId) {
             console.warn(`[clearNowShowing] scheduleId is required for pickup question UID: ${prevUid}, but scheduleId is empty or invalid. Skipping API call.`);
             // API呼び出しをスキップ（ただし、Firebaseのansweredフラグは既に設定済み）
@@ -1483,32 +1490,17 @@ export async function clearNowShowing(app) {
             });
           }
         } else {
-          // 通常質問の場合でも、prevItemが見つからない場合は、
-          // バックエンド側でpickup questionと判定される可能性があるため、scheduleIdを送る
-          // これにより、バックエンド側でpickup questionと判定された場合でもエラーが発生しない
-          if (!prevItem) {
-            // prevItemが見つからない場合は、バックエンド側でpickup questionと判定される可能性があるため、
-            // scheduleIdを送る（空の場合はスキップ）
-            const fallbackScheduleId = scheduleId ? String(scheduleId).trim() : "";
-            if (fallbackScheduleId) {
-              app.api.fireAndForgetApi({ 
-                action: "updateStatus", 
-                uid: prevUid, 
-                status: true, 
-                eventId,
-                scheduleId: fallbackScheduleId
-              });
-            } else {
-              console.warn(`[clearNowShowing] scheduleId is required for potential pickup question UID: ${prevUid}, but scheduleId is empty. Skipping API call.`);
-            }
+          // 通常質問として扱う場合でも、実際にはpickup questionである可能性に備えてscheduleIdを付与
+          // scheduleIdが空の場合は従来通りスキップ
+          if (!apiScheduleId) {
+            console.warn(`[clearNowShowing] scheduleId is required for potential pickup question UID: ${prevUid}, but scheduleId is empty. Skipping API call.`);
           } else {
-            // prevItemが見つかった場合は、通常質問として扱い、scheduleIdを送らない
             app.api.fireAndForgetApi({ 
               action: "updateStatus", 
               uid: prevUid, 
               status: true, 
               eventId,
-              scheduleId: undefined
+              scheduleId: apiScheduleId
             });
           }
         }
