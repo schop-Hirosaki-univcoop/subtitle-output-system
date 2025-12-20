@@ -1766,11 +1766,60 @@ export class OperatorApp {
       this.questionStatusUnsubscribe = null;
       return;
     }
-    const statusRef = getQuestionStatusRef(eventId, false);
-    
-    this.questionStatusUnsubscribe = onValue(statusRef, (snapshot) => {
-      this.applyQuestionStatusSnapshot(snapshot.val() || {});
+
+    const { scheduleId = "" } = this.getActiveChannel() || {};
+    const normalizedScheduleId = scheduleId ? normalizeScheduleId(scheduleId) : "";
+
+    // 通常質問用: questionStatus/${eventId}を監視
+    const normalStatusRef = getQuestionStatusRef(eventId, false);
+
+    // Pick Up Question用: questionStatus/${eventId}/${scheduleId}を監視（現在のscheduleIdのみ）
+    const pickupStatusRef = normalizedScheduleId
+      ? getQuestionStatusRef(eventId, true, normalizedScheduleId)
+      : null;
+
+    // 通常質問のリスナーを設定
+    const normalUnsubscribe = onValue(normalStatusRef, (snapshot) => {
+      const value = snapshot.val() || {};
+      // 通常質問のstatusのみを抽出（pickupquestionのscheduleIdノードを除外）
+      const normalStatus = {};
+      const questionsByUid = this.state.questionsByUid instanceof Map ? this.state.questionsByUid : new Map();
+      Object.entries(value).forEach(([key, status]) => {
+        // keyがscheduleId形式でない場合（通常質問のUID）のみを処理
+        // pickupquestionのscheduleIdノードを除外するため、`questions/pickup/${key}`の存在を確認
+        const questionRecord = questionsByUid.get(key);
+        const isPickup = questionRecord && questionRecord.pickup === true;
+        // keyがscheduleId形式（通常質問のUIDではない）かどうかを判定
+        // scheduleIdノードの場合は、その配下にuidが含まれる構造になっている
+        const isScheduleIdNode = status && typeof status === "object" &&
+          !(status.answered !== undefined || status.selecting !== undefined) &&
+          Object.values(status).some(v => v && typeof v === "object" && (v.answered !== undefined || v.selecting !== undefined));
+
+        if (!isPickup && !isScheduleIdNode && status && typeof status === "object" && (status.answered !== undefined || status.selecting !== undefined)) {
+          normalStatus[key] = status;
+        }
+      });
+      // 通常質問のstatusを適用（pickupquestionのstatusとマージされる）
+      this.applyQuestionStatusSnapshot(normalStatus);
     });
+
+    // Pick Up Questionのリスナーを設定（scheduleIdがある場合のみ）
+    let pickupUnsubscribe = null;
+    if (pickupStatusRef) {
+      pickupUnsubscribe = onValue(pickupStatusRef, (snapshot) => {
+        const value = snapshot.val() || {};
+        // pickupquestionのstatusを適用（通常質問のstatusとマージされる）
+        // 通常質問とpickupquestionは異なるuidを持つため、上書きされることはない
+        this.applyQuestionStatusSnapshot(value);
+      });
+    }
+
+    this.questionStatusUnsubscribe = () => {
+      normalUnsubscribe();
+      if (pickupUnsubscribe) {
+        pickupUnsubscribe();
+      }
+    };
   }
 
   /**
@@ -1814,11 +1863,14 @@ export class OperatorApp {
 
   /**
    * 質問のステータス情報をMapへ変換し、既存リストにマージします。
+   * 通常質問とpickupquestionの両方のリスナーから呼び出される可能性があるため、
+   * 既存のquestionStatusByUidとマージする。
    * @param {Record<string, any>} value
    */
   applyQuestionStatusSnapshot(value) {
     const branch = value && typeof value === "object" ? value : {};
-    const next = new Map();
+    // 既存のquestionStatusByUidを取得（マージするため）
+    const current = this.state.questionStatusByUid instanceof Map ? this.state.questionStatusByUid : new Map();
     Object.entries(branch).forEach(([uidKey, record]) => {
       if (!record || typeof record !== "object") {
         return;
@@ -1827,14 +1879,15 @@ export class OperatorApp {
       if (!resolvedUid) {
         return;
       }
-      next.set(resolvedUid, {
+      // 既存のstatusを更新または追加
+      current.set(resolvedUid, {
         answered: record.answered === true,
         selecting: record.selecting === true,
         pickup: record.pickup === true,
         updatedAt: Number(record.updatedAt || 0)
       });
     });
-    this.state.questionStatusByUid = next;
+    this.state.questionStatusByUid = current;
     this.rebuildQuestions();
   }
 

@@ -1309,6 +1309,11 @@ export class ChannelManager {
     this.app.refreshOperatorPresenceSubscription();
     this.app.renderChannelBanner();
     this.evaluateScheduleConflict();
+    
+    // 日程変更時にquestionStatusの監視を更新
+    if (typeof this.app.startQuestionStatusStream === "function") {
+      this.app.startQuestionStatusStream();
+    }
   }
 }
 

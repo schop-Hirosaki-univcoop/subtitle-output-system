@@ -108,9 +108,18 @@ test('isLegacyChannel always returns false', () => {
 });
 
 test('getQuestionStatusPath builds question status paths', () => {
+  // 通常質問（isPickup = false）
   assert.equal(getQuestionStatusPath('event-1'), 'questionStatus/event-1');
   assert.equal(getQuestionStatusPath('event-1', false), 'questionStatus/event-1');
-  assert.equal(getQuestionStatusPath('event-1', true), 'questionStatus/event-1');
+  assert.equal(getQuestionStatusPath('event-1', false, 'schedule-1'), 'questionStatus/event-1');
+  
+  // Pick Up Question（isPickup = true）
+  assert.equal(getQuestionStatusPath('event-1', true, 'schedule-1'), 'questionStatus/event-1/schedule-1');
+  assert.equal(getQuestionStatusPath('event-1', true, ''), 'questionStatus/event-1/__default_schedule__');
+  assert.equal(getQuestionStatusPath('event-1', true, null), 'questionStatus/event-1/__default_schedule__');
+  
+  // エラーケース
   assert.throws(() => getQuestionStatusPath(null), /eventId is required/);
   assert.throws(() => getQuestionStatusPath(''), /eventId is required/);
+  assert.throws(() => getQuestionStatusPath(null, true, 'schedule-1'), /eventId is required/);
 });

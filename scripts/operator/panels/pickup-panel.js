@@ -2,6 +2,7 @@
 import { GENRE_OPTIONS, GENRE_ALL_VALUE } from "../constants.js";
 import { pickupQuestionsRef, database, ref, update, onValue, get, getQuestionStatusRef } from "../firebase.js";
 import { escapeHtml, resolveGenreLabel, formatRelative } from "../utils.js";
+import { normalizeEventId } from "../../shared/channel-paths.js";
 
 const ALL_FILTER_VALUE = GENRE_ALL_VALUE;
 
@@ -905,16 +906,27 @@ export async function handlePickupFormSubmit(app, event) {
     const record = createPickupRecord(uid, question, genre, null, now);
     const eventIdRaw = app.state?.activeEventId;
     const eventId = eventIdRaw ? String(eventIdRaw).trim() : "";
-    const updates = {
-      [`questions/pickup/${uid}`]: record
-    };
-    // questionStatusへの書き込みはeventIdが存在する場合のみ
+    const { scheduleId = "" } = app.getActiveChannel?.() || {};
+    // questionStatusへの書き込みはeventIdとscheduleIdが存在する場合のみ
     // eventIdが空文字列やnull/undefinedの場合はスキップ
+    // pickupquestionの場合はscheduleIdが必須
     if (eventId && eventId.length > 0) {
-      const statusRef = getQuestionStatusRef(eventId, false);
-      updates[`${statusRef.key}/${uid}`] = { answered: false, selecting: false, pickup: true, updatedAt: now };
+      if (!scheduleId || scheduleId.length === 0) {
+        app.toast("日程が選択されていないため、Pick Up Questionを作成できません。", "error");
+        return;
+      }
+      const statusRef = getQuestionStatusRef(eventId, true, scheduleId);
+      const updates = {
+        [`questions/pickup/${uid}`]: record,
+        [`${statusRef.key}/${uid}`]: { answered: false, selecting: false, pickup: true, updatedAt: now }
+      };
+      await update(ref(database), updates);
+    } else {
+      const updates = {
+        [`questions/pickup/${uid}`]: record
+      };
+      await update(ref(database), updates);
     }
-    await update(ref(database), updates);
     app.api?.logAction?.("PICKUP_ADD", buildPickupLogDetails(uid, question, genre));
     if (questionInput) {
       questionInput.value = "";
@@ -1027,13 +1039,15 @@ export async function handlePickupEditSubmit(app, event) {
     const record = createPickupRecord(state.uid, question, genre, existing?.raw || null, now);
     const eventIdRaw = app.state?.activeEventId;
     const eventId = eventIdRaw ? String(eventIdRaw).trim() : "";
+    const { scheduleId = "" } = app.getActiveChannel?.() || {};
     const updates = {
       [`questions/pickup/${state.uid}`]: record
     };
-    // questionStatusへの書き込みはeventIdが存在する場合のみ
+    // questionStatusへの書き込みはeventIdとscheduleIdが存在する場合のみ
     // eventIdが空文字列やnull/undefinedの場合はスキップ
-    if (eventId && eventId.length > 0) {
-      const statusRef = getQuestionStatusRef(eventId, false);
+    // pickupquestionの更新時は現在のscheduleIdに対応するquestionStatusのみを更新
+    if (eventId && eventId.length > 0 && scheduleId && scheduleId.length > 0) {
+      const statusRef = getQuestionStatusRef(eventId, true, scheduleId);
       const statusMap = app.state?.questionStatusByUid;
       const statusEntry = statusMap instanceof Map ? statusMap.get(state.uid) : null;
       if (statusEntry) {
@@ -1168,9 +1182,31 @@ export async function handlePickupDelete(app) {
     };
     // questionStatusへの削除はeventIdが存在する場合のみ
     // eventIdが空文字列やnull/undefinedの場合はスキップ
+    // pickupquestionの削除時は、全日程のquestionStatus/${eventId}/${scheduleId}/${uid}から削除する
     if (eventId && eventId.length > 0) {
-      const statusRef = getQuestionStatusRef(eventId, false);
-      updates[`${statusRef.key}/${trimmedUid}`] = null;
+      const eventKey = normalizeEventId(eventId);
+      const eventStatusRef = ref(database, `questionStatus/${eventKey}`);
+      try {
+        const eventStatusSnapshot = await get(eventStatusRef);
+        const eventStatusData = eventStatusSnapshot.val() || {};
+        // questionStatus/${eventId}配下のすべてのキーを走査
+        // keyがscheduleIdノードの場合（通常質問のUIDではない場合）、その配下のuidを削除
+        Object.keys(eventStatusData).forEach((key) => {
+          const value = eventStatusData[key];
+          // scheduleIdノードの場合は、その配下にuidが含まれる構造になっている
+          // 通常質問のUIDノードの場合は、直接statusが含まれる構造（answered, selectingなど）
+          const isScheduleIdNode = value && typeof value === "object" &&
+            !(value.answered !== undefined || value.selecting !== undefined) &&
+            Object.keys(value).some(k => value[k] && typeof value[k] === "object" && (value[k].answered !== undefined || value[k].selecting !== undefined));
+          if (isScheduleIdNode && value[trimmedUid]) {
+            // このscheduleIdノードの配下からuidを削除
+            updates[`questionStatus/${eventKey}/${key}/${trimmedUid}`] = null;
+          }
+        });
+      } catch (error) {
+        console.warn("[confirmPickupDelete] Failed to fetch eventStatus for deletion:", error);
+        // エラーが発生しても、questions/pickupからの削除は続行
+      }
     }
     await update(ref(database), updates);
     app.api?.logAction?.("PICKUP_DELETE", buildPickupLogDetails(state.uid, state.question, state.genre));

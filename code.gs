@@ -696,16 +696,16 @@ function doPost(e) {
         return ok(batchToggleDictionaryTerms(req.uids, req.enabled));
       case "updateStatus":
         assertOperator_(principal);
-        return ok(updateAnswerStatus(req.uid, req.status, req.eventId));
+        return ok(updateAnswerStatus(req.uid, req.status, req.eventId, req.scheduleId));
       case "editQuestion":
         assertOperator_(principal);
         return ok(editQuestionText(req.uid, req.text));
       case "batchUpdateStatus":
         assertOperator_(principal);
-        return ok(batchUpdateStatus(req.uids, req.status, principal));
+        return ok(batchUpdateStatus(req.uids, req.status, req.scheduleId, principal));
       case "updateSelectingStatus":
         assertOperator_(principal);
-        return ok(updateSelectingStatus(req.uid, principal));
+        return ok(updateSelectingStatus(req.uid, req.scheduleId, principal));
       case "clearSelectingStatus":
         assertOperator_(principal);
         return ok(clearSelectingStatus(principal));
@@ -5195,7 +5195,7 @@ function resolveQuestionRecordForUid_(uid, token) {
   return { branch: "", record: null, token: accessToken };
 }
 
-function updateAnswerStatus(uid, status, eventId) {
+function updateAnswerStatus(uid, status, eventId, scheduleId) {
   const normalizedUid = String(uid || "").trim();
   if (!normalizedUid) {
     throw new Error("UID is required.");
@@ -5213,7 +5213,33 @@ function updateAnswerStatus(uid, status, eventId) {
   if (!resolvedEventId) {
     throw new Error(`UID: ${normalizedUid} has no eventId.`);
   }
-  const statusPath = `questionStatus/${resolvedEventId}/${normalizedUid}`;
+  
+  // pickupquestionの場合はscheduleIdを含むパスを使用
+  const isPickup = branch === "pickup";
+  let statusPath;
+  if (isPickup) {
+    const normalizedScheduleId = String(scheduleId || "").trim();
+    if (!normalizedScheduleId) {
+      // scheduleIdが取得できない場合は、tokenから取得を試みる
+      const questionToken = String(record.token || "").trim();
+      if (questionToken) {
+        const tokenRecord = fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
+        const tokenScheduleId = String(tokenRecord.scheduleId || "").trim();
+        if (tokenScheduleId) {
+          statusPath = `questionStatus/${resolvedEventId}/${tokenScheduleId}/${normalizedUid}`;
+        } else {
+          throw new Error(`UID: ${normalizedUid} has no scheduleId for pickup question.`);
+        }
+      } else {
+        throw new Error(`UID: ${normalizedUid} has no scheduleId for pickup question.`);
+      }
+    } else {
+      statusPath = `questionStatus/${resolvedEventId}/${normalizedScheduleId}/${normalizedUid}`;
+    }
+  } else {
+    statusPath = `questionStatus/${resolvedEventId}/${normalizedUid}`;
+  }
+  
   const currentStatus = fetchRtdb_(statusPath, token);
 
   if (!currentStatus || typeof currentStatus !== "object") {
@@ -5241,7 +5267,7 @@ function updateAnswerStatus(uid, status, eventId) {
 // それぞれの status フィールドを requestedStatus に更新する。
 // まとめてPATCHすることでRTDBへの書き込み回数を削減する。
 // 司会用に「この質問群を一括で採用済みにする」といった操作で使う。
-function batchUpdateStatus(uids, status) {
+function batchUpdateStatus(uids, status, scheduleId, principal) {
   if (!Array.isArray(uids)) {
     throw new Error("UIDs array is required.");
   }
@@ -5265,19 +5291,50 @@ function batchUpdateStatus(uids, status) {
       return;
     }
 
-    // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
-    // record.eventIdは削除されているため、tokenから取得
-    const questionToken = String(record.token || "").trim();
-    if (!questionToken) {
-      return; // tokenがない場合はスキップ
+    const isPickup = branch === "pickup";
+    let statusPath;
+    
+    if (isPickup) {
+      // pickupquestionの場合はscheduleIdが必要
+      // 引数でscheduleIdが渡されている場合はそれを使用、そうでない場合はtokenから取得
+      const questionToken = String(record.token || "").trim();
+      let resolvedScheduleId = String(scheduleId || "").trim();
+      let eventId = "";
+      
+      if (questionToken) {
+        const tokenRecord = fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
+        eventId = String(tokenRecord.eventId || "").trim();
+        if (!resolvedScheduleId) {
+          resolvedScheduleId = String(tokenRecord.scheduleId || "").trim();
+        }
+      }
+      
+      if (!eventId) {
+        // eventIdが取得できない場合はスキップ
+        return;
+      }
+      if (!resolvedScheduleId) {
+        // scheduleIdが取得できない場合はスキップ
+        return;
+      }
+      statusPath = `questionStatus/${eventId}/${resolvedScheduleId}/${uid}`;
+    } else {
+      // 通常質問の処理（既存のまま）
+      // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
+      // record.eventIdは削除されているため、tokenから取得
+      const questionToken = String(record.token || "").trim();
+      if (!questionToken) {
+        return; // tokenがない場合はスキップ
+      }
+      const tokenRecord =
+        fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
+      const eventId = String(tokenRecord.eventId || "").trim();
+      if (!eventId) {
+        return; // eventIdがない場合はスキップ
+      }
+      statusPath = `questionStatus/${eventId}/${uid}`;
     }
-    const tokenRecord =
-      fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
-    const eventId = String(tokenRecord.eventId || "").trim();
-    if (!eventId) {
-      return; // eventIdがない場合はスキップ
-    }
-    const statusPath = `questionStatus/${eventId}/${uid}`;
+    
     const currentStatus = fetchRtdb_(statusPath, token);
 
     if (!currentStatus || typeof currentStatus !== "object") {
@@ -5301,7 +5358,7 @@ function batchUpdateStatus(uids, status) {
   return { success: true, message: `${updatedCount} items updated.` };
 }
 
-function updateSelectingStatus(uid) {
+function updateSelectingStatus(uid, scheduleId, principal) {
   const normalizedUid = String(uid || "").trim();
   if (!normalizedUid) {
     throw new Error("UID is required.");
@@ -5314,48 +5371,135 @@ function updateSelectingStatus(uid) {
     throw new Error(`UID: ${normalizedUid} not found.`);
   }
 
+  const isPickup = branch === "pickup";
+
   // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
   // record.eventIdは削除されているため、tokenから取得
   const questionToken = String(record.token || "").trim();
-  if (!questionToken) {
-    throw new Error(`UID: ${normalizedUid} has no token.`);
+  let eventId = "";
+  if (questionToken) {
+    const tokenRecord = fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
+    eventId = String(tokenRecord.eventId || "").trim();
   }
-  const tokenRecord =
-    fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
-  const eventId = String(tokenRecord.eventId || "").trim();
   if (!eventId) {
-    throw new Error(`UID: ${normalizedUid} has no eventId.`);
+    // pickupquestionにはtokenがない場合があるため、scheduleIdが引数で渡されている場合はそれを使用
+    if (isPickup && scheduleId) {
+      // eventIdを取得するために、questions/pickup/${normalizedUid}から取得を試みる
+      // ただし、通常はtokenから取得できるはずなので、エラーを投げる
+      throw new Error(`UID: ${normalizedUid} has no eventId.`);
+    } else {
+      throw new Error(`UID: ${normalizedUid} has no token.`);
+    }
   }
-  const questionStatusBasePath = `questionStatus/${eventId}`;
-  const statusBranch = fetchRtdb_(questionStatusBasePath, token) || {};
-
-  if (
-    !statusBranch ||
-    typeof statusBranch !== "object" ||
-    !statusBranch[normalizedUid]
-  ) {
-    throw new Error(`UID: ${normalizedUid} not found.`);
-  }
-
+  
   const now = Date.now();
   const updates = {};
-  Object.keys(statusBranch).forEach((key) => {
-    const normalizedKey = String(key || "").trim();
-    if (!normalizedKey) {
-      return;
+  
+  if (isPickup) {
+    // pickupquestionの場合は、scheduleIdが必要
+    let resolvedScheduleId = String(scheduleId || "").trim();
+    if (!resolvedScheduleId && questionToken) {
+      const tokenRecord = fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
+      resolvedScheduleId = String(tokenRecord.scheduleId || "").trim();
     }
-    const selecting = normalizedKey === normalizedUid;
-    updates[`${questionStatusBasePath}/${normalizedKey}/selecting`] = selecting;
-    updates[`${questionStatusBasePath}/${normalizedKey}/updatedAt`] = now;
-    const { branch: itemBranch } = resolveQuestionRecordForUid_(
-      normalizedKey,
-      token
-    );
-    if (itemBranch) {
-      updates[`questions/${itemBranch}/${normalizedKey}/selecting`] = selecting;
-      updates[`questions/${itemBranch}/${normalizedKey}/updatedAt`] = now;
+    if (!resolvedScheduleId) {
+      // scheduleIdが引数で渡されていない場合は、questionStatus/${eventId}配下の全scheduleIdを走査
+      const questionStatusBasePath = `questionStatus/${eventId}`;
+      const statusBranch = fetchRtdb_(questionStatusBasePath, token) || {};
+      let found = false;
+      Object.entries(statusBranch).forEach(([key, value]) => {
+        // keyがscheduleIdノードの場合（通常質問のUIDではない場合）を判定
+        // scheduleIdノードの場合は、その配下にuidが含まれる構造になっている
+        // 通常質問のUIDノードの場合は、直接statusが含まれる構造（answered, selectingなど）
+        const isScheduleIdNode = value && typeof value === "object" &&
+          !(value.answered !== undefined || value.selecting !== undefined) &&
+          Object.values(value).some(v => v && typeof v === "object" && (v.answered !== undefined || v.selecting !== undefined));
+        
+        if (isScheduleIdNode && value[normalizedUid]) {
+          const scheduleStatus = value[normalizedUid];
+          found = true;
+          // このscheduleIdのselecting状態を更新
+          const selecting = true; // このuidをselectingにする
+          updates[`${questionStatusBasePath}/${key}/${normalizedUid}/selecting`] = selecting;
+          updates[`${questionStatusBasePath}/${key}/${normalizedUid}/updatedAt`] = now;
+          // 他のuidのselectingをfalseにする
+          Object.keys(value).forEach((otherUid) => {
+            if (otherUid !== normalizedUid) {
+              updates[`${questionStatusBasePath}/${key}/${otherUid}/selecting`] = false;
+              updates[`${questionStatusBasePath}/${key}/${otherUid}/updatedAt`] = now;
+            }
+          });
+        }
+      });
+      if (!found) {
+        throw new Error(`UID: ${normalizedUid} not found in any schedule.`);
+      }
+    } else {
+      // scheduleIdが指定されている場合は、そのscheduleIdのみを更新
+      const statusPath = `questionStatus/${eventId}/${resolvedScheduleId}`;
+      const statusBranch = fetchRtdb_(statusPath, token) || {};
+      
+      if (!statusBranch || typeof statusBranch !== "object" || !statusBranch[normalizedUid]) {
+        throw new Error(`UID: ${normalizedUid} not found.`);
+      }
+      
+      Object.keys(statusBranch).forEach((key) => {
+        const normalizedKey = String(key || "").trim();
+        if (!normalizedKey) {
+          return;
+        }
+        const selecting = normalizedKey === normalizedUid;
+        updates[`${statusPath}/${normalizedKey}/selecting`] = selecting;
+        updates[`${statusPath}/${normalizedKey}/updatedAt`] = now;
+        const { branch: itemBranch } = resolveQuestionRecordForUid_(
+          normalizedKey,
+          token
+        );
+        if (itemBranch) {
+          updates[`questions/${itemBranch}/${normalizedKey}/selecting`] = selecting;
+          updates[`questions/${itemBranch}/${normalizedKey}/updatedAt`] = now;
+        }
+      });
     }
-  });
+  } else {
+    // 通常質問の処理（既存のまま）
+    const questionStatusBasePath = `questionStatus/${eventId}`;
+    const statusBranch = fetchRtdb_(questionStatusBasePath, token) || {};
+
+    if (
+      !statusBranch ||
+      typeof statusBranch !== "object" ||
+      !statusBranch[normalizedUid]
+    ) {
+      throw new Error(`UID: ${normalizedUid} not found.`);
+    }
+
+    Object.keys(statusBranch).forEach((key) => {
+      const normalizedKey = String(key || "").trim();
+      if (!normalizedKey) {
+        return;
+      }
+      // keyがscheduleIdノードの場合はスキップ（pickupquestion用）
+      const value = statusBranch[key];
+      const isScheduleIdNode = value && typeof value === "object" &&
+        !(value.answered !== undefined || value.selecting !== undefined) &&
+        Object.values(value).some(v => v && typeof v === "object" && (v.answered !== undefined || v.selecting !== undefined));
+      if (isScheduleIdNode) {
+        return; // scheduleIdノードはスキップ
+      }
+      const selecting = normalizedKey === normalizedUid;
+      updates[`${questionStatusBasePath}/${normalizedKey}/selecting`] = selecting;
+      updates[`${questionStatusBasePath}/${normalizedKey}/updatedAt`] = now;
+      const { branch: itemBranch } = resolveQuestionRecordForUid_(
+        normalizedKey,
+        token
+      );
+      if (itemBranch) {
+        updates[`questions/${itemBranch}/${normalizedKey}/selecting`] = selecting;
+        updates[`questions/${itemBranch}/${normalizedKey}/updatedAt`] = now;
+      }
+    });
+  }
 
   patchRtdb_(updates, token);
   return { success: true, message: `UID: ${normalizedUid} is now selecting.` };
@@ -5396,15 +5540,40 @@ function clearSelectingStatus() {
       processedEventIds.add(eventId);
       const statusBranch = fetchRtdb_(`questionStatus/${eventId}`, token) || {};
       if (statusBranch && typeof statusBranch === "object") {
-        Object.entries(statusBranch).forEach(([statusUid, statusRecord]) => {
-          if (statusRecord && statusRecord.selecting === true) {
-            changed = true;
-            updates[`questionStatus/${eventId}/${statusUid}/selecting`] = false;
-            updates[`questionStatus/${eventId}/${statusUid}/updatedAt`] = now;
-            const { branch } = resolveQuestionRecordForUid_(statusUid, token);
-            if (branch) {
-              updates[`questions/${branch}/${statusUid}/selecting`] = false;
-              updates[`questions/${branch}/${statusUid}/updatedAt`] = now;
+        Object.entries(statusBranch).forEach(([key, value]) => {
+          // keyがscheduleIdノードかuidノードかを判定
+          // scheduleIdノードの場合は、その配下にuidが含まれる構造になっている
+          // 通常質問のUIDノードの場合は、直接statusが含まれる構造（answered, selectingなど）
+          const isScheduleIdNode = value && typeof value === "object" &&
+            !(value.answered !== undefined || value.selecting !== undefined) &&
+            Object.values(value).some(v => v && typeof v === "object" && (v.answered !== undefined || v.selecting !== undefined));
+          
+          if (isScheduleIdNode) {
+            // scheduleIdノードの場合（pickupquestion用）
+            // 配下のすべてのuidを走査
+            Object.entries(value).forEach(([statusUid, statusRecord]) => {
+              if (statusRecord && typeof statusRecord === "object" && statusRecord.selecting === true) {
+                changed = true;
+                updates[`questionStatus/${eventId}/${key}/${statusUid}/selecting`] = false;
+                updates[`questionStatus/${eventId}/${key}/${statusUid}/updatedAt`] = now;
+                const { branch } = resolveQuestionRecordForUid_(statusUid, token);
+                if (branch) {
+                  updates[`questions/${branch}/${statusUid}/selecting`] = false;
+                  updates[`questions/${branch}/${statusUid}/updatedAt`] = now;
+                }
+              }
+            });
+          } else {
+            // 通常質問のUIDノードの場合
+            if (value && typeof value === "object" && value.selecting === true) {
+              changed = true;
+              updates[`questionStatus/${eventId}/${key}/selecting`] = false;
+              updates[`questionStatus/${eventId}/${key}/updatedAt`] = now;
+              const { branch } = resolveQuestionRecordForUid_(key, token);
+              if (branch) {
+                updates[`questions/${branch}/${key}/selecting`] = false;
+                updates[`questions/${branch}/${key}/updatedAt`] = now;
+              }
             }
           }
         });
@@ -5438,25 +5607,48 @@ function editQuestionText(uid, newText) {
     throw new Error(`UID: ${normalizedUid} not found.`);
   }
 
+  const isPickup = branch === "pickup";
+  
   // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
   // record.eventIdは削除されているため、tokenから取得
   const questionToken = String(record.token || "").trim();
-  if (!questionToken) {
-    throw new Error(`UID: ${normalizedUid} has no token.`);
+  let eventId = "";
+  if (questionToken) {
+    const tokenRecord = fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
+    eventId = String(tokenRecord.eventId || "").trim();
   }
-  const tokenRecord =
-    fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
-  const eventId = String(tokenRecord.eventId || "").trim();
   if (!eventId) {
+    // pickupquestionにはtokenがない場合があるため、エラーを投げる
     throw new Error(`UID: ${normalizedUid} has no eventId.`);
   }
-  const statusPath = `questionStatus/${eventId}/${normalizedUid}`;
-
+  
   const now = Date.now();
   const updates = {};
   updates[`questions/${branch}/${normalizedUid}/question`] = trimmed;
   updates[`questions/${branch}/${normalizedUid}/updatedAt`] = now;
-  updates[`${statusPath}/updatedAt`] = now;
+  
+  if (isPickup) {
+    // pickupquestionの場合は、全日程のquestionStatus/${eventId}/${scheduleId}/${normalizedUid}/updatedAtを更新
+    // または、現在のscheduleIdのみを更新する（実装方針による）
+    // ここでは、questionStatus/${eventId}配下の全scheduleIdノードを走査し、該当するuidのupdatedAtを更新
+    const questionStatusBasePath = `questionStatus/${eventId}`;
+    const statusBranch = fetchRtdb_(questionStatusBasePath, token) || {};
+    Object.entries(statusBranch).forEach(([key, value]) => {
+      // keyがscheduleIdノードの場合（通常質問のUIDではない場合）
+      const isScheduleIdNode = value && typeof value === "object" &&
+        !(value.answered !== undefined || value.selecting !== undefined) &&
+        Object.values(value).some(v => v && typeof v === "object" && (v.answered !== undefined || v.selecting !== undefined));
+      if (isScheduleIdNode && value[normalizedUid]) {
+        // このscheduleIdノードの配下のuidのupdatedAtを更新
+        updates[`${questionStatusBasePath}/${key}/${normalizedUid}/updatedAt`] = now;
+      }
+    });
+  } else {
+    // 通常質問の処理（既存のまま）
+    const statusPath = `questionStatus/${eventId}/${normalizedUid}`;
+    updates[`${statusPath}/updatedAt`] = now;
+  }
+  
   patchRtdb_(updates, token);
   return { success: true, message: `UID: ${normalizedUid} question updated.` };
 }

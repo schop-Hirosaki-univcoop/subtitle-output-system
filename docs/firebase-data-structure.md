@@ -553,7 +553,7 @@ GL の割り当て情報を管理。
 
 ### questionStatus/{eventId}/{uid}
 
-各質問の状態。
+通常質問の状態。
 
 **読み取り権限:** 認証済みユーザー
 
@@ -568,6 +568,26 @@ GL の割り当て情報を管理。
 - `answered` (boolean, 任意): 回答済みかどうか（新規作成時は false のみ許可）
 - `selecting` (boolean, 任意): 選択中かどうか（新規作成時は false のみ許可）
 - `updatedAt` (number, 任意): 更新時刻（タイムスタンプ、または`now`）
+
+### questionStatus/{eventId}/{scheduleId}/{uid}
+
+Pick Up Question の状態（日程毎に管理）。
+
+**読み取り権限:** 認証済みユーザー
+
+**書き込み権限:**
+
+- 匿名認証ユーザー以外、または管理者
+- 匿名認証ユーザーで、screens/approved に登録されている場合
+- 新規作成時で、questions/pickup に該当する質問が存在する場合
+
+**データ構造:**
+
+- `answered` (boolean, 任意): 回答済みかどうか（新規作成時は false のみ許可）
+- `selecting` (boolean, 任意): 選択中かどうか（新規作成時は false のみ許可）
+- `updatedAt` (number, 任意): 更新時刻（タイムスタンプ、または`now`）
+
+**注意:** Pick Up Question は日程に関係なく同じ UID を使用するため、日程毎に状態を管理する必要があります。同じ Pick Up Question でも、異なる日程では別々の状態として管理されます。
 
 ---
 

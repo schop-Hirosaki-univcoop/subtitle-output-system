@@ -106,13 +106,15 @@ export function getSideTelopsRef(eventId = "", scheduleId = "") {
 
 /**
  * 質問ステータスの参照を返します。
- * 通常質問もPick Up Questionもイベントごとに分離されます。
+ * 通常質問: questionStatus/${eventId}
+ * Pick Up Question: questionStatus/${eventId}/${scheduleId}
  * @param {string} eventId イベントID
- * @param {boolean} isPickup Pick Up Questionかどうか（現在は使用されていませんが、将来の拡張のために残しています）
+ * @param {boolean} isPickup Pick Up Questionかどうか
+ * @param {string} scheduleId スケジュールID（Pick Up Questionの場合に使用）
  * @returns {import("firebase/database").DatabaseReference}
  */
-export function getQuestionStatusRef(eventId = "", isPickup = false) {
-  const path = getQuestionStatusPath(eventId, isPickup);
+export function getQuestionStatusRef(eventId = "", isPickup = false, scheduleId = "") {
+  const path = getQuestionStatusPath(eventId, isPickup, scheduleId);
   return ref(database, path);
 }
 
