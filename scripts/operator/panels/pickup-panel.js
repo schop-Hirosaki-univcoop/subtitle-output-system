@@ -1072,10 +1072,19 @@ export async function handlePickupEditSubmit(app, event) {
 
 export function handlePickupActionEdit(app, event) {
   ensurePickupSelectionState(app);
-  const entry = app.pickupSelectedEntry && app.pickupSelectedEntry.uid === app.pickupSelectedId
+  // pickupSelectedEntryが正しく設定されていない場合、pickupEntriesから再検索
+  let entry = app.pickupSelectedEntry && app.pickupSelectedEntry.uid === app.pickupSelectedId
     ? app.pickupSelectedEntry
     : null;
+  if (!entry && app.pickupSelectedId) {
+    const entries = Array.isArray(app.pickupEntries) ? app.pickupEntries : [];
+    entry = entries.find((e) => e.uid === app.pickupSelectedId) || null;
+    if (entry) {
+      app.pickupSelectedEntry = entry;
+    }
+  }
   if (!entry) {
+    app.toast("編集する質問を選択してください。", "error");
     return;
   }
   const trigger = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null;
@@ -1084,10 +1093,19 @@ export function handlePickupActionEdit(app, event) {
 
 export function handlePickupActionDelete(app, event) {
   ensurePickupSelectionState(app);
-  const entry = app.pickupSelectedEntry && app.pickupSelectedEntry.uid === app.pickupSelectedId
+  // pickupSelectedEntryが正しく設定されていない場合、pickupEntriesから再検索
+  let entry = app.pickupSelectedEntry && app.pickupSelectedEntry.uid === app.pickupSelectedId
     ? app.pickupSelectedEntry
     : null;
+  if (!entry && app.pickupSelectedId) {
+    const entries = Array.isArray(app.pickupEntries) ? app.pickupEntries : [];
+    entry = entries.find((e) => e.uid === app.pickupSelectedId) || null;
+    if (entry) {
+      app.pickupSelectedEntry = entry;
+    }
+  }
   if (!entry) {
+    app.toast("削除する質問を選択してください。", "error");
     return;
   }
   const trigger = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null;
