@@ -1391,8 +1391,11 @@ export async function clearNowShowing(app) {
     if (previousNowShowing) {
       let prevUid = typeof previousNowShowing.uid !== "undefined" ? String(previousNowShowing.uid || "") : "";
       let prevItem = null;
+      // まずpreviousNowShowing.pickupを確認
       let isPickup = previousNowShowing.pickup === true;
+      
       if (!prevUid) {
+        // uidがない場合はname/questionから検索
         prevItem = app.state.allQuestions.find(
           (q) => q["ラジオネーム"] === previousNowShowing.name && q["質問・お悩み"] === previousNowShowing.question
         );
@@ -1401,10 +1404,13 @@ export async function clearNowShowing(app) {
           isPickup = prevItem.ピックアップ === true;
         }
       } else {
+        // uidがある場合はuidから検索
         prevItem = app.state.allQuestions.find((q) => String(q.UID || "") === prevUid) || null;
-        if (!isPickup && prevItem) {
+        if (prevItem) {
+          // prevItemが見つかった場合は、prevItemのピックアップフラグを優先
           isPickup = prevItem.ピックアップ === true;
         }
+        // prevItemが見つからない場合でも、previousNowShowing.pickupがtrueならisPickupをtrueのまま維持
       }
 
       if (prevUid) {
@@ -1418,14 +1424,28 @@ export async function clearNowShowing(app) {
         group.updates[`${prevUid}/answered`] = true;
         group.updates[`${prevUid}/updatedAt`] = serverTimestamp();
         // PUQの場合はscheduleIdが必須
-        // scheduleIdが空文字列や__default_schedule__の場合は、undefinedを渡さない（空文字列でも有効な値として扱う）
-        app.api.fireAndForgetApi({ 
-          action: "updateStatus", 
-          uid: prevUid, 
-          status: true, 
-          eventId,
-          scheduleId: isPickup ? (scheduleId || undefined) : undefined
-        });
+        // scheduleIdが空文字列や__default_schedule__の場合でも、有効な値として渡す
+        if (isPickup) {
+          if (!scheduleId || scheduleId.trim() === "") {
+            console.warn(`[clearNowShowing] scheduleId is required for pickup question UID: ${prevUid}, but scheduleId is empty`);
+          } else {
+            app.api.fireAndForgetApi({ 
+              action: "updateStatus", 
+              uid: prevUid, 
+              status: true, 
+              eventId,
+              scheduleId: scheduleId
+            });
+          }
+        } else {
+          app.api.fireAndForgetApi({ 
+            action: "updateStatus", 
+            uid: prevUid, 
+            status: true, 
+            eventId,
+            scheduleId: undefined
+          });
+        }
       }
     }
     // 各パスごとに更新を実行
