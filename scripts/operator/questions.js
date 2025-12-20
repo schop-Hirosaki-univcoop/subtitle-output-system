@@ -1225,7 +1225,7 @@ export async function handleBatchUnanswer(app) {
   // 即座に再描画してローディング状態を表示
   renderQuestions(app);
   
-  const { scheduleId } = resolveNowShowingReference(app);
+  const { eventId, scheduleId } = resolveNowShowingReference(app);
   
   // イベント/Pick Up Question/scheduleIdごとにグループ化
   const updatesByPath = new Map();
@@ -1281,6 +1281,7 @@ export async function handleBatchUnanswer(app) {
       action: "batchUpdateStatus", 
       uids: uidsToUpdate, 
       status: false,
+      eventId: eventId,
       scheduleId: scheduleId
     });
     if (uidsToUpdate.length) {

@@ -5276,7 +5276,7 @@ function updateAnswerStatus(uid, status, eventId, scheduleId) {
 // それぞれの status フィールドを requestedStatus に更新する。
 // まとめてPATCHすることでRTDBへの書き込み回数を削減する。
 // 司会用に「この質問群を一括で採用済みにする」といった操作で使う。
-function batchUpdateStatus(uids, status, scheduleId, principal) {
+function batchUpdateStatus(uids, status, eventId, scheduleId, principal) {
   if (!Array.isArray(uids)) {
     throw new Error("UIDs array is required.");
   }
@@ -5305,29 +5305,39 @@ function batchUpdateStatus(uids, status, scheduleId, principal) {
 
     if (isPickup) {
       // pickupquestionの場合はscheduleIdが必要
-      // 引数でscheduleIdが渡されている場合はそれを使用、そうでない場合はtokenから取得
+      // 引数でscheduleIdが渡されている場合はそれを使用、そうでない場合はtokenから取得を試みる
+      // ただし、PUQにはtokenがない場合があるため、引数のscheduleIdが必須
       const questionToken = String(record.token || "").trim();
       let resolvedScheduleId = String(scheduleId || "").trim();
       let eventId = "";
 
-      if (questionToken) {
+      // 引数でeventIdが渡されている場合はそれを使用
+      let resolvedEventId = String(eventId || "").trim();
+
+      // 引数でeventIdが渡されていない場合、tokenから取得を試みる
+      if (!resolvedEventId && questionToken) {
         const tokenRecord =
           fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
-        eventId = String(tokenRecord.eventId || "").trim();
-        if (!resolvedScheduleId) {
-          resolvedScheduleId = String(tokenRecord.scheduleId || "").trim();
-        }
+        resolvedEventId = String(tokenRecord.eventId || "").trim();
       }
 
-      if (!eventId) {
-        // eventIdが取得できない場合はスキップ
+      // 引数でscheduleIdが渡されていない場合、tokenから取得を試みる
+      if (!resolvedScheduleId && questionToken) {
+        const tokenRecord =
+          fetchRtdb_(`questionIntake/tokens/${questionToken}`, token) || {};
+        resolvedScheduleId = String(tokenRecord.scheduleId || "").trim();
+      }
+
+      // PUQの場合、eventIdとscheduleIdが必須
+      if (!resolvedEventId) {
+        // eventIdが取得できない場合はスキップ（エラーを投げずにスキップ）
         return;
       }
       if (!resolvedScheduleId) {
-        // scheduleIdが取得できない場合はスキップ
+        // scheduleIdが取得できない場合はスキップ（エラーを投げずにスキップ）
         return;
       }
-      statusPath = `questionStatus/${eventId}/${resolvedScheduleId}/${uid}`;
+      statusPath = `questionStatus/${resolvedEventId}/${resolvedScheduleId}/${uid}`;
     } else {
       // 通常質問の処理（既存のまま）
       // イベントIDを確認（Pick Up Questionも通常質問も同じ構造でイベントごとに分離）
