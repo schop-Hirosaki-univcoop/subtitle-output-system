@@ -89,8 +89,33 @@ export function getQuestionStatusRef(
 
 - `handleDisplay` (行 873): 送出時に scheduleId を取得して渡す
   - **重要**: 現在`getQuestionStatusRef(eventId, isPickup)`を呼び出しているが、scheduleId を渡していない
+  - **重要**: 行 875-904 で`updates`オブジェクトを作成して`statusRef`に更新しているが、pickupquestion の場合は`scheduleId`を含むパスを使用する必要がある
+    - **重要**: `previousUid`や`previousNowShowing`が pickupquestion かどうかを判定する必要がある
+      - 行 877-880 で`previousUid`を処理する際、`previousUid`が pickupquestion かどうかを判定し、pickupquestion の場合は`scheduleId`を含むパスを使用する必要がある
+      - 行 881-898 で`previousNowShowing`を処理する際、`prev`が pickupquestion かどうかを判定し、pickupquestion の場合は`scheduleId`を含むパスを使用する必要がある
+      - 現在は`isPickup`は現在選択中の質問（`app.state.selectedRowData.isPickup`）のみをチェックしているが、`previousUid`や`prev`が pickupquestion の場合も考慮する必要がある
+    - 行 900-902 で現在の質問のステータスを更新する際、pickupquestion の場合は`scheduleId`を含むパスを使用する必要がある
+    - **実装方針**: `previousUid`や`prev`が pickupquestion の場合、別の`statusRef`を使用するか、`updates`オブジェクトを複数の`statusRef`に分割する必要がある
+      - オプション 1: `previousUid`や`prev`が pickupquestion の場合、別の`statusRef`を作成し、複数の`update`呼び出しを実行する（推奨）
+        - `previousUid`が存在する場合、`app.state.allQuestions`から該当する質問を検索し、pickupquestion かどうかを判定する
+        - `previousUid`が pickupquestion の場合、`getQuestionStatusRef(eventId, true, scheduleId)`で`statusRef`を取得し、別途`update`を実行する
+        - `prev`が pickupquestion の場合も同様に処理する
+        - 現在の質問（`app.state.selectedRowData.uid`）が pickupquestion の場合も、適切な`statusRef`を使用する
+      - オプション 2: `updates`オブジェクトを通常質問用と pickupquestion 用に分割し、それぞれ適切な`statusRef`に更新する
+    - `statusRef`は`getQuestionStatusRef(eventId, isPickup, scheduleId)`で取得する必要がある
+    - **重要**: `previousUid`が存在する場合、`app.state.allQuestions.find((q) => String(q.UID || "") === previousUid)`で該当する質問を検索し、`isPickUpQuestion`関数または`q.ピックアップ === true`で判定する必要がある
   - 行 937 で`updateSelectingStatus`を呼び出す際、pickupquestion の場合は scheduleId を引数で渡す必要がある（Google Apps Script 側の修正も必要）
+  - 行 938-955 で token がない場合の代替処理があるが、この処理でも pickupquestion の場合は`scheduleId`を含むパスを使用する必要がある
+    - 現在は`statusRef`を使用しているが、pickupquestion の場合は`scheduleId`を含むパスを使用する必要がある
+    - `sameEventQuestions`をフィルタリングする際、pickupquestion の場合は現在の scheduleId に対応する questionStatus のみを更新する必要がある
+    - **重要**: この代替処理では、`sameEventQuestions`内の各質問について、pickupquestion かどうかを判定し、pickupquestion の場合は別の`statusRef`を使用する必要がある
+    - **実装方針**: `sameEventQuestions`を通常質問と pickupquestion に分割し、それぞれ適切な`statusRef`に更新する
+      - 通常質問用の`statusRef`: `getQuestionStatusRef(eventId, false)`
+      - pickupquestion 用の`statusRef`: `getQuestionStatusRef(eventId, true, scheduleId)`
+      - 通常質問用と pickupquestion 用の`clearingUpdates`を別々に作成し、それぞれ適切な`statusRef`に`update`を実行する
   - 行 958, 973 で`updateStatus`を呼び出す際も、pickupquestion の場合は scheduleId を渡す必要がある（Google Apps Script 側の修正も必要）
+    - **重要**: 行 958 で`previousUid`が pickupquestion かどうかを判定し、pickupquestion の場合は`scheduleId`を渡す必要がある
+    - **重要**: 行 973 で`prev`が pickupquestion かどうかを判定し、pickupquestion の場合は`scheduleId`を渡す必要がある
 - `handleUnanswer` (行 1039): 未回答に戻す際に scheduleId を取得して渡す
   - **重要**: 現在`getQuestionStatusRef(eventId, isPickup)`を呼び出しているが、scheduleId を渡していない
   - 行 1043 で`updateStatus`を呼び出す際も、pickupquestion の場合は scheduleId を渡す必要がある（Google Apps Script 側の修正も必要）
@@ -100,15 +125,22 @@ export function getQuestionStatusRef(
   - **実装方針**: 一括操作では現在の scheduleId を使用する（`resolveNowShowingReference(app)`から取得）
     - pickupquestion の場合は、現在選択中の scheduleId に対応する questionStatus のみを更新する
     - 各質問について異なる scheduleId を取得する必要はない（一括操作は現在のコンテキストで実行される）
+  - **重要**: 行 1170-1185 で、各質問を`eventId`と`isPickup`でグループ化しているが、pickupquestion の場合は`scheduleId`も含めてグループ化する必要がある
+    - 現在は`pathKey = statusRef.key`を使用してグループ化しているが、pickupquestion の場合は`scheduleId`を含むパスを使用する必要がある
+    - または、現在の scheduleId に対応する pickupquestion のみを処理する
   - scheduleId ごとにグループ化する必要がある（通常質問と pickupquestion を区別）
   - 行 1205 で`batchUpdateStatus`を呼び出す際も、pickupquestion の場合は scheduleId を渡す必要がある（Google Apps Script 側の修正も必要）
 - `clearNowShowing` (行 1300, 1329): 送出クリア時に scheduleId を取得して渡す
   - **重要**: 行 1298 で selectingItems を処理する際、pickupquestion の場合は scheduleId を取得する必要がある
     - 現在の実装（行 1300）では、`getQuestionStatusRef(eventId, isPickup)`を呼び出しているが、scheduleId を渡していない
     - `resolveNowShowingReference(app)`または`app.getActiveChannel()`から scheduleId を取得する必要がある
+    - **重要**: 行 1298-1308 で、selectingItems を処理する際、pickupquestion の場合は`scheduleId`ごとにグループ化する必要がある
+      - 現在は`isPickup`のみでグループ化しているが、pickupquestion の場合は`scheduleId`も含めてグループ化する必要がある
+      - または、現在の scheduleId に対応する pickupquestion のみを処理する
   - 行 1329 で previousNowShowing を処理する際も、pickupquestion の場合は scheduleId を取得する必要がある
     - 現在の実装（行 1329）では、`getQuestionStatusRef(eventId, isPickup)`を呼び出しているが、scheduleId を渡していない
     - `resolveNowShowingReference(app)`または`app.getActiveChannel()`から scheduleId を取得する必要がある
+    - **重要**: 行 1312-1326 で`isPickup`を判定しているが、`scheduleId`を渡していない
   - 行 1337 で`updateStatus`を呼び出す際も、pickupquestion の場合は scheduleId を渡す必要がある（Google Apps Script 側の修正も必要）
 
 **修正パターン:**
@@ -770,8 +802,10 @@ test("getQuestionStatusPath builds pickup question status paths with scheduleId"
 #### `scripts/operator/channel-manager.js`
 
 - **行 1248**: `refreshChannelSubscriptions`関数で、`startQuestionStatusStream`を呼び出す処理を追加
+  - **重要**: 現在の実装では`startQuestionStatusStream`を呼び出していない
   - 日程変更時に questionStatus の監視を更新するため
   - `this.app.startQuestionStatusStream()`を呼び出す処理を追加
+  - **実装場所**: `refreshChannelSubscriptions`関数の最後（レンダリング状態の監視を設定した後）に追加
 
 #### `code.gs`
 
@@ -864,3 +898,24 @@ test("getQuestionStatusPath builds pickup question status paths with scheduleId"
 - [ ] `startQuestionStatusStream`の通常質問と pickupquestion の両方のリスナーが同時に動作している
 - [ ] Firebase セキュリティルールの`$scheduleId/$uid`ルールが既存の`$uid`ルールと同じ構造になっている
 - [ ] Firebase セキュリティルールの`$scheduleId/$uid`ルールで`root.child('questions/pickup').child($uid).exists()`のチェックが正しく実装されている
+- [ ] `refreshChannelSubscriptions`が`startQuestionStatusStream`を呼び出している（現在は呼び出していない）
+- [ ] `refreshChannelSubscriptions`で`startQuestionStatusStream`を呼び出すタイミングが適切である（レンダリング状態の監視を設定した後）
+- [ ] `handleDisplay`の token がない場合の代替処理で pickupquestion の場合は`scheduleId`を含むパスを使用している（行 938-955）
+- [ ] `handleDisplay`の token がない場合の代替処理で`sameEventQuestions`をフィルタリングする際、pickupquestion の場合は現在の scheduleId に対応する questionStatus のみを更新している
+- [ ] `clearNowShowing`の selectingItems 処理で pickupquestion の場合は`scheduleId`ごとにグループ化している（行 1298-1308）
+- [ ] `clearNowShowing`の selectingItems 処理で pickupquestion の場合は現在の scheduleId に対応する questionStatus のみを処理している
+- [ ] `handleBatchUnanswer`で pickupquestion の場合は`scheduleId`を含むパスでグループ化している（行 1170-1185）
+- [ ] `handleBatchUnanswer`で pickupquestion の場合は現在の scheduleId に対応する questionStatus のみを処理している
+- [ ] `handleDisplay`の`updates`オブジェクト作成時に pickupquestion の場合は`scheduleId`を含むパスを使用している（行 875-904）
+- [ ] `handleDisplay`の`previousUid`処理時に pickupquestion の場合は`scheduleId`を含むパスを使用している（行 877-880）
+- [ ] `handleDisplay`の`previousNowShowing`処理時に pickupquestion の場合は`scheduleId`を含むパスを使用している（行 881-898）
+- [ ] `handleDisplay`の現在の質問のステータス更新時に pickupquestion の場合は`scheduleId`を含むパスを使用している（行 900-902）
+- [ ] `handleDisplay`で`previousUid`が pickupquestion かどうかを判定している（行 877-880）
+- [ ] `handleDisplay`で`previousNowShowing`（`prev`）が pickupquestion かどうかを判定している（行 881-898）
+- [ ] `handleDisplay`で`previousUid`や`prev`が pickupquestion の場合、適切な`statusRef`を使用している（複数の`statusRef`に分割するか、別々の`update`呼び出しを実行）
+- [ ] `handleDisplay`で`previousUid`が pickupquestion の場合、`updateStatus` API 呼び出しに`scheduleId`を渡している（行 958）
+- [ ] `handleDisplay`で`prev`が pickupquestion の場合、`updateStatus` API 呼び出しに`scheduleId`を渡している（行 973）
+- [ ] `clearNowShowing`で`previousNowShowing`（`prevItem`）が pickupquestion の場合、`scheduleId`を含むパスを使用している（行 1312-1326, 1329）
+- [ ] `handleDisplay`で`previousUid`が存在する場合、`app.state.allQuestions`から該当する質問を検索し、pickupquestion かどうかを判定している
+- [ ] `handleDisplay`で`previousUid`や`prev`が pickupquestion の場合、適切な`statusRef`を使用して別途`update`を実行している（複数の`statusRef`に分割）
+- [ ] `handleDisplay`の token がない場合の代替処理で、`sameEventQuestions`を通常質問と pickupquestion に分割し、それぞれ適切な`statusRef`に更新している（行 938-955）
