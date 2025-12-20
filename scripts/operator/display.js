@@ -91,6 +91,8 @@ function normalizeNowShowing(now, app = null) {
   // 完全正規化: uidから情報を取得
   const questionsByUid = app?.state?.questionsByUid instanceof Map ? app.state.questionsByUid : new Map();
   const questionRecord = questionsByUid.get(uid);
+  const allQuestions = Array.isArray(app?.state?.allQuestions) ? app.state.allQuestions : [];
+  const fullQuestion = allQuestions.find((q) => String(q.UID || "") === uid);
   
   const normalized = {
     uid
@@ -107,10 +109,19 @@ function normalizeNowShowing(now, app = null) {
     }
     // pickupはquestions/normalには存在しないため、questions/pickupの存在確認が必要
     // ただし、通常はallQuestionsから取得可能
-    const allQuestions = Array.isArray(app?.state?.allQuestions) ? app.state.allQuestions : [];
-    const fullQuestion = allQuestions.find((q) => String(q.UID || "") === uid);
     if (fullQuestion) {
       normalized.pickup = Boolean(fullQuestion["ピックアップ"]);
+    }
+  } else if (fullQuestion) {
+    // questionsByUidにない場合でも、allQuestionsから情報を取得
+    normalized.name = String(fullQuestion["ラジオネーム"] || "").trim();
+    normalized.question = String(fullQuestion["質問・お悩み"] || "").trim();
+    normalized.pickup = Boolean(fullQuestion["ピックアップ"]);
+    if (fullQuestion["参加者ID"]) {
+      normalized.participantId = String(fullQuestion["参加者ID"] || "");
+    }
+    if (fullQuestion["ジャンル"]) {
+      normalized.genre = String(fullQuestion["ジャンル"] || "");
     }
   } else {
     // 既存データとの互換性: キャッシュにない場合は従来の形式をフォールバック
