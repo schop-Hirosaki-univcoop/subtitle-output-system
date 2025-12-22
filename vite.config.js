@@ -6,6 +6,10 @@ import vue from '@vitejs/plugin-vue';
 export default defineConfig({
   plugins: [vue()],
   
+  // GitHub Pages 用のベースパス設定
+  // リポジトリ名に合わせて設定
+  base: '/subtitle-output-system/',
+  
   // Multi-page application の設定
   build: {
     rollupOptions: {
@@ -20,9 +24,6 @@ export default defineConfig({
         notFound: resolve(__dirname, '404.html'),
       },
     },
-    // GitHub Pages 用のベースパス設定
-    // リポジトリ名に合わせて設定
-    base: '/subtitle-output-system/',
     outDir: 'dist',
   },
   
