@@ -1,0 +1,19 @@
+{
+  "name": "subtitle-output-system",
+  "version": "1.0.0",
+  "description": "Subtitle output system with Vue.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "@vitejs/plugin-vue": "^4.5.0"
+  },
+  "dependencies": {
+    "vue": "^3.3.4"
+  }
+}
+
