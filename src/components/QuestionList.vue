@@ -8,8 +8,7 @@
     :is-loading="loadingUids.has(String(question.UID))"
     :show-genre="viewingAllGenres"
     :viewing-all-genres="viewingAllGenres"
-    @click="handleCardClick"
-    @checkbox-change="handleCheckboxChange"
+      @click="handleCardClick"
   />
 </template>
 
@@ -59,8 +58,14 @@ const filteredQuestions = computed(() => {
     if (viewingNormalTab && isPuq) return false;
     const itemGenre = String(item["ジャンル"] ?? "").trim() || "その他";
     if (!viewingAllGenres && itemGenre !== selectedGenre.value) return false;
-    const itemSchedule = String(item.__scheduleKey ?? item["日程"] ?? "").trim();
-    if (!isPuq && selectedSchedule.value && itemSchedule !== selectedSchedule.value)
+    const itemSchedule = String(
+      item.__scheduleKey ?? item["日程"] ?? ""
+    ).trim();
+    if (
+      !isPuq &&
+      selectedSchedule.value &&
+      itemSchedule !== selectedSchedule.value
+    )
       return false;
     return true;
   });
@@ -101,7 +106,8 @@ function updateQuestions() {
     app.value.state.renderState?.nowShowing ||
     app.value.state.displaySession?.nowShowing ||
     null;
-  liveUid.value = live && typeof live.uid !== "undefined" ? String(live.uid || "") : "";
+  liveUid.value =
+    live && typeof live.uid !== "undefined" ? String(live.uid || "") : "";
 
   // フィルタリング用の状態を更新
   currentTab.value = app.value.state.currentSubTab || "all";
@@ -113,7 +119,9 @@ function updateQuestions() {
   // 日程の解決（簡易実装）
   const displaySession = app.value?.state?.displaySession || {};
   const assignment =
-    displaySession && typeof displaySession === "object" ? displaySession.assignment : null;
+    displaySession && typeof displaySession === "object"
+      ? displaySession.assignment
+      : null;
   const displayEventId = String(
     displaySession?.eventId || assignment?.eventId || ""
   ).trim();
@@ -160,11 +168,7 @@ function handleCardClick(question) {
   }
 }
 
-// チェックボックス変更ハンドラ
-function handleCheckboxChange(question, checked) {
-  // 既存のロジックに委譲（必要に応じて実装）
-  console.log("Checkbox changed", question.UID, checked);
-}
+// チェックボックスの変更は既存のイベントデリゲーション（cardsContainerのchangeイベント）で処理される
 
 onMounted(() => {
   // 初期データを取得
@@ -196,4 +200,3 @@ watch(
   { immediate: true }
 );
 </script>
-

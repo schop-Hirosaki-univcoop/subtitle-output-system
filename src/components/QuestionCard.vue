@@ -27,7 +27,6 @@
           type="checkbox"
           class="row-checkbox"
           :data-uid="question.UID"
-          @change="handleCheckboxChange"
         />
         <span class="visually-hidden">選択</span>
       </label>
@@ -84,7 +83,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["click", "checkbox-change"]);
+const emit = defineEmits(["click"]);
 
 const statusText = computed(() => {
   if (props.question["選択中"]) return "送出準備中";
@@ -127,8 +126,6 @@ const handleClick = (event) => {
   emit("click", props.question);
 };
 
-const handleCheckboxChange = (event) => {
-  event.stopPropagation();
-  emit("checkbox-change", props.question, event.target.checked);
-};
+// チェックボックスの変更は既存のイベントデリゲーション（cardsContainerのchangeイベント）で処理される
+// そのため、Vueのハンドラは不要
 </script>
