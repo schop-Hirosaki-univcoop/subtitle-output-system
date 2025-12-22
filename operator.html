@@ -2182,7 +2182,7 @@
   <!-- 既存のスクリプト（そのまま維持） -->
   <script type="module" src="./scripts/events/index.js"></script>
 
-  <!-- Vue.js の実験用スクリプト（動作確認用） -->
+  <!-- Vue.js の実験用スクリプト（質問カードコンポーネント化） -->
   <script type="module">
     // Vue.js が読み込まれたことを確認
     if (typeof Vue === "undefined") {
@@ -2190,52 +2190,283 @@
     } else {
       console.log("[Vue Experiment] Vue.js が読み込まれました", Vue.version);
 
-      // 小さなテストコンポーネントを作成（既存コードに影響しない）
       const { createApp } = Vue;
 
-      const testApp = createApp({
+      // OperatorAppインスタンスを取得（既存コードと連携）
+      function getOperatorApp() {
+        if (typeof window !== "undefined" && window.operatorEmbed && window.operatorEmbed.app) {
+          return window.operatorEmbed.app;
+        }
+        return null;
+      }
+
+      // 質問カードコンポーネント
+      const QuestionCard = {
+        props: {
+          question: {
+            type: Object,
+            required: true,
+          },
+          isSelected: {
+            type: Boolean,
+            default: false,
+          },
+          isLive: {
+            type: Boolean,
+            default: false,
+          },
+        },
+        computed: {
+          statusText() {
+            if (this.question["選択中"]) return "送出準備中";
+            if (this.question["回答済"]) return "送出済";
+            return "未送出";
+          },
+          displayName() {
+            const rawName = this.question["ラジオネーム"];
+            // formatOperatorName相当の簡易実装
+            return rawName ? String(rawName).trim() || "—" : "—";
+          },
+          genreLabel() {
+            const rawGenre = String(this.question["ジャンル"] ?? "").trim() || "その他";
+            return rawGenre;
+          },
+          questionText() {
+            return String(this.question["質問・お悩み"] ?? "").trim();
+          },
+          groupLabel() {
+            return String(this.question["班番号"] ?? "").trim();
+          },
+          isPickup() {
+            const radioName = String(this.question["ラジオネーム"] ?? "")
+              .trim()
+              .replace(/\s+/g, " ")
+              .toLowerCase();
+            return this.question["ピックアップ"] === true || radioName === "pick up question";
+          },
+        },
+        methods: {
+          handleClick() {
+            const app = getOperatorApp();
+            if (!app) return;
+
+            // 既存の選択ロジックを呼び出す
+            const uid = String(this.question.UID);
+            app.dom.cardsContainer?.querySelectorAll(".q-card").forEach((el) => el.classList.remove("is-selected"));
+            
+            app.state.selectedRowData = {
+              uid,
+              name: this.question["ラジオネーム"],
+              question: this.question["質問・お悩み"],
+              isAnswered: !!this.question["回答済"],
+              participantId: String(this.question["参加者ID"] ?? "").trim(),
+              genre: this.genreLabel,
+              isPickup: this.isPickup,
+            };
+
+            // 既存のupdateActionAvailabilityを呼び出す
+            if (typeof app.updateActionAvailability === "function") {
+              app.updateActionAvailability(app);
+            }
+          },
+          handleCheckboxChange(event) {
+            // チェックボックスの変更は既存のロジックに委譲
+            event.stopPropagation();
+          },
+        },
+        template: `
+          <article
+            :class="[
+              'q-card',
+              { 'is-answered': question['回答済'] },
+              { 'is-selecting': question['選択中'] },
+              { 'is-puq': isPickup },
+              { 'is-selected': isSelected },
+              { 'is-live': isLive, 'now-displaying': isLive }
+            ]"
+            :data-uid="question.UID"
+            @click="handleClick"
+          >
+            <span class="status-text visually-hidden">{{ statusText }}</span>
+            <div class="q-corner">
+              <span v-if="groupLabel" class="q-group" role="text" :aria-label="'班番号 ' + groupLabel">
+                {{ groupLabel }}
+              </span>
+              <label class="q-check" :aria-label="statusText + 'の質問をバッチ選択'">
+                <input
+                  type="checkbox"
+                  class="row-checkbox"
+                  :data-uid="question.UID"
+                  @change="handleCheckboxChange"
+                />
+                <span class="visually-hidden">選択</span>
+              </label>
+            </div>
+            <header class="q-head">
+              <div class="q-title">
+                <span class="q-name">{{ displayName }}</span>
+                <span class="q-genre" :aria-label="'ジャンル ' + genreLabel">{{ genreLabel }}</span>
+              </div>
+            </header>
+            <div class="q-text">{{ questionText }}</div>
+          </article>
+        `,
+      };
+
+      // 質問リストコンポーネント
+      const QuestionList = {
+        components: {
+          QuestionCard,
+        },
         data() {
           return {
-            message: "Vue.js 実験中",
-            count: 0,
+            questions: [],
+            selectedUid: null,
+            liveUid: null,
+            app: null,
           };
         },
         mounted() {
-          console.log("[Vue Experiment] Vue アプリがマウントされました");
-          // 1秒ごとにカウントを増やす（動作確認用）
+          // OperatorAppインスタンスを取得
+          this.app = getOperatorApp();
+          if (!this.app) {
+            console.warn("[Vue Experiment] OperatorApp が見つかりません");
+            return;
+          }
+
+          // 初期データを取得
+          this.updateQuestions();
+
+          // 既存のrenderQuestionsが呼ばれた時に更新するため、MutationObserverを使用
+          // または、定期的にチェック（簡易実装）
           this.intervalId = setInterval(() => {
-            this.count++;
-          }, 1000);
+            this.updateQuestions();
+          }, 500); // 500msごとにチェック
+
+          console.log("[Vue Experiment] 質問リストコンポーネントがマウントされました");
         },
         beforeUnmount() {
-          // クリーンアップ
           if (this.intervalId) {
             clearInterval(this.intervalId);
           }
         },
-        template: `
-          <div style="position: fixed; bottom: 20px; right: 20px; z-index: 9999; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-size: 12px; font-family: monospace;">
-            <div>{{ message }}</div>
-            <div>カウント: {{ count }}</div>
-            <div style="font-size: 10px; margin-top: 5px; opacity: 0.7;">
-              Vue {{ version }}
-            </div>
-          </div>
-        `,
-        computed: {
-          version() {
-            return Vue.version || "unknown";
+        methods: {
+          updateQuestions() {
+            if (!this.app || !this.app.state) return;
+
+            // 既存のstateから質問データを取得
+            const allQuestions = Array.isArray(this.app.state.allQuestions)
+              ? this.app.state.allQuestions
+              : [];
+
+            // 既存のrenderQuestionsと同じフィルタリングロジックを適用
+            const currentTab = this.app.state.currentSubTab || "all";
+            const viewingPuqTab = currentTab === "puq";
+            const viewingNormalTab = currentTab === "normal";
+            const selectedGenre = typeof this.app.state.currentGenre === "string"
+              ? this.app.state.currentGenre.trim()
+              : "";
+            const viewingAllGenres = !selectedGenre || selectedGenre.toLowerCase() === "すべて";
+
+            let filtered = allQuestions.filter((item) => {
+              const isPuq = this.isPickupQuestion(item);
+              if (viewingPuqTab && !isPuq) return false;
+              if (viewingNormalTab && isPuq) return false;
+              const itemGenre = String(item["ジャンル"] ?? "").trim() || "その他";
+              if (!viewingAllGenres && itemGenre !== selectedGenre) return false;
+              return true;
+            });
+
+            // ソート
+            filtered = [...filtered].sort((a, b) => {
+              const aTs = Number(a.__ts || 0);
+              const bTs = Number(b.__ts || 0);
+              return bTs - aTs;
+            });
+
+            this.questions = filtered;
+
+            // 選択中のUIDを更新
+            if (this.app.state.selectedRowData) {
+              this.selectedUid = String(this.app.state.selectedRowData.uid || "");
+            } else {
+              this.selectedUid = null;
+            }
+
+            // ライブ表示中のUIDを更新
+            const live = this.app.state.renderState?.nowShowing || this.app.state.displaySession?.nowShowing || null;
+            this.liveUid = live && typeof live.uid !== "undefined" ? String(live.uid || "") : "";
+          },
+          isPickupQuestion(record) {
+            if (!record || typeof record !== "object") return false;
+            if (record["ピックアップ"] === true) return true;
+            const radioName = String(record["ラジオネーム"] ?? "")
+              .trim()
+              .replace(/\s+/g, " ")
+              .toLowerCase();
+            return radioName === "pick up question";
           },
         },
+        template: `
+          <div class="cards-list">
+            <QuestionCard
+              v-for="question in questions"
+              :key="question.UID"
+              :question="question"
+              :is-selected="selectedUid === String(question.UID)"
+              :is-live="liveUid === String(question.UID)"
+            />
+          </div>
+        `,
+      };
+
+      // Vueアプリを作成
+      const questionListApp = createApp({
+        components: {
+          QuestionList,
+        },
+        mounted() {
+          console.log("[Vue Experiment] 質問リストアプリがマウントされました");
+        },
+        template: `<QuestionList />`,
       });
 
-      // テスト用コンテナを作成してマウント
-      const container = document.createElement("div");
-      container.id = "vue-experiment-container";
-      document.body.appendChild(container);
+      // 既存のop-questions-cardsコンテナにマウント
+      // 既存のrenderQuestionsと競合しないように、既存のレンダリングを一時的に無効化
+      const container = document.getElementById("op-questions-cards");
+      if (container) {
+        // 既存のrenderQuestionsを一時的に無効化（実験用）
+        // 注意: 本番環境ではこのフラグを削除するか、条件付きで有効化
+        if (typeof window !== "undefined") {
+          window.__vueExperimentEnabled = true;
+        }
 
-      testApp.mount("#vue-experiment-container");
-      console.log("[Vue Experiment] Vue アプリをマウントしました");
+        // 既存のrenderQuestionsをラップして、Vueコンポーネントがある場合はスキップ
+        const app = getOperatorApp();
+        if (app && typeof app.renderQuestions === "function") {
+          const originalRenderQuestions = app.renderQuestions.bind(app);
+          app.renderQuestions = function() {
+            // Vueコンポーネントが有効な場合は既存のレンダリングをスキップ
+            if (window.__vueExperimentEnabled) {
+              console.log("[Vue Experiment] 既存のrenderQuestionsをスキップ（Vueコンポーネントを使用）");
+              return;
+            }
+            return originalRenderQuestions();
+          };
+        }
+
+        // Vueコンテナを作成
+        const vueContainer = document.createElement("div");
+        vueContainer.id = "vue-questions-container";
+        vueContainer.setAttribute("data-vue-experiment", "true");
+        container.appendChild(vueContainer);
+
+        // Vueアプリをマウント
+        questionListApp.mount("#vue-questions-container");
+        console.log("[Vue Experiment] 質問リストアプリをマウントしました");
+      } else {
+        console.warn("[Vue Experiment] op-questions-cards コンテナが見つかりません");
+      }
     }
   </script>
 </body>
