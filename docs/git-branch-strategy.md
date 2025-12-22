@@ -17,14 +17,17 @@
 #### メリット
 
 1. **既存コードの保護**
+
    - main ブランチのコードが壊れない
    - いつでもロールバック可能
 
 2. **段階的な開発**
+
    - 機能ごとに開発・テストが可能
    - リスクを最小化
 
 3. **レビューの容易さ**
+
    - 変更内容が明確
    - コードレビューがしやすい
 
@@ -80,11 +83,13 @@ main
 ```
 
 **メリット:**
+
 - シンプル
 - 機能ごとに独立して開発
 - 小規模な変更を段階的にマージ可能
 
 **デメリット:**
+
 - 複数の機能ブランチの統合が複雑になる可能性
 
 #### オプション 2: Develop Branch 戦略
@@ -99,10 +104,12 @@ main
 ```
 
 **メリット:**
+
 - 統合テストが容易
 - 複数の機能を統合してから main にマージ
 
 **デメリット:**
+
 - ブランチ管理が複雑
 - 小規模なプロジェクトには過剰
 
@@ -147,10 +154,12 @@ git push origin experiment/vue-cdn
 #### ステップ 4: 動作確認後の判断
 
 **うまくいった場合:**
+
 - `feature/vue-framework` ブランチにマージ
 - または、直接 `main` にマージ（小規模な変更の場合）
 
 **うまくいかなかった場合:**
+
 - ブランチを削除
 - 別のアプローチを試す
 
@@ -238,6 +247,7 @@ git push origin feature/vue-question-form
 - `refactor/` - リファクタリング
 
 **例:**
+
 - `feature/vue-operator` ✅
 - `vue-operator` ❌（プレフィックスなし）
 - `Vue-Operator` ❌（大文字）
@@ -255,6 +265,7 @@ git push origin feature/vue-question-form
 ```
 
 **タイプ:**
+
 - `feat`: 新機能
 - `fix`: バグ修正
 - `refactor`: リファクタリング
@@ -262,6 +273,7 @@ git push origin feature/vue-question-form
 - `test`: テスト
 
 **例:**
+
 ```
 feat: Vue.js を CDN 経由で導入
 
@@ -286,10 +298,12 @@ feat: Vue.js を CDN 経由で導入
 **重要な考慮事項:**
 
 1. **既存コードの保護**
+
    - main ブランチのコードは常に動作する状態を保つ
    - 新機能は既存機能を壊さないように実装
 
 2. **段階的なマージ**
+
    - 小さな変更から順にマージ
    - 大きな変更は分割してマージ
 
@@ -451,15 +465,18 @@ git push origin feature/vue-operator
 
 ```markdown
 ## 変更内容
+
 - Vue.js を CDN 経由で導入
 - オペレーター画面の質問一覧を Vue コンポーネント化
 
 ## 動作確認
+
 - [ ] ローカルで動作確認済み
 - [ ] 既存機能が壊れていないことを確認
 - [ ] ブラウザで動作確認済み
 
 ## 関連 Issue
+
 #123
 ```
 
@@ -482,7 +499,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   test:
@@ -492,7 +509,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: "18"
       - name: Install dependencies
         run: npm ci
       - name: Run tests
@@ -519,15 +536,19 @@ jobs:
 ### 8.3 注意点
 
 1. **既存コードの保護**
+
    - main ブランチのコードは常に動作する状態を保つ
 
 2. **段階的なマージ**
+
    - 小さな変更から順にマージ
 
 3. **ロールバック計画**
+
    - 問題が発生した場合の対処法を準備
 
 4. **コミットメッセージ**
+
    - 明確なコミットメッセージを書く
 
 5. **Pull Request の活用**
@@ -550,4 +571,3 @@ main
 
 **作成日**: 2025 年 12 月  
 **バージョン**: 1.0.0
-
