@@ -1,45 +1,48 @@
-# GitHub PagesのURLについて
+# GitHub Pages の URL について
 
-## 基本URL
+## 基本 URL
 
-このリポジトリのGitHub PagesのURLは：
+このリポジトリの GitHub Pages の URL は：
 
 ```
 https://schop-hirosaki-univcoop.github.io/subtitle-output-system/
 ```
 
-## URLの構成
+## URL の構成
 
-GitHub PagesのURLは以下の形式です：
+GitHub Pages の URL は以下の形式です：
 
 ```
 https://[ユーザー名または組織名].github.io/[リポジトリ名]/
 ```
 
 このリポジトリの場合：
+
 - ユーザー名/組織名: `schop-hirosaki-univcoop`
 - リポジトリ名: `subtitle-output-system`
 
-## ブランチとURLの関係
+## ブランチと URL の関係
 
 ### 重要なポイント
 
-**GitHub PagesのURLは、デプロイ元のブランチに関係なく、常に同じURLになります。**
+**GitHub Pages の URL は、デプロイ元のブランチに関係なく、常に同じ URL になります。**
 
 - `main`ブランチからデプロイ → `https://schop-hirosaki-univcoop.github.io/subtitle-output-system/`
-- `feature/vite-setup`ブランチからデプロイ → **同じURL** `https://schop-hirosaki-univcoop.github.io/subtitle-output-system/`
+- `feature/vite-setup`ブランチからデプロイ → **同じ URL** `https://schop-hirosaki-univcoop.github.io/subtitle-output-system/`
 
 ### デプロイの動作
 
 1. **最初のデプロイ**
-   - `main`ブランチをデプロイ → URLに`main`ブランチの内容が表示される
 
-2. **2回目のデプロイ**
-   - `feature/vite-setup`ブランチをデプロイ → **同じURL**に`feature/vite-setup`ブランチの内容が**上書き**される
+   - `main`ブランチをデプロイ → URL に`main`ブランチの内容が表示される
+
+2. **2 回目のデプロイ**
+
+   - `feature/vite-setup`ブランチをデプロイ → **同じ URL**に`feature/vite-setup`ブランチの内容が**上書き**される
    - 以前の`main`ブランチの内容は置き換えられる
 
-3. **3回目のデプロイ**
-   - 再度`main`ブランチをデプロイ → 同じURLに`main`ブランチの内容が**上書き**される
+3. **3 回目のデプロイ**
+   - 再度`main`ブランチをデプロイ → 同じ URL に`main`ブランチの内容が**上書き**される
 
 ### 注意事項
 
@@ -60,25 +63,29 @@ https://your-custom-domain.com/
 
 ## プレビュー環境（Pull Request）
 
-Pull Requestを作成すると、GitHub Actionsのワークフローでビルドが実行されますが、通常はデプロイされません。
+Pull Request を作成すると、GitHub Actions のワークフローでビルドが実行されますが、通常はデプロイされません。
 
-プレビュー環境を使用する場合は、別途設定が必要です（例：Vercel、Netlifyなどのプレビュー機能）。
+プレビュー環境を使用する場合は、別途設定が必要です（例：Vercel、Netlify などのプレビュー機能）。
 
 ## 推奨される運用
 
 ### 開発中
 
 1. **ローカルで確認**
+
    ```bash
    npm run dev
    ```
+
    - `http://localhost:3000` で確認
 
 2. **ビルドテスト**
+
    ```bash
    npm run build
    npm run preview
    ```
+
    - ビルド結果をローカルで確認
 
 3. **必要に応じてデプロイ**
@@ -92,21 +99,24 @@ Pull Requestを作成すると、GitHub Actionsのワークフローでビルド
 
 ## トラブルシューティング
 
-### URLにアクセスできない
+### URL にアクセスできない
 
-1. **GitHub Pagesが有効になっているか確認**
+1. **GitHub Pages が有効になっているか確認**
+
    - Settings > Pages で確認
 
 2. **デプロイが完了しているか確認**
+
    - Actions タブでワークフローの実行状況を確認
 
-3. **URLが正しいか確認**
+3. **URL が正しいか確認**
    - リポジトリ名に誤字がないか確認
-   - 大文字小文字が正しいか確認（GitHub PagesのURLは大文字小文字を区別します）
+   - 大文字小文字が正しいか確認（GitHub Pages の URL は大文字小文字を区別します）
 
 ### 古い内容が表示される
 
 1. **ブラウザのキャッシュをクリア**
+
    - ハードリロード（Ctrl+Shift+R または Cmd+Shift+R）
 
 2. **最新のデプロイを確認**
@@ -114,6 +124,5 @@ Pull Requestを作成すると、GitHub Actionsのワークフローでビルド
 
 ---
 
-**作成日**: 2025年12月  
+**作成日**: 2025 年 12 月  
 **バージョン**: 1.0.0
-

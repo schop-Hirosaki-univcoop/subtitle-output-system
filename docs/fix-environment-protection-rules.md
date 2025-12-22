@@ -11,10 +11,12 @@ The deployment was rejected or didn't satisfy other protection rules.
 
 ### ステップ 1: Environments 設定を開く
 
-1. **GitHubリポジトリにアクセス**
+1. **GitHub リポジトリにアクセス**
+
    - https://github.com/schop-Hirosaki-univcoop/subtitle-output-system
 
 2. **Settings を開く**
+
    - リポジトリの Settings タブをクリック
 
 3. **Environments を開く**
@@ -24,13 +26,16 @@ The deployment was rejected or didn't satisfy other protection rules.
 ### ステップ 2: github-pages 環境を設定
 
 1. **github-pages 環境を選択**
+
    - 環境一覧から "github-pages" をクリック
 
 2. **Deployment branches を設定**
+
    - "Deployment branches" セクションを探す
    - デフォルトでは "All branches" または "Protected branches only" が選択されている可能性があります
 
 3. **Selected branches を選択**
+
    - "Selected branches" ラジオボタンを選択
    - ブランチ名の入力欄に `feature/vite-setup` を入力
    - または、ドロップダウンから選択（既存のブランチが表示される場合）
@@ -41,6 +46,7 @@ The deployment was rejected or didn't satisfy other protection rules.
 ### ステップ 3: 確認
 
 1. **設定が保存されたか確認**
+
    - "Deployment branches" セクションに `feature/vite-setup` が表示されていることを確認
 
 2. **ワークフローを再実行**
@@ -52,13 +58,15 @@ The deployment was rejected or didn't satisfy other protection rules.
 設定が完了すると：
 
 1. **`feature/vite-setup`ブランチからデプロイ可能**
+
    - プッシュすると自動的にビルドとデプロイが実行されます
 
 2. **`main`ブランチも引き続きデプロイ可能**
+
    - 両方のブランチからデプロイできます
 
-3. **同じURLにデプロイ**
-   - どちらのブランチからデプロイしても、同じURLにデプロイされます
+3. **同じ URL にデプロイ**
+   - どちらのブランチからデプロイしても、同じ URL にデプロイされます
    - 最後にデプロイされたブランチの内容が表示されます
 
 ## 注意事項
@@ -87,6 +95,5 @@ The deployment was rejected or didn't satisfy other protection rules.
 
 ---
 
-**作成日**: 2025年12月  
+**作成日**: 2025 年 12 月  
 **バージョン**: 1.0.0
-
