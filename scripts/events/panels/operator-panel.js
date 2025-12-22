@@ -49,8 +49,15 @@ export class OperatorToolManager {
         if (typeof document !== "undefined") {
           document.documentElement.dataset.operatorEmbedPrefix = "op-";
         }
-        const operatorModuleUrl = new URL("../../operator/index.js", import.meta.url);
-        await import(operatorModuleUrl.href);
+        // Viteビルド環境ではimport.meta.urlが正しく解決されない可能性があるため、
+        // 相対パスを直接使用する
+        try {
+          await import("../../operator/index.js");
+        } catch (error) {
+          // フォールバック: import.meta.urlを使用
+          const operatorModuleUrl = new URL("../../operator/index.js", import.meta.url);
+          await import(operatorModuleUrl.href);
+        }
         state.ready = true;
       })().catch((error) => {
         logError("Failed to load operator tool", error);
