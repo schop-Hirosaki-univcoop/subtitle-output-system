@@ -2176,6 +2176,67 @@
 
   <telop-footer year="2025"></telop-footer>
 
+  <!-- Vue.js を CDN から読み込む（実験: フェーズ1 ステップ2） -->
+  <script src="https://unpkg.com/vue@3.3.4/dist/vue.global.js"></script>
+
+  <!-- 既存のスクリプト（そのまま維持） -->
   <script type="module" src="./scripts/events/index.js"></script>
+
+  <!-- Vue.js の実験用スクリプト（動作確認用） -->
+  <script type="module">
+    // Vue.js が読み込まれたことを確認
+    if (typeof Vue === "undefined") {
+      console.error("[Vue Experiment] Vue.js が読み込まれていません");
+    } else {
+      console.log("[Vue Experiment] Vue.js が読み込まれました", Vue.version);
+
+      // 小さなテストコンポーネントを作成（既存コードに影響しない）
+      const { createApp } = Vue;
+
+      const testApp = createApp({
+        data() {
+          return {
+            message: "Vue.js 実験中",
+            count: 0,
+          };
+        },
+        mounted() {
+          console.log("[Vue Experiment] Vue アプリがマウントされました");
+          // 1秒ごとにカウントを増やす（動作確認用）
+          this.intervalId = setInterval(() => {
+            this.count++;
+          }, 1000);
+        },
+        beforeUnmount() {
+          // クリーンアップ
+          if (this.intervalId) {
+            clearInterval(this.intervalId);
+          }
+        },
+        template: `
+          <div style="position: fixed; bottom: 20px; right: 20px; z-index: 9999; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-size: 12px; font-family: monospace;">
+            <div>{{ message }}</div>
+            <div>カウント: {{ count }}</div>
+            <div style="font-size: 10px; margin-top: 5px; opacity: 0.7;">
+              Vue {{ version }}
+            </div>
+          </div>
+        `,
+        computed: {
+          version() {
+            return Vue.version || "unknown";
+          },
+        },
+      });
+
+      // テスト用コンテナを作成してマウント
+      const container = document.createElement("div");
+      container.id = "vue-experiment-container";
+      document.body.appendChild(container);
+
+      testApp.mount("#vue-experiment-container");
+      console.log("[Vue Experiment] Vue アプリをマウントしました");
+    }
+  </script>
 </body>
 </html>
