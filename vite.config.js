@@ -21,9 +21,8 @@ export default defineConfig({
       },
     },
     // GitHub Pages 用のベースパス設定
-    // リポジトリ名が subtitle-output-system-1 の場合
-    // base: '/subtitle-output-system-1/',
-    // ルートパスでホストする場合は '/' のまま
+    // リポジトリ名に合わせて設定
+    base: '/subtitle-output-system/',
     outDir: 'dist',
   },
   
