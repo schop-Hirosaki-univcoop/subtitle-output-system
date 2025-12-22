@@ -13,6 +13,7 @@ npm install
 ```
 
 これにより、以下のパッケージがインストールされます：
+
 - `vite`: ビルドツール
 - `@vitejs/plugin-vue`: Vue.js サポート
 - `vue`: Vue.js フレームワーク
@@ -112,7 +113,7 @@ build: {
 </template>
 
 <script setup>
-import { defineProps, defineEmits } from 'vue';
+import { defineProps, defineEmits } from "vue";
 
 const props = defineProps({
   question: {
@@ -121,10 +122,10 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['click']);
+const emit = defineEmits(["click"]);
 
 const handleClick = () => {
-  emit('click', props.question);
+  emit("click", props.question);
 };
 </script>
 ```
@@ -135,8 +136,8 @@ const handleClick = () => {
 <!-- operator.html -->
 <div id="app"></div>
 <script type="module">
-  import { createApp } from 'vue';
-  import QuestionCard from './src/components/QuestionCard.vue';
+  import { createApp } from "vue";
+  import QuestionCard from "./src/components/QuestionCard.vue";
 
   const app = createApp({
     components: {
@@ -145,7 +146,7 @@ const handleClick = () => {
     // ...
   });
 
-  app.mount('#app');
+  app.mount("#app");
 </script>
 ```
 
@@ -178,22 +179,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      
+          node-version: "20"
+          cache: "npm"
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Build
         run: npm run build
-      
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
-      
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -216,10 +217,12 @@ jobs:
 ### 段階的な移行
 
 1. **既存コードを維持**
+
    - 既存の HTML ファイルと JavaScript ファイルはそのまま維持
    - Vue コンポーネントを段階的に追加
 
 2. **小さな機能から始める**
+
    - 質問カードコンポーネント
    - ローディング表示
    - ステータス表示
@@ -239,6 +242,7 @@ jobs:
 ### ビルドエラー
 
 1. **依存関係のインストール**
+
    ```bash
    rm -rf node_modules package-lock.json
    npm install
@@ -264,10 +268,12 @@ jobs:
 ## 次のステップ
 
 1. **TypeScript の導入**（オプション）
+
    - `vite.config.ts` に変更
    - TypeScript の型定義を追加
 
 2. **コンポーネントの整理**
+
    - `src/components/` ディレクトリを作成
    - コンポーネントを整理
 
@@ -279,4 +285,3 @@ jobs:
 
 **作成日**: 2025 年 12 月  
 **バージョン**: 1.0.0
-
