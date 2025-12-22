@@ -14,7 +14,12 @@
   >
     <span class="status-text visually-hidden">{{ statusText }}</span>
     <div class="q-corner">
-      <span v-if="groupLabel" class="q-group" role="text" :aria-label="'班番号 ' + groupLabel">
+      <span
+        v-if="groupLabel"
+        class="q-group"
+        role="text"
+        :aria-label="'班番号 ' + groupLabel"
+      >
         {{ groupLabel }}
       </span>
       <label class="q-check" :aria-label="statusText + 'の質問をバッチ選択'">
@@ -30,7 +35,11 @@
     <header class="q-head">
       <div class="q-title">
         <span class="q-name">{{ displayName }}</span>
-        <span v-if="showGenre && viewingAllGenres" class="q-genre" :aria-label="'ジャンル ' + genreLabel">
+        <span
+          v-if="showGenre && viewingAllGenres"
+          class="q-genre"
+          :aria-label="'ジャンル ' + genreLabel"
+        >
           {{ genreLabel }}
         </span>
       </div>
@@ -43,7 +52,10 @@
 <script setup>
 import { computed } from "vue";
 // 既存のユーティリティ関数をインポート
-import { formatOperatorName, resolveGenreLabel } from "../../scripts/operator/utils.js";
+import {
+  formatOperatorName,
+  resolveGenreLabel,
+} from "../../scripts/operator/utils.js";
 
 const props = defineProps({
   question: {
@@ -120,4 +132,3 @@ const handleCheckboxChange = (event) => {
   emit("checkbox-change", props.question, event.target.checked);
 };
 </script>
-
