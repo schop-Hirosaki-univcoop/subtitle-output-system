@@ -27,21 +27,23 @@
         <span class="visually-hidden">選択</span>
       </label>
     </div>
-    <div v-if="isLoading" class="q-loading-spinner" aria-label="更新中"></div>
     <header class="q-head">
       <div class="q-title">
         <span class="q-name">{{ displayName }}</span>
-        <span v-if="showGenre" class="q-genre" :aria-label="'ジャンル ' + genreLabel">
+        <span v-if="showGenre && viewingAllGenres" class="q-genre" :aria-label="'ジャンル ' + genreLabel">
           {{ genreLabel }}
         </span>
       </div>
     </header>
     <div class="q-text">{{ questionText }}</div>
+    <div v-if="isLoading" class="q-loading-spinner" aria-label="更新中"></div>
   </article>
 </template>
 
 <script setup>
 import { computed } from "vue";
+// 既存のユーティリティ関数をインポート
+import { formatOperatorName, resolveGenreLabel } from "../../scripts/operator/utils.js";
 
 const props = defineProps({
   question: {
@@ -80,13 +82,14 @@ const statusText = computed(() => {
 
 const displayName = computed(() => {
   const rawName = props.question["ラジオネーム"];
-  // formatOperatorName相当の簡易実装
-  return rawName ? String(rawName).trim() || "—" : "—";
+  // 既存のformatOperatorName関数を使用（空文字列もそのまま返す）
+  return formatOperatorName(rawName);
 });
 
 const genreLabel = computed(() => {
   const rawGenre = String(props.question["ジャンル"] ?? "").trim() || "その他";
-  return rawGenre;
+  // 既存のresolveGenreLabel関数を使用
+  return resolveGenreLabel(rawGenre);
 });
 
 const questionText = computed(() => {
