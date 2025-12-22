@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/vite-setup  # テスト用: フェーズ2の開発中はこのブランチでもビルド
   workflow_dispatch:
 
 permissions:
