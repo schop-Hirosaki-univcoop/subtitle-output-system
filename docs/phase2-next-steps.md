@@ -17,11 +17,13 @@
 ### 実装内容
 
 1. **Vite のセットアップ**
+
    - Vite 5.0.0 をインストール
    - @vitejs/plugin-vue 4.5.0 をインストール
    - Vue.js 3.3.4 をインストール
 
 2. **Multi-page Application の設定**
+
    - 8 つの HTML エントリーポイントを設定
    - 既存の HTML ファイルを維持
 
@@ -42,6 +44,7 @@
 **実装内容:**
 
 1. **Vue コンポーネントファイルを作成**
+
    ```vue
    <!-- src/components/QuestionCard.vue -->
    <template>
@@ -52,7 +55,7 @@
          { 'is-selecting': question['選択中'] },
          { 'is-puq': isPickup },
          { 'is-selected': isSelected },
-         { 'is-live': isLive, 'now-displaying': isLive }
+         { 'is-live': isLive, 'now-displaying': isLive },
        ]"
        :data-uid="question.UID"
        @click="handleClick"
@@ -62,7 +65,7 @@
    </template>
 
    <script setup>
-   import { computed } from 'vue';
+   import { computed } from "vue";
 
    const props = defineProps({
      question: {
@@ -84,15 +87,16 @@
    ```
 
 2. **operator.html を更新**
+
    ```html
    <!-- operator.html -->
    <div id="vue-questions-container"></div>
    <script type="module">
-     import { createApp } from 'vue';
-     import QuestionList from './src/components/QuestionList.vue';
+     import { createApp } from "vue";
+     import QuestionList from "./src/components/QuestionList.vue";
 
      const app = createApp(QuestionList);
-     app.mount('#vue-questions-container');
+     app.mount("#vue-questions-container");
    </script>
    ```
 
@@ -103,15 +107,16 @@
 **実装内容:**
 
 1. **Composable 関数を作成**
+
    ```javascript
    // src/composables/useOperatorApp.js
-   import { ref, onMounted } from 'vue';
+   import { ref, onMounted } from "vue";
 
    export function useOperatorApp() {
      const app = ref(null);
 
      onMounted(() => {
-       if (typeof window !== 'undefined' && window.operatorEmbed?.app) {
+       if (typeof window !== "undefined" && window.operatorEmbed?.app) {
          app.value = window.operatorEmbed.app;
        }
      });
@@ -121,9 +126,10 @@
    ```
 
 2. **コンポーネントで使用**
+
    ```vue
    <script setup>
-   import { useOperatorApp } from './composables/useOperatorApp.js';
+   import { useOperatorApp } from "./composables/useOperatorApp.js";
 
    const { app } = useOperatorApp();
    // app.value を使用して既存の OperatorApp インスタンスにアクセス
@@ -137,11 +143,13 @@
 **実装内容:**
 
 1. **TypeScript の依存関係を追加**
+
    ```bash
    npm install -D typescript @vitejs/plugin-vue-tsx
    ```
 
 2. **tsconfig.json を作成**
+
    ```json
    {
      "compilerOptions": {
@@ -161,15 +169,20 @@
        "noUnusedParameters": true,
        "noFallthroughCasesInSwitch": true
      },
-     "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],
+     "include": [
+       "src/**/*.ts",
+       "src/**/*.d.ts",
+       "src/**/*.tsx",
+       "src/**/*.vue"
+     ],
      "references": [{ "path": "./tsconfig.node.json" }]
    }
    ```
 
 3. **vite.config.js を vite.config.ts に変更**
    ```typescript
-   import { defineConfig } from 'vite';
-   import vue from '@vitejs/plugin-vue';
+   import { defineConfig } from "vite";
+   import vue from "@vitejs/plugin-vue";
    // ...
    ```
 
@@ -180,6 +193,7 @@
 **実装内容:**
 
 1. **ディレクトリ構造を作成**
+
    ```
    src/
    ├── components/
@@ -205,10 +219,12 @@
 **実装内容:**
 
 1. **コード分割**
+
    - 動的インポートを使用
    - ルートごとにコードを分割
 
 2. **アセットの最適化**
+
    - 画像の最適化
    - フォントの最適化
 
@@ -221,6 +237,7 @@
 ### 優先度: 高
 
 1. **既存コードを Vue コンポーネントに移行**
+
    - 質問カードコンポーネントの移行
    - 既存の CDN 経由の実装を Vite ベースに置き換え
 
@@ -232,6 +249,7 @@
 ### 優先度: 中
 
 3. **TypeScript の導入**
+
    - 型安全性の向上
    - 開発体験の向上
 
@@ -262,4 +280,3 @@
 
 **作成日**: 2025 年 12 月  
 **バージョン**: 1.0.0
-
