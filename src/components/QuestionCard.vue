@@ -94,8 +94,8 @@ const statusText = computed(() => {
 
 const displayName = computed(() => {
   const rawName = props.question["ラジオネーム"];
-  // 既存のformatOperatorName関数を使用（空文字列もそのまま返す）
-  return formatOperatorName(rawName);
+  // 既存のformatOperatorName関数を使用（空文字列の場合は"—"を表示）
+  return formatOperatorName(rawName) || "—";
 });
 
 const genreLabel = computed(() => {

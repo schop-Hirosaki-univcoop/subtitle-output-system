@@ -1,18 +1,16 @@
 <template>
-  <div class="cards-list">
-    <QuestionCard
-      v-for="question in filteredQuestions"
-      :key="question.UID"
-      :question="question"
-      :is-selected="selectedUid === String(question.UID)"
-      :is-live="liveUid === String(question.UID)"
-      :is-loading="loadingUids.has(String(question.UID))"
-      :show-genre="viewingAllGenres"
-      :viewing-all-genres="viewingAllGenres"
-      @click="handleCardClick"
-      @checkbox-change="handleCheckboxChange"
-    />
-  </div>
+  <QuestionCard
+    v-for="question in filteredQuestions"
+    :key="question.UID"
+    :question="question"
+    :is-selected="selectedUid === String(question.UID)"
+    :is-live="liveUid === String(question.UID)"
+    :is-loading="loadingUids.has(String(question.UID))"
+    :show-genre="viewingAllGenres"
+    :viewing-all-genres="viewingAllGenres"
+    @click="handleCardClick"
+    @checkbox-change="handleCheckboxChange"
+  />
 </template>
 
 <script setup>
