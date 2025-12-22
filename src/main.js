@@ -12,41 +12,57 @@ function waitForOperatorApp() {
       resolve(window.operatorEmbed.app);
       return;
     }
-    const checkInterval = setInterval(() => {
+
+    // 最大10秒待機
+    let attempts = 0;
+    const maxAttempts = 100;
+    const interval = setInterval(() => {
+      attempts++;
       if (window.operatorEmbed?.app) {
-        clearInterval(checkInterval);
+        clearInterval(interval);
         resolve(window.operatorEmbed.app);
+      } else if (attempts >= maxAttempts) {
+        clearInterval(interval);
+        console.warn("[Vue] OperatorApp の初期化を待機中にタイムアウトしました");
+        resolve(null);
       }
     }, 100);
-    // タイムアウト（10秒）
-    setTimeout(() => {
-      clearInterval(checkInterval);
-      resolve(null);
-    }, 10000);
   });
 }
 
-// DOMContentLoaded後に初期化
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
-} else {
-  init();
-}
-
-async function init() {
-  const container = document.getElementById("vue-questions-container");
-  if (!container) {
-    console.warn("Vue questions container not found");
-    return;
-  }
-
-  const app = await waitForOperatorApp();
+// OperatorAppが初期化されたらVueアプリをマウント
+waitForOperatorApp().then((app) => {
   if (!app) {
-    console.warn("OperatorApp not found");
+    console.warn("[Vue] OperatorApp が見つかりません。Vueアプリをマウントできません。");
     return;
   }
 
+  const container = document.getElementById("op-questions-cards");
+  if (!container) {
+    console.warn("[Vue] op-questions-cards コンテナが見つかりません");
+    return;
+  }
+
+  // 既存のrenderQuestionsを一時的に無効化（Vueコンポーネントを使用するため）
+  if (typeof window !== "undefined") {
+    window.__vueExperimentEnabled = true;
+  }
+
+  // 既存のrenderQuestionsをラップ
+  if (app && typeof app.renderQuestions === "function") {
+    const originalRenderQuestions = app.renderQuestions.bind(app);
+    app.renderQuestions = function () {
+      if (window.__vueExperimentEnabled) {
+        console.log("[Vue] 既存のrenderQuestionsをスキップ（Vueコンポーネントを使用）");
+        return;
+      }
+      return originalRenderQuestions();
+    };
+  }
+
+  // Vueアプリを作成してマウント
   const vueApp = createApp(QuestionList);
   vueApp.mount(container);
-}
+  console.log("[Vue] QuestionList アプリをマウントしました");
+});
 
