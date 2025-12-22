@@ -1,0 +1,45 @@
+name: Build Test
+
+# feature/vite-setupブランチでのビルドテスト用
+# デプロイは行わず、ビルドが成功するか確認するだけ
+
+on:
+  push:
+    branches:
+      - feature/vite-setup
+  pull_request:
+    branches:
+      - feature/vite-setup
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Check build output
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "Error: dist directory not found"
+            exit 1
+          fi
+          echo "Build successful! Files in dist:"
+          ls -la dist/
+

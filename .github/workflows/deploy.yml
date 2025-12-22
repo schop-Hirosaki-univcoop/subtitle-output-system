@@ -4,7 +4,9 @@ on:
   push:
     branches:
       - main
-      - feature/vite-setup  # テスト用: フェーズ2の開発中はこのブランチでもビルド
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -44,6 +46,8 @@ jobs:
           path: ./dist
 
   deploy:
+    # mainブランチのみデプロイ（環境保護ルールに準拠）
+    if: github.ref == 'refs/heads/main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
