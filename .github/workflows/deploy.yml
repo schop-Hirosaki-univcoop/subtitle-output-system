@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/vite-setup  # 開発用: UIでブランチを設定する場合は有効化
   pull_request:
     branches:
       - main
@@ -46,8 +47,8 @@ jobs:
           path: ./dist
 
   deploy:
-    # mainブランチのみデプロイ（環境保護ルールに準拠）
-    if: github.ref == 'refs/heads/main'
+    # UIでブランチを設定する場合は、条件を削除または調整
+    # 環境保護ルールで許可されたブランチのみデプロイ
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
