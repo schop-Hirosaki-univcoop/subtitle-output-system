@@ -1664,19 +1664,13 @@ export async function clearNowShowing(app) {
         // previousNowShowing.pickupがtrueの場合は常にscheduleIdを送る
         // prevItemが見つからない場合でも、バックエンド側でpickup questionと判定される可能性があるため
         if (isPickup) {
-          // apiScheduleIdを計算（優先順位: pickupScheduleId > scheduleId > previousNowShowing.scheduleId）
-          // ただし、空の場合はAPI呼び出しをスキップするため、空文字列を許可
-          const apiScheduleId = String(
-            pickupScheduleId ||
-            scheduleId ||
-            previousNowShowing.scheduleId ||
-            ""
-          ).trim();
+          // apiScheduleIdを計算（finalScheduleIdを使用、空の場合はscheduleIdを使用）
+          const apiScheduleId = String(finalScheduleId || scheduleId || "").trim();
           // scheduleIdが空の場合はAPI呼び出しをスキップ
           // normalizeScheduleIdは空の場合__default_schedule__を返すため、直接チェックする
           if (!apiScheduleId) {
             console.warn(`[clearNowShowing] scheduleId is required for pickup question UID: ${prevUid}, but scheduleId is empty or invalid. Skipping API call.`, {
-              pickupScheduleId,
+              finalScheduleId,
               scheduleId,
               previousNowShowingScheduleId: previousNowShowing.scheduleId,
               prevItem: prevItem ? { UID: prevItem.UID, 日程ID: prevItem["日程ID"] } : null
