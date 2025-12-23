@@ -1078,21 +1078,41 @@ export async function handleDisplay(app) {
     }
     // previousUidまたはprevのupdateStatus API呼び出し
     if (previousUid && previousUidItem) {
-      app.api.fireAndForgetApi({ 
-        action: "updateStatus", 
-        uid: previousUid, 
-        status: true, 
-        eventId,
-        scheduleId: previousUidIsPickup ? scheduleId : undefined
-      });
+      // PUQの場合はscheduleIdが必須
+      const prevScheduleId = previousUidIsPickup ? scheduleId : undefined;
+      if (previousUidIsPickup && !prevScheduleId) {
+        console.warn(`[handleDisplay] scheduleId is required for pickup question UID: ${previousUid}, but scheduleId is empty. Skipping API call.`, {
+          scheduleId,
+          eventId,
+          previousUidItem: previousUidItem ? { UID: previousUidItem.UID, 日程ID: previousUidItem["日程ID"] } : null
+        });
+      } else {
+        app.api.fireAndForgetApi({ 
+          action: "updateStatus", 
+          uid: previousUid, 
+          status: true, 
+          eventId,
+          scheduleId: prevScheduleId
+        });
+      }
     } else if (prev) {
-      app.api.fireAndForgetApi({ 
-        action: "updateStatus", 
-        uid: prev.UID, 
-        status: true, 
-        eventId,
-        scheduleId: prevIsPickup ? scheduleId : undefined
-      });
+      // PUQの場合はscheduleIdが必須
+      const prevScheduleId = prevIsPickup ? scheduleId : undefined;
+      if (prevIsPickup && !prevScheduleId) {
+        console.warn(`[handleDisplay] scheduleId is required for pickup question UID: ${prev.UID}, but scheduleId is empty. Skipping API call.`, {
+          scheduleId,
+          eventId,
+          prev: prev ? { UID: prev.UID, 日程ID: prev["日程ID"] } : null
+        });
+      } else {
+        app.api.fireAndForgetApi({ 
+          action: "updateStatus", 
+          uid: prev.UID, 
+          status: true, 
+          eventId,
+          scheduleId: prevScheduleId
+        });
+      }
     }
     app.state.lastDisplayedUid = app.state.selectedRowData.uid;
     app.api.logAction("DISPLAY", `RN: ${app.state.selectedRowData.name}`);
@@ -1182,13 +1202,23 @@ export async function handleUnanswer(app) {
     const statusPath = getQuestionStatusPath(eventId, isPickup, scheduleId);
     console.log("[未回答にする] questionStatus更新用JSON:", JSON.stringify({ [`${statusPath}/${uid}`]: unanswerPayload }, null, 2));
     await update(statusRef, { [`${uid}`]: unanswerPayload });
-    app.api.fireAndForgetApi({
-      action: "updateStatus",
-      uid: app.state.selectedRowData.uid,
-      status: false,
-      eventId,
-      scheduleId: isPickup ? scheduleId : undefined
-    });
+    // PUQの場合はscheduleIdが必須
+    const apiScheduleId = isPickup ? scheduleId : undefined;
+    if (isPickup && !apiScheduleId) {
+      console.warn(`[handleUnanswer] scheduleId is required for pickup question UID: ${uid}, but scheduleId is empty. Skipping API call.`, {
+        scheduleId,
+        eventId,
+        currentItem: currentItem ? { UID: currentItem.UID, 日程ID: currentItem["日程ID"] } : null
+      });
+    } else {
+      app.api.fireAndForgetApi({
+        action: "updateStatus",
+        uid: app.state.selectedRowData.uid,
+        status: false,
+        eventId,
+        scheduleId: apiScheduleId
+      });
+    }
     app.api.logAction("UNANSWER", `UID: ${uid}, RN: ${displayLabel}`);
     
     // Firebaseの更新が反映されるまで少し待つ（最大5秒）
