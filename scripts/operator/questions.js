@@ -1299,15 +1299,30 @@ export async function handleBatchUnanswer(app) {
   }
   const checkedBoxes = Array.from(app.dom.cardsContainer?.querySelectorAll(".row-checkbox:checked") || []);
   if (checkedBoxes.length === 0) return;
+  
+  // 回答済の質問のみをフィルタリング（未回答のものはスキップ）
+  const answeredUids = checkedBoxes
+    .map((checkbox) => {
+      const uid = checkbox.dataset.uid;
+      const item = app.state.allQuestions.find((q) => String(q.UID) === uid);
+      return item && !!item["回答済"] ? uid : null;
+    })
+    .filter((uid) => uid !== null);
+  
+  if (answeredUids.length === 0) {
+    app.toast("選択された質問の中に、未回答に戻す対象（回答済みの質問）がありません。", "info");
+    return;
+  }
+  
   const confirmed = await app.confirmAction({
     title: "一括で未回答に戻す",
-    description: `${checkedBoxes.length}件の質問を「未回答」に戻します。よろしいですか？`,
+    description: `${answeredUids.length}件の質問を「未回答」に戻します。よろしいですか？`,
     confirmLabel: "未回答に戻す",
     cancelLabel: "キャンセル",
     tone: "danger"
   });
   if (!confirmed) return;
-  const uidsToUpdate = checkedBoxes.map((checkbox) => checkbox.dataset.uid);
+  const uidsToUpdate = answeredUids;
   
   // ローディング状態を開始（更新前の状態を記録）
   uidsToUpdate.forEach((uid) => {
