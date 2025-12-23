@@ -14,6 +14,9 @@ const loadingUids = new Set();
 // ローディング開始時の状態を記録（更新前の状態を保持）
 const loadingUidStates = new Map();
 
+// Vueコンポーネントからアクセスできるようにエクスポート
+export { loadingUids, loadingUidStates };
+
 function isPickUpQuestion(record) {
   if (!record || typeof record !== "object") {
     return false;

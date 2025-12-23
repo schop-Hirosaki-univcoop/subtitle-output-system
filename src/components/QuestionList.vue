@@ -5,7 +5,7 @@
     :question="question"
     :is-selected="selectedUid === String(question.UID)"
     :is-live="liveQuestionMap.get(String(question.UID)) || false"
-    :is-loading="loadingUids.has(String(question.UID))"
+    :is-loading="isLoadingQuestion(question.UID)"
     :should-flash="lastDisplayedUid === question.UID"
     :show-genre="viewingAllGenres"
     :viewing-all-genres="viewingAllGenres"
@@ -17,7 +17,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import QuestionCard from "./QuestionCard.vue";
 import { useOperatorApp } from "../composables/useOperatorApp.js";
-import { resolveNormalScheduleKey } from "../../scripts/operator/questions.js";
+import { resolveNormalScheduleKey, loadingUids as moduleLoadingUids, loadingUidStates as moduleLoadingUidStates } from "../../scripts/operator/questions.js";
 import { normalizeScheduleId } from "../../scripts/shared/channel-paths.js";
 import { GENRE_ALL_VALUE } from "../../scripts/operator/constants.js";
 
@@ -30,8 +30,10 @@ const liveParticipantId = ref("");
 const liveQuestion = ref("");
 const liveName = ref("");
 const lastDisplayedUid = ref(null);
-const loadingUids = ref(new Set());
-const loadingUidStates = ref(new Map());
+// 既存のJavaScriptコードが使用しているモジュールレベルのloadingUidsとloadingUidStatesを直接使用
+// これにより、未回答に戻す処理などで正しく同期される
+const loadingUids = moduleLoadingUids;
+const loadingUidStates = moduleLoadingUidStates;
 const liveQuestionMap = ref(new Map());
 
 // フィルタリング用の状態
@@ -41,6 +43,7 @@ const selectedSchedule = ref("");
 
 // 定期的な更新のためのinterval
 let updateInterval = null;
+let loadingUidsCheckInterval = null;
 
 // 既存のisPickUpQuestion関数の実装
 function isPickUpQuestion(record) {
@@ -214,9 +217,11 @@ function updateQuestions() {
   // ローディング中のUIDについて、更新が反映されたか確認
   // （Firebaseリスナーが新しいデータを拾った時にローディング状態を解除）
   // 注意: filteredQuestions.valueを参照すると無限ループになるため、直接questions.valueを使用
-  loadingUids.value.forEach((uid) => {
+  // 注意: loadingUidsとloadingUidStatesはモジュールレベルの変数なので、.valueは不要
+  let loadingUidsChanged = false;
+  loadingUids.forEach((uid) => {
     const question = questions.value.find((q) => String(q.UID) === uid);
-    const loadingState = loadingUidStates.value.get(uid);
+    const loadingState = loadingUidStates.get(uid);
     if (question && loadingState) {
       // 更新が反映されたか確認
       // 未回答に戻す場合は、previousAnsweredがtrueで、現在answeredがfalseになっていることを確認
@@ -226,11 +231,17 @@ function updateQuestions() {
         !question["回答済"]
       ) {
         // 更新が反映された
-        loadingUids.value.delete(uid);
-        loadingUidStates.value.delete(uid);
+        loadingUids.delete(uid);
+        loadingUidStates.delete(uid);
+        loadingUidsChanged = true;
       }
     }
   });
+  
+  // loadingUidsが変更された場合、リアクティビティをトリガー
+  if (loadingUidsChanged) {
+    loadingUidsVersion.value++;
+  }
 }
 
 // カードクリックハンドラ
@@ -278,12 +289,26 @@ onMounted(() => {
     updateQuestions();
   }, 500);
 
+  // loadingUidsの変更を監視（100msごと）
+  // 既存のJavaScriptコードがloadingUidsを変更した場合に検知するため
+  let previousLoadingUidsSize = loadingUids.size;
+  loadingUidsCheckInterval = setInterval(() => {
+    const currentSize = loadingUids.size;
+    if (currentSize !== previousLoadingUidsSize) {
+      loadingUidsVersion.value++;
+      previousLoadingUidsSize = currentSize;
+    }
+  }, 100);
+
   console.log("[Vue] QuestionList コンポーネントがマウントされました");
 });
 
 onUnmounted(() => {
   if (updateInterval) {
     clearInterval(updateInterval);
+  }
+  if (loadingUidsCheckInterval) {
+    clearInterval(loadingUidsCheckInterval);
   }
 });
 
