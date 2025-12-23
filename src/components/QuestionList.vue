@@ -365,11 +365,36 @@ function updateQuestions() {
   });
 }
 
+// 選択解除関数
+function clearSelection() {
+  if (!app.value) return;
+  
+  selectedUid.value = null;
+  app.value.state.selectedRowData = null;
+  
+  if (app.value.dom.cardsContainer) {
+    app.value.dom.cardsContainer
+      .querySelectorAll(".q-card")
+      .forEach((el) => el.classList.remove("is-selected"));
+  }
+  
+  if (typeof app.value.updateActionAvailability === "function") {
+    app.value.updateActionAvailability(app.value);
+  }
+}
+
 // カードクリックハンドラ
 function handleCardClick(question) {
   if (!app.value) return;
 
   const uid = String(question.UID);
+  
+  // 既に選択されているカードを再度クリックした場合は選択解除
+  if (selectedUid.value === uid) {
+    clearSelection();
+    return;
+  }
+  
   const isAnswered = !!question["回答済"];
   const participantId = String(question["参加者ID"] ?? "").trim();
   const rawGenre = String(question["ジャンル"] ?? "").trim() || "その他";
@@ -445,15 +470,21 @@ onMounted(() => {
         clearSelection();
       }
     };
-    app.value.dom.cardsContainer.addEventListener("click", handleContainerClick);
-    
+    app.value.dom.cardsContainer.addEventListener(
+      "click",
+      handleContainerClick
+    );
+
     // クリーンアップ用に保存
     if (!app.value._questionListCleanup) {
       app.value._questionListCleanup = [];
     }
     app.value._questionListCleanup.push(() => {
       if (app.value?.dom?.cardsContainer) {
-        app.value.dom.cardsContainer.removeEventListener("click", handleContainerClick);
+        app.value.dom.cardsContainer.removeEventListener(
+          "click",
+          handleContainerClick
+        );
       }
     });
   }
@@ -465,7 +496,7 @@ onMounted(() => {
     }
   };
   document.addEventListener("keydown", handleKeydown);
-  
+
   // クリーンアップ用に保存
   if (!app.value._questionListCleanup) {
     app.value._questionListCleanup = [];
