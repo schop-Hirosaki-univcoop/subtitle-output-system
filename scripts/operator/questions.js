@@ -1311,11 +1311,12 @@ export async function handleBatchUnanswer(app) {
     const isPickup = item.ピックアップ === true;
     // 各質問のイベントIDを取得
     // PUQの場合はtokenがないため、現在アクティブなeventIdを使用
+    // 通常質問の場合も、item["イベントID"]が空の場合は、現在アクティブなeventIdをフォールバックとして使用
     let questionEventId = String(item["イベントID"] ?? "").trim();
-    if (!questionEventId && isPickup) {
-      // PUQの場合は現在アクティブなeventIdを使用
-      const { eventId } = resolveNowShowingReference(app);
-      questionEventId = String(eventId || "").trim();
+    if (!questionEventId) {
+      // PUQの場合も通常質問の場合も、現在アクティブなeventIdを使用
+      const { eventId: fallbackEventId } = resolveNowShowingReference(app);
+      questionEventId = String(fallbackEventId || "").trim();
     }
     if (!questionEventId) {
       console.warn(`[handleBatchUnanswer] EventId not found for UID: ${uid}`);
