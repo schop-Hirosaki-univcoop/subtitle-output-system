@@ -32,6 +32,7 @@ const liveName = ref("");
 const lastDisplayedUid = ref(null);
 const loadingUids = ref(new Set());
 const loadingUidStates = ref(new Map());
+const liveQuestionMap = ref(new Map());
 
 // フィルタリング用の状態
 const currentTab = ref("all");
@@ -90,19 +91,15 @@ const filteredQuestions = computed(() => {
   return filtered;
 });
 
-// ライブ質問の判定をcomputed化（パフォーマンス向上）
-// 注意: liveUid, liveParticipantId, liveQuestion, liveNameの変更を検知するため、
-// これらの値を明示的に参照する必要がある
-const liveQuestionMap = computed(() => {
-  // 依存関係を明示的に追跡するため、これらの値を参照
+// ライブ質問の判定を更新する関数
+function updateLiveQuestionMap() {
+  const map = new Map();
   const currentLiveUid = liveUid.value;
   const currentLiveParticipantId = liveParticipantId.value;
   const currentLiveQuestion = liveQuestion.value;
   const currentLiveName = liveName.value;
-  const currentFilteredQuestions = filteredQuestions.value;
-
-  const map = new Map();
-  currentFilteredQuestions.forEach((question) => {
+  
+  filteredQuestions.value.forEach((question) => {
     const uid = String(question.UID || "");
     const participantId = String(question["参加者ID"] ?? "").trim();
     const questionText = String(question["質問・お悩み"] ?? "").trim();
@@ -136,8 +133,9 @@ const liveQuestionMap = computed(() => {
 
     map.set(uid, isLive);
   });
-  return map;
-});
+  
+  liveQuestionMap.value = map;
+}
 
 const viewingAllGenres = computed(() => {
   return (
@@ -209,6 +207,9 @@ function updateQuestions() {
     resolvedSchedule = displayScheduleKey;
   }
   selectedSchedule.value = resolvedSchedule;
+
+  // ライブ質問の判定を更新
+  updateLiveQuestionMap();
 
   // ローディング中のUIDについて、更新が反映されたか確認
   // （Firebaseリスナーが新しいデータを拾った時にローディング状態を解除）
@@ -315,6 +316,15 @@ watch(
     }
   },
   { deep: true, immediate: true }
+);
+
+// liveUid, liveParticipantId, liveQuestion, liveNameの変更を監視してliveQuestionMapを更新
+watch(
+  () => [liveUid.value, liveParticipantId.value, liveQuestion.value, liveName.value, filteredQuestions.value],
+  () => {
+    updateLiveQuestionMap();
+  },
+  { immediate: true }
 );
 
 // 既存のrenderQuestionsが呼ばれた時にも更新されるように、cardsContainerの変更を監視
