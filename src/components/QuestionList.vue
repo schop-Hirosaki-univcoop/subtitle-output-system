@@ -168,7 +168,9 @@ function updateQuestions() {
     ? app.value.state.allQuestions
     : [];
 
-  questions.value = allQuestions;
+  // 新しい配列を作成して、Vueのリアクティビティを確実にトリガーする
+  // オブジェクトのプロパティが変更された場合でも、Vueが変更を検知できるようにする
+  questions.value = [...allQuestions];
 
   // 選択中のUIDを更新
   if (app.value.state.selectedRowData) {
@@ -269,13 +271,18 @@ function updateQuestions() {
     // 既存のコードでは、renderQuestionsの最後でupdateActionAvailabilityが呼ばれている
     nextTick(() => {
       if (app.value && app.value.state && app.value.state.selectedRowData) {
-        const currentSelectedUid = String(app.value.state.selectedRowData.uid || "");
-        const question = questions.value.find((q) => String(q.UID) === currentSelectedUid);
+        const currentSelectedUid = String(
+          app.value.state.selectedRowData.uid || ""
+        );
+        const question = questions.value.find(
+          (q) => String(q.UID) === currentSelectedUid
+        );
         if (question) {
           // selectedRowDataのisAnsweredを最新の状態に更新
           const isAnswered = !!question["回答済"];
           const participantId = String(question["参加者ID"] ?? "").trim();
-          const rawGenre = String(question["ジャンル"] ?? "").trim() || "その他";
+          const rawGenre =
+            String(question["ジャンル"] ?? "").trim() || "その他";
           const isPickup = isPickUpQuestion(question);
           app.value.state.selectedRowData = {
             uid: currentSelectedUid,
@@ -395,7 +402,10 @@ watch(
       // 既存のコードでは、renderQuestionsの最後でupdateActionAvailabilityが呼ばれている
       // データが更新された時にも呼ぶ必要がある（特にallQuestionsが更新された時）
       nextTick(() => {
-        if (app.value && typeof app.value.updateActionAvailability === "function") {
+        if (
+          app.value &&
+          typeof app.value.updateActionAvailability === "function"
+        ) {
           app.value.updateActionAvailability(app.value);
         }
       });

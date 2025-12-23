@@ -3,8 +3,8 @@
     ref="cardElement"
     :class="[
       'q-card',
-      { 'is-answered': question['回答済'] },
-      { 'is-selecting': question['選択中'] },
+      { 'is-answered': isAnswered },
+      { 'is-selecting': isSelecting },
       { 'is-puq': isPickup },
       { 'is-selected': isSelected },
       { 'is-live': isLive, 'now-displaying': isLive },
@@ -87,9 +87,12 @@ const props = defineProps({
 const emit = defineEmits(["click"]);
 const cardElement = ref(null);
 
+const isAnswered = computed(() => !!props.question["回答済"]);
+const isSelecting = computed(() => !!props.question["選択中"]);
+
 const statusText = computed(() => {
-  if (props.question["選択中"]) return "送出準備中";
-  if (props.question["回答済"]) return "送出済";
+  if (isSelecting.value) return "送出準備中";
+  if (isAnswered.value) return "送出済";
   return "未送出";
 });
 
