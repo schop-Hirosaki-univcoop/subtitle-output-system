@@ -100,7 +100,7 @@ const liveQuestionMap = computed(() => {
   const currentLiveQuestion = liveQuestion.value;
   const currentLiveName = liveName.value;
   const currentFilteredQuestions = filteredQuestions.value;
-  
+
   const map = new Map();
   currentFilteredQuestions.forEach((question) => {
     const uid = String(question.UID || "");
