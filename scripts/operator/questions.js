@@ -1920,22 +1920,82 @@ export function updateActionAvailability(app) {
     logAvailability("batch-selection", { effectiveCheckedCount: checkedCount });
     return;
   }
+  // 現在送出中の質問を取得
+  const nowShowing = app.state.renderState?.nowShowing || app.state.displaySession?.nowShowing || null;
+  const nowShowingUid = nowShowing && typeof nowShowing.uid !== "undefined" ? String(nowShowing.uid || "").trim() : "";
+  const hasNowShowing = !!nowShowingUid;
+  
   if (!selection) {
-    app.dom.selectedInfo.textContent = "行を選択してください";
+    // 何も選択していない時
+    if (hasNowShowing) {
+      // 何かを送出している場合は、送出クリアボタンを表示
+      app.dom.selectedInfo.textContent = "行を選択してください";
+      if (app.dom.clearButton) {
+        app.dom.clearButton.hidden = false;
+        const canClear = assetAvailable && telopEnabled && displayOnline;
+        app.dom.clearButton.disabled = !canClear;
+      }
+      // 送出ボタンは非表示
+      if (app.dom.actionButtons[0]) {
+        app.dom.actionButtons[0].hidden = true;
+      }
+    } else {
+      // 何も送出していない場合は、両方とも非表示
+      app.dom.selectedInfo.textContent = "行を選択してください";
+      if (app.dom.clearButton) {
+        app.dom.clearButton.hidden = true;
+      }
+      if (app.dom.actionButtons[0]) {
+        app.dom.actionButtons[0].hidden = true;
+      }
+    }
     updateBatchButtonVisibility(app, checkedCount);
-    logAvailability("no-selection");
+    logAvailability("no-selection", { hasNowShowing, nowShowingUid });
     return;
   }
 
+  // 選択中の質問のUID
+  const selectedUid = String(selection.uid || "").trim();
+  const isSelectedNowShowing = hasNowShowing && selectedUid === nowShowingUid;
+  
   app.dom.actionButtons.forEach((button) => {
     if (button) button.disabled = false;
   });
-  if (app.dom.actionButtons[0]) app.dom.actionButtons[0].disabled = !!selection.isAnswered;
+  
+  if (isSelectedNowShowing) {
+    // 送出中のものを選択した場合: 送出クリアボタンを表示
+    if (app.dom.clearButton) {
+      app.dom.clearButton.hidden = false;
+      const canClear = assetAvailable && telopEnabled && displayOnline;
+      app.dom.clearButton.disabled = !canClear;
+    }
+    // 送出ボタンは非表示
+    if (app.dom.actionButtons[0]) {
+      app.dom.actionButtons[0].hidden = true;
+    }
+  } else {
+    // 送出していないものを選択した場合: 送出ボタンを表示
+    if (app.dom.actionButtons[0]) {
+      app.dom.actionButtons[0].hidden = false;
+      app.dom.actionButtons[0].disabled = !!selection.isAnswered;
+    }
+    // 送出クリアボタンは非表示
+    if (app.dom.clearButton) {
+      app.dom.clearButton.hidden = true;
+    }
+  }
+  
   if (app.dom.actionButtons[1]) app.dom.actionButtons[1].disabled = !selection.isAnswered;
   const safeName = formatOperatorName(selection.name) || "—";
   app.dom.selectedInfo.textContent = `選択中: ${safeName}`;
   updateBatchButtonVisibility(app, checkedCount);
-  logAvailability("ready-single-selection", { effectiveCheckedCount: checkedCount });
+  logAvailability("ready-single-selection", { 
+    effectiveCheckedCount: checkedCount,
+    hasNowShowing,
+    nowShowingUid,
+    selectedUid,
+    isSelectedNowShowing
+  });
 }
 
 export function updateBatchButtonVisibility(app, providedCount) {
