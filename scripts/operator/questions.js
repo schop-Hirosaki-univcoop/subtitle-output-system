@@ -1054,8 +1054,8 @@ export async function handleDisplay(app) {
         return qEventId === eventId && String(q.UID) !== app.state.selectedRowData.uid;
       });
       if (sameEventQuestions.length > 0) {
-        // 通常質問とpickupquestionを分けて処理
-        const normalClearingUpdates = {};
+        // 通常質問とpickupquestionをスケジュールごとにグループ化
+        const normalClearingUpdatesByPath = new Map();
         const pickupClearingUpdates = {};
         sameEventQuestions.forEach((q) => {
           const qUid = String(q.UID);
@@ -1064,13 +1064,27 @@ export async function handleDisplay(app) {
             pickupClearingUpdates[`${qUid}/selecting`] = false;
             pickupClearingUpdates[`${qUid}/updatedAt`] = serverTimestamp();
           } else {
-            normalClearingUpdates[`${qUid}/selecting`] = false;
-            normalClearingUpdates[`${qUid}/updatedAt`] = serverTimestamp();
+            // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+            const questionEventId = String(q["イベントID"] ?? "").trim() || eventId;
+            const questionScheduleId = String(q["日程ID"] ?? "").trim() || scheduleId;
+            const pathKey = getQuestionStatusPath(questionEventId, false, questionScheduleId);
+            if (!normalClearingUpdatesByPath.has(pathKey)) {
+              normalClearingUpdatesByPath.set(pathKey, { 
+                ref: getQuestionStatusRef(questionEventId, false, questionScheduleId), 
+                updates: {} 
+              });
+            }
+            normalClearingUpdatesByPath.get(pathKey).updates[`${qUid}/selecting`] = false;
+            normalClearingUpdatesByPath.get(pathKey).updates[`${qUid}/updatedAt`] = serverTimestamp();
           }
         });
-        if (Object.keys(normalClearingUpdates).length > 0) {
-          await update(normalStatusRef, normalClearingUpdates);
+        // 通常質問をスケジュールごとに更新
+        for (const [pathKey, { ref: statusRef, updates }] of normalClearingUpdatesByPath) {
+          if (Object.keys(updates).length > 0) {
+            await update(statusRef, updates);
+          }
         }
+        // PUQを更新
         if (Object.keys(pickupClearingUpdates).length > 0) {
           await update(currentStatusRef, pickupClearingUpdates);
         }
