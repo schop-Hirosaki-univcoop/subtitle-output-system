@@ -1611,37 +1611,39 @@ export async function clearNowShowing(app) {
       }
 
       if (prevUid) {
+        // pickupquestionの場合は、prevItemからscheduleIdを取得するか、現在のscheduleIdを使用
+        // prevItemが見つかった場合は、そのscheduleIdを優先
+        let pickupScheduleId = scheduleId ? String(scheduleId).trim() : "";
+        if (isPickup && prevItem) {
+          const itemScheduleId = String(prevItem["日程ID"] || "").trim();
+          if (itemScheduleId) {
+            pickupScheduleId = itemScheduleId;
+          }
+        }
+        // previousNowShowingからもscheduleIdを取得を試みる
+        if (isPickup && !pickupScheduleId) {
+          const prevScheduleId = String(previousNowShowing.scheduleId || "").trim();
+          if (prevScheduleId) {
+            pickupScheduleId = prevScheduleId;
+          }
+        }
+        // prevItemが見つからなくても、isPickupがtrueの場合はpickup questionとして扱う
+        // この場合、現在のチャンネルのscheduleIdを使用（PUQを送出する際に使用したscheduleIdである可能性が高い）
+        if (isPickup && !pickupScheduleId) {
+          // 現在のチャンネルのscheduleIdをフォールバックとして使用
+          pickupScheduleId = scheduleId ? String(scheduleId).trim() : "";
+        }
+        
         // Firebaseのパス計算にはnormalizeScheduleIdを使用（空の場合は__default_schedule__になる）
         // 通常質問もPick Up Questionも、スケジュールの中に作成する
         // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
         // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
         let finalEventId = eventId;
-        let finalScheduleId = scheduleId;
+        let finalScheduleId = isPickup ? pickupScheduleId : scheduleId;
         
-        if (isPickup) {
-          // PUQの場合は、現在のチャンネルのscheduleIdを使用（PUQを送出する際に使用したscheduleId）
-          // prevItemからscheduleIdを取得できる場合はそれを使用（通常は空のはず）
-          if (prevItem) {
-            const itemScheduleId = String(prevItem["日程ID"] || "").trim();
-            if (itemScheduleId) {
-              finalScheduleId = itemScheduleId;
-            }
-          }
-          // previousNowShowingからもscheduleIdを取得を試みる（通常は空のはず）
-          if (!finalScheduleId || finalScheduleId === scheduleId) {
-            const prevScheduleId = String(previousNowShowing.scheduleId || "").trim();
-            if (prevScheduleId) {
-              finalScheduleId = prevScheduleId;
-            }
-          }
-          // 最終的にscheduleIdが空の場合は、現在のチャンネルのscheduleIdを使用
-          if (!finalScheduleId) {
-            finalScheduleId = scheduleId;
-          }
-        } else {
+        if (!isPickup) {
           // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
           if (prevItem) {
-            // prevItemが見つかった場合は、その質問のイベントIDとスケジュールIDを使用
             const questionEventId = String(prevItem["イベントID"] ?? "").trim();
             const questionScheduleId = String(prevItem["日程ID"] ?? "").trim();
             if (questionEventId) {
@@ -1652,9 +1654,7 @@ export async function clearNowShowing(app) {
             }
           } else {
             // prevItemが見つからない場合でも、通常質問として扱う
-            // この場合、現在のチャンネルのeventIdとscheduleIdを使用
-            // ただし、通常質問は1つの日程にのみ表示されるため、現在のチャンネルのscheduleIdが正しい可能性が高い
-            // 念のため、allQuestionsから該当する質問を検索して、そのスケジュールIDを使用
+            // allQuestionsから該当する質問を検索して、そのスケジュールIDを使用
             const foundQuestion = app.state.allQuestions.find((q) => String(q.UID || "") === prevUid);
             if (foundQuestion) {
               const questionEventId = String(foundQuestion["イベントID"] ?? "").trim();
