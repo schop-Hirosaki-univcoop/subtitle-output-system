@@ -1933,6 +1933,22 @@ export class OperatorApp {
     const branch = value && typeof value === "object" ? value : {};
     // 既存のquestionStatusByUidを取得（マージするため）
     const current = this.state.questionStatusByUid instanceof Map ? this.state.questionStatusByUid : new Map();
+    
+    // デバッグログ: 処理対象のUIDとansweredフラグを確認
+    const targetUid = "7c95bb08-7885-4a01-8e18-0396f382e6a8"; // テスト用UID
+    const hasTargetUid = Object.keys(branch).some((uidKey) => {
+      const record = branch[uidKey];
+      if (!record || typeof record !== "object") return false;
+      const resolvedUid = String(record.uid ?? uidKey ?? "").trim();
+      return resolvedUid === targetUid;
+    });
+    if (hasTargetUid) {
+      console.log(`[applyQuestionStatusSnapshot] Processing target UID ${targetUid}:`, {
+        branchKeys: Object.keys(branch),
+        branchValue: branch[targetUid] || Object.entries(branch).find(([k, v]) => String(v?.uid ?? k ?? "").trim() === targetUid)?.[1]
+      });
+    }
+    
     Object.entries(branch).forEach(([uidKey, record]) => {
       if (!record || typeof record !== "object") {
         return;
@@ -1955,6 +1971,15 @@ export class OperatorApp {
           old: oldStatus.answered,
           new: newStatus.answered,
           record
+        });
+      }
+      // デバッグログ: 対象UIDの場合は常にログを出力
+      if (resolvedUid === targetUid) {
+        console.log(`[applyQuestionStatusSnapshot] Processing UID ${resolvedUid}:`, {
+          oldStatus,
+          newStatus,
+          record,
+          uidKey
         });
       }
       current.set(resolvedUid, newStatus);
