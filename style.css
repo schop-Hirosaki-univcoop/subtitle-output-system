@@ -1769,13 +1769,6 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 #op-action-panel[data-selection="multi"] [data-mode="multi"]{ display:flex; }
 #op-action-panel[data-selection="multi"] [data-mode="single"]{ display:none; }
 #op-action-panel[data-selection="multi"] [data-mode="any"]{ display:none; }
-/* 送出ボタンと送出クリアボタンを同じ位置に配置（排他的に表示） */
-#op-action-panel [data-mode="any"]{ 
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: auto;
-}
 /* hidden属性が設定されている場合は、data-modeやdata-selectionに関係なく非表示にする */
 #op-action-panel [data-mode="single"]:first-of-type[hidden],
 #op-action-panel [data-mode="any"][hidden]{ display:none !important; }
