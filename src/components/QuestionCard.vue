@@ -51,7 +51,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, onUpdated, nextTick } from "vue";
+import { computed, ref, onMounted, onUpdated, nextTick } from "vue";
 // 既存のユーティリティ関数をインポート
 import {
   formatOperatorName,
@@ -164,24 +164,45 @@ watch(
 // ただし、コンポーネントが再レンダリングされてもチェックボックスの状態を保持する必要がある
 
 // チェックボックスの状態を復元する関数
+// 既存のDOMに同じUIDのチェックボックスが存在する場合、その状態を復元
+// handleSelectAllなどで既存のJavaScriptコードがチェックボックスの状態を変更した場合にも対応
 function restoreCheckboxState() {
   if (!checkboxElement.value || !app.value?.dom?.cardsContainer) return;
-  
-  // 同じUIDの他のチェックボックス（古い要素）の状態を確認
+
+  const uid = String(props.question.UID);
+
+  // 既存のDOMに同じUIDのチェックボックスが存在する場合、その状態を復元
+  // 複数のチェックボックスが存在する可能性があるため、すべて確認
   const allCheckboxes = app.value.dom.cardsContainer.querySelectorAll(
-    `.row-checkbox[data-uid="${props.question.UID}"]`
+    `.row-checkbox[data-uid="${uid}"]`
   );
+
+  // 既存のチェックボックスでcheckedになっているものがあれば、新しいチェックボックスもcheckedにする
+  let shouldBeChecked = false;
   for (const checkbox of allCheckboxes) {
-    if (
-      checkbox instanceof HTMLInputElement &&
-      checkbox !== checkboxElement.value &&
-      checkbox.checked
-    ) {
-      checkboxElement.value.checked = true;
-      return;
+    if (checkbox instanceof HTMLInputElement) {
+      if (checkbox === checkboxElement.value) {
+        // 現在のチェックボックスの状態を保持（既存の状態を優先）
+        shouldBeChecked = checkbox.checked;
+      } else if (checkbox.checked) {
+        // 他のチェックボックスがcheckedの場合、現在のチェックボックスもcheckedにする
+        shouldBeChecked = true;
+        break;
+      }
     }
   }
+
+  // 状態を更新（既存の状態と異なる場合のみ）
+  // 注意: 既存のJavaScriptコード（handleSelectAllなど）がチェックボックスの状態を変更した場合、
+  // この関数が呼ばれた時点で既にDOMの状態が更新されているため、その状態を反映する
+  if (checkboxElement.value.checked !== shouldBeChecked) {
+    checkboxElement.value.checked = shouldBeChecked;
+  }
 }
+
+// 注意: チェックボックスの変更は既存のイベント委譲（cardsContainerのchangeイベント）で処理される
+// handleSelectAllやhandleBatchUnanswerなど、既存のJavaScriptコードがチェックボックスの状態を変更する場合、
+// onUpdatedで状態を復元することで対応する
 
 onMounted(() => {
   nextTick(() => {
@@ -190,6 +211,8 @@ onMounted(() => {
 });
 
 onUpdated(() => {
+  // コンポーネントが更新された時も、チェックボックスの状態を復元
+  // これは、Vueコンポーネントが再レンダリングされた際に、既存のDOMの状態を確認して復元するため
   nextTick(() => {
     restoreCheckboxState();
   });

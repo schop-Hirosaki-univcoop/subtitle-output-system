@@ -343,6 +343,10 @@ function updateQuestions() {
         // filteredQuestionsに存在しない場合は、selectedRowDataをnullに設定
         app.value.state.selectedRowData = null;
       }
+    } else {
+      // 既存のコードでは、selectedUidが存在しない場合、selectedRowDataをnullに設定している
+      // Vueコンポーネントでも同様に処理する
+      app.value.state.selectedRowData = null;
     }
 
     // 既存のコードでは、renderQuestionsの最後で必ずupdateActionAvailability、syncSelectAllState、updateBatchButtonVisibilityが呼ばれている
@@ -372,11 +376,16 @@ function handleCardClick(question) {
   const isPickup = isPickUpQuestion(question);
 
   // 既存の選択ロジックを呼び出す
+  // 既存のコードでは、すべてのカードからis-selectedクラスを削除し、クリックされたカードにis-selectedクラスを追加している
+  // Vueコンポーネントでは、selectedUidを更新することで、is-selectedプロパティが自動的に更新される
   if (app.value.dom.cardsContainer) {
     app.value.dom.cardsContainer
       .querySelectorAll(".q-card")
       .forEach((el) => el.classList.remove("is-selected"));
   }
+
+  // selectedUidを更新（これにより、Vueコンポーネントのis-selectedプロパティが自動的に更新される）
+  selectedUid.value = uid;
 
   app.value.state.selectedRowData = {
     uid,
