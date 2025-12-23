@@ -1578,6 +1578,7 @@ export async function clearNowShowing(app) {
         group.updates[`${prevUid}/answered`] = true;
         group.updates[`${prevUid}/updatedAt`] = serverTimestamp();
 
+        // apiScheduleIdを計算（空文字列の場合はAPI呼び出しをスキップするため、空文字列を許可）
         const apiScheduleId = String(
           pickupScheduleId ||
           scheduleId ||
@@ -1591,17 +1592,19 @@ export async function clearNowShowing(app) {
         if (isPickup) {
           // scheduleIdが空の場合はAPI呼び出しをスキップ
           // normalizeScheduleIdは空の場合__default_schedule__を返すため、直接チェックする
-          const normalizedScheduleId = apiScheduleId;
-          if (!normalizedScheduleId) {
+          // apiScheduleIdが空文字列の場合は、API呼び出しをスキップ
+          if (!apiScheduleId) {
             console.warn(`[clearNowShowing] scheduleId is required for pickup question UID: ${prevUid}, but scheduleId is empty or invalid. Skipping API call.`);
             // API呼び出しをスキップ（ただし、Firebaseのansweredフラグは既に設定済み）
           } else {
+            // apiScheduleIdが空でない場合のみ、API呼び出しを実行
+            // normalizeScheduleIdは使用しない（空の場合__default_schedule__を返すため、API呼び出しでは空文字列を送信しないようにする）
             app.api.fireAndForgetApi({ 
               action: "updateStatus", 
               uid: prevUid, 
               status: true, 
               eventId,
-              scheduleId: normalizedScheduleId
+              scheduleId: apiScheduleId
             });
           }
         } else {
