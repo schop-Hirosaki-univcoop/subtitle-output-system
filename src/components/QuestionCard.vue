@@ -52,7 +52,15 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, onUpdated, onUnmounted, nextTick } from "vue";
+import {
+  computed,
+  ref,
+  watch,
+  onMounted,
+  onUpdated,
+  onUnmounted,
+  nextTick,
+} from "vue";
 // 既存のユーティリティ関数をインポート
 import {
   formatOperatorName,
@@ -184,12 +192,18 @@ function restoreCheckboxState() {
 
   // 既存のチェックボックスでcheckedになっているものがあれば、新しいチェックボックスもcheckedにする
   // 注意: 現在のチェックボックスの状態を優先する（ユーザーがクリックした状態を保持）
+  // ただし、既存のJavaScriptコード（handleSelectAllなど）が変更した場合は、その状態を反映する
   let shouldBeChecked = isChecked.value; // Vueの状態を初期値として使用
   for (const checkbox of allCheckboxes) {
     if (checkbox instanceof HTMLInputElement) {
       if (checkbox === checkboxElement.value) {
         // 現在のチェックボックスの状態を保持（既存の状態を優先）
-        shouldBeChecked = checkbox.checked;
+        // ただし、Vueの状態と異なる場合は、DOMの状態を優先（既存のJavaScriptコードが変更した場合）
+        if (checkbox.checked !== isChecked.value) {
+          shouldBeChecked = checkbox.checked;
+        } else {
+          shouldBeChecked = isChecked.value;
+        }
       } else if (checkbox.checked) {
         // 他のチェックボックスがcheckedの場合、現在のチェックボックスもcheckedにする
         // これは、handleSelectAllなどで全選択された場合に対応するため
@@ -215,7 +229,10 @@ function restoreCheckboxState() {
 // チェックボックスのchangeイベントを処理して、Vueの状態を同期
 // 既存のイベント委譲で処理されるが、Vueの状態も更新する必要がある
 function handleCheckboxChangeSync(event) {
-  if (event.target instanceof HTMLInputElement && event.target === checkboxElement.value) {
+  if (
+    event.target instanceof HTMLInputElement &&
+    event.target === checkboxElement.value
+  ) {
     isChecked.value = event.target.checked;
   }
 }
@@ -230,11 +247,11 @@ watch(
     if (oldElement) {
       oldElement.removeEventListener("change", handleCheckboxChangeSync);
     }
-    
+
     // 新しい要素にイベントリスナーを追加
     if (newElement) {
-      // 初期状態を同期
-      isChecked.value = newElement.checked;
+      // 既存のDOMから状態を復元（Vueコンポーネントが再レンダリングされた場合に対応）
+      restoreCheckboxState();
       // changeイベントを監視（既存のイベント委譲の後に実行される）
       newElement.addEventListener("change", handleCheckboxChangeSync);
     }
@@ -269,7 +286,10 @@ onUpdated(() => {
 onUnmounted(() => {
   // コンポーネントがアンマウントされる際に、イベントリスナーを削除
   if (checkboxElement.value) {
-    checkboxElement.value.removeEventListener("change", handleCheckboxChangeSync);
+    checkboxElement.value.removeEventListener(
+      "change",
+      handleCheckboxChangeSync
+    );
   }
 });
 </script>
