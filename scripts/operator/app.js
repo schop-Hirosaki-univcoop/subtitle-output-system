@@ -1845,38 +1845,42 @@ export class OperatorApp {
     const { scheduleId = "" } = this.getActiveChannel() || {};
     const normalizedScheduleId = scheduleId ? normalizeScheduleId(scheduleId) : "";
 
-    // 通常質問用: questionStatus/${eventId}を監視
-    const normalStatusRef = getQuestionStatusRef(eventId, false);
+    // 通常質問とPick Up Questionは、全てスケジュールごとに分かれたパスで管理される
+    // 通常質問: questionStatus/${eventId}/${scheduleId}
+    // Pick Up Question: questionStatus/${eventId}/${scheduleId}
+    // 全てのスケジュールのquestionStatusを監視するため、questionStatus/${eventId}を監視し、
+    // その配下の各スケジュールノードから通常質問とPUQを抽出する
+    const eventStatusRef = ref(database, `questionStatus/${normalizeEventId(eventId)}`);
 
-    // Pick Up Question用: questionStatus/${eventId}/${scheduleId}を監視（現在のscheduleIdのみ）
-    const pickupStatusRef = normalizedScheduleId
-      ? getQuestionStatusRef(eventId, true, normalizedScheduleId)
-      : null;
-
-    // 通常質問のリスナーを設定
-    const normalUnsubscribe = onValue(normalStatusRef, (snapshot) => {
+    // イベント全体のquestionStatusを監視（全てのスケジュールを含む）
+    const eventUnsubscribe = onValue(eventStatusRef, (snapshot) => {
       const value = snapshot.val() || {};
-      // 通常質問のstatusのみを抽出（pickupquestionのscheduleIdノードを除外）
-      const normalStatus = {};
+      const allStatus = {};
       const questionsByUid = this.state.questionsByUid instanceof Map ? this.state.questionsByUid : new Map();
-      Object.entries(value).forEach(([key, status]) => {
-        // keyがscheduleId形式でない場合（通常質問のUID）のみを処理
-        // pickupquestionのscheduleIdノードを除外するため、`questions/pickup/${key}`の存在を確認
-        const questionRecord = questionsByUid.get(key);
-        const isPickup = questionRecord && questionRecord.pickup === true;
-        // keyがscheduleId形式（通常質問のUIDではない）かどうかを判定
-        // scheduleIdノードの場合は、その配下にuidが含まれる構造になっている
-        const isScheduleIdNode = status && typeof status === "object" &&
-          !(status.answered !== undefined || status.selecting !== undefined) &&
-          Object.values(status).some(v => v && typeof v === "object" && (v.answered !== undefined || v.selecting !== undefined));
-
-        if (!isPickup && !isScheduleIdNode && status && typeof status === "object" && (status.answered !== undefined || status.selecting !== undefined)) {
-          normalStatus[key] = status;
+      
+      // 各スケジュールノードを走査
+      Object.entries(value).forEach(([scheduleKey, scheduleStatus]) => {
+        if (!scheduleStatus || typeof scheduleStatus !== "object") {
+          return;
         }
+        // スケジュールノード配下の各UIDを処理
+        Object.entries(scheduleStatus).forEach(([uidKey, status]) => {
+          if (!status || typeof status !== "object") {
+            return;
+          }
+          // 通常質問とPUQの両方を処理
+          if (status.answered !== undefined || status.selecting !== undefined) {
+            allStatus[uidKey] = status;
+          }
+        });
       });
-      // 通常質問のstatusを適用（pickupquestionのstatusとマージされる）
-      this.applyQuestionStatusSnapshot(normalStatus);
+      
+      // 全てのstatusを適用
+      this.applyQuestionStatusSnapshot(allStatus);
     });
+
+    // Pick Up Question用の個別リスナーは不要（上記のイベント全体リスナーで処理される）
+    const pickupStatusRef = null;
 
     // Pick Up Questionのリスナーを設定（scheduleIdがある場合のみ）
     let pickupUnsubscribe = null;

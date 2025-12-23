@@ -1219,9 +1219,23 @@ export async function handleUnanswer(app) {
   renderQuestions(app);
   
   try {
-    const statusRef = getQuestionStatusRef(eventId, isPickup, scheduleId);
+    // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+    // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
+    let questionEventId = eventId;
+    let questionScheduleId = scheduleId;
+    if (!isPickup) {
+      const itemEventId = String(currentItem["イベントID"] ?? "").trim();
+      const itemScheduleId = String(currentItem["日程ID"] ?? "").trim();
+      if (itemEventId) {
+        questionEventId = itemEventId;
+      }
+      if (itemScheduleId) {
+        questionScheduleId = itemScheduleId;
+      }
+    }
+    const statusRef = getQuestionStatusRef(questionEventId, isPickup, questionScheduleId);
     const unanswerPayload = { answered: false, updatedAt: serverTimestamp() };
-    const statusPath = getQuestionStatusPath(eventId, isPickup, scheduleId);
+    const statusPath = getQuestionStatusPath(questionEventId, isPickup, questionScheduleId);
     console.log("[未回答にする] questionStatus更新用JSON:", JSON.stringify({ [`${statusPath}/${uid}`]: unanswerPayload }, null, 2));
     await update(statusRef, { [`${uid}`]: unanswerPayload });
     // PUQの場合はscheduleIdが必須
