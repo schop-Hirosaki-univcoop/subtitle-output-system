@@ -1639,8 +1639,12 @@ export async function clearNowShowing(app) {
         // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
         // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
         let finalEventId = eventId;
-        let finalScheduleId = isPickup ? pickupScheduleId : scheduleId;
-        if (!isPickup && prevItem) {
+        let finalScheduleId = scheduleId;
+        if (isPickup) {
+          // PUQの場合は、pickupScheduleIdが空でない場合はそれを使用、空の場合はscheduleIdを使用
+          finalScheduleId = pickupScheduleId || scheduleId;
+        } else if (prevItem) {
+          // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
           const questionEventId = String(prevItem["イベントID"] ?? "").trim();
           const questionScheduleId = String(prevItem["日程ID"] ?? "").trim();
           if (questionEventId) {
