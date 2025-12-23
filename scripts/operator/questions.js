@@ -1639,7 +1639,8 @@ export async function clearNowShowing(app) {
         // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
         // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
         let finalEventId = eventId;
-        let finalScheduleId = isPickup ? pickupScheduleId : scheduleId;
+        // PUQの場合は、pickupScheduleIdが空の場合はscheduleIdをフォールバックとして使用
+        let finalScheduleId = isPickup ? (pickupScheduleId || scheduleId) : scheduleId;
         
         if (!isPickup) {
           // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
