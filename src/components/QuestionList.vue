@@ -192,7 +192,8 @@ function updateQuestions() {
       // 選択中の質問がリストに存在する場合は、selectedRowDataを更新
       const isAnswered = !!questionInList["回答済"];
       const participantId = String(questionInList["参加者ID"] ?? "").trim();
-      const rawGenre = String(questionInList["ジャンル"] ?? "").trim() || "その他";
+      const rawGenre =
+        String(questionInList["ジャンル"] ?? "").trim() || "その他";
       const isPickup = isPickUpQuestion(questionInList);
       if (app.value && app.value.state) {
         app.value.state.selectedRowData = {
