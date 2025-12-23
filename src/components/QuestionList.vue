@@ -302,9 +302,51 @@ function updateQuestions() {
     });
   }
 
-  // 既存のコードでは、renderQuestionsの最後で必ずupdateActionAvailability、syncSelectAllState、updateBatchButtonVisibilityが呼ばれている
-  // Vueコンポーネントでも同様に、updateQuestionsの最後で呼ぶ
+  // 既存のコードでは、renderQuestionsの最後で必ずnextSelectionを設定してselectedRowDataを更新している
+  // Vueコンポーネントでも同様に、updateQuestionsの最後でnextSelectionを設定する
+  // 注意: filteredQuestionsはcomputedプロパティなので、nextTick内で処理する
   nextTick(() => {
+    if (!app.value || !app.value.state) return;
+
+    const currentSelectedUid = selectedUid.value;
+    if (currentSelectedUid) {
+      // 既存のコードでは、list（フィルタリング後のリスト）に存在するかどうかを確認している
+      // filteredQuestionsに存在する場合は、nextSelectionを設定
+      const questionInFilteredList = filteredQuestions.value.find(
+        (item) => String(item.UID) === currentSelectedUid
+      );
+      if (questionInFilteredList) {
+        // 選択中の質問がfilteredQuestionsに存在する場合は、nextSelectionを設定（既存実装に合わせる）
+        // questions.valueから最新の状態を取得（フィルタリング後のリストではなく、全質問リストから取得）
+        const question = questions.value.find(
+          (item) => String(item.UID) === currentSelectedUid
+        );
+        if (question) {
+          const isAnswered = !!question["回答済"];
+          const participantId = String(question["参加者ID"] ?? "").trim();
+          const rawGenre =
+            String(question["ジャンル"] ?? "").trim() || "その他";
+          const isPickup = isPickUpQuestion(question);
+          const nextSelection = {
+            uid: currentSelectedUid,
+            name: question["ラジオネーム"],
+            question: question["質問・お悩み"],
+            isAnswered,
+            participantId,
+            genre: rawGenre,
+            isPickup,
+          };
+          app.value.state.selectedRowData = nextSelection;
+        }
+      } else {
+        // 既存のコードでは、listに存在しない場合、selectedRowDataをnullに設定している
+        // filteredQuestionsに存在しない場合は、selectedRowDataをnullに設定
+        app.value.state.selectedRowData = null;
+      }
+    }
+
+    // 既存のコードでは、renderQuestionsの最後で必ずupdateActionAvailability、syncSelectAllState、updateBatchButtonVisibilityが呼ばれている
+    // Vueコンポーネントでも同様に、updateQuestionsの最後で呼ぶ
     if (app.value) {
       if (typeof app.value.updateActionAvailability === "function") {
         app.value.updateActionAvailability(app.value);
