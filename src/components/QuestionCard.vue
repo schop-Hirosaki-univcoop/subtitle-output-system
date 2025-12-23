@@ -28,6 +28,7 @@
           type="checkbox"
           class="row-checkbox"
           :data-uid="question.UID"
+          :checked="isChecked"
           ref="checkboxElement"
         />
         <span class="visually-hidden">選択</span>
@@ -51,7 +52,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, onUpdated, nextTick } from "vue";
+import { computed, ref, watch, onMounted, onUpdated, onUnmounted, nextTick } from "vue";
 // 既存のユーティリティ関数をインポート
 import {
   formatOperatorName,
@@ -94,6 +95,10 @@ const emit = defineEmits(["click"]);
 const cardElement = ref(null);
 const checkboxElement = ref(null);
 const { app } = useOperatorApp();
+
+// チェックボックスの状態をVueの状態として管理
+// これにより、Vueコンポーネントが再レンダリングされても状態が保持される
+const isChecked = ref(false);
 
 const isAnswered = computed(() => !!props.question["回答済"]);
 const isSelecting = computed(() => !!props.question["選択中"]);
@@ -178,7 +183,8 @@ function restoreCheckboxState() {
   );
 
   // 既存のチェックボックスでcheckedになっているものがあれば、新しいチェックボックスもcheckedにする
-  let shouldBeChecked = false;
+  // 注意: 現在のチェックボックスの状態を優先する（ユーザーがクリックした状態を保持）
+  let shouldBeChecked = isChecked.value; // Vueの状態を初期値として使用
   for (const checkbox of allCheckboxes) {
     if (checkbox instanceof HTMLInputElement) {
       if (checkbox === checkboxElement.value) {
@@ -186,15 +192,17 @@ function restoreCheckboxState() {
         shouldBeChecked = checkbox.checked;
       } else if (checkbox.checked) {
         // 他のチェックボックスがcheckedの場合、現在のチェックボックスもcheckedにする
+        // これは、handleSelectAllなどで全選択された場合に対応するため
         shouldBeChecked = true;
         break;
       }
     }
   }
 
-  // 状態を更新（既存の状態と異なる場合のみ）
-  // 注意: 既存のJavaScriptコード（handleSelectAllなど）がチェックボックスの状態を変更した場合、
-  // この関数が呼ばれた時点で既にDOMの状態が更新されているため、その状態を反映する
+  // Vueの状態とDOMの状態を同期
+  if (isChecked.value !== shouldBeChecked) {
+    isChecked.value = shouldBeChecked;
+  }
   if (checkboxElement.value.checked !== shouldBeChecked) {
     checkboxElement.value.checked = shouldBeChecked;
   }
@@ -203,6 +211,46 @@ function restoreCheckboxState() {
 // 注意: チェックボックスの変更は既存のイベント委譲（cardsContainerのchangeイベント）で処理される
 // handleSelectAllやhandleBatchUnanswerなど、既存のJavaScriptコードがチェックボックスの状態を変更する場合、
 // onUpdatedで状態を復元することで対応する
+
+// チェックボックスのchangeイベントを処理して、Vueの状態を同期
+// 既存のイベント委譲で処理されるが、Vueの状態も更新する必要がある
+function handleCheckboxChangeSync(event) {
+  if (event.target instanceof HTMLInputElement && event.target === checkboxElement.value) {
+    isChecked.value = event.target.checked;
+  }
+}
+
+// チェックボックスのDOMの状態を監視して、Vueの状態と同期
+// handleSelectAllなどで既存のJavaScriptコードがチェックボックスの状態を変更した場合に対応
+// changeイベントを直接監視して、既存のイベント委譲と競合しないようにする
+watch(
+  () => checkboxElement.value,
+  (newElement, oldElement) => {
+    // 古いイベントリスナーを削除
+    if (oldElement) {
+      oldElement.removeEventListener("change", handleCheckboxChangeSync);
+    }
+    
+    // 新しい要素にイベントリスナーを追加
+    if (newElement) {
+      // 初期状態を同期
+      isChecked.value = newElement.checked;
+      // changeイベントを監視（既存のイベント委譲の後に実行される）
+      newElement.addEventListener("change", handleCheckboxChangeSync);
+    }
+  },
+  { immediate: true }
+);
+
+// Vueの状態を監視して、DOMの状態と同期
+watch(
+  () => isChecked.value,
+  (newChecked) => {
+    if (checkboxElement.value && checkboxElement.value.checked !== newChecked) {
+      checkboxElement.value.checked = newChecked;
+    }
+  }
+);
 
 onMounted(() => {
   nextTick(() => {
@@ -216,5 +264,12 @@ onUpdated(() => {
   nextTick(() => {
     restoreCheckboxState();
   });
+});
+
+onUnmounted(() => {
+  // コンポーネントがアンマウントされる際に、イベントリスナーを削除
+  if (checkboxElement.value) {
+    checkboxElement.value.removeEventListener("change", handleCheckboxChangeSync);
+  }
 });
 </script>
