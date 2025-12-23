@@ -1,7 +1,7 @@
 <template>
   <QuestionCard
     v-for="question in filteredQuestions"
-    :key="question.UID"
+    :key="`${question.UID}-${question['回答済']}-${question['選択中']}`"
     :question="question"
     :is-selected="selectedUid === String(question.UID)"
     :is-live="liveQuestionMap.get(String(question.UID)) || false"
