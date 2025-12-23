@@ -1054,9 +1054,13 @@ export async function handleDisplay(app) {
         return qEventId === eventId && String(q.UID) !== app.state.selectedRowData.uid;
       });
       if (sameEventQuestions.length > 0) {
-        // 通常質問とpickupquestionをスケジュールごとにグループ化
-        const normalClearingUpdatesByPath = new Map();
+        // 通常質問とpickupquestionを分けて処理
+        // 通常質問は1つの日程にのみ表示されるため、スケジュールごとにグループ化する必要はない
+        // PUQは全日程で表示されるため、現在のチャンネルのスケジュールIDを使用
+        const normalClearingUpdates = {};
         const pickupClearingUpdates = {};
+        let normalStatusRef = null;
+        
         sameEventQuestions.forEach((q) => {
           const qUid = String(q.UID);
           const qIsPickup = q.ピックアップ === true;
@@ -1065,24 +1069,20 @@ export async function handleDisplay(app) {
             pickupClearingUpdates[`${qUid}/updatedAt`] = serverTimestamp();
           } else {
             // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
-            const questionEventId = String(q["イベントID"] ?? "").trim() || eventId;
-            const questionScheduleId = String(q["日程ID"] ?? "").trim() || scheduleId;
-            const pathKey = getQuestionStatusPath(questionEventId, false, questionScheduleId);
-            if (!normalClearingUpdatesByPath.has(pathKey)) {
-              normalClearingUpdatesByPath.set(pathKey, { 
-                ref: getQuestionStatusRef(questionEventId, false, questionScheduleId), 
-                updates: {} 
-              });
+            // 通常質問は1つの日程にのみ表示されるため、最初に見つかった通常質問のスケジュールIDを使用
+            if (!normalStatusRef) {
+              const questionEventId = String(q["イベントID"] ?? "").trim() || eventId;
+              const questionScheduleId = String(q["日程ID"] ?? "").trim() || scheduleId;
+              normalStatusRef = getQuestionStatusRef(questionEventId, false, questionScheduleId);
             }
-            normalClearingUpdatesByPath.get(pathKey).updates[`${qUid}/selecting`] = false;
-            normalClearingUpdatesByPath.get(pathKey).updates[`${qUid}/updatedAt`] = serverTimestamp();
+            normalClearingUpdates[`${qUid}/selecting`] = false;
+            normalClearingUpdates[`${qUid}/updatedAt`] = serverTimestamp();
           }
         });
-        // 通常質問をスケジュールごとに更新
-        for (const [pathKey, { ref: statusRef, updates }] of normalClearingUpdatesByPath) {
-          if (Object.keys(updates).length > 0) {
-            await update(statusRef, updates);
-          }
+        
+        // 通常質問を更新（通常質問は1つの日程にのみ表示されるため、1つの参照で更新可能）
+        if (Object.keys(normalClearingUpdates).length > 0 && normalStatusRef) {
+          await update(normalStatusRef, normalClearingUpdates);
         }
         // PUQを更新
         if (Object.keys(pickupClearingUpdates).length > 0) {
