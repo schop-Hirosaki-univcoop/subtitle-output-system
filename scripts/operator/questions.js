@@ -1078,11 +1078,12 @@ export async function handleDisplay(app) {
     }
     // previousUidまたはprevのupdateStatus API呼び出し
     if (previousUid && previousUidItem) {
-      // PUQの場合はscheduleIdが必須
-      const prevScheduleId = previousUidIsPickup ? scheduleId : undefined;
+      // PUQの場合はscheduleIdが必須（空文字列も無効）
+      const prevScheduleId = previousUidIsPickup ? (scheduleId && String(scheduleId).trim() ? String(scheduleId).trim() : undefined) : undefined;
       if (previousUidIsPickup && !prevScheduleId) {
         console.warn(`[handleDisplay] scheduleId is required for pickup question UID: ${previousUid}, but scheduleId is empty. Skipping API call.`, {
           scheduleId,
+          scheduleIdTrimmed: scheduleId ? String(scheduleId).trim() : "",
           eventId,
           previousUidItem: previousUidItem ? { UID: previousUidItem.UID, 日程ID: previousUidItem["日程ID"] } : null
         });
@@ -1096,11 +1097,12 @@ export async function handleDisplay(app) {
         });
       }
     } else if (prev) {
-      // PUQの場合はscheduleIdが必須
-      const prevScheduleId = prevIsPickup ? scheduleId : undefined;
+      // PUQの場合はscheduleIdが必須（空文字列も無効）
+      const prevScheduleId = prevIsPickup ? (scheduleId && String(scheduleId).trim() ? String(scheduleId).trim() : undefined) : undefined;
       if (prevIsPickup && !prevScheduleId) {
         console.warn(`[handleDisplay] scheduleId is required for pickup question UID: ${prev.UID}, but scheduleId is empty. Skipping API call.`, {
           scheduleId,
+          scheduleIdTrimmed: scheduleId ? String(scheduleId).trim() : "",
           eventId,
           prev: prev ? { UID: prev.UID, 日程ID: prev["日程ID"] } : null
         });
