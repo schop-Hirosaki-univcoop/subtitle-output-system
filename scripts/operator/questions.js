@@ -945,7 +945,8 @@ export async function handleDisplay(app) {
     }
     
     // 通常質問とpickupquestionをそれぞれ適切なstatusRefに更新
-    const normalStatusRef = getQuestionStatusRef(eventId, false);
+    // 通常質問もスケジュールの中に作成する
+    const normalStatusRef = getQuestionStatusRef(eventId, false, scheduleId);
     if (Object.keys(normalUpdates).length > 0) {
       console.log("[送出] 通常質問のquestionStatus更新用JSON:", JSON.stringify(normalUpdates, null, 2));
       await update(normalStatusRef, normalUpdates);
@@ -1251,9 +1252,10 @@ export async function handleBatchUnanswer(app) {
       console.warn(`[handleBatchUnanswer] EventId not found for UID: ${uid}`);
       continue;
     }
-    // pickupquestionの場合は現在のscheduleIdを使用
-    const statusRef = getQuestionStatusRef(questionEventId, isPickup, isPickup ? scheduleId : "");
-    const pathKey = getQuestionStatusPath(questionEventId, isPickup, isPickup ? scheduleId : "");
+    // 通常質問もPick Up Questionも、スケジュールの中に作成する
+    // 通常質問の場合は現在のチャンネルのscheduleIdを使用
+    const statusRef = getQuestionStatusRef(questionEventId, isPickup, scheduleId);
+    const pathKey = getQuestionStatusPath(questionEventId, isPickup, scheduleId);
     if (!updatesByPath.has(pathKey)) {
       updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
     }
@@ -1381,9 +1383,9 @@ export async function clearNowShowing(app) {
     const selectingItems = app.state.allQuestions.filter((item) => item["選択中"] === true);
     selectingItems.forEach((item) => {
       const isPickup = item.ピックアップ === true;
-      // pickupquestionの場合は現在のscheduleIdを使用
-      const statusRef = getQuestionStatusRef(eventId, isPickup, isPickup ? scheduleId : "");
-      const pathKey = getQuestionStatusPath(eventId, isPickup, isPickup ? scheduleId : "");
+      // 通常質問もPick Up Questionも、スケジュールの中に作成する
+      const statusRef = getQuestionStatusRef(eventId, isPickup, scheduleId);
+      const pathKey = getQuestionStatusPath(eventId, isPickup, scheduleId);
       if (!updatesByPath.has(pathKey)) {
         updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
       }
@@ -1456,7 +1458,9 @@ export async function clearNowShowing(app) {
         }
         
         // Firebaseのパス計算にはnormalizeScheduleIdを使用（空の場合は__default_schedule__になる）
-        const finalScheduleId = isPickup ? pickupScheduleId : "";
+        // 通常質問もPick Up Questionも、スケジュールの中に作成する
+        // 通常質問の場合は現在のチャンネルのscheduleIdを使用
+        const finalScheduleId = isPickup ? pickupScheduleId : scheduleId;
         const statusRef = getQuestionStatusRef(eventId, isPickup, finalScheduleId);
         const pathKey = getQuestionStatusPath(eventId, isPickup, finalScheduleId);
         if (!updatesByPath.has(pathKey)) {
