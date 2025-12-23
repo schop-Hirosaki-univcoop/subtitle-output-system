@@ -300,7 +300,10 @@ export function renderQuestions(app) {
     }
   });
 
-  app.dom.cardsContainer.innerHTML = "";
+  // Vueコンポーネントが有効な場合は、innerHTMLをクリアしない（Vueの仮想DOMと不整合になるため）
+  if (!window.__vueExperimentEnabled) {
+    app.dom.cardsContainer.innerHTML = "";
+  }
   list.forEach((item) => {
     const card = document.createElement("article");
     card.className = "q-card";

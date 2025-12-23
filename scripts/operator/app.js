@@ -1676,7 +1676,10 @@ export class OperatorApp {
     }
     this.updateActionAvailability();
     this.updateBatchButtonVisibility();
-    if (this.dom.cardsContainer) this.dom.cardsContainer.innerHTML = "";
+    // Vueコンポーネントが有効な場合は、innerHTMLをクリアしない（Vueの仮想DOMと不整合になるため）
+    if (this.dom.cardsContainer && !window.__vueExperimentEnabled) {
+      this.dom.cardsContainer.innerHTML = "";
+    }
     if (this.dom.logStream) this.dom.logStream.innerHTML = "";
     if (this.dom.dictionaryCardsContainer) this.dom.dictionaryCardsContainer.innerHTML = "";
     if (this.dom.pickupList) this.dom.pickupList.innerHTML = "";
