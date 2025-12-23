@@ -1939,13 +1939,14 @@ export function updateActionAvailability(app) {
         app.dom.actionButtons[0].hidden = true;
       }
     } else {
-      // 何も送出していない場合は、両方とも非表示
+      // 何も送出していない場合は、無効状態の送出ボタンを表示
       app.dom.selectedInfo.textContent = "行を選択してください";
       if (app.dom.clearButton) {
         app.dom.clearButton.hidden = true;
       }
       if (app.dom.actionButtons[0]) {
-        app.dom.actionButtons[0].hidden = true;
+        app.dom.actionButtons[0].hidden = false;
+        app.dom.actionButtons[0].disabled = true;
       }
     }
     updateBatchButtonVisibility(app, checkedCount);
