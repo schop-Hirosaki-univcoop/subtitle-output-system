@@ -1869,7 +1869,9 @@ export function updateActionAvailability(app) {
     if (button) button.disabled = true;
   });
   if (app.dom.clearButton) {
-    const canClear = assetAvailable && telopEnabled && displayOnline;
+    // チェックボックスで選択されている場合は、送出クリアボタンを無効化
+    // （チェックボックスで選択してから送出クリアを行うことはないため）
+    const canClear = !hasBatchSelection && assetAvailable && telopEnabled && displayOnline;
     app.dom.clearButton.disabled = !canClear;
   }
   if (!app.dom.selectedInfo) {
