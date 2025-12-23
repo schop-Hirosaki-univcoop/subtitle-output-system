@@ -300,6 +300,22 @@ function updateQuestions() {
       }
     });
   }
+
+  // 既存のコードでは、renderQuestionsの最後で必ずupdateActionAvailability、syncSelectAllState、updateBatchButtonVisibilityが呼ばれている
+  // Vueコンポーネントでも同様に、updateQuestionsの最後で呼ぶ
+  nextTick(() => {
+    if (app.value) {
+      if (typeof app.value.updateActionAvailability === "function") {
+        app.value.updateActionAvailability(app.value);
+      }
+      if (typeof app.value.syncSelectAllState === "function") {
+        app.value.syncSelectAllState(app.value);
+      }
+      if (typeof app.value.updateBatchButtonVisibility === "function") {
+        app.value.updateBatchButtonVisibility(app.value);
+      }
+    }
+  });
 }
 
 // カードクリックハンドラ
@@ -437,10 +453,13 @@ watch(
     // lastDisplayedUidが設定された場合（flashアニメーションが表示される時点）
     // 既存のコードでは、flashクラスを追加した直後にapp.state.lastDisplayedUid = nullを設定している
     if (newValue && app.value && app.value.state) {
-      // 既存のコードと同じ動作を実現するため、次のupdateQuestionsでnullになるまで待つ
-      // 実際には、既存のコードでapp.state.lastDisplayedUid = nullが設定されているため、
-      // 次のupdateQuestionsでlastDisplayedUid.valueがnullになる
-      // ここでは何もしない（既存のコードでnullに設定されているため）
+      // 既存のコードと同じ動作を実現するため、flashアニメーションが表示された直後にnullに設定
+      // 次のフレームでnullに設定することで、flashアニメーションが1回だけ表示されるようにする
+      nextTick(() => {
+        if (app.value && app.value.state) {
+          app.value.state.lastDisplayedUid = null;
+        }
+      });
     }
   }
 );
