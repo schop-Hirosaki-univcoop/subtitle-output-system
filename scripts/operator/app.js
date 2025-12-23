@@ -1942,12 +1942,22 @@ export class OperatorApp {
         return;
       }
       // 既存のstatusを更新または追加
-      current.set(resolvedUid, {
+      const newStatus = {
         answered: record.answered === true,
         selecting: record.selecting === true,
         pickup: record.pickup === true,
         updatedAt: Number(record.updatedAt || 0)
-      });
+      };
+      const oldStatus = current.get(resolvedUid);
+      // デバッグログ: answeredフラグが変更された場合にログを出力
+      if (oldStatus && oldStatus.answered !== newStatus.answered) {
+        console.log(`[applyQuestionStatusSnapshot] answered status changed for UID ${resolvedUid}:`, {
+          old: oldStatus.answered,
+          new: newStatus.answered,
+          record
+        });
+      }
+      current.set(resolvedUid, newStatus);
     });
     this.state.questionStatusByUid = current;
     this.rebuildQuestions();
