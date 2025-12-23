@@ -170,7 +170,8 @@ function updateQuestions() {
 
   // 新しい配列を作成して、Vueのリアクティビティを確実にトリガーする
   // オブジェクトのプロパティが変更された場合でも、Vueが変更を検知できるようにする
-  questions.value = [...allQuestions];
+  // 各オブジェクトも新しいオブジェクトとして作成することで、Vueが変更を検知できるようにする
+  questions.value = allQuestions.map((q) => ({ ...q }));
 
   // 選択中のUIDを更新
   if (app.value.state.selectedRowData) {
@@ -500,7 +501,8 @@ watch(
         if (question) {
           const isAnswered = !!question["回答済"];
           const participantId = String(question["参加者ID"] ?? "").trim();
-          const rawGenre = String(question["ジャンル"] ?? "").trim() || "その他";
+          const rawGenre =
+            String(question["ジャンル"] ?? "").trim() || "その他";
           const isPickup = isPickUpQuestion(question);
           const nextSelection = {
             uid: currentSelectedUid,
