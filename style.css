@@ -1769,6 +1769,9 @@ table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:.75rem
 #op-action-panel[data-selection="multi"] [data-mode="multi"]{ display:flex; }
 #op-action-panel[data-selection="multi"] [data-mode="single"]{ display:none; }
 #op-action-panel[data-selection="multi"] [data-mode="any"]{ display:none; }
+/* 送出ボタンと送出クリアボタンを排他的に表示するため、hidden属性で制御 */
+#op-action-panel [data-mode="single"]:first-of-type[hidden],
+#op-action-panel [data-mode="any"][hidden]{ display:none !important; }
 #op-channel-banner{
   margin:0;
   padding:1vh 1vw;
