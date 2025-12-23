@@ -48,12 +48,12 @@ waitForOperatorApp().then((app) => {
     window.__vueExperimentEnabled = true;
   }
 
-  // 既存のrenderQuestionsをラップ
+  // 既存のrenderQuestionsをラップ（Vueコンポーネントが有効な場合はスキップ）
   if (app && typeof app.renderQuestions === "function") {
     const originalRenderQuestions = app.renderQuestions.bind(app);
     app.renderQuestions = function () {
       if (window.__vueExperimentEnabled) {
-        console.log("[Vue] 既存のrenderQuestionsをスキップ（Vueコンポーネントを使用）");
+        // Vueコンポーネントがレンダリングを担当するため、既存のrenderQuestionsをスキップ
         return;
       }
       return originalRenderQuestions();
@@ -63,6 +63,5 @@ waitForOperatorApp().then((app) => {
   // Vueアプリを作成してマウント
   const vueApp = createApp(QuestionList);
   vueApp.mount(container);
-  console.log("[Vue] QuestionList アプリをマウントしました");
 });
 
