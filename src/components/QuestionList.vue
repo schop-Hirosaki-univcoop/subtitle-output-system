@@ -4,7 +4,7 @@
     :key="question.UID"
     :question="question"
     :is-selected="selectedUid === String(question.UID)"
-    :is-live="isLiveQuestion(question)"
+    :is-live="liveQuestionMap.get(String(question.UID)) || false"
     :is-loading="loadingUids.has(String(question.UID))"
     :should-flash="lastDisplayedUid === question.UID"
     :show-genre="viewingAllGenres"
@@ -90,6 +90,40 @@ const filteredQuestions = computed(() => {
   return filtered;
 });
 
+// ライブ質問の判定をcomputed化（パフォーマンス向上）
+const liveQuestionMap = computed(() => {
+  const map = new Map();
+  filteredQuestions.value.forEach((question) => {
+    const uid = String(question.UID || "");
+    const participantId = String(question["参加者ID"] ?? "").trim();
+    const questionText = String(question["質問・お悩み"] ?? "").trim();
+    const radioName = String(question["ラジオネーム"] ?? "").trim();
+
+    let isLive = false;
+    
+    // liveUidが存在する場合は、それで判定
+    if (liveUid.value && liveUid.value.trim()) {
+      isLive = liveUid.value === uid;
+    } else {
+      // liveUidが存在しない場合は、participantId/questionまたはname/questionで判定
+      if (liveParticipantId.value && participantId && liveQuestion.value) {
+        if (liveParticipantId.value === participantId && liveQuestion.value === questionText) {
+          isLive = true;
+        }
+      }
+      
+      if (!isLive && liveName.value && radioName && liveQuestion.value) {
+        if (liveName.value === radioName && liveQuestion.value === questionText) {
+          isLive = true;
+        }
+      }
+    }
+    
+    map.set(uid, isLive);
+  });
+  return map;
+});
+
 const viewingAllGenres = computed(() => {
   return (
     !selectedGenre.value ||
@@ -163,9 +197,9 @@ function updateQuestions() {
 
   // ローディング中のUIDについて、更新が反映されたか確認
   // （Firebaseリスナーが新しいデータを拾った時にローディング状態を解除）
-  const filteredList = filteredQuestions.value;
+  // 注意: filteredQuestions.valueを参照すると無限ループになるため、直接questions.valueを使用
   loadingUids.value.forEach((uid) => {
-    const question = filteredList.find((q) => String(q.UID) === uid);
+    const question = questions.value.find((q) => String(q.UID) === uid);
     const loadingState = loadingUidStates.value.get(uid);
     if (question && loadingState) {
       // 更新が反映されたか確認
@@ -181,79 +215,8 @@ function updateQuestions() {
       }
     }
   });
-
-  // 選択状態の管理（既存実装に合わせる）
-  const currentSelectedUid = selectedUid.value;
-  if (currentSelectedUid) {
-    const questionInList = filteredList.find(
-      (item) => String(item.UID) === currentSelectedUid
-    );
-    if (questionInList) {
-      // 選択中の質問がリストに存在する場合は、selectedRowDataを更新
-      const isAnswered = !!questionInList["回答済"];
-      const participantId = String(questionInList["参加者ID"] ?? "").trim();
-      const rawGenre =
-        String(questionInList["ジャンル"] ?? "").trim() || "その他";
-      const isPickup = isPickUpQuestion(questionInList);
-      if (app.value && app.value.state) {
-        app.value.state.selectedRowData = {
-          uid: currentSelectedUid,
-          name: questionInList["ラジオネーム"],
-          question: questionInList["質問・お悩み"],
-          isAnswered,
-          participantId,
-          genre: rawGenre,
-          isPickup,
-        };
-        if (typeof app.value.updateActionAvailability === "function") {
-          app.value.updateActionAvailability(app.value);
-        }
-      }
-    } else {
-      // 選択中の質問がリストに存在しない場合は、selectedRowDataをnullに設定
-      if (app.value && app.value.state) {
-        app.value.state.selectedRowData = null;
-        if (typeof app.value.updateActionAvailability === "function") {
-          app.value.updateActionAvailability(app.value);
-        }
-      }
-    }
-  }
-
-  // syncSelectAllStateとupdateBatchButtonVisibilityを呼び出す
-  nextTick(() => {
-    if (app.value) {
-      if (typeof app.value.syncSelectAllState === "function") {
-        app.value.syncSelectAllState(app.value);
-      }
-      if (typeof app.value.updateBatchButtonVisibility === "function") {
-        app.value.updateBatchButtonVisibility(app.value);
-      }
-    }
-  });
 }
 
-// ライブ質問の判定（既存実装に合わせる）
-function isLiveQuestion(question) {
-  const uid = String(question.UID);
-  const participantId = String(question["参加者ID"] ?? "").trim();
-  const questionText = String(question["質問・お悩み"] ?? "").trim();
-  const radioName = String(question["ラジオネーム"] ?? "").trim();
-
-  if (liveUid.value) {
-    return liveUid.value === uid;
-  }
-  return (
-    (liveParticipantId.value &&
-      participantId &&
-      liveParticipantId.value === participantId &&
-      liveQuestion.value === questionText) ||
-    (liveName.value &&
-      radioName &&
-      liveName.value === radioName &&
-      liveQuestion.value === questionText)
-  );
-}
 
 // カードクリックハンドラ
 function handleCardClick(question) {
@@ -321,10 +284,19 @@ watch(
 );
 
 // app.value.stateの変更を監視（allQuestions、renderState、displaySessionなど）
+// 注意: selectedRowDataの変更は監視しない（無限ループを防ぐため）
 watch(
-  () => app.value?.state,
-  (newState) => {
-    if (newState) {
+  () => [
+    app.value?.state?.allQuestions,
+    app.value?.state?.renderState?.nowShowing,
+    app.value?.state?.displaySession?.nowShowing,
+    app.value?.state?.currentSubTab,
+    app.value?.state?.currentGenre,
+    app.value?.state?.displaySession,
+    app.value?.state?.lastDisplayedUid,
+  ],
+  () => {
+    if (app.value?.state) {
       updateQuestions();
     }
   },
@@ -341,5 +313,47 @@ watch(
     }
   },
   { immediate: true }
+);
+
+// 選択状態の管理（既存実装に合わせる）
+// 選択中の質問がフィルタリングされたリストに存在しない場合、selectedRowDataをnullに設定
+watch(
+  () => [filteredQuestions.value, selectedUid.value],
+  () => {
+    if (!app.value || !app.value.state) return;
+    
+    const currentSelectedUid = selectedUid.value;
+    if (currentSelectedUid) {
+      const questionInList = filteredQuestions.value.find(
+        (item) => String(item.UID) === currentSelectedUid
+      );
+      if (!questionInList) {
+        // 選択中の質問がリストに存在しない場合は、selectedRowDataをnullに設定
+        app.value.state.selectedRowData = null;
+        if (typeof app.value.updateActionAvailability === "function") {
+          app.value.updateActionAvailability(app.value);
+        }
+      }
+    }
+  },
+  { immediate: false }
+);
+
+// syncSelectAllStateとupdateBatchButtonVisibilityを呼び出す
+watch(
+  () => filteredQuestions.value,
+  () => {
+    nextTick(() => {
+      if (app.value) {
+        if (typeof app.value.syncSelectAllState === "function") {
+          app.value.syncSelectAllState(app.value);
+        }
+        if (typeof app.value.updateBatchButtonVisibility === "function") {
+          app.value.updateBatchButtonVisibility(app.value);
+        }
+      }
+    });
+  },
+  { immediate: false }
 );
 </script>
