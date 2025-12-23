@@ -1638,15 +1638,34 @@ export async function clearNowShowing(app) {
           if (!finalScheduleId) {
             finalScheduleId = scheduleId;
           }
-        } else if (prevItem) {
+        } else {
           // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
-          const questionEventId = String(prevItem["イベントID"] ?? "").trim();
-          const questionScheduleId = String(prevItem["日程ID"] ?? "").trim();
-          if (questionEventId) {
-            finalEventId = questionEventId;
-          }
-          if (questionScheduleId) {
-            finalScheduleId = questionScheduleId;
+          if (prevItem) {
+            // prevItemが見つかった場合は、その質問のイベントIDとスケジュールIDを使用
+            const questionEventId = String(prevItem["イベントID"] ?? "").trim();
+            const questionScheduleId = String(prevItem["日程ID"] ?? "").trim();
+            if (questionEventId) {
+              finalEventId = questionEventId;
+            }
+            if (questionScheduleId) {
+              finalScheduleId = questionScheduleId;
+            }
+          } else {
+            // prevItemが見つからない場合でも、通常質問として扱う
+            // この場合、現在のチャンネルのeventIdとscheduleIdを使用
+            // ただし、通常質問は1つの日程にのみ表示されるため、現在のチャンネルのscheduleIdが正しい可能性が高い
+            // 念のため、allQuestionsから該当する質問を検索して、そのスケジュールIDを使用
+            const foundQuestion = app.state.allQuestions.find((q) => String(q.UID || "") === prevUid);
+            if (foundQuestion) {
+              const questionEventId = String(foundQuestion["イベントID"] ?? "").trim();
+              const questionScheduleId = String(foundQuestion["日程ID"] ?? "").trim();
+              if (questionEventId) {
+                finalEventId = questionEventId;
+              }
+              if (questionScheduleId) {
+                finalScheduleId = questionScheduleId;
+              }
+            }
           }
         }
         
