@@ -100,25 +100,31 @@ const liveQuestionMap = computed(() => {
     const radioName = String(question["ラジオネーム"] ?? "").trim();
 
     let isLive = false;
-    
+
     // liveUidが存在する場合は、それで判定
     if (liveUid.value && liveUid.value.trim()) {
       isLive = liveUid.value === uid;
     } else {
       // liveUidが存在しない場合は、participantId/questionまたはname/questionで判定
       if (liveParticipantId.value && participantId && liveQuestion.value) {
-        if (liveParticipantId.value === participantId && liveQuestion.value === questionText) {
+        if (
+          liveParticipantId.value === participantId &&
+          liveQuestion.value === questionText
+        ) {
           isLive = true;
         }
       }
-      
+
       if (!isLive && liveName.value && radioName && liveQuestion.value) {
-        if (liveName.value === radioName && liveQuestion.value === questionText) {
+        if (
+          liveName.value === radioName &&
+          liveQuestion.value === questionText
+        ) {
           isLive = true;
         }
       }
     }
-    
+
     map.set(uid, isLive);
   });
   return map;
@@ -216,7 +222,6 @@ function updateQuestions() {
     }
   });
 }
-
 
 // カードクリックハンドラ
 function handleCardClick(question) {
@@ -321,7 +326,7 @@ watch(
   () => [filteredQuestions.value, selectedUid.value],
   () => {
     if (!app.value || !app.value.state) return;
-    
+
     const currentSelectedUid = selectedUid.value;
     if (currentSelectedUid) {
       const questionInList = filteredQuestions.value.find(
