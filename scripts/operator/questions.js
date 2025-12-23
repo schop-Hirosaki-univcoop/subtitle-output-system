@@ -1869,10 +1869,15 @@ export function updateActionAvailability(app) {
     if (button) button.disabled = true;
   });
   if (app.dom.clearButton) {
-    // チェックボックスで選択されている場合は、送出クリアボタンを無効化
+    // チェックボックスで選択されている場合は、送出クリアボタンを非表示にする
     // （チェックボックスで選択してから送出クリアを行うことはないため）
-    const canClear = !hasBatchSelection && assetAvailable && telopEnabled && displayOnline;
-    app.dom.clearButton.disabled = !canClear;
+    if (hasBatchSelection) {
+      app.dom.clearButton.hidden = true;
+    } else {
+      app.dom.clearButton.hidden = false;
+      const canClear = assetAvailable && telopEnabled && displayOnline;
+      app.dom.clearButton.disabled = !canClear;
+    }
   }
   if (!app.dom.selectedInfo) {
     updateBatchButtonVisibility(app, checkedCount);
