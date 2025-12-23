@@ -51,7 +51,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUpdated, nextTick } from "vue";
+import { computed, ref, watch, onMounted, onUpdated, nextTick } from "vue";
 // 既存のユーティリティ関数をインポート
 import {
   formatOperatorName,
