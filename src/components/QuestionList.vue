@@ -4,25 +4,34 @@
     :key="question.UID"
     :question="question"
     :is-selected="selectedUid === String(question.UID)"
-    :is-live="liveUid === String(question.UID)"
+    :is-live="isLiveQuestion(question)"
     :is-loading="loadingUids.has(String(question.UID))"
+    :should-flash="lastDisplayedUid === question.UID"
     :show-genre="viewingAllGenres"
     :viewing-all-genres="viewingAllGenres"
-      @click="handleCardClick"
+    @click="handleCardClick"
   />
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import QuestionCard from "./QuestionCard.vue";
 import { useOperatorApp } from "../composables/useOperatorApp.js";
+import { resolveNormalScheduleKey } from "../../scripts/operator/questions.js";
+import { normalizeScheduleId } from "../../scripts/shared/channel-paths.js";
+import { GENRE_ALL_VALUE } from "../../scripts/operator/constants.js";
 
 const { app } = useOperatorApp();
 
 const questions = ref([]);
 const selectedUid = ref(null);
 const liveUid = ref(null);
+const liveParticipantId = ref("");
+const liveQuestion = ref("");
+const liveName = ref("");
+const lastDisplayedUid = ref(null);
 const loadingUids = ref(new Set());
+const loadingUidStates = ref(new Map());
 
 // フィルタリング用の状態
 const currentTab = ref("all");
@@ -50,7 +59,8 @@ const filteredQuestions = computed(() => {
   const viewingPuqTab = currentTab.value === "puq";
   const viewingNormalTab = currentTab.value === "normal";
   const viewingAllGenres =
-    !selectedGenre.value || selectedGenre.value.toLowerCase() === "すべて";
+    !selectedGenre.value ||
+    selectedGenre.value.toLowerCase() === GENRE_ALL_VALUE;
 
   let filtered = questions.value.filter((item) => {
     const isPuq = isPickUpQuestion(item);
@@ -81,7 +91,10 @@ const filteredQuestions = computed(() => {
 });
 
 const viewingAllGenres = computed(() => {
-  return !selectedGenre.value || selectedGenre.value.toLowerCase() === "すべて";
+  return (
+    !selectedGenre.value ||
+    selectedGenre.value.toLowerCase() === GENRE_ALL_VALUE
+  );
 });
 
 // 質問データを更新
@@ -101,13 +114,19 @@ function updateQuestions() {
     selectedUid.value = null;
   }
 
-  // ライブ表示中のUIDを更新
+  // ライブ表示中の情報を更新
   const live =
     app.value.state.renderState?.nowShowing ||
     app.value.state.displaySession?.nowShowing ||
     null;
   liveUid.value =
     live && typeof live.uid !== "undefined" ? String(live.uid || "") : "";
+  liveParticipantId.value = String(live?.participantId || "").trim();
+  liveQuestion.value = live?.question ?? "";
+  liveName.value = live?.name ?? "";
+
+  // lastDisplayedUidを更新
+  lastDisplayedUid.value = app.value.state.lastDisplayedUid || null;
 
   // フィルタリング用の状態を更新
   currentTab.value = app.value.state.currentSubTab || "all";
@@ -116,7 +135,8 @@ function updateQuestions() {
       ? app.value.state.currentGenre.trim()
       : "";
 
-  // 日程の解決（簡易実装）
+  // 日程の解決（既存実装に合わせる）
+  let resolvedSchedule = resolveNormalScheduleKey(app.value);
   const displaySession = app.value?.state?.displaySession || {};
   const assignment =
     displaySession && typeof displaySession === "object"
@@ -125,14 +145,113 @@ function updateQuestions() {
   const displayEventId = String(
     displaySession?.eventId || assignment?.eventId || ""
   ).trim();
-  const displayScheduleId = String(
+  const displayScheduleId = normalizeScheduleId(
     displaySession?.scheduleId || assignment?.scheduleId || ""
+  );
+  const derivedDisplayKey =
+    displayEventId && displayScheduleId
+      ? `${displayEventId}::${displayScheduleId}`
+      : "";
+  const displayScheduleKey = String(
+    assignment?.scheduleKey || derivedDisplayKey || ""
   ).trim();
-  if (displayEventId && displayScheduleId) {
-    selectedSchedule.value = `${displayEventId}::${displayScheduleId}`;
-  } else {
-    selectedSchedule.value = "";
+  // テロップ操作パネルの日程情報を優先的に使用
+  if (displayScheduleKey) {
+    resolvedSchedule = displayScheduleKey;
   }
+  selectedSchedule.value = resolvedSchedule;
+
+  // ローディング中のUIDについて、更新が反映されたか確認
+  // （Firebaseリスナーが新しいデータを拾った時にローディング状態を解除）
+  const filteredList = filteredQuestions.value;
+  loadingUids.value.forEach((uid) => {
+    const question = filteredList.find((q) => String(q.UID) === uid);
+    const loadingState = loadingUidStates.value.get(uid);
+    if (question && loadingState) {
+      // 更新が反映されたか確認
+      // 未回答に戻す場合は、previousAnsweredがtrueで、現在answeredがfalseになっていることを確認
+      if (
+        loadingState.expectedAnswered === false &&
+        loadingState.previousAnswered === true &&
+        !question["回答済"]
+      ) {
+        // 更新が反映された
+        loadingUids.value.delete(uid);
+        loadingUidStates.value.delete(uid);
+      }
+    }
+  });
+
+  // 選択状態の管理（既存実装に合わせる）
+  const currentSelectedUid = selectedUid.value;
+  if (currentSelectedUid) {
+    const questionInList = filteredList.find(
+      (item) => String(item.UID) === currentSelectedUid
+    );
+    if (questionInList) {
+      // 選択中の質問がリストに存在する場合は、selectedRowDataを更新
+      const isAnswered = !!questionInList["回答済"];
+      const participantId = String(questionInList["参加者ID"] ?? "").trim();
+      const rawGenre = String(questionInList["ジャンル"] ?? "").trim() || "その他";
+      const isPickup = isPickUpQuestion(questionInList);
+      if (app.value && app.value.state) {
+        app.value.state.selectedRowData = {
+          uid: currentSelectedUid,
+          name: questionInList["ラジオネーム"],
+          question: questionInList["質問・お悩み"],
+          isAnswered,
+          participantId,
+          genre: rawGenre,
+          isPickup,
+        };
+        if (typeof app.value.updateActionAvailability === "function") {
+          app.value.updateActionAvailability(app.value);
+        }
+      }
+    } else {
+      // 選択中の質問がリストに存在しない場合は、selectedRowDataをnullに設定
+      if (app.value && app.value.state) {
+        app.value.state.selectedRowData = null;
+        if (typeof app.value.updateActionAvailability === "function") {
+          app.value.updateActionAvailability(app.value);
+        }
+      }
+    }
+  }
+
+  // syncSelectAllStateとupdateBatchButtonVisibilityを呼び出す
+  nextTick(() => {
+    if (app.value) {
+      if (typeof app.value.syncSelectAllState === "function") {
+        app.value.syncSelectAllState(app.value);
+      }
+      if (typeof app.value.updateBatchButtonVisibility === "function") {
+        app.value.updateBatchButtonVisibility(app.value);
+      }
+    }
+  });
+}
+
+// ライブ質問の判定（既存実装に合わせる）
+function isLiveQuestion(question) {
+  const uid = String(question.UID);
+  const participantId = String(question["参加者ID"] ?? "").trim();
+  const questionText = String(question["質問・お悩み"] ?? "").trim();
+  const radioName = String(question["ラジオネーム"] ?? "").trim();
+
+  if (liveUid.value) {
+    return liveUid.value === uid;
+  }
+  return (
+    (liveParticipantId.value &&
+      participantId &&
+      liveParticipantId.value === participantId &&
+      liveQuestion.value === questionText) ||
+    (liveName.value &&
+      radioName &&
+      liveName.value === radioName &&
+      liveQuestion.value === questionText)
+  );
 }
 
 // カードクリックハンドラ
@@ -194,6 +313,29 @@ watch(
   () => app.value,
   (newApp) => {
     if (newApp) {
+      updateQuestions();
+    }
+  },
+  { immediate: true }
+);
+
+// app.value.stateの変更を監視（allQuestions、renderState、displaySessionなど）
+watch(
+  () => app.value?.state,
+  (newState) => {
+    if (newState) {
+      updateQuestions();
+    }
+  },
+  { deep: true, immediate: true }
+);
+
+// 既存のrenderQuestionsが呼ばれた時にも更新されるように、cardsContainerの変更を監視
+watch(
+  () => app.value?.dom?.cardsContainer,
+  (newContainer) => {
+    if (newContainer) {
+      // cardsContainerが設定されたら、初期データを取得
       updateQuestions();
     }
   },

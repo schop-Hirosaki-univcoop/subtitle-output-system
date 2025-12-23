@@ -1,5 +1,6 @@
 <template>
   <article
+    ref="cardElement"
     :class="[
       'q-card',
       { 'is-answered': question['回答済'] },
@@ -23,11 +24,7 @@
         {{ groupLabel }}
       </span>
       <label class="q-check" :aria-label="statusText + 'の質問をバッチ選択'">
-        <input
-          type="checkbox"
-          class="row-checkbox"
-          :data-uid="question.UID"
-        />
+        <input type="checkbox" class="row-checkbox" :data-uid="question.UID" />
         <span class="visually-hidden">選択</span>
       </label>
     </div>
@@ -49,7 +46,7 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref, watch, onMounted } from "vue";
 // 既存のユーティリティ関数をインポート
 import {
   formatOperatorName,
@@ -73,6 +70,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  shouldFlash: {
+    type: Boolean,
+    default: false,
+  },
   showGenre: {
     type: Boolean,
     default: true,
@@ -84,6 +85,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["click"]);
+const cardElement = ref(null);
 
 const statusText = computed(() => {
   if (props.question["選択中"]) return "送出準備中";
@@ -125,6 +127,29 @@ const handleClick = (event) => {
   if (target instanceof Element && target.closest(".q-check")) return;
   emit("click", props.question);
 };
+
+// flashアニメーションの処理
+watch(
+  () => props.shouldFlash,
+  (newValue, oldValue) => {
+    if (newValue && !oldValue && cardElement.value) {
+      // flashクラスを追加
+      cardElement.value.classList.add("flash");
+      // animationendイベントでflashクラスを削除
+      const handleAnimationEnd = () => {
+        if (cardElement.value) {
+          cardElement.value.classList.remove("flash");
+        }
+      };
+      cardElement.value.addEventListener("animationend", handleAnimationEnd, {
+        once: true,
+      });
+      // 既存実装に合わせて、lastDisplayedUidをnullに設定
+      // 注意: これは親コンポーネント（QuestionList）で管理されているため、
+      // ここでは直接設定しない（親コンポーネントで処理される）
+    }
+  }
+);
 
 // チェックボックスの変更は既存のイベントデリゲーション（cardsContainerのchangeイベント）で処理される
 // そのため、Vueのハンドラは不要
