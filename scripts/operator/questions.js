@@ -1869,12 +1869,9 @@ export function updateActionAvailability(app) {
     if (button) button.disabled = true;
   });
   if (app.dom.clearButton) {
-    // チェックボックスで選択されている場合は、送出クリアボタンを非表示にする
-    // （チェックボックスで選択してから送出クリアを行うことはないため）
-    if (hasBatchSelection) {
-      app.dom.clearButton.hidden = true;
-    } else {
-      app.dom.clearButton.hidden = false;
+    // チェックボックスで選択されている場合は、CSSで非表示になる（data-selection="multi"の時）
+    // チェックボックスで選択されていない場合は、通常通り有効/無効を制御
+    if (!hasBatchSelection) {
       const canClear = assetAvailable && telopEnabled && displayOnline;
       app.dom.clearButton.disabled = !canClear;
     }
