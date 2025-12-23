@@ -1868,13 +1868,12 @@ export function updateActionAvailability(app) {
   app.dom.actionButtons.forEach((button) => {
     if (button) button.disabled = true;
   });
+  // 初期状態: 両方のボタンを非表示に設定（後で条件に応じて表示/非表示を切り替える）
   if (app.dom.clearButton) {
-    // チェックボックスで選択されている場合は、CSSで非表示になる（data-selection="multi"の時）
-    // チェックボックスで選択されていない場合は、通常通り有効/無効を制御
-    if (!hasBatchSelection) {
-      const canClear = assetAvailable && telopEnabled && displayOnline;
-      app.dom.clearButton.disabled = !canClear;
-    }
+    app.dom.clearButton.hidden = true;
+  }
+  if (app.dom.actionButtons[0]) {
+    app.dom.actionButtons[0].hidden = true;
   }
   if (!app.dom.selectedInfo) {
     updateBatchButtonVisibility(app, checkedCount);
