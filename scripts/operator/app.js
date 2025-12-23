@@ -1880,25 +1880,8 @@ export class OperatorApp {
       this.applyQuestionStatusSnapshot(allStatus);
     });
 
-    // Pick Up Question用の個別リスナーは不要（上記のイベント全体リスナーで処理される）
-    const pickupStatusRef = null;
-
-    // Pick Up Questionのリスナーを設定（scheduleIdがある場合のみ）
-    let pickupUnsubscribe = null;
-    if (pickupStatusRef) {
-      pickupUnsubscribe = onValue(pickupStatusRef, (snapshot) => {
-        const value = snapshot.val() || {};
-        // pickupquestionのstatusを適用（通常質問のstatusとマージされる）
-        // 通常質問とpickupquestionは異なるuidを持つため、上書きされることはない
-        this.applyQuestionStatusSnapshot(value);
-      });
-    }
-
     this.questionStatusUnsubscribe = () => {
-      normalUnsubscribe();
-      if (pickupUnsubscribe) {
-        pickupUnsubscribe();
-      }
+      eventUnsubscribe();
     };
   }
 
