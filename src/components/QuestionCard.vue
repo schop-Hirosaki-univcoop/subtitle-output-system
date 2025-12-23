@@ -144,9 +144,6 @@ watch(
       cardElement.value.addEventListener("animationend", handleAnimationEnd, {
         once: true,
       });
-      // 既存実装に合わせて、lastDisplayedUidをnullに設定
-      // 注意: これは親コンポーネント（QuestionList）で管理されているため、
-      // ここでは直接設定しない（親コンポーネントで処理される）
     }
   }
 );

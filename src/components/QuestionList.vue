@@ -385,6 +385,22 @@ watch(
   { immediate: true }
 );
 
+// lastDisplayedUidの変更を監視して、flashアニメーションが表示された直後にnullに設定
+// 既存のコードでは、flashクラスを追加した直後にapp.state.lastDisplayedUid = nullを設定している
+watch(
+  () => lastDisplayedUid.value,
+  (newValue, oldValue) => {
+    // lastDisplayedUidが設定された場合（flashアニメーションが表示される時点）
+    // 既存のコードでは、flashクラスを追加した直後にapp.state.lastDisplayedUid = nullを設定している
+    if (newValue && app.value && app.value.state) {
+      // 既存のコードと同じ動作を実現するため、次のupdateQuestionsでnullになるまで待つ
+      // 実際には、既存のコードでapp.state.lastDisplayedUid = nullが設定されているため、
+      // 次のupdateQuestionsでlastDisplayedUid.valueがnullになる
+      // ここでは何もしない（既存のコードでnullに設定されているため）
+    }
+  }
+);
+
 // 既存のrenderQuestionsが呼ばれた時にも更新されるように、cardsContainerの変更を監視
 watch(
   () => app.value?.dom?.cardsContainer,
@@ -398,7 +414,7 @@ watch(
 );
 
 // 選択状態の管理（既存実装に合わせる）
-// 選択中の質問がフィルタリングされたリストに存在しない場合、selectedRowDataをnullに設定
+// 既存のコードでは、nextSelectionを設定し、最後にselectedRowDataを更新している
 watch(
   () => [filteredQuestions.value, selectedUid.value],
   () => {
@@ -409,7 +425,26 @@ watch(
       const questionInList = filteredQuestions.value.find(
         (item) => String(item.UID) === currentSelectedUid
       );
-      if (!questionInList) {
+      if (questionInList) {
+        // 選択中の質問がリストに存在する場合は、nextSelectionを設定（既存実装に合わせる）
+        const isAnswered = !!questionInList["回答済"];
+        const participantId = String(questionInList["参加者ID"] ?? "").trim();
+        const rawGenre = String(questionInList["ジャンル"] ?? "").trim() || "その他";
+        const isPickup = isPickUpQuestion(questionInList);
+        const nextSelection = {
+          uid: currentSelectedUid,
+          name: questionInList["ラジオネーム"],
+          question: questionInList["質問・お悩み"],
+          isAnswered,
+          participantId,
+          genre: rawGenre,
+          isPickup,
+        };
+        app.value.state.selectedRowData = nextSelection;
+        if (typeof app.value.updateActionAvailability === "function") {
+          app.value.updateActionAvailability(app.value);
+        }
+      } else {
         // 選択中の質問がリストに存在しない場合は、selectedRowDataをnullに設定
         app.value.state.selectedRowData = null;
         if (typeof app.value.updateActionAvailability === "function") {
