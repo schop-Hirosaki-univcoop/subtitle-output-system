@@ -17,7 +17,11 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import QuestionCard from "./QuestionCard.vue";
 import { useOperatorApp } from "../composables/useOperatorApp.js";
-import { resolveNormalScheduleKey, loadingUids as moduleLoadingUids, loadingUidStates as moduleLoadingUidStates } from "../../scripts/operator/questions.js";
+import {
+  resolveNormalScheduleKey,
+  loadingUids as moduleLoadingUids,
+  loadingUidStates as moduleLoadingUidStates,
+} from "../../scripts/operator/questions.js";
 import { normalizeScheduleId } from "../../scripts/shared/channel-paths.js";
 import { GENRE_ALL_VALUE } from "../../scripts/operator/constants.js";
 
@@ -146,6 +150,16 @@ const viewingAllGenres = computed(() => {
   );
 });
 
+// loadingUidsの変更を検知するためのカウンター（リアクティビティのため）
+const loadingUidsVersion = ref(0);
+
+// 質問がローディング中かどうかを判定する関数
+function isLoadingQuestion(uid) {
+  // loadingUidsVersionを参照してリアクティビティを確保
+  loadingUidsVersion.value; // 依存関係として参照
+  return loadingUids.value.has(String(uid));
+}
+
 // 質問データを更新
 function updateQuestions() {
   if (!app.value || !app.value.state) return;
@@ -217,11 +231,11 @@ function updateQuestions() {
   // 既存のコード（handleUnanswerなど）が変更した場合に、Vueコンポーネントの状態を更新
   const moduleUids = Array.from(moduleLoadingUids);
   const moduleStates = new Map(moduleLoadingUidStates);
-  
+
   // VueコンポーネントのloadingUidsを更新
   loadingUids.value = new Set(moduleUids);
   loadingUidStates.value = new Map(moduleStates);
-  
+
   // ローディング中のUIDについて、更新が反映されたか確認
   // （Firebaseリスナーが新しいデータを拾った時にローディング状態を解除）
   // 注意: filteredQuestions.valueを参照すると無限ループになるため、直接questions.valueを使用
