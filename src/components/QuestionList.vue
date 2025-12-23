@@ -265,6 +265,33 @@ function updateQuestions() {
   // loadingUidsが変更された場合、リアクティビティをトリガー
   if (loadingUidsChanged) {
     loadingUidsVersion.value++;
+    // ローディング状態が解除された場合、selectedRowDataを更新してupdateActionAvailabilityを呼ぶ
+    // 既存のコードでは、renderQuestionsの最後でupdateActionAvailabilityが呼ばれている
+    nextTick(() => {
+      if (app.value && app.value.state && app.value.state.selectedRowData) {
+        const currentSelectedUid = String(app.value.state.selectedRowData.uid || "");
+        const question = questions.value.find((q) => String(q.UID) === currentSelectedUid);
+        if (question) {
+          // selectedRowDataのisAnsweredを最新の状態に更新
+          const isAnswered = !!question["回答済"];
+          const participantId = String(question["参加者ID"] ?? "").trim();
+          const rawGenre = String(question["ジャンル"] ?? "").trim() || "その他";
+          const isPickup = isPickUpQuestion(question);
+          app.value.state.selectedRowData = {
+            uid: currentSelectedUid,
+            name: question["ラジオネーム"],
+            question: question["質問・お悩み"],
+            isAnswered,
+            participantId,
+            genre: rawGenre,
+            isPickup,
+          };
+          if (typeof app.value.updateActionAvailability === "function") {
+            app.value.updateActionAvailability(app.value);
+          }
+        }
+      }
+    });
   }
 }
 
@@ -365,6 +392,13 @@ watch(
   () => {
     if (app.value?.state) {
       updateQuestions();
+      // 既存のコードでは、renderQuestionsの最後でupdateActionAvailabilityが呼ばれている
+      // データが更新された時にも呼ぶ必要がある（特にallQuestionsが更新された時）
+      nextTick(() => {
+        if (app.value && typeof app.value.updateActionAvailability === "function") {
+          app.value.updateActionAvailability(app.value);
+        }
+      });
     }
   },
   { deep: true, immediate: true }
@@ -415,26 +449,28 @@ watch(
 
 // 選択状態の管理（既存実装に合わせる）
 // 既存のコードでは、nextSelectionを設定し、最後にselectedRowDataを更新している
+// allQuestionsが更新された時にも、選択中の質問の状態を更新する必要がある
 watch(
-  () => [filteredQuestions.value, selectedUid.value],
+  () => [filteredQuestions.value, selectedUid.value, questions.value],
   () => {
     if (!app.value || !app.value.state) return;
 
     const currentSelectedUid = selectedUid.value;
     if (currentSelectedUid) {
-      const questionInList = filteredQuestions.value.find(
+      // filteredQuestionsではなく、questions.valueから最新の状態を取得
+      const question = questions.value.find(
         (item) => String(item.UID) === currentSelectedUid
       );
-      if (questionInList) {
-        // 選択中の質問がリストに存在する場合は、nextSelectionを設定（既存実装に合わせる）
-        const isAnswered = !!questionInList["回答済"];
-        const participantId = String(questionInList["参加者ID"] ?? "").trim();
-        const rawGenre = String(questionInList["ジャンル"] ?? "").trim() || "その他";
-        const isPickup = isPickUpQuestion(questionInList);
+      if (question) {
+        // 選択中の質問が存在する場合は、nextSelectionを設定（既存実装に合わせる）
+        const isAnswered = !!question["回答済"];
+        const participantId = String(question["参加者ID"] ?? "").trim();
+        const rawGenre = String(question["ジャンル"] ?? "").trim() || "その他";
+        const isPickup = isPickUpQuestion(question);
         const nextSelection = {
           uid: currentSelectedUid,
-          name: questionInList["ラジオネーム"],
-          question: questionInList["質問・お悩み"],
+          name: question["ラジオネーム"],
+          question: question["質問・お悩み"],
           isAnswered,
           participantId,
           genre: rawGenre,
@@ -445,7 +481,7 @@ watch(
           app.value.updateActionAvailability(app.value);
         }
       } else {
-        // 選択中の質問がリストに存在しない場合は、selectedRowDataをnullに設定
+        // 選択中の質問が存在しない場合は、selectedRowDataをnullに設定
         app.value.state.selectedRowData = null;
         if (typeof app.value.updateActionAvailability === "function") {
           app.value.updateActionAvailability(app.value);
