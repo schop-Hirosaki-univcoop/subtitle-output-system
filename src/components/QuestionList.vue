@@ -358,11 +358,13 @@ onMounted(() => {
   // 初期データを取得
   updateQuestions();
 
-  // 定期的に更新（500msごと）
+  // 定期的に更新（100msごと）
+  // FirebaseリスナーがallQuestionsのオブジェクトプロパティを直接変更する場合、
+  // watchでは検知できないため、定期的に更新する必要がある
   // 注意: 本番環境では、Firebaseリスナーやイベントベースの更新に変更することを推奨
   updateInterval = setInterval(() => {
     updateQuestions();
-  }, 500);
+  }, 100);
 
   // loadingUidsの変更を監視（100msごと）
   // 既存のJavaScriptコードがモジュールレベルのloadingUidsを変更した場合に検知するため
