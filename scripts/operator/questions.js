@@ -910,46 +910,93 @@ export async function handleDisplay(app) {
       }
     }
     
+    // 通常質問とpickupquestionをイベントID/スケジュールIDごとにグループ化
+    const normalUpdatesByPath = new Map();
+    const pickupUpdatesByPath = new Map();
+    
     // previousUidまたはprevのステータスを更新
     if (previousUid && previousUidItem) {
       if (previousUidIsPickup) {
-        pickupUpdates[`${previousUid}/selecting`] = false;
-        pickupUpdates[`${previousUid}/answered`] = true;
-        pickupUpdates[`${previousUid}/updatedAt`] = serverTimestamp();
+        // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
+        const pathKey = getQuestionStatusPath(eventId, true, scheduleId);
+        if (!pickupUpdatesByPath.has(pathKey)) {
+          pickupUpdatesByPath.set(pathKey, { ref: currentStatusRef, updates: {} });
+        }
+        pickupUpdatesByPath.get(pathKey).updates[`${previousUid}/selecting`] = false;
+        pickupUpdatesByPath.get(pathKey).updates[`${previousUid}/answered`] = true;
+        pickupUpdatesByPath.get(pathKey).updates[`${previousUid}/updatedAt`] = serverTimestamp();
       } else {
-        normalUpdates[`${previousUid}/selecting`] = false;
-        normalUpdates[`${previousUid}/answered`] = true;
-        normalUpdates[`${previousUid}/updatedAt`] = serverTimestamp();
+        // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+        const questionEventId = String(previousUidItem["イベントID"] ?? "").trim() || eventId;
+        const questionScheduleId = String(previousUidItem["日程ID"] ?? "").trim() || scheduleId;
+        const pathKey = getQuestionStatusPath(questionEventId, false, questionScheduleId);
+        if (!normalUpdatesByPath.has(pathKey)) {
+          normalUpdatesByPath.set(pathKey, { ref: getQuestionStatusRef(questionEventId, false, questionScheduleId), updates: {} });
+        }
+        normalUpdatesByPath.get(pathKey).updates[`${previousUid}/selecting`] = false;
+        normalUpdatesByPath.get(pathKey).updates[`${previousUid}/answered`] = true;
+        normalUpdatesByPath.get(pathKey).updates[`${previousUid}/updatedAt`] = serverTimestamp();
       }
     } else if (prev) {
       if (prevIsPickup) {
-        pickupUpdates[`${prev.UID}/selecting`] = false;
-        pickupUpdates[`${prev.UID}/answered`] = true;
-        pickupUpdates[`${prev.UID}/updatedAt`] = serverTimestamp();
+        // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
+        const pathKey = getQuestionStatusPath(eventId, true, scheduleId);
+        if (!pickupUpdatesByPath.has(pathKey)) {
+          pickupUpdatesByPath.set(pathKey, { ref: currentStatusRef, updates: {} });
+        }
+        pickupUpdatesByPath.get(pathKey).updates[`${prev.UID}/selecting`] = false;
+        pickupUpdatesByPath.get(pathKey).updates[`${prev.UID}/answered`] = true;
+        pickupUpdatesByPath.get(pathKey).updates[`${prev.UID}/updatedAt`] = serverTimestamp();
       } else {
-        normalUpdates[`${prev.UID}/selecting`] = false;
-        normalUpdates[`${prev.UID}/answered`] = true;
-        normalUpdates[`${prev.UID}/updatedAt`] = serverTimestamp();
+        // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+        const questionEventId = String(prev["イベントID"] ?? "").trim() || eventId;
+        const questionScheduleId = String(prev["日程ID"] ?? "").trim() || scheduleId;
+        const pathKey = getQuestionStatusPath(questionEventId, false, questionScheduleId);
+        if (!normalUpdatesByPath.has(pathKey)) {
+          normalUpdatesByPath.set(pathKey, { ref: getQuestionStatusRef(questionEventId, false, questionScheduleId), updates: {} });
+        }
+        normalUpdatesByPath.get(pathKey).updates[`${prev.UID}/selecting`] = false;
+        normalUpdatesByPath.get(pathKey).updates[`${prev.UID}/answered`] = true;
+        normalUpdatesByPath.get(pathKey).updates[`${prev.UID}/updatedAt`] = serverTimestamp();
       }
     }
     
     // 現在の質問のステータスを更新
     if (isPickup) {
-      pickupUpdates[`${app.state.selectedRowData.uid}/selecting`] = true;
-      pickupUpdates[`${app.state.selectedRowData.uid}/answered`] = false;
-      pickupUpdates[`${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
+      // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
+      const pathKey = getQuestionStatusPath(eventId, true, scheduleId);
+      if (!pickupUpdatesByPath.has(pathKey)) {
+        pickupUpdatesByPath.set(pathKey, { ref: currentStatusRef, updates: {} });
+      }
+      pickupUpdatesByPath.get(pathKey).updates[`${app.state.selectedRowData.uid}/selecting`] = true;
+      pickupUpdatesByPath.get(pathKey).updates[`${app.state.selectedRowData.uid}/answered`] = false;
+      pickupUpdatesByPath.get(pathKey).updates[`${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
     } else {
-      normalUpdates[`${app.state.selectedRowData.uid}/selecting`] = true;
-      normalUpdates[`${app.state.selectedRowData.uid}/answered`] = false;
-      normalUpdates[`${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
+      // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+      const currentItem = app.state.allQuestions.find((q) => String(q.UID) === app.state.selectedRowData.uid);
+      const questionEventId = currentItem ? String(currentItem["イベントID"] ?? "").trim() || eventId : eventId;
+      const questionScheduleId = currentItem ? String(currentItem["日程ID"] ?? "").trim() || scheduleId : scheduleId;
+      const pathKey = getQuestionStatusPath(questionEventId, false, questionScheduleId);
+      if (!normalUpdatesByPath.has(pathKey)) {
+        normalUpdatesByPath.set(pathKey, { ref: getQuestionStatusRef(questionEventId, false, questionScheduleId), updates: {} });
+      }
+      normalUpdatesByPath.get(pathKey).updates[`${app.state.selectedRowData.uid}/selecting`] = true;
+      normalUpdatesByPath.get(pathKey).updates[`${app.state.selectedRowData.uid}/answered`] = false;
+      normalUpdatesByPath.get(pathKey).updates[`${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
     }
     
     // 通常質問とpickupquestionをそれぞれ適切なstatusRefに更新
-    // 通常質問もスケジュールの中に作成する
-    const normalStatusRef = getQuestionStatusRef(eventId, false, scheduleId);
-    if (Object.keys(normalUpdates).length > 0) {
-      console.log("[送出] 通常質問のquestionStatus更新用JSON:", JSON.stringify(normalUpdates, null, 2));
-      await update(normalStatusRef, normalUpdates);
+    for (const [pathKey, { ref: statusRef, updates }] of normalUpdatesByPath) {
+      if (Object.keys(updates).length > 0) {
+        console.log("[送出] 通常質問のquestionStatus更新用JSON:", JSON.stringify({ [pathKey]: updates }, null, 2));
+        await update(statusRef, updates);
+      }
+    }
+    for (const [pathKey, { ref: statusRef, updates }] of pickupUpdatesByPath) {
+      if (Object.keys(updates).length > 0) {
+        console.log("[送出] Pick Up QuestionのquestionStatus更新用JSON:", JSON.stringify({ [pathKey]: updates }, null, 2));
+        await update(statusRef, updates);
+      }
     }
     if (Object.keys(pickupUpdates).length > 0) {
       console.log("[送出] Pick Up QuestionのquestionStatus更新用JSON:", JSON.stringify(pickupUpdates, null, 2));
@@ -1080,8 +1127,27 @@ export async function handleUnanswer(app) {
   const currentItem = app.state.allQuestions.find((q) => String(q.UID) === uid);
   const currentAnswered = currentItem ? !!currentItem["回答済"] : false;
   const isPickup = app.state.selectedRowData.isPickup === true;
-  const eventId = String(app.state.activeEventId || "").trim();
-  const { scheduleId } = resolveNowShowingReference(app);
+  // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+  // PUQの場合は現在のチャンネルのイベントIDとスケジュールIDを使用
+  let eventId = String(app.state.activeEventId || "").trim();
+  let scheduleId = "";
+  if (isPickup) {
+    const { scheduleId: channelScheduleId } = resolveNowShowingReference(app);
+    scheduleId = channelScheduleId;
+  } else {
+    // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+    const questionEventId = currentItem ? String(currentItem["イベントID"] ?? "").trim() : "";
+    const questionScheduleId = currentItem ? String(currentItem["日程ID"] ?? "").trim() : "";
+    if (questionEventId) {
+      eventId = questionEventId;
+    }
+    if (questionScheduleId) {
+      scheduleId = questionScheduleId;
+    } else {
+      const { scheduleId: channelScheduleId } = resolveNowShowingReference(app);
+      scheduleId = channelScheduleId;
+    }
+  }
   loadingUids.add(uid);
   loadingUidStates.set(uid, {
     expectedAnswered: false, // 未回答に戻すので、最終的にfalseになることを期待
@@ -1253,9 +1319,17 @@ export async function handleBatchUnanswer(app) {
       continue;
     }
     // 通常質問もPick Up Questionも、スケジュールの中に作成する
-    // 通常質問の場合は現在のチャンネルのscheduleIdを使用
-    const statusRef = getQuestionStatusRef(questionEventId, isPickup, scheduleId);
-    const pathKey = getQuestionStatusPath(questionEventId, isPickup, scheduleId);
+    // 通常質問の場合は、その質問のスケジュールIDを使用
+    // PUQの場合は現在のチャンネルのscheduleIdを使用
+    let questionScheduleId = scheduleId;
+    if (!isPickup) {
+      const itemScheduleId = String(item["日程ID"] ?? "").trim();
+      if (itemScheduleId) {
+        questionScheduleId = itemScheduleId;
+      }
+    }
+    const statusRef = getQuestionStatusRef(questionEventId, isPickup, questionScheduleId);
+    const pathKey = getQuestionStatusPath(questionEventId, isPickup, questionScheduleId);
     if (!updatesByPath.has(pathKey)) {
       updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
     }
@@ -1384,8 +1458,22 @@ export async function clearNowShowing(app) {
     selectingItems.forEach((item) => {
       const isPickup = item.ピックアップ === true;
       // 通常質問もPick Up Questionも、スケジュールの中に作成する
-      const statusRef = getQuestionStatusRef(eventId, isPickup, scheduleId);
-      const pathKey = getQuestionStatusPath(eventId, isPickup, scheduleId);
+      // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+      // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
+      let itemEventId = eventId;
+      let itemScheduleId = scheduleId;
+      if (!isPickup) {
+        const questionEventId = String(item["イベントID"] ?? "").trim();
+        const questionScheduleId = String(item["日程ID"] ?? "").trim();
+        if (questionEventId) {
+          itemEventId = questionEventId;
+        }
+        if (questionScheduleId) {
+          itemScheduleId = questionScheduleId;
+        }
+      }
+      const statusRef = getQuestionStatusRef(itemEventId, isPickup, itemScheduleId);
+      const pathKey = getQuestionStatusPath(itemEventId, isPickup, itemScheduleId);
       if (!updatesByPath.has(pathKey)) {
         updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
       }
@@ -1459,10 +1547,22 @@ export async function clearNowShowing(app) {
         
         // Firebaseのパス計算にはnormalizeScheduleIdを使用（空の場合は__default_schedule__になる）
         // 通常質問もPick Up Questionも、スケジュールの中に作成する
-        // 通常質問の場合は現在のチャンネルのscheduleIdを使用
-        const finalScheduleId = isPickup ? pickupScheduleId : scheduleId;
-        const statusRef = getQuestionStatusRef(eventId, isPickup, finalScheduleId);
-        const pathKey = getQuestionStatusPath(eventId, isPickup, finalScheduleId);
+        // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+        // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
+        let finalEventId = eventId;
+        let finalScheduleId = isPickup ? pickupScheduleId : scheduleId;
+        if (!isPickup && prevItem) {
+          const questionEventId = String(prevItem["イベントID"] ?? "").trim();
+          const questionScheduleId = String(prevItem["日程ID"] ?? "").trim();
+          if (questionEventId) {
+            finalEventId = questionEventId;
+          }
+          if (questionScheduleId) {
+            finalScheduleId = questionScheduleId;
+          }
+        }
+        const statusRef = getQuestionStatusRef(finalEventId, isPickup, finalScheduleId);
+        const pathKey = getQuestionStatusPath(finalEventId, isPickup, finalScheduleId);
         if (!updatesByPath.has(pathKey)) {
           updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
         }
