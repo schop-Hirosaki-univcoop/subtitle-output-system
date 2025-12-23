@@ -192,6 +192,10 @@ export function resolveNormalScheduleKey(app) {
 
 export function renderQuestions(app) {
   if (!app.dom.cardsContainer) return;
+  // Vueコンポーネントが有効な場合は、DOM要素を追加しない（Vueがレンダリングを担当するため）
+  if (window.__vueExperimentEnabled) {
+    return;
+  }
   const currentTab = app.state.currentSubTab;
   const viewingPuqTab = currentTab === "puq";
   const viewingNormalTab = currentTab === "normal";
