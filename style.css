@@ -1290,7 +1290,6 @@ input[type="checkbox"]{
   position:absolute;
   top:50%;
   left:50%;
-  transform:translate(-50%, -50%);
   width:clamp(2rem, 3.4vw, 2.6rem);
   height:clamp(2rem, 3.4vw, 2.6rem);
   border:.22rem solid rgba(231,236,251,.18);
@@ -1299,6 +1298,7 @@ input[type="checkbox"]{
   animation:spin 1s linear infinite;
   z-index:2;
   box-shadow:0 0 0 1px rgba(12,18,34,.4);
+  transform:translate(-50%, -50%);
 }
 
 /* 上段：RN & 班・状態 */
@@ -1484,7 +1484,10 @@ input[type="checkbox"]{
   animation: spin 1s linear infinite;
   box-shadow: 0 0 0 1px rgba(12,18,34,.4);
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
 .loading-text {
   font-weight: 600;
   letter-spacing: .03em;

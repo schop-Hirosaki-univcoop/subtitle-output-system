@@ -24,7 +24,12 @@
         {{ groupLabel }}
       </span>
       <label class="q-check" :aria-label="statusText + 'の質問をバッチ選択'">
-        <input type="checkbox" class="row-checkbox" :data-uid="question.UID" />
+        <input
+          type="checkbox"
+          class="row-checkbox"
+          :data-uid="question.UID"
+          ref="checkboxElement"
+        />
         <span class="visually-hidden">選択</span>
       </label>
     </div>
@@ -46,12 +51,13 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted } from "vue";
+import { computed, ref, watch, onMounted, onUpdated, nextTick } from "vue";
 // 既存のユーティリティ関数をインポート
 import {
   formatOperatorName,
   resolveGenreLabel,
 } from "../../scripts/operator/utils.js";
+import { useOperatorApp } from "../composables/useOperatorApp.js";
 
 const props = defineProps({
   question: {
@@ -86,6 +92,8 @@ const props = defineProps({
 
 const emit = defineEmits(["click"]);
 const cardElement = ref(null);
+const checkboxElement = ref(null);
+const { app } = useOperatorApp();
 
 const isAnswered = computed(() => !!props.question["回答済"]);
 const isSelecting = computed(() => !!props.question["選択中"]);
@@ -153,4 +161,37 @@ watch(
 
 // チェックボックスの変更は既存のイベントデリゲーション（cardsContainerのchangeイベント）で処理される
 // そのため、Vueのハンドラは不要
+// ただし、コンポーネントが再レンダリングされてもチェックボックスの状態を保持する必要がある
+
+// チェックボックスの状態を復元する関数
+function restoreCheckboxState() {
+  if (!checkboxElement.value || !app.value?.dom?.cardsContainer) return;
+  
+  // 同じUIDの他のチェックボックス（古い要素）の状態を確認
+  const allCheckboxes = app.value.dom.cardsContainer.querySelectorAll(
+    `.row-checkbox[data-uid="${props.question.UID}"]`
+  );
+  for (const checkbox of allCheckboxes) {
+    if (
+      checkbox instanceof HTMLInputElement &&
+      checkbox !== checkboxElement.value &&
+      checkbox.checked
+    ) {
+      checkboxElement.value.checked = true;
+      return;
+    }
+  }
+}
+
+onMounted(() => {
+  nextTick(() => {
+    restoreCheckboxState();
+  });
+});
+
+onUpdated(() => {
+  nextTick(() => {
+    restoreCheckboxState();
+  });
+});
 </script>
