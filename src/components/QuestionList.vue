@@ -30,10 +30,9 @@ const liveParticipantId = ref("");
 const liveQuestion = ref("");
 const liveName = ref("");
 const lastDisplayedUid = ref(null);
-// 既存のJavaScriptコードが使用しているモジュールレベルのloadingUidsとloadingUidStatesを直接使用
-// これにより、未回答に戻す処理などで正しく同期される
-const loadingUids = moduleLoadingUids;
-const loadingUidStates = moduleLoadingUidStates;
+// Vueコンポーネント内で独自に管理（Vueへの移行のため）
+const loadingUids = ref(new Set());
+const loadingUidStates = ref(new Map());
 const liveQuestionMap = ref(new Map());
 
 // フィルタリング用の状態
@@ -214,14 +213,22 @@ function updateQuestions() {
   // ライブ質問の判定を更新
   updateLiveQuestionMap();
 
+  // 既存のJavaScriptコードが使用しているモジュールレベルのloadingUidsとloadingUidStatesを同期
+  // 既存のコード（handleUnanswerなど）が変更した場合に、Vueコンポーネントの状態を更新
+  const moduleUids = Array.from(moduleLoadingUids);
+  const moduleStates = new Map(moduleLoadingUidStates);
+  
+  // VueコンポーネントのloadingUidsを更新
+  loadingUids.value = new Set(moduleUids);
+  loadingUidStates.value = new Map(moduleStates);
+  
   // ローディング中のUIDについて、更新が反映されたか確認
   // （Firebaseリスナーが新しいデータを拾った時にローディング状態を解除）
   // 注意: filteredQuestions.valueを参照すると無限ループになるため、直接questions.valueを使用
-  // 注意: loadingUidsとloadingUidStatesはモジュールレベルの変数なので、.valueは不要
   let loadingUidsChanged = false;
-  loadingUids.forEach((uid) => {
+  loadingUids.value.forEach((uid) => {
     const question = questions.value.find((q) => String(q.UID) === uid);
-    const loadingState = loadingUidStates.get(uid);
+    const loadingState = loadingUidStates.value.get(uid);
     if (question && loadingState) {
       // 更新が反映されたか確認
       // 未回答に戻す場合は、previousAnsweredがtrueで、現在answeredがfalseになっていることを確認
@@ -231,13 +238,16 @@ function updateQuestions() {
         !question["回答済"]
       ) {
         // 更新が反映された
-        loadingUids.delete(uid);
-        loadingUidStates.delete(uid);
+        loadingUids.value.delete(uid);
+        loadingUidStates.value.delete(uid);
+        // モジュールレベルの変数も更新（既存のコードとの同期のため）
+        moduleLoadingUids.delete(uid);
+        moduleLoadingUidStates.delete(uid);
         loadingUidsChanged = true;
       }
     }
   });
-  
+
   // loadingUidsが変更された場合、リアクティビティをトリガー
   if (loadingUidsChanged) {
     loadingUidsVersion.value++;
@@ -290,13 +300,16 @@ onMounted(() => {
   }, 500);
 
   // loadingUidsの変更を監視（100msごと）
-  // 既存のJavaScriptコードがloadingUidsを変更した場合に検知するため
-  let previousLoadingUidsSize = loadingUids.size;
+  // 既存のJavaScriptコードがモジュールレベルのloadingUidsを変更した場合に検知するため
+  let previousModuleLoadingUidsSize = moduleLoadingUids.size;
   loadingUidsCheckInterval = setInterval(() => {
-    const currentSize = loadingUids.size;
-    if (currentSize !== previousLoadingUidsSize) {
+    const currentSize = moduleLoadingUids.size;
+    if (currentSize !== previousModuleLoadingUidsSize) {
+      // モジュールレベルの変更を検知したら、Vueコンポーネントの状態を更新
+      loadingUids.value = new Set(moduleLoadingUids);
+      loadingUidStates.value = new Map(moduleLoadingUidStates);
       loadingUidsVersion.value++;
-      previousLoadingUidsSize = currentSize;
+      previousModuleLoadingUidsSize = currentSize;
     }
   }, 100);
 
