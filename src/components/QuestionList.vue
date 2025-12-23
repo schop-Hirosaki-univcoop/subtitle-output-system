@@ -91,9 +91,18 @@ const filteredQuestions = computed(() => {
 });
 
 // ライブ質問の判定をcomputed化（パフォーマンス向上）
+// 注意: liveUid, liveParticipantId, liveQuestion, liveNameの変更を検知するため、
+// これらの値を明示的に参照する必要がある
 const liveQuestionMap = computed(() => {
+  // 依存関係を明示的に追跡するため、これらの値を参照
+  const currentLiveUid = liveUid.value;
+  const currentLiveParticipantId = liveParticipantId.value;
+  const currentLiveQuestion = liveQuestion.value;
+  const currentLiveName = liveName.value;
+  const currentFilteredQuestions = filteredQuestions.value;
+  
   const map = new Map();
-  filteredQuestions.value.forEach((question) => {
+  currentFilteredQuestions.forEach((question) => {
     const uid = String(question.UID || "");
     const participantId = String(question["参加者ID"] ?? "").trim();
     const questionText = String(question["質問・お悩み"] ?? "").trim();
@@ -102,23 +111,23 @@ const liveQuestionMap = computed(() => {
     let isLive = false;
 
     // liveUidが存在する場合は、それで判定
-    if (liveUid.value && liveUid.value.trim()) {
-      isLive = liveUid.value === uid;
+    if (currentLiveUid && currentLiveUid.trim()) {
+      isLive = currentLiveUid === uid;
     } else {
       // liveUidが存在しない場合は、participantId/questionまたはname/questionで判定
-      if (liveParticipantId.value && participantId && liveQuestion.value) {
+      if (currentLiveParticipantId && participantId && currentLiveQuestion) {
         if (
-          liveParticipantId.value === participantId &&
-          liveQuestion.value === questionText
+          currentLiveParticipantId === participantId &&
+          currentLiveQuestion === questionText
         ) {
           isLive = true;
         }
       }
 
-      if (!isLive && liveName.value && radioName && liveQuestion.value) {
+      if (!isLive && currentLiveName && radioName && currentLiveQuestion) {
         if (
-          liveName.value === radioName &&
-          liveQuestion.value === questionText
+          currentLiveName === radioName &&
+          currentLiveQuestion === questionText
         ) {
           isLive = true;
         }
