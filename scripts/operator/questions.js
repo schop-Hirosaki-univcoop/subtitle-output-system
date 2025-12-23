@@ -1670,14 +1670,31 @@ export async function clearNowShowing(app) {
           }
         }
         
-        const statusRef = getQuestionStatusRef(finalEventId, isPickup, finalScheduleId);
-        const pathKey = getQuestionStatusPath(finalEventId, isPickup, finalScheduleId);
+        // PUQの場合は、finalScheduleIdが空の場合でもscheduleIdをフォールバックとして使用
+        // コミット8fb8872の時点では、pickupScheduleIdが空になることはなかったが、
+        // 念のため、finalScheduleIdが空の場合はscheduleIdを使用する
+        const effectiveScheduleId = isPickup && !finalScheduleId ? scheduleId : finalScheduleId;
+        const statusRef = getQuestionStatusRef(finalEventId, isPickup, effectiveScheduleId);
+        const pathKey = getQuestionStatusPath(finalEventId, isPickup, effectiveScheduleId);
         if (!updatesByPath.has(pathKey)) {
           updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
         }
         const group = updatesByPath.get(pathKey);
         group.updates[`${prevUid}/answered`] = true;
         group.updates[`${prevUid}/updatedAt`] = serverTimestamp();
+        
+        // デバッグログ: PUQの場合にfinalScheduleIdとeffectiveScheduleIdを確認
+        if (isPickup) {
+          console.log(`[clearNowShowing] PUQ answered flag update:`, {
+            prevUid,
+            finalEventId,
+            finalScheduleId,
+            effectiveScheduleId,
+            scheduleId,
+            pickupScheduleId,
+            pathKey
+          });
+        }
 
         // PUQの場合はscheduleIdが必須
         // バックエンド側でpickup questionと判定される可能性があるため、
