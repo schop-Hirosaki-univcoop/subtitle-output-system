@@ -431,6 +431,49 @@ onMounted(() => {
     }
   }, 100);
 
+  // 余白クリックで選択解除
+  if (app.value?.dom?.cardsContainer) {
+    const handleContainerClick = (event) => {
+      // カードやチェックボックス以外をクリックした場合は選択解除
+      const target = event.target;
+      if (
+        target &&
+        !target.closest(".q-card") &&
+        !target.closest(".row-checkbox") &&
+        !target.closest(".q-check")
+      ) {
+        clearSelection();
+      }
+    };
+    app.value.dom.cardsContainer.addEventListener("click", handleContainerClick);
+    
+    // クリーンアップ用に保存
+    if (!app.value._questionListCleanup) {
+      app.value._questionListCleanup = [];
+    }
+    app.value._questionListCleanup.push(() => {
+      if (app.value?.dom?.cardsContainer) {
+        app.value.dom.cardsContainer.removeEventListener("click", handleContainerClick);
+      }
+    });
+  }
+
+  // ESCキーで選択解除
+  const handleKeydown = (event) => {
+    if (event.key === "Escape" && selectedUid.value) {
+      clearSelection();
+    }
+  };
+  document.addEventListener("keydown", handleKeydown);
+  
+  // クリーンアップ用に保存
+  if (!app.value._questionListCleanup) {
+    app.value._questionListCleanup = [];
+  }
+  app.value._questionListCleanup.push(() => {
+    document.removeEventListener("keydown", handleKeydown);
+  });
+
   // Vueコンポーネントがマウントされました
 });
 
