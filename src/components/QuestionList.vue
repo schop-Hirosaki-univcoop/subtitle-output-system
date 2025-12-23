@@ -98,7 +98,7 @@ function updateLiveQuestionMap() {
   const currentLiveParticipantId = liveParticipantId.value;
   const currentLiveQuestion = liveQuestion.value;
   const currentLiveName = liveName.value;
-  
+
   filteredQuestions.value.forEach((question) => {
     const uid = String(question.UID || "");
     const participantId = String(question["参加者ID"] ?? "").trim();
@@ -133,7 +133,7 @@ function updateLiveQuestionMap() {
 
     map.set(uid, isLive);
   });
-  
+
   liveQuestionMap.value = map;
 }
 
@@ -320,7 +320,13 @@ watch(
 
 // liveUid, liveParticipantId, liveQuestion, liveNameの変更を監視してliveQuestionMapを更新
 watch(
-  () => [liveUid.value, liveParticipantId.value, liveQuestion.value, liveName.value, filteredQuestions.value],
+  () => [
+    liveUid.value,
+    liveParticipantId.value,
+    liveQuestion.value,
+    liveName.value,
+    filteredQuestions.value,
+  ],
   () => {
     updateLiveQuestionMap();
   },
