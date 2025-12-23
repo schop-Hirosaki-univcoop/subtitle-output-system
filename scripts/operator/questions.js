@@ -1611,6 +1611,15 @@ export async function clearNowShowing(app) {
       }
 
       if (prevUid) {
+        // デバッグログ: isPickupの判定結果を確認
+        console.log(`[clearNowShowing] prevUid found:`, {
+          prevUid,
+          isPickup,
+          previousNowShowingPickup: previousNowShowing.pickup,
+          prevItemFound: !!prevItem,
+          prevItemPickup: prevItem ? prevItem.ピックアップ : null
+        });
+        
         // pickupquestionの場合は、prevItemからscheduleIdを取得するか、現在のscheduleIdを使用
         // prevItemが見つかった場合は、そのscheduleIdを優先
         let pickupScheduleId = scheduleId ? String(scheduleId).trim() : "";
