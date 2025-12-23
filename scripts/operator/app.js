@@ -1858,6 +1858,10 @@ export class OperatorApp {
       const allStatus = {};
       const questionsByUid = this.state.questionsByUid instanceof Map ? this.state.questionsByUid : new Map();
       
+      // デバッグログ: 対象UIDが含まれているか確認
+      const targetUid = "7c95bb08-7885-4a01-8e18-0396f382e6a8"; // テスト用UID
+      let foundTargetUid = false;
+      
       // 各スケジュールノードを走査
       Object.entries(value).forEach(([scheduleKey, scheduleStatus]) => {
         if (!scheduleStatus || typeof scheduleStatus !== "object") {
@@ -1871,9 +1875,25 @@ export class OperatorApp {
           // 通常質問とPUQの両方を処理
           if (status.answered !== undefined || status.selecting !== undefined) {
             allStatus[uidKey] = status;
+            if (uidKey === targetUid) {
+              foundTargetUid = true;
+              console.log(`[startQuestionStatusStream] Found target UID ${targetUid} in schedule ${scheduleKey}:`, {
+                status,
+                scheduleKey,
+                uidKey
+              });
+            }
           }
         });
       });
+      
+      // デバッグログ: 対象UIDが見つからなかった場合
+      if (!foundTargetUid) {
+        console.log(`[startQuestionStatusStream] Target UID ${targetUid} not found in snapshot:`, {
+          scheduleKeys: Object.keys(value),
+          allStatusKeys: Object.keys(allStatus)
+        });
+      }
       
       // 全てのstatusを適用
       this.applyQuestionStatusSnapshot(allStatus);
