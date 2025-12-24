@@ -68,9 +68,9 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - `InitManager`: 初期化管理
 
 4. **`QuestionFormApp`** (`scripts/question-form/app.js`)
-   - 約 540 行
+   - 約 550 行
    - 質問フォーム（`question-form.html`）
-   - 既に`FormView`クラスで View 層が分離されている（MVC モデルに準拠）
+   - 既に`FormView`クラス（`view.js`）で View 層が分離されている（MVC モデルに準拠）
 
 ## Phase 3 の移行計画
 
@@ -176,10 +176,31 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 - **オペレーターチャットパネル** (`events/panels/chat-panel.js`)
 
   - 管理チャットの送受信（常時表示される独立した機能）
+  - `EventChat`クラスが管理
 
 - **右サイドテロップ操作パネル** (`operator/panels/side-telop-panel.js`)
   - サイドテロップの管理（追加・編集・削除・同期）
   - `operator.html`内に実装されている（`OperatorApp`が管理）
+
+- **バックアップ・復元機能**（ヘッダーボタン）
+
+  - バックアップボタン（`handleBackupClick`）
+  - 復元ボタン（`handleRestoreClick`）
+  - データのエクスポート・インポート
+
+- **フルスクリーン機能**（ヘッダーボタン）
+
+  - フルスクリーンボタン（`toggleFullscreen`）
+  - フルスクリーンプロンプトダイアログ
+
+- **印刷機能**（イベント管理パネル、GL管理パネル）
+
+  - イベント一覧の印刷（`handleEventPrint`）
+  - GLリストの印刷（`handleGlPrint`）
+  - 印刷プレビュー・印刷設定ダイアログ
+
+- **再読み込み機能**（ヘッダーボタン）
+  - イベント情報の再読み込み（`refreshButton`）
 
 **移行方法**:
 
