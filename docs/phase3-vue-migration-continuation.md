@@ -17,8 +17,9 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 1. **`EventAdminApp`** (`scripts/events/app.js`)
 
    - 約 6,700 行
-   - イベント管理画面（`index.html`）
+   - イベント管理画面（`operator.html`に実装）
    - イベント・日程の管理、参加者リスト、GL 管理など
+   - **9つのパネル**（ショートカットキー 1-9）+ **オペレーターチャットパネル** + **右サイドテロップ操作パネル**
 
 2. **`OperatorApp`** (`scripts/operator/app.js`)
 
@@ -151,6 +152,7 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 **その他の機能**（パネル切り替えの対象外）:
 
 - **オペレーターチャットパネル** (`events/panels/chat-panel.js`)
+
   - 管理チャットの送受信（常時表示される独立した機能）
 
 - **右サイドテロップ操作パネル** (`operator/panels/side-telop-panel.js` - 埋め込みツール)
