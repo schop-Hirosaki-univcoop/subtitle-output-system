@@ -1975,24 +1975,6 @@ export class OperatorApp {
         pickup: record.pickup === true,
         updatedAt: Number(record.updatedAt || 0)
       };
-      const oldStatus = current.get(resolvedUid);
-      // デバッグログ: answeredフラグが変更された場合にログを出力
-      if (oldStatus && oldStatus.answered !== newStatus.answered) {
-        console.log(`[applyQuestionStatusSnapshot] answered status changed for UID ${resolvedUid}:`, {
-          old: oldStatus.answered,
-          new: newStatus.answered,
-          record
-        });
-      }
-      // デバッグログ: 対象UIDの場合は常にログを出力
-      if (resolvedUid === targetUid) {
-        console.log(`[applyQuestionStatusSnapshot] Processing UID ${resolvedUid}:`, {
-          oldStatus,
-          newStatus,
-          record,
-          uidKey
-        });
-      }
       current.set(resolvedUid, newStatus);
     });
     this.state.questionStatusByUid = current;
