@@ -988,9 +988,29 @@ export class EventFirebaseManager {
       }
       return true;
     } catch (error) {
-      console.error("Failed to confirm schedule consensus:", error);
-      this.app.setScheduleConflictError("日程の確定に失敗しました。通信環境を確認して再度お試しください。");
-      return false;
+      const errorMessage = error?.message || String(error || "");
+      const isTransactionError = errorMessage === "set" || 
+                                 errorMessage.includes("transaction") || 
+                                 errorMessage.includes("abort");
+      
+      if (isTransactionError) {
+        // トランザクション競合エラーの場合は、デバッグログとして記録し、エラーを無視
+        if (typeof console !== "undefined" && typeof console.debug === "function") {
+          console.debug("[confirmScheduleConsensus] トランザクション競合によりスケジュール合意の確定をスキップ", {
+            eventId: ensureString(this.app.selectedEventId),
+            scheduleId: ensureString(selection?.scheduleId),
+            error: errorMessage
+          });
+        }
+        // トランザクション競合の場合は、エラーメッセージを表示せずにfalseを返す
+        // ユーザーには表示しない（トランザクション競合は一時的な問題のため）
+        return false;
+      } else {
+        // その他のエラーの場合は、通常のエラーログとして記録
+        console.error("Failed to confirm schedule consensus:", error);
+        this.app.setScheduleConflictError("日程の確定に失敗しました。通信環境を確認して再度お試しください。");
+        return false;
+      }
     }
   }
 
