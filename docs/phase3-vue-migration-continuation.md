@@ -19,13 +19,14 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - 約 6,700 行
    - イベント管理画面（`operator.html`に実装）
    - イベント・日程の管理、参加者リスト、GL 管理など
-   - **9つのパネル**（ショートカットキー 1-9）+ **オペレーターチャットパネル** + **右サイドテロップ操作パネル**
+   - **9 つのパネル**（ショートカットキー 1-9）+ **オペレーターチャットパネル** + **右サイドテロップ操作パネル**
 
 2. **`OperatorApp`** (`scripts/operator/app.js`)
 
    - 約 2,600 行
-   - オペレーター画面（`operator.html`）
-   - 質問カード以外の部分（辞書、ピックアップ、ログ、サイドテロップなど）
+   - テロップ操作パネル（`operator.html`内の埋め込みツールとして使用）
+   - 質問カード表示、辞書、ピックアップ、ログ、サイドテロップなどの管理
+   - 埋め込み環境でも動作する設計（`operatorEmbed` API を提供）
 
    **構造**: Manager パターンが採用されている
 
@@ -64,9 +65,9 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
 ### 優先度: 高
 
-#### 1. オペレーター画面の残りの部分
+#### 1. テロップ操作パネル（`OperatorApp`）の残りの部分
 
-**対象**: `OperatorApp`の他の機能
+**対象**: `OperatorApp`の他の機能（`operator.html`内の埋め込みツールとして使用）
 
 - **辞書パネル** (`operator/panels/dictionary-panel.js`)
 
@@ -91,10 +92,11 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
 - 各パネルを Vue コンポーネントに移行
 - `QuestionCard`と同様に、既存のロジックと統合
+- `EventAdminApp`の埋め込みツールとしての統合を維持
 
-#### 2. イベント管理画面の主要部分
+#### 2. イベント管理画面（`operator.html`）の主要部分
 
-**対象**: `EventAdminApp`の主要機能
+**対象**: `EventAdminApp`の主要機能（`operator.html`に実装）
 
 **構造**: Manager パターンが採用されている
 
@@ -155,9 +157,9 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
   - 管理チャットの送受信（常時表示される独立した機能）
 
-- **右サイドテロップ操作パネル** (`operator/panels/side-telop-panel.js` - 埋め込みツール)
+- **右サイドテロップ操作パネル** (`operator/panels/side-telop-panel.js`)
   - サイドテロップの管理（追加・編集・削除・同期）
-  - `operator.html`に埋め込まれているが、`index.html`からもアクセス可能
+  - `operator.html`内に実装されている（`OperatorApp`が管理）
 
 **移行方法**:
 
@@ -232,26 +234,30 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
 ## 推奨される移行順序
 
-### Phase 3.1: オペレーター画面の残りの部分（優先度: 高）
+### Phase 3.1: テロップ操作パネル（`OperatorApp`）の残りの部分（優先度: 高）
 
 1. **辞書パネル**
 
    - `DictionaryPanel.vue`コンポーネントを作成
-   - 既存の`dictionary-panel.js`と統合
+   - 既存の`operator/panels/dictionary-panel.js`と統合
+   - `EventAdminApp`の埋め込みツールとしての統合を維持
 
 2. **ピックアップパネル**
 
    - `PickupPanel.vue`コンポーネントを作成
-   - 既存の`pickup-panel.js`と統合
+   - 既存の`operator/panels/pickup-panel.js`と統合
+   - `EventAdminApp`の埋め込みツールとしての統合を維持
 
 3. **ログパネル**
 
    - `LogsPanel.vue`コンポーネントを作成
-   - 既存の`logs-panel.js`と統合
+   - 既存の`operator/panels/logs-panel.js`と統合
+   - `EventAdminApp`の埋め込みツールとしての統合を維持
 
 4. **サイドテロップパネル**
    - `SideTelopPanel.vue`コンポーネントを作成
-   - 既存の`side-telop-panel.js`と統合
+   - 既存の`operator/panels/side-telop-panel.js`と統合
+   - `EventAdminApp`の埋め込みツールとしての統合を維持
 
 ### Phase 3.2: イベント管理画面（優先度: 高）
 
@@ -285,7 +291,7 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - `EventChat.vue`コンポーネントを作成
    - 既存の`chat-panel.js`（`EventChat`）と統合
 
-**注意**: テロップ操作パネル、ルビ辞書管理、Pick Up Question 管理、操作ログは埋め込みツールとして`operator.html`に統合されているため、`OperatorApp`の移行と同時に検討する
+**注意**: テロップ操作パネル（`OperatorApp`）、ルビ辞書管理、Pick Up Question 管理、操作ログは`EventAdminApp`の埋め込みツールとして`operator.html`に統合されているため、`OperatorApp`の移行（Phase 3.1）と同時に検討する
 
 ### Phase 3.3: 質問管理画面（優先度: 中）
 
