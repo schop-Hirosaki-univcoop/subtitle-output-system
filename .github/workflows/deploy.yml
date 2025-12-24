@@ -47,6 +47,8 @@ jobs:
           path: ./dist
 
   deploy:
+    # Pull Requestの場合はデプロイをスキップ（mainブランチにマージされた後にデプロイ）
+    if: github.event_name != 'pull_request'
     # UIでブランチを設定する場合は、条件を削除または調整
     # 環境保護ルールで許可されたブランチのみデプロイ
     environment:
