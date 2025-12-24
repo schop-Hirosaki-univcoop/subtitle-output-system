@@ -1862,6 +1862,10 @@ export class OperatorApp {
       const targetUid = "7c95bb08-7885-4a01-8e18-0396f382e6a8"; // テスト用UID
       let foundTargetUid = false;
       
+      // 現在のチャンネルのスケジュールIDを取得（PUQのステータス選択に使用）
+      const { scheduleId: currentScheduleId } = this.getActiveChannel() || {};
+      const normalizedCurrentScheduleId = currentScheduleId ? normalizeScheduleId(currentScheduleId) : "";
+      
       // 各スケジュールノードを走査
       Object.entries(value).forEach(([scheduleKey, scheduleStatus]) => {
         if (!scheduleStatus || typeof scheduleStatus !== "object") {
@@ -1874,13 +1878,37 @@ export class OperatorApp {
           }
           // 通常質問とPUQの両方を処理
           if (status.answered !== undefined || status.selecting !== undefined) {
-            allStatus[uidKey] = status;
+            // 既存のステータスがある場合、マージする
+            // PUQの場合は、answered: trueを優先する（複数のスケジュールに存在する可能性があるため）
+            if (allStatus[uidKey]) {
+              const existing = allStatus[uidKey];
+              // answered: trueを優先する
+              if (status.answered === true || existing.answered === true) {
+                allStatus[uidKey] = {
+                  ...existing,
+                  ...status,
+                  answered: true
+                };
+              } else {
+                // 両方ともanswered: falseの場合は、現在のチャンネルのスケジュールIDを優先する
+                if (normalizedCurrentScheduleId && scheduleKey === normalizedCurrentScheduleId) {
+                  allStatus[uidKey] = status;
+                } else {
+                  // 既存のステータスを保持
+                  allStatus[uidKey] = existing;
+                }
+              }
+            } else {
+              allStatus[uidKey] = status;
+            }
             if (uidKey === targetUid) {
               foundTargetUid = true;
               console.log(`[startQuestionStatusStream] Found target UID ${targetUid} in schedule ${scheduleKey}:`, {
                 status,
                 scheduleKey,
-                uidKey
+                uidKey,
+                normalizedCurrentScheduleId,
+                isCurrentSchedule: scheduleKey === normalizedCurrentScheduleId
               });
             }
           }
