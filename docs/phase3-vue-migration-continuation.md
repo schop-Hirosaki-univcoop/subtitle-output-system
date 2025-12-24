@@ -27,6 +27,7 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - 質問カード以外の部分（辞書、ピックアップ、ログ、サイドテロップなど）
 
    **構造**: Manager パターンが採用されている
+
    - `AuthManager`: 認証管理
    - `PresenceManager`: プレゼンス管理
    - `ContextManager`: コンテキスト管理
@@ -40,6 +41,7 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - 参加者管理、印刷機能、GL 管理など
 
    **構造**: Manager パターンが広く採用されている（20 個以上の Manager）
+
    - `AuthManager`: 認証管理
    - `ParticipantManager`: 参加者管理
    - `ScheduleManager`: 日程管理
@@ -94,6 +96,7 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 **対象**: `EventAdminApp`の主要機能
 
 **構造**: Manager パターンが採用されている
+
 - `EventAuthManager`: 認証管理
 - `EventStateManager`: 状態管理
 - `EventNavigationManager`: 画面遷移制御
@@ -102,44 +105,57 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 - `DisplayLockManager`: ディスプレイロック機能
 - `ToolCoordinator`: 埋め込みツールの同期管理
 
-**パネル一覧**:
+**パネル一覧**（ショートカットキー 1-9 で切り替え可能）:
 
-- **イベント一覧** (`events/panels/event-panel.js`)
+1. **イベント管理パネル** (`events/panels/event-panel.js`) - ショートカットキー: `1`
 
-  - イベントの追加・編集・削除
-  - イベント選択・一括操作
+   - イベントの追加・編集・削除
+   - イベント選択・一括操作
 
-- **日程一覧** (`events/panels/schedule-panel.js`)
+2. **日程管理パネル** (`events/panels/schedule-panel.js`) - ショートカットキー: `2`
 
-  - 日程の追加・編集・削除
-  - 日程選択・一括操作
+   - 日程の追加・編集・削除
+   - 日程選択・一括操作
 
-- **参加者リスト** (`events/panels/participants-panel.js`)
-  - 参加者情報の表示
-  - 埋め込みツールとの連携
+3. **参加者リスト管理パネル** (`events/panels/participants-panel.js`) - ショートカットキー: `3`
 
-- **GL リスト管理** (`events/panels/gl-panel.js`)
-  - GL 応募フォームの設定
-  - 応募者の学部学科・シフト可否の確認
-  - 班割りステータスの更新
+   - 参加者情報の表示
+   - 埋め込みツールとの連携
 
-- **学部・学科設定** (`events/panels/gl-faculties-panel.js`)
-  - GL 応募フォームで共通利用する学部・学科の階層構造の編集
+4. **GL リスト管理パネル** (`events/panels/gl-panel.js`) - ショートカットキー: `4`
 
-- **テロップ操作パネル** (`events/panels/operator-panel.js`)
-  - 質問の選択・送出（埋め込みツール）
+   - GL 応募フォームの設定
+   - 応募者の学部学科・シフト可否の確認
+   - 班割りステータスの更新
 
-- **ルビ辞書管理** (`events/panels/dictionary-panel.js` - 埋め込みツール)
-  - 登録語句の追加・更新
+5. **学部・学科管理パネル** (`events/panels/gl-faculties-panel.js`) - ショートカットキー: `5`
 
-- **Pick Up Question 管理** (`events/panels/pickup-panel.js` - 埋め込みツール)
-  - Pick Up Question の候補を追加・編集
+   - GL 応募フォームで共通利用する学部・学科の階層構造の編集
 
-- **操作ログ** (`events/panels/logs-panel.js` - 埋め込みツール)
-  - 直近の操作履歴の確認
+6. **テロップ操作パネル** (`events/panels/operator-panel.js`) - ショートカットキー: `6`
 
-- **チャット機能** (`events/panels/chat-panel.js`)
-  - 管理チャットの送受信（パネルではなく独立した機能）
+   - 質問の選択・送出（埋め込みツール）
+
+7. **ルビ辞書管理パネル** (`events/panels/dictionary-panel.js` - 埋め込みツール) - ショートカットキー: `7`
+
+   - 登録語句の追加・更新
+
+8. **Pick Up Question 管理パネル** (`events/panels/pickup-panel.js` - 埋め込みツール) - ショートカットキー: `8`
+
+   - Pick Up Question の候補を追加・編集
+
+9. **操作ログパネル** (`events/panels/logs-panel.js` - 埋め込みツール) - ショートカットキー: `9`
+
+   - 直近の操作履歴の確認
+
+**その他の機能**（パネル切り替えの対象外）:
+
+- **オペレーターチャットパネル** (`events/panels/chat-panel.js`)
+  - 管理チャットの送受信（常時表示される独立した機能）
+
+- **右サイドテロップ操作パネル** (`operator/panels/side-telop-panel.js` - 埋め込みツール)
+  - サイドテロップの管理（追加・編集・削除・同期）
+  - `operator.html`に埋め込まれているが、`index.html`からもアクセス可能
 
 **移行方法**:
 
@@ -161,15 +177,18 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
   - 参加者の移動（日程間の移動）
 
 - **印刷機能**
+
   - 印刷プレビュー
   - 印刷設定
   - 参加者リスト・スタッフリストの印刷
 
 - **GL 管理**
+
   - GL 応募者の管理
   - GL リストの表示・編集
 
 - **イベント・日程管理**
+
   - イベントの追加・編集・削除
   - 日程の追加・編集・削除
 
@@ -245,6 +264,7 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - 既存の`schedule-panel.js`（`SchedulePanelManager`）と統合
 
 3. **参加者リスト**
+
    - `ParticipantList.vue`コンポーネントを作成
    - 既存の`participants-panel.js`（`ParticipantToolManager`）と統合
 
