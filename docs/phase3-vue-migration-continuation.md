@@ -381,6 +381,8 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 ### 2. 状態管理
 
 - **Composables**: 共通の状態管理ロジックは Composable として作成
+  - 既存の`useOperatorApp.js`を参考に、必要に応じて追加の Composable を作成
+  - `EventAdminApp`や`QuestionAdminApp`へのアクセスを提供する Composable の作成を検討
 - **既存の Manager パターン**: Manager パターンとの統合を維持
 - **Firebase リスナー**: Firebase のリアルタイム更新を Vue のリアクティブシステムと統合
 
