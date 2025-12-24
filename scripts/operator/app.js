@@ -1858,10 +1858,6 @@ export class OperatorApp {
       const allStatus = {};
       const questionsByUid = this.state.questionsByUid instanceof Map ? this.state.questionsByUid : new Map();
       
-      // デバッグログ: 対象UIDが含まれているか確認
-      const targetUid = "7c95bb08-7885-4a01-8e18-0396f382e6a8"; // テスト用UID
-      let foundTargetUid = false;
-      
       // 現在のチャンネルのスケジュールIDを取得（PUQのステータス選択に使用）
       const { scheduleId: currentScheduleId } = this.getActiveChannel() || {};
       const normalizedCurrentScheduleId = currentScheduleId ? normalizeScheduleId(currentScheduleId) : "";
@@ -1901,34 +1897,9 @@ export class OperatorApp {
             } else {
               allStatus[uidKey] = status;
             }
-            if (uidKey === targetUid) {
-              foundTargetUid = true;
-              console.log(`[startQuestionStatusStream] Found target UID ${targetUid} in schedule ${scheduleKey}:`, {
-                status,
-                scheduleKey,
-                uidKey,
-                normalizedCurrentScheduleId,
-                isCurrentSchedule: scheduleKey === normalizedCurrentScheduleId
-              });
-            }
           }
         });
       });
-      
-      // デバッグログ: 対象UIDが見つからなかった場合
-      if (!foundTargetUid) {
-        console.log(`[startQuestionStatusStream] Target UID ${targetUid} not found in snapshot:`, {
-          scheduleKeys: Object.keys(value),
-          allStatusKeys: Object.keys(allStatus)
-        });
-      } else {
-        // 対象UIDが見つかった場合、allStatusの内容を確認
-        console.log(`[startQuestionStatusStream] Target UID ${targetUid} found in allStatus:`, {
-          allStatusValue: allStatus[targetUid],
-          allStatusKeys: Object.keys(allStatus),
-          allStatusCount: Object.keys(allStatus).length
-        });
-      }
       
       // 全てのstatusを適用
       this.applyQuestionStatusSnapshot(allStatus);
@@ -1988,21 +1959,6 @@ export class OperatorApp {
     const branch = value && typeof value === "object" ? value : {};
     // 既存のquestionStatusByUidを取得（マージするため）
     const current = this.state.questionStatusByUid instanceof Map ? this.state.questionStatusByUid : new Map();
-    
-    // デバッグログ: 処理対象のUIDとansweredフラグを確認
-    const targetUid = "7c95bb08-7885-4a01-8e18-0396f382e6a8"; // テスト用UID
-    const hasTargetUid = Object.keys(branch).some((uidKey) => {
-      const record = branch[uidKey];
-      if (!record || typeof record !== "object") return false;
-      const resolvedUid = String(record.uid ?? uidKey ?? "").trim();
-      return resolvedUid === targetUid;
-    });
-    if (hasTargetUid) {
-      console.log(`[applyQuestionStatusSnapshot] Processing target UID ${targetUid}:`, {
-        branchKeys: Object.keys(branch),
-        branchValue: branch[targetUid] || Object.entries(branch).find(([k, v]) => String(v?.uid ?? k ?? "").trim() === targetUid)?.[1]
-      });
-    }
     
     Object.entries(branch).forEach(([uidKey, record]) => {
       if (!record || typeof record !== "object") {

@@ -1611,15 +1611,6 @@ export async function clearNowShowing(app) {
       }
 
       if (prevUid) {
-        // デバッグログ: isPickupの判定結果を確認
-        console.log(`[clearNowShowing] prevUid found:`, {
-          prevUid,
-          isPickup,
-          previousNowShowingPickup: previousNowShowing.pickup,
-          prevItemFound: !!prevItem,
-          prevItemPickup: prevItem ? prevItem.ピックアップ : null
-        });
-        
         // pickupquestionの場合は、prevItemからscheduleIdを取得するか、現在のscheduleIdを使用
         // prevItemが見つかった場合は、そのscheduleIdを優先
         let pickupScheduleId = scheduleId ? String(scheduleId).trim() : "";
@@ -1691,19 +1682,6 @@ export async function clearNowShowing(app) {
         const group = updatesByPath.get(pathKey);
         group.updates[`${prevUid}/answered`] = true;
         group.updates[`${prevUid}/updatedAt`] = serverTimestamp();
-        
-        // デバッグログ: PUQの場合にfinalScheduleIdとeffectiveScheduleIdを確認
-        if (isPickup) {
-          console.log(`[clearNowShowing] PUQ answered flag update:`, {
-            prevUid,
-            finalEventId,
-            finalScheduleId,
-            effectiveScheduleId,
-            scheduleId,
-            pickupScheduleId,
-            pathKey
-          });
-        }
 
         // PUQの場合はscheduleIdが必須
         // バックエンド側でpickup questionと判定される可能性があるため、
