@@ -140,7 +140,7 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 3. **参加者リスト管理パネル** (`events/panels/participants-panel.js`) - ショートカットキー: `3`
 
    - 参加者情報の表示
-   - 埋め込みツールとの連携
+   - `QuestionAdminApp`を埋め込みツールとして使用（`ParticipantToolManager`が管理）
 
 4. **GL リスト管理パネル** (`events/panels/gl-panel.js`) - ショートカットキー: `4`
 
