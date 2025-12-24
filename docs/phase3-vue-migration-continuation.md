@@ -58,10 +58,10 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - `UIManager`: UI 管理
    - `ButtonStateManager`: ボタン状態管理
    - `ConfirmDialogManager`: 確認ダイアログ管理
-   - `ParticipantUIManager`: 参加者UI管理
+   - `ParticipantUIManager`: 参加者 UI 管理
    - `ParticipantContextManager`: 参加者コンテキスト管理
    - `ParticipantActionManager`: 参加者アクション管理
-   - `TokenApiManager`: トークンAPI管理
+   - `TokenApiManager`: トークン API 管理
    - `ShareClipboardManager`: クリップボード共有管理
    - `ScheduleUtilityManager`: 日程ユーティリティ管理
    - `EventHandlersManager`: イベントハンドラー管理
@@ -122,7 +122,7 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 - `SchedulePanelManager`: 日程管理パネル管理
 - `OperatorToolManager`: テロップ操作パネル管理（`ToolCoordinator`内）
 - `ParticipantToolManager`: 参加者リストパネル管理（`ToolCoordinator`内）
-- `GlToolManager`: GLリスト管理パネル管理（`ToolCoordinator`内）
+- `GlToolManager`: GL リスト管理パネル管理（`ToolCoordinator`内）
 - `GlFacultyAdminManager`: 学部・学科設定パネル管理（`ToolCoordinator`内）
 
 **パネル一覧**（ショートカットキー 1-9 で切り替え可能）:
@@ -222,7 +222,7 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 **移行方法**:
 
 - 各機能を Vue コンポーネントに移行
-- 既存の Manager パターンとの統合（20 個以上の Manager が存在）
+- 既存の Manager パターンとの統合（22 個の Manager が存在）
 
 ### 優先度: 低
 
