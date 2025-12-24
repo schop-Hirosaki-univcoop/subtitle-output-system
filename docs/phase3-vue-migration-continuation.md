@@ -26,11 +26,31 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - オペレーター画面（`operator.html`）
    - 質問カード以外の部分（辞書、ピックアップ、ログ、サイドテロップなど）
 
+   **構造**: Manager パターンが採用されている
+   - `AuthManager`: 認証管理
+   - `PresenceManager`: プレゼンス管理
+   - `ContextManager`: コンテキスト管理
+   - `ChannelManager`: チャンネル管理
+   - `UIRenderer`: UI 描画
+
 3. **`QuestionAdminApp`** (`scripts/question-admin/app.js`)
 
    - 約 2,200 行
    - 質問管理機能（`operator.html`に埋め込まれている）
-   - 参加者管理、質問管理、印刷機能など
+   - 参加者管理、印刷機能、GL 管理など
+
+   **構造**: Manager パターンが広く採用されている（20 個以上の Manager）
+   - `AuthManager`: 認証管理
+   - `ParticipantManager`: 参加者管理
+   - `ScheduleManager`: 日程管理
+   - `EventManager`: イベント管理
+   - `PrintManager`: 印刷機能
+   - `CsvManager`: CSV インポート・エクスポート
+   - `MailManager`: メール送信
+   - `GlManager`: GL 管理
+   - `RelocationManager`: 参加者の移動管理
+   - `HostIntegrationManager`: ホスト統合管理
+   - その他多数の Manager（UI 管理、状態管理、イベントハンドラーなど）
 
 4. **`QuestionFormApp`** (`scripts/question-form/app.js`)
    - 約 540 行
@@ -73,6 +93,17 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
 **対象**: `EventAdminApp`の主要機能
 
+**構造**: Manager パターンが採用されている
+- `EventAuthManager`: 認証管理
+- `EventStateManager`: 状態管理
+- `EventNavigationManager`: 画面遷移制御
+- `EventUIRenderer`: UI 描画
+- `EventFirebaseManager`: Firebase 操作
+- `DisplayLockManager`: ディスプレイロック機能
+- `ToolCoordinator`: 埋め込みツールの同期管理
+
+**パネル一覧**:
+
 - **イベント一覧** (`events/panels/event-panel.js`)
 
   - イベントの追加・編集・削除
@@ -87,10 +118,34 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
   - 参加者情報の表示
   - 埋め込みツールとの連携
 
+- **GL リスト管理** (`events/panels/gl-panel.js`)
+  - GL 応募フォームの設定
+  - 応募者の学部学科・シフト可否の確認
+  - 班割りステータスの更新
+
+- **学部・学科設定** (`events/panels/gl-faculties-panel.js`)
+  - GL 応募フォームで共通利用する学部・学科の階層構造の編集
+
+- **テロップ操作パネル** (`events/panels/operator-panel.js`)
+  - 質問の選択・送出（埋め込みツール）
+
+- **ルビ辞書管理** (`events/panels/dictionary-panel.js` - 埋め込みツール)
+  - 登録語句の追加・更新
+
+- **Pick Up Question 管理** (`events/panels/pickup-panel.js` - 埋め込みツール)
+  - Pick Up Question の候補を追加・編集
+
+- **操作ログ** (`events/panels/logs-panel.js` - 埋め込みツール)
+  - 直近の操作履歴の確認
+
+- **チャット機能** (`events/panels/chat-panel.js`)
+  - 管理チャットの送受信（パネルではなく独立した機能）
+
 **移行方法**:
 
 - 各パネルを Vue コンポーネントに移行
 - Manager パターンとの統合を維持
+- `ToolCoordinator`との連携を維持
 
 ### 優先度: 中
 
@@ -103,20 +158,28 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
   - 参加者リストの表示・編集
   - CSV インポート・エクスポート
   - 班番号の割り当て
-
-- **質問管理**
-
-  - 質問リストの表示
-  - 質問の編集・削除
+  - 参加者の移動（日程間の移動）
 
 - **印刷機能**
   - 印刷プレビュー
   - 印刷設定
+  - 参加者リスト・スタッフリストの印刷
+
+- **GL 管理**
+  - GL 応募者の管理
+  - GL リストの表示・編集
+
+- **イベント・日程管理**
+  - イベントの追加・編集・削除
+  - 日程の追加・編集・削除
+
+- **メール送信**
+  - 参加者へのメール送信
 
 **移行方法**:
 
 - 各機能を Vue コンポーネントに移行
-- 既存の Manager パターンとの統合
+- 既存の Manager パターンとの統合（20 個以上の Manager が存在）
 
 ### 優先度: 低
 
@@ -174,32 +237,60 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 1. **イベント一覧**
 
    - `EventList.vue`コンポーネントを作成
-   - 既存の`event-panel.js`と統合
+   - 既存の`event-panel.js`（`EventPanelManager`）と統合
 
 2. **日程一覧**
 
    - `ScheduleList.vue`コンポーネントを作成
-   - 既存の`schedule-panel.js`と統合
+   - 既存の`schedule-panel.js`（`SchedulePanelManager`）と統合
 
 3. **参加者リスト**
    - `ParticipantList.vue`コンポーネントを作成
-   - 既存の`participants-panel.js`と統合
+   - 既存の`participants-panel.js`（`ParticipantToolManager`）と統合
+
+4. **GL リスト管理**（優先度: 中）
+
+   - `GlList.vue`コンポーネントを作成
+   - 既存の`gl-panel.js`（`GlToolManager`）と統合
+
+5. **学部・学科設定**（優先度: 中）
+
+   - `GlFaculties.vue`コンポーネントを作成
+   - 既存の`gl-faculties-panel.js`（`GlFacultyAdminManager`）と統合
+
+6. **チャット機能**（優先度: 低）
+
+   - `EventChat.vue`コンポーネントを作成
+   - 既存の`chat-panel.js`（`EventChat`）と統合
+
+**注意**: テロップ操作パネル、ルビ辞書管理、Pick Up Question 管理、操作ログは埋め込みツールとして`operator.html`に統合されているため、`OperatorApp`の移行と同時に検討する
 
 ### Phase 3.3: 質問管理画面（優先度: 中）
 
 1. **参加者管理**
 
    - `ParticipantManagement.vue`コンポーネントを作成
-   - 既存の Manager パターンと統合
+   - 既存の`ParticipantManager`と統合
 
-2. **質問管理**
+2. **印刷機能**
 
-   - `QuestionManagement.vue`コンポーネントを作成
-   - 既存の Manager パターンと統合
-
-3. **印刷機能**
    - `PrintPreview.vue`コンポーネントを作成
    - 既存の`PrintManager`と統合
+
+3. **GL 管理**（優先度: 中）
+
+   - `GlManagement.vue`コンポーネントを作成
+   - 既存の`GlManager`と統合
+
+4. **イベント・日程管理**（優先度: 低）
+
+   - `EventScheduleManagement.vue`コンポーネントを作成
+   - 既存の`EventManager`、`ScheduleManager`と統合
+
+5. **メール送信**（優先度: 低）
+
+   - `MailSender.vue`コンポーネントを作成
+   - 既存の`MailManager`と統合
 
 ## 技術的な考慮事項
 
