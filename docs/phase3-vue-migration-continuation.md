@@ -42,7 +42,7 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - 質問管理機能（`operator.html`に埋め込まれている）
    - 参加者管理、印刷機能、GL 管理など
 
-   **構造**: Manager パターンが広く採用されている（20 個以上の Manager）
+   **構造**: Manager パターンが広く採用されている（22 個の Manager）
 
    - `AuthManager`: 認証管理
    - `ParticipantManager`: 参加者管理
@@ -54,7 +54,18 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - `GlManager`: GL 管理
    - `RelocationManager`: 参加者の移動管理
    - `HostIntegrationManager`: ホスト統合管理
-   - その他多数の Manager（UI 管理、状態管理、イベントハンドラーなど）
+   - `StateManager`: 状態管理
+   - `UIManager`: UI 管理
+   - `ButtonStateManager`: ボタン状態管理
+   - `ConfirmDialogManager`: 確認ダイアログ管理
+   - `ParticipantUIManager`: 参加者UI管理
+   - `ParticipantContextManager`: 参加者コンテキスト管理
+   - `ParticipantActionManager`: 参加者アクション管理
+   - `TokenApiManager`: トークンAPI管理
+   - `ShareClipboardManager`: クリップボード共有管理
+   - `ScheduleUtilityManager`: 日程ユーティリティ管理
+   - `EventHandlersManager`: イベントハンドラー管理
+   - `InitManager`: 初期化管理
 
 4. **`QuestionFormApp`** (`scripts/question-form/app.js`)
    - 約 540 行
@@ -107,6 +118,12 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 - `EventFirebaseManager`: Firebase 操作
 - `DisplayLockManager`: ディスプレイロック機能
 - `ToolCoordinator`: 埋め込みツールの同期管理
+- `EventPanelManager`: イベント管理パネル管理
+- `SchedulePanelManager`: 日程管理パネル管理
+- `OperatorToolManager`: テロップ操作パネル管理（`ToolCoordinator`内）
+- `ParticipantToolManager`: 参加者リストパネル管理（`ToolCoordinator`内）
+- `GlToolManager`: GLリスト管理パネル管理（`ToolCoordinator`内）
+- `GlFacultyAdminManager`: 学部・学科設定パネル管理（`ToolCoordinator`内）
 
 **パネル一覧**（ショートカットキー 1-9 で切り替え可能）:
 
@@ -139,17 +156,20 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
    - 質問の選択・送出（埋め込みツール）
 
-7. **ルビ辞書管理パネル** (`events/panels/dictionary-panel.js` - 埋め込みツール) - ショートカットキー: `7`
+7. **ルビ辞書管理パネル** (`operator/panels/dictionary-panel.js` - 埋め込みツール) - ショートカットキー: `7`
 
    - 登録語句の追加・更新
+   - `OperatorApp`が管理（`EventAdminApp`の埋め込みツールとして使用）
 
-8. **Pick Up Question 管理パネル** (`events/panels/pickup-panel.js` - 埋め込みツール) - ショートカットキー: `8`
+8. **Pick Up Question 管理パネル** (`operator/panels/pickup-panel.js` - 埋め込みツール) - ショートカットキー: `8`
 
    - Pick Up Question の候補を追加・編集
+   - `OperatorApp`が管理（`EventAdminApp`の埋め込みツールとして使用）
 
-9. **操作ログパネル** (`events/panels/logs-panel.js` - 埋め込みツール) - ショートカットキー: `9`
+9. **操作ログパネル** (`operator/panels/logs-panel.js` - 埋め込みツール) - ショートカットキー: `9`
 
    - 直近の操作履歴の確認
+   - `OperatorApp`が管理（`EventAdminApp`の埋め込みツールとして使用）
 
 **その他の機能**（パネル切り替えの対象外）:
 
