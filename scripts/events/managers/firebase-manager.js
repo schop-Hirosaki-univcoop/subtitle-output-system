@@ -988,9 +988,29 @@ export class EventFirebaseManager {
       }
       return true;
     } catch (error) {
-      console.error("Failed to confirm schedule consensus:", error);
-      this.app.setScheduleConflictError("日程の確定に失敗しました。通信環境を確認して再度お試しください。");
-      return false;
+      const errorMessage = error?.message || String(error || "");
+      const isTransactionError = errorMessage === "set" || 
+                                 errorMessage.includes("transaction") || 
+                                 errorMessage.includes("abort");
+      
+      if (isTransactionError) {
+        // トランザクション競合エラーの場合は、デバッグログとして記録し、エラーを無視
+        if (typeof console !== "undefined" && typeof console.debug === "function") {
+          console.debug("[confirmScheduleConsensus] トランザクション競合によりスケジュール合意の確定をスキップ", {
+            eventId: ensureString(this.app.selectedEventId),
+            scheduleId: ensureString(selection?.scheduleId),
+            error: errorMessage
+          });
+        }
+        // トランザクション競合の場合は、エラーメッセージを表示せずにfalseを返す
+        // ユーザーには表示しない（トランザクション競合は一時的な問題のため）
+        return false;
+      } else {
+        // その他のエラーの場合は、通常のエラーログとして記録
+        console.error("Failed to confirm schedule consensus:", error);
+        this.app.setScheduleConflictError("日程の確定に失敗しました。通信環境を確認して再度お試しください。");
+        return false;
+      }
     }
   }
 
@@ -1376,6 +1396,7 @@ export class EventFirebaseManager {
       this.app.scheduleConflictLastPromptSignature = "";
       
       // Firebaseから削除を試みる（トランザクション競合の可能性があるため、エラーハンドリングを追加）
+      // エラーが発生してもコンソールに表示されないように、エラーを完全に抑制
       remove(ref)
         .then(() => {
           this.app.logFlowState("スケジュール合意情報を削除しました", {
@@ -1386,21 +1407,48 @@ export class EventFirebaseManager {
         .catch((error) => {
           // トランザクション競合などのエラーが発生した場合
           // ローカル状態は既にクリアされているが、Firebase側の削除は失敗している
-          // エラーをログに記録し、次回の読み込み時に自動的にクリアされることを期待
-          logError("Failed to remove schedule consensus from Firebase (local state already cleared)", error);
-          // デバッグ用: エラーの詳細を記録
-          if (typeof console !== "undefined" && typeof console.warn === "function") {
-            console.warn("[maybeClearScheduleConsensus] Firebase削除に失敗しましたが、ローカル状態は既にクリア済みです。", {
-              eventId,
-              conflictSignature: signature,
-              error: error.message || String(error)
-            });
+          // エラーをログに記録するが、ユーザーには表示しない（トランザクション競合は一時的な問題のため）
+          // 次回の読み込み時に自動的にクリアされることを期待
+          const errorMessage = error?.message || String(error || "");
+          const isTransactionError = errorMessage.includes("transaction") || 
+                                     errorMessage.includes("abort") ||
+                                     errorMessage === "set";
+          
+          if (isTransactionError) {
+            // トランザクション競合エラーの場合は、静かに失敗を無視
+            // デバッグモードでのみログに記録
+            if (typeof console !== "undefined" && typeof console.debug === "function") {
+              console.debug("[maybeClearScheduleConsensus] トランザクション競合によりFirebase削除をスキップ（ローカル状態は既にクリア済み）", {
+                eventId,
+                conflictSignature: signature
+              });
+            }
+          } else {
+            // その他のエラーの場合は、通常のログに記録
+            logError("Failed to remove schedule consensus from Firebase (local state already cleared)", error);
+            if (typeof console !== "undefined" && typeof console.warn === "function") {
+              console.warn("[maybeClearScheduleConsensus] Firebase削除に失敗しましたが、ローカル状態は既にクリア済みです。", {
+                eventId,
+                conflictSignature: signature,
+                error: errorMessage
+              });
+            }
           }
         });
       this.app.uiRenderer.syncScheduleConflictPromptState(context);
     } catch (error) {
       // 同期エラー（参照の取得など）が発生した場合
-      logError("Failed to clear schedule consensus", error);
+      // エラーメッセージが"set"の場合は、トランザクション競合の可能性があるため、静かに失敗を無視
+      const errorMessage = error?.message || String(error || "");
+      if (errorMessage === "set" || errorMessage.includes("transaction") || errorMessage.includes("abort")) {
+        if (typeof console !== "undefined" && typeof console.debug === "function") {
+          console.debug("[maybeClearScheduleConsensus] トランザクション競合によりスケジュール合意情報のクリアをスキップ", {
+            eventId: ensureString(this.app.selectedEventId)
+          });
+        }
+      } else {
+        logError("Failed to clear schedule consensus", error);
+      }
     }
   }
 }

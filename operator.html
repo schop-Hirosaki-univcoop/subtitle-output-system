@@ -1108,9 +1108,9 @@
                       </div>
                       <div id="op-action-panel" class="action-panel" hidden>
                         <button id="op-btn-display" class="btn btn-primary" data-mode="single" disabled>送出</button>
+                        <button id="op-btn-clear" class="btn btn-danger" data-mode="any">送出クリア</button>
                         <button id="op-btn-unanswer" class="btn" data-mode="single" disabled>未回答へ戻す</button>
                         <button id="op-btn-edit" class="btn" data-mode="single" disabled>原稿修正</button>
-                        <button id="op-btn-clear" class="btn btn-danger" data-mode="any">送出クリア</button>
                         <span id="op-selected-info">行を選択してください</span>
                         <div class="action-panel-right">
                           <button id="op-btn-batch-unanswer" class="btn btn-ghost" data-mode="multi">選択項目を未回答へ戻す</button>
@@ -2176,6 +2176,10 @@
 
   <telop-footer year="2025"></telop-footer>
 
+  <!-- 既存のスクリプト（そのまま維持） -->
   <script type="module" src="./scripts/events/index.js"></script>
+
+  <!-- Vue.js アプリケーションのエントリーポイント -->
+  <script type="module" src="./src/main.js"></script>
 </body>
 </html>

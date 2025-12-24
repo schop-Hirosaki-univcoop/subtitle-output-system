@@ -14,6 +14,9 @@ const loadingUids = new Set();
 // ローディング開始時の状態を記録（更新前の状態を保持）
 const loadingUidStates = new Map();
 
+// Vueコンポーネントからアクセスできるようにエクスポート
+export { loadingUids, loadingUidStates };
+
 function isPickUpQuestion(record) {
   if (!record || typeof record !== "object") {
     return false;
@@ -189,6 +192,10 @@ export function resolveNormalScheduleKey(app) {
 
 export function renderQuestions(app) {
   if (!app.dom.cardsContainer) return;
+  // Vueコンポーネントが有効な場合は、DOM要素を追加しない（Vueがレンダリングを担当するため）
+  if (window.__vueExperimentEnabled) {
+    return;
+  }
   const currentTab = app.state.currentSubTab;
   const viewingPuqTab = currentTab === "puq";
   const viewingNormalTab = currentTab === "normal";
@@ -297,7 +304,10 @@ export function renderQuestions(app) {
     }
   });
 
-  app.dom.cardsContainer.innerHTML = "";
+  // Vueコンポーネントが有効な場合は、innerHTMLをクリアしない（Vueの仮想DOMと不整合になるため）
+  if (!window.__vueExperimentEnabled) {
+    app.dom.cardsContainer.innerHTML = "";
+  }
   list.forEach((item) => {
     const card = document.createElement("article");
     card.className = "q-card";
@@ -907,45 +917,93 @@ export async function handleDisplay(app) {
       }
     }
     
+    // 通常質問とpickupquestionをイベントID/スケジュールIDごとにグループ化
+    const normalUpdatesByPath = new Map();
+    const pickupUpdatesByPath = new Map();
+    
     // previousUidまたはprevのステータスを更新
     if (previousUid && previousUidItem) {
       if (previousUidIsPickup) {
-        pickupUpdates[`${previousUid}/selecting`] = false;
-        pickupUpdates[`${previousUid}/answered`] = true;
-        pickupUpdates[`${previousUid}/updatedAt`] = serverTimestamp();
+        // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
+        const pathKey = getQuestionStatusPath(eventId, true, scheduleId);
+        if (!pickupUpdatesByPath.has(pathKey)) {
+          pickupUpdatesByPath.set(pathKey, { ref: currentStatusRef, updates: {} });
+        }
+        pickupUpdatesByPath.get(pathKey).updates[`${previousUid}/selecting`] = false;
+        pickupUpdatesByPath.get(pathKey).updates[`${previousUid}/answered`] = true;
+        pickupUpdatesByPath.get(pathKey).updates[`${previousUid}/updatedAt`] = serverTimestamp();
       } else {
-        normalUpdates[`${previousUid}/selecting`] = false;
-        normalUpdates[`${previousUid}/answered`] = true;
-        normalUpdates[`${previousUid}/updatedAt`] = serverTimestamp();
+        // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+        const questionEventId = String(previousUidItem["イベントID"] ?? "").trim() || eventId;
+        const questionScheduleId = String(previousUidItem["日程ID"] ?? "").trim() || scheduleId;
+        const pathKey = getQuestionStatusPath(questionEventId, false, questionScheduleId);
+        if (!normalUpdatesByPath.has(pathKey)) {
+          normalUpdatesByPath.set(pathKey, { ref: getQuestionStatusRef(questionEventId, false, questionScheduleId), updates: {} });
+        }
+        normalUpdatesByPath.get(pathKey).updates[`${previousUid}/selecting`] = false;
+        normalUpdatesByPath.get(pathKey).updates[`${previousUid}/answered`] = true;
+        normalUpdatesByPath.get(pathKey).updates[`${previousUid}/updatedAt`] = serverTimestamp();
       }
     } else if (prev) {
       if (prevIsPickup) {
-        pickupUpdates[`${prev.UID}/selecting`] = false;
-        pickupUpdates[`${prev.UID}/answered`] = true;
-        pickupUpdates[`${prev.UID}/updatedAt`] = serverTimestamp();
+        // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
+        const pathKey = getQuestionStatusPath(eventId, true, scheduleId);
+        if (!pickupUpdatesByPath.has(pathKey)) {
+          pickupUpdatesByPath.set(pathKey, { ref: currentStatusRef, updates: {} });
+        }
+        pickupUpdatesByPath.get(pathKey).updates[`${prev.UID}/selecting`] = false;
+        pickupUpdatesByPath.get(pathKey).updates[`${prev.UID}/answered`] = true;
+        pickupUpdatesByPath.get(pathKey).updates[`${prev.UID}/updatedAt`] = serverTimestamp();
       } else {
-        normalUpdates[`${prev.UID}/selecting`] = false;
-        normalUpdates[`${prev.UID}/answered`] = true;
-        normalUpdates[`${prev.UID}/updatedAt`] = serverTimestamp();
+        // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+        const questionEventId = String(prev["イベントID"] ?? "").trim() || eventId;
+        const questionScheduleId = String(prev["日程ID"] ?? "").trim() || scheduleId;
+        const pathKey = getQuestionStatusPath(questionEventId, false, questionScheduleId);
+        if (!normalUpdatesByPath.has(pathKey)) {
+          normalUpdatesByPath.set(pathKey, { ref: getQuestionStatusRef(questionEventId, false, questionScheduleId), updates: {} });
+        }
+        normalUpdatesByPath.get(pathKey).updates[`${prev.UID}/selecting`] = false;
+        normalUpdatesByPath.get(pathKey).updates[`${prev.UID}/answered`] = true;
+        normalUpdatesByPath.get(pathKey).updates[`${prev.UID}/updatedAt`] = serverTimestamp();
       }
     }
     
     // 現在の質問のステータスを更新
     if (isPickup) {
-      pickupUpdates[`${app.state.selectedRowData.uid}/selecting`] = true;
-      pickupUpdates[`${app.state.selectedRowData.uid}/answered`] = false;
-      pickupUpdates[`${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
+      // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
+      const pathKey = getQuestionStatusPath(eventId, true, scheduleId);
+      if (!pickupUpdatesByPath.has(pathKey)) {
+        pickupUpdatesByPath.set(pathKey, { ref: currentStatusRef, updates: {} });
+      }
+      pickupUpdatesByPath.get(pathKey).updates[`${app.state.selectedRowData.uid}/selecting`] = true;
+      pickupUpdatesByPath.get(pathKey).updates[`${app.state.selectedRowData.uid}/answered`] = false;
+      pickupUpdatesByPath.get(pathKey).updates[`${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
     } else {
-      normalUpdates[`${app.state.selectedRowData.uid}/selecting`] = true;
-      normalUpdates[`${app.state.selectedRowData.uid}/answered`] = false;
-      normalUpdates[`${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
+      // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+      const currentItem = app.state.allQuestions.find((q) => String(q.UID) === app.state.selectedRowData.uid);
+      const questionEventId = currentItem ? String(currentItem["イベントID"] ?? "").trim() || eventId : eventId;
+      const questionScheduleId = currentItem ? String(currentItem["日程ID"] ?? "").trim() || scheduleId : scheduleId;
+      const pathKey = getQuestionStatusPath(questionEventId, false, questionScheduleId);
+      if (!normalUpdatesByPath.has(pathKey)) {
+        normalUpdatesByPath.set(pathKey, { ref: getQuestionStatusRef(questionEventId, false, questionScheduleId), updates: {} });
+      }
+      normalUpdatesByPath.get(pathKey).updates[`${app.state.selectedRowData.uid}/selecting`] = true;
+      normalUpdatesByPath.get(pathKey).updates[`${app.state.selectedRowData.uid}/answered`] = false;
+      normalUpdatesByPath.get(pathKey).updates[`${app.state.selectedRowData.uid}/updatedAt`] = serverTimestamp();
     }
     
     // 通常質問とpickupquestionをそれぞれ適切なstatusRefに更新
-    const normalStatusRef = getQuestionStatusRef(eventId, false);
-    if (Object.keys(normalUpdates).length > 0) {
-      console.log("[送出] 通常質問のquestionStatus更新用JSON:", JSON.stringify(normalUpdates, null, 2));
-      await update(normalStatusRef, normalUpdates);
+    for (const [pathKey, { ref: statusRef, updates }] of normalUpdatesByPath) {
+      if (Object.keys(updates).length > 0) {
+        console.log("[送出] 通常質問のquestionStatus更新用JSON:", JSON.stringify({ [pathKey]: updates }, null, 2));
+        await update(statusRef, updates);
+      }
+    }
+    for (const [pathKey, { ref: statusRef, updates }] of pickupUpdatesByPath) {
+      if (Object.keys(updates).length > 0) {
+        console.log("[送出] Pick Up QuestionのquestionStatus更新用JSON:", JSON.stringify({ [pathKey]: updates }, null, 2));
+        await update(statusRef, updates);
+      }
     }
     if (Object.keys(pickupUpdates).length > 0) {
       console.log("[送出] Pick Up QuestionのquestionStatus更新用JSON:", JSON.stringify(pickupUpdates, null, 2));
@@ -997,8 +1055,12 @@ export async function handleDisplay(app) {
       });
       if (sameEventQuestions.length > 0) {
         // 通常質問とpickupquestionを分けて処理
-        const normalClearingUpdates = {};
+        // 通常質問は1つの日程にのみ表示されるが、同じイベント内の通常質問は異なるスケジュールに属する可能性がある
+        // そのため、通常質問はスケジュールごとにグループ化する必要がある
+        // PUQは全日程で表示されるため、現在のチャンネルのスケジュールIDを使用
+        const normalClearingUpdatesByPath = new Map();
         const pickupClearingUpdates = {};
+        
         sameEventQuestions.forEach((q) => {
           const qUid = String(q.UID);
           const qIsPickup = q.ピックアップ === true;
@@ -1006,13 +1068,29 @@ export async function handleDisplay(app) {
             pickupClearingUpdates[`${qUid}/selecting`] = false;
             pickupClearingUpdates[`${qUid}/updatedAt`] = serverTimestamp();
           } else {
-            normalClearingUpdates[`${qUid}/selecting`] = false;
-            normalClearingUpdates[`${qUid}/updatedAt`] = serverTimestamp();
+            // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+            // 通常質問は1つの日程にのみ表示されるが、同じイベント内の通常質問は異なるスケジュールに属する可能性がある
+            const questionEventId = String(q["イベントID"] ?? "").trim() || eventId;
+            const questionScheduleId = String(q["日程ID"] ?? "").trim() || scheduleId;
+            const pathKey = getQuestionStatusPath(questionEventId, false, questionScheduleId);
+            if (!normalClearingUpdatesByPath.has(pathKey)) {
+              normalClearingUpdatesByPath.set(pathKey, { 
+                ref: getQuestionStatusRef(questionEventId, false, questionScheduleId), 
+                updates: {} 
+              });
+            }
+            normalClearingUpdatesByPath.get(pathKey).updates[`${qUid}/selecting`] = false;
+            normalClearingUpdatesByPath.get(pathKey).updates[`${qUid}/updatedAt`] = serverTimestamp();
           }
         });
-        if (Object.keys(normalClearingUpdates).length > 0) {
-          await update(normalStatusRef, normalClearingUpdates);
+        
+        // 通常質問をスケジュールごとに更新
+        for (const [pathKey, { ref: statusRef, updates }] of normalClearingUpdatesByPath) {
+          if (Object.keys(updates).length > 0) {
+            await update(statusRef, updates);
+          }
         }
+        // PUQを更新
         if (Object.keys(pickupClearingUpdates).length > 0) {
           await update(currentStatusRef, pickupClearingUpdates);
         }
@@ -1020,21 +1098,43 @@ export async function handleDisplay(app) {
     }
     // previousUidまたはprevのupdateStatus API呼び出し
     if (previousUid && previousUidItem) {
-      app.api.fireAndForgetApi({ 
-        action: "updateStatus", 
-        uid: previousUid, 
-        status: true, 
-        eventId,
-        scheduleId: previousUidIsPickup ? scheduleId : undefined
-      });
+      // PUQの場合はscheduleIdが必須（空文字列も無効）
+      const prevScheduleId = previousUidIsPickup ? (scheduleId && String(scheduleId).trim() ? String(scheduleId).trim() : undefined) : undefined;
+      if (previousUidIsPickup && !prevScheduleId) {
+        console.warn(`[handleDisplay] scheduleId is required for pickup question UID: ${previousUid}, but scheduleId is empty. Skipping API call.`, {
+          scheduleId,
+          scheduleIdTrimmed: scheduleId ? String(scheduleId).trim() : "",
+          eventId,
+          previousUidItem: previousUidItem ? { UID: previousUidItem.UID, 日程ID: previousUidItem["日程ID"] } : null
+        });
+      } else {
+        app.api.fireAndForgetApi({ 
+          action: "updateStatus", 
+          uid: previousUid, 
+          status: true, 
+          eventId,
+          scheduleId: prevScheduleId
+        });
+      }
     } else if (prev) {
-      app.api.fireAndForgetApi({ 
-        action: "updateStatus", 
-        uid: prev.UID, 
-        status: true, 
-        eventId,
-        scheduleId: prevIsPickup ? scheduleId : undefined
-      });
+      // PUQの場合はscheduleIdが必須（空文字列も無効）
+      const prevScheduleId = prevIsPickup ? (scheduleId && String(scheduleId).trim() ? String(scheduleId).trim() : undefined) : undefined;
+      if (prevIsPickup && !prevScheduleId) {
+        console.warn(`[handleDisplay] scheduleId is required for pickup question UID: ${prev.UID}, but scheduleId is empty. Skipping API call.`, {
+          scheduleId,
+          scheduleIdTrimmed: scheduleId ? String(scheduleId).trim() : "",
+          eventId,
+          prev: prev ? { UID: prev.UID, 日程ID: prev["日程ID"] } : null
+        });
+      } else {
+        app.api.fireAndForgetApi({ 
+          action: "updateStatus", 
+          uid: prev.UID, 
+          status: true, 
+          eventId,
+          scheduleId: prevScheduleId
+        });
+      }
     }
     app.state.lastDisplayedUid = app.state.selectedRowData.uid;
     app.api.logAction("DISPLAY", `RN: ${app.state.selectedRowData.name}`);
@@ -1076,8 +1176,27 @@ export async function handleUnanswer(app) {
   const currentItem = app.state.allQuestions.find((q) => String(q.UID) === uid);
   const currentAnswered = currentItem ? !!currentItem["回答済"] : false;
   const isPickup = app.state.selectedRowData.isPickup === true;
-  const eventId = String(app.state.activeEventId || "").trim();
-  const { scheduleId } = resolveNowShowingReference(app);
+  // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+  // PUQの場合は現在のチャンネルのイベントIDとスケジュールIDを使用
+  let eventId = String(app.state.activeEventId || "").trim();
+  let scheduleId = "";
+  if (isPickup) {
+    const { scheduleId: channelScheduleId } = resolveNowShowingReference(app);
+    scheduleId = channelScheduleId;
+  } else {
+    // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+    const questionEventId = currentItem ? String(currentItem["イベントID"] ?? "").trim() : "";
+    const questionScheduleId = currentItem ? String(currentItem["日程ID"] ?? "").trim() : "";
+    if (questionEventId) {
+      eventId = questionEventId;
+    }
+    if (questionScheduleId) {
+      scheduleId = questionScheduleId;
+    } else {
+      const { scheduleId: channelScheduleId } = resolveNowShowingReference(app);
+      scheduleId = channelScheduleId;
+    }
+  }
   loadingUids.add(uid);
   loadingUidStates.set(uid, {
     expectedAnswered: false, // 未回答に戻すので、最終的にfalseになることを期待
@@ -1100,18 +1219,42 @@ export async function handleUnanswer(app) {
   renderQuestions(app);
   
   try {
-    const statusRef = getQuestionStatusRef(eventId, isPickup, scheduleId);
+    // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+    // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
+    let questionEventId = eventId;
+    let questionScheduleId = scheduleId;
+    if (!isPickup) {
+      const itemEventId = String(currentItem["イベントID"] ?? "").trim();
+      const itemScheduleId = String(currentItem["日程ID"] ?? "").trim();
+      if (itemEventId) {
+        questionEventId = itemEventId;
+      }
+      if (itemScheduleId) {
+        questionScheduleId = itemScheduleId;
+      }
+    }
+    const statusRef = getQuestionStatusRef(questionEventId, isPickup, questionScheduleId);
     const unanswerPayload = { answered: false, updatedAt: serverTimestamp() };
-    const statusPath = getQuestionStatusPath(eventId, isPickup, scheduleId);
+    const statusPath = getQuestionStatusPath(questionEventId, isPickup, questionScheduleId);
     console.log("[未回答にする] questionStatus更新用JSON:", JSON.stringify({ [`${statusPath}/${uid}`]: unanswerPayload }, null, 2));
     await update(statusRef, { [`${uid}`]: unanswerPayload });
-    app.api.fireAndForgetApi({
-      action: "updateStatus",
-      uid: app.state.selectedRowData.uid,
-      status: false,
-      eventId,
-      scheduleId: isPickup ? scheduleId : undefined
-    });
+    // PUQの場合はscheduleIdが必須
+    const apiScheduleId = isPickup ? scheduleId : undefined;
+    if (isPickup && !apiScheduleId) {
+      console.warn(`[handleUnanswer] scheduleId is required for pickup question UID: ${uid}, but scheduleId is empty. Skipping API call.`, {
+        scheduleId,
+        eventId,
+        currentItem: currentItem ? { UID: currentItem.UID, 日程ID: currentItem["日程ID"] } : null
+      });
+    } else {
+      app.api.fireAndForgetApi({
+        action: "updateStatus",
+        uid: app.state.selectedRowData.uid,
+        status: false,
+        eventId,
+        scheduleId: apiScheduleId
+      });
+    }
     app.api.logAction("UNANSWER", `UID: ${uid}, RN: ${displayLabel}`);
     
     // Firebaseの更新が反映されるまで少し待つ（最大5秒）
@@ -1190,15 +1333,30 @@ export async function handleBatchUnanswer(app) {
   }
   const checkedBoxes = Array.from(app.dom.cardsContainer?.querySelectorAll(".row-checkbox:checked") || []);
   if (checkedBoxes.length === 0) return;
+  
+  // 回答済の質問のみをフィルタリング（未回答のものはスキップ）
+  const answeredUids = checkedBoxes
+    .map((checkbox) => {
+      const uid = checkbox.dataset.uid;
+      const item = app.state.allQuestions.find((q) => String(q.UID) === uid);
+      return item && !!item["回答済"] ? uid : null;
+    })
+    .filter((uid) => uid !== null);
+  
+  if (answeredUids.length === 0) {
+    app.toast("選択された質問の中に、未回答に戻す対象（回答済みの質問）がありません。", "info");
+    return;
+  }
+  
   const confirmed = await app.confirmAction({
     title: "一括で未回答に戻す",
-    description: `${checkedBoxes.length}件の質問を「未回答」に戻します。よろしいですか？`,
+    description: `${answeredUids.length}件の質問を「未回答」に戻します。よろしいですか？`,
     confirmLabel: "未回答に戻す",
     cancelLabel: "キャンセル",
     tone: "danger"
   });
   if (!confirmed) return;
-  const uidsToUpdate = checkedBoxes.map((checkbox) => checkbox.dataset.uid);
+  const uidsToUpdate = answeredUids;
   
   // ローディング状態を開始（更新前の状態を記録）
   uidsToUpdate.forEach((uid) => {
@@ -1238,19 +1396,29 @@ export async function handleBatchUnanswer(app) {
     const isPickup = item.ピックアップ === true;
     // 各質問のイベントIDを取得
     // PUQの場合はtokenがないため、現在アクティブなeventIdを使用
+    // 通常質問の場合も、item["イベントID"]が空の場合は、現在アクティブなeventIdをフォールバックとして使用
     let questionEventId = String(item["イベントID"] ?? "").trim();
-    if (!questionEventId && isPickup) {
-      // PUQの場合は現在アクティブなeventIdを使用
-      const { eventId } = resolveNowShowingReference(app);
-      questionEventId = String(eventId || "").trim();
+    if (!questionEventId) {
+      // PUQの場合も通常質問の場合も、現在アクティブなeventIdを使用
+      const { eventId: fallbackEventId } = resolveNowShowingReference(app);
+      questionEventId = String(fallbackEventId || "").trim();
     }
     if (!questionEventId) {
       console.warn(`[handleBatchUnanswer] EventId not found for UID: ${uid}`);
       continue;
     }
-    // pickupquestionの場合は現在のscheduleIdを使用
-    const statusRef = getQuestionStatusRef(questionEventId, isPickup, isPickup ? scheduleId : "");
-    const pathKey = getQuestionStatusPath(questionEventId, isPickup, isPickup ? scheduleId : "");
+    // 通常質問もPick Up Questionも、スケジュールの中に作成する
+    // 通常質問の場合は、その質問のスケジュールIDを使用
+    // PUQの場合は現在のチャンネルのscheduleIdを使用
+    let questionScheduleId = scheduleId;
+    if (!isPickup) {
+      const itemScheduleId = String(item["日程ID"] ?? "").trim();
+      if (itemScheduleId) {
+        questionScheduleId = itemScheduleId;
+      }
+    }
+    const statusRef = getQuestionStatusRef(questionEventId, isPickup, questionScheduleId);
+    const pathKey = getQuestionStatusPath(questionEventId, isPickup, questionScheduleId);
     if (!updatesByPath.has(pathKey)) {
       updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
     }
@@ -1378,9 +1546,23 @@ export async function clearNowShowing(app) {
     const selectingItems = app.state.allQuestions.filter((item) => item["選択中"] === true);
     selectingItems.forEach((item) => {
       const isPickup = item.ピックアップ === true;
-      // pickupquestionの場合は現在のscheduleIdを使用
-      const statusRef = getQuestionStatusRef(eventId, isPickup, isPickup ? scheduleId : "");
-      const pathKey = getQuestionStatusPath(eventId, isPickup, isPickup ? scheduleId : "");
+      // 通常質問もPick Up Questionも、スケジュールの中に作成する
+      // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+      // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
+      let itemEventId = eventId;
+      let itemScheduleId = scheduleId;
+      if (!isPickup) {
+        const questionEventId = String(item["イベントID"] ?? "").trim();
+        const questionScheduleId = String(item["日程ID"] ?? "").trim();
+        if (questionEventId) {
+          itemEventId = questionEventId;
+        }
+        if (questionScheduleId) {
+          itemScheduleId = questionScheduleId;
+        }
+      }
+      const statusRef = getQuestionStatusRef(itemEventId, isPickup, itemScheduleId);
+      const pathKey = getQuestionStatusPath(itemEventId, isPickup, itemScheduleId);
       if (!updatesByPath.has(pathKey)) {
         updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
       }
@@ -1453,9 +1635,47 @@ export async function clearNowShowing(app) {
         }
         
         // Firebaseのパス計算にはnormalizeScheduleIdを使用（空の場合は__default_schedule__になる）
-        const finalScheduleId = isPickup ? pickupScheduleId : "";
-        const statusRef = getQuestionStatusRef(eventId, isPickup, finalScheduleId);
-        const pathKey = getQuestionStatusPath(eventId, isPickup, finalScheduleId);
+        // 通常質問もPick Up Questionも、スケジュールの中に作成する
+        // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+        // PUQの場合は現在のチャンネルのeventIdとscheduleIdを使用
+        let finalEventId = eventId;
+        // PUQの場合は、pickupScheduleIdが空の場合はscheduleIdをフォールバックとして使用
+        let finalScheduleId = isPickup ? (pickupScheduleId || scheduleId) : scheduleId;
+        
+        if (!isPickup) {
+          // 通常質問の場合は、その質問のイベントIDとスケジュールIDを使用
+          if (prevItem) {
+            const questionEventId = String(prevItem["イベントID"] ?? "").trim();
+            const questionScheduleId = String(prevItem["日程ID"] ?? "").trim();
+            if (questionEventId) {
+              finalEventId = questionEventId;
+            }
+            if (questionScheduleId) {
+              finalScheduleId = questionScheduleId;
+            }
+          } else {
+            // prevItemが見つからない場合でも、通常質問として扱う
+            // allQuestionsから該当する質問を検索して、そのスケジュールIDを使用
+            const foundQuestion = app.state.allQuestions.find((q) => String(q.UID || "") === prevUid);
+            if (foundQuestion) {
+              const questionEventId = String(foundQuestion["イベントID"] ?? "").trim();
+              const questionScheduleId = String(foundQuestion["日程ID"] ?? "").trim();
+              if (questionEventId) {
+                finalEventId = questionEventId;
+              }
+              if (questionScheduleId) {
+                finalScheduleId = questionScheduleId;
+              }
+            }
+          }
+        }
+        
+        // PUQの場合は、finalScheduleIdが空の場合でもscheduleIdをフォールバックとして使用
+        // コミット8fb8872の時点では、pickupScheduleIdが空になることはなかったが、
+        // 念のため、finalScheduleIdが空の場合はscheduleIdを使用する
+        const effectiveScheduleId = isPickup && !finalScheduleId ? scheduleId : finalScheduleId;
+        const statusRef = getQuestionStatusRef(finalEventId, isPickup, effectiveScheduleId);
+        const pathKey = getQuestionStatusPath(finalEventId, isPickup, effectiveScheduleId);
         if (!updatesByPath.has(pathKey)) {
           updatesByPath.set(pathKey, { ref: statusRef, updates: {} });
         }
@@ -1463,22 +1683,28 @@ export async function clearNowShowing(app) {
         group.updates[`${prevUid}/answered`] = true;
         group.updates[`${prevUid}/updatedAt`] = serverTimestamp();
 
-        const apiScheduleId = String(
-          pickupScheduleId ||
-          scheduleId ||
-          previousNowShowing.scheduleId ||
-          ""
-        ).trim();
         // PUQの場合はscheduleIdが必須
         // バックエンド側でpickup questionと判定される可能性があるため、
         // previousNowShowing.pickupがtrueの場合は常にscheduleIdを送る
         // prevItemが見つからない場合でも、バックエンド側でpickup questionと判定される可能性があるため
         if (isPickup) {
+          // apiScheduleIdを計算（優先順位: pickupScheduleId > scheduleId > previousNowShowing.scheduleId）
+          // ただし、空の場合はAPI呼び出しをスキップするため、空文字列を許可
+          const apiScheduleId = String(
+            pickupScheduleId ||
+            scheduleId ||
+            previousNowShowing.scheduleId ||
+            ""
+          ).trim();
           // scheduleIdが空の場合はAPI呼び出しをスキップ
           // normalizeScheduleIdは空の場合__default_schedule__を返すため、直接チェックする
-          const normalizedScheduleId = apiScheduleId;
-          if (!normalizedScheduleId) {
-            console.warn(`[clearNowShowing] scheduleId is required for pickup question UID: ${prevUid}, but scheduleId is empty or invalid. Skipping API call.`);
+          if (!apiScheduleId) {
+            console.warn(`[clearNowShowing] scheduleId is required for pickup question UID: ${prevUid}, but scheduleId is empty or invalid. Skipping API call.`, {
+              finalScheduleId,
+              scheduleId,
+              previousNowShowingScheduleId: previousNowShowing.scheduleId,
+              prevItem: prevItem ? { UID: prevItem.UID, 日程ID: prevItem["日程ID"] } : null
+            });
             // API呼び出しをスキップ（ただし、Firebaseのansweredフラグは既に設定済み）
           } else {
             app.api.fireAndForgetApi({ 
@@ -1486,10 +1712,16 @@ export async function clearNowShowing(app) {
               uid: prevUid, 
               status: true, 
               eventId,
-              scheduleId: normalizedScheduleId
+              scheduleId: apiScheduleId
             });
           }
         } else {
+          // 通常質問として扱う場合でも、実際にはpickup questionである可能性に備えてscheduleIdを付与
+          const apiScheduleId = String(
+            scheduleId ||
+            previousNowShowing.scheduleId ||
+            ""
+          ).trim();
           // 通常質問として扱う場合でも、実際にはpickup questionである可能性に備えてscheduleIdを付与
           // scheduleIdが空の場合は従来通りスキップ
           if (!apiScheduleId) {
@@ -1694,9 +1926,12 @@ export function updateActionAvailability(app) {
   app.dom.actionButtons.forEach((button) => {
     if (button) button.disabled = true;
   });
+  // 初期状態: 両方のボタンを非表示に設定（後で条件に応じて表示/非表示を切り替える）
   if (app.dom.clearButton) {
-    const canClear = assetAvailable && telopEnabled && displayOnline;
-    app.dom.clearButton.disabled = !canClear;
+    app.dom.clearButton.hidden = true;
+  }
+  if (app.dom.actionButtons[0]) {
+    app.dom.actionButtons[0].hidden = true;
   }
   if (!app.dom.selectedInfo) {
     updateBatchButtonVisibility(app, checkedCount);
@@ -1742,22 +1977,83 @@ export function updateActionAvailability(app) {
     logAvailability("batch-selection", { effectiveCheckedCount: checkedCount });
     return;
   }
+  // 現在送出中の質問を取得
+  const nowShowing = app.state.renderState?.nowShowing || app.state.displaySession?.nowShowing || null;
+  const nowShowingUid = nowShowing && typeof nowShowing.uid !== "undefined" ? String(nowShowing.uid || "").trim() : "";
+  const hasNowShowing = !!nowShowingUid;
+  
   if (!selection) {
-    app.dom.selectedInfo.textContent = "行を選択してください";
+    // 何も選択していない時
+    if (hasNowShowing) {
+      // 何かを送出している場合は、送出クリアボタンを表示
+      app.dom.selectedInfo.textContent = "行を選択してください";
+      if (app.dom.clearButton) {
+        app.dom.clearButton.hidden = false;
+        const canClear = assetAvailable && telopEnabled && displayOnline;
+        app.dom.clearButton.disabled = !canClear;
+      }
+      // 送出ボタンは非表示
+      if (app.dom.actionButtons[0]) {
+        app.dom.actionButtons[0].hidden = true;
+      }
+    } else {
+      // 何も送出していない場合は、無効状態の送出ボタンを表示
+      app.dom.selectedInfo.textContent = "行を選択してください";
+      if (app.dom.clearButton) {
+        app.dom.clearButton.hidden = true;
+      }
+      if (app.dom.actionButtons[0]) {
+        app.dom.actionButtons[0].hidden = false;
+        app.dom.actionButtons[0].disabled = true;
+      }
+    }
     updateBatchButtonVisibility(app, checkedCount);
-    logAvailability("no-selection");
+    logAvailability("no-selection", { hasNowShowing, nowShowingUid });
     return;
   }
 
+  // 選択中の質問のUID
+  const selectedUid = String(selection.uid || "").trim();
+  const isSelectedNowShowing = hasNowShowing && selectedUid === nowShowingUid;
+  
   app.dom.actionButtons.forEach((button) => {
     if (button) button.disabled = false;
   });
-  if (app.dom.actionButtons[0]) app.dom.actionButtons[0].disabled = !!selection.isAnswered;
+  
+  if (isSelectedNowShowing) {
+    // 送出中のものを選択した場合: 送出クリアボタンを表示
+    if (app.dom.clearButton) {
+      app.dom.clearButton.hidden = false;
+      const canClear = assetAvailable && telopEnabled && displayOnline;
+      app.dom.clearButton.disabled = !canClear;
+    }
+    // 送出ボタンは非表示
+    if (app.dom.actionButtons[0]) {
+      app.dom.actionButtons[0].hidden = true;
+    }
+  } else {
+    // 送出していないものを選択した場合: 送出ボタンを表示
+    if (app.dom.actionButtons[0]) {
+      app.dom.actionButtons[0].hidden = false;
+      app.dom.actionButtons[0].disabled = !!selection.isAnswered;
+    }
+    // 送出クリアボタンは非表示
+    if (app.dom.clearButton) {
+      app.dom.clearButton.hidden = true;
+    }
+  }
+  
   if (app.dom.actionButtons[1]) app.dom.actionButtons[1].disabled = !selection.isAnswered;
   const safeName = formatOperatorName(selection.name) || "—";
   app.dom.selectedInfo.textContent = `選択中: ${safeName}`;
   updateBatchButtonVisibility(app, checkedCount);
-  logAvailability("ready-single-selection", { effectiveCheckedCount: checkedCount });
+  logAvailability("ready-single-selection", { 
+    effectiveCheckedCount: checkedCount,
+    hasNowShowing,
+    nowShowingUid,
+    selectedUid,
+    isSelectedNowShowing
+  });
 }
 
 export function updateBatchButtonVisibility(app, providedCount) {

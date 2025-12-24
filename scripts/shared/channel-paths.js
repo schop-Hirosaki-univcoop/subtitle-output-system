@@ -155,11 +155,11 @@ export function isLegacyChannel(eventId, scheduleId) {
 
 /**
  * 質問ステータスを配置するパスを返します。
- * 通常質問: questionStatus/${eventId}
+ * 通常質問: questionStatus/${eventId}/${scheduleId}
  * Pick Up Question: questionStatus/${eventId}/${scheduleId}
  * @param {unknown} eventId イベントID（必須）
- * @param {boolean} isPickup Pick Up Questionかどうか
- * @param {unknown} scheduleId スケジュールID（Pick Up Questionの場合に必須）
+ * @param {boolean} isPickup Pick Up Questionかどうか（現在は使用されていませんが、後方互換性のため残しています）
+ * @param {unknown} scheduleId スケジュールID（必須）
  * @returns {string}
  * @throws {Error} eventIdが空の場合
  */
@@ -168,10 +168,7 @@ export function getQuestionStatusPath(eventId, isPickup = false, scheduleId = ""
   if (!eventKey) {
     throw new Error("eventId is required for questionStatus path");
   }
-  if (isPickup) {
-    const scheduleKey = normalizeScheduleId(scheduleId);
-    return `questionStatus/${eventKey}/${scheduleKey}`;
-  }
-  // 通常質問はイベントごとに分離
-  return `questionStatus/${eventKey}`;
+  // 通常質問もPick Up Questionも、スケジュールの中に作成する
+  const scheduleKey = normalizeScheduleId(scheduleId);
+  return `questionStatus/${eventKey}/${scheduleKey}`;
 }
