@@ -1893,6 +1893,13 @@ export class OperatorApp {
           scheduleKeys: Object.keys(value),
           allStatusKeys: Object.keys(allStatus)
         });
+      } else {
+        // 対象UIDが見つかった場合、allStatusの内容を確認
+        console.log(`[startQuestionStatusStream] Target UID ${targetUid} found in allStatus:`, {
+          allStatusValue: allStatus[targetUid],
+          allStatusKeys: Object.keys(allStatus),
+          allStatusCount: Object.keys(allStatus).length
+        });
       }
       
       // 全てのstatusを適用
