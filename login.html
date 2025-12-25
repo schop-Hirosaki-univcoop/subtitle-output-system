@@ -91,6 +91,20 @@
 
   <telop-footer year="2025"></telop-footer>
 
-  <script type="module" src="./scripts/login.js"></script>
+  <!-- Vue.js移行: 段階的移行のため、既存のスクリプトは残す -->
+  <script type="module">
+    // Vueアプリが有効な場合は既存のスクリプトをスキップ
+    if (typeof window !== "undefined") {
+      window.__vueLoginEnabled = true;
+    }
+  </script>
+  <script type="module" src="./src/main-login.js"></script>
+  <!-- 既存のログインスクリプト（Vueが無効な場合のフォールバック） -->
+  <script type="module">
+    // Vueが有効な場合は既存のスクリプトをスキップ
+    if (!window.__vueLoginEnabled) {
+      import("./scripts/login.js");
+    }
+  </script>
 </body>
 </html>
