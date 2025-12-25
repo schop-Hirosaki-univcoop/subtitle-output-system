@@ -655,13 +655,6 @@ class LoginPage {
 }
 
 // 依存サービスを注入した LoginPage を作成し、ブラウザ起動時に即座に初期化します。
-// Vue.js移行: Vueが有効な場合は既存の初期化をスキップ
-if (typeof window === "undefined" || !window.__vueLoginEnabled) {
-const page = new LoginPage({
-  authInstance: auth,
-  authProvider: provider,
-  googleAuthProvider: GoogleAuthProvider
-});
-
-page.init();
-}
+// 注意: このファイルはVue.js移行により使用されなくなりました。
+// ログイン画面は src/components/LoginPage.vue と src/main-login.js を使用しています。
+// このファイルは後方互換性のため残していますが、将来的に削除される可能性があります。
