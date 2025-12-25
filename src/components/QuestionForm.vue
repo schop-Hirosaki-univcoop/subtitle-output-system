@@ -98,7 +98,7 @@
             autocomplete="off"
             :maxlength="MAX_RADIO_NAME_LENGTH"
             required
-            :value="radioName"
+            v-model="radioName"
             @input="handleRadioNameInput"
             @blur="handleRadioNameBlur"
           />
@@ -122,7 +122,7 @@
             :maxlength="MAX_QUESTION_LENGTH"
             placeholder="質問や相談内容を入力してください"
             required
-            :value="question"
+            v-model="question"
             @input="handleQuestionInput"
             @blur="handleQuestionBlur"
           ></textarea>
@@ -152,7 +152,7 @@
             name="genre"
             class="input"
             required
-            :value="genre"
+            v-model="genre"
             @change="handleGenreChange"
           >
             <option value="" data-placeholder="true" disabled :selected="!genre">
@@ -467,7 +467,8 @@ const handleReset = () => {
   }, 0);
 };
 
-const handleQuestionInput = () => {
+const handleQuestionInput = (event) => {
+  // v-modelで自動的にquestion.valueが更新されるため、カウンターを更新するだけ
   updateQuestionCounter();
 };
 
@@ -481,10 +482,14 @@ const handleQuestionBlur = () => {
 
 const handleRadioNameBlur = () => {
   const sanitized = sanitizeRadioName(radioName.value, MAX_RADIO_NAME_LENGTH);
-  radioName.value = sanitized;
+  if (radioName.value !== sanitized) {
+    radioName.value = sanitized;
+  }
 };
 
-const handleRadioNameInput = () => {
+const handleRadioNameInput = (event) => {
+  // v-modelで自動的にradioName.valueが更新される
+  // 文字数制限を適用
   const truncated = truncateGraphemes(radioName.value, MAX_RADIO_NAME_LENGTH);
   if (radioName.value !== truncated) {
     radioName.value = truncated;
