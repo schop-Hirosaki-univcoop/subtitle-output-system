@@ -148,6 +148,7 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - GL 応募フォームの設定
    - 応募者の学部学科・シフト可否の確認
    - 班割りステータスの更新
+   - `GlToolManager`が管理（関連Manager: `GlApplicationManager`, `GlConfigManager`, `GlRenderer`, `GlAssignmentManager`）
 
 5. **学部・学科管理パネル** (`events/panels/gl-faculties-panel.js`) - ショートカットキー: `5`
 
@@ -156,6 +157,8 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 6. **テロップ操作パネル** (`events/panels/operator-panel.js`) - ショートカットキー: `6`
 
    - 質問の選択・送出（埋め込みツール）
+   - 質問カード表示部分は既にPhase 2でVueに移行済み（`QuestionCard.vue`, `QuestionList.vue`）
+   - `OperatorToolManager`が管理（`OperatorApp`を埋め込みツールとして使用）
 
 7. **ルビ辞書管理パネル** (`operator/panels/dictionary-panel.js` - 埋め込みツール) - ショートカットキー: `7`
 
