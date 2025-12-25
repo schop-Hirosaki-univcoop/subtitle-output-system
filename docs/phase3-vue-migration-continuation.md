@@ -365,9 +365,9 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - **移行時の修正内容**:
      - 入力値のバインディングを`:value`から`v-model`に変更（双方向バインディングを実現）
      - コンテキスト取得時のエラーハンドリングを改善
-     - Firebaseセキュリティルールを更新：参加者情報の`name`フィールドのみ公開読み取り可能に変更
+     - Firebase セキュリティルールを更新：参加者情報の`name`フィールドのみ公開読み取り可能に変更
        - `questionIntake/participants/{eventId}/{scheduleId}/{participantId}/name`を誰でも読み取り可能に
-       - 他の機密フィールド（email, phone, token等）は管理者のみ読み取り可能のまま
+       - 他の機密フィールド（email, phone, token 等）は管理者のみ読み取り可能のまま
    - **移行結果**: `QuestionFormApp`と`FormView`の DOM 操作を Vue のテンプレートとリアクティビティに置き換え
    - **理由**: 既に`FormView`で View 層が分離されており、移行が比較的容易
 
@@ -517,13 +517,13 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
   - `:value`だけでは入力値が更新されない
   - 例: `<input v-model="radioName" />` ではなく `<input :value="radioName" />` は動作しない
 
-#### Firebaseセキュリティルール
+#### Firebase セキュリティルール
 
-- **親ノードの制限が優先される**: Firebase Realtime Databaseのセキュリティルールでは、親ノードが`.read: false`の場合、子ノードで`.read: true`を設定しても読み取れない
+- **親ノードの制限が優先される**: Firebase Realtime Database のセキュリティルールでは、親ノードが`.read: false`の場合、子ノードで`.read: true`を設定しても読み取れない
   - 子ノードを読み取り可能にするには、親ノードも読み取り可能にする必要がある
   - 例: `questionIntake/participants/{eventId}/{scheduleId}/{participantId}/name`を読み取り可能にするには、`$scheduleId`の`.read`も`true`にする必要がある
 - **参加者情報の公開**: 質問フォームで参加者名を表示するため、`name`フィールドのみ公開読み取り可能に変更
-  - 他の機密フィールド（email, phone, token等）は管理者のみ読み取り可能のまま
+  - 他の機密フィールド（email, phone, token 等）は管理者のみ読み取り可能のまま
 
 ### 3. パフォーマンス
 
