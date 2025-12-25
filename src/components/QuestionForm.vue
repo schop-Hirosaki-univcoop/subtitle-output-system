@@ -397,11 +397,18 @@ const prepareContext = async () => {
 
 const applyContext = (rawContext) => {
   const normalizedContext = normalizeContextData(rawContext);
-  context.value = normalizedContext;
   if (!normalizedContext) {
     lockFormWithMessage("アクセス情報を確認できませんでした。運営までお問い合わせください。");
     return;
   }
+
+  // eventIdとscheduleIdが必須。これらがない場合はコンテキストが無効
+  if (!normalizedContext.eventId || !normalizedContext.scheduleId) {
+    lockFormWithMessage("アクセス情報が不完全です。運営までお問い合わせください。");
+    return;
+  }
+
+  context.value = normalizedContext;
 
   hiddenContext.value = {
     eventId: normalizedContext.eventId,
@@ -574,10 +581,27 @@ const handleSubmit = async (event) => {
   feedbackMessage.value = "";
   feedbackType.value = "";
 
+  // フォームがロックされている場合は送信しない
+  if (isLocked.value) {
+    feedbackMessage.value = "フォームがロックされています。アクセス情報を確認してください。";
+    feedbackType.value = "error";
+    return;
+  }
+
   if (!hasValidContext()) {
     feedbackMessage.value = "アクセス情報を確認できませんでした。リンクを再度開き直してください。";
     feedbackType.value = "error";
     return;
+  }
+
+  // ネイティブのフォームバリデーションを実行
+  const form = event.target;
+  if (form && typeof form.reportValidity === "function") {
+    if (!form.reportValidity()) {
+      feedbackMessage.value = "未入力の項目があります。確認してください。";
+      feedbackType.value = "error";
+      return;
+    }
   }
 
   let formData;
