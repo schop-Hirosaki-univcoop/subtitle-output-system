@@ -87,12 +87,8 @@ async function fetchParticipantInfo(database, eventId, scheduleId, participantId
     const data = snapshot.val() || {};
     return { name: String(data.name || "") };
   } catch (error) {
-    // Permission deniedエラーは想定内の動作（参加者情報が取得できない場合がある）
-    // エラーをログに記録せず、静かにnullを返す
-    const code = error?.code || "";
-    if (code !== "PERMISSION_DENIED") {
-      console.warn("Failed to fetch participant info", error);
-    }
+    // 参加者情報の取得に失敗した場合（nameフィールドは読み取り可能になったが、念のためエラーハンドリングを維持）
+    console.warn("Failed to fetch participant info", error);
     return null;
   }
 }

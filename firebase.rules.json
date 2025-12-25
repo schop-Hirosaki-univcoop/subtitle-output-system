@@ -565,39 +565,129 @@
             ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
             ".write": "auth != null && root.child('admins').child(auth.uid).val() == true",
             "$participantId": {
-              ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+              ".read": true,
               ".write": "auth != null && root.child('admins').child(auth.uid).val() == true",
               ".validate": "!newData.exists() || (newData.hasChildren(['participantId','name','groupNumber','token']) && newData.child('participantId').isString() && newData.child('name').isString() && newData.child('groupNumber').isString() && newData.child('token').isString())",
-              "participantId": { ".validate": "newData.isString()" },
-              "uid": { ".validate": "newData.isString() || !newData.exists()" },
-              "legacyParticipantId": { ".validate": "newData.isString() || !newData.exists()" },
-              "name": { ".validate": "newData.isString()" },
-              "phonetic": { ".validate": "newData.isString() || !newData.exists()" },
-              "furigana": { ".validate": "newData.isString() || !newData.exists()" },
-              "gender": { ".validate": "newData.isString() || !newData.exists()" },
-              "department": { ".validate": "newData.isString() || !newData.exists()" },
-              "phone": { ".validate": "newData.isString() || !newData.exists()" },
-              "email": { ".validate": "newData.isString() || !newData.exists()" },
-              "groupNumber": { ".validate": "newData.isString()" },
-              "token": { ".validate": "newData.isString()" },
-              "guidance": { ".validate": "newData.isString() || !newData.exists()" },
-              "status": { ".validate": "newData.isString() || !newData.exists()" },
-              "isCancelled": { ".validate": "newData.isBoolean() || !newData.exists()" },
-              "isRelocated": { ".validate": "newData.isBoolean() || !newData.exists()" },
-              "relocationSourceScheduleId": { ".validate": "newData.isString() || !newData.exists()" },
-              "relocationSourceScheduleLabel": { ".validate": "newData.isString() || !newData.exists()" },
-              "relocationDestinationScheduleId": { ".validate": "newData.isString() || !newData.exists()" },
-              "relocationDestinationScheduleLabel": { ".validate": "newData.isString() || !newData.exists()" },
-              "relocationDestinationTeamNumber": { ".validate": "newData.isString() || !newData.exists()" },
-              "mailStatus": { ".validate": "newData.isString() || !newData.exists()" },
-              "mailSentAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-              "mailError": { ".validate": "newData.isString() || !newData.exists()" },
-              "mailLastSubject": { ".validate": "newData.isString() || !newData.exists()" },
-              "mailLastMessageId": { ".validate": "newData.isString() || !newData.exists()" },
-              "mailSentBy": { ".validate": "newData.isString() || !newData.exists()" },
-              "mailLastAttemptAt": { ".validate": "newData.isNumber() || !newData.exists()" },
-              "mailLastAttemptBy": { ".validate": "newData.isString() || !newData.exists()" },
-              "updatedAt": { ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()" },
+              "participantId": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString()"
+              },
+              "uid": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "legacyParticipantId": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "name": {
+                ".read": true,
+                ".validate": "newData.isString()"
+              },
+              "phonetic": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "furigana": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "gender": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "department": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "phone": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "email": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "groupNumber": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString()"
+              },
+              "token": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString()"
+              },
+              "guidance": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "status": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "isCancelled": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isBoolean() || !newData.exists()"
+              },
+              "isRelocated": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isBoolean() || !newData.exists()"
+              },
+              "relocationSourceScheduleId": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "relocationSourceScheduleLabel": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "relocationDestinationScheduleId": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "relocationDestinationScheduleLabel": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "relocationDestinationTeamNumber": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "mailStatus": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "mailSentAt": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isNumber() || !newData.exists()"
+              },
+              "mailError": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "mailLastSubject": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "mailLastMessageId": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "mailSentBy": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "mailLastAttemptAt": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isNumber() || !newData.exists()"
+              },
+              "mailLastAttemptBy": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isString() || !newData.exists()"
+              },
+              "updatedAt": {
+                ".read": "auth != null && root.child('admins').child(auth.uid).val() == true",
+                ".validate": "newData.isNumber() || newData.val() == now || !newData.exists()"
+              },
               "$other": { ".validate": false }
             }
           }
