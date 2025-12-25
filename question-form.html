@@ -18,98 +18,20 @@
   </noscript>
   <telop-header tagline="Question Intake Desk" context-label="フォーム情報"></telop-header>
 
-  <!-- 本文: 受付フォーム本体と案内メッセージを保持 -->
+  <!-- 本文: Vueコンポーネントがマウントされるコンテナ -->
   <main class="single-main" id="question-main">
-    <!-- 受付モジュール: 参加者への案内とフォーム要素をまとめる -->
-    <section class="module module--primary intake-module" aria-labelledby="form-title">
-      <div class="module-header">
-        <div class="module-heading">
-          <h1 id="form-title">質問受付フォーム</h1>
-          <p class="module-description">お送りした専用URLからアクセスし、ラジオネームと質問内容を入力してください。</p>
-        </div>
-      </div>
-      <div class="module-body">
-        <!-- コンテキストバナー: 招待リンク由来の挨拶や日程情報を表示 -->
-        <div id="context-banner" class="context-banner" hidden>
-          <p id="welcome-line" class="context-text context-text--welcome"></p>
-          <p id="intro-line" class="context-text context-text--intro" hidden></p>
-          <p id="schedule-line" class="context-text context-text--schedule"></p>
-        </div>
-        <!-- 利用制限表示: 認証エラーなどフォームを非表示にするガード -->
-        <div id="context-guard" class="context-guard" role="alert" aria-live="assertive" hidden></div>
-
-        <!-- 質問フォーム: ラジオネームと質問本文をサーバーへ送信 -->
-        <form id="question-form" class="intake-form" novalidate autocomplete="on" hidden>
-          <input id="access-token" name="access-token" type="hidden">
-          <input id="event-id" name="event-id" type="hidden">
-          <input id="event-name" name="event-name" type="hidden">
-          <input id="schedule-id" name="schedule-id" type="hidden">
-          <input id="schedule" name="schedule" type="hidden">
-          <input id="schedule-date" name="schedule-date" type="hidden">
-          <input id="schedule-location" name="schedule-location" type="hidden">
-          <input id="participant-id" name="participant-id" type="hidden">
-          <input id="group-number" name="group-number" type="hidden">
-
-          <div class="form-field">
-            <!-- ラジオネーム入力: 配信表示名を収集 -->
-            <div class="field-header">
-              <label for="radio-name">ラジオネーム</label>
-              <span class="field-tag field-tag--required">必須</span>
-            </div>
-            <input id="radio-name" name="radio-name" type="text" class="input" inputmode="text" autocomplete="off" maxlength="20" required>
-            <div class="field-footer">
-              <p class="field-hint">20文字まで。本名ではなく番組用のお名前をご入力ください。</p>
-            </div>
-          </div>
-
-          <div class="form-field">
-            <!-- 質問本文入力: 60文字制限でテロップ化を想定 -->
-            <div class="field-header">
-              <label for="question-text">質問・お悩み</label>
-              <span class="field-tag field-tag--required">必須</span>
-            </div>
-            <textarea id="question-text" name="question-text" class="input input--textarea" rows="6" maxlength="60" placeholder="質問や相談内容を入力してください" required></textarea>
-            <div class="field-footer">
-              <p class="field-hint">句読点や改行を含めて60文字以内で入力してください。</p>
-              <p id="question-counter" class="field-hint field-hint--status" role="status" aria-live="polite">0 / 60文字</p>
-            </div>
-          </div>
-
-          <div class="form-field">
-            <!-- ジャンル選択: オンエア時の分類と運営側並び替えに利用 -->
-            <div class="field-header">
-              <label for="genre">ジャンル</label>
-              <span class="field-tag field-tag--required">必須</span>
-            </div>
-            <select id="genre" name="genre" class="input" required>
-              <option value="" data-placeholder="true" disabled selected>ジャンルを選択してください</option>
-              <option value="学び">学び</option>
-              <option value="活動">活動</option>
-              <option value="暮らし">暮らし</option>
-              <option value="食・スポット">食・スポット</option>
-              <option value="移動・季節">移動・季節</option>
-              <option value="その他">その他</option>
-            </select>
-          </div>
-
-          <div class="form-actions">
-            <!-- 送信ボタンと送信後フィードバック領域 -->
-            <button type="submit" class="btn btn-primary" id="submit-button">送信する</button>
-            <p class="form-feedback" id="form-feedback" role="alert" aria-live="polite"></p>
-          </div>
-        </form>
-        <!-- 利用案内: 送信後の連絡方法や運営向け案内のテキスト -->
-        <div class="form-meta" id="form-meta" hidden>
-          <p class="form-meta-line" id="form-guidance" hidden></p>
-          <p class="form-meta-line">フォームの利用方法やリンクに関するお問い合わせは、運営からのご案内に従ってください。</p>
-          <p class="form-meta-line">送信後に内容を修正したい場合は、配布元までご連絡ください。</p>
-        </div>
-      </div>
-    </section>
+    <!-- Vueコンポーネント (QuestionForm.vue) がここにマウントされます -->
   </main>
 
   <telop-footer year="2025"></telop-footer>
 
-  <script src="./scripts/question-form/index.js" type="module"></script>
+  <script type="module" src="./src/main-question-form.js"></script>
+  <!-- 既存のスクリプト（Vueが無効な場合のフォールバック） -->
+  <script type="module">
+    // Vueが有効な場合は既存のスクリプトをスキップ
+    if (!window.__vueQuestionFormEnabled) {
+      import("./scripts/question-form/index.js");
+    }
+  </script>
 </body>
 </html>
