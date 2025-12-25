@@ -69,17 +69,20 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - `InitManager`: 初期化管理
 
 4. **`QuestionFormApp`** (`scripts/question-form/app.js`)
+
    - 約 550 行
    - 質問フォーム（`question-form.html`）
    - 既に`FormView`クラス（`view.js`）で View 層が分離されている（MVC モデルに準拠）
 
 5. **`LoginPage`** (`scripts/login.js`)
+
    - 約 655 行
    - ログイン画面（`login.html`）
    - Firebase 認証のログイン UI を提供
    - Google OAuth によるサインイン操作
 
 6. **GL 応募フォーム** (`scripts/gl-form/`)
+
    - GL 応募フォーム（`gl-form.html`）
    - `GlFormManager`と`GlFormDataManager`を使用
    - フォーム入力・送信機能
@@ -337,7 +340,39 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
 ## 推奨される移行順序
 
-### Phase 3.1: テロップ操作パネル（`OperatorApp`）の残りの部分（優先度: 高）
+**方針**: 軽い機能から順に移行し、経験を積んでから重い機能に取り組む。これにより、小さな成功を積み重ね、Vue 移行のパターンを確立してから複雑な機能に集中できる。
+
+### Phase 3.1: 軽量な独立画面（優先度: 高 - 早期完了を目指す）
+
+軽量で独立した画面から移行を開始し、Vue 移行のパターンを確立する。
+
+1. **ログイン画面**
+
+   - `LoginPage.vue`コンポーネントを作成
+   - 既存の`LoginPage`クラス（`scripts/login.js`、約 655 行）と統合
+   - Firebase 認証フローの維持
+   - **理由**: 比較的シンプルで独立した画面。Vue 移行の基礎パターンを確立できる
+
+2. **質問フォーム**
+
+   - `QuestionForm.vue`コンポーネントを作成
+   - 既存の`QuestionFormApp`（約 550 行）と`FormView`と統合
+   - **理由**: 既に`FormView`で View 層が分離されており、移行が比較的容易
+
+3. **GL 応募フォーム**
+
+   - `GlForm.vue`コンポーネントを作成
+   - 既存の`GlFormManager`と`GlFormDataManager`と統合
+   - **理由**: 質問フォームと同様の構造で、フォーム管理が分離されている
+
+**期待される効果**:
+- Vue 移行の基本的なパターンを確立
+- 小さな成功を積み重ね、チームのモチベーションを維持
+- フォーム系の移行ノウハウを蓄積
+
+### Phase 3.2: テロップ操作パネル（`OperatorApp`）の残りの部分（優先度: 高）
+
+`OperatorApp`の埋め込みツールとして使用されるパネルを移行する。
 
 1. **辞書パネル**
 
@@ -362,7 +397,40 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - 既存の`operator/panels/side-telop-panel.js`と統合
    - `EventAdminApp`の埋め込みツールとしての統合を維持
 
-### Phase 3.2: イベント管理画面（優先度: 高）
+**注意**: テロップ操作パネル（`OperatorApp`）、ルビ辞書管理、Pick Up Question 管理、操作ログは`EventAdminApp`の埋め込みツールとして`operator.html`に統合されているため、`EventAdminApp`の移行（Phase 3.4）と連携が必要
+
+### Phase 3.3: 質問管理画面（優先度: 中）
+
+`QuestionAdminApp`（約 2,200 行）の主要機能を移行する。
+
+1. **参加者管理**
+
+   - `ParticipantManagement.vue`コンポーネントを作成
+   - 既存の`ParticipantManager`と統合
+
+2. **印刷機能**
+
+   - `PrintPreview.vue`コンポーネントを作成
+   - 既存の`PrintManager`と統合
+
+3. **GL 管理**（優先度: 中）
+
+   - `GlManagement.vue`コンポーネントを作成
+   - 既存の`GlManager`と統合
+
+4. **イベント・日程管理**（優先度: 低）
+
+   - `EventScheduleManagement.vue`コンポーネントを作成
+   - 既存の`EventManager`、`ScheduleManager`と統合
+
+5. **メール送信**（優先度: 低）
+
+   - `MailSender.vue`コンポーネントを作成
+   - 既存の`MailManager`と統合
+
+### Phase 3.4: イベント管理画面（優先度: 高 - 最も重い機能）
+
+`EventAdminApp`（約 6,700 行）の主要機能を移行する。最も複雑で大規模な機能のため、Phase 3.1-3.3 で経験を積んでから取り組む。
 
 1. **イベント一覧**
 
@@ -401,58 +469,14 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - **印刷機能**: イベント一覧・GL リストの印刷機能（Vue 移行の優先度は低い）
    - **再読み込み機能**: ヘッダーボタンの機能として実装（Vue 移行の優先度は低い）
 
-**注意**: テロップ操作パネル（`OperatorApp`）、ルビ辞書管理、Pick Up Question 管理、操作ログは`EventAdminApp`の埋め込みツールとして`operator.html`に統合されているため、`OperatorApp`の移行（Phase 3.1）と同時に検討する
+### Phase 3.5: テロップ表示画面（優先度: 非常に低い）
 
-### Phase 3.3: 質問管理画面（優先度: 中）
-
-1. **参加者管理**
-
-   - `ParticipantManagement.vue`コンポーネントを作成
-   - 既存の`ParticipantManager`と統合
-
-2. **印刷機能**
-
-   - `PrintPreview.vue`コンポーネントを作成
-   - 既存の`PrintManager`と統合
-
-3. **GL 管理**（優先度: 中）
-
-   - `GlManagement.vue`コンポーネントを作成
-   - 既存の`GlManager`と統合
-
-4. **イベント・日程管理**（優先度: 低）
-
-   - `EventScheduleManagement.vue`コンポーネントを作成
-   - 既存の`EventManager`、`ScheduleManager`と統合
-
-5. **メール送信**（優先度: 低）
-
-   - `MailSender.vue`コンポーネントを作成
-   - 既存の`MailManager`と統合
-
-### Phase 3.4: その他の画面（優先度: 低）
-
-1. **ログイン画面**
-
-   - `LoginPage.vue`コンポーネントを作成
-   - 既存の`LoginPage`クラス（`scripts/login.js`）と統合
-   - Firebase 認証フローの維持
-
-2. **GL 応募フォーム**
-
-   - `GlForm.vue`コンポーネントを作成
-   - 既存の`GlFormManager`と`GlFormDataManager`と統合
-
-3. **質問フォーム**
-
-   - `QuestionForm.vue`コンポーネントを作成
-   - 既存の`QuestionFormApp`と`FormView`と統合
-
-4. **テロップ表示画面**（優先度: 非常に低い）
+1. **テロップ表示画面**
 
    - `DisplayView.vue`コンポーネントを作成
    - 既存のインラインスクリプトと統合
    - パフォーマンスを最優先に考慮
+   - **理由**: 表示専用で、リアルタイム表示のパフォーマンスが最重要。Vue 移行の優先度は非常に低い
 
 **注意**: 静的ページ（`index.html`、`participant-mail-view.html`、`email-*.html`、`404.html`）は Vue への移行対象外
 
@@ -480,15 +504,17 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
 ## 次のステップ
 
-1. **Phase 3.1 の開始**
+1. **Phase 3.1 の開始（軽量な独立画面）**
 
-   - オペレーター画面の辞書パネルから移行を開始
+   - ログイン画面から移行を開始
    - 動作確認を実施
+   - Vue 移行の基本的なパターンを確立
 
 2. **段階的な移行**
 
    - 各機能を移行した後、動作確認を実施
    - 問題がなければ次の機能に進む
+   - 軽い機能から順に進め、経験を積んでから重い機能に取り組む
 
 3. **パフォーマンスの最適化**
    - 移行完了後、パフォーマンスの最適化を実施
