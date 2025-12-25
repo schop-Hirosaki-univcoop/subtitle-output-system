@@ -4,7 +4,8 @@
       <div class="module-heading">
         <h1 id="login-title">イベントコントロールセンターへログイン</h1>
         <p class="module-description">
-          イベントや日程の管理、テロップ操作ツールの利用には管理用 Google アカウントでのサインインが必要です。
+          イベントや日程の管理、テロップ操作ツールの利用には管理用 Google
+          アカウントでのサインインが必要です。
         </p>
       </div>
     </div>
@@ -37,12 +38,14 @@
               :class="{
                 'is-active': step.state === 'active',
                 'is-complete': step.state === 'complete',
-                'is-error': step.state === 'error'
+                'is-error': step.state === 'error',
               }"
               :data-step="step.step"
               :data-state="step.state"
             >
-              <span class="login-status__icon" aria-hidden="true">{{ step.icon }}</span>
+              <span class="login-status__icon" aria-hidden="true">{{
+                step.icon
+              }}</span>
               <span class="login-status__label">{{ step.label }}</span>
             </li>
           </ol>
@@ -79,21 +82,30 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   onAuthStateChanged,
-  signOut
+  signOut,
 } from "../../scripts/operator/firebase.js";
-import { storeAuthTransfer, clearAuthTransfer } from "../../scripts/shared/auth-transfer.js";
+import {
+  storeAuthTransfer,
+  clearAuthTransfer,
+} from "../../scripts/shared/auth-transfer.js";
 import {
   runAuthPreflight,
   AuthPreflightError,
-  clearAuthPreflightContext
+  clearAuthPreflightContext,
 } from "../../scripts/shared/auth-preflight.js";
 import { goToEvents } from "../../scripts/shared/routes.js";
-import { appendAuthDebugLog, replayAuthDebugLog } from "../../scripts/shared/auth-debug-log.js";
+import {
+  appendAuthDebugLog,
+  replayAuthDebugLog,
+} from "../../scripts/shared/auth-debug-log.js";
 
 const ERROR_MESSAGES = {
-  "auth/popup-closed-by-user": "ログインウィンドウが閉じられました。もう一度お試しください。",
-  "auth/cancelled-popup-request": "別のログイン処理が進行中です。完了してから再試行してください。",
-  "auth/popup-blocked": "ポップアップがブロックされました。ブラウザの設定を確認してから再試行してください。"
+  "auth/popup-closed-by-user":
+    "ログインウィンドウが閉じられました。もう一度お試しください。",
+  "auth/cancelled-popup-request":
+    "別のログイン処理が進行中です。完了してから再試行してください。",
+  "auth/popup-blocked":
+    "ポップアップがブロックされました。ブラウザの設定を確認してから再試行してください。",
 };
 
 // ステップ定義
@@ -103,7 +115,7 @@ const STATUS_STEPS = [
   { step: "preflight-access", label: "アクセス権限を照合しています" },
   { step: "preflight-data", label: "イベント情報を取得しています" },
   { step: "transfer", label: "資格情報を保存しています" },
-  { step: "redirect", label: "イベント管理画面へ移動しています" }
+  { step: "redirect", label: "イベント管理画面へ移動しています" },
 ];
 
 // 状態管理
@@ -112,7 +124,9 @@ const errorMessage = ref("");
 const redirecting = ref(false);
 const statusFlowActive = ref(false);
 const activeStep = ref(null);
-const statusDetail = ref("Googleアカウントでログインを開始すると処理の進捗が表示されます。");
+const statusDetail = ref(
+  "Googleアカウントでログインを開始すると処理の進捗が表示されます。"
+);
 const statusDetailIsError = ref(false);
 const preflightPromise = ref(null);
 const preflightError = ref(null);
@@ -122,7 +136,7 @@ const statusSteps = ref(
   STATUS_STEPS.map((step) => ({
     ...step,
     state: "pending",
-    icon: "•"
+    icon: "•",
   }))
 );
 
@@ -171,7 +185,9 @@ const completeStep = (stepKey) => {
 
 // ステータス詳細を更新
 const setStatusDetail = (message, { isError = false } = {}) => {
-  statusDetail.value = message || "Googleアカウントでログインを開始すると処理の進捗が表示されます。";
+  statusDetail.value =
+    message ||
+    "Googleアカウントでログインを開始すると処理の進捗が表示されます。";
   statusDetailIsError.value = isError;
 };
 
@@ -183,7 +199,8 @@ const resetStatusFlow = () => {
   activeStep.value = null;
   statusFlowActive.value = false;
   statusDetailIsError.value = false;
-  statusDetail.value = "Googleアカウントでログインを開始すると処理の進捗が表示されます。";
+  statusDetail.value =
+    "Googleアカウントでログインを開始すると処理の進捗が表示されます。";
 };
 
 // ステータスフローを開始
@@ -206,7 +223,8 @@ const setBusy = (busy) => {
 const waitForVisualUpdate = async ({ minimumDelay = 0 } = {}) => {
   await new Promise((resolve) => {
     const raf =
-      typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
+      typeof window !== "undefined" &&
+      typeof window.requestAnimationFrame === "function"
         ? window.requestAnimationFrame.bind(window)
         : null;
     if (raf) {
@@ -231,7 +249,9 @@ const getErrorMessage = (error) => {
       ? "通信エラーが発生しました。ネットワークを確認して再試行してください。"
       : "ネットワークに接続できません。接続状況を確認してから再試行してください。";
   }
-  return ERROR_MESSAGES[code] || "ログインに失敗しました。もう一度お試しください。";
+  return (
+    ERROR_MESSAGES[code] || "ログインに失敗しました。もう一度お試しください。"
+  );
 };
 
 // 資格情報を保存
@@ -239,16 +259,18 @@ const storeCredential = (credential) => {
   if (credential && (credential.idToken || credential.accessToken)) {
     appendAuthDebugLog("login:store-credential", {
       hasIdToken: Boolean(credential.idToken),
-      hasAccessToken: Boolean(credential.accessToken)
+      hasAccessToken: Boolean(credential.accessToken),
     });
     storeAuthTransfer({
       providerId: credential.providerId || GoogleAuthProvider.PROVIDER_ID,
       signInMethod: credential.signInMethod || "",
       idToken: credential.idToken || "",
-      accessToken: credential.accessToken || ""
+      accessToken: credential.accessToken || "",
     });
   } else {
-    appendAuthDebugLog("login:store-credential:missing-token", null, { level: "warn" });
+    appendAuthDebugLog("login:store-credential:missing-token", null, {
+      level: "warn",
+    });
     clearAuthTransfer();
   }
 };
@@ -262,7 +284,7 @@ const handlePreflightProgress = (progress) => {
   const stepMap = {
     ensureAdmin: "preflight-admin",
     userSheet: "preflight-access",
-    mirror: "preflight-data"
+    mirror: "preflight-data",
   };
   const stepKey = stage ? stepMap[stage] : null;
   if (!stepKey) {
@@ -273,7 +295,7 @@ const handlePreflightProgress = (progress) => {
     const startMessages = {
       ensureAdmin: "管理者権限を確認しています…",
       userSheet: "アクセス権限を照合しています…",
-      mirror: "イベント情報を取得しています…"
+      mirror: "イベント情報を取得しています…",
     };
     const message = startMessages[stage] || null;
     activateStep(stepKey, message);
@@ -294,10 +316,13 @@ const handlePreflightProgress = (progress) => {
     } else if (stage === "userSheet") {
       const useFallback = Boolean(payload && payload.fallback);
       if (useFallback) {
-        message = "アクセス権限の最新情報を取得できなかったため、前回の情報で続行しています。イベント情報を取得しています…";
+        message =
+          "アクセス権限の最新情報を取得できなかったため、前回の情報で続行しています。イベント情報を取得しています…";
       } else {
         const totalUsers =
-          payload && typeof payload.totalUsers === "number" && Number.isFinite(payload.totalUsers)
+          payload &&
+          typeof payload.totalUsers === "number" &&
+          Number.isFinite(payload.totalUsers)
             ? payload.totalUsers
             : null;
         if (typeof totalUsers === "number" && totalUsers >= 0) {
@@ -309,10 +334,13 @@ const handlePreflightProgress = (progress) => {
     } else if (stage === "mirror") {
       const useFallback = Boolean(payload && payload.fallback);
       if (useFallback) {
-        message = "イベント情報の最新状態を取得できた範囲で続行しています。資格情報を保存しています…";
+        message =
+          "イベント情報の最新状態を取得できた範囲で続行しています。資格情報を保存しています…";
       } else {
         const questionCount =
-          payload && typeof payload.questionCount === "number" && Number.isFinite(payload.questionCount)
+          payload &&
+          typeof payload.questionCount === "number" &&
+          Number.isFinite(payload.questionCount)
             ? payload.questionCount
             : null;
         if (typeof questionCount === "number" && questionCount >= 0) {
@@ -329,7 +357,8 @@ const handlePreflightProgress = (progress) => {
   }
 
   if (phase === "error") {
-    const detail = payload && typeof payload.message === "string" ? payload.message : null;
+    const detail =
+      payload && typeof payload.message === "string" ? payload.message : null;
     if (detail) {
       setStatusDetail(detail, { isError: true });
     }
@@ -346,11 +375,14 @@ const handlePreflightFailure = async (error) => {
     "login:preflight:failure",
     {
       code: error.code,
-      message: error.message
+      message: error.message,
     },
     { level: "error" }
   );
-  if (error.code === "NOT_IN_USER_SHEET" || error.code === "ENSURE_ADMIN_FAILED") {
+  if (
+    error.code === "NOT_IN_USER_SHEET" ||
+    error.code === "ENSURE_ADMIN_FAILED"
+  ) {
     try {
       await signOut(auth);
     } catch (signOutError) {
@@ -373,7 +405,11 @@ const markFlowError = (error, message) => {
       break;
     }
   }
-  const targetStep = activeStep.value || fallbackStep || statusSteps.value[statusSteps.value.length - 1]?.step || null;
+  const targetStep =
+    activeStep.value ||
+    fallbackStep ||
+    statusSteps.value[statusSteps.value.length - 1]?.step ||
+    null;
   if (targetStep) {
     setStepState(targetStep, "error");
   }
@@ -396,25 +432,27 @@ const performLogin = async () => {
     appendAuthDebugLog("login:popup-success", {
       uid: result?.user?.uid || null,
       email: result?.user?.email || null,
-      providerId: result?.providerId || null
+      providerId: result?.providerId || null,
     });
     completeStep("popup");
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const context = await runAuthPreflight({
       auth,
       credential,
-      onProgress: handlePreflightProgress
+      onProgress: handlePreflightProgress,
     });
     appendAuthDebugLog("login:preflight:success", {
       adminSheetHash: context?.admin?.sheetHash || null,
-      questionCount: context?.mirror?.questionCount ?? null
+      questionCount: context?.mirror?.questionCount ?? null,
     });
     activateStep("transfer", "資格情報を保存しています…");
     await waitForVisualUpdate({ minimumDelay: 120 });
     storeCredential(credential);
     completeStep("transfer");
     await waitForVisualUpdate({ minimumDelay: 160 });
-    setStatusDetail("ログイン情報を保存しました。アカウント状態を確認しています…");
+    setStatusDetail(
+      "ログイン情報を保存しました。アカウント状態を確認しています…"
+    );
     return context;
   })();
 
@@ -429,7 +467,7 @@ const performLogin = async () => {
       "login:perform-login:error",
       {
         code: error?.code || null,
-        message: error?.message || null
+        message: error?.message || null,
       },
       { level: "error" }
     );
@@ -451,7 +489,11 @@ const performLogin = async () => {
 // ログインボタンのクリックハンドラー
 const handleLoginClick = () => {
   if (isBusy.value) {
-    appendAuthDebugLog("login:click-ignored", { reason: "button-disabled" }, { level: "warn" });
+    appendAuthDebugLog(
+      "login:click-ignored",
+      { reason: "button-disabled" },
+      { level: "warn" }
+    );
     return;
   }
 
@@ -462,7 +504,7 @@ const handleLoginClick = () => {
 // 認証状態変更のハンドラー
 const handleAuthStateChanged = async (user) => {
   appendAuthDebugLog("login:handle-auth-state", {
-    uid: user?.uid || null
+    uid: user?.uid || null,
   });
   if (!user) {
     redirecting.value = false;
@@ -506,7 +548,7 @@ const handleAuthStateChanged = async (user) => {
 
   redirecting.value = true;
   appendAuthDebugLog("login:redirect-to-events", {
-    uid: user?.uid || null
+    uid: user?.uid || null,
   });
   if (statusFlowActive.value) {
     activateStep("redirect", "イベント管理画面へ移動しています…");
@@ -522,9 +564,12 @@ const handleAuthStateChanged = async (user) => {
 let unsubscribeAuth = null;
 
 onMounted(() => {
-  replayAuthDebugLog({ label: "[auth-debug] existing log (login)", clear: false });
+  replayAuthDebugLog({
+    label: "[auth-debug] existing log (login)",
+    clear: false,
+  });
   appendAuthDebugLog("login:init", {
-    hasCurrentUser: Boolean(auth?.currentUser)
+    hasCurrentUser: Boolean(auth?.currentUser),
   });
 
   // キーボードショートカット「l」でログイン
@@ -532,10 +577,18 @@ onMounted(() => {
     const target = event.target;
     const isFormField =
       target instanceof HTMLElement &&
-      target.closest("input, textarea, select, [role='textbox'], [contenteditable=''], [contenteditable='true']");
+      target.closest(
+        "input, textarea, select, [role='textbox'], [contenteditable=''], [contenteditable='true']"
+      );
 
     // 入力フィールドにフォーカスがある場合は無視
-    if (!isFormField && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+    if (
+      !isFormField &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.shiftKey
+    ) {
       if (event.key === "l" || event.key === "L") {
         if (!isBusy.value) {
           event.preventDefault();
@@ -552,7 +605,7 @@ onMounted(() => {
   unsubscribeAuth = onAuthStateChanged(auth, (user) => {
     appendAuthDebugLog("login:on-auth-state", {
       uid: user?.uid || null,
-      email: user?.email || null
+      email: user?.email || null,
     });
     handleAuthStateChanged(user);
   });
@@ -566,4 +619,3 @@ onUnmounted(() => {
   }
 });
 </script>
-
