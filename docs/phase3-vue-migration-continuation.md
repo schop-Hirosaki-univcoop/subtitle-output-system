@@ -73,6 +73,22 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - 質問フォーム（`question-form.html`）
    - 既に`FormView`クラス（`view.js`）で View 層が分離されている（MVC モデルに準拠）
 
+5. **`LoginPage`** (`scripts/login.js`)
+   - 約 655 行
+   - ログイン画面（`login.html`）
+   - Firebase 認証のログイン UI を提供
+   - Google OAuth によるサインイン操作
+
+6. **GL 応募フォーム** (`scripts/gl-form/`)
+   - GL 応募フォーム（`gl-form.html`）
+   - `GlFormManager`と`GlFormDataManager`を使用
+   - フォーム入力・送信機能
+
+7. **テロップ表示画面** (`display.html`)
+   - イベントで表示するテロップ画面
+   - インラインスクリプトで実装されている
+   - リアルタイム表示用で、パフォーマンスが重要
+
 ## Phase 3 の移行計画
 
 ### 優先度: 高
@@ -254,11 +270,52 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
 #### 4. 質問フォーム
 
-**対象**: `QuestionFormApp`
+**対象**: `QuestionFormApp` (`question-form.html`)
 
 - 既に`FormView`クラスで View 層が分離されている
 - MVC モデルに準拠しているため、Vue への移行は優先度が低い
 - 必要に応じて、将来的に Vue コンポーネントに移行
+
+#### 5. ログイン画面
+
+**対象**: `LoginPage` (`login.html`)
+
+- `scripts/login.js`に実装されている`LoginPage`クラス（約 655 行）
+- Firebase 認証のログイン UI を提供
+- Google OAuth によるサインイン操作
+- 認証状態の監視とリダイレクト処理
+- 比較的シンプルな UI のため、Vue への移行は優先度が低い
+- 必要に応じて、将来的に Vue コンポーネントに移行
+
+#### 6. GL 応募フォーム
+
+**対象**: `GlFormManager` / `GlFormDataManager` (`gl-form.html`)
+
+- `scripts/gl-form/`に実装されている GL 応募フォーム
+- `GlFormManager`と`GlFormDataManager`を使用
+- フォーム入力・送信機能
+- 質問フォームと同様に、フォーム管理が分離されている可能性がある
+- Vue への移行は優先度が低い
+- 必要に応じて、将来的に Vue コンポーネントに移行
+
+#### 7. テロップ表示画面
+
+**対象**: `display.html`
+
+- イベントで表示するテロップ画面
+- インラインスクリプトで実装されている
+- リアルタイム表示用で、パフォーマンスが重要
+- 表示専用のため、Vue への移行は優先度が非常に低い
+- 必要に応じて、将来的に Vue コンポーネントに移行
+
+#### 8. その他の静的ページ
+
+以下のページは静的コンテンツまたはメールテンプレートのため、Vue への移行は不要：
+
+- **`index.html`**: アクセス案内ページ（静的ページ）
+- **`participant-mail-view.html`**: 参加者メール閲覧ページ（静的ページ）
+- **`email-participant-shell.html`** / **`email-participant-body.html`**: メールテンプレート（静的ページ）
+- **`404.html`**: エラーページ（静的ページ）
 
 ## 移行の原則
 
@@ -372,6 +429,32 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
    - `MailSender.vue`コンポーネントを作成
    - 既存の`MailManager`と統合
+
+### Phase 3.4: その他の画面（優先度: 低）
+
+1. **ログイン画面**
+
+   - `LoginPage.vue`コンポーネントを作成
+   - 既存の`LoginPage`クラス（`scripts/login.js`）と統合
+   - Firebase 認証フローの維持
+
+2. **GL 応募フォーム**
+
+   - `GlForm.vue`コンポーネントを作成
+   - 既存の`GlFormManager`と`GlFormDataManager`と統合
+
+3. **質問フォーム**
+
+   - `QuestionForm.vue`コンポーネントを作成
+   - 既存の`QuestionFormApp`と`FormView`と統合
+
+4. **テロップ表示画面**（優先度: 非常に低い）
+
+   - `DisplayView.vue`コンポーネントを作成
+   - 既存のインラインスクリプトと統合
+   - パフォーマンスを最優先に考慮
+
+**注意**: 静的ページ（`index.html`、`participant-mail-view.html`、`email-*.html`、`404.html`）は Vue への移行対象外
 
 ## 技術的な考慮事項
 
