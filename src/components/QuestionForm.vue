@@ -397,18 +397,11 @@ const prepareContext = async () => {
 
 const applyContext = (rawContext) => {
   const normalizedContext = normalizeContextData(rawContext);
+  context.value = normalizedContext;
   if (!normalizedContext) {
     lockFormWithMessage("アクセス情報を確認できませんでした。運営までお問い合わせください。");
     return;
   }
-
-  // eventIdとscheduleIdが必須。これらがない場合はコンテキストが無効
-  if (!normalizedContext.eventId || !normalizedContext.scheduleId) {
-    lockFormWithMessage("アクセス情報が不完全です。運営までお問い合わせください。");
-    return;
-  }
-
-  context.value = normalizedContext;
 
   hiddenContext.value = {
     eventId: normalizedContext.eventId,
