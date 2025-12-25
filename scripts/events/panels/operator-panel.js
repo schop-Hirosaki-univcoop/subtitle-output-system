@@ -55,8 +55,8 @@ export class OperatorToolManager {
           await import("../../operator/index.js");
         } catch (error) {
           // フォールバック: import.meta.urlを使用
-          const operatorModuleUrl = new URL("../../operator/index.js", import.meta.url);
-          await import(operatorModuleUrl.href);
+        const operatorModuleUrl = new URL("../../operator/index.js", import.meta.url);
+        await import(operatorModuleUrl.href);
         }
         state.ready = true;
       })().catch((error) => {

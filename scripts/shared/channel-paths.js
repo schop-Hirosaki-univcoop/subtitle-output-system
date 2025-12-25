@@ -169,6 +169,6 @@ export function getQuestionStatusPath(eventId, isPickup = false, scheduleId = ""
     throw new Error("eventId is required for questionStatus path");
   }
   // 通常質問もPick Up Questionも、スケジュールの中に作成する
-  const scheduleKey = normalizeScheduleId(scheduleId);
-  return `questionStatus/${eventKey}/${scheduleKey}`;
+    const scheduleKey = normalizeScheduleId(scheduleId);
+    return `questionStatus/${eventKey}/${scheduleKey}`;
 }

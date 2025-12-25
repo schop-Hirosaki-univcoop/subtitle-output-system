@@ -306,7 +306,7 @@ export function renderQuestions(app) {
 
   // Vueコンポーネントが有効な場合は、innerHTMLをクリアしない（Vueの仮想DOMと不整合になるため）
   if (!window.__vueExperimentEnabled) {
-    app.dom.cardsContainer.innerHTML = "";
+  app.dom.cardsContainer.innerHTML = "";
   }
   list.forEach((item) => {
     const card = document.createElement("article");
@@ -1088,7 +1088,7 @@ export async function handleDisplay(app) {
         for (const [pathKey, { ref: statusRef, updates }] of normalClearingUpdatesByPath) {
           if (Object.keys(updates).length > 0) {
             await update(statusRef, updates);
-          }
+        }
         }
         // PUQを更新
         if (Object.keys(pickupClearingUpdates).length > 0) {
@@ -1108,13 +1108,13 @@ export async function handleDisplay(app) {
           previousUidItem: previousUidItem ? { UID: previousUidItem.UID, 日程ID: previousUidItem["日程ID"] } : null
         });
       } else {
-        app.api.fireAndForgetApi({ 
-          action: "updateStatus", 
-          uid: previousUid, 
-          status: true, 
-          eventId,
+      app.api.fireAndForgetApi({ 
+        action: "updateStatus", 
+        uid: previousUid, 
+        status: true, 
+        eventId,
           scheduleId: prevScheduleId
-        });
+      });
       }
     } else if (prev) {
       // PUQの場合はscheduleIdが必須（空文字列も無効）
@@ -1127,13 +1127,13 @@ export async function handleDisplay(app) {
           prev: prev ? { UID: prev.UID, 日程ID: prev["日程ID"] } : null
         });
       } else {
-        app.api.fireAndForgetApi({ 
-          action: "updateStatus", 
-          uid: prev.UID, 
-          status: true, 
-          eventId,
+      app.api.fireAndForgetApi({ 
+        action: "updateStatus", 
+        uid: prev.UID, 
+        status: true, 
+        eventId,
           scheduleId: prevScheduleId
-        });
+      });
       }
     }
     app.state.lastDisplayedUid = app.state.selectedRowData.uid;
@@ -1247,13 +1247,13 @@ export async function handleUnanswer(app) {
         currentItem: currentItem ? { UID: currentItem.UID, 日程ID: currentItem["日程ID"] } : null
       });
     } else {
-      app.api.fireAndForgetApi({
-        action: "updateStatus",
-        uid: app.state.selectedRowData.uid,
-        status: false,
-        eventId,
+    app.api.fireAndForgetApi({
+      action: "updateStatus",
+      uid: app.state.selectedRowData.uid,
+      status: false,
+      eventId,
         scheduleId: apiScheduleId
-      });
+    });
     }
     app.api.logAction("UNANSWER", `UID: ${uid}, RN: ${displayLabel}`);
     
@@ -1690,12 +1690,12 @@ export async function clearNowShowing(app) {
         if (isPickup) {
           // apiScheduleIdを計算（優先順位: pickupScheduleId > scheduleId > previousNowShowing.scheduleId）
           // ただし、空の場合はAPI呼び出しをスキップするため、空文字列を許可
-          const apiScheduleId = String(
-            pickupScheduleId ||
-            scheduleId ||
-            previousNowShowing.scheduleId ||
-            ""
-          ).trim();
+        const apiScheduleId = String(
+          pickupScheduleId ||
+          scheduleId ||
+          previousNowShowing.scheduleId ||
+          ""
+        ).trim();
           // scheduleIdが空の場合はAPI呼び出しをスキップ
           // normalizeScheduleIdは空の場合__default_schedule__を返すため、直接チェックする
           if (!apiScheduleId) {
@@ -1986,7 +1986,7 @@ export function updateActionAvailability(app) {
     // 何も選択していない時
     if (hasNowShowing) {
       // 何かを送出している場合は、送出クリアボタンを表示
-      app.dom.selectedInfo.textContent = "行を選択してください";
+    app.dom.selectedInfo.textContent = "行を選択してください";
       if (app.dom.clearButton) {
         app.dom.clearButton.hidden = false;
         const canClear = assetAvailable && telopEnabled && displayOnline;
@@ -2015,7 +2015,7 @@ export function updateActionAvailability(app) {
   // 選択中の質問のUID
   const selectedUid = String(selection.uid || "").trim();
   const isSelectedNowShowing = hasNowShowing && selectedUid === nowShowingUid;
-  
+
   app.dom.actionButtons.forEach((button) => {
     if (button) button.disabled = false;
   });

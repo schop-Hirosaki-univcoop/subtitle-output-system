@@ -1903,7 +1903,7 @@ export class OperatorApp {
       
       // 全てのstatusを適用
       this.applyQuestionStatusSnapshot(allStatus);
-    });
+      });
 
     this.questionStatusUnsubscribe = () => {
       eventUnsubscribe();

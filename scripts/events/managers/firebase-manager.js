@@ -1007,9 +1007,9 @@ export class EventFirebaseManager {
         return false;
       } else {
         // その他のエラーの場合は、通常のエラーログとして記録
-        console.error("Failed to confirm schedule consensus:", error);
-        this.app.setScheduleConflictError("日程の確定に失敗しました。通信環境を確認して再度お試しください。");
-        return false;
+      console.error("Failed to confirm schedule consensus:", error);
+      this.app.setScheduleConflictError("日程の確定に失敗しました。通信環境を確認して再度お試しください。");
+      return false;
       }
     }
   }
@@ -1425,13 +1425,13 @@ export class EventFirebaseManager {
             }
           } else {
             // その他のエラーの場合は、通常のログに記録
-            logError("Failed to remove schedule consensus from Firebase (local state already cleared)", error);
-            if (typeof console !== "undefined" && typeof console.warn === "function") {
-              console.warn("[maybeClearScheduleConsensus] Firebase削除に失敗しましたが、ローカル状態は既にクリア済みです。", {
-                eventId,
-                conflictSignature: signature,
+          logError("Failed to remove schedule consensus from Firebase (local state already cleared)", error);
+          if (typeof console !== "undefined" && typeof console.warn === "function") {
+            console.warn("[maybeClearScheduleConsensus] Firebase削除に失敗しましたが、ローカル状態は既にクリア済みです。", {
+              eventId,
+              conflictSignature: signature,
                 error: errorMessage
-              });
+            });
             }
           }
         });
@@ -1447,7 +1447,7 @@ export class EventFirebaseManager {
           });
         }
       } else {
-        logError("Failed to clear schedule consensus", error);
+      logError("Failed to clear schedule consensus", error);
       }
     }
   }
