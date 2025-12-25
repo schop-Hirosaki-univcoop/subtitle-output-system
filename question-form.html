@@ -26,12 +26,5 @@
   <telop-footer year="2025"></telop-footer>
 
   <script type="module" src="./src/main-question-form.js"></script>
-  <!-- 既存のスクリプト（Vueが無効な場合のフォールバック） -->
-  <script type="module">
-    // Vueが有効な場合は既存のスクリプトをスキップ
-    if (!window.__vueQuestionFormEnabled) {
-      import("./scripts/question-form/index.js");
-    }
-  </script>
 </body>
 </html>
