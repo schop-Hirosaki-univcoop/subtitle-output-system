@@ -752,53 +752,38 @@ const validateAllFields = () => {
   }
 
   // 4. 学歴パス
-  const academic = collectAcademicPathState();
-  if (academic.pendingSelect) {
-    const label = ensureString(academic.pendingSelect.dataset?.levelLabel) || '所属';
-    const depth = Number(academic.pendingSelect.dataset?.depth ?? '0');
-    setFieldError(`academic-${depth}`, `${label}を選択してください。`);
-    if (!firstErrorElement) {
-      firstErrorElement = academic.pendingSelect;
-    }
-    hasError = true;
-  } else if (!academic.path.length) {
-    const label = academicCustomLabel.value || '所属情報';
-    if (academic.firstSelect) {
-      const depth = Number(academic.firstSelect.dataset?.depth ?? '0');
+  // すべての階層のプルダウンを個別にチェック
+  for (let depth = 0; depth < academicLevels.value.length; depth++) {
+    const levelData = academicLevels.value[depth];
+    const value = academicSelections.value[depth] || '';
+    const selectElement = document.getElementById(`gl-academic-select-${depth}`);
+    if (!value && selectElement) {
+      const label = ensureString(levelData?.label) || ensureString(selectElement.dataset?.levelLabel) || '所属';
       setFieldError(`academic-${depth}`, `${label}を選択してください。`);
       if (!firstErrorElement) {
-        firstErrorElement = academic.firstSelect;
+        firstErrorElement = selectElement;
       }
-    } else if (academicCustomVisible.value) {
-      setFieldError('academic-custom', `${label}を入力してください。`);
-      if (!firstErrorElement) {
-        firstErrorElement = document.getElementById('gl-academic-custom');
-      }
+      hasError = true;
     }
-    hasError = true;
-  } else if (academic.requiresCustom && !academic.customValue) {
+  }
+  // カスタム学歴フィールドのチェック
+  const academic = collectAcademicPathState();
+  if (academic.requiresCustom && !academic.customValue) {
     const label = academic.customLabel || academicCustomLabel.value || '所属';
     setFieldError('academic-custom', `${label}を入力してください。`);
     if (!firstErrorElement) {
       firstErrorElement = document.getElementById('gl-academic-custom');
     }
     hasError = true;
-  } else {
-    const departmentSegment = academic.path[academic.path.length - 1];
-    const department = ensureString(departmentSegment?.value);
-    if (!department) {
-      const label = ensureString(departmentSegment?.label) || '所属';
-      if (departmentSegment?.isCustom) {
-        setFieldError('academic-custom', `${label}を入力してください。`);
-        if (!firstErrorElement) {
-          firstErrorElement = document.getElementById('gl-academic-custom');
-        }
-      } else if (departmentSegment?.element) {
-        const depth = Number(departmentSegment.element.dataset?.depth ?? '0');
-        setFieldError(`academic-${depth}`, `${label}を選択してください。`);
-        if (!firstErrorElement) {
-          firstErrorElement = departmentSegment.element;
-        }
+  }
+  // 学歴パスが空の場合のチェック（フォールバック）
+  if (!hasError && !academic.path.length && academicLevels.value.length === 0 && !academicCustomVisible.value) {
+    const label = academicCustomLabel.value || '所属情報';
+    if (academic.firstSelect) {
+      const depth = Number(academic.firstSelect.dataset?.depth ?? '0');
+      setFieldError(`academic-${depth}`, `${label}を選択してください。`);
+      if (!firstErrorElement) {
+        firstErrorElement = academic.firstSelect;
       }
       hasError = true;
     }
