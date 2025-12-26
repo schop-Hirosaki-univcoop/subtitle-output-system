@@ -752,19 +752,23 @@ const validateAllFields = () => {
   }
 
   // 4. 学歴パス
-  // すべての階層のプルダウンを個別にチェック
-  for (let depth = 0; depth < academicLevels.value.length; depth++) {
-    const levelData = academicLevels.value[depth];
-    const value = academicSelections.value[depth] || '';
-    const selectElement = document.getElementById(`gl-academic-select-${depth}`);
-    if (!value && selectElement) {
-      const label = ensureString(levelData?.label) || ensureString(selectElement.dataset?.levelLabel) || '所属';
-      setFieldError(`academic-${depth}`, `${label}を選択してください。`);
-      if (!firstErrorElement) {
-        firstErrorElement = selectElement;
+  // DOMに存在するすべての学歴プルダウンを直接チェック（学部選択直後に追加されたプルダウンも含む）
+  const academicFieldsContainer = document.getElementById('gl-academic-fields');
+  if (academicFieldsContainer) {
+    const academicSelects = academicFieldsContainer.querySelectorAll('select.gl-academic-select');
+    academicSelects.forEach((selectElement) => {
+      if (!(selectElement instanceof HTMLSelectElement)) return;
+      const depth = Number(selectElement.dataset?.depth ?? selectElement.id.replace('gl-academic-select-', ''));
+      const value = selectElement.value || '';
+      if (!value || value === '') {
+        const label = ensureString(selectElement.dataset?.levelLabel) || '所属';
+        setFieldError(`academic-${depth}`, `${label}を選択してください。`);
+        if (!firstErrorElement) {
+          firstErrorElement = selectElement;
+        }
+        hasError = true;
       }
-      hasError = true;
-    }
+    });
   }
   // カスタム学歴フィールドのチェック
   const academic = collectAcademicPathState();
@@ -775,18 +779,6 @@ const validateAllFields = () => {
       firstErrorElement = document.getElementById('gl-academic-custom');
     }
     hasError = true;
-  }
-  // 学歴パスが空の場合のチェック（フォールバック）
-  if (!hasError && !academic.path.length && academicLevels.value.length === 0 && !academicCustomVisible.value) {
-    const label = academicCustomLabel.value || '所属情報';
-    if (academic.firstSelect) {
-      const depth = Number(academic.firstSelect.dataset?.depth ?? '0');
-      setFieldError(`academic-${depth}`, `${label}を選択してください。`);
-      if (!firstErrorElement) {
-        firstErrorElement = academic.firstSelect;
-      }
-      hasError = true;
-    }
   }
 
   // 7. 学籍番号
