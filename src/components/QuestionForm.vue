@@ -69,6 +69,8 @@
           field-id="radio-name"
           :required="true"
           :hint="`${MAX_RADIO_NAME_LENGTH}文字まで。本名ではなく番組用のお名前をご入力ください。`"
+          :error="fieldErrors.radioName"
+          error-id="radio-name-error"
         >
           <input
             id="radio-name"
@@ -81,6 +83,8 @@
             :maxlength="MAX_RADIO_NAME_LENGTH"
             required
             v-model="radioName"
+            :aria-invalid="fieldErrors.radioName ? 'true' : undefined"
+            :aria-describedby="fieldErrors.radioName ? 'radio-name-error' : undefined"
             @input="handleRadioNameInput"
             @blur="handleRadioNameBlur"
           />
@@ -91,6 +95,8 @@
           field-id="question-text"
           :required="true"
           :hint="`句読点や改行を含めて${MAX_QUESTION_LENGTH}文字以内で入力してください。`"
+          :error="fieldErrors.question"
+          error-id="question-text-error"
         >
           <textarea
             id="question-text"
@@ -102,6 +108,8 @@
             placeholder="質問や相談内容を入力してください"
             required
             v-model="question"
+            :aria-invalid="fieldErrors.question ? 'true' : undefined"
+            :aria-describedby="fieldErrors.question ? 'question-text-error' : undefined"
             @input="handleQuestionInput"
             @blur="handleQuestionBlur"
           ></textarea>
@@ -118,7 +126,13 @@
           </div>
         </FormField>
 
-        <FormField label="ジャンル" field-id="genre" :required="true">
+        <FormField
+          label="ジャンル"
+          field-id="genre"
+          :required="true"
+          :error="fieldErrors.genre"
+          error-id="genre-error"
+        >
           <select
             id="genre"
             ref="genreSelectRef"
@@ -126,6 +140,8 @@
             class="input"
             required
             v-model="genre"
+            :aria-invalid="fieldErrors.genre ? 'true' : undefined"
+            :aria-describedby="fieldErrors.genre ? 'genre-error' : undefined"
             @change="handleGenreChange"
           >
             <option value="" data-placeholder="true" disabled :selected="!genre">
@@ -198,6 +214,7 @@ import FormFieldError from "./FormFieldError.vue";
 import { useFormFeedback } from "../composables/useFormFeedback.js";
 import { useFormGuard } from "../composables/useFormGuard.js";
 import { useFormState } from "../composables/useFormState.js";
+import { useFormValidation } from "../composables/useFormValidation.js";
 import { useFormSubmission } from "../composables/useFormSubmission.js";
 import { useFormReset } from "../composables/useFormReset.js";
 
@@ -255,6 +272,7 @@ const { isLocked, isBusy, isDirty, setBusy, setDirty, unlockForm } = useFormStat
 const { submittingController, abortPendingSubmission, startSubmissionController, clearSubmissionController } = useFormSubmission({
   createController: () => createSubmissionController(),
 });
+const { fieldErrors, setFieldError, clearFieldError, clearAllFieldErrors } = useFormValidation();
 
 // コンテキスト情報
 const context = ref(null);
@@ -440,10 +458,14 @@ const handleRadioNameInput = (event) => {
   if (radioName.value !== truncated) {
     radioName.value = truncated;
   }
+  // 入力時にエラーをクリア
+  clearFieldError('radioName');
 };
 
 const handleGenreChange = () => {
   setDirty(true);
+  // 変更時にエラーをクリア
+  clearFieldError('genre');
 };
 
 const hasValidContext = () => {
@@ -451,14 +473,16 @@ const hasValidContext = () => {
 };
 
 const getSanitizedFormData = () => {
+  clearAllFieldErrors();
+  let hasError = false;
+
   const sanitizedName = sanitizeRadioName(radioName.value, MAX_RADIO_NAME_LENGTH);
   if (radioName.value !== sanitizedName) {
     radioName.value = sanitizedName;
   }
   if (!sanitizedName) {
-    throw new FormValidationError("ラジオネームを入力してください。", {
-      focus: () => radioNameInputRef.value?.focus(),
-    });
+    setFieldError('radioName', 'ラジオネームを入力してください。');
+    hasError = true;
   }
 
   const normalizedQuestion = normalizeMultiline(question.value).trim();
@@ -470,24 +494,32 @@ const getSanitizedFormData = () => {
   updateQuestionCounter();
 
   if (!qLength) {
-    throw new FormValidationError("質問内容を入力してください。", {
-      focus: () => questionInputRef.value?.focus(),
-    });
-  }
-  if (qLength > MAX_QUESTION_LENGTH) {
-    throw new FormValidationError(`質問は${MAX_QUESTION_LENGTH}文字以内で入力してください。`, {
-      focus: () => questionInputRef.value?.focus(),
-    });
+    setFieldError('question', '質問内容を入力してください。');
+    hasError = true;
+  } else if (qLength > MAX_QUESTION_LENGTH) {
+    setFieldError('question', `質問は${MAX_QUESTION_LENGTH}文字以内で入力してください。`);
+    hasError = true;
   }
 
   const selectedGenre = genre.value;
   if (!selectedGenre) {
-    throw new FormValidationError("ジャンルを選択してください。", {
-      focus: () => genreSelectRef.value?.focus(),
-    });
+    setFieldError('genre', 'ジャンルを選択してください。');
+    hasError = true;
+  } else if (!GENRE_OPTIONS.includes(selectedGenre)) {
+    setFieldError('genre', 'ジャンルの選択が正しくありません。');
+    hasError = true;
   }
-  if (!GENRE_OPTIONS.includes(selectedGenre)) {
-    throw new FormValidationError("ジャンルの選択が正しくありません。");
+
+  if (hasError) {
+    // 最初のエラーフィールドにフォーカス
+    if (fieldErrors.value.radioName) {
+      radioNameInputRef.value?.focus();
+    } else if (fieldErrors.value.question) {
+      questionInputRef.value?.focus();
+    } else if (fieldErrors.value.genre) {
+      genreSelectRef.value?.focus();
+    }
+    throw new FormValidationError("入力内容に誤りがあります。各項目を確認してください。");
   }
 
   return { radioName: sanitizedName, question: normalizedQuestion, questionLength: qLength, genre: selectedGenre };
@@ -539,7 +571,7 @@ const handleSubmit = async (event) => {
   const form = event.target;
   if (form && typeof form.reportValidity === "function") {
     if (!form.reportValidity()) {
-      setFeedback("未入力の項目があります。確認してください。", "error");
+      // ネイティブバリデーションエラーは各フィールドの下に表示されるため、フィードバックは不要
       return;
     }
   }
@@ -549,8 +581,7 @@ const handleSubmit = async (event) => {
     formData = getSanitizedFormData();
   } catch (error) {
     if (error instanceof FormValidationError) {
-      error.invokeFocus();
-      setFeedback(error.message, "error");
+      // エラーは各フィールドの下に表示されているため、フィードバックは不要
       return;
     }
     throw error;

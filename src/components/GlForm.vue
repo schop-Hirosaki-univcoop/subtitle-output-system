@@ -43,8 +43,26 @@
         </FormField>
 
         <!-- フリガナ -->
-        <FormField label="フリガナ" field-id="gl-phonetic">
-          <input id="gl-phonetic" v-model="phonetic" name="phonetic" class="input" type="text" autocomplete="off" />
+        <FormField
+          label="フリガナ"
+          field-id="gl-phonetic"
+          :required="true"
+          :error="fieldErrors.phonetic"
+          error-id="gl-phonetic-error"
+        >
+          <input
+            id="gl-phonetic"
+            v-model="phonetic"
+            name="phonetic"
+            class="input"
+            type="text"
+            autocomplete="off"
+            required
+            :aria-invalid="fieldErrors.phonetic ? 'true' : undefined"
+            :aria-describedby="fieldErrors.phonetic ? 'gl-phonetic-error' : undefined"
+            @blur="validateField('phonetic')"
+            @input="clearFieldError('phonetic')"
+          />
         </FormField>
 
         <!-- メールアドレス -->
@@ -71,8 +89,24 @@
         </FormField>
 
         <!-- 学年 -->
-        <FormField label="学年" field-id="gl-grade">
-          <select id="gl-grade" v-model="grade" name="grade" class="input">
+        <FormField
+          label="学年"
+          field-id="gl-grade"
+          :required="true"
+          :error="fieldErrors.grade"
+          error-id="gl-grade-error"
+        >
+          <select
+            id="gl-grade"
+            v-model="grade"
+            name="grade"
+            class="input"
+            required
+            :aria-invalid="fieldErrors.grade ? 'true' : undefined"
+            :aria-describedby="fieldErrors.grade ? 'gl-grade-error' : undefined"
+            @blur="validateField('grade')"
+            @change="clearFieldError('grade')"
+          >
             <option value="" data-placeholder="true" disabled>学年を選択してください</option>
             <option value="1年">1年</option>
             <option value="2年">2年</option>
@@ -88,8 +122,24 @@
         </FormField>
 
         <!-- 性別 -->
-        <FormField label="性別" field-id="gl-gender">
-          <select id="gl-gender" v-model="gender" name="gender" class="input">
+        <FormField
+          label="性別"
+          field-id="gl-gender"
+          :required="true"
+          :error="fieldErrors.gender"
+          error-id="gl-gender-error"
+        >
+          <select
+            id="gl-gender"
+            v-model="gender"
+            name="gender"
+            class="input"
+            required
+            :aria-invalid="fieldErrors.gender ? 'true' : undefined"
+            :aria-describedby="fieldErrors.gender ? 'gl-gender-error' : undefined"
+            @blur="validateField('gender')"
+            @change="clearFieldError('gender')"
+          >
             <option value="" data-placeholder="true" disabled>性別を選択してください</option>
             <option value="男性">男性</option>
             <option value="女性">女性</option>
@@ -186,8 +236,26 @@
         </FormField>
 
         <!-- 学籍番号 -->
-        <FormField label="学籍番号" field-id="gl-student-id">
-          <input id="gl-student-id" v-model="studentId" name="student-id" class="input" type="text" autocomplete="off" />
+        <FormField
+          label="学籍番号"
+          field-id="gl-student-id"
+          :required="true"
+          :error="fieldErrors.studentId"
+          error-id="gl-student-id-error"
+        >
+          <input
+            id="gl-student-id"
+            v-model="studentId"
+            name="student-id"
+            class="input"
+            type="text"
+            autocomplete="off"
+            required
+            :aria-invalid="fieldErrors.studentId ? 'true' : undefined"
+            :aria-describedby="fieldErrors.studentId ? 'gl-student-id-error' : undefined"
+            @blur="validateField('studentId')"
+            @input="clearFieldError('studentId')"
+          />
         </FormField>
 
         <!-- 所属している部活・サークル -->
