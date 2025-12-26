@@ -223,7 +223,6 @@
 
         <!-- 個人情報の取扱いについて同意 -->
         <FormField
-          label="個人情報の取扱いについて同意します"
           field-id="gl-privacy-consent"
           :required="true"
           :error="fieldErrors['privacy-consent']"
