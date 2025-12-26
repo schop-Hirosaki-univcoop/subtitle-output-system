@@ -688,7 +688,17 @@ const validateAllFields = () => {
     hasError = true;
   }
 
-  // 2. メールアドレス
+  // 2. フリガナ
+  const phoneticValue = ensureString(phonetic.value);
+  if (!phoneticValue) {
+    setFieldError('phonetic', 'フリガナを入力してください。');
+    if (!firstErrorElement) {
+      firstErrorElement = document.getElementById('gl-phonetic');
+    }
+    hasError = true;
+  }
+
+  // 3. メールアドレス
   const emailValue = ensureString(email.value);
   if (!emailValue) {
     setFieldError('email', 'メールアドレスを入力してください。');
@@ -711,7 +721,27 @@ const validateAllFields = () => {
     }
   }
 
-  // 3. 学部
+  // 4. 学年
+  const gradeValue = ensureString(grade.value);
+  if (!gradeValue) {
+    setFieldError('grade', '学年を選択してください。');
+    if (!firstErrorElement) {
+      firstErrorElement = document.getElementById('gl-grade');
+    }
+    hasError = true;
+  }
+
+  // 5. 性別
+  const genderValue = ensureString(gender.value);
+  if (!genderValue) {
+    setFieldError('gender', '性別を選択してください。');
+    if (!firstErrorElement) {
+      firstErrorElement = document.getElementById('gl-gender');
+    }
+    hasError = true;
+  }
+
+  // 6. 学部
   const facultyValue = ensureString(faculty.value);
   if (!facultyValue || facultyValue === CUSTOM_OPTION_VALUE) {
     setFieldError('faculty', '学部を選択してください。');
@@ -774,7 +804,17 @@ const validateAllFields = () => {
     }
   }
 
-  // 5. シフト
+  // 7. 学籍番号
+  const studentIdValue = ensureString(studentId.value);
+  if (!studentIdValue) {
+    setFieldError('studentId', '学籍番号を入力してください。');
+    if (!firstErrorElement) {
+      firstErrorElement = document.getElementById('gl-student-id');
+    }
+    hasError = true;
+  }
+
+  // 8. シフト
   const shifts = collectShifts();
   if (schedules.value.length && !Object.values(shifts).some(Boolean)) {
     setFieldError('shifts', '参加可能な日程にチェックを入れてください。');
@@ -784,7 +824,7 @@ const validateAllFields = () => {
     hasError = true;
   }
 
-  // 6. 個人情報の取扱いについて同意
+  // 9. 個人情報の取扱いについて同意
   if (!privacyConsent.value) {
     setFieldError('privacy-consent', '個人情報の取扱いについて同意してください。');
     if (!firstErrorElement) {
