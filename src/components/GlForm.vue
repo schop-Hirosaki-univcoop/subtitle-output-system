@@ -752,23 +752,18 @@ const validateAllFields = () => {
   }
 
   // 4. 学歴パス
-  // DOMに存在するすべての学歴プルダウンを直接チェック（学部選択直後に追加されたプルダウンも含む）
-  const academicFieldsContainer = document.getElementById('gl-academic-fields');
-  if (academicFieldsContainer) {
-    const academicSelects = academicFieldsContainer.querySelectorAll('select.gl-academic-select');
-    academicSelects.forEach((selectElement) => {
-      if (!(selectElement instanceof HTMLSelectElement)) return;
-      const depth = Number(selectElement.dataset?.depth ?? selectElement.id.replace('gl-academic-select-', ''));
-      const value = selectElement.value || '';
-      if (!value || value === '') {
-        const label = ensureString(selectElement.dataset?.levelLabel) || '所属';
-        setFieldError(`academic-${depth}`, `${label}を選択してください。`);
-        if (!firstErrorElement) {
-          firstErrorElement = selectElement;
-        }
-        hasError = true;
+  // リアクティブなacademicLevelsを直接チェック（学部選択直後に追加されたプルダウンも確実にチェック）
+  for (let depth = 0; depth < academicLevels.value.length; depth++) {
+    const levelData = academicLevels.value[depth];
+    const value = academicSelections.value[depth] || '';
+    if (!value || value === '') {
+      const label = ensureString(levelData?.label) || '所属';
+      setFieldError(`academic-${depth}`, `${label}を選択してください。`);
+      if (!firstErrorElement) {
+        firstErrorElement = document.getElementById(`gl-academic-select-${depth}`);
       }
-    });
+      hasError = true;
+    }
   }
   // カスタム学歴フィールドのチェック
   const academic = collectAcademicPathState();
