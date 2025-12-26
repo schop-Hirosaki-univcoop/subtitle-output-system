@@ -29,7 +29,22 @@
             <label for="gl-name">氏名</label>
             <span class="field-tag field-tag--required">必須</span>
           </div>
-          <input id="gl-name" v-model="name" name="name" class="input" type="text" autocomplete="name" required />
+          <input
+            id="gl-name"
+            v-model="name"
+            name="name"
+            class="input"
+            type="text"
+            autocomplete="name"
+            required
+            :aria-invalid="fieldErrors.name ? 'true' : undefined"
+            :aria-describedby="fieldErrors.name ? 'gl-name-error' : undefined"
+            @blur="validateField('name')"
+            @input="clearFieldError('name')"
+          />
+          <div v-if="fieldErrors.name" id="gl-name-error" class="form-error" role="alert">
+            {{ fieldErrors.name }}
+          </div>
         </div>
 
         <!-- フリガナ -->
@@ -46,7 +61,22 @@
             <label for="gl-email">メールアドレス</label>
             <span class="field-tag field-tag--required">必須</span>
           </div>
-          <input id="gl-email" v-model="email" name="email" class="input" type="email" autocomplete="email" required />
+          <input
+            id="gl-email"
+            v-model="email"
+            name="email"
+            class="input"
+            type="email"
+            autocomplete="email"
+            required
+            :aria-invalid="fieldErrors.email ? 'true' : undefined"
+            :aria-describedby="fieldErrors.email ? 'gl-email-error' : undefined"
+            @blur="validateField('email')"
+            @input="clearFieldError('email')"
+          />
+          <div v-if="fieldErrors.email" id="gl-email-error" class="form-error" role="alert">
+            {{ fieldErrors.email }}
+          </div>
         </div>
 
         <!-- 学年 -->
@@ -89,13 +119,26 @@
             <label for="gl-faculty">学部</label>
             <span class="field-tag field-tag--required">必須</span>
           </div>
-          <select id="gl-faculty" v-model="faculty" name="faculty" class="input" required @change="handleFacultyChange">
+          <select
+            id="gl-faculty"
+            v-model="faculty"
+            name="faculty"
+            class="input"
+            required
+            :aria-invalid="fieldErrors.faculty ? 'true' : undefined"
+            :aria-describedby="fieldErrors.faculty ? 'gl-faculty-error' : undefined"
+            @change="handleFacultyChange"
+            @blur="validateField('faculty')"
+          >
             <option value="" data-placeholder="true" disabled>学部を選択してください</option>
             <option v-for="facultyOption in facultyOptions" :key="facultyOption.faculty" :value="facultyOption.faculty">
               {{ facultyOption.faculty }}
             </option>
             <option :value="CUSTOM_OPTION_VALUE">その他</option>
           </select>
+          <div v-if="fieldErrors.faculty" id="gl-faculty-error" class="form-error" role="alert">
+            {{ fieldErrors.faculty }}
+          </div>
         </div>
 
         <!-- 学歴フィールド（動的生成） -->
@@ -117,7 +160,10 @@
               :data-depth="depth"
               :data-level-label="level.label"
               required
+              :aria-invalid="fieldErrors[`academic-${depth}`] ? 'true' : undefined"
+              :aria-describedby="fieldErrors[`academic-${depth}`] ? `gl-academic-select-${depth}-error` : undefined"
               @change="handleAcademicLevelChange(depth)"
+              @blur="validateAcademicField(depth)"
             >
               <option value="" data-placeholder="true" disabled>{{ level.placeholder || `${level.label}を選択してください` }}</option>
               <option v-for="(option, index) in level.options" :key="index" :value="option.value" :data-option-index="index" :data-has-children="option.children ? 'true' : undefined">
@@ -125,6 +171,9 @@
               </option>
               <option v-if="level.allowCustom !== false" :value="CUSTOM_OPTION_VALUE" data-is-custom="true">その他</option>
             </select>
+            <div v-if="fieldErrors[`academic-${depth}`]" :id="`gl-academic-select-${depth}-error`" class="form-error" role="alert">
+              {{ fieldErrors[`academic-${depth}`] }}
+            </div>
           </div>
         </div>
 
@@ -142,7 +191,14 @@
             autocomplete="off"
             :placeholder="`${academicCustomLabel}名を入力してください`"
             :required="academicCustomVisible"
+            :aria-invalid="fieldErrors['academic-custom'] ? 'true' : undefined"
+            :aria-describedby="fieldErrors['academic-custom'] ? 'gl-academic-custom-error' : undefined"
+            @blur="validateField('academic-custom')"
+            @input="clearFieldError('academic-custom')"
           />
+          <div v-if="fieldErrors['academic-custom']" id="gl-academic-custom-error" class="form-error" role="alert">
+            {{ fieldErrors['academic-custom'] }}
+          </div>
         </div>
 
         <!-- 学籍番号 -->
@@ -177,6 +233,9 @@
               <span>{{ formatScheduleOption(schedule) }}</span>
             </label>
           </div>
+          <div v-if="fieldErrors.shifts" id="gl-shift-error" class="form-error" role="alert">
+            {{ fieldErrors.shifts }}
+          </div>
         </fieldset>
 
         <!-- 備考・連絡事項 -->
@@ -191,9 +250,21 @@
         <!-- 個人情報の取扱いについて同意 -->
         <div class="form-field">
           <label class="checkbox-label" for="gl-privacy-consent">
-            <input id="gl-privacy-consent" v-model="privacyConsent" name="privacy-consent" type="checkbox" required />
+            <input
+              id="gl-privacy-consent"
+              v-model="privacyConsent"
+              name="privacy-consent"
+              type="checkbox"
+              required
+              :aria-invalid="fieldErrors['privacy-consent'] ? 'true' : undefined"
+              :aria-describedby="fieldErrors['privacy-consent'] ? 'gl-privacy-consent-error' : undefined"
+              @change="clearFieldError('privacy-consent')"
+            />
             <span>個人情報の取扱いについて同意します</span>
           </label>
+          <div v-if="fieldErrors['privacy-consent']" id="gl-privacy-consent-error" class="form-error" role="alert">
+            {{ fieldErrors['privacy-consent'] }}
+          </div>
         </div>
 
         <!-- 送信ボタン -->
@@ -275,6 +346,9 @@ const note = ref('');
 const privacyConsent = ref(false);
 const selectedShifts = ref([]);
 
+// フィールドエラー（各フィールドの下に表示）
+const fieldErrors = ref({});
+
 // 学部・学歴データ
 const facultyOptions = ref([]);
 const academicLevels = ref([]);
@@ -329,6 +403,54 @@ const setFeedback = (message, type = '') => {
 const clearFeedback = () => {
   feedbackMessage.value = '';
   feedbackType.value = '';
+};
+
+const setFieldError = (fieldName, message) => {
+  fieldErrors.value[fieldName] = message;
+};
+
+const clearFieldError = (fieldName) => {
+  if (fieldErrors.value[fieldName]) {
+    delete fieldErrors.value[fieldName];
+  }
+};
+
+const clearAllFieldErrors = () => {
+  fieldErrors.value = {};
+};
+
+const validateField = (fieldName) => {
+  clearFieldError(fieldName);
+  const element = document.getElementById(`gl-${fieldName}`);
+  if (!element) return;
+  if (element instanceof HTMLInputElement || element instanceof HTMLSelectElement) {
+    if (!element.checkValidity()) {
+      let message = '';
+      if (element.validity.valueMissing) {
+        message = 'この項目は必須です。';
+      } else if (element.validity.typeMismatch && element.type === 'email') {
+        message = '正しいメールアドレスを入力してください。';
+      } else {
+        message = element.validationMessage || '入力内容に誤りがあります。';
+      }
+      setFieldError(fieldName, message);
+    }
+  }
+};
+
+const validateAcademicField = (depth) => {
+  const fieldName = `academic-${depth}`;
+  clearFieldError(fieldName);
+  const element = document.getElementById(`gl-academic-select-${depth}`);
+  if (!element || !(element instanceof HTMLSelectElement)) return;
+  if (!element.checkValidity()) {
+    const levelLabel = element.dataset?.levelLabel || '所属';
+    if (element.validity.valueMissing) {
+      setFieldError(fieldName, `${levelLabel}を選択してください。`);
+    } else {
+      setFieldError(fieldName, element.validationMessage || '選択内容に誤りがあります。');
+    }
+  }
 };
 
 const clearAcademicFields = () => {
@@ -570,6 +692,134 @@ const prepareForm = async () => {
   clearContextGuard();
 };
 
+const validateAllFields = () => {
+  clearAllFieldErrors();
+  let hasError = false;
+  let firstErrorElement = null;
+
+  // 上から順番にバリデーション
+  // 1. 氏名
+  const nameValue = ensureString(name.value);
+  if (!nameValue) {
+    setFieldError('name', '氏名を入力してください。');
+    if (!firstErrorElement) {
+      firstErrorElement = document.getElementById('gl-name');
+    }
+    hasError = true;
+  }
+
+  // 2. メールアドレス
+  const emailValue = ensureString(email.value);
+  if (!emailValue) {
+    setFieldError('email', 'メールアドレスを入力してください。');
+    if (!firstErrorElement) {
+      firstErrorElement = document.getElementById('gl-email');
+    }
+    hasError = true;
+  } else {
+    const emailElement = document.getElementById('gl-email');
+    if (emailElement && !emailElement.checkValidity()) {
+      if (emailElement.validity.typeMismatch) {
+        setFieldError('email', '正しいメールアドレスを入力してください。');
+      } else {
+        setFieldError('email', 'メールアドレスの形式が正しくありません。');
+      }
+      if (!firstErrorElement) {
+        firstErrorElement = emailElement;
+      }
+      hasError = true;
+    }
+  }
+
+  // 3. 学部
+  const facultyValue = ensureString(faculty.value);
+  if (!facultyValue || facultyValue === CUSTOM_OPTION_VALUE) {
+    setFieldError('faculty', '学部を選択してください。');
+    if (!firstErrorElement) {
+      firstErrorElement = document.getElementById('gl-faculty');
+    }
+    hasError = true;
+  }
+
+  // 4. 学歴パス
+  const academic = collectAcademicPathState();
+  if (academic.pendingSelect) {
+    const label = ensureString(academic.pendingSelect.dataset?.levelLabel) || '所属';
+    const depth = Number(academic.pendingSelect.dataset?.depth ?? '0');
+    setFieldError(`academic-${depth}`, `${label}を選択してください。`);
+    if (!firstErrorElement) {
+      firstErrorElement = academic.pendingSelect;
+    }
+    hasError = true;
+  } else if (!academic.path.length) {
+    const label = academicCustomLabel.value || '所属情報';
+    if (academic.firstSelect) {
+      const depth = Number(academic.firstSelect.dataset?.depth ?? '0');
+      setFieldError(`academic-${depth}`, `${label}を選択してください。`);
+      if (!firstErrorElement) {
+        firstErrorElement = academic.firstSelect;
+      }
+    } else if (academicCustomVisible.value) {
+      setFieldError('academic-custom', `${label}を入力してください。`);
+      if (!firstErrorElement) {
+        firstErrorElement = document.getElementById('gl-academic-custom');
+      }
+    }
+    hasError = true;
+  } else if (academic.requiresCustom && !academic.customValue) {
+    const label = academic.customLabel || academicCustomLabel.value || '所属';
+    setFieldError('academic-custom', `${label}を入力してください。`);
+    if (!firstErrorElement) {
+      firstErrorElement = document.getElementById('gl-academic-custom');
+    }
+    hasError = true;
+  } else {
+    const departmentSegment = academic.path[academic.path.length - 1];
+    const department = ensureString(departmentSegment?.value);
+    if (!department) {
+      const label = ensureString(departmentSegment?.label) || '所属';
+      if (departmentSegment?.isCustom) {
+        setFieldError('academic-custom', `${label}を入力してください。`);
+        if (!firstErrorElement) {
+          firstErrorElement = document.getElementById('gl-academic-custom');
+        }
+      } else if (departmentSegment?.element) {
+        const depth = Number(departmentSegment.element.dataset?.depth ?? '0');
+        setFieldError(`academic-${depth}`, `${label}を選択してください。`);
+        if (!firstErrorElement) {
+          firstErrorElement = departmentSegment.element;
+        }
+      }
+      hasError = true;
+    }
+  }
+
+  // 5. シフト
+  const shifts = collectShifts();
+  if (schedules.value.length && !Object.values(shifts).some(Boolean)) {
+    setFieldError('shifts', '参加可能な日程にチェックを入れてください。');
+    if (!firstErrorElement) {
+      firstErrorElement = document.querySelector('#gl-shift-list input[type="checkbox"]');
+    }
+    hasError = true;
+  }
+
+  // 6. 個人情報の取扱いについて同意
+  if (!privacyConsent.value) {
+    setFieldError('privacy-consent', '個人情報の取扱いについて同意してください。');
+    if (!firstErrorElement) {
+      firstErrorElement = document.getElementById('gl-privacy-consent');
+    }
+    hasError = true;
+  }
+
+  if (hasError && firstErrorElement) {
+    firstErrorElement.focus();
+  }
+
+  return !hasError;
+};
+
 const handleSubmit = async (event) => {
   event.preventDefault();
   clearFeedback();
@@ -578,61 +828,17 @@ const handleSubmit = async (event) => {
     setFeedback('イベント情報が取得できませんでした。運営までお問い合わせください。', 'error');
     return;
   }
+
+  // 上から順番にバリデーション
+  if (!validateAllFields()) {
+    return;
+  }
+
   const facultyValue = ensureString(faculty.value);
-  if (!facultyValue || facultyValue === CUSTOM_OPTION_VALUE) {
-    setFeedback('学部を選択してください。', 'error');
-    document.getElementById('gl-faculty')?.focus();
-    return;
-  }
   const academic = collectAcademicPathState();
-  if (academic.pendingSelect) {
-    const label = ensureString(academic.pendingSelect.dataset?.levelLabel) || '所属';
-    setFeedback(`${label}を選択してください。`, 'error');
-    academic.pendingSelect.focus();
-    return;
-  }
-  if (!academic.path.length) {
-    const label = academicCustomLabel.value || '所属情報';
-    setFeedback(`${label}を選択してください。`, 'error');
-    if (academic.firstSelect) {
-      academic.firstSelect.focus();
-    } else if (academicCustomVisible.value) {
-      document.getElementById('gl-academic-custom')?.focus();
-    }
-    return;
-  }
-  if (academic.requiresCustom && !academic.customValue) {
-    const label = academic.customLabel || academicCustomLabel.value || '所属';
-    setFeedback(`${label}を入力してください。`, 'error');
-    document.getElementById('gl-academic-custom')?.focus();
-    return;
-  }
   const departmentSegment = academic.path[academic.path.length - 1];
   const department = ensureString(departmentSegment?.value);
-  if (!department) {
-    const label = ensureString(departmentSegment?.label) || '所属';
-    setFeedback(`${label}を入力してください。`, 'error');
-    if (departmentSegment?.element) {
-      departmentSegment.element.focus();
-    } else {
-      document.getElementById('gl-academic-custom')?.focus();
-    }
-    return;
-  }
   const shifts = collectShifts();
-  if (schedules.value.length && !Object.values(shifts).some(Boolean)) {
-    setFeedback('参加可能な日程にチェックを入れてください。', 'error');
-    const firstCheckbox = document.querySelector('#gl-shift-list input[type="checkbox"]');
-    if (firstCheckbox) {
-      firstCheckbox.focus();
-    }
-    return;
-  }
-  if (!privacyConsent.value) {
-    setFeedback('個人情報の取扱いについて同意してください。', 'error');
-    document.getElementById('gl-privacy-consent')?.focus();
-    return;
-  }
   const academicPath = academic.path
     .map((segment) => ({
       label: ensureString(segment.label),
@@ -643,16 +849,6 @@ const handleSubmit = async (event) => {
     .filter((segment) => segment.value);
   const nameValue = ensureString(name.value);
   const emailValue = ensureString(email.value);
-  if (!nameValue) {
-    setFeedback('氏名を入力してください。', 'error');
-    document.getElementById('gl-name')?.focus();
-    return;
-  }
-  if (!emailValue) {
-    setFeedback('メールアドレスを入力してください。', 'error');
-    document.getElementById('gl-email')?.focus();
-    return;
-  }
   const payload = {
     name: nameValue,
     phonetic: ensureString(phonetic.value),
