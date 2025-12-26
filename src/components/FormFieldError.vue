@@ -1,6 +1,6 @@
 <!-- FormFieldError.vue: フォームフィールドのエラー表示コンポーネント -->
 <template>
-  <div v-if="error" :id="id" class="form-error" role="alert">
+  <div v-if="error" :id="id || undefined" class="form-error" role="alert">
     {{ error }}
   </div>
 </template>
