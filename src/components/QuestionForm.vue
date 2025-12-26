@@ -567,15 +567,7 @@ const handleSubmit = async (event) => {
     return;
   }
 
-  // ネイティブのフォームバリデーションを実行
-  const form = event.target;
-  if (form && typeof form.reportValidity === "function") {
-    if (!form.reportValidity()) {
-      // ネイティブバリデーションエラーは各フィールドの下に表示されるため、フィードバックは不要
-      return;
-    }
-  }
-
+  // カスタムバリデーションを先に実行（GLフォームと同様）
   let formData;
   try {
     formData = getSanitizedFormData();
