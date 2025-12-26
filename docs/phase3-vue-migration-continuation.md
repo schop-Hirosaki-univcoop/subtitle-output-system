@@ -68,26 +68,26 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - `EventHandlersManager`: イベントハンドラー管理
    - `InitManager`: 初期化管理
 
-4. **`QuestionFormApp`** (`scripts/question-form/app.js`) ✅ **Vue移行完了**
+4. **`QuestionFormApp`** (`scripts/question-form/app.js`) ✅ **Vue 移行完了**
 
    - 約 550 行（移行前）
    - 質問フォーム（`question-form.html`）
    - ✅ `QuestionForm.vue`コンポーネントに移行完了
    - ✅ 既存の`QuestionFormApp`と`FormView`クラスを削除
 
-5. **`LoginPage`** (`scripts/login.js`) ✅ **Vue移行完了**
+5. **`LoginPage`** (`scripts/login.js`) ✅ **Vue 移行完了**
 
    - 約 655 行（移行前）
    - ログイン画面（`login.html`）
    - ✅ `LoginPage.vue`コンポーネントに移行完了
    - ✅ 既存の`LoginPage`クラスを削除
 
-6. **GL 応募フォーム** (`scripts/gl-form/`) ✅ **Vue移行完了**
+6. **GL 応募フォーム** (`scripts/gl-form/`) ✅ **Vue 移行完了**
 
    - GL 応募フォーム（`gl-form.html`）
    - ✅ `GlForm.vue`コンポーネントに移行完了
    - ✅ 既存の`GlFormManager`と`GlFormDataManager`クラスを削除
-   - ✅ `gl-form-utils.js`はユーティリティ関数として残存（Vueコンポーネントから使用）
+   - ✅ `gl-form-utils.js`はユーティリティ関数として残存（Vue コンポーネントから使用）
 
 7. **テロップ表示画面** (`display.html`)
    - イベントで表示するテロップ画面
@@ -273,30 +273,30 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
 ### 優先度: 低
 
-#### 4. 質問フォーム ✅ **Vue移行完了**
+#### 4. 質問フォーム ✅ **Vue 移行完了**
 
 **対象**: `QuestionFormApp` (`question-form.html`)
 
-- ✅ Phase 3.1で移行完了
+- ✅ Phase 3.1 で移行完了
 - ✅ `QuestionForm.vue`コンポーネントに移行
 - ✅ 既存の`QuestionFormApp`と`FormView`クラスを削除
 
-#### 5. ログイン画面 ✅ **Vue移行完了**
+#### 5. ログイン画面 ✅ **Vue 移行完了**
 
 **対象**: `LoginPage` (`login.html`)
 
-- ✅ Phase 3.1で移行完了
+- ✅ Phase 3.1 で移行完了
 - ✅ `LoginPage.vue`コンポーネントに移行
 - ✅ 既存の`LoginPage`クラスを削除
 
-#### 6. GL 応募フォーム ✅ **Vue移行完了**
+#### 6. GL 応募フォーム ✅ **Vue 移行完了**
 
 **対象**: `GlFormManager` / `GlFormDataManager` (`gl-form.html`)
 
-- ✅ Phase 3.1で移行完了
+- ✅ Phase 3.1 で移行完了
 - ✅ `GlForm.vue`コンポーネントに移行
 - ✅ 既存の`GlFormManager`と`GlFormDataManager`クラスを削除
-- ✅ `gl-form-utils.js`はユーティリティ関数として残存（Vueコンポーネントから使用）
+- ✅ `gl-form-utils.js`はユーティリティ関数として残存（Vue コンポーネントから使用）
 
 #### 7. テロップ表示画面
 
@@ -366,10 +366,10 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
        - `questionIntake/participants/{eventId}/{scheduleId}/{participantId}/name`を誰でも読み取り可能に
        - 他の機密フィールド（email, phone, token 等）は管理者のみ読み取り可能のまま
      - カスタムバリデーションを実装し、各フィールドの下にエラーを表示
-     - ネイティブのHTML5バリデーションを削除し、カスタムバリデーションに統一
+     - ネイティブの HTML5 バリデーションを削除し、カスタムバリデーションに統一
    - **削除したファイル**: `scripts/question-form/index.js`, `scripts/question-form/app.js`, `scripts/question-form/view.js`
    - **移行結果**: `QuestionFormApp`と`FormView`の DOM 操作を Vue のテンプレートとリアクティビティに置き換え
-   - **共通化**: 質問フォームとGLフォームで共通コンポーネントとComposableを作成（後述）
+   - **共通化**: 質問フォームと GL フォームで共通コンポーネントと Composable を作成（後述）
 
 3. **GL 応募フォーム** ✅ **完了**
 
@@ -382,8 +382,8 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
      - カスタムバリデーションを実装し、各フィールドの下にエラーを表示
      - 学部選択直後に追加される階層プルダウンも確実にバリデーションされるように修正
    - **削除したファイル**: `scripts/gl-form/index.js`, `scripts/gl-form/gl-form-manager.js`, `scripts/gl-form/gl-form-data-manager.js`
-   - **残存ファイル**: `scripts/gl-form/gl-form-utils.js`（ユーティリティ関数としてVueコンポーネントから使用）
-   - **共通化**: 質問フォームとGLフォームで共通コンポーネントとComposableを作成（後述）
+   - **残存ファイル**: `scripts/gl-form/gl-form-utils.js`（ユーティリティ関数として Vue コンポーネントから使用）
+   - **共通化**: 質問フォームと GL フォームで共通コンポーネントと Composable を作成（後述）
 
 **期待される効果**:
 
@@ -514,8 +514,36 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 - **Composables**: 共通の状態管理ロジックは Composable として作成
   - 既存の`useOperatorApp.js`を参考に、必要に応じて追加の Composable を作成
   - `EventAdminApp`や`QuestionAdminApp`へのアクセスを提供する Composable の作成を検討
+  - **フォーム共通Composables**（Phase 3.1で作成）:
+    - `useFormFeedback.js`: フィードバックメッセージ管理
+    - `useFormGuard.js`: コンテキストガード管理
+    - `useFormState.js`: フォーム状態管理（isLocked, isBusy, isSubmitting, isDirty, submissionSuccess）
+    - `useFormValidation.js`: バリデーション管理（fieldErrors, validateField, validateAcademicField）
+    - `useFormSubmission.js`: 送信処理管理（AbortController対応）
+    - `useFormReset.js`: フォームリセット処理（ラジオネーム非リセット対応）
 - **既存の Manager パターン**: Manager パターンとの統合を維持
 - **Firebase リスナー**: Firebase のリアルタイム更新を Vue のリアクティブシステムと統合
+
+### フォーム共通化（Phase 3.1で実装）
+
+質問フォームとGLフォームの共通部分をコンポーネントとComposableに抽出：
+
+**共通コンポーネント**:
+- `IntakeFormLayout.vue`: 外側のモジュール構造（module-header, module-body）
+- `ContextGuard.vue`: コンテキストガード表示
+- `ContextBanner.vue`: コンテキストバナー表示
+- `FormActions.vue`: フォームアクション（送信ボタンとフィードバック）
+- `FormMeta.vue`: フォームメタ情報表示
+- `FormField.vue`: フォームフィールドラッパー（label, required/optional tag, hint, error）
+- `FormFieldError.vue`: エラー表示コンポーネント
+
+**共通Composables**:
+- 上記の`useFormFeedback`, `useFormGuard`, `useFormState`, `useFormValidation`, `useFormSubmission`, `useFormReset`
+
+**効果**:
+- コードの重複を大幅に削減
+- 保守性の向上（共通部分の変更が一箇所で済む）
+- 一貫性の確保（両フォームで同じUI/UX）
 
 ### 4. 移行時の注意点
 
@@ -545,7 +573,7 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
    - ✅ ログイン画面の移行完了
    - ✅ 質問フォームの移行完了
-   - ✅ GL応募フォームの移行完了
+   - ✅ GL 応募フォームの移行完了
    - ✅ フォーム共通化の実装完了
    - ✅ Vue 移行の基本的なパターンを確立
 
