@@ -68,24 +68,26 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
    - `EventHandlersManager`: イベントハンドラー管理
    - `InitManager`: 初期化管理
 
-4. **`QuestionFormApp`** (`scripts/question-form/app.js`)
+4. **`QuestionFormApp`** (`scripts/question-form/app.js`) ✅ **Vue移行完了**
 
-   - 約 550 行
+   - 約 550 行（移行前）
    - 質問フォーム（`question-form.html`）
-   - 既に`FormView`クラス（`view.js`）で View 層が分離されている（MVC モデルに準拠）
+   - ✅ `QuestionForm.vue`コンポーネントに移行完了
+   - ✅ 既存の`QuestionFormApp`と`FormView`クラスを削除
 
-5. **`LoginPage`** (`scripts/login.js`)
+5. **`LoginPage`** (`scripts/login.js`) ✅ **Vue移行完了**
 
-   - 約 655 行
+   - 約 655 行（移行前）
    - ログイン画面（`login.html`）
-   - Firebase 認証のログイン UI を提供
-   - Google OAuth によるサインイン操作
+   - ✅ `LoginPage.vue`コンポーネントに移行完了
+   - ✅ 既存の`LoginPage`クラスを削除
 
-6. **GL 応募フォーム** (`scripts/gl-form/`)
+6. **GL 応募フォーム** (`scripts/gl-form/`) ✅ **Vue移行完了**
 
    - GL 応募フォーム（`gl-form.html`）
-   - `GlFormManager`と`GlFormDataManager`を使用
-   - フォーム入力・送信機能
+   - ✅ `GlForm.vue`コンポーネントに移行完了
+   - ✅ 既存の`GlFormManager`と`GlFormDataManager`クラスを削除
+   - ✅ `gl-form-utils.js`はユーティリティ関数として残存（Vueコンポーネントから使用）
 
 7. **テロップ表示画面** (`display.html`)
    - イベントで表示するテロップ画面
@@ -271,35 +273,30 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
 ### 優先度: 低
 
-#### 4. 質問フォーム
+#### 4. 質問フォーム ✅ **Vue移行完了**
 
 **対象**: `QuestionFormApp` (`question-form.html`)
 
-- 既に`FormView`クラスで View 層が分離されている
-- MVC モデルに準拠しているため、Vue への移行は優先度が低い
-- 必要に応じて、将来的に Vue コンポーネントに移行
+- ✅ Phase 3.1で移行完了
+- ✅ `QuestionForm.vue`コンポーネントに移行
+- ✅ 既存の`QuestionFormApp`と`FormView`クラスを削除
 
-#### 5. ログイン画面
+#### 5. ログイン画面 ✅ **Vue移行完了**
 
 **対象**: `LoginPage` (`login.html`)
 
-- `scripts/login.js`に実装されている`LoginPage`クラス（約 655 行）
-- Firebase 認証のログイン UI を提供
-- Google OAuth によるサインイン操作
-- 認証状態の監視とリダイレクト処理
-- 比較的シンプルな UI のため、Vue への移行は優先度が低い
-- 必要に応じて、将来的に Vue コンポーネントに移行
+- ✅ Phase 3.1で移行完了
+- ✅ `LoginPage.vue`コンポーネントに移行
+- ✅ 既存の`LoginPage`クラスを削除
 
-#### 6. GL 応募フォーム
+#### 6. GL 応募フォーム ✅ **Vue移行完了**
 
 **対象**: `GlFormManager` / `GlFormDataManager` (`gl-form.html`)
 
-- `scripts/gl-form/`に実装されている GL 応募フォーム
-- `GlFormManager`と`GlFormDataManager`を使用
-- フォーム入力・送信機能
-- 質問フォームと同様に、フォーム管理が分離されている可能性がある
-- Vue への移行は優先度が低い
-- 必要に応じて、将来的に Vue コンポーネントに移行
+- ✅ Phase 3.1で移行完了
+- ✅ `GlForm.vue`コンポーネントに移行
+- ✅ 既存の`GlFormManager`と`GlFormDataManager`クラスを削除
+- ✅ `gl-form-utils.js`はユーティリティ関数として残存（Vueコンポーネントから使用）
 
 #### 7. テロップ表示画面
 
@@ -368,14 +365,25 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
      - Firebase セキュリティルールを更新：参加者情報の`name`フィールドのみ公開読み取り可能に変更
        - `questionIntake/participants/{eventId}/{scheduleId}/{participantId}/name`を誰でも読み取り可能に
        - 他の機密フィールド（email, phone, token 等）は管理者のみ読み取り可能のまま
+     - カスタムバリデーションを実装し、各フィールドの下にエラーを表示
+     - ネイティブのHTML5バリデーションを削除し、カスタムバリデーションに統一
+   - **削除したファイル**: `scripts/question-form/index.js`, `scripts/question-form/app.js`, `scripts/question-form/view.js`
    - **移行結果**: `QuestionFormApp`と`FormView`の DOM 操作を Vue のテンプレートとリアクティビティに置き換え
-   - **理由**: 既に`FormView`で View 層が分離されており、移行が比較的容易
+   - **共通化**: 質問フォームとGLフォームで共通コンポーネントとComposableを作成（後述）
 
-3. **GL 応募フォーム**
+3. **GL 応募フォーム** ✅ **完了**
 
    - `GlForm.vue`コンポーネントを作成
-   - 既存の`GlFormManager`と`GlFormDataManager`と統合
-   - **理由**: 質問フォームと同様の構造で、フォーム管理が分離されている
+   - `src/main-gl-form.js`エントリーポイントを作成
+   - 既存の`GlFormManager`と`GlFormDataManager`の機能を統合
+   - リアクティブな状態管理、バリデーション、フォーム送信処理を実装
+   - **移行時の修正内容**:
+     - フリガナ、性別、学年、学籍番号を必須項目に変更
+     - カスタムバリデーションを実装し、各フィールドの下にエラーを表示
+     - 学部選択直後に追加される階層プルダウンも確実にバリデーションされるように修正
+   - **削除したファイル**: `scripts/gl-form/index.js`, `scripts/gl-form/gl-form-manager.js`, `scripts/gl-form/gl-form-data-manager.js`
+   - **残存ファイル**: `scripts/gl-form/gl-form-utils.js`（ユーティリティ関数としてVueコンポーネントから使用）
+   - **共通化**: 質問フォームとGLフォームで共通コンポーネントとComposableを作成（後述）
 
 **期待される効果**:
 
@@ -533,19 +541,26 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 
 ## 次のステップ
 
-1. **Phase 3.1 の開始（軽量な独立画面）**
+1. **Phase 3.1 の完了（軽量な独立画面）** ✅
 
-   - ログイン画面から移行を開始
-   - 動作確認を実施
-   - Vue 移行の基本的なパターンを確立
+   - ✅ ログイン画面の移行完了
+   - ✅ 質問フォームの移行完了
+   - ✅ GL応募フォームの移行完了
+   - ✅ フォーム共通化の実装完了
+   - ✅ Vue 移行の基本的なパターンを確立
 
-2. **段階的な移行**
+2. **Phase 3.2 の開始（テロップ操作パネルの残りの部分）**
+
+   - `OperatorApp`の埋め込みツールとして使用されるパネルを移行
+   - 辞書パネル、ピックアップパネル、ログパネル、サイドテロップパネル
+
+3. **段階的な移行**
 
    - 各機能を移行した後、動作確認を実施
    - 問題がなければ次の機能に進む
    - 軽い機能から順に進め、経験を積んでから重い機能に取り組む
 
-3. **パフォーマンスの最適化**
+4. **パフォーマンスの最適化**
    - 移行完了後、パフォーマンスの最適化を実施
    - Firebase リスナーやイベントベースの更新に変更
 
