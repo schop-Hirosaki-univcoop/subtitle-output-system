@@ -64,12 +64,12 @@
         />
         <input id="group-number" name="group-number" type="hidden" :value="hiddenContext.groupNumber" />
 
-        <div class="form-field">
-          <!-- ラジオネーム入力: 配信表示名を収集 -->
-          <div class="field-header">
-            <label for="radio-name">ラジオネーム</label>
-            <span class="field-tag field-tag--required">必須</span>
-          </div>
+        <FormField
+          label="ラジオネーム"
+          field-id="radio-name"
+          :required="true"
+          :hint="`${MAX_RADIO_NAME_LENGTH}文字まで。本名ではなく番組用のお名前をご入力ください。`"
+        >
           <input
             id="radio-name"
             ref="radioNameInputRef"
@@ -84,17 +84,14 @@
             @input="handleRadioNameInput"
             @blur="handleRadioNameBlur"
           />
-          <div class="field-footer">
-            <p class="field-hint">{{ MAX_RADIO_NAME_LENGTH }}文字まで。本名ではなく番組用のお名前をご入力ください。</p>
-          </div>
-        </div>
+        </FormField>
 
-        <div class="form-field">
-          <!-- 質問本文入力: 60文字制限でテロップ化を想定 -->
-          <div class="field-header">
-            <label for="question-text">質問・お悩み</label>
-            <span class="field-tag field-tag--required">必須</span>
-          </div>
+        <FormField
+          label="質問・お悩み"
+          field-id="question-text"
+          :required="true"
+          :hint="`句読点や改行を含めて${MAX_QUESTION_LENGTH}文字以内で入力してください。`"
+        >
           <textarea
             id="question-text"
             ref="questionInputRef"
@@ -109,7 +106,6 @@
             @blur="handleQuestionBlur"
           ></textarea>
           <div class="field-footer">
-            <p class="field-hint">句読点や改行を含めて{{ MAX_QUESTION_LENGTH }}文字以内で入力してください。</p>
             <p
               id="question-counter"
               class="field-hint field-hint--status"
@@ -120,14 +116,9 @@
               {{ questionLength }} / {{ MAX_QUESTION_LENGTH }}文字
             </p>
           </div>
-        </div>
+        </FormField>
 
-        <div class="form-field">
-          <!-- ジャンル選択: オンエア時の分類と運営側並び替えに利用 -->
-          <div class="field-header">
-            <label for="genre">ジャンル</label>
-            <span class="field-tag field-tag--required">必須</span>
-          </div>
+        <FormField label="ジャンル" field-id="genre" :required="true">
           <select
             id="genre"
             ref="genreSelectRef"
@@ -149,7 +140,7 @@
               {{ option }}
             </option>
           </select>
-        </div>
+        </FormField>
 
         <FormActions
           :is-busy="isBusy"
@@ -202,6 +193,8 @@ import ContextGuard from "./ContextGuard.vue";
 import ContextBanner from "./ContextBanner.vue";
 import FormActions from "./FormActions.vue";
 import FormMeta from "./FormMeta.vue";
+import FormField from "./FormField.vue";
+import FormFieldError from "./FormFieldError.vue";
 import { useFormFeedback } from "../composables/useFormFeedback.js";
 import { useFormGuard } from "../composables/useFormGuard.js";
 import { useFormState } from "../composables/useFormState.js";

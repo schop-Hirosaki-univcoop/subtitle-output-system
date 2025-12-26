@@ -20,11 +20,13 @@
         <input id="gl-slug" name="form-slug" type="hidden" :value="slug" />
 
         <!-- 氏名 -->
-        <div class="form-field">
-          <div class="field-header">
-            <label for="gl-name">氏名</label>
-            <span class="field-tag field-tag--required">必須</span>
-          </div>
+        <FormField
+          label="氏名"
+          field-id="gl-name"
+          :required="true"
+          :error="fieldErrors.name"
+          error-id="gl-name-error"
+        >
           <input
             id="gl-name"
             v-model="name"
@@ -38,25 +40,21 @@
             @blur="validateField('name')"
             @input="clearFieldError('name')"
           />
-          <div v-if="fieldErrors.name" id="gl-name-error" class="form-error" role="alert">
-            {{ fieldErrors.name }}
-          </div>
-        </div>
+        </FormField>
 
         <!-- フリガナ -->
-        <div class="form-field">
-          <div class="field-header">
-            <label for="gl-phonetic">フリガナ</label>
-          </div>
+        <FormField label="フリガナ" field-id="gl-phonetic">
           <input id="gl-phonetic" v-model="phonetic" name="phonetic" class="input" type="text" autocomplete="off" />
-        </div>
+        </FormField>
 
         <!-- メールアドレス -->
-        <div class="form-field">
-          <div class="field-header">
-            <label for="gl-email">メールアドレス</label>
-            <span class="field-tag field-tag--required">必須</span>
-          </div>
+        <FormField
+          label="メールアドレス"
+          field-id="gl-email"
+          :required="true"
+          :error="fieldErrors.email"
+          error-id="gl-email-error"
+        >
           <input
             id="gl-email"
             v-model="email"
@@ -70,16 +68,10 @@
             @blur="validateField('email')"
             @input="clearFieldError('email')"
           />
-          <div v-if="fieldErrors.email" id="gl-email-error" class="form-error" role="alert">
-            {{ fieldErrors.email }}
-          </div>
-        </div>
+        </FormField>
 
         <!-- 学年 -->
-        <div class="form-field">
-          <div class="field-header">
-            <label for="gl-grade">学年</label>
-          </div>
+        <FormField label="学年" field-id="gl-grade">
           <select id="gl-grade" v-model="grade" name="grade" class="input">
             <option value="" data-placeholder="true" disabled>学年を選択してください</option>
             <option value="1年">1年</option>
@@ -93,13 +85,10 @@
             <option value="博士3年">博士3年</option>
             <option value="その他（備考欄に記入してください）">その他（備考欄に記入してください）</option>
           </select>
-        </div>
+        </FormField>
 
         <!-- 性別 -->
-        <div class="form-field">
-          <div class="field-header">
-            <label for="gl-gender">性別</label>
-          </div>
+        <FormField label="性別" field-id="gl-gender">
           <select id="gl-gender" v-model="gender" name="gender" class="input">
             <option value="" data-placeholder="true" disabled>性別を選択してください</option>
             <option value="男性">男性</option>
@@ -107,14 +96,16 @@
             <option value="その他">その他</option>
             <option value="回答しない">回答しない</option>
           </select>
-        </div>
+        </FormField>
 
         <!-- 学部 -->
-        <div class="form-field">
-          <div class="field-header">
-            <label for="gl-faculty">学部</label>
-            <span class="field-tag field-tag--required">必須</span>
-          </div>
+        <FormField
+          label="学部"
+          field-id="gl-faculty"
+          :required="true"
+          :error="fieldErrors.faculty"
+          error-id="gl-faculty-error"
+        >
           <select
             id="gl-faculty"
             v-model="faculty"
@@ -132,23 +123,21 @@
             </option>
             <option :value="CUSTOM_OPTION_VALUE">その他</option>
           </select>
-          <div v-if="fieldErrors.faculty" id="gl-faculty-error" class="form-error" role="alert">
-            {{ fieldErrors.faculty }}
-          </div>
-        </div>
+        </FormField>
 
         <!-- 学歴フィールド（動的生成） -->
         <div id="gl-academic-fields">
-          <div
+          <FormField
             v-for="(level, depth) in academicLevels"
             :key="`academic-${depth}`"
-            class="form-field gl-academic-field"
+            :label="level.label"
+            :field-id="`gl-academic-select-${depth}`"
+            :required="true"
+            :error="fieldErrors[`academic-${depth}`]"
+            :error-id="`gl-academic-select-${depth}-error`"
+            field-class="gl-academic-field"
             :data-depth="depth"
           >
-            <div class="field-header">
-              <label :for="`gl-academic-select-${depth}`" class="gl-academic-label">{{ level.label }}</label>
-              <span class="field-tag field-tag--required">必須</span>
-            </div>
             <select
               :id="`gl-academic-select-${depth}`"
               v-model="academicSelections[depth]"
@@ -167,17 +156,19 @@
               </option>
               <option v-if="level.allowCustom !== false" :value="CUSTOM_OPTION_VALUE" data-is-custom="true">その他</option>
             </select>
-            <div v-if="fieldErrors[`academic-${depth}`]" :id="`gl-academic-select-${depth}-error`" class="form-error" role="alert">
-              {{ fieldErrors[`academic-${depth}`] }}
-            </div>
-          </div>
+          </FormField>
         </div>
 
         <!-- カスタム学歴フィールド -->
-        <div v-if="academicCustomVisible" class="form-field" id="gl-academic-custom-field">
-          <div class="field-header">
-            <label for="gl-academic-custom" id="gl-academic-custom-label">{{ academicCustomLabel }}（その他入力）</label>
-          </div>
+        <FormField
+          v-if="academicCustomVisible"
+          :label="`${academicCustomLabel}（その他入力）`"
+          field-id="gl-academic-custom"
+          :required="academicCustomVisible"
+          :error="fieldErrors['academic-custom']"
+          error-id="gl-academic-custom-error"
+          id="gl-academic-custom-field"
+        >
           <input
             id="gl-academic-custom"
             v-model="academicCustomValue"
@@ -192,26 +183,17 @@
             @blur="validateField('academic-custom')"
             @input="clearFieldError('academic-custom')"
           />
-          <div v-if="fieldErrors['academic-custom']" id="gl-academic-custom-error" class="form-error" role="alert">
-            {{ fieldErrors['academic-custom'] }}
-          </div>
-        </div>
+        </FormField>
 
         <!-- 学籍番号 -->
-        <div class="form-field">
-          <div class="field-header">
-            <label for="gl-student-id">学籍番号</label>
-          </div>
+        <FormField label="学籍番号" field-id="gl-student-id">
           <input id="gl-student-id" v-model="studentId" name="student-id" class="input" type="text" autocomplete="off" />
-        </div>
+        </FormField>
 
         <!-- 所属している部活・サークル -->
-        <div class="form-field">
-          <div class="field-header">
-            <label for="gl-club">所属している部活・サークル</label>
-          </div>
+        <FormField label="所属している部活・サークル" field-id="gl-club">
           <input id="gl-club" v-model="club" name="club" class="input" type="text" autocomplete="off" />
-        </div>
+        </FormField>
 
         <!-- 参加可能な日程 -->
         <fieldset v-if="schedules.length > 0" id="gl-shift-fieldset" class="form-field" aria-describedby="gl-shift-hint">
@@ -235,16 +217,18 @@
         </fieldset>
 
         <!-- 備考・連絡事項 -->
-        <div class="form-field">
-          <div class="field-header">
-            <label for="gl-note">備考・連絡事項</label>
-            <span class="field-tag">任意</span>
-          </div>
+        <FormField label="備考・連絡事項" field-id="gl-note" :optional="true">
           <textarea id="gl-note" v-model="note" name="note" class="input input--textarea" rows="4" placeholder="連絡事項があればご記入ください"></textarea>
-        </div>
+        </FormField>
 
         <!-- 個人情報の取扱いについて同意 -->
-        <div class="form-field">
+        <FormField
+          label="個人情報の取扱いについて同意します"
+          field-id="gl-privacy-consent"
+          :required="true"
+          :error="fieldErrors['privacy-consent']"
+          error-id="gl-privacy-consent-error"
+        >
           <label class="checkbox-label" for="gl-privacy-consent">
             <input
               id="gl-privacy-consent"
@@ -258,10 +242,7 @@
             />
             <span>個人情報の取扱いについて同意します</span>
           </label>
-          <div v-if="fieldErrors['privacy-consent']" id="gl-privacy-consent-error" class="form-error" role="alert">
-            {{ fieldErrors['privacy-consent'] }}
-          </div>
-        </div>
+        </FormField>
 
         <!-- 送信ボタン -->
         <FormActions
@@ -302,6 +283,8 @@ import ContextGuard from './ContextGuard.vue';
 import ContextBanner from './ContextBanner.vue';
 import FormActions from './FormActions.vue';
 import FormMeta from './FormMeta.vue';
+import FormField from './FormField.vue';
+import FormFieldError from './FormFieldError.vue';
 import { useFormFeedback } from '../composables/useFormFeedback.js';
 import { useFormGuard } from '../composables/useFormGuard.js';
 import { useFormState } from '../composables/useFormState.js';

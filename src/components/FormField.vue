@@ -1,6 +1,6 @@
 <!-- FormField.vue: フォームフィールドのラッパーコンポーネント -->
 <template>
-  <div class="form-field" :class="fieldClass">
+  <div class="form-field" :class="fieldClass" :id="id" v-bind="dataAttributes">
     <div class="field-header">
       <label :for="fieldId">{{ label }}</label>
       <span v-if="required" class="field-tag field-tag--required">必須</span>
@@ -15,9 +15,10 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import FormFieldError from './FormFieldError.vue';
 
-defineProps({
+const props = defineProps({
   label: {
     type: String,
     required: true,
@@ -50,6 +51,22 @@ defineProps({
     type: String,
     default: '',
   },
+  dataDepth: {
+    type: [String, Number],
+    default: null,
+  },
+  id: {
+    type: String,
+    default: '',
+  },
+});
+
+const dataAttributes = computed(() => {
+  const attrs = {};
+  if (props.dataDepth !== null) {
+    attrs['data-depth'] = String(props.dataDepth);
+  }
+  return attrs;
 });
 </script>
 
