@@ -6,16 +6,16 @@
     description-id="gl-form-description"
   >
     <!-- コンテキストバナー -->
-    <div v-if="contextBannerVisible" id="gl-context-banner" class="context-banner">
+    <ContextBanner :visible="contextBannerVisible" id="gl-context-banner">
       <p v-if="eventName" id="gl-context-event" class="context-text">対象イベント: {{ eventName }}</p>
       <p v-if="periodText" id="gl-context-period" class="context-text">募集期間: {{ periodText }}</p>
-    </div>
+    </ContextBanner>
 
     <!-- 利用制限表示 -->
     <ContextGuard :message="contextGuardMessage" id="gl-context-guard" />
 
       <!-- GL応募フォーム -->
-      <form v-if="!formLocked" id="gl-entry-form" class="intake-form" novalidate @submit.prevent="handleSubmit">
+      <form v-if="!isLocked" id="gl-entry-form" class="intake-form" novalidate @submit.prevent="handleSubmit">
         <input id="gl-event-id" name="event-id" type="hidden" :value="eventId" />
         <input id="gl-slug" name="form-slug" type="hidden" :value="slug" />
 
@@ -275,10 +275,10 @@
       </form>
 
       <!-- 利用案内 -->
-      <div v-if="formMetaVisible" class="form-meta" id="gl-form-meta">
+      <FormMeta :visible="formMetaVisible" id="gl-form-meta">
         <p class="form-meta-line">送信完了後、運営からの案内をお待ちください。</p>
         <p class="form-meta-line">入力内容に誤りがあった場合は、案内元までご連絡ください。</p>
-      </div>
+      </FormMeta>
   </IntakeFormLayout>
 </template>
 
@@ -299,9 +299,14 @@ import {
 } from '../../scripts/gl-form/gl-form-utils.js';
 import IntakeFormLayout from './IntakeFormLayout.vue';
 import ContextGuard from './ContextGuard.vue';
+import ContextBanner from './ContextBanner.vue';
 import FormActions from './FormActions.vue';
+import FormMeta from './FormMeta.vue';
 import { useFormFeedback } from '../composables/useFormFeedback.js';
 import { useFormGuard } from '../composables/useFormGuard.js';
+import { useFormState } from '../composables/useFormState.js';
+import { useFormValidation } from '../composables/useFormValidation.js';
+import { useFormReset } from '../composables/useFormReset.js';
 
 // Firebase初期化
 const apps = getApps();
@@ -317,20 +322,16 @@ const slug = ref('');
 const eventId = ref('');
 const eventName = ref('');
 const periodText = ref('');
-const formLocked = ref(true);
-const isSubmitting = ref(false);
 
 // 共通Composables
 const { feedbackMessage, feedbackType, setFeedback, clearFeedback } = useFormFeedback();
+const { isLocked, isSubmitting, submissionSuccess, lockForm, unlockForm, setSubmitting, setSubmissionSuccess } = useFormState();
 const { contextGuardMessage, setContextGuard, clearContextGuard } = useFormGuard({
-  onLock: () => {
-    formLocked.value = true;
-  },
-  onUnlock: () => {
-    formLocked.value = false;
-  },
+  onLock: lockForm,
+  onUnlock: unlockForm,
   guardElementId: 'gl-context-guard',
 });
+const { fieldErrors, setFieldError, clearFieldError, clearAllFieldErrors, validateField, validateAcademicField } = useFormValidation();
 
 // フォーム入力値
 const name = ref('');
@@ -345,8 +346,7 @@ const note = ref('');
 const privacyConsent = ref(false);
 const selectedShifts = ref([]);
 
-// フィールドエラー（各フィールドの下に表示）
-const fieldErrors = ref({});
+// フィールドエラーはuseFormValidationで管理
 
 // 学部・学歴データ
 const facultyOptions = ref([]);
@@ -362,12 +362,13 @@ const schedules = ref([]);
 // 学歴レベルマップ（使用しないが、互換性のために保持）
 // const unitLevelMap = new Map();
 
-// 送信成功フラグ
-const submissionSuccess = ref(false);
+// 送信成功フラグはuseFormStateで管理
 
 // Computed
 const contextBannerVisible = computed(() => Boolean(eventName.value || periodText.value));
 const formMetaVisible = computed(() => submissionSuccess.value);
+// 互換性のため
+const formLocked = isLocked;
 const availableSchedules = computed(() => {
   return schedules.value
     .filter((schedule) => schedule.recruitGl !== false)
@@ -380,53 +381,7 @@ const availableSchedules = computed(() => {
 
 // メソッド（共通Composablesで管理されるため削除）
 
-const setFieldError = (fieldName, message) => {
-  fieldErrors.value[fieldName] = message;
-};
-
-const clearFieldError = (fieldName) => {
-  if (fieldErrors.value[fieldName]) {
-    delete fieldErrors.value[fieldName];
-  }
-};
-
-const clearAllFieldErrors = () => {
-  fieldErrors.value = {};
-};
-
-const validateField = (fieldName) => {
-  clearFieldError(fieldName);
-  const element = document.getElementById(`gl-${fieldName}`);
-  if (!element) return;
-  if (element instanceof HTMLInputElement || element instanceof HTMLSelectElement) {
-    if (!element.checkValidity()) {
-      let message = '';
-      if (element.validity.valueMissing) {
-        message = 'この項目は必須です。';
-      } else if (element.validity.typeMismatch && element.type === 'email') {
-        message = '正しいメールアドレスを入力してください。';
-      } else {
-        message = element.validationMessage || '入力内容に誤りがあります。';
-      }
-      setFieldError(fieldName, message);
-    }
-  }
-};
-
-const validateAcademicField = (depth) => {
-  const fieldName = `academic-${depth}`;
-  clearFieldError(fieldName);
-  const element = document.getElementById(`gl-academic-select-${depth}`);
-  if (!element || !(element instanceof HTMLSelectElement)) return;
-  if (!element.checkValidity()) {
-    const levelLabel = element.dataset?.levelLabel || '所属';
-    if (element.validity.valueMissing) {
-      setFieldError(fieldName, `${levelLabel}を選択してください。`);
-    } else {
-      setFieldError(fieldName, element.validationMessage || '選択内容に誤りがあります。');
-    }
-  }
-};
+// バリデーション関数はuseFormValidationで管理
 
 const clearAcademicFields = () => {
   academicLevels.value = [];
@@ -798,7 +753,7 @@ const validateAllFields = () => {
 const handleSubmit = async (event) => {
   event.preventDefault();
   clearFeedback();
-  if (formLocked.value) return;
+  if (isLocked.value) return;
   if (!eventId.value) {
     setFeedback('イベント情報が取得できませんでした。運営までお問い合わせください。', 'error');
     return;
@@ -851,7 +806,7 @@ const handleSubmit = async (event) => {
   if (!payload.gender) {
     delete payload.gender;
   }
-  isSubmitting.value = true;
+  setSubmitting(true);
   setFeedback('送信しています…', 'progress');
   try {
     const applicationsRef = dbRef(database, `glIntake/applications/${eventId.value}`);
@@ -873,13 +828,13 @@ const handleSubmit = async (event) => {
     clearAcademicFields();
     handleFacultyChange();
     // フォームを非表示にしてメタ情報を表示
-    formLocked.value = true;
-    submissionSuccess.value = true;
+    lockForm();
+    setSubmissionSuccess(true);
   } catch (error) {
     console.error(error);
     setFeedback('送信に失敗しました。時間をおいて再度お試しください。', 'error');
   } finally {
-    isSubmitting.value = false;
+    setSubmitting(false);
   }
 };
 

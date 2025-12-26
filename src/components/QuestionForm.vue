@@ -5,11 +5,7 @@
     title-id="form-title"
   >
     <!-- コンテキストバナー: 招待リンク由来の挨拶や日程情報を表示 -->
-    <div
-      v-if="contextBannerVisible"
-      id="context-banner"
-      class="context-banner"
-    >
+    <ContextBanner :visible="contextBannerVisible" id="context-banner">
       <p
         v-if="contextBanner.welcomeText"
         id="welcome-line"
@@ -31,7 +27,7 @@
       >
         {{ contextBanner.scheduleText }}
       </p>
-    </div>
+    </ContextBanner>
     <!-- 利用制限表示: 認証エラーなどフォームを非表示にするガード -->
     <ContextGuard :message="contextGuardMessage" id="context-guard" />
 
@@ -165,17 +161,13 @@
         />
       </form>
       <!-- 利用案内: 送信後の連絡方法や運営向け案内のテキスト -->
-      <div
-        v-if="formMetaVisible"
-        class="form-meta"
-        id="form-meta"
-      >
+      <FormMeta :visible="formMetaVisible" id="form-meta">
         <p v-if="guidance" class="form-meta-line" id="form-guidance">
           {{ guidance }}
         </p>
         <p class="form-meta-line">フォームの利用方法やリンクに関するお問い合わせは、運営からのご案内に従ってください。</p>
         <p class="form-meta-line">送信後に内容を修正したい場合は、配布元までご連絡ください。</p>
-      </div>
+      </FormMeta>
   </IntakeFormLayout>
 </template>
 
@@ -207,9 +199,14 @@ import {
 import { ref as firebaseRef, set, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import IntakeFormLayout from "./IntakeFormLayout.vue";
 import ContextGuard from "./ContextGuard.vue";
+import ContextBanner from "./ContextBanner.vue";
 import FormActions from "./FormActions.vue";
+import FormMeta from "./FormMeta.vue";
 import { useFormFeedback } from "../composables/useFormFeedback.js";
 import { useFormGuard } from "../composables/useFormGuard.js";
+import { useFormState } from "../composables/useFormState.js";
+import { useFormSubmission } from "../composables/useFormSubmission.js";
+import { useFormReset } from "../composables/useFormReset.js";
 
 /**
  * フォーム送信時のバリデーション失敗を表す独自エラー。
@@ -259,10 +256,12 @@ const database = getDatabaseInstance(firebaseConfig);
 
 // フォーム状態
 const token = ref("");
-const isLocked = ref(true);
-const isBusy = ref(false);
-const isDirty = ref(false);
-const submittingController = ref(null);
+
+// 共通Composables
+const { isLocked, isBusy, isDirty, setBusy, setDirty, unlockForm } = useFormState();
+const { submittingController, abortPendingSubmission, startSubmissionController, clearSubmissionController } = useFormSubmission({
+  createController: () => createSubmissionController(),
+});
 
 // コンテキスト情報
 const context = ref(null);
@@ -292,7 +291,9 @@ const hiddenContext = ref({
   groupNumber: "",
 });
 const guidance = ref("");
-const formMetaVisible = ref(false);
+
+// Computed
+const formMetaVisible = computed(() => !isLocked.value);
 
 // フォーム入力値
 const radioName = ref("");
@@ -323,19 +324,7 @@ const lockFormWithMessage = (message) => {
   lockFormWithMessageFromGuard(message);
 };
 
-const abortPendingSubmission = () => {
-  if (submittingController.value) {
-    submittingController.value.abort();
-    submittingController.value = null;
-  }
-};
-
-const startSubmissionController = () => {
-  abortPendingSubmission();
-  const controller = createSubmissionController();
-  submittingController.value = controller;
-  return controller;
-};
+// 送信処理はuseFormSubmissionで管理
 
 const updateQuestionCounter = () => {
   // リアクティブなquestionLengthを使用するため、この関数は不要
@@ -404,25 +393,24 @@ const applyContext = (rawContext) => {
   guidance.value = normalizedContext.guidance || "";
   clearContextGuard();
   unlockFormForContext();
-  isDirty.value = false;
+  setDirty(false);
 };
 
 const resetFormForContext = () => {
-  radioName.value = "";
+  // ラジオネームはリセットしない
   question.value = "";
   genre.value = "";
   updateQuestionCounter();
-  isDirty.value = false;
+  setDirty(false);
 };
 
 const unlockFormForContext = () => {
-  formMetaVisible.value = true;
-  isLocked.value = false;
-  isBusy.value = false;
+  unlockForm();
+  setBusy(false);
 };
 
 const handleFormInput = () => {
-  isDirty.value = true;
+  setDirty(true);
 };
 
 const handleReset = () => {
@@ -462,7 +450,7 @@ const handleRadioNameInput = (event) => {
 };
 
 const handleGenreChange = () => {
-  isDirty.value = true;
+  setDirty(true);
 };
 
 const hasValidContext = () => {
@@ -576,7 +564,7 @@ const handleSubmit = async (event) => {
   }
 
   const controller = startSubmissionController();
-  isBusy.value = true;
+  setBusy(true);
   setFeedback("送信中です…", "");
 
   try {
@@ -604,10 +592,8 @@ const handleSubmit = async (event) => {
     console.error(error);
     setFeedback(error.message || "送信時にエラーが発生しました。", "error");
   } finally {
-    if (submittingController.value === controller) {
-      submittingController.value = null;
-    }
-    isBusy.value = false;
+    clearSubmissionController(controller);
+    setBusy(false);
   }
 };
 
@@ -620,16 +606,22 @@ const handleSubmitSuccess = (result) => {
   resetFormAfterSubmission();
 };
 
-const resetFormAfterSubmission = () => {
-  question.value = "";
-  genre.value = "";
-  updateQuestionCounter();
-  isDirty.value = false;
-  // フォーカスを質問入力欄に移動
-  setTimeout(() => {
-    questionInputRef.value?.focus();
-  }, 0);
-};
+// フォームリセット（ラジオネームはリセットしない）
+const { resetFormAfterSubmission } = useFormReset({
+  fields: {
+    question,
+    genre,
+  },
+  excludeFields: ['radioName'], // ラジオネームはリセットしない
+  onReset: () => {
+    updateQuestionCounter();
+    setDirty(false);
+    // フォーカスを質問入力欄に移動
+    setTimeout(() => {
+      questionInputRef.value?.focus();
+    }, 0);
+  },
+});
 
 const handleBeforeUnload = (event) => {
   if (isDirty.value && !submittingController.value) {
