@@ -1,22 +1,18 @@
 <template>
-  <section class="module module--primary intake-module" aria-labelledby="gl-form-title">
-    <div class="module-header">
-      <div class="module-heading">
-        <h1 id="gl-form-title">GL応募フォーム</h1>
-        <p class="module-description" id="gl-form-description">運営から案内されたURLからアクセスし、必要事項をご入力ください。</p>
-      </div>
+  <IntakeFormLayout
+    title="GL応募フォーム"
+    description="運営から案内されたURLからアクセスし、必要事項をご入力ください。"
+    title-id="gl-form-title"
+    description-id="gl-form-description"
+  >
+    <!-- コンテキストバナー -->
+    <div v-if="contextBannerVisible" id="gl-context-banner" class="context-banner">
+      <p v-if="eventName" id="gl-context-event" class="context-text">対象イベント: {{ eventName }}</p>
+      <p v-if="periodText" id="gl-context-period" class="context-text">募集期間: {{ periodText }}</p>
     </div>
-    <div class="module-body">
-      <!-- コンテキストバナー -->
-      <div v-if="contextBannerVisible" id="gl-context-banner" class="context-banner">
-        <p v-if="eventName" id="gl-context-event" class="context-text">対象イベント: {{ eventName }}</p>
-        <p v-if="periodText" id="gl-context-period" class="context-text">募集期間: {{ periodText }}</p>
-      </div>
 
-      <!-- 利用制限表示 -->
-      <div v-if="contextGuardMessage" id="gl-context-guard" class="context-guard" role="alert" aria-live="assertive" tabindex="-1">
-        {{ contextGuardMessage }}
-      </div>
+    <!-- 利用制限表示 -->
+    <ContextGuard :message="contextGuardMessage" id="gl-context-guard" />
 
       <!-- GL応募フォーム -->
       <form v-if="!formLocked" id="gl-entry-form" class="intake-form" novalidate @submit.prevent="handleSubmit">
@@ -268,24 +264,14 @@
         </div>
 
         <!-- 送信ボタン -->
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary" id="gl-submit-button" :disabled="isSubmitting" :aria-busy="isSubmitting">
-            送信する
-          </button>
-          <p
-            v-if="feedbackMessage"
-            id="gl-form-feedback"
-            class="form-feedback"
-            :class="{
-              'form-feedback--success': feedbackType === 'success',
-              'form-feedback--error': feedbackType === 'error',
-            }"
-            role="alert"
-            aria-live="polite"
-          >
-            {{ feedbackMessage }}
-          </p>
-        </div>
+        <FormActions
+          :is-busy="isSubmitting"
+          :disabled="isSubmitting"
+          :feedback-message="feedbackMessage"
+          :feedback-type="feedbackType"
+          button-id="gl-submit-button"
+          feedback-id="gl-form-feedback"
+        />
       </form>
 
       <!-- 利用案内 -->
@@ -293,8 +279,7 @@
         <p class="form-meta-line">送信完了後、運営からの案内をお待ちください。</p>
         <p class="form-meta-line">入力内容に誤りがあった場合は、案内元までご連絡ください。</p>
       </div>
-    </div>
-  </section>
+  </IntakeFormLayout>
 </template>
 
 <script setup>
@@ -312,6 +297,11 @@ import {
   formatScheduleOption,
   parseUnitLevel,
 } from '../../scripts/gl-form/gl-form-utils.js';
+import IntakeFormLayout from './IntakeFormLayout.vue';
+import ContextGuard from './ContextGuard.vue';
+import FormActions from './FormActions.vue';
+import { useFormFeedback } from '../composables/useFormFeedback.js';
+import { useFormGuard } from '../composables/useFormGuard.js';
 
 // Firebase初期化
 const apps = getApps();
@@ -327,11 +317,20 @@ const slug = ref('');
 const eventId = ref('');
 const eventName = ref('');
 const periodText = ref('');
-const contextGuardMessage = ref('アクセス権を確認しています…');
 const formLocked = ref(true);
 const isSubmitting = ref(false);
-const feedbackMessage = ref('');
-const feedbackType = ref(''); // 'success', 'error', 'progress'
+
+// 共通Composables
+const { feedbackMessage, feedbackType, setFeedback, clearFeedback } = useFormFeedback();
+const { contextGuardMessage, setContextGuard, clearContextGuard } = useFormGuard({
+  onLock: () => {
+    formLocked.value = true;
+  },
+  onUnlock: () => {
+    formLocked.value = false;
+  },
+  guardElementId: 'gl-context-guard',
+});
 
 // フォーム入力値
 const name = ref('');
@@ -379,31 +378,7 @@ const availableSchedules = computed(() => {
     });
 });
 
-// メソッド
-const setContextGuard = (message) => {
-  contextGuardMessage.value = message || '';
-  if (message) {
-    formLocked.value = true;
-    requestAnimationFrame(() => {
-      document.getElementById('gl-context-guard')?.focus();
-    });
-  }
-};
-
-const clearContextGuard = () => {
-  contextGuardMessage.value = '';
-  formLocked.value = false;
-};
-
-const setFeedback = (message, type = '') => {
-  feedbackMessage.value = message;
-  feedbackType.value = type;
-};
-
-const clearFeedback = () => {
-  feedbackMessage.value = '';
-  feedbackType.value = '';
-};
+// メソッド（共通Composablesで管理されるため削除）
 
 const setFieldError = (fieldName, message) => {
   fieldErrors.value[fieldName] = message;

@@ -1,53 +1,39 @@
 <template>
-  <section class="module module--primary intake-module" aria-labelledby="form-title">
-    <div class="module-header">
-      <div class="module-heading">
-        <h1 id="form-title">質問受付フォーム</h1>
-        <p class="module-description">
-          お送りした専用URLからアクセスし、ラジオネームと質問内容を入力してください。
-        </p>
-      </div>
+  <IntakeFormLayout
+    title="質問受付フォーム"
+    description="お送りした専用URLからアクセスし、ラジオネームと質問内容を入力してください。"
+    title-id="form-title"
+  >
+    <!-- コンテキストバナー: 招待リンク由来の挨拶や日程情報を表示 -->
+    <div
+      v-if="contextBannerVisible"
+      id="context-banner"
+      class="context-banner"
+    >
+      <p
+        v-if="contextBanner.welcomeText"
+        id="welcome-line"
+        class="context-text context-text--welcome"
+      >
+        {{ contextBanner.welcomeText }}
+      </p>
+      <p
+        v-if="contextBanner.descriptionText"
+        id="intro-line"
+        class="context-text context-text--intro"
+      >
+        {{ contextBanner.descriptionText }}
+      </p>
+      <p
+        v-if="contextBanner.scheduleText"
+        id="schedule-line"
+        class="context-text context-text--schedule"
+      >
+        {{ contextBanner.scheduleText }}
+      </p>
     </div>
-    <div class="module-body">
-      <!-- コンテキストバナー: 招待リンク由来の挨拶や日程情報を表示 -->
-      <div
-        v-if="contextBannerVisible"
-        id="context-banner"
-        class="context-banner"
-      >
-        <p
-          v-if="contextBanner.welcomeText"
-          id="welcome-line"
-          class="context-text context-text--welcome"
-        >
-          {{ contextBanner.welcomeText }}
-        </p>
-        <p
-          v-if="contextBanner.descriptionText"
-          id="intro-line"
-          class="context-text context-text--intro"
-        >
-          {{ contextBanner.descriptionText }}
-        </p>
-        <p
-          v-if="contextBanner.scheduleText"
-          id="schedule-line"
-          class="context-text context-text--schedule"
-        >
-          {{ contextBanner.scheduleText }}
-        </p>
-      </div>
-      <!-- 利用制限表示: 認証エラーなどフォームを非表示にするガード -->
-      <div
-        v-if="contextGuardMessage"
-        id="context-guard"
-        class="context-guard"
-        role="alert"
-        aria-live="assertive"
-        tabindex="-1"
-      >
-        {{ contextGuardMessage }}
-      </div>
+    <!-- 利用制限表示: 認証エラーなどフォームを非表示にするガード -->
+    <ContextGuard :message="contextGuardMessage" id="context-guard" />
 
       <!-- 質問フォーム: ラジオネームと質問本文をサーバーへ送信 -->
       <form
@@ -169,30 +155,14 @@
           </select>
         </div>
 
-        <div class="form-actions">
-          <!-- 送信ボタンと送信後フィードバック領域 -->
-          <button
-            type="submit"
-            class="btn btn-primary"
-            id="submit-button"
-            :disabled="isBusy || isLocked"
-            :aria-busy="isBusy"
-          >
-            {{ isBusy ? "送信中…" : "送信する" }}
-          </button>
-          <p
-            id="form-feedback"
-            class="form-feedback"
-            :class="{
-              'form-feedback--success': feedbackType === 'success',
-              'form-feedback--error': feedbackType === 'error',
-            }"
-            role="alert"
-            aria-live="polite"
-          >
-            {{ feedbackMessage }}
-          </p>
-        </div>
+        <FormActions
+          :is-busy="isBusy"
+          :disabled="isBusy || isLocked"
+          :feedback-message="feedbackMessage"
+          :feedback-type="feedbackType"
+          button-id="submit-button"
+          feedback-id="form-feedback"
+        />
       </form>
       <!-- 利用案内: 送信後の連絡方法や運営向け案内のテキスト -->
       <div
@@ -206,8 +176,7 @@
         <p class="form-meta-line">フォームの利用方法やリンクに関するお問い合わせは、運営からのご案内に従ってください。</p>
         <p class="form-meta-line">送信後に内容を修正したい場合は、配布元までご連絡ください。</p>
       </div>
-    </div>
-  </section>
+  </IntakeFormLayout>
 </template>
 
 <script setup>
@@ -236,6 +205,11 @@ import {
   submitQuestionRecord,
 } from "../../scripts/question-form/submission-service.js";
 import { ref as firebaseRef, set, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import IntakeFormLayout from "./IntakeFormLayout.vue";
+import ContextGuard from "./ContextGuard.vue";
+import FormActions from "./FormActions.vue";
+import { useFormFeedback } from "../composables/useFormFeedback.js";
+import { useFormGuard } from "../composables/useFormGuard.js";
 
 /**
  * フォーム送信時のバリデーション失敗を表す独自エラー。
@@ -292,11 +266,20 @@ const submittingController = ref(null);
 
 // コンテキスト情報
 const context = ref(null);
-const contextGuardMessage = ref("アクセス権を確認しています…");
 const contextBanner = ref({
   welcomeText: "",
   descriptionText: "",
   scheduleText: "",
+});
+
+// 共通Composables
+const { feedbackMessage, feedbackType, setFeedback, clearFeedback } = useFormFeedback();
+const { contextGuardMessage, setContextGuard, clearContextGuard, lockFormWithMessage: lockFormWithMessageFromGuard } = useFormGuard({
+  onLock: () => {
+    isLocked.value = true;
+    isBusy.value = false;
+  },
+  guardElementId: 'context-guard',
 });
 const hiddenContext = ref({
   eventId: "",
@@ -315,10 +298,6 @@ const formMetaVisible = ref(false);
 const radioName = ref("");
 const question = ref("");
 const genre = ref("");
-
-// フィードバック
-const feedbackMessage = ref("");
-const feedbackType = ref("");
 
 // DOM要素参照
 const radioNameInputRef = ref(null);
@@ -341,19 +320,7 @@ const questionLength = computed(() => {
 // メソッド
 const lockFormWithMessage = (message) => {
   abortPendingSubmission();
-  isLocked.value = true;
-  contextGuardMessage.value = message;
-  isBusy.value = false;
-  if (contextGuardMessage.value) {
-    const guardEl = document.getElementById("context-guard");
-    if (guardEl) {
-      try {
-        guardEl.focus();
-      } catch (error) {
-        // no-op
-      }
-    }
-  }
+  lockFormWithMessageFromGuard(message);
 };
 
 const abortPendingSubmission = () => {
@@ -378,20 +345,19 @@ const updateQuestionCounter = () => {
 const prepareContext = async () => {
   const extractedToken = extractToken();
   if (!extractedToken) {
-    lockFormWithMessage("このフォームには、運営から配布された専用リンクからアクセスしてください。");
+    lockFormWithMessageWrapper("このフォームには、運営から配布された専用リンクからアクセスしてください。");
     return;
   }
 
   token.value = extractedToken;
-  contextGuardMessage.value = "アクセス権を確認しています…";
 
   try {
     const rawContext = await fetchContextFromToken(database, extractedToken);
     applyContext(rawContext);
   } catch (error) {
     console.error(error);
-    lockFormWithMessage(error.message || "アクセスに必要な情報が不足しています。");
-    feedbackMessage.value = "";
+    lockFormWithMessageWrapper(error.message || "アクセスに必要な情報が不足しています。");
+    clearFeedback();
   }
 };
 
@@ -436,7 +402,7 @@ const applyContext = (rawContext) => {
   };
 
   guidance.value = normalizedContext.guidance || "";
-  contextGuardMessage.value = "";
+  clearContextGuard();
   unlockFormForContext();
   isDirty.value = false;
 };
@@ -462,8 +428,7 @@ const handleFormInput = () => {
 const handleReset = () => {
   setTimeout(() => {
     resetFormForContext();
-    feedbackMessage.value = "";
-    feedbackType.value = "";
+    clearFeedback();
   }, 0);
 };
 
@@ -576,19 +541,16 @@ const captureSubmissionSnapshot = () => {
 
 const handleSubmit = async (event) => {
   event.preventDefault();
-  feedbackMessage.value = "";
-  feedbackType.value = "";
+  clearFeedback();
 
   // フォームがロックされている場合は送信しない
   if (isLocked.value) {
-    feedbackMessage.value = "フォームがロックされています。アクセス情報を確認してください。";
-    feedbackType.value = "error";
+    setFeedback("フォームがロックされています。アクセス情報を確認してください。", "error");
     return;
   }
 
   if (!hasValidContext()) {
-    feedbackMessage.value = "アクセス情報を確認できませんでした。リンクを再度開き直してください。";
-    feedbackType.value = "error";
+    setFeedback("アクセス情報を確認できませんでした。リンクを再度開き直してください。", "error");
     return;
   }
 
@@ -596,8 +558,7 @@ const handleSubmit = async (event) => {
   const form = event.target;
   if (form && typeof form.reportValidity === "function") {
     if (!form.reportValidity()) {
-      feedbackMessage.value = "未入力の項目があります。確認してください。";
-      feedbackType.value = "error";
+      setFeedback("未入力の項目があります。確認してください。", "error");
       return;
     }
   }
@@ -608,8 +569,7 @@ const handleSubmit = async (event) => {
   } catch (error) {
     if (error instanceof FormValidationError) {
       error.invokeFocus();
-      feedbackMessage.value = error.message;
-      feedbackType.value = "error";
+      setFeedback(error.message, "error");
       return;
     }
     throw error;
@@ -617,8 +577,7 @@ const handleSubmit = async (event) => {
 
   const controller = startSubmissionController();
   isBusy.value = true;
-  feedbackMessage.value = "送信中です…";
-  feedbackType.value = "";
+  setFeedback("送信中です…", "");
 
   try {
     const snapshot = captureSubmissionSnapshot();
@@ -643,8 +602,7 @@ const handleSubmit = async (event) => {
       return;
     }
     console.error(error);
-    feedbackMessage.value = error.message || "送信時にエラーが発生しました。";
-    feedbackType.value = "error";
+    setFeedback(error.message || "送信時にエラーが発生しました。", "error");
   } finally {
     if (submittingController.value === controller) {
       submittingController.value = null;
@@ -655,11 +613,10 @@ const handleSubmit = async (event) => {
 
 const handleSubmitSuccess = (result) => {
   if (result?.queueProcessed) {
-    feedbackMessage.value = "送信しました。ありがとうございました！";
+    setFeedback("送信しました。ありがとうございました！", "success");
   } else {
-    feedbackMessage.value = "送信しました。反映まで数秒かかる場合があります。";
+    setFeedback("送信しました。反映まで数秒かかる場合があります。", "success");
   }
-  feedbackType.value = "success";
   resetFormAfterSubmission();
 };
 
