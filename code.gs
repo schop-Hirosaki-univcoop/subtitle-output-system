@@ -379,7 +379,7 @@ function include_(filename) {
 
 const PARTICIPANT_MAIL_TEMPLATE_CACHE_KEY = "participantMailTemplate:v3";
 const PARTICIPANT_MAIL_TEMPLATE_FALLBACK_BASE_URL =
-  "https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/";
+  "https://raw.githubusercontent.com/schop-hirosaki-univcoop/subtitle-output-system/main/public/";
 const PARTICIPANT_MAIL_WEB_VIEW_FALLBACK_URL =
   "https://schop-hirosaki-univcoop.github.io/subtitle-output-system/participant-mail-view.html";
 const PARTICIPANT_MAIL_CONTACT_EMAIL = "gakui.hirosaki@gmail.com";
