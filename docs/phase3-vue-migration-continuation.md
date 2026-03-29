@@ -514,21 +514,22 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 - **Composables**: 共通の状態管理ロジックは Composable として作成
   - 既存の`useOperatorApp.js`を参考に、必要に応じて追加の Composable を作成
   - `EventAdminApp`や`QuestionAdminApp`へのアクセスを提供する Composable の作成を検討
-  - **フォーム共通Composables**（Phase 3.1で作成）:
+  - **フォーム共通 Composables**（Phase 3.1 で作成）:
     - `useFormFeedback.js`: フィードバックメッセージ管理
     - `useFormGuard.js`: コンテキストガード管理
     - `useFormState.js`: フォーム状態管理（isLocked, isBusy, isSubmitting, isDirty, submissionSuccess）
     - `useFormValidation.js`: バリデーション管理（fieldErrors, validateField, validateAcademicField）
-    - `useFormSubmission.js`: 送信処理管理（AbortController対応）
+    - `useFormSubmission.js`: 送信処理管理（AbortController 対応）
     - `useFormReset.js`: フォームリセット処理（ラジオネーム非リセット対応）
 - **既存の Manager パターン**: Manager パターンとの統合を維持
 - **Firebase リスナー**: Firebase のリアルタイム更新を Vue のリアクティブシステムと統合
 
-### フォーム共通化（Phase 3.1で実装）
+### フォーム共通化（Phase 3.1 で実装）
 
-質問フォームとGLフォームの共通部分をコンポーネントとComposableに抽出：
+質問フォームと GL フォームの共通部分をコンポーネントと Composable に抽出：
 
 **共通コンポーネント**:
+
 - `IntakeFormLayout.vue`: 外側のモジュール構造（module-header, module-body）
 - `ContextGuard.vue`: コンテキストガード表示
 - `ContextBanner.vue`: コンテキストバナー表示
@@ -537,13 +538,15 @@ Phase 2 では、オペレーター画面の質問カード部分のみを Vue.j
 - `FormField.vue`: フォームフィールドラッパー（label, required/optional tag, hint, error）
 - `FormFieldError.vue`: エラー表示コンポーネント
 
-**共通Composables**:
+**共通 Composables**:
+
 - 上記の`useFormFeedback`, `useFormGuard`, `useFormState`, `useFormValidation`, `useFormSubmission`, `useFormReset`
 
 **効果**:
+
 - コードの重複を大幅に削減
 - 保守性の向上（共通部分の変更が一箇所で済む）
-- 一貫性の確保（両フォームで同じUI/UX）
+- 一貫性の確保（両フォームで同じ UI/UX）
 
 ### 4. 移行時の注意点
 
