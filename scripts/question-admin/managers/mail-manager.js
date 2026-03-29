@@ -189,6 +189,19 @@ export class MailManager {
       );
     }
 
+    this.setActionButtonState(button, disabled);
+
+    if (this.state.mailSending) {
+      button.textContent = "メール送信中…";
+      button.setAttribute("aria-busy", "true");
+    } else {
+      const baseLabel = button.dataset.defaultLabel || "参加者へ案内メール送信";
+      button.textContent = pendingCount > 0 ? `${baseLabel}（${pendingCount}件）` : baseLabel;
+      button.removeAttribute("aria-busy");
+    }
+
+    button.dataset.pendingCount = String(pendingCount);
+
     this.logMailSendButtonDebug({
       buttonFound: true,
       buttonEnabled: !disabled,
@@ -226,21 +239,10 @@ export class MailManager {
           blocksButton: hasSelection && hasParticipantsWithEmail && pendingCount === 0
         }
       },
-      disableReasons
+      disableReasons,
+      domDisabledAfterSync: button.disabled,
+      domMatchesLogic: button.disabled === disabled
     });
-
-    this.setActionButtonState(button, disabled);
-
-    if (this.state.mailSending) {
-      button.textContent = "メール送信中…";
-      button.setAttribute("aria-busy", "true");
-    } else {
-      const baseLabel = button.dataset.defaultLabel || "参加者へ案内メール送信";
-      button.textContent = pendingCount > 0 ? `${baseLabel}（${pendingCount}件）` : baseLabel;
-      button.removeAttribute("aria-busy");
-    }
-
-    button.dataset.pendingCount = String(pendingCount);
 
     const signature = JSON.stringify({
       hasSelection,

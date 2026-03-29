@@ -448,9 +448,9 @@ export class InitManager {
       state: this.state,
       // 依存関数と定数
       api: this.api,
-      setUploadStatus: () => {
+      setUploadStatus: (...args) => {
         if (refs.stateManager) {
-          return refs.stateManager.setUploadStatus(...arguments);
+          return refs.stateManager.setUploadStatus(...args);
         }
         // StateManager が初期化されていない場合は何もしない
       },
@@ -480,9 +480,9 @@ export class InitManager {
         }
         // StateManager が初期化されていない場合は何もしない
       },
-      setActionButtonState: () => {
+      setActionButtonState: (...args) => {
         if (refs.buttonStateManager) {
-          return refs.buttonStateManager.setActionButtonState(...arguments);
+          return refs.buttonStateManager.setActionButtonState(...args);
         }
         // ButtonStateManager が初期化されていない場合は何もしない
       },
@@ -505,9 +505,9 @@ export class InitManager {
       getAuthIdToken: this.getAuthIdToken,
       firebaseConfig: this.firebaseConfig,
       goToLogin: this.goToLogin,
-      setAuthUi: () => {
+      setAuthUi: (...args) => {
         if (refs.uiManager) {
-          return refs.uiManager.setAuthUi(...arguments);
+          return refs.uiManager.setAuthUi(...args);
         }
         // UIManager が初期化されていない場合は何もしない
       },
@@ -522,10 +522,10 @@ export class InitManager {
       initLoaderSteps: this.initLoaderSteps,
       setLoaderStep: this.setLoaderStep,
       finishLoaderSteps: this.finishLoaderSteps,
-      resetState: () => {
+      resetState: (...args) => {
         // resetState は複雑な処理を含むため、refs を使用する実装は resetState 内で行う
         // ここではフォールバックとしてグローバル関数を使用
-        return this.resetState(...arguments);
+        return this.resetState(...args);
       },
       renderUserSummary: (user) => {
         if (refs.uiManager) {
@@ -570,9 +570,9 @@ export class InitManager {
         // UIManager が初期化されていない場合は何もしない
       },
       sleep: this.sleep,
-      setUploadStatus: () => {
+      setUploadStatus: (...args) => {
         if (refs.stateManager) {
-          return refs.stateManager.setUploadStatus(...arguments);
+          return refs.stateManager.setUploadStatus(...args);
         }
         // StateManager が初期化されていない場合は何もしない
       },
@@ -705,9 +705,9 @@ export class InitManager {
         // TokenApiManager が初期化されていない場合は null を返す
         return null;
       },
-      setUploadStatus: () => {
+      setUploadStatus: (...args) => {
         if (refs.stateManager) {
-          return refs.stateManager.setUploadStatus(...arguments);
+          return refs.stateManager.setUploadStatus(...args);
         }
         // StateManager が初期化されていない場合は何もしない
       },
@@ -849,9 +849,9 @@ export class InitManager {
         }
         // ButtonStateManager が初期化されていない場合は何もしない
       },
-      setUploadStatus: () => {
+      setUploadStatus: (...args) => {
         if (refs.stateManager) {
-          return refs.stateManager.setUploadStatus(...arguments);
+          return refs.stateManager.setUploadStatus(...args);
         }
         // StateManager が初期化されていない場合は何もしない
       },
@@ -974,9 +974,9 @@ export class InitManager {
         // StateManager が初期化されていない場合は空文字列を返す
         return "";
       },
-      setUploadStatus: () => {
+      setUploadStatus: (...args) => {
         if (refs.stateManager) {
-          return refs.stateManager.setUploadStatus(...arguments);
+          return refs.stateManager.setUploadStatus(...args);
         }
         // StateManager が初期化されていない場合は何もしない
       },
@@ -1477,9 +1477,9 @@ export class InitManager {
         }
         // ButtonStateManager が初期化されていない場合は何もしない
       },
-      setUploadStatus: () => {
+      setUploadStatus: (...args) => {
         if (refs.stateManager) {
-          return refs.stateManager.setUploadStatus(...arguments);
+          return refs.stateManager.setUploadStatus(...args);
         }
         // StateManager が初期化されていない場合は何もしない
       },
@@ -1591,9 +1591,9 @@ export class InitManager {
         // ConfirmDialogManager が初期化されていない場合は false を返す
         return false;
       },
-      setUploadStatus: () => {
+      setUploadStatus: (...args) => {
         if (refs.stateManager) {
-          return refs.stateManager.setUploadStatus(...arguments);
+          return refs.stateManager.setUploadStatus(...args);
         }
         // StateManager が初期化されていない場合は何もしない
       },
@@ -1691,9 +1691,9 @@ export class InitManager {
         // ConfirmDialogManager が初期化されていない場合は false を返す
         return false;
       },
-      setUploadStatus: () => {
+      setUploadStatus: (...args) => {
         if (refs.stateManager) {
-          return refs.stateManager.setUploadStatus(...arguments);
+          return refs.stateManager.setUploadStatus(...args);
         }
         // StateManager が初期化されていない場合は何もしない
       },
