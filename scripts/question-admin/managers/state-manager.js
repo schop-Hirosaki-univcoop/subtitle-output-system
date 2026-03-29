@@ -92,7 +92,11 @@ export class StateManager {
     if (!message) {
       return true;
     }
-    return this.UPLOAD_STATUS_PLACEHOLDERS.has(message);
+    if (this.UPLOAD_STATUS_PLACEHOLDERS.has(message)) {
+      return true;
+    }
+    // "ファイルを選択して..." はデフォルトの待機状態なので非スティッキーなプレースホルダーとして扱う
+    return message === "ファイルを選択して参加者リストを更新してください。";
   }
 
   /**

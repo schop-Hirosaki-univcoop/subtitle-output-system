@@ -40,6 +40,7 @@ export class CsvManager {
     this.renderParticipants = context.renderParticipants;
     this.updateParticipantActionPanelState = context.updateParticipantActionPanelState;
     this.syncSaveButtonState = context.syncSaveButtonState;
+    this.syncMailActionState = context.syncMailActionState;
     this.queueRelocationPrompt = context.queueRelocationPrompt;
     this.captureParticipantBaseline = context.captureParticipantBaseline;
     
@@ -297,6 +298,7 @@ export class CsvManager {
         this.dom.addParticipantFileLabel.textContent = file.name;
       }
       this.renderParticipants();
+      this.syncMailActionState();
       const relocationCandidates = this.state.participants
         .filter(entry => {
           const teamValue = String(entry.groupNumber || "");

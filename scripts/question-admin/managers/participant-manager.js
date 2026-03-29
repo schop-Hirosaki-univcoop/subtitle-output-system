@@ -757,6 +757,7 @@ export class ParticipantManager {
     updateDuplicateMatches();
     this.renderParticipants();
     this.syncSaveButtonState();
+    this.syncMailActionState();
     this.updateParticipantActionPanelState();
   }
 
