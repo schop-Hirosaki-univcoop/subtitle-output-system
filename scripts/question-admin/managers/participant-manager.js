@@ -289,6 +289,7 @@ export class ParticipantManager {
       }, 100); // 100ms delay to ensure UI is responsive
       this.updateParticipantContext({ preserveStatus: true });
       this.syncSaveButtonState();
+      this.syncMailActionState();
       this.syncAllPrintButtonStates();
       this.emitParticipantSyncEvent({
         success: true,
@@ -309,7 +310,7 @@ export class ParticipantManager {
       this.captureParticipantBaseline([], { ready: false });
       this.setUploadStatus(error.message || "参加者リストの読み込みに失敗しました。", "error");
       this.renderParticipants();
-      this.updateParticipantContext();
+      this.updateParticipantContext({ preserveStatus: true });
       this.syncSaveButtonState();
       this.syncMailActionState();
       this.syncAllPrintButtonStates();
