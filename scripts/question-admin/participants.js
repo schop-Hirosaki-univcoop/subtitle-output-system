@@ -15,6 +15,33 @@ function normalizeText(value) {
   return String(value ?? "").trim();
 }
 
+/**
+ * 参加者レコードからメールアドレス文字列を解決する。
+ * Firebase や旧 CSV・シート連携でキー名が異なる場合（mail / メールアドレス 等）に対応する。
+ * @param {Object|null|undefined} entry
+ * @returns {string}
+ */
+function resolveParticipantEmail(entry) {
+  if (!entry || typeof entry !== "object") {
+    return "";
+  }
+  const candidates = [
+    entry.email,
+    entry.mail,
+    entry.mailAddress,
+    entry.Email,
+    entry.eMail,
+    entry["メールアドレス"]
+  ];
+  for (const value of candidates) {
+    const t = normalizeText(value);
+    if (t) {
+      return t;
+    }
+  }
+  return "";
+}
+
 let rowKeyCounter = 0;
 
 function generateRowKey(prefix = "row") {
@@ -688,7 +715,7 @@ function normalizeParticipantRecord(entry, fallbackId = "") {
   const rawGroup = entry?.groupNumber ?? "";
   const groupNumber = normalizeGroupNumberValue(rawGroup);
   const phone = normalizeText(entry?.phone);
-  const email = normalizeText(entry?.email);
+  const email = resolveParticipantEmail(entry);
   const token = normalizeText(entry?.token);
   const guidance = normalizeText(entry?.guidance);
   const status = resolveParticipantStatus(entry, groupNumber);
@@ -758,7 +785,7 @@ function resolveMailStatusKey(entry) {
   if (!entry || typeof entry !== "object") {
     return "missing";
   }
-  const email = normalizeText(entry.email);
+  const email = resolveParticipantEmail(entry);
   if (!email) {
     return "missing";
   }
@@ -791,7 +818,7 @@ function formatMailTimestamp(value) {
 }
 
 function resolveMailStatusInfo(entry) {
-  const email = normalizeText(entry?.email);
+  const email = resolveParticipantEmail(entry);
   const key = resolveMailStatusKey(entry);
   const mailSentAt = Number(entry?.mailSentAt || 0);
   const mailLastAttemptAt = Number(entry?.mailLastAttemptAt || 0);
@@ -1128,7 +1155,7 @@ function signatureForEntries(entries) {
     entry.groupNumber || "",
     entry.department || entry.groupNumber || "",
     entry.phone || "",
-    entry.email || "",
+    resolveParticipantEmail(entry) || "",
     normalizeText(entry.mailStatus || ""),
     String(Number(entry.mailSentAt || 0) || 0),
     normalizeText(entry.mailError || ""),
@@ -1152,6 +1179,7 @@ export {
   applyAssignmentsToEntries,
   applyAssignmentsToEventCache,
   normalizeParticipantRecord,
+  resolveParticipantEmail,
   assignParticipantIds,
   resolveParticipantUid,
   resolveParticipantStatus,

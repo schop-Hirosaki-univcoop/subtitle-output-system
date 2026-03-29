@@ -1889,9 +1889,7 @@ function buildParticipantMailContext_(
     scheduleId,
     participantId,
     participantName,
-    participantEmail: String(
-      (participantRecord && participantRecord.email) || ""
-    ).trim(),
+    participantEmail: resolveParticipantEmail_(participantRecord),
     eventName,
     scheduleLabel,
     scheduleDateLabel: resolvedScheduleDateLabel,
@@ -2603,6 +2601,33 @@ function sendParticipantMailMessage_(options) {
   });
 }
 
+/**
+ * 参加者レコードからメールアドレスを取り出す（Firebase / 旧データのキー名の揺れに対応）。
+ * 質問管理UIの resolveParticipantEmail と同じ候補順。
+ * @param {Object|null|undefined} record
+ * @returns {string}
+ */
+function resolveParticipantEmail_(record) {
+  if (!record || typeof record !== "object") {
+    return "";
+  }
+  const candidates = [
+    record.email,
+    record.mail,
+    record.mailAddress,
+    record.Email,
+    record.eMail,
+    record["メールアドレス"]
+  ];
+  for (var i = 0; i < candidates.length; i++) {
+    var t = String(candidates[i] || "").trim();
+    if (t) {
+      return t;
+    }
+  }
+  return "";
+}
+
 // === 参加者一覧に対して一斉メール送信を行うメイン処理 ===============
 // doPost(action: 'sendParticipantMail') から呼ばれるエントリポイント。
 // 1. eventId / scheduleId を正規化し、principal がそのイベントの
@@ -2699,7 +2724,7 @@ function sendParticipantMail_(principal, req) {
     if (!value || typeof value !== "object") {
       return;
     }
-    const email = String(value.email || "").trim();
+    const email = resolveParticipantEmail_(value);
     if (!email) {
       skippedMissingEmail += 1;
       return;

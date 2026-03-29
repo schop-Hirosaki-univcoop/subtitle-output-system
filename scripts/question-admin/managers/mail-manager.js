@@ -4,6 +4,7 @@
 import { normalizeKey } from "../utils.js";
 import {
   isMailDeliveryPending,
+  resolveParticipantEmail,
   resolveParticipantUid,
   signatureForEntries,
   snapshotParticipantList
@@ -150,12 +151,12 @@ export class MailManager {
 
     const hasSelection = Boolean(this.state.selectedEventId && this.state.selectedScheduleId);
     const hasParticipantsWithEmail = hasSelection
-      ? this.state.participants.some(entry => String(entry?.email || "").trim())
+      ? this.state.participants.some(entry => Boolean(resolveParticipantEmail(entry)))
       : false;
     const pendingCount = hasSelection ? this.getPendingMailCount() : 0;
     const participantCount = Array.isArray(this.state.participants) ? this.state.participants.length : 0;
     const withEmailCount = Array.isArray(this.state.participants)
-      ? this.state.participants.filter(entry => String(entry?.email || "").trim()).length
+      ? this.state.participants.filter(entry => Boolean(resolveParticipantEmail(entry))).length
       : 0;
 
     const disabled =
