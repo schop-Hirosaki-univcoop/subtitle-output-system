@@ -476,6 +476,7 @@ export class ParticipantManager {
 
     this.renderParticipantChangePreview(diff, changeInfoByKey, participants);
     this.syncSaveButtonState();
+    this.syncMailActionState();
     this.syncClearButtonState();
     this.syncTemplateButtons();
     this.renderRelocationPrompt();
