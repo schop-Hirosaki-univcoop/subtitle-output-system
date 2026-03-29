@@ -36,6 +36,20 @@ export class MailManager {
     this.MAIL_LOG_ENABLED = false;
     this.MAIL_LOG_OUTPUT_ENABLED = false;
     this.MAIL_LOG_PREFIX = "[Mail]";
+    /** true のとき、案内メール送信ボタンの有効/無効理由を console.debug に出す */
+    this.MAIL_SEND_BUTTON_DEBUG = true;
+  }
+
+  /**
+   * 案内メール送信ボタンが無効になる条件の内訳をデバッグ出力する
+   * @param {Object} params - 判定に使った値
+   */
+  logMailSendButtonDebug(params) {
+    if (!this.MAIL_SEND_BUTTON_DEBUG || typeof console === "undefined") {
+      return;
+    }
+    const log = typeof console.log === "function" ? console.log.bind(console) : () => {};
+    log("[QA Mail] 案内メール送信ボタン", params);
   }
 
   /**
@@ -121,6 +135,12 @@ export class MailManager {
       if (!this.mailActionButtonMissingLogged) {
         this.mailActionButtonMissingLogged = true;
         this.logMailWarn("send-mail-button が見つからないため、メールアクションの状態を同期できませんでした。");
+        this.logMailSendButtonDebug({
+          buttonFound: false,
+          buttonEnabled: false,
+          summary: "送信ボタン用の DOM（send-mail-button / qa-send-mail-button）が見つかりません。",
+          conditions: null
+        });
       }
       return;
     }
@@ -133,12 +153,80 @@ export class MailManager {
       ? this.state.participants.some(entry => String(entry?.email || "").trim())
       : false;
     const pendingCount = hasSelection ? this.getPendingMailCount() : 0;
+    const participantCount = Array.isArray(this.state.participants) ? this.state.participants.length : 0;
+    const withEmailCount = Array.isArray(this.state.participants)
+      ? this.state.participants.filter(entry => String(entry?.email || "").trim()).length
+      : 0;
+
     const disabled =
       this.state.mailSending ||
       this.state.saving ||
       !hasSelection ||
       !hasParticipantsWithEmail ||
       pendingCount === 0;
+
+    const disableReasons = [];
+    if (this.state.mailSending) {
+      disableReasons.push("案内メールを送信中（mailSending）のため無効です。");
+    }
+    if (this.state.saving) {
+      disableReasons.push("参加者リストの保存処理中（saving）のため無効です。");
+    }
+    if (!hasSelection) {
+      disableReasons.push(
+        "イベントと日程の両方が選択されていないため無効です。（selectedEventId / selectedScheduleId）"
+      );
+    }
+    if (hasSelection && !hasParticipantsWithEmail) {
+      disableReasons.push(
+        "メールアドレスが登録されている参加者がいないため無効です。（参加者一覧に @ 付きアドレスが必要）"
+      );
+    }
+    if (hasSelection && hasParticipantsWithEmail && pendingCount === 0) {
+      disableReasons.push(
+        "送信待ち・再送対象（mailStatus が pending または error）が0件のため無効です。（全員送信済み、または該当者なし）"
+      );
+    }
+
+    this.logMailSendButtonDebug({
+      buttonFound: true,
+      buttonEnabled: !disabled,
+      summary: disabled
+        ? `無効: ${disableReasons.join(" ")}`
+        : "有効: 上記の無効条件はどれも当てはまりません。",
+      conditions: {
+        mailSending: {
+          label: "メール送信中",
+          value: Boolean(this.state.mailSending),
+          blocksButton: Boolean(this.state.mailSending)
+        },
+        saving: {
+          label: "保存処理中",
+          value: Boolean(this.state.saving),
+          blocksButton: Boolean(this.state.saving)
+        },
+        eventAndScheduleSelected: {
+          label: "イベントと日程が両方選択済み",
+          value: hasSelection,
+          selectedEventId: this.state.selectedEventId || null,
+          selectedScheduleId: this.state.selectedScheduleId || null,
+          blocksButton: !hasSelection
+        },
+        hasParticipantWithEmail: {
+          label: "メールアドレス付き参加者が少なくとも1人いる",
+          value: hasParticipantsWithEmail,
+          participantCount,
+          withEmailCount,
+          blocksButton: hasSelection && !hasParticipantsWithEmail
+        },
+        pendingMailTargets: {
+          label: "送信待ち・再送対象が1件以上（pending / error）",
+          pendingCount,
+          blocksButton: hasSelection && hasParticipantsWithEmail && pendingCount === 0
+        }
+      },
+      disableReasons
+    });
 
     this.setActionButtonState(button, disabled);
 
@@ -158,6 +246,7 @@ export class MailManager {
       hasParticipantsWithEmail,
       pendingCount,
       mailSending: this.state.mailSending,
+      saving: this.state.saving,
       disabled
     });
     if (signature !== this.lastMailActionStateSignature) {
