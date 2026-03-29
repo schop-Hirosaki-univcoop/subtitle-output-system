@@ -85,8 +85,20 @@ export class ParticipantManager {
     // handleSave に必要な依存関係
     this.getScheduleRecord = context.getScheduleRecord;
     this.loadEvents = context.loadEvents;
-    
+
+    /** @type {number} 非同期 loadParticipants の世代。古い完了で state を上書きしないために使う */
+    this._participantLoadSeq = 0;
+
     this.bindDom();
+  }
+
+  /**
+   * 指定した loadParticipants リクエストが、まだ最新の読み込みかどうか
+   * @param {number} requestId - loadParticipants が採番した ID
+   * @returns {boolean} 古い（破棄すべき）リクエストなら true
+   */
+  isParticipantLoadStale(requestId) {
+    return requestId !== this._participantLoadSeq;
   }
 
   bindDom() {
@@ -188,12 +200,19 @@ export class ParticipantManager {
       return;
     }
 
+    const requestId = ++this._participantLoadSeq;
     try {
       await this.ensureTokenSnapshot(false);
+      if (this.isParticipantLoadStale(requestId)) {
+        return;
+      }
       // --- FIX 1: Load current schedule participants ONLY ---
       let scheduleBranch = await fetchDbValue(
         `questionIntake/participants/${eventId}/${scheduleId}`
       );
+      if (this.isParticipantLoadStale(requestId)) {
+        return;
+      }
       scheduleBranch =
         scheduleBranch && typeof scheduleBranch === "object" ? scheduleBranch : {};
       // Temporarily set eventBranch to just this schedule's data
@@ -272,9 +291,18 @@ export class ParticipantManager {
 
       // Now, load the full event data in the background for the duplicate check
       setTimeout(() => {
-        if (this.state.selectedEventId !== eventId) return; // Abort if user navigated away
+        if (this.isParticipantLoadStale(requestId)) return;
+        if (this.state.selectedEventId !== eventId || this.state.selectedScheduleId !== scheduleId) {
+          return;
+        }
         fetchDbValue(`questionIntake/participants/${eventId}`).then(eventBranchRaw => {
-          if (!eventBranchRaw || typeof eventBranchRaw !== "object" || this.state.selectedEventId !== eventId) {
+          if (this.isParticipantLoadStale(requestId)) return;
+          if (
+            !eventBranchRaw ||
+            typeof eventBranchRaw !== "object" ||
+            this.state.selectedEventId !== eventId ||
+            this.state.selectedScheduleId !== scheduleId
+          ) {
             return;
           }
           // Now populate the cache with the FULL event data
@@ -302,6 +330,9 @@ export class ParticipantManager {
       });
     } catch (error) {
       console.error(error);
+      if (this.isParticipantLoadStale(requestId)) {
+        return;
+      }
       this.state.participants = [];
       this.state.participantTokenMap = new Map();
       this.state.duplicateMatches = new Map();
